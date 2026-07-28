@@ -58,7 +58,12 @@ app.use('/api/sales', require('./src/modules/sales/presentation/routes/sales'));
 // registrada aqui, para evitar montar duas vezes o mesmo path `/api/purchases`.
 // Ver `server/src/modules/purchases/README.md`.
 app.use('/api/purchases', require('./src/modules/purchases/presentation/routes/purchases'));
-app.use('/api/finance', require('./src/routes/finance'));
+// Modulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
+// A rota legada `./src/routes/finance.js` (+ `./src/controllers/financeController.js`)
+// permanece no repositorio apenas como referencia historica e NAO e mais
+// registrada aqui, para evitar montar duas vezes o mesmo path `/api/finance`.
+// Ver `server/src/modules/financial/README.md`.
+app.use('/api/finance', require('./src/modules/financial/presentation/routes/finance'));
 app.use('/api/service-orders', require('./src/routes/serviceOrders'));
 app.use('/api/categories', require('./src/routes/categories'));
 app.use('/api/reports', require('./src/routes/reports'));

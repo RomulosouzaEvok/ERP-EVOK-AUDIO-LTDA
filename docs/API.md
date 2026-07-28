@@ -466,16 +466,37 @@ Atualiza status da venda.
 
 ## 6. Financeiro
 
-### GET /api/finance/receivable
-Contas a receber.
+Implementado no módulo `server/src/modules/financial/` (Clean Architecture). Todas as rotas exigem `authenticate`; `POST /api/finance/payable` exige adicionalmente `authorize('admin', 'financial')`.
 
-**Query Params:** status, start_date, end_date, customer_id
+### GET /api/finance/receivable
+Contas a receber, com paginação.
+
+**Query Params:** status, start_date, end_date, customer_id, page, limit
+
+**Response:** `{ success: true, data: AccountReceivable[], pagination: { total, page, limit, totalPages } }` (cada item inclui `customer` e `sale`).
+
+### PUT /api/finance/receivable/:id/pay
+Registra recebimento de conta a receber (total ou parcial via `amount`).
+
+**Request:**
+```json
+{
+  "payment_date": "2024-01-20",
+  "payment_method": "pix",
+  "amount": 413.23
+}
+```
+Regras: conta não pode estar `paid` ou `canceled`; se `amount` informado, deve ser > 0 e não pode exceder o valor atual da conta. Em caso de sucesso, `status` vira `paid`.
 
 ### GET /api/finance/payable
-Contas a pagar.
+Contas a pagar, com paginação.
+
+**Query Params:** status, start_date, end_date, page, limit
+
+**Response:** `{ success: true, data: AccountPayable[], pagination: { total, page, limit, totalPages } }`
 
 ### POST /api/finance/payable
-Registra nova conta a pagar.
+Registra nova conta a pagar. Requer papel `admin` ou `financial`.
 
 **Request:**
 ```json
@@ -486,47 +507,32 @@ Registra nova conta a pagar.
   "category": "Utilidades"
 }
 ```
-
-### PUT /api/finance/receivable/:id/pay
-Registra recebimento de conta.
-
-**Request:**
-```json
-{
-  "payment_date": "2024-01-20",
-  "payment_method": "pix",
-  "amount": 413.23
-}
-```
+Campos obrigatórios: `description`, `amount` (> 0), `due_date`. Opcionais: `category`, `supplier_id`, `purchase_id`, `notes`. Criada sempre com `status: "pending"`.
 
 ### PUT /api/finance/payable/:id/pay
-Registra pagamento de conta.
+Registra pagamento de conta a pagar (total ou parcial via `amount`). Mesmas regras de `PUT /api/finance/receivable/:id/pay`.
 
 ### GET /api/finance/cash-flow
-Fluxo de caixa por período.
+Fluxo de caixa agregado por status, no período informado (padrão: mês corrente).
+
+**Query Params:** start_date, end_date
 
 **Response:**
 ```json
 {
   "success": true,
   "data": {
-    "period": {
-      "start": "2024-01-01",
-      "end": "2024-01-31"
-    },
+    "period": { "start": "2024-01-01T00:00:00.000Z", "end": "2024-01-31T00:00:00.000Z" },
     "summary": {
       "total_receivable": 25000.00,
       "total_payable": 18000.00,
-      "balance": 7000.00
+      "pending_receivable": 12000.00,
+      "pending_payable": 5000.00,
+      "projected_balance": 7000.00,
+      "actual_balance": 7000.00
     },
-    "daily_flow": [
-      {
-        "date": "2024-01-15",
-        "receipts": 5000.00,
-        "payments": 3000.00,
-        "balance": 2000.00
-      }
-    ]
+    "receivable_by_status": [ { "status": "pending", "total": "12000.00" }, { "status": "paid", "total": "13000.00" } ],
+    "payable_by_status": [ { "status": "pending", "total": "5000.00" }, { "status": "paid", "total": "13000.00" } ]
   }
 }
 ```
