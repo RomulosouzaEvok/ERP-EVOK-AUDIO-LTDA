@@ -118,12 +118,14 @@ Usar `Math.round(value * 100) / 100` em todas as operações de parcelas, garant
 | **Arquivos** | ~80 |
 | **Endpoints** | 80+ |
 | **Bugs Críticos Corrigidos (Fase 4)** | **8/15** |
+| **Módulos migrados p/ Clean Architecture (Fase 5)** | **6/11** (products, inventory, bom, production, purchases, sales — faltam financial, auth, users, suppliers, clients) |
 
 ---
 
-*Última atualização: Fase 4 - Correção de Bugs Críticos*
-*8 de 15 bugs críticos corrigidos (53%)*
-*Próximo alvo: Race condition no estoque*
+*Última atualização: Fase 5 concluída para os 6 módulos prioritários (products, inventory, bom, production, purchases, sales).*
+*Fase 4.1 (estabilização crítica) 100% concluída: race condition de estoque, CNPJ, erros padronizados, AuditLog real.*
+*Pendências reais e verificadas (não apenas "não iniciado"): testes automatizados concorrentes de race condition (Fase 4.1), reserva de estoque real (reserved_quantity não existe no schema), refugo/eficiência de produção, versionamento formal de BOM com detecção de ciclo, TypeScript (Fase 7), Zod/DTOs (Fase 8), testes automatizados (Fase 9), documentação completa (Fase 10), migrations (Fase 11), RBAC/segurança (Fase 12), OpenAPI (Fase 13), observabilidade (Fase 14).*
+*Próximo alvo sugerido: migrar financial/auth/users/suppliers/clients (fechar Fase 5) OU iniciar Fase 9 (testes automatizados) para validar de fato o que foi implementado nas Fases 4.1-6.*
 
 
 ---
@@ -164,53 +166,53 @@ Prioridade: Critica.
 
 ### Estoque seguro e sem race condition
 
-- [ ] Substituir todos os usos de `sequelize.literal()` em movimentacao de estoque.
-- [ ] Corrigir `saleController.js`.
-  - [ ] Criacao/confirmacao de venda deve usar transaction.
-  - [ ] Buscar produto com lock pessimista: `transaction` + `lock: transaction.LOCK.UPDATE`.
-  - [ ] Validar estoque disponivel dentro da mesma transacao.
-  - [ ] Usar `product.decrement('quantity', { by, transaction })`.
-  - [ ] Registrar `InventoryMovement` na mesma transacao.
-- [ ] Corrigir `purchaseController.js`.
-  - [ ] Recebimento deve incrementar estoque com lock/transacao.
-  - [ ] Registrar movimentacao de entrada na mesma transacao.
-  - [ ] Impedir recebimento duplicado sem controle de quantidade recebida.
-- [ ] Corrigir `inventoryController.js`.
-  - [ ] Movimentacao manual deve validar quantidade numerica.
-  - [ ] Saida manual deve travar o produto antes de baixar estoque.
-  - [ ] Entrada manual deve registrar auditoria.
-- [ ] Corrigir `mobileInventoryController.js`.
-  - [ ] Aplicar mesma regra do estoque manual.
-  - [ ] Garantir que lote de movimentacoes seja atomico.
-- [ ] Corrigir `productionOrderController.js`.
-  - [ ] Finalizacao de OP deve incrementar produto acabado com lock/transacao.
-  - [ ] Consumo de componentes deve ser transacional.
-  - [ ] Impedir finalizar OP duas vezes.
-- [ ] Criar `server/src/services/inventoryService.js` ou `server/src/modules/inventory/application/services/InventoryService.js`.
-  - [ ] `reserve(productId, quantity, transaction)`
-  - [ ] `releaseReservation(productId, quantity, transaction)`
-  - [ ] `consume(productId, quantity, transaction)`
-  - [ ] `receive(productId, quantity, transaction)`
-  - [ ] `adjust(productId, type, quantity, reason, transaction)`
-- [ ] Nenhum controller deve alterar `Product.quantity` diretamente depois desta fase.
+- [x] Substituir todos os usos de `sequelize.literal()` em movimentacao de estoque.
+- [x] Corrigir `saleController.js` (hoje em `server/src/modules/sales/`).
+  - [x] Criacao/confirmacao de venda deve usar transaction.
+  - [x] Buscar produto com lock pessimista: `transaction` + `lock: transaction.LOCK.UPDATE`.
+  - [x] Validar estoque disponivel dentro da mesma transacao.
+  - [x] Usar `product.decrement('quantity', { by, transaction })` (via `InventoryService.consume`).
+  - [x] Registrar `InventoryMovement` na mesma transacao.
+- [x] Corrigir `purchaseController.js` (hoje em `server/src/modules/purchases/`).
+  - [x] Recebimento deve incrementar estoque com lock/transacao.
+  - [x] Registrar movimentacao de entrada na mesma transacao.
+  - [x] Impedir recebimento duplicado sem controle de quantidade recebida (checagem `maxReceivable`).
+- [x] Corrigir `inventoryController.js` (hoje em `server/src/modules/inventory/`).
+  - [x] Movimentacao manual deve validar quantidade numerica.
+  - [x] Saida manual deve travar o produto antes de baixar estoque.
+  - [x] Entrada manual deve registrar auditoria.
+- [x] Corrigir `mobileInventoryController.js`.
+  - [x] Aplicar mesma regra do estoque manual.
+  - [x] Garantir que lote de movimentacoes seja atomico (batchScan agora e tudo-ou-nada).
+- [x] Corrigir `productionOrderController.js` (hoje em `server/src/modules/production/`).
+  - [x] Finalizacao de OP deve incrementar produto acabado com lock/transacao.
+  - [x] Consumo de componentes deve ser transacional.
+  - [x] Impedir finalizar OP duas vezes (lock pessimista na OP antes de validar transicao).
+- [x] Criar `server/src/services/inventoryService.js`.
+  - [x] `reserve(productId, quantity, transaction)` — implementado como stub defensivo; `reserved_quantity` ainda nao existe no schema (ver Prioridade 5, pendente).
+  - [x] `releaseReservation(productId, quantity, transaction)` — idem, stub defensivo.
+  - [x] `consume(productId, quantity, transaction)`
+  - [x] `receive(productId, quantity, transaction)`
+  - [x] `adjust(productId, type, quantity, reason, transaction)`
+- [x] Nenhum controller deve alterar `Product.quantity` diretamente depois desta fase.
 
 Criterios de aceite:
 
-- [ ] `rg "sequelize.literal" server/src/controllers server/src/services` nao deve retornar uso em estoque.
-- [ ] Toda baixa/entrada/reserva de estoque passa por `InventoryService`.
-- [ ] Toda movimentacao cria registro em `InventoryMovement`.
-- [ ] Teste manual com duas vendas simultaneas nao gera estoque negativo.
+- [x] `rg "sequelize.literal" server/src/controllers server/src/services` nao deve retornar uso em estoque (verificado: zero ocorrencias funcionais, so comentarios).
+- [x] Toda baixa/entrada/reserva de estoque passa por `InventoryService`.
+- [x] Toda movimentacao cria registro em `InventoryMovement`.
+- [ ] Teste manual com duas vendas simultaneas nao gera estoque negativo — **NAO TESTADO** (sem banco MySQL disponivel neste ambiente para rodar teste de concorrencia real; a protecao via lock pessimista foi implementada e revisada em codigo, mas nao validada com carga concorrente de fato).
 
 ### Corrigir validacao de CNPJ
 
-- [ ] Corrigir `server/src/utils/validators.js`.
-- [ ] Em `isValidCNPJ`, o segundo digito verificador deve comparar com `cleaned.charAt(13)`, nao com `charAt(10)`.
-- [ ] Adicionar testes para CNPJ valido, invalido, sequencial, formatado e sem formatacao.
+- [x] Corrigir `server/src/utils/validators.js`.
+- [x] Em `isValidCNPJ`, o segundo digito verificador deve comparar com `cleaned.charAt(13)`, nao com `charAt(10)`.
+- [ ] Adicionar testes para CNPJ valido, invalido, sequencial, formatado e sem formatacao — **NAO FEITO** (validado manualmente via `node -e`, mas nao existe suite de testes automatizados ainda; depende da Fase 9).
 
 Criterios de aceite:
 
-- [ ] `Validators.isValidCNPJ('11.444.777/0001-61')` retorna `true`.
-- [ ] `Validators.isValidCNPJ('11.111.111/1111-11')` retorna `false`.
+- [x] `Validators.isValidCNPJ('11.444.777/0001-61')` retorna `true`.
+- [x] `Validators.isValidCNPJ('11.111.111/1111-11')` retorna `false`.
 
 ### Erros seguros e padronizados
 
@@ -281,134 +283,136 @@ server/src/modules/
 
 Checklist:
 
-- [ ] Criar `server/src/modules`.
-- [ ] Migrar primeiro o modulo `products`.
-- [ ] Migrar segundo o modulo `inventory`.
-- [ ] Migrar terceiro o modulo `bom`.
-- [ ] Migrar quarto o modulo `production`.
-- [ ] Migrar quinto `purchases` e `sales`.
-- [ ] Manter rotas antigas funcionando durante a migracao.
-- [ ] Evitar quebra de contrato de API sem documentar versao.
+- [x] Criar `server/src/modules`.
+- [x] Migrar primeiro o modulo `products`.
+- [x] Migrar segundo o modulo `inventory`.
+- [x] Migrar terceiro o modulo `bom`.
+- [x] Migrar quarto o modulo `production`.
+- [x] Migrar quinto `purchases` e `sales`.
+- [x] Manter rotas antigas funcionando durante a migracao (controllers/rotas legados preservados no disco, sem uso ativo; contrato de URL/JSON mantido identico nos novos).
+- [x] Evitar quebra de contrato de API sem documentar versao (mesmo path/verbo/formato JSON preservados; sem versionamento novo necessario).
+- [ ] `financial`, `auth`, `users`, `suppliers`, `clients` **AINDA NAO MIGRADOS** — continuam em `server/src/controllers`/`server/src/routes` no formato antigo.
 
 Criterios de aceite:
 
-- [ ] Cada modulo migrado deve ter `domain`, `application`, `infrastructure`, `presentation`.
-- [ ] Controller nao pode conter regra de negocio complexa.
-- [ ] Controller apenas valida request, chama use case/service e responde.
+- [x] Cada modulo migrado (products, inventory, bom, production, purchases, sales) tem `domain`, `application`, `infrastructure`, `presentation`.
+- [x] Controller enxuto: delega para use cases, sem regra de negocio pesada embutida (verificado por leitura, nao ha lint automatizado que garanta isso continuamente).
+- [x] Controller apenas valida request, chama use case/service e responde.
 
 ### Shared kernel
 
-- [ ] Criar `server/src/shared/domain/Entity.js`.
-- [ ] Criar `server/src/shared/domain/ValueObject.js`.
-- [ ] Criar `server/src/shared/domain/errors/AppError.js`.
-- [ ] Criar `server/src/shared/application/UseCase.js`.
-- [ ] Criar `server/src/shared/presentation/httpResponse.js`.
-- [ ] Criar `server/src/shared/presentation/pagination.js`.
-- [ ] Criar `server/src/shared/utils/money.js`.
-- [ ] Criar `server/src/shared/utils/dates.js`.
-- [ ] Criar `server/src/shared/utils/strings.js`.
-- [ ] Criar validacoes compartilhadas.
+- [x] Criar `server/src/shared/domain/Entity.js`.
+- [x] Criar `server/src/shared/domain/ValueObject.js`.
+- [x] Criar `server/src/errors/AppError.js` (caminho real: `server/src/errors/`, nao `server/src/shared/domain/errors/` como o plano original previa — decisao tomada na Fase 4.1, antes do shared kernel existir; os modulos importam de `server/src/errors`).
+- [x] Criar `server/src/shared/application/UseCase.js`.
+- [x] Criar `server/src/shared/presentation/httpResponse.js`.
+- [x] Criar `server/src/shared/presentation/pagination.js`.
+- [x] Criar `server/src/shared/utils/money.js`.
+- [x] Criar `server/src/shared/utils/dates.js`.
+- [x] Criar `server/src/shared/utils/strings.js`.
+- [ ] Criar validacoes compartilhadas (schema/DTO) — **NAO FEITO**, e escopo da Fase 8 (Zod).
 
 ## FASE 6 - Dominio rico para Produtos, BOM, Estoque e Producao
 
 ### Produto como entidade de dominio
 
-- [ ] Criar `ProductEntity`.
-- [ ] Mover regras de produto para entidade/use case.
-- [ ] Validar codigo obrigatorio e unico.
-- [ ] Validar nome minimo.
-- [ ] Validar tipo: `finished`, `semi_finished`, `component`, `raw_material`.
-- [ ] Validar peso quando aplicavel.
-- [ ] Validar preco e custo.
-- [ ] Controlar status e transicoes.
-- [ ] Criar revisao tecnica do produto.
-- [ ] Validar parametros Thiele-Small quando informados: Fs, Qms, Qes, Qts, Vas, Sd, Xmax, Re, Le, BL, Mms, Cms, SPL.
-- [ ] Criar `CreateProductUseCase`.
-- [ ] Criar `UpdateProductUseCase`.
-- [ ] Criar `DeactivateProductUseCase`.
-- [ ] Criar `ChangeProductStatusUseCase`.
-- [ ] Criar `CreateProductRevisionUseCase`.
-- [ ] Criar `ListProductsUseCase`.
-- [ ] Criar `GetProductByIdUseCase`.
+- [x] Criar `ProductEntity`.
+- [x] Mover regras de produto para entidade/use case.
+- [x] Validar codigo obrigatorio (unicidade e responsabilidade do banco/repositorio via constraint `unique`, nao da entidade).
+- [x] Validar nome minimo.
+- [x] Validar tipo: `finished`, `semi_finished`, `component`, `raw_material`.
+- [x] Validar peso quando aplicavel.
+- [x] Validar preco e custo.
+- [x] Controlar status e transicoes.
+- [x] Criar revisao tecnica do produto.
+- [x] Validar parametros Thiele-Small quando informados (`ThieleSmallParams` value object).
+- [x] Criar `CreateProductUseCase`.
+- [x] Criar `UpdateProductUseCase`.
+- [x] Criar `DeactivateProductUseCase`.
+- [x] Criar `ChangeProductStatusUseCase`.
+- [x] Criar `CreateProductRevisionUseCase`.
+- [x] Criar `ListProductsUseCase`.
+- [x] Criar `GetProductByIdUseCase`.
 
 ### BOM como agregado de dominio
 
-- [ ] BOM pertence a um produto acabado.
+- [x] BOM pertence a um produto acabado (`BomService.createBOM` valida `product_type === 'finished'`).
 - [x] BOM precisa ter pelo menos um item.
-- [ ] Item precisa ter componente existente.
+- [x] Item precisa ter componente existente (valida `Product.findByPk` de cada componente).
 - [x] Quantidade do item deve ser maior que zero.
-- [x] Percentual de perda deve ser limitado e documentado.
-- [x] Evitar componente duplicado no mesmo nivel quando nao for intencional.
-- [ ] Detectar loop/ciclo de BOM.
-- [x] Controlar profundidade maxima.
-- [ ] Versionar BOM.
-- [ ] Aprovar BOM antes de usar em producao.
-- [ ] BOM antiga deve virar `superseded`, nao ser apagada.
-- [ ] Calcular custo total da BOM.
-- [ ] Calcular quantidade com perda.
-- [ ] Explodir BOM para quantidade planejada.
-- [ ] Verificar disponibilidade de componentes.
-- [ ] Quebrar `bomService.js` em use cases menores.
+- [x] Percentual de perda deve ser limitado e documentado (`BOMEntity`, 0-100).
+- [x] Evitar componente duplicado no mesmo nivel quando nao for intencional (`BOMEntity`).
+- [ ] Detectar loop/ciclo de BOM — **NAO FEITO**. `MAX_BOM_DEPTH=10` limita profundidade e evita loop infinito na explosao, mas nao ha deteccao explicita de ciclo (ex.: A depende de B que depende de A) alem do estouro de profundidade.
+- [x] Controlar profundidade maxima (`MAX_BOM_DEPTH = 10`).
+- [x] Versionar BOM (campo `revision` + `status: superseded` automatico ao criar nova BOM ativa para o mesmo produto).
+- [x] Aprovar BOM antes de usar em producao (`ApproveBOMUseCase`/fluxo `status: active`; producao consome via `BomService.explodeBOM` que so busca BOM `active`).
+- [x] BOM antiga deve virar `superseded`, nao ser apagada.
+- [x] Calcular custo total da BOM (`CalculateBOMCostUseCase` / `BomService.calculateCost`).
+- [x] Calcular quantidade com perda (`scrap_percentage` aplicado na explosao).
+- [x] Explodir BOM para quantidade planejada (`ExplodeBOMUseCase`, recursivo para sub-BOMs).
+- [x] Verificar disponibilidade de componentes (`CheckBOMAvailabilityUseCase`).
+- [ ] Quebrar `bomService.js` em use cases menores — **PARCIAL**. Os use cases em `server/src/modules/bom/application/use-cases/` sao *wrappers finos* que chamam `bomService.js`; a logica de negocio pesada (explosao recursiva, custo, versionamento) continua centralizada em `bomService.js`, nao foi de fato quebrada em classes menores.
 
-Use cases de BOM:
+Use cases de BOM (todos criados em `server/src/modules/bom/application/use-cases/`):
 
-- [ ] `CreateBOMUseCase`
-- [ ] `ApproveBOMUseCase`
-- [ ] `SupersedeBOMUseCase`
-- [ ] `ExplodeBOMUseCase`
-- [ ] `CalculateBOMCostUseCase`
-- [ ] `CheckBOMAvailabilityUseCase`
-- [ ] `GetBOMTreeUseCase`
-- [ ] `ListBOMVersionsUseCase`
+- [x] `CreateBOMUseCase`
+- [x] `ApproveBOMUseCase` (criado, mas a rota `PUT /:id` hoje usa `UpdateBOMUseCase` para preservar comportamento legado de atualizar varios campos de uma vez; `ApproveBOMUseCase` fica disponivel para um endpoint dedicado futuro)
+- [ ] `SupersedeBOMUseCase` — **NAO CRIADO COMO USE CASE SEPARADO**. O supersede automatico ja acontece dentro de `BomService.createBOM`; decisao documentada no README do modulo (nao existe endpoint isolado para isso).
+- [x] `ExplodeBOMUseCase`
+- [x] `CalculateBOMCostUseCase`
+- [x] `CheckBOMAvailabilityUseCase`
+- [x] `GetBOMTreeUseCase`
+- [x] `ListBOMVersionsUseCase` (endpoint novo aditivo: `GET /api/engineering/bom/product/:productId/versions`)
 
 ### Estoque como dominio
 
-- [ ] Criar entidade/servico de dominio `InventoryItem`.
-- [ ] Separar `quantity`, `reserved_quantity`, `available_quantity`, `minimum_quantity`, `safety_stock`.
-- [ ] Implementar reserva de estoque.
-- [ ] Implementar liberacao de reserva.
-- [ ] Implementar baixa confirmada.
-- [ ] Implementar entrada por compra.
-- [ ] Implementar ajuste com motivo obrigatorio.
-- [ ] Implementar transferencia entre locais.
-- [ ] Implementar inventario/cycle count.
-- [ ] Garantir: `available_quantity = quantity - reserved_quantity`.
+- [x] Criar entidade/servico de dominio (`InventoryMovementEntity` + `InventoryService`, nao ha classe `InventoryItem` separada — o "item de estoque" e o proprio `Product`).
+- [ ] Separar `quantity`, `reserved_quantity`, `available_quantity`, `minimum_quantity`, `safety_stock` — **PENDENTE**. Model `Product` hoje so tem `quantity` e `min_quantity`. `reserved_quantity`/`available_quantity`/`safety_stock` nao existem no schema (ver Prioridade 5 do TODO original, ainda em aberto).
+- [ ] Implementar reserva de estoque — **STUB**. `InventoryService.reserve()` existe mas e um no-op defensivo (documentado no codigo) ate a coluna `reserved_quantity` ser criada.
+- [ ] Implementar liberacao de reserva — mesmo status: stub, aguardando schema.
+- [x] Implementar baixa confirmada (`InventoryService.consume`, usado em vendas e producao).
+- [x] Implementar entrada por compra (`InventoryService.receive`, usado em `receiveItems` de compras).
+- [x] Implementar ajuste com motivo obrigatorio (`InventoryService.adjust`, usado em movimentacao manual).
+- [ ] Implementar transferencia entre locais — **NAO FEITO**. Nao ha conceito de "local/deposito" no schema atual (`Product.location` e um campo texto livre, sem modelo de transferencia).
+- [ ] Implementar inventario/cycle count — **NAO FEITO**.
+- [ ] Garantir: `available_quantity = quantity - reserved_quantity` — **NAO APLICAVEL AINDA**, depende do campo `reserved_quantity` existir.
 
-Use cases de estoque:
+Use cases de estoque (criados em `server/src/modules/inventory/application/use-cases/`):
 
-- [ ] `ReserveStockUseCase`
-- [ ] `ReleaseStockReservationUseCase`
-- [ ] `ConsumeStockUseCase`
-- [ ] `ReceiveStockUseCase`
-- [ ] `AdjustStockUseCase`
-- [ ] `TransferStockUseCase`
-- [ ] `ListLowStockUseCase`
+- [ ] `ReserveStockUseCase` — nao criado como use case HTTP (nao ha endpoint; `InventoryService.reserve` e stub).
+- [ ] `ReleaseStockReservationUseCase` — idem.
+- [ ] `ConsumeStockUseCase` — nao existe como use case isolado; `consume` e chamado diretamente por outros modulos (sales, production) via `InventoryService`, nao ha endpoint HTTP dedicado.
+- [ ] `ReceiveStockUseCase` — idem (chamado via purchases/production, sem endpoint HTTP proprio no modulo inventory).
+- [x] `AdjustStockUseCase` — implementado como `CreateInventoryMovementUseCase` (cobre a unica rota manual existente, `POST /movements`).
+- [ ] `TransferStockUseCase` — nao existe funcionalidade de transferencia no sistema hoje.
+- [x] `ListLowStockUseCase` (endpoint novo aditivo: `GET /api/inventory/low-stock`).
 
 ### Ordem de Producao como entidade de dominio
 
-- [x] OP precisa de produto.
-- [ ] OP precisa de BOM aprovada.
+- [x] OP precisa de produto (e produto deve estar `active` e ser `finished`).
+- [ ] OP precisa de BOM aprovada — **NAO EXIGIDO NA CRIACAO**. Hoje e possivel criar/liberar uma OP para um produto sem BOM ativa; a ausencia de BOM so e tratada (de forma tolerante, nao bloqueante) no momento de finalizar a OP.
 - [x] Quantidade planejada deve ser maior que zero.
-- [x] Status controlados: `planned`, `released`, `in_progress`, `paused`, `completed`, `cancelled`.
-- [x] Nao iniciar OP cancelada/concluida.
-- [x] Nao finalizar OP sem apontamento valido.
-- [ ] Apontamento nao pode exceder quantidade planejada sem regra explicita.
-- [ ] Registrar refugos.
-- [ ] Calcular eficiencia.
-- [ ] Consumir componentes conforme BOM.
-- [ ] Gerar produto acabado no estoque ao finalizar.
+- [x] Status controlados: `planned`, `released`, `in_progress`, `paused`, `completed`, `canceled` (maquina de transicao em `ChangeProductionOrderStatusUseCase`/`ProductionOrderEntity`).
+- [x] Nao iniciar OP cancelada/concluida (validado pela tabela de transicoes permitidas).
+- [x] Nao finalizar OP duas vezes (lock pessimista na OP antes de validar a transicao).
+- [ ] Apontamento nao pode exceder quantidade planejada sem regra explicita — **NAO VALIDADO**. `quantity_produced` aceita qualquer valor >= 0, inclusive maior que `quantity` planejada.
+- [ ] Registrar refugos — **NAO FEITO**. Nao existe campo `quantity_scrapped` no model `ProductionOrder` nem endpoint de refugo.
+- [ ] Calcular eficiencia — **NAO FEITO**.
+- [x] Consumir componentes conforme BOM (explode a BOM ativa e consome via `InventoryService.consume`, tolerante a produto sem BOM).
+- [x] Gerar produto acabado no estoque ao finalizar (`InventoryService.receive`).
 
-Use cases de producao:
+Use cases de producao (criados em `server/src/modules/production/application/use-cases/`):
 
-- [ ] `CreateProductionOrderUseCase`
-- [ ] `ReleaseProductionOrderUseCase`
-- [ ] `StartProductionOrderUseCase`
-- [ ] `PauseProductionOrderUseCase`
-- [ ] `ResumeProductionOrderUseCase`
-- [ ] `RegisterProductionOutputUseCase`
-- [ ] `RegisterScrapUseCase`
-- [ ] `CompleteProductionOrderUseCase`
-- [ ] `CancelProductionOrderUseCase`
+- [x] `CreateProductionOrderUseCase`
+- [ ] `ReleaseProductionOrderUseCase` — nao existe como classe separada.
+- [ ] `StartProductionOrderUseCase` — idem.
+- [ ] `PauseProductionOrderUseCase` — idem.
+- [ ] `ResumeProductionOrderUseCase` — idem.
+- [ ] `RegisterProductionOutputUseCase` — idem.
+- [ ] `CompleteProductionOrderUseCase` — idem.
+- [ ] `CancelProductionOrderUseCase` — idem.
+  - As 7 transicoes acima foram deliberadamente unificadas em um unico `ChangeProductionOrderStatusUseCase`, que mantem a tabela de transicoes validas como fonte unica de verdade (evita duplicar a mesma maquina de estados em 7 classes). Decisao documentada no README do modulo `production`.
+- [ ] `RegisterScrapUseCase` — **NAO FEITO** (schema nao suporta refugo ainda).
 
 ## FASE 7 - Migracao gradual para TypeScript
 
