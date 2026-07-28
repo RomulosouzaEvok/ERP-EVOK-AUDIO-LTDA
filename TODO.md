@@ -334,13 +334,13 @@ Criterios de aceite:
 ### BOM como agregado de dominio
 
 - [ ] BOM pertence a um produto acabado.
-- [ ] BOM precisa ter pelo menos um item.
+- [x] BOM precisa ter pelo menos um item.
 - [ ] Item precisa ter componente existente.
-- [ ] Quantidade do item deve ser maior que zero.
-- [ ] Percentual de perda deve ser limitado e documentado.
-- [ ] Evitar componente duplicado no mesmo nivel quando nao for intencional.
+- [x] Quantidade do item deve ser maior que zero.
+- [x] Percentual de perda deve ser limitado e documentado.
+- [x] Evitar componente duplicado no mesmo nivel quando nao for intencional.
 - [ ] Detectar loop/ciclo de BOM.
-- [ ] Controlar profundidade maxima.
+- [x] Controlar profundidade maxima.
 - [ ] Versionar BOM.
 - [ ] Aprovar BOM antes de usar em producao.
 - [ ] BOM antiga deve virar `superseded`, nao ser apagada.
@@ -386,12 +386,12 @@ Use cases de estoque:
 
 ### Ordem de Producao como entidade de dominio
 
-- [ ] OP precisa de produto.
+- [x] OP precisa de produto.
 - [ ] OP precisa de BOM aprovada.
-- [ ] Quantidade planejada deve ser maior que zero.
-- [ ] Status controlados: `planned`, `released`, `in_progress`, `paused`, `completed`, `cancelled`.
-- [ ] Nao iniciar OP cancelada/concluida.
-- [ ] Nao finalizar OP sem apontamento valido.
+- [x] Quantidade planejada deve ser maior que zero.
+- [x] Status controlados: `planned`, `released`, `in_progress`, `paused`, `completed`, `cancelled`.
+- [x] Nao iniciar OP cancelada/concluida.
+- [x] Nao finalizar OP sem apontamento valido.
 - [ ] Apontamento nao pode exceder quantidade planejada sem regra explicita.
 - [ ] Registrar refugos.
 - [ ] Calcular eficiencia.

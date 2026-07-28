@@ -1,82 +1,112 @@
 const Entity = require('../../../../shared/domain/Entity');
-const { ValidationError } = require('../../../../errors');
+const { ValidationError, BusinessRuleError } = require('../../../../errors');
 
-/**
- * Entidade de domínio leve que representa a Ordem de Produção (OP) na
- * entrada de criação via `POST /api/production-orders`.
- *
- * Esta entidade valida apenas a FORMA dos dados de entrada (`product_id`,
- * `quantity > 0` e `due_date` obrigatórios). Regras de negócio mais pesadas
- * — produto deve existir, deve estar `active`, deve ser do tipo `finished` —
- * continuam sendo verificadas pelo use case via repositório, consultando o
- * model `Product` diretamente (mesmo comportamento do controller legado).
- */
+const PRODUCTION_STATUSES = ['planned', 'released', 'in_progress', 'paused', 'completed', 'canceled'];
+const PRODUCTION_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
+
+const STATUS_TRANSITIONS = {
+  planned: ['released', 'canceled'],
+  released: ['in_progress', 'canceled'],
+  in_progress: ['completed', 'paused', 'canceled'],
+  paused: ['in_progress', 'canceled'],
+  completed: [],
+  canceled: []
+};
+
 class ProductionOrderEntity extends Entity {
-  /**
-   * @param {Object} props - Propriedades da OP.
-   * @param {number} [props.id] - Identificador único (quando já persistida).
-   * @param {number} props.product_id - Id do produto acabado a ser produzido.
-   * @param {number} props.quantity - Quantidade planejada (deve ser > 0).
-   * @param {string|Date} props.due_date - Data de vencimento/entrega da OP.
-   * @param {string} [props.priority] - Prioridade (`low`/`normal`/`high`/`urgent`).
-   * @param {number} [props.responsible_id] - Id do funcionário responsável.
-   * @param {number} [props.sales_order_id] - Id do pedido de venda de origem, se houver.
-   * @param {string} [props.notes] - Observações.
-   * @param {Date|string} [props.createdAt]
-   * @param {Date|string} [props.updatedAt]
-   * @throws {ValidationError} Se `product_id`, `quantity` ou `due_date` estiverem ausentes/inválidos.
-   */
   constructor(props) {
     super({ id: props.id, createdAt: props.createdAt, updatedAt: props.updatedAt });
 
+    this.order_number = props.order_number;
     this.product_id = props.product_id;
-    this.quantity = props.quantity;
+    this.quantity = Number(props.quantity);
+    this.quantity_produced = props.quantity_produced !== undefined ? Number(props.quantity_produced) : 0;
+    this.priority = props.priority || 'normal';
+    this.status = props.status || 'planned';
     this.due_date = props.due_date;
-    this.priority = props.priority;
-    this.responsible_id = props.responsible_id;
-    this.sales_order_id = props.sales_order_id;
-    this.notes = props.notes;
+    this.start_date = props.start_date ?? null;
+    this.completion_date = props.completion_date ?? null;
+    this.sales_order_id = props.sales_order_id ?? null;
+    this.responsible_id = props.responsible_id ?? null;
+    this.notes = props.notes ?? null;
+    this.created_by = props.created_by ?? null;
 
     this.validate();
   }
 
-  /**
-   * Executa todas as validações de forma da entidade.
-   *
-   * @returns {void}
-   * @throws {ValidationError} Se algum campo obrigatório estiver ausente ou inválido.
-   */
   validate() {
     if (!this.product_id) {
-      throw new ValidationError('Produto, quantidade e data de vencimento são obrigatórios');
+      throw new ValidationError('Produto da ordem de producao e obrigatorio');
     }
-    if (!this.quantity) {
-      throw new ValidationError('Produto, quantidade e data de vencimento são obrigatórios');
+    if (!Number.isFinite(this.quantity) || this.quantity <= 0) {
+      throw new ValidationError('Quantidade planejada deve ser maior que zero');
+    }
+    if (!Number.isFinite(this.quantity_produced) || this.quantity_produced < 0) {
+      throw new ValidationError('Quantidade produzida nao pode ser negativa');
     }
     if (!this.due_date) {
-      throw new ValidationError('Produto, quantidade e data de vencimento são obrigatórios');
+      throw new ValidationError('Data de vencimento e obrigatoria');
     }
-    if (parseFloat(this.quantity) <= 0) {
-      throw new ValidationError('Quantidade deve ser maior que zero');
+    if (!PRODUCTION_PRIORITIES.includes(this.priority)) {
+      throw new ValidationError(`Prioridade invalida. Valores aceitos: ${PRODUCTION_PRIORITIES.join(', ')}`);
+    }
+    if (!PRODUCTION_STATUSES.includes(this.status)) {
+      throw new ValidationError(`Status invalido. Valores aceitos: ${PRODUCTION_STATUSES.join(', ')}`);
     }
   }
 
-  /**
-   * Serializa a entidade para os parâmetros aceitos por `CreateProductionOrderUseCase`.
-   *
-   * @returns {{ product_id: number, quantity: number, due_date: (string|Date), priority: (string|undefined), responsible_id: (number|undefined), sales_order_id: (number|undefined), notes: (string|undefined) }}
-   */
-  toPersistence() {
+  assertCanBeCreatedFor(product) {
+    if (!product) {
+      throw new BusinessRuleError('Produto nao encontrado');
+    }
+    if (product.status !== 'active') {
+      throw new BusinessRuleError('Produto inativo nao pode ser produzido');
+    }
+    if (product.product_type !== 'finished') {
+      throw new BusinessRuleError(`Apenas produtos acabados tem OP. '${product.name}' e '${product.product_type}'`);
+    }
+  }
+
+  transitionTo(nextStatus, quantityProduced) {
+    const allowed = STATUS_TRANSITIONS[this.status] || [];
+    if (this.status === nextStatus) {
+      throw new BusinessRuleError(`OP ja esta com status ${nextStatus}`);
+    }
+    if (!allowed.includes(nextStatus)) {
+      throw new BusinessRuleError(`Transicao invalida: ${this.status} -> ${nextStatus}`);
+    }
+
+    const changes = { status: nextStatus };
+    if (nextStatus === 'in_progress') changes.start_date = new Date();
+    if (nextStatus === 'completed') {
+      const produced = quantityProduced !== undefined ? Number(quantityProduced) : this.quantity;
+      if (!Number.isFinite(produced) || produced < 0) {
+        throw new ValidationError('Quantidade produzida nao pode ser negativa');
+      }
+      changes.quantity_produced = produced;
+      changes.completion_date = new Date();
+    }
+
+    return changes;
+  }
+
+  toCreatePersistence({ order_number, created_by }) {
     return {
+      order_number,
       product_id: this.product_id,
       quantity: this.quantity,
-      due_date: this.due_date,
       priority: this.priority,
-      responsible_id: this.responsible_id,
+      status: 'planned',
+      due_date: this.due_date,
       sales_order_id: this.sales_order_id,
-      notes: this.notes
+      responsible_id: this.responsible_id,
+      notes: this.notes,
+      created_by
     };
   }
 }
 
 module.exports = ProductionOrderEntity;
+module.exports.PRODUCTION_STATUSES = PRODUCTION_STATUSES;
+module.exports.PRODUCTION_PRIORITIES = PRODUCTION_PRIORITIES;
+module.exports.STATUS_TRANSITIONS = STATUS_TRANSITIONS;

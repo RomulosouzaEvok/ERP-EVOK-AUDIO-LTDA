@@ -335,6 +335,18 @@ Lista todas as categorias.
 
 ## 5. Vendas
 
+> Nota de arquitetura: os endpoints de `/api/sales` sao servidos pelo
+> modulo `server/src/modules/sales/` (Clean Architecture). A criacao
+> reutiliza `server/src/services/inventoryService.js` (lock pessimista +
+> transacao) para debitar estoque, e `server/src/shared/utils/money.js`
+> (toCents/fromCents) para o calculo em centavos das parcelas geradas em
+> AccountReceivable (ultima parcela absorve o resto da divisao). Erros de
+> validacao/regra de negocio retornam `{ success: false, error: { code,
+> message } }` (em vez de string simples, mesmo padrao ja adotado em
+> `inventory`/`bom`/`production`/`purchases`). Ver
+> `server/src/modules/sales/README.md` para detalhes, incluindo a
+> pendencia conhecida de reserva de estoque em orcamentos (`quote`).
+
 ### GET /api/sales
 Lista vendas com paginação.
 

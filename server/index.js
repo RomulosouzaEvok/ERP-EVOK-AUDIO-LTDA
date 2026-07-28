@@ -46,7 +46,12 @@ app.use('/api/users', require('./src/routes/users'));
 app.use('/api/products', require('./src/modules/products/presentation/routes/products'));
 app.use('/api/clients', require('./src/routes/clients'));
 app.use('/api/suppliers', require('./src/routes/suppliers'));
-app.use('/api/sales', require('./src/routes/sales'));
+// MÃ³dulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
+// A rota legada `./src/routes/sales.js` (+ `./src/controllers/saleController.js`)
+// permanece no repositÃ³rio apenas como referÃªncia histÃ³rica e NÃƒO Ã© mais
+// registrada aqui, para evitar montar duas vezes o mesmo path `/api/sales`.
+// Ver `server/src/modules/sales/README.md`.
+app.use('/api/sales', require('./src/modules/sales/presentation/routes/sales'));
 // Modulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
 // A rota legada `./src/routes/purchases.js` (+ `./src/controllers/purchaseController.js`)
 // permanece no repositorio apenas como referencia historica e NAO e mais
@@ -59,9 +64,9 @@ app.use('/api/categories', require('./src/routes/categories'));
 app.use('/api/reports', require('./src/routes/reports'));
 app.use('/api/employees', require('./src/routes/employees'));
 app.use('/api/departments', require('./src/routes/departments'));
-// Módulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
+// Mï¿½dulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
 // A rota legada `./src/routes/productionOrders.js` (+ `./src/controllers/productionOrderController.js`)
-// permanece no repositório apenas como referência histórica e NÃO é mais
+// permanece no repositï¿½rio apenas como referï¿½ncia histï¿½rica e Nï¿½O ï¿½ mais
 // registrada aqui, para evitar montar duas vezes o mesmo path `/api/production-orders`.
 // Ver `server/src/modules/production/README.md`.
 app.use('/api/production-orders', require('./src/modules/production/presentation/routes/productionOrders'));

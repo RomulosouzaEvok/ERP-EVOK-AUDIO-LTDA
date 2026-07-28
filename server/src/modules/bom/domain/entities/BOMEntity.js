@@ -1,34 +1,10 @@
 const Entity = require('../../../../shared/domain/Entity');
 const { ValidationError } = require('../../../../errors');
 
-/**
- * Entidade de domínio leve que representa a Estrutura de Produto (BOM –
- * Bill of Materials) na entrada de criação via `POST /api/engineering/bom`.
- *
- * Esta entidade valida apenas a FORMA dos dados de entrada (produto
- * informado, lista de itens não vazia, cada item com componente e
- * quantidade > 0). Toda a lógica de negócio pesada — produto deve ser do
- * tipo `finished`, componente deve existir, versionamento automático via
- * `status = 'superseded'` das BOMs ativas anteriores, cálculo de custo por
- * item — permanece 100% em `server/src/services/bomService.js`
- * (`BomService.createBOM`), não duplicada aqui.
- */
+const MAX_BOM_LEVEL = 10;
+const MAX_SCRAP_PERCENTAGE = 100;
+
 class BOMEntity extends Entity {
-  /**
-   * @param {Object} props - Propriedades da BOM.
-   * @param {number} [props.id] - Identificador único (quando já persistida).
-   * @param {number} props.product_id - Id do produto acabado ao qual a BOM pertence.
-   * @param {Array<Object>} props.items - Lista de itens componentes.
-   * @param {number} props.items[].component_product_id - Id do produto componente.
-   * @param {number} props.items[].quantity - Quantidade do componente por unidade do produto (deve ser > 0).
-   * @param {string} [props.revision] - Revisão da BOM.
-   * @param {string} [props.revision_notes] - Notas da revisão.
-   * @param {string} [props.notes] - Observações técnicas.
-   * @param {Date|string} [props.createdAt]
-   * @param {Date|string} [props.updatedAt]
-   * @throws {ValidationError} Se `product_id` estiver ausente, `items` estiver vazio/ausente
-   * ou algum item não tiver `component_product_id`/`quantity` válidos.
-   */
   constructor(props) {
     super({ id: props.id, createdAt: props.createdAt, updatedAt: props.updatedAt });
 
@@ -41,35 +17,44 @@ class BOMEntity extends Entity {
     this.validate();
   }
 
-  /**
-   * Executa todas as validações de forma da entidade.
-   *
-   * @returns {void}
-   * @throws {ValidationError} Se algum campo obrigatório estiver ausente ou inválido.
-   */
   validate() {
     if (!this.product_id) {
-      throw new ValidationError('ID do produto é obrigatório');
+      throw new ValidationError('ID do produto e obrigatorio');
     }
     if (!this.items || this.items.length === 0) {
-      throw new ValidationError('Adicione pelo menos um item componente à BOM');
+      throw new ValidationError('Adicione pelo menos um item componente a BOM');
     }
+
+    const seenComponents = new Set();
     this.items.forEach((item, i) => {
       if (!item.component_product_id) {
-        throw new ValidationError(`Item ${i + 1}: component_product_id é obrigatório`);
+        throw new ValidationError(`Item ${i + 1}: component_product_id e obrigatorio`);
+      }
+      if (Number(item.component_product_id) === Number(this.product_id)) {
+        throw new ValidationError(`Item ${i + 1}: produto nao pode ser componente dele mesmo`);
       }
       if (!item.quantity || parseFloat(item.quantity) <= 0) {
         throw new ValidationError(`Item ${i + 1}: quantidade deve ser maior que zero`);
       }
+
+      const scrap = item.scrap_percentage !== undefined ? Number(item.scrap_percentage) : 0;
+      if (!Number.isFinite(scrap) || scrap < 0 || scrap > MAX_SCRAP_PERCENTAGE) {
+        throw new ValidationError(`Item ${i + 1}: percentual de perda deve ficar entre 0 e ${MAX_SCRAP_PERCENTAGE}`);
+      }
+
+      const level = item.bom_level !== undefined ? Number(item.bom_level) : 1;
+      if (!Number.isInteger(level) || level < 1 || level > MAX_BOM_LEVEL) {
+        throw new ValidationError(`Item ${i + 1}: nivel da BOM deve ficar entre 1 e ${MAX_BOM_LEVEL}`);
+      }
+
+      const duplicateKey = `${level}:${item.component_product_id}`;
+      if (seenComponents.has(duplicateKey)) {
+        throw new ValidationError(`Item ${i + 1}: componente duplicado no mesmo nivel da BOM`);
+      }
+      seenComponents.add(duplicateKey);
     });
   }
 
-  /**
-   * Serializa a entidade para os parâmetros aceitos por `BomService.createBOM`.
-   *
-   * @param {number} createdBy - Id do usuário que está criando a BOM.
-   * @returns {{ product_id: number, created_by: number, items: Array<Object>, revision: string|undefined, revision_notes: string|undefined, notes: string|undefined }}
-   */
   toServiceInput(createdBy) {
     return {
       product_id: this.product_id,
