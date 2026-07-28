@@ -118,11 +118,11 @@ Usar `Math.round(value * 100) / 100` em todas as operações de parcelas, garant
 | **Arquivos** | ~80 |
 | **Endpoints** | 80+ |
 | **Bugs Críticos Corrigidos (Fase 4)** | **8/15** |
-| **Módulos migrados p/ Clean Architecture (Fase 5)** | **6/11** (products, inventory, bom, production, purchases, sales — faltam financial, auth, users, suppliers, clients) |
+| **Módulos migrados p/ Clean Architecture (Fase 5)** | **7/11** (products, inventory, bom, production, purchases, sales, financial — faltam auth, users, suppliers, clients) |
 
 ---
 
-*Última atualização: Fase 5 concluída para os 6 módulos prioritários (products, inventory, bom, production, purchases, sales).*
+*Última atualização: Fase 5 concluída para os 7 módulos críticos (products, inventory, bom, production, purchases, sales, financial).*
 *Fase 4.1 (estabilização crítica) 100% concluída: race condition de estoque, CNPJ, erros padronizados, AuditLog real.*
 *Pendências reais e verificadas (não apenas "não iniciado"): testes automatizados concorrentes de race condition (Fase 4.1), reserva de estoque real (reserved_quantity não existe no schema), refugo/eficiência de produção, versionamento formal de BOM com detecção de ciclo, TypeScript (Fase 7), Zod/DTOs (Fase 8), testes automatizados (Fase 9), documentação completa (Fase 10), migrations (Fase 11), RBAC/segurança (Fase 12), OpenAPI (Fase 13), observabilidade (Fase 14).*
 *Próximo alvo sugerido: migrar financial/auth/users/suppliers/clients (fechar Fase 5) OU iniciar Fase 9 (testes automatizados) para validar de fato o que foi implementado nas Fases 4.1-6.*
@@ -142,23 +142,25 @@ Este plano nao substitui as correcoes criticas da Fase 4. Ele organiza a evoluca
 
 - [x] Continuar usando `D:\erp-evok-audio` como base principal.
 - [x] Usar `D:\ErpEvokAudio` como referencia de arquitetura, documentacao, DDD, testes e organizacao modular.
-- [ ] Nao copiar cegamente a estrutura do projeto TypeScript; adaptar por partes para nao quebrar o ERP funcional existente.
-- [ ] Priorizar modulos criticos: Estoque, Produtos, BOM, Compras, Vendas, Producao e Financeiro.
+- [x] Nao copiar cegamente a estrutura do projeto TypeScript; adaptar por partes para nao quebrar o ERP funcional existente (rotas legadas mantidas no disco, contrato de API preservado em cada migracao).
+- [x] Priorizar modulos criticos: Estoque, Produtos, BOM, Compras, Vendas, Producao e Financeiro — **todos os 7 migrados** (products, inventory, bom, purchases, sales, production, financial).
 
 ## O que deve ser herdado do D:\ErpEvokAudio
 
-- [ ] Organizacao por modulo com camadas: `domain`, `application`, `infrastructure`, `presentation`.
-- [ ] Entidades de dominio com regras de negocio fora dos controllers.
-- [ ] Use cases para operacoes importantes.
-- [ ] DTOs claros de entrada e saida.
-- [ ] Interfaces de repositorio.
-- [ ] Erros padronizados.
-- [ ] Testes unitarios de dominio.
-- [ ] Testes de use cases.
-- [ ] Documentacao de arquitetura, banco, APIs, fluxos de negocio e guia de desenvolvimento.
-- [ ] Contrato OpenAPI/Swagger centralizado.
-- [ ] Padrao de resposta JSON consistente.
-- [ ] Padrao de validacao e sanitizacao em todas as entradas.
+Status real (auditado em 2026-07-28), item a item:
+
+- [ ] Organizacao por modulo com camadas: `domain`, `application`, `infrastructure`, `presentation` — **PARCIAL**. Feito em 7 de 11 modulos (products, inventory, bom, purchases, sales, production, financial). Faltam: `auth`, `users`, `suppliers`, `clients`.
+- [ ] Entidades de dominio com regras de negocio fora dos controllers — **PARCIAL**, so nos 7 modulos migrados. Nos demais controllers (auth, users, suppliers, clients, categories, employees, departments, reports, assets, maintenance, nonConformities, serviceOrders, mobileInventory, auditLogs, dashboard, intelligentAuditor) a regra de negocio ainda esta solta no controller, formato antigo.
+- [ ] Use cases para operacoes importantes — **PARCIAL**, mesma cobertura dos 7 modulos migrados. Alem disso, os use cases hoje sao majoritariamente wrappers finos sobre services/models existentes (ex.: bomService.js), nao uma reescrita completa de dominio rico em todos os casos — ver notas especificas nas Fases 6.
+- [ ] DTOs claros de entrada e saida — **NAO FEITO**. Nao existem classes/schemas de DTO formais; a validacao de entrada e feita por entidades leves (`*Entity.js`) que veem o `req.body` bruto. Isso e explicitamente escopo da Fase 8 (Zod), ainda nao iniciada.
+- [x] Interfaces de repositorio — feito nos 7 modulos migrados (`domain/repositories/*Repository.js` + implementacao Sequelize em `infrastructure/sequelize/`).
+- [x] Erros padronizados — feito em todo o projeto (nao so nos modulos migrados): `AppError`/subclasses + `errorHandler` central, aplicado nos 25 controllers desde a Fase 4.1.
+- [ ] Testes unitarios de dominio — **NAO FEITO**. Zero arquivos de teste no projeto inteiro (nao ha `server/tests/` nem runner configurado). Escopo da Fase 9.
+- [ ] Testes de use cases — **NAO FEITO**, mesma razao acima.
+- [ ] Documentacao de arquitetura, banco, APIs, fluxos de negocio e guia de desenvolvimento — **PARCIAL**. Existe `docs/API.md` (atualizado a cada modulo migrado) e um `README.md` por modulo migrado (objetivo, entidades, regras, endpoints, permissoes, auditoria, pendencias). NAO existem os documentos formais previstos na Fase 10 (`docs/01-ARQUITETURA.md`, `docs/03-BANCO-DE-DADOS.md`, `docs/05-FLUXOS-DE-NEGOCIO.md`, `docs/06-GUIA-DE-DESENVOLVIMENTO.md`, C4 model, LOGBOOK).
+- [ ] Contrato OpenAPI/Swagger centralizado — **NAO FEITO**. Existem comentarios `@openapi` isolados no arquivo legado `server/src/routes/bom.js` (nao mais ativo) mas nao ha spec centralizada nem servida (`/docs`, Swagger UI). Escopo da Fase 13.
+- [x] Padrao de resposta JSON consistente — feito nos 7 modulos migrados (`{ success, data, pagination? }` e `{ success:false, error:{ code, message } }` via `AppError`); os controllers antigos (nao migrados) continuam no formato legado equivalente mas sem a garantia central do `AppError`.
+- [ ] Padrao de validacao e sanitizacao em todas as entradas — **PARCIAL**. Ha validacao de forma (entidades leves) nos 7 modulos migrados e sanitizacao de busca (`sanitizeSearch`) desde a Fase 3, mas nao ha padrao de schema/validacao centralizado (Zod) aplicado a todas as rotas — escopo da Fase 8.
 
 ## FASE 4.1 - Estabilizacao obrigatoria antes da elegancia
 
