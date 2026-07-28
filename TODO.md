@@ -429,7 +429,7 @@ Status real (auditado em 2026-07-28, primeira rodada desta fase):
 - [x] Definir regra: arquivos novos de dominio/application devem nascer em TypeScript — decisao registrada aqui no TODO; **nao e reforcada por lint/CI ainda** (depende do ESLint acima), e um acordo de processo por enquanto.
 - [x] Migrar `validators.js` para TypeScript (`server/src/utils/validators.ts`, mesma API publica via `export = Validators`, testado via `tsx` isoladamente e via boot completo do servidor).
 - [x] Migrar erros compartilhados (`server/src/errors/AppError.ts` e `index.ts`, mesma API via `export =`; testado isoladamente e via boot completo — os 61 arquivos que fazem `require('.../errors')` continuam funcionando sem alteracao).
-- [ ] Migrar services puros — **NAO FEITO** (`inventoryService.js`, `bomService.js`, `auditLogService.js`, `uploadService.js`, `dashboardService.js`, `reportService.js`, `qrCodeService.js` continuam `.js`).
+- [ ] Migrar services puros — **PARCIAL**. Migrados: `auditLogService.ts`, `qrCodeService.ts`, `reportService.ts`, `dashboardService.ts` (testados isoladamente via `tsx` e via boot completo). Faltam: `inventoryService.js`, `bomService.js`, `uploadService.js` (services maiores/mais criticos, migracao adiada para uma proxima rodada dedicada por seguranca).
 - [ ] Migrar modulo `products` — **NAO FEITO**.
 - [ ] Migrar modulo `inventory` — **NAO FEITO**.
 - [ ] Migrar modulo `bom` — **NAO FEITO**.

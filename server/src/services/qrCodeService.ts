@@ -1,14 +1,24 @@
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const QRCode = require('qrcode');
+
+interface QRCodeResult {
+  qrDataUrl: string;
+  qrCodeData: string;
+}
+
+interface QRCodeSvgResult {
+  qrSvg: string;
+  qrCodeData: string;
+}
 
 class QRCodeService {
   /**
-   * Generate QR Code for a given entity
-   * @param {string} entityType - Type: 'asset', 'product', 'machine'
-   * @param {string} entityId - MongoDB ObjectId
-   * @param {object} data - Additional data to encode
-   * @returns {Promise<{ qrDataUrl: string, qrCodeData: string }>}
+   * Gera QR Code (PNG data URL) para uma entidade.
+   * @param entityType - Tipo: 'asset', 'product', 'machine'
+   * @param entityId - Id da entidade
+   * @param data - Dados adicionais a codificar
    */
-  static async generate(entityType, entityId, data = {}) {
+  static async generate(entityType: string, entityId: string | number, data: Record<string, unknown> = {}): Promise<QRCodeResult> {
     const qrCodeData = JSON.stringify({
       type: entityType,
       id: entityId,
@@ -31,9 +41,9 @@ class QRCodeService {
   }
 
   /**
-   * Generate QR Code in SVG format (for printing)
+   * Gera QR Code em formato SVG (para impressão).
    */
-  static async generateSvg(entityType, entityId, data = {}) {
+  static async generateSvg(entityType: string, entityId: string | number, data: Record<string, unknown> = {}): Promise<QRCodeSvgResult> {
     const qrCodeData = JSON.stringify({
       type: entityType,
       id: entityId,
@@ -52,5 +62,4 @@ class QRCodeService {
   }
 }
 
-module.exports = QRCodeService;
-
+export = QRCodeService;

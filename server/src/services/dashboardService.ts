@@ -1,6 +1,7 @@
-const { Sale, SaleItem, Product, Client, Category, Supplier, Employee, ProductionOrder, AccountReceivable, AccountPayable, InventoryMovement, User } = require('../models/index');
-const { Op, fn, col, literal } = require('sequelize');
-const { sequelize } = require('../config/database');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { Sale, Product, Client, Supplier, Employee, ProductionOrder, AccountReceivable, AccountPayable, InventoryMovement, User } = require('../models/index');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { Op, fn, col } = require('sequelize');
 
 class DashboardService {
   static async getDashboard() {
@@ -94,4 +95,4 @@ class DashboardService {
   }
 }
 
-module.exports = DashboardService;
+export = DashboardService;
