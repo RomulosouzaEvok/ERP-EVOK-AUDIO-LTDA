@@ -2,7 +2,7 @@ const { Employee, Department, User } = require('../models/index');
 const { Op } = require('sequelize');
 const Validators = require('../utils/validators');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, status, department_id } = req.query;
     const where = {};
@@ -32,11 +32,11 @@ exports.list = async (req, res) => {
 
     res.json({ success: true, data: rows, pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) } });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao listar funcionários') });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const employee = await Employee.findByPk(req.params.id, {
       attributes: { exclude: ['bank_name', 'bank_agency', 'bank_account', 'bank_account_type', 'pix_key'] },
@@ -48,11 +48,11 @@ exports.getById = async (req, res) => {
     if (!employee) return res.status(404).json({ success: false, error: 'Funcionário não encontrado' });
     res.json({ success: true, data: employee });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao buscar funcionário') });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const { name, cpf, rg, pis_pasep, ctps, phone, email, address, department_id, position, salary, salary_type, hire_date, shift, work_regime, work_hours_weekly, notes } = req.body;
 
@@ -77,11 +77,11 @@ exports.create = async (req, res) => {
     res.status(201).json({ success: true, data: employee });
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'CPF já cadastrado' });
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao criar funcionário') });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const allowedFields = ['name', 'rg', 'pis_pasep', 'ctps', 'phone', 'email', 'address', 'department_id', 'position', 'salary', 'salary_type', 'shift', 'work_regime', 'work_hours_weekly', 'notes'];
     const updateData = {};
@@ -97,21 +97,21 @@ exports.update = async (req, res) => {
     });
     res.json({ success: true, data: employee });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao atualizar funcionário') });
+    next(error);
   }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     const [updated] = await Employee.update({ status: 'inactive', dismissal_date: new Date() }, { where: { id: req.params.id } });
     if (!updated) return res.status(404).json({ success: false, error: 'Funcionário não encontrado' });
     res.json({ success: true, data: { message: 'Funcionário desligado com sucesso' } });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao desligar funcionário') });
+    next(error);
   }
 };
 
-exports.getByDepartment = async (req, res) => {
+exports.getByDepartment = async (req, res, next) => {
   try {
     const employees = await Employee.findAll({
       where: { department_id: req.params.departmentId, status: 'active' },
@@ -120,7 +120,7 @@ exports.getByDepartment = async (req, res) => {
     });
     res.json({ success: true, data: employees });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao buscar funcionários por departamento') });
+    next(error);
   }
 };
 

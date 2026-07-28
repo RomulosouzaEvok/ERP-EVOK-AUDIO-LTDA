@@ -78,7 +78,7 @@ class Validators {
     for (let i = 0; i < 13; i++) sum += parseInt(cleaned.charAt(i)) * w2[i];
     rem = sum % 11;
     let d2 = rem < 2 ? 0 : 11 - rem;
-    if (d2 !== parseInt(cleaned.charAt(10))) return false;
+    if (d2 !== parseInt(cleaned.charAt(13))) return false;
 
     return true;
   }

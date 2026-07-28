@@ -1,6 +1,6 @@
 const { Department, Employee } = require('../models/index');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { only_active } = req.query;
     const where = {};
@@ -19,11 +19,11 @@ exports.list = async (req, res) => {
 
     res.json({ success: true, data: departmentsWithCount });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const department = await Department.findByPk(req.params.id, {
       include: [{ model: Employee, as: 'manager', attributes: ['id', 'name'] }]
@@ -33,11 +33,11 @@ exports.getById = async (req, res) => {
     const employeeCount = await Employee.count({ where: { department_id: department.id, status: 'active' } });
     res.json({ success: true, data: { ...department.toJSON(), employee_count: employeeCount } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const { code, name, sigla, description, manager_id } = req.body;
     if (!code || !name || !sigla) return res.status(400).json({ success: false, error: 'Código, nome e sigla são obrigatórios' });
@@ -46,11 +46,11 @@ exports.create = async (req, res) => {
     res.status(201).json({ success: true, data: department });
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Já existe departamento com este código ou sigla' });
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const allowedFields = ['name', 'sigla', 'description', 'manager_id'];
     const updateData = {};
@@ -67,11 +67,11 @@ exports.update = async (req, res) => {
     });
     res.json({ success: true, data: department });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     const employeeCount = await Employee.count({ where: { department_id: req.params.id, status: 'active' } });
     if (employeeCount > 0) return res.status(400).json({ success: false, error: `Departamento possui ${employeeCount} funcionário(s) ativo(s).` });
@@ -80,11 +80,11 @@ exports.remove = async (req, res) => {
     if (!updated) return res.status(404).json({ success: false, error: 'Departamento não encontrado' });
     res.json({ success: true, data: { message: 'Departamento inativado com sucesso' } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getHierarchy = async (req, res) => {
+exports.getHierarchy = async (req, res, next) => {
   try {
     const departments = await Department.findAll({
       where: { active: true },
@@ -103,6 +103,6 @@ exports.getHierarchy = async (req, res) => {
 
     res.json({ success: true, data: hierarchy });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };

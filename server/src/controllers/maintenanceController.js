@@ -2,7 +2,7 @@ const { MaintenanceOrder, Asset, Department, Employee, User } = require('../mode
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, status, maintenance_type, asset_id, priority, start_date, end_date, technician_id } = req.query;
     const where = {};
@@ -48,11 +48,11 @@ exports.list = async (req, res) => {
       pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const order = await MaintenanceOrder.findByPk(req.params.id, {
       include: [
@@ -66,11 +66,11 @@ exports.getById = async (req, res) => {
     if (!order) return res.status(404).json({ success: false, error: 'Ordem de manutenção não encontrada' });
     res.json({ success: true, data: order });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const { asset_id, maintenance_type, priority, problem_description, reported_by, notes, scheduled_date } = req.body;
     if (!asset_id || !maintenance_type || !problem_description) {
@@ -98,11 +98,11 @@ exports.create = async (req, res) => {
 
     res.status(201).json({ success: true, data: order });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const allowedFields = [
       'problem_description', 'diagnosed_problem', 'service_performed',
@@ -126,11 +126,11 @@ exports.update = async (req, res) => {
     const order = await MaintenanceOrder.findByPk(req.params.id);
     res.json({ success: true, data: order });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.updateStatus = async (req, res) => {
+exports.updateStatus = async (req, res, next) => {
   try {
     const { status, diagnosed_problem, service_performed, parts_cost, labor_cost, downtime_hours, result, notes, frequency_days } = req.body;
 
@@ -193,11 +193,11 @@ exports.updateStatus = async (req, res) => {
     const updated = await MaintenanceOrder.findByPk(req.params.id);
     res.json({ success: true, data: updated });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     const order = await MaintenanceOrder.findByPk(req.params.id);
     if (!order) return res.status(404).json({ success: false, error: 'Ordem de manutenção não encontrada' });
@@ -207,11 +207,11 @@ exports.remove = async (req, res) => {
     await MaintenanceOrder.destroy({ where: { id: req.params.id } });
     res.json({ success: true, data: { message: 'Ordem de manutenção removida' } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getSchedule = async (req, res) => {
+exports.getSchedule = async (req, res, next) => {
   try {
     const { start_date, end_date } = req.query;
     const where = { status: { [Op.notIn]: ['completed', 'canceled'] } };
@@ -232,11 +232,11 @@ exports.getSchedule = async (req, res) => {
 
     res.json({ success: true, data: { total: orders.length, schedule: orders } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getReport = async (req, res) => {
+exports.getReport = async (req, res, next) => {
   try {
     const { start_date, end_date } = req.query;
     const where = {};
@@ -277,6 +277,6 @@ exports.getReport = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };

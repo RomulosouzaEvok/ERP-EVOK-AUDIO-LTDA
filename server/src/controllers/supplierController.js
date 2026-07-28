@@ -2,7 +2,7 @@ const { Supplier } = require('../models/index');
 const { Op } = require('sequelize');
 const Validators = require('../utils/validators');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, status } = req.query;
     const where = {};
@@ -29,21 +29,21 @@ exports.list = async (req, res) => {
       pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao listar fornecedores') });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const supplier = await Supplier.findByPk(req.params.id);
     if (!supplier) return res.status(404).json({ success: false, error: 'Fornecedor não encontrado' });
     res.json({ success: true, data: supplier });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao buscar fornecedor') });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const {
       company_name, trade_name, cnpj, ie, phone, email, address,
@@ -73,11 +73,11 @@ exports.create = async (req, res) => {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({ success: false, error: 'CNPJ já cadastrado' });
     }
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao criar fornecedor') });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const allowedFields = [
       'company_name', 'trade_name', 'ie', 'phone', 'email',
@@ -95,11 +95,11 @@ exports.update = async (req, res) => {
     const supplier = await Supplier.findByPk(req.params.id);
     res.json({ success: true, data: supplier });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao atualizar fornecedor') });
+    next(error);
   }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     const { Purchase } = require('../models/index');
     const pendingPurchases = await Purchase.count({
@@ -118,7 +118,7 @@ exports.remove = async (req, res) => {
     if (!updated) return res.status(404).json({ success: false, error: 'Fornecedor não encontrado' });
     res.json({ success: true, data: { message: 'Fornecedor inativado com sucesso' } });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao inativar fornecedor') });
+    next(error);
   }
 };
 

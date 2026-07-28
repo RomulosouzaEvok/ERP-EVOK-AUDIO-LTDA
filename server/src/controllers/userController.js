@@ -1,7 +1,8 @@
 const { User } = require('../models/index');
 const { Op } = require('sequelize');
+const { logAction } = require('../services/auditLogService');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, role, active } = req.query;
     const where = {};
@@ -27,21 +28,21 @@ exports.list = async (req, res) => {
       pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const user = await User.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
     if (!user) return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
     res.json({ success: true, data: user });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const { name, email, password, role } = req.body;
     if (!name || !email || !password) return res.status(400).json({ success: false, error: 'Nome, email e senha são obrigatórios' });
@@ -52,14 +53,17 @@ exports.create = async (req, res) => {
     if (role && !validRoles.includes(role)) return res.status(400).json({ success: false, error: `Perfil inválido. Use: ${validRoles.join(', ')}` });
 
     const user = await User.create({ name, email, password, role: role || 'operator' });
+
+    logAction(req, { action: 'create', entityType: 'User', entityId: user.id, entityDescription: user.email, newValues: { name: user.name, email: user.email, role: user.role }, description: `Usuário ${user.email} criado` });
+
     res.status(201).json({ success: true, data: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Email já cadastrado' });
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     if (req.body.password) return res.status(400).json({ success: false, error: 'Use endpoint específico para alterar senha' });
     const allowedFields = ['name', 'email', 'role', 'active'];
@@ -72,23 +76,36 @@ exports.update = async (req, res) => {
       if (!emailRegex.test(updateData.email)) return res.status(400).json({ success: false, error: 'Formato de email inválido' });
     }
 
+    const before = await User.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
+    if (!before) return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
+    const oldValues = {};
+    for (const field of Object.keys(updateData)) oldValues[field] = before[field];
+
     const [updated] = await User.update(updateData, { where: { id: req.params.id } });
     if (!updated) return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
     const user = await User.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
+
+    logAction(req, { action: 'update', entityType: 'User', entityId: user.id, entityDescription: user.email, oldValues, newValues: updateData, description: `Usuário ${user.email} atualizado` });
+
     res.json({ success: true, data: user });
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Email já cadastrado' });
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     if (parseInt(req.params.id) === req.user.id) return res.status(400).json({ success: false, error: 'Você não pode inativar seu próprio usuário' });
+    const before = await User.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
+    if (!before) return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
     const [updated] = await User.update({ active: false }, { where: { id: req.params.id } });
     if (!updated) return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
+
+    logAction(req, { action: 'soft_delete', entityType: 'User', entityId: before.id, entityDescription: before.email, oldValues: { active: before.active }, newValues: { active: false }, description: `Usuário ${before.email} inativado` });
+
     res.json({ success: true, data: { message: 'Usuário inativado com sucesso' } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };

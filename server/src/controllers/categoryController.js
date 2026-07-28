@@ -1,7 +1,7 @@
 const { Category, Product } = require('../models/index');
 const { sequelize } = require('../config/database');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const categories = await Category.findAll({
       include: [{ model: Product, as: 'products', attributes: [], required: false }],
@@ -16,21 +16,21 @@ exports.list = async (req, res) => {
 
     res.json({ success: true, data: categories });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const category = await Category.findByPk(req.params.id);
     if (!category) return res.status(404).json({ success: false, error: 'Categoria não encontrada' });
     res.json({ success: true, data: category });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const { name, description } = req.body;
     if (!name) {
@@ -42,11 +42,11 @@ exports.create = async (req, res) => {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({ success: false, error: 'Categoria já existe' });
     }
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const updateData = {};
     if (req.body.name !== undefined) updateData.name = req.body.name;
@@ -61,11 +61,11 @@ exports.update = async (req, res) => {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({ success: false, error: 'Nome da categoria já existe' });
     }
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     const productsCount = await Product.count({ where: { category_id: req.params.id } });
     if (productsCount > 0) {
@@ -75,7 +75,7 @@ exports.remove = async (req, res) => {
     if (!deleted) return res.status(404).json({ success: false, error: 'Categoria não encontrada' });
     res.json({ success: true, data: { message: 'Categoria excluída com sucesso' } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 

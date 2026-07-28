@@ -35,6 +35,7 @@
 const { BillOfMaterial, BillOfMaterialItem, Product } = require('../models/index');
 const { Op } = require('sequelize');
 const BomService = require('../services/bomService');
+const { logAction } = require('../services/auditLogService');
 
 module.exports = {
 
@@ -57,7 +58,7 @@ module.exports = {
    * 
    * @throws {500} Erro interno do servidor (logado internamente)
    */
-  async list(req, res) {
+  async list(req, res, next) {
     try {
       const { page = 1, limit = 10, status, search, product_id } = req.query;
       const where = {};
@@ -100,12 +101,7 @@ module.exports = {
     } catch (error) {
       // Log interno sem vazar detalhes do erro
       console.error('[BOM] Erro ao listar:', error.message);
-      res.status(500).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' 
-          ? 'Erro interno ao listar estruturas de produto' 
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -121,7 +117,7 @@ module.exports = {
    * @throws {404} BOM não encontrada
    * @throws {500} Erro interno do servidor
    */
-  async getById(req, res) {
+  async getById(req, res, next) {
     try {
       const bom = await BillOfMaterial.findByPk(req.params.id, {
         include: [
@@ -142,12 +138,7 @@ module.exports = {
       res.json({ success: true, data: bom });
     } catch (error) {
       console.error('[BOM] Erro ao buscar por ID:', error.message);
-      res.status(500).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' 
-          ? 'Erro interno ao buscar estrutura de produto' 
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -162,7 +153,7 @@ module.exports = {
    * 
    * @throws {404} Produto não encontrado ou sem BOM ativa
    */
-  async getByProduct(req, res) {
+  async getByProduct(req, res, next) {
     try {
       const product = await Product.findByPk(req.params.productId);
       if (!product) {
@@ -189,12 +180,7 @@ module.exports = {
       res.json({ success: true, data: bom });
     } catch (error) {
       console.error('[BOM] Erro ao buscar por produto:', error.message);
-      res.status(500).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' 
-          ? 'Erro interno ao buscar BOM do produto' 
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -221,7 +207,7 @@ module.exports = {
    * @throws {400} Dados inválidos ou incompletos
    * @throws {404} Produto ou componente não encontrado
    */
-  async create(req, res) {
+  async create(req, res, next) {
     try {
       const { product_id, items, revision, revision_notes, notes } = req.body;
 
@@ -253,17 +239,14 @@ module.exports = {
         notes
       });
 
+      const bomId = result && (result.id || (result.bom && result.bom.id));
+      logAction(req, { action: 'create', entityType: 'BOM', entityId: bomId, entityDescription: `Produto #${product_id}`, newValues: { product_id, revision, items_count: items.length }, description: `BOM criada para o produto #${product_id}` });
+
       res.status(201).json({ success: true, data: result });
     } catch (error) {
       // Tratamento de erros conhecidos do serviço
-      const statusCode = error.statusCode || 500;
       console.error('[BOM] Erro ao criar:', error.message);
-      res.status(statusCode).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' && statusCode === 500
-          ? 'Erro interno ao criar estrutura de produto'
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -286,7 +269,7 @@ module.exports = {
    * 
    * @throws {404} BOM não encontrada
    */
-  async update(req, res) {
+  async update(req, res, next) {
     try {
       const allowedFields = ['revision', 'revision_notes', 'notes', 'status'];
       const updateData = {};
@@ -297,8 +280,15 @@ module.exports = {
         }
       }
 
-      const [updated] = await BillOfMaterial.update(updateData, { 
-        where: { id: req.params.id } 
+      const before = await BillOfMaterial.findByPk(req.params.id);
+      if (!before) {
+        return res.status(404).json({ success: false, error: 'BOM não encontrada' });
+      }
+      const oldValues = {};
+      for (const field of Object.keys(updateData)) oldValues[field] = before[field];
+
+      const [updated] = await BillOfMaterial.update(updateData, {
+        where: { id: req.params.id }
       });
 
       if (!updated) {
@@ -309,15 +299,24 @@ module.exports = {
         include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }]
       });
 
+      const isApproval = updateData.status === 'active' && before.status !== 'active';
+      const isRevision = updateData.revision !== undefined && updateData.revision !== before.revision;
+      logAction(req, {
+        action: isApproval ? 'approve' : 'update',
+        entityType: 'BOM',
+        entityId: bom.id,
+        entityDescription: bom.product ? bom.product.code : `BOM #${bom.id}`,
+        oldValues,
+        newValues: updateData,
+        description: isApproval
+          ? `BOM #${bom.id} aprovada (status alterado para active)`
+          : (isRevision ? `BOM #${bom.id} revisada (revisão ${before.revision} → ${updateData.revision})` : `BOM #${bom.id} atualizada`)
+      });
+
       res.json({ success: true, data: bom });
     } catch (error) {
       console.error('[BOM] Erro ao atualizar:', error.message);
-      res.status(500).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' 
-          ? 'Erro interno ao atualizar estrutura de produto' 
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -337,7 +336,7 @@ module.exports = {
    * @throws {400} BOM em status que não permite inativação
    * @throws {404} BOM não encontrada
    */
-  async remove(req, res) {
+  async remove(req, res, next) {
     try {
       const bom = await BillOfMaterial.findByPk(req.params.id);
       if (!bom) {
@@ -356,15 +355,12 @@ module.exports = {
         { where: { id: req.params.id } }
       );
 
+      logAction(req, { action: 'soft_delete', entityType: 'BOM', entityId: bom.id, entityDescription: `BOM #${bom.id}`, oldValues: { status: bom.status }, newValues: { status: 'inactive' }, description: `BOM #${bom.id} inativada` });
+
       res.json({ success: true, data: { message: 'BOM inativada com sucesso' } });
     } catch (error) {
       console.error('[BOM] Erro ao remover:', error.message);
-      res.status(500).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' 
-          ? 'Erro interno ao inativar estrutura de produto' 
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -386,7 +382,7 @@ module.exports = {
    * @throws {400} Quantidade não informada
    * @throws {404} BOM não encontrada
    */
-  async explode(req, res) {
+  async explode(req, res, next) {
     try {
       const { qty } = req.query;
       if (!qty || parseInt(qty) <= 0) {
@@ -401,14 +397,8 @@ module.exports = {
       const result = await BomService.explodeBOM(bom.product_id, parseInt(qty));
       res.json({ success: true, data: result });
     } catch (error) {
-      const statusCode = error.statusCode || 500;
       console.error('[BOM] Erro ao explodir:', error.message);
-      res.status(statusCode).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' && statusCode === 500
-          ? 'Erro interno ao explodir estrutura de produto'
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -422,7 +412,7 @@ module.exports = {
    * @param {Object} res - Express response object
    * @returns {Promise<void>} Detalhamento de custos
    */
-  async cost(req, res) {
+  async cost(req, res, next) {
     try {
       const qty = parseInt(req.query.qty) || 1;
       if (qty <= 0) {
@@ -437,14 +427,8 @@ module.exports = {
       const result = await BomService.calculateCost(bom.product_id, qty);
       res.json({ success: true, data: result });
     } catch (error) {
-      const statusCode = error.statusCode || 500;
       console.error('[BOM] Erro ao calcular custo:', error.message);
-      res.status(statusCode).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' && statusCode === 500
-          ? 'Erro interno ao calcular custo'
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -458,7 +442,7 @@ module.exports = {
    * @param {Object} res - Express response object
    * @returns {Promise<void>} Status de disponibilidade
    */
-  async availability(req, res) {
+  async availability(req, res, next) {
     try {
       const { qty } = req.query;
       if (!qty || parseInt(qty) <= 0) {
@@ -473,14 +457,8 @@ module.exports = {
       const result = await BomService.checkAvailability(bom.product_id, parseInt(qty));
       res.json({ success: true, data: result });
     } catch (error) {
-      const statusCode = error.statusCode || 500;
       console.error('[BOM] Erro ao verificar disponibilidade:', error.message);
-      res.status(statusCode).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' && statusCode === 500
-          ? 'Erro interno ao verificar disponibilidade'
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -492,19 +470,13 @@ module.exports = {
    * @param {Object} res - Express response object
    * @returns {Promise<void>} Árvore estruturada
    */
-  async tree(req, res) {
+  async tree(req, res, next) {
     try {
       const result = await BomService.getBOMTree(req.params.id);
       res.json({ success: true, data: result });
     } catch (error) {
-      const statusCode = error.statusCode || 500;
       console.error('[BOM] Erro ao buscar árvore:', error.message);
-      res.status(statusCode).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' && statusCode === 500
-          ? 'Erro interno ao buscar árvore da BOM'
-          : error.message 
-      });
+      next(error);
     }
   },
 
@@ -516,7 +488,7 @@ module.exports = {
    * @param {Object} res - Express response object
    * @returns {Promise<void>} Lista de itens
    */
-  async listItems(req, res) {
+  async listItems(req, res, next) {
     try {
       const items = await BillOfMaterialItem.findAll({
         where: { bom_id: req.params.id },
@@ -527,12 +499,7 @@ module.exports = {
       res.json({ success: true, data: items });
     } catch (error) {
       console.error('[BOM] Erro ao listar itens:', error.message);
-      res.status(500).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' 
-          ? 'Erro interno ao listar itens da BOM' 
-          : error.message 
-      });
+      next(error);
     }
   }
 };

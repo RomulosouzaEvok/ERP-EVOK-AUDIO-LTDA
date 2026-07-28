@@ -1,11 +1,13 @@
-const { Sale, SaleItem, Product, Client, AccountReceivable, InventoryMovement } = require('../models/index');
+const { Sale, SaleItem, Product, Client, AccountReceivable } = require('../models/index');
+const InventoryService = require('../services/inventoryService');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
+const { logAction } = require('../services/auditLogService');
 
 const toCents = value => Math.round((parseFloat(value) || 0) * 100);
 const fromCents = cents => parseFloat((cents / 100).toFixed(2));
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, status, start_date, end_date, customer_id } = req.query;
     const where = {};
@@ -41,11 +43,11 @@ exports.list = async (req, res) => {
       pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const sale = await Sale.findByPk(req.params.id, {
       include: [
@@ -56,11 +58,11 @@ exports.getById = async (req, res) => {
     if (!sale) return res.status(404).json({ success: false, error: 'Venda não encontrada' });
     res.json({ success: true, data: sale });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
     const { customer_id, items, discount = 0, payment_method, installments = 1, notes } = req.body;
@@ -145,40 +147,31 @@ exports.create = async (req, res) => {
       status: 'confirmed', payment_method, installments, notes
     }, { transaction: t });
 
-    // Create sale items
+    // Create sale items and debit stock atomically.
+    // InventoryService locks each Product row (SELECT ... FOR UPDATE) inside
+    // the same transaction, re-validates available quantity and registers
+    // the InventoryMovement, preventing concurrent sales from driving
+    // inventory negative.
     for (const item of processedItems) {
       await SaleItem.create({
         sale_id: sale.id, product_id: item.product_id,
         quantity: item.quantity, unit_price: item.unit_price, total_price: item.total_price
       }, { transaction: t });
 
-      // Atomic stock debit: prevents concurrent sales from driving inventory negative.
-      const [updatedRows] = await Product.update(
-        { quantity: sequelize.literal(`quantity - ${item.quantity}`) },
-        {
-          where: {
-            id: item.product_id,
-            status: 'active',
-            quantity: { [Op.gte]: item.quantity }
-          },
-          transaction: t
-        }
-      );
-      if (updatedRows !== 1) {
+      try {
+        await InventoryService.consume(item.product_id, item.quantity, t, {
+          user_id: req.user.id,
+          description: `Venda #${sale.id} - ${payment_method}`,
+          reference_id: sale.id,
+          reference_type: 'sale'
+        });
+      } catch (stockError) {
         await t.rollback();
-        return res.status(409).json({
+        return res.status(stockError.statusCode || 409).json({
           success: false,
-          error: `Estoque insuficiente para o produto ID ${item.product_id}. Venda nao concluida.`
+          error: stockError.message || `Estoque insuficiente para o produto ID ${item.product_id}. Venda nao concluida.`
         });
       }
-
-      // Inventory movement
-      await InventoryMovement.create({
-        product_id: item.product_id, user_id: req.user.id, type: 'out',
-        quantity: item.quantity,
-        description: `Venda #${sale.id} - ${payment_method}`,
-        reference_id: sale.id, reference_type: 'sale'
-      }, { transaction: t });
     }
 
 // Generate accounts receivable
@@ -211,6 +204,9 @@ exports.create = async (req, res) => {
 
     await t.commit();
 
+    // Log de auditoria feito após o commit para não segurar locks de banco.
+    logAction(req, { action: 'create', entityType: 'Sale', entityId: sale.id, entityDescription: `Venda #${sale.id}`, newValues: { customer_id, total_amount: totalNet, status: 'confirmed' }, description: `Venda #${sale.id} criada` });
+
     const fullSale = await Sale.findByPk(sale.id, {
       include: [
         { model: Client, as: 'customer', attributes: ['id', 'name'] },
@@ -221,11 +217,11 @@ exports.create = async (req, res) => {
     res.status(201).json({ success: true, data: fullSale });
   } catch (error) {
     await t.rollback();
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.updateStatus = async (req, res) => {
+exports.updateStatus = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
     const { status } = req.body;
@@ -264,15 +260,16 @@ exports.updateStatus = async (req, res) => {
       return res.status(400).json({ success: false, error: `Venda já está com status ${status}` });
     }
 
+    const previousStatus = sale.status;
+
     if (status === 'canceled') {
       for (const item of sale.items) {
-        await Product.update({ quantity: sequelize.literal(`quantity + ${item.quantity}`) }, { where: { id: item.product_id }, transaction: t });
-        await InventoryMovement.create({
-          product_id: item.product_id, user_id: req.user.id, type: 'in',
-          quantity: item.quantity,
+        await InventoryService.receive(item.product_id, item.quantity, t, {
+          user_id: req.user.id,
           description: `Cancelamento venda #${sale.id} - estoque restaurado`,
-          reference_id: sale.id, reference_type: 'adjustment'
-        }, { transaction: t });
+          reference_id: sale.id,
+          reference_type: 'adjustment'
+        });
       }
       await AccountReceivable.update({ status: 'canceled' }, {
         where: { sale_id: sale.id, status: { [Op.notIn]: ['paid', 'canceled'] } },
@@ -284,9 +281,12 @@ exports.updateStatus = async (req, res) => {
     await sale.save({ transaction: t });
     await t.commit();
 
+    // Log de auditoria feito após o commit para não segurar locks de banco.
+    logAction(req, { action: 'status_change', entityType: 'Sale', entityId: sale.id, entityDescription: `Venda #${sale.id}`, oldValues: { status: previousStatus }, newValues: { status }, description: `Venda #${sale.id}: status alterado de ${previousStatus} para ${status}` });
+
     res.json({ success: true, data: sale });
   } catch (error) {
     await t.rollback();
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };

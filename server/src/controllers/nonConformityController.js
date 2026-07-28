@@ -2,7 +2,7 @@ const { NonConformity, Product, ProductionOrder, Supplier, User } = require('../
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, status, origin, severity, product_id, start_date, end_date } = req.query;
     const where = {};
@@ -44,11 +44,11 @@ exports.list = async (req, res) => {
       pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const nc = await NonConformity.findByPk(req.params.id, {
       include: [
@@ -63,11 +63,11 @@ exports.getById = async (req, res) => {
     if (!nc) return res.status(404).json({ success: false, error: 'NC não encontrada' });
     res.json({ success: true, data: nc });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const {
       origin, product_id, purchase_item_id, production_order_id, service_order_id, supplier_id,
@@ -100,11 +100,11 @@ exports.create = async (req, res) => {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({ success: false, error: 'Número de NC já existe' });
     }
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const allowedFields = [
       'description', 'defect_type', 'severity', 'quantity_affected',
@@ -128,11 +128,11 @@ exports.update = async (req, res) => {
     const nc = await NonConformity.findByPk(req.params.id);
     res.json({ success: true, data: nc });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.updateStatus = async (req, res) => {
+exports.updateStatus = async (req, res, next) => {
   try {
     const { status, root_cause, root_cause_category, corrective_action, corrective_action_deadline, responsible_id, effectiveness_check, effectiveness_date, effectiveness_result, notes } = req.body;
 
@@ -172,11 +172,11 @@ exports.updateStatus = async (req, res) => {
     const updated = await NonConformity.findByPk(req.params.id);
     res.json({ success: true, data: updated });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getReport = async (req, res) => {
+exports.getReport = async (req, res, next) => {
   try {
     const { start_date, end_date } = req.query;
     const where = {};
@@ -217,6 +217,6 @@ exports.getReport = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };

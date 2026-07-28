@@ -1,4 +1,5 @@
 const { ValidationError, UniqueConstraintError, ForeignKeyConstraintError, DatabaseError } = require('sequelize');
+const { AppError } = require('../errors');
 
 /** Mapa de mensagens amigáveis por tipo de erro */
 const ERROR_MESSAGES = {
@@ -12,15 +13,51 @@ const ERROR_MESSAGES = {
 
 /**
  * Middleware de tratamento centralizado de erros.
- * Em produção, NUNCA retorna stack traces ou detalhes internos.
+ *
+ * Nunca retorna stack trace ou `error.message` cru de exceções inesperadas
+ * ao cliente HTTP, em nenhum ambiente (dev ou produção). Erros inesperados
+ * são sempre logados por completo no servidor (console.error com stack) para
+ * fins de depuração, mas o cliente recebe apenas uma mensagem genérica.
+ *
+ * Erros que sejam instâncias de {@link AppError} (ou subclasses como
+ * `NotFoundError`, `ValidationError`, `BusinessRuleError`, etc.) são
+ * considerados operacionais/esperados: sua `message`, `code` e `details`
+ * (quando definidos) são seguros para expor ao cliente e são retornados
+ * diretamente com o `statusCode` apropriado.
+ *
+ * @param {Error} err - Erro capturado (via `next(error)` ou lançado em rota async).
+ * @param {import('express').Request} req - Requisição Express.
+ * @param {import('express').Response} res - Resposta Express.
+ * @param {import('express').NextFunction} next - Próximo middleware (não utilizado, mas exigido pela assinatura do Express).
+ * @returns {void}
  */
 const errorHandler = (err, req, res, next) => {
   // Log interno (nunca exposto ao cliente)
   if (process.env.NODE_ENV !== 'test') {
     console.error(`[${new Date().toISOString()}] ERROR:`, err.message);
-    if (process.env.NODE_ENV === 'development') {
-      console.error(err.stack);
-    }
+    console.error(err.stack);
+  }
+
+  // Erros operacionais padronizados da aplicação (AppError e subclasses)
+  if (err instanceof AppError) {
+    const body = {
+      success: false,
+      error: {
+        code: err.code,
+        message: err.message
+      }
+    };
+    if (err.details !== undefined) body.error.details = err.details;
+    return res.status(err.statusCode).json(body);
+  }
+
+  // Erros legados de services que anexam { statusCode } a um Error simples
+  // (ex.: Object.assign(new Error('...'), { statusCode: 404 })). Quando o
+  // statusCode é < 500, o erro é considerado controlado/esperado e sua
+  // mensagem é segura para o cliente. Erros com statusCode 500 (ou sem
+  // statusCode) caem no fallback genérico abaixo.
+  if (err.statusCode && err.statusCode < 500) {
+    return res.status(err.statusCode).json({ success: false, error: err.message });
   }
 
   // Sequelize Validation Errors
@@ -78,22 +115,16 @@ const errorHandler = (err, req, res, next) => {
     return res.status(400).json({ success: false, error: 'Campo de arquivo inesperado.' });
   }
   if (err.name === 'MulterError') {
-    return res.status(400).json({ success: false, error: err.message || 'Erro no upload do arquivo.' });
+    return res.status(400).json({ success: false, error: 'Erro no upload do arquivo.' });
   }
 
-  // Custom errors with statusCode
-  if (err.statusCode) {
-    return res.status(err.statusCode).json({ success: false, error: err.message });
-  }
-
-  // Fallback seguro: em produção nunca expõe detalhes
-  res.status(err.status || 500).json({
+  // Fallback seguro: erro inesperado/não operacional.
+  // Nunca expõe err.message ou stack ao cliente, em nenhum ambiente.
+  // Detalhes completos já foram logados no servidor acima.
+  res.status(err.statusCode || err.status || 500).json({
     success: false,
-    error: process.env.NODE_ENV === 'production'
-      ? 'Erro interno do servidor'
-      : (err.message || 'Erro interno do servidor')
+    error: 'Erro interno do servidor'
   });
 };
 
 module.exports = errorHandler;
-

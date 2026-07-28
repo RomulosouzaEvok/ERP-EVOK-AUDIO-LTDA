@@ -2,7 +2,7 @@ const { Client } = require('../models/index');
 const { Op } = require('sequelize');
 const Validators = require('../utils/validators');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, status } = req.query;
     const where = {};
@@ -31,21 +31,21 @@ exports.list = async (req, res) => {
       pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao listar clientes') });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const customer = await Client.findByPk(req.params.id);
     if (!customer) return res.status(404).json({ success: false, error: 'Cliente não encontrado' });
     res.json({ success: true, data: customer });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao buscar cliente') });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const { name, cpf_cnpj, phone, email, address, notes, tax_regime, ie, im, city, state, cep, street, number, complement, neighborhood } = req.body;
 
@@ -73,11 +73,11 @@ exports.create = async (req, res) => {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({ success: false, error: 'CPF/CNPJ já cadastrado' });
     }
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao criar cliente') });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const allowedFields = ['name', 'phone', 'email', 'notes', 'tax_regime', 'ie', 'im', 'status',
       'cep', 'street', 'number', 'complement', 'neighborhood', 'city', 'state'];
@@ -95,11 +95,11 @@ exports.update = async (req, res) => {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({ success: false, error: 'CPF/CNPJ já cadastrado' });
     }
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao atualizar cliente') });
+    next(error);
   }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     const { Sale } = require('../models/index');
     const activeSales = await Sale.count({ where: { customer_id: req.params.id, status: { [Op.in]: ['quote', 'confirmed', 'invoiced'] } } });
@@ -110,7 +110,7 @@ exports.remove = async (req, res) => {
     if (!updated) return res.status(404).json({ success: false, error: 'Cliente não encontrado' });
     res.json({ success: true, data: { message: 'Cliente inativado com sucesso' } });
   } catch (error) {
-    res.status(500).json({ success: false, error: Validators.sanitizeError(error, 'Erro ao inativar cliente') });
+    next(error);
   }
 };
 

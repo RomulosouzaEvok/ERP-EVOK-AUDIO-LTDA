@@ -1,7 +1,8 @@
 const { Product, Category, InventoryMovement } = require('../models/index');
 const { Op, col } = require('sequelize');
+const { logAction } = require('../services/auditLogService');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, category_id, low_stock, status } = req.query;
     const where = {};
@@ -16,18 +17,18 @@ exports.list = async (req, res) => {
       limit: parseInt(limit), offset, order: [['createdAt', 'DESC']]
     });
     res.json({ success: true, data: rows, pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) } });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const product = await Product.findByPk(req.params.id, { include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }] });
     if (!product) return res.status(404).json({ success: false, error: 'Produto não encontrado' });
     res.json({ success: true, data: product });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const { name, code, description, category_id, price, cost_price, quantity, min_quantity, product_type, ncm, cest, weight, unit, lead_time, drawing_number, revision, location } = req.body;
     if (!name || !code || price === undefined || price === null) return res.status(400).json({ success: false, error: 'Nome, código e preço são obrigatórios' });
@@ -37,14 +38,17 @@ exports.create = async (req, res) => {
     if (parsedCostPrice > 0 && parsedPrice <= parsedCostPrice) return res.status(400).json({ success: false, error: 'Preço de venda deve ser maior que o preço de custo' });
 
     const product = await Product.create({ name, code, description, category_id, price: parsedPrice, cost_price: parsedCostPrice, quantity: quantity || 0, min_quantity: min_quantity || 5, product_type: product_type || 'finished', ncm: ncm || '85182100', cest, weight, unit, lead_time, drawing_number, revision, location, status: 'active' });
+
+    logAction(req, { action: 'create', entityType: 'Product', entityId: product.id, entityDescription: product.code, newValues: { name: product.name, code: product.code, price: product.price }, description: `Produto ${product.code} criado` });
+
     res.status(201).json({ success: true, data: product });
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Código do produto já existe' });
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const allowedFields = ['name', 'description', 'category_id', 'price', 'cost_price', 'min_quantity', 'status', 'product_type', 'ncm', 'cest', 'weight', 'unit', 'lead_time', 'drawing_number', 'revision', 'location'];
     const updateData = {};
@@ -52,30 +56,52 @@ exports.update = async (req, res) => {
     if (updateData.price !== undefined && updateData.cost_price !== undefined) {
       if (parseFloat(updateData.price) <= parseFloat(updateData.cost_price)) return res.status(400).json({ success: false, error: 'Preço de venda deve ser maior que o preço de custo' });
     }
+    const before = await Product.findByPk(req.params.id);
+    if (!before) return res.status(404).json({ success: false, error: 'Produto não encontrado' });
+    const oldValues = {};
+    for (const field of Object.keys(updateData)) oldValues[field] = before[field];
+
     const [updated] = await Product.update(updateData, { where: { id: req.params.id } });
     if (!updated) return res.status(404).json({ success: false, error: 'Produto não encontrado' });
     const product = await Product.findByPk(req.params.id, { include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }] });
+
+    const isRevision = updateData.revision !== undefined && updateData.revision !== before.revision;
+    logAction(req, {
+      action: isRevision ? 'update' : 'update',
+      entityType: 'Product',
+      entityId: product.id,
+      entityDescription: product.code,
+      oldValues,
+      newValues: updateData,
+      description: isRevision ? `Produto ${product.code} revisado (revisão ${before.revision} → ${updateData.revision})` : `Produto ${product.code} atualizado`
+    });
+
     res.json({ success: true, data: product });
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Código já existe' });
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     const { Sale } = require('../models/index');
     const activeSales = await Sale.count({ where: { product_id: req.params.id, status: { [Op.in]: ['confirmed', 'invoiced'] } } });
     if (activeSales > 0) {
       return res.status(400).json({ success: false, error: `Produto possui ${activeSales} venda(s) ativa(s). Não pode ser inativado.` });
     }
+    const before = await Product.findByPk(req.params.id);
+    if (!before) return res.status(404).json({ success: false, error: 'Produto não encontrado' });
     const [updated] = await Product.update({ status: 'inactive' }, { where: { id: req.params.id } });
     if (!updated) return res.status(404).json({ success: false, error: 'Produto não encontrado' });
+
+    logAction(req, { action: 'soft_delete', entityType: 'Product', entityId: before.id, entityDescription: before.code, oldValues: { status: before.status }, newValues: { status: 'inactive' }, description: `Produto ${before.code} inativado` });
+
     res.json({ success: true, data: { message: 'Produto inativado com sucesso' } });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };
 
-exports.movement = async (req, res) => {
+exports.movement = async (req, res, next) => {
   try {
     const { product_id, type, quantity, description } = req.body;
     if (!product_id || !type || !quantity) return res.status(400).json({ success: false, error: 'Produto, tipo e quantidade são obrigatórios' });
@@ -85,7 +111,12 @@ exports.movement = async (req, res) => {
     if (type === 'out' && product.quantity < quantity) return res.status(400).json({ success: false, error: `Estoque insuficiente. Disponível: ${product.quantity}, Solicitado: ${quantity}` });
 
     const movement = await InventoryMovement.create({ product_id, user_id: req.user.id, type, quantity, description: description || 'Movimentação manual', reference_type: 'adjustment' });
-    await Product.update({ quantity: product.quantity + (type === 'in' ? quantity : -quantity) }, { where: { id: product_id } });
+    const previousQuantity = product.quantity;
+    const newQuantity = product.quantity + (type === 'in' ? quantity : -quantity);
+    await Product.update({ quantity: newQuantity }, { where: { id: product_id } });
+
+    logAction(req, { action: 'create', entityType: 'InventoryMovement', entityId: movement.id, entityDescription: product.code, oldValues: { quantity: previousQuantity }, newValues: { quantity: newQuantity }, description: `Movimentação manual de estoque (${type}) - produto ${product.code}` });
+
     res.status(201).json({ success: true, data: movement });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };

@@ -2,7 +2,7 @@ const { Product, InventoryMovement, Sale, SaleItem, Purchase, PurchaseItem, Prod
 const { Op, fn, col, literal } = require('sequelize');
 const { sequelize } = require('../config/database');
 
-exports.auditReport = async (req, res) => {
+exports.auditReport = async (req, res, next) => {
   try {
     const products = await Product.findAll({ where: { status: 'active' }, include: ['category'] });
     const anomalies = [], restockSuggestions = [];
@@ -79,11 +79,11 @@ exports.auditReport = async (req, res) => {
 
     res.json({ success: true, data: { generated_at: new Date(), inventory_summary: { total_products: products.length, total_stock_value: totalStockValue, out_of_stock: totalOutOfStock, low_stock: totalLowStock, healthy_stock: products.length - totalOutOfStock - totalLowStock }, inventory_accuracy: { ...inventoryAccuracy, accuracy_rate: `${((inventoryAccuracy.accurate / (inventoryAccuracy.total_products || 1)) * 100).toFixed(1)}%` }, anomalies: { total: anomalies.length, critical: anomalies.filter(a => a.severity === 'critical').length, warning: anomalies.filter(a => a.severity === 'warning').length, info: anomalies.filter(a => a.severity === 'info').length, items: anomalies }, restock_suggestions: restockSuggestions } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.stockValuation = async (req, res) => {
+exports.stockValuation = async (req, res, next) => {
   try {
     const products = await Product.findAll({ where: { status: 'active' }, include: ['category'] });
 
@@ -109,11 +109,11 @@ exports.stockValuation = async (req, res) => {
 
     res.json({ success: true, data: { generated_at: new Date(), summary: { total_cost_value: totalCostValue, total_sale_value: totalSaleValue, potential_profit: totalSaleValue - totalCostValue, product_count: products.length }, valuation: valuation.sort((a, b) => b.total_cost_value - a.total_cost_value), abc_curve: { class_a: abcCurve.filter(p => p.abc_class === 'A').length, class_b: abcCurve.filter(p => p.abc_class === 'B').length, class_c: abcCurve.filter(p => p.abc_class === 'C').length, items: abcCurve } } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.auditSummary = async (req, res) => {
+exports.auditSummary = async (req, res, next) => {
   try {
     const now = new Date();
     const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
@@ -137,6 +137,6 @@ exports.auditSummary = async (req, res) => {
 
     res.json({ success: true, data: { audited_at: now, period: { start: thirtyDaysAgo, end: now }, overview: { active_products: totalProducts, movements_30d: totalMovements, sales_30d: totalSales30d, purchases_30d: totalPurchases30d, production_30d: totalProduction30d, active_alerts: activeAlerts, stock_value: stockValue.length > 0 ? parseFloat(stockValue[0].total) || 0 : 0 } } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };

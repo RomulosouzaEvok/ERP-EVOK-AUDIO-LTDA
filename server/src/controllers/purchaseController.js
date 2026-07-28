@@ -1,6 +1,8 @@
-const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, InventoryMovement } = require('../models/index');
+const { Purchase, PurchaseItem, Product, Supplier, AccountPayable } = require('../models/index');
+const InventoryService = require('../services/inventoryService');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
+const { logAction } = require('../services/auditLogService');
 
 const createPurchasePayable = async (purchase, userId, transaction) => {
   if (!purchase.supplier_id) return;
@@ -32,7 +34,7 @@ const createPurchasePayable = async (purchase, userId, transaction) => {
   }, { transaction });
 };
 
-exports.updateStatus = async (req, res) => {
+exports.updateStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
     if (!status) return res.status(400).json({ success: false, error: 'Status é obrigatório' });
@@ -58,18 +60,30 @@ exports.updateStatus = async (req, res) => {
       });
     }
 
+    const previousStatus = purchase.status;
     purchase.status = status;
     await purchase.save();
     if (status === 'approved') {
       await createPurchasePayable(purchase, req.user.id);
     }
+
+    logAction(req, {
+      action: status === 'approved' ? 'approve' : (status === 'canceled' ? 'status_change' : 'status_change'),
+      entityType: 'Purchase',
+      entityId: purchase.id,
+      entityDescription: purchase.order_number,
+      oldValues: { status: previousStatus },
+      newValues: { status },
+      description: `Pedido de compra ${purchase.order_number}: status alterado de ${previousStatus} para ${status}`
+    });
+
     res.json({ success: true, data: purchase });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, status, supplier_id, start_date, end_date } = req.query;
     const where = {};
@@ -97,11 +111,11 @@ exports.list = async (req, res) => {
       pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const purchase = await Purchase.findByPk(req.params.id);
     if (!purchase) return res.status(404).json({ success: false, error: 'Pedido não encontrado' });
@@ -114,18 +128,23 @@ exports.update = async (req, res) => {
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) updateData[field] = req.body[field];
     }
+    const oldValues = {};
+    for (const field of Object.keys(updateData)) oldValues[field] = purchase[field];
 
     await Purchase.update(updateData, { where: { id: req.params.id } });
     const updated = await Purchase.findByPk(req.params.id, {
       include: [{ model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] }]
     });
+
+    logAction(req, { action: 'update', entityType: 'Purchase', entityId: updated.id, entityDescription: updated.order_number, oldValues, newValues: updateData, description: `Pedido de compra ${updated.order_number} atualizado` });
+
     res.json({ success: true, data: updated });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const purchase = await Purchase.findByPk(req.params.id, {
       include: [
@@ -136,11 +155,11 @@ exports.getById = async (req, res) => {
     if (!purchase) return res.status(404).json({ success: false, error: 'Pedido não encontrado' });
     res.json({ success: true, data: purchase });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
     const { supplier_id, items, notes, expected_date } = req.body;
@@ -179,17 +198,21 @@ const unitPrice = parseFloat(item.unit_price);
     }
 
     await t.commit();
+
+    // Log de auditoria feito após o commit para não segurar locks de banco.
+    logAction(req, { action: 'create', entityType: 'Purchase', entityId: purchase.id, entityDescription: purchase.order_number, newValues: { supplier_id, total_amount: totalAmount, status: 'pending' }, description: `Pedido de compra ${purchase.order_number} criado` });
+
     const fullPurchase = await Purchase.findByPk(purchase.id, {
       include: [{ model: PurchaseItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }] }]
     });
     res.status(201).json({ success: true, data: fullPurchase });
   } catch (error) {
     await t.rollback();
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.receiveItems = async (req, res) => {
+exports.receiveItems = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
     const { items } = req.body;
@@ -200,6 +223,8 @@ exports.receiveItems = async (req, res) => {
     if (!purchase) { await t.rollback(); return res.status(404).json({ success: false, error: 'Pedido não encontrado' }); }
     if (!['sent', 'partial'].includes(purchase.status)) { await t.rollback(); return res.status(400).json({ success: false, error: 'Apenas pedidos enviados ou com recebimento parcial podem ser recebidos' }); }
     if (!items || items.length === 0) { await t.rollback(); return res.status(400).json({ success: false, error: 'Lista de itens é obrigatória' }); }
+
+    const previousStatus = purchase.status;
 
     for (const received of items) {
       if (!received.item_id || received.quantity === undefined) { await t.rollback(); return res.status(400).json({ success: false, error: 'Cada item deve ter item_id e quantity' }); }
@@ -217,12 +242,15 @@ exports.receiveItems = async (req, res) => {
       const itemStatus = newReceived >= parseFloat(item.quantity) ? 'received' : 'partial';
       await PurchaseItem.update({ received_quantity: newReceived, status: itemStatus }, { where: { id: item.id }, transaction: t });
 
-      await Product.update({ quantity: sequelize.literal(`quantity + ${qty}`) }, { where: { id: item.product_id }, transaction: t });
-      await InventoryMovement.create({
-        product_id: item.product_id, user_id: req.user.id, type: 'in', quantity: qty,
+      // InventoryService locks the Product row and registers the InventoryMovement
+      // atomically in the same transaction. Duplicate/excess receiving is already
+      // blocked above by the maxReceivable check against received_quantity.
+      await InventoryService.receive(item.product_id, qty, t, {
+        user_id: req.user.id,
         description: `Recebimento PO ${purchase.order_number}`,
-        reference_id: purchase.id, reference_type: 'purchase'
-      }, { transaction: t });
+        reference_id: purchase.id,
+        reference_type: 'purchase'
+      });
     }
 
     const updatedItems = await PurchaseItem.findAll({ where: { purchase_id: purchase.id }, transaction: t });
@@ -231,12 +259,16 @@ exports.receiveItems = async (req, res) => {
     await purchase.save({ transaction: t });
 
     await t.commit();
+
+    // Log de auditoria feito após o commit para não segurar locks de banco.
+    logAction(req, { action: 'update', entityType: 'Purchase', entityId: purchase.id, entityDescription: purchase.order_number, oldValues: { status: previousStatus }, newValues: { status: purchase.status }, description: `Recebimento de itens do pedido ${purchase.order_number}` });
+
     const fullPurchase = await Purchase.findByPk(purchase.id, {
       include: [{ model: PurchaseItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }] }]
     });
     res.json({ success: true, data: fullPurchase });
   } catch (error) {
     await t.rollback();
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };

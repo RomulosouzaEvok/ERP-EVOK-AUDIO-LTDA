@@ -2,7 +2,7 @@ const { ServiceOrder, Client, Product, User } = require('../models/index');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, status, client_id, priority, start_date, end_date } = req.query;
     const where = {};
@@ -30,11 +30,11 @@ exports.list = async (req, res) => {
       pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const order = await ServiceOrder.findByPk(req.params.id, {
       include: [
@@ -46,11 +46,11 @@ exports.getById = async (req, res) => {
     if (!order) return res.status(404).json({ success: false, error: 'Ordem de serviço não encontrada' });
     res.json({ success: true, data: order });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const { client_id, product_id, equipment_description, reported_issue, priority, technician_id, responsible_id, notes } = req.body;
     if (!client_id || !equipment_description || !reported_issue) {
@@ -68,11 +68,11 @@ exports.create = async (req, res) => {
     });
     res.status(201).json({ success: true, data: order });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const allowedFields = ['equipment_description', 'reported_issue', 'diagnosed_issue', 'service_performed', 'priority', 'technician_id', 'responsible_id', 'notes', 'product_id'];
     const updateData = {};
@@ -86,11 +86,11 @@ exports.update = async (req, res) => {
     });
     res.json({ success: true, data: order });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.updateStatus = async (req, res) => {
+exports.updateStatus = async (req, res, next) => {
   try {
     const { status, diagnosed_issue, service_performed, labor_cost, parts_used, completion_date } = req.body;
     const updateData = { status };
@@ -127,11 +127,11 @@ exports.updateStatus = async (req, res) => {
     const updated = await ServiceOrder.findByPk(req.params.id);
     res.json({ success: true, data: updated });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     const order = await ServiceOrder.findByPk(req.params.id);
     if (!order) return res.status(404).json({ success: false, error: 'Ordem de serviço não encontrada' });
@@ -141,11 +141,11 @@ exports.remove = async (req, res) => {
     await ServiceOrder.destroy({ where: { id: req.params.id } });
     res.json({ success: true, data: { message: 'Ordem de serviço removida com sucesso' } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.getServiceReport = async (req, res) => {
+exports.getServiceReport = async (req, res, next) => {
   try {
     const { start_date, end_date, technician_id } = req.query;
     const where = {};
@@ -181,6 +181,6 @@ exports.getServiceReport = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };

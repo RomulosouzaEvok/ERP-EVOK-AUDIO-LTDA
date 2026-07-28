@@ -5,7 +5,7 @@ const QRCodeService = require('../services/qrCodeService');
 // Sanitiza string para busca segura (evita injection via Op.like)
 const sanitizeSearch = (str) => str.replace(/[%_]/g, '\\$&');
 
-exports.list = async (req, res) => {
+exports.list = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, asset_type, status, department_id } = req.query;
     const where = {};
@@ -27,20 +27,20 @@ exports.list = async (req, res) => {
       limit: parseInt(limit), offset, order: [['tag', 'ASC']]
     });
     res.json({ success: true, data: rows, pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) } });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };
 
-exports.getById = async (req, res) => {
+exports.getById = async (req, res, next) => {
   try {
     const asset = await Asset.findByPk(req.params.id, {
       include: [{ model: Department, as: 'department', attributes: ['id', 'name', 'sigla'] }, { model: Employee, as: 'responsible', attributes: ['id', 'name'] }, { model: Product, as: 'product', attributes: ['id', 'name', 'code'] }]
     });
     if (!asset) return res.status(404).json({ success: false, error: 'Patrimônio não encontrado' });
     res.json({ success: true, data: asset });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };
 
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
     const { tag, name, description, asset_type, department_id, responsible_id, location, purchase_date, purchase_value, useful_life_months, product_id, notes } = req.body;
     if (!tag || !name) return res.status(400).json({ success: false, error: 'Tag e nome do patrimônio são obrigatórios' });
@@ -65,11 +65,11 @@ exports.create = async (req, res) => {
     res.status(201).json({ success: true, data: fullAsset });
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Código do patrimônio já existe' });
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.update = async (req, res) => {
+exports.update = async (req, res, next) => {
   try {
     const allowedFields = ['name', 'description', 'category', 'department_id', 'responsible_id', 'location', 'acquisition_date', 'acquisition_value', 'current_value', 'quantity', 'product_id', 'notes', 'status'];
     const updateData = {};
@@ -80,18 +80,18 @@ exports.update = async (req, res) => {
 
     const asset = await Asset.findByPk(req.params.id, { include: [{ model: Department, as: 'department', attributes: ['id', 'name', 'sigla'] }, { model: Employee, as: 'responsible', attributes: ['id', 'name'] }] });
     res.json({ success: true, data: asset });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };
 
-exports.remove = async (req, res) => {
+exports.remove = async (req, res, next) => {
   try {
     const [updated] = await Asset.update({ status: 'disposed' }, { where: { id: req.params.id } });
     if (!updated) return res.status(404).json({ success: false, error: 'Patrimônio não encontrado' });
     res.json({ success: true, data: { message: 'Patrimônio baixado com sucesso' } });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };
 
-exports.generateQRCode = async (req, res) => {
+exports.generateQRCode = async (req, res, next) => {
   try {
     const asset = await Asset.findByPk(req.params.id);
     if (!asset) return res.status(404).json({ success: false, error: 'Patrimônio não encontrado' });
@@ -99,10 +99,10 @@ exports.generateQRCode = async (req, res) => {
     const { qrDataUrl, qrCodeData } = await QRCodeService.generate('asset', asset.id, { name: asset.name, code: asset.code });
     await Asset.update({ qr_code: qrDataUrl, qr_code_data: qrCodeData }, { where: { id: asset.id } });
     res.json({ success: true, data: { qrCode: qrDataUrl, qrCodeData } });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };
 
-exports.getByQRCode = async (req, res) => {
+exports.getByQRCode = async (req, res, next) => {
   try {
     const { qrCodeData } = req.query;
     if (!qrCodeData) return res.status(400).json({ success: false, error: 'Dados do QR Code são obrigatórios' });
@@ -114,5 +114,5 @@ exports.getByQRCode = async (req, res) => {
     const asset = await Asset.findByPk(parsed.id, { include: [{ model: Department, as: 'department', attributes: ['id', 'name', 'sigla'] }, { model: Employee, as: 'responsible', attributes: ['id', 'name'] }] });
     if (!asset) return res.status(404).json({ success: false, error: 'Patrimônio não encontrado' });
     res.json({ success: true, data: asset });
-  } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error) { next(error); }
 };

@@ -27,13 +27,44 @@ Content-Type: application/json
 }
 ```
 
-**Erro (400/401/404/500):**
+**Erro (400/401/404/500) — formato legado (string):**
+
+Ainda usado por respostas de validação simples e mensagens de negócio pontuais em alguns controllers:
 ```json
 {
   "success": false,
   "error": "Mensagem do erro"
 }
 ```
+
+**Erro padronizado (`AppError` e subclasses) — formato estruturado:**
+
+Erros lançados via `server/src/errors` (`ValidationError`, `NotFoundError`, `UnauthorizedError`, `ForbiddenError`, `ConflictError`, `BusinessRuleError`) e tratados pelo `errorHandler` central (`server/src/middlewares/errorHandler.js`) retornam:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Cliente não encontrado.",
+    "details": {}
+  }
+}
+```
+- `code`: identificador estável do tipo de erro (ex.: `VALIDATION_ERROR`, `NOT_FOUND`, `UNAUTHORIZED`, `FORBIDDEN`, `CONFLICT`, `BUSINESS_RULE_VIOLATION`).
+- `message`: mensagem segura para exibição ao usuário.
+- `details`: opcional, presente apenas quando o erro carrega informação estruturada adicional (ex.: lista de campos inválidos).
+
+**Erros inesperados (bugs, falhas de banco, exceções não tratadas):**
+
+Nunca expõem stack trace nem a mensagem crua da exceção ao cliente, em nenhum ambiente (dev ou produção). São logados integralmente no servidor via `console.error` para depuração e respondidos como:
+```json
+{
+  "success": false,
+  "error": "Erro interno do servidor"
+}
+```
+
+> Nota: controllers devem propagar exceções inesperadas com `next(error)` (nunca montar a resposta de erro manualmente com `error.message`); o `errorHandler` central é responsável por sanitizar e formatar a resposta.
 
 ---
 

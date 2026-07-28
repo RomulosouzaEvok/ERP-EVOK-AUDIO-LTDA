@@ -2,7 +2,7 @@ const { Sale, SaleItem, Product, Client, AccountReceivable, AccountPayable, Inve
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
-exports.sales = async (req, res) => {
+exports.sales = async (req, res, next) => {
   try {
     const { start_date, end_date, customer_id } = req.query;
     const where = {};
@@ -27,11 +27,11 @@ exports.sales = async (req, res) => {
 
     res.json({ success: true, data: { report_type: 'sales', generated_at: new Date(), filters: { start_date, end_date }, summary: { total_sales: totalSales, total_amount: totalAmount, average_ticket: averageTicket }, details: sales } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.inventory = async (req, res) => {
+exports.inventory = async (req, res, next) => {
   try {
     const products = await Product.findAll({
       where: { status: 'active' },
@@ -44,11 +44,11 @@ exports.inventory = async (req, res) => {
 
     res.json({ success: true, data: { report_type: 'inventory', generated_at: new Date(), summary: { total_products: products.length, total_items: totalItems, total_value: totalValue, low_stock_items: lowStock.length }, details: products, low_stock: lowStock } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.customers = async (req, res) => {
+exports.customers = async (req, res, next) => {
   try {
     const { start_date, end_date } = req.query;
     const customers = await Client.findAll({ where: { status: 'active' } });
@@ -67,11 +67,11 @@ exports.customers = async (req, res) => {
 
     res.json({ success: true, data: { report_type: 'customers', generated_at: new Date(), summary: { total_customers: enriched.length, active_customers: enriched.filter(c => c.total_purchases > 0).length }, details: enriched } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.cashFlow = async (req, res) => {
+exports.cashFlow = async (req, res, next) => {
   try {
     const { start_date, end_date } = req.query;
     const start = start_date ? new Date(start_date) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -94,6 +94,6 @@ exports.cashFlow = async (req, res) => {
 
     res.json({ success: true, data: { report_type: 'cash-flow', generated_at: new Date(), filters: { start_date: start, end_date: end }, summary: { total_receivable: totalReceivable, total_payable: totalPayable, balance: totalReceivable - totalPayable }, receivable_by_status: receivable, payable_by_status: payable } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };

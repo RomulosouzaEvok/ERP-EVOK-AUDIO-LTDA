@@ -1,8 +1,9 @@
 const { AccountReceivable, AccountPayable, Client, Sale, Supplier } = require('../models/index');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
+const { logAction } = require('../services/auditLogService');
 
-exports.listReceivable = async (req, res) => {
+exports.listReceivable = async (req, res, next) => {
   try {
     const { status, start_date, end_date, customer_id, page = 1, limit = 10 } = req.query;
     const where = {};
@@ -25,17 +26,19 @@ exports.listReceivable = async (req, res) => {
     });
     res.json({ success: true, data: rows, pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.receivePayment = async (req, res) => {
+exports.receivePayment = async (req, res, next) => {
   try {
     const { payment_date, payment_method, amount } = req.body;
     const account = await AccountReceivable.findByPk(req.params.id);
     if (!account) return res.status(404).json({ success: false, error: 'Conta a receber não encontrada' });
     if (account.status === 'paid') return res.status(400).json({ success: false, error: 'Conta já foi paga' });
     if (account.status === 'canceled') return res.status(400).json({ success: false, error: 'Conta cancelada' });
+
+    const previousStatus = account.status;
 
     if (amount !== undefined) {
       const parsedAmount = parseFloat(amount);
@@ -48,13 +51,16 @@ exports.receivePayment = async (req, res) => {
     account.payment_method = payment_method || account.payment_method;
     account.status = 'paid';
     await account.save();
+
+    logAction(req, { action: 'status_change', entityType: 'AccountReceivable', entityId: account.id, entityDescription: `Conta a receber #${account.id}`, oldValues: { status: previousStatus }, newValues: { status: 'paid', amount: account.amount }, description: `Conta a receber #${account.id} recebida` });
+
     res.json({ success: true, data: account });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.listPayable = async (req, res) => {
+exports.listPayable = async (req, res, next) => {
   try {
     const { status, start_date, end_date, page = 1, limit = 10 } = req.query;
     const where = {};
@@ -72,11 +78,11 @@ exports.listPayable = async (req, res) => {
     });
     res.json({ success: true, data: rows, pagination: { total: count, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(count / parseInt(limit)) } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.createPayable = async (req, res) => {
+exports.createPayable = async (req, res, next) => {
   try {
     const { description, amount, due_date, category, supplier_id, purchase_id, notes } = req.body;
     if (!description || amount === undefined || !due_date) return res.status(400).json({ success: false, error: 'Descrição, valor e data de vencimento são obrigatórios' });
@@ -85,19 +91,24 @@ exports.createPayable = async (req, res) => {
     const account = await AccountPayable.create({
       description, amount, due_date, category, supplier_id, purchase_id, notes, status: 'pending'
     });
+
+    logAction(req, { action: 'create', entityType: 'AccountPayable', entityId: account.id, entityDescription: description, newValues: { description, amount, due_date, status: 'pending' }, description: `Conta a pagar "${description}" criada` });
+
     res.status(201).json({ success: true, data: account });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.payPayable = async (req, res) => {
+exports.payPayable = async (req, res, next) => {
   try {
     const { payment_date, payment_method, amount } = req.body;
     const account = await AccountPayable.findByPk(req.params.id);
     if (!account) return res.status(404).json({ success: false, error: 'Conta a pagar não encontrada' });
     if (account.status === 'paid') return res.status(400).json({ success: false, error: 'Conta já foi paga' });
     if (account.status === 'canceled') return res.status(400).json({ success: false, error: 'Conta cancelada' });
+
+    const previousStatus = account.status;
 
     if (amount !== undefined) {
       const parsedAmount = parseFloat(amount);
@@ -110,13 +121,16 @@ exports.payPayable = async (req, res) => {
     account.payment_method = payment_method || account.payment_method;
     account.status = 'paid';
     await account.save();
+
+    logAction(req, { action: 'status_change', entityType: 'AccountPayable', entityId: account.id, entityDescription: account.description, oldValues: { status: previousStatus }, newValues: { status: 'paid', amount: account.amount }, description: `Conta a pagar "${account.description}" paga` });
+
     res.json({ success: true, data: account });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
 
-exports.cashFlow = async (req, res) => {
+exports.cashFlow = async (req, res, next) => {
   try {
     const { start_date, end_date } = req.query;
     const start = start_date ? new Date(start_date) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -156,6 +170,6 @@ exports.cashFlow = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    next(error);
   }
 };
