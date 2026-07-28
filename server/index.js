@@ -38,7 +38,12 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 // ==========================================
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/users', require('./src/routes/users'));
-app.use('/api/products', require('./src/routes/products'));
+// Módulo Produtos migrado para Clean Architecture (Fase 5/6 do TODO).
+// A rota legada `./src/routes/products.js` (+ `./src/controllers/productController.js`)
+// permanece no repositório apenas como referência histórica e NÃO é mais
+// registrada aqui, para evitar montar duas vezes o mesmo path `/api/products`.
+// Ver `server/src/modules/products/README.md`.
+app.use('/api/products', require('./src/modules/products/presentation/routes/products'));
 app.use('/api/clients', require('./src/routes/clients'));
 app.use('/api/suppliers', require('./src/routes/suppliers'));
 app.use('/api/sales', require('./src/routes/sales'));

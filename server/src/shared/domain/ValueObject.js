@@ -1,0 +1,32 @@
+/**
+ * Classe base simples para value objects imutáveis.
+ *
+ * Um value object não possui identidade própria: duas instâncias são
+ * iguais quando todos os seus valores são iguais. Instâncias são
+ * congeladas (`Object.freeze`) no construtor para reforçar imutabilidade.
+ */
+class ValueObject {
+  /**
+   * @param {Object} props - Conjunto de valores imutáveis que compõem o value object.
+   */
+  constructor(props) {
+    Object.assign(this, props);
+    Object.freeze(this);
+  }
+
+  /**
+   * Compara este value object a outro por igualdade estrutural (por valor),
+   * usando serialização JSON simples. Suficiente para value objects com
+   * propriedades primitivas/planas.
+   *
+   * @param {ValueObject} other - Outro value object a comparar.
+   * @returns {boolean} `true` se ambos possuem os mesmos valores.
+   */
+  equals(other) {
+    if (other === null || other === undefined) return false;
+    if (!(other instanceof ValueObject)) return false;
+    return JSON.stringify(this) === JSON.stringify(other);
+  }
+}
+
+module.exports = ValueObject;

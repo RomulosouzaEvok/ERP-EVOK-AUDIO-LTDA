@@ -281,7 +281,26 @@ Cadastra um novo produto.
 Atualiza dados do produto.
 
 ### DELETE /api/products/:id
-Inativa um produto.
+Inativa um produto (bloqueado se houver vendas ativas associadas: retorna erro de regra de negocio).
+
+### POST /api/products/movements
+Registra uma movimentacao manual de estoque (entrada ou saida) para um produto.
+
+**Request:**
+```json
+{
+  "product_id": 1,
+  "type": "in",
+  "quantity": 10,
+  "description": "Ajuste de inventario"
+}
+```
+
+> Nota de arquitetura: desde a Fase 5 do TODO, o modulo Produtos foi migrado
+> para Clean Architecture (`server/src/modules/products/`). O contrato de
+> `/api/products` (paths, metodos, formato de resposta) permanece identico;
+> apenas a implementacao interna passou a usar entidades de dominio e use
+> cases. Detalhes em `server/src/modules/products/README.md`.
 
 ---
 

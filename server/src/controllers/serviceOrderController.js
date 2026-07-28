@@ -1,6 +1,9 @@
 const { ServiceOrder, Client, Product, User } = require('../models/index');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
+const InventoryService = require('../services/inventoryService');
+const { logAction } = require('../services/auditLogService');
+const { NotFoundError, ValidationError, BusinessRuleError } = require('../errors');
 
 exports.list = async (req, res, next) => {
   try {
@@ -141,6 +144,64 @@ exports.remove = async (req, res, next) => {
     await ServiceOrder.destroy({ where: { id: req.params.id } });
     res.json({ success: true, data: { message: 'Ordem de serviço removida com sucesso' } });
   } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Adiciona uma peça consumida a uma ordem de serviço: baixa o estoque do
+ * produto usado (via InventoryService, com lock pessimista/transação) e
+ * soma o valor ao total_amount da OS.
+ *
+ * Limitação conhecida: não existe hoje uma tabela de itens (ServiceOrderPart)
+ * para listar as peças usadas individualmente; apenas o efeito agregado no
+ * estoque e no total_amount é persistido. Criar essa tabela é uma melhoria
+ * futura (ver README do módulo de service orders).
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+exports.addPart = async (req, res, next) => {
+  const t = await sequelize.transaction();
+  try {
+    const { product_id, quantity, unit_price } = req.body;
+    if (!product_id || !quantity || quantity <= 0) {
+      await t.rollback();
+      return next(new ValidationError('Produto e quantidade (> 0) são obrigatórios'));
+    }
+
+    const order = await ServiceOrder.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!order) {
+      await t.rollback();
+      return next(new NotFoundError('Ordem de serviço não encontrada'));
+    }
+    if (['delivered', 'canceled'].includes(order.status)) {
+      await t.rollback();
+      return next(new BusinessRuleError(`Não é possível adicionar peças a uma OS com status "${order.status}"`));
+    }
+
+    await InventoryService.consume(product_id, quantity, t);
+
+    const partTotal = parseFloat(unit_price || 0) * parseFloat(quantity);
+    const newTotal = parseFloat(order.total_amount || 0) + partTotal;
+    await order.update({ total_amount: newTotal }, { transaction: t });
+
+    await t.commit();
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'ServiceOrder',
+      entityId: order.id,
+      entityDescription: order.order_number,
+      newValues: { part_product_id: product_id, quantity, unit_price, total_amount: newTotal },
+      description: `Peça adicionada à OS ${order.order_number} (produto #${product_id}, qtd ${quantity})`
+    });
+
+    const updated = await ServiceOrder.findByPk(order.id);
+    res.status(201).json({ success: true, data: updated });
+  } catch (error) {
+    await t.rollback();
     next(error);
   }
 };
