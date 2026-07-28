@@ -428,7 +428,7 @@ Status real (auditado em 2026-07-28, primeira rodada desta fase):
 - [ ] Configurar ESLint para JS + TS durante periodo hibrido — **NAO FEITO**. Nao existe configuracao de ESLint no projeto ainda.
 - [x] Definir regra: arquivos novos de dominio/application devem nascer em TypeScript — decisao registrada aqui no TODO; **nao e reforcada por lint/CI ainda** (depende do ESLint acima), e um acordo de processo por enquanto.
 - [x] Migrar `validators.js` para TypeScript (`server/src/utils/validators.ts`, mesma API publica via `export = Validators`, testado via `tsx` isoladamente e via boot completo do servidor).
-- [ ] Migrar erros compartilhados — **NAO FEITO** (`server/src/errors/` continua `.js`).
+- [x] Migrar erros compartilhados (`server/src/errors/AppError.ts` e `index.ts`, mesma API via `export =`; testado isoladamente e via boot completo — os 61 arquivos que fazem `require('.../errors')` continuam funcionando sem alteracao).
 - [ ] Migrar services puros — **NAO FEITO** (`inventoryService.js`, `bomService.js`, `auditLogService.js`, `uploadService.js`, `dashboardService.js`, `reportService.js`, `qrCodeService.js` continuam `.js`).
 - [ ] Migrar modulo `products` — **NAO FEITO**.
 - [ ] Migrar modulo `inventory` — **NAO FEITO**.

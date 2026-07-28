@@ -17,22 +17,27 @@
  * genérica, sem vazar `error.message` ou stack trace.
  */
 class AppError extends Error {
+  statusCode: number;
+  code: string;
+  details?: unknown;
+  /** Indica que este é um erro previsto/tratado (não um bug inesperado). */
+  isOperational: boolean;
+
   /**
-   * @param {string} message - Mensagem de erro segura para exibição ao cliente.
-   * @param {number} [statusCode=500] - Código de status HTTP a ser retornado.
-   * @param {string} [code='INTERNAL_ERROR'] - Código curto e estável para identificação programática do erro.
-   * @param {*} [details] - Informações adicionais opcionais (ex.: lista de campos inválidos). Deve ser seguro para expor ao cliente.
+   * @param message - Mensagem de erro segura para exibição ao cliente.
+   * @param statusCode - Código de status HTTP a ser retornado.
+   * @param code - Código curto e estável para identificação programática do erro.
+   * @param details - Informações adicionais opcionais (ex.: lista de campos inválidos). Deve ser seguro para expor ao cliente.
    */
-  constructor(message, statusCode = 500, code = 'INTERNAL_ERROR', details) {
+  constructor(message: string, statusCode = 500, code = 'INTERNAL_ERROR', details?: unknown) {
     super(message);
     this.name = this.constructor.name;
     this.statusCode = statusCode;
     this.code = code;
     if (details !== undefined) this.details = details;
-    /** Indica que este é um erro previsto/tratado (não um bug inesperado). */
     this.isOperational = true;
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
-module.exports = AppError;
+export = AppError;
