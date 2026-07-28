@@ -736,6 +736,67 @@ Remove a OP. Requer papel `admin`. Não permitido se a OP estiver `in_progress` 
 
 ---
 
+## 11. Compras (Pedidos de Compra)
+
+### GET /api/purchases
+Lista pedidos de compra. Filtros: `status`, `supplier_id`, `start_date`, `end_date`; paginação: `page`, `limit`.
+```json
+{
+  "success": true,
+  "data": [ { "id": 1, "order_number": "PO-1730000000000", "status": "pending", "total_amount": "1500.00", "supplier": { "id": 2, "company_name": "Fornecedor X" } } ],
+  "pagination": { "total": 1, "page": 1, "limit": 10, "totalPages": 1 }
+}
+```
+
+### GET /api/purchases/:id
+Detalhes do pedido, com fornecedor e itens (+ produto).
+
+### POST /api/purchases
+Cria um pedido de compra com itens (transacional).
+```json
+{
+  "supplier_id": 2,
+  "expected_date": "2026-08-15",
+  "notes": "Reposição de bobinas",
+  "items": [
+    { "product_id": 10, "quantity": 100, "unit_price": 12.5 }
+  ]
+}
+```
+`order_number` (`PO-<timestamp>`) e `total_amount` são calculados no backend. Cada `product_id` deve existir.
+
+### PUT /api/purchases/:id
+Atualiza campos permitidos (`expected_date`, `freight_type`, `freight_value`, `notes`, `supplier_id`). Só permitido enquanto o pedido está `pending` ou `approved`.
+
+### PUT /api/purchases/:id/status
+Altera o status conforme a máquina de estados `pending → approved → sent → partial/received/canceled`.
+```json
+{ "status": "approved" }
+```
+Ao transicionar para `approved`, gera automaticamente uma `AccountPayable` vinculada ao pedido (idempotente), em uma única transação com o `save()` do status.
+
+### POST /api/purchases/:id/receive
+Registra o recebimento (total ou parcial) dos itens do pedido. Só permitido enquanto o pedido está `sent` ou `partial`.
+```json
+{
+  "items": [
+    { "item_id": 7, "quantity": 60 }
+  ]
+}
+```
+Cada item não pode exceder a quantidade pendente (`quantity - received_quantity`). Dá entrada no estoque via `InventoryService.receive` (lock pessimista + transação) e atualiza o status do pedido e dos itens.
+
+> Nota de arquitetura: os endpoints de `/api/purchases` são servidos pelo
+> módulo `server/src/modules/purchases/` (Clean Architecture). O
+> recebimento reutiliza `server/src/services/inventoryService.js` (lock
+> pessimista + transação). Erros de validação/regra de negócio retornam
+> `{ success: false, error: { code, message } }` (em vez de string simples,
+> mesmo padrão já adotado em `inventory`/`bom`/`production`). Ver
+> `server/src/modules/purchases/README.md` para detalhes de regras de
+> negócio, a máquina de estados e a correção de atomicidade da aprovação.
+
+---
+
 ## Códigos de Erro
 
 | Código | Significado |

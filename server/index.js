@@ -47,7 +47,12 @@ app.use('/api/products', require('./src/modules/products/presentation/routes/pro
 app.use('/api/clients', require('./src/routes/clients'));
 app.use('/api/suppliers', require('./src/routes/suppliers'));
 app.use('/api/sales', require('./src/routes/sales'));
-app.use('/api/purchases', require('./src/routes/purchases'));
+// Modulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
+// A rota legada `./src/routes/purchases.js` (+ `./src/controllers/purchaseController.js`)
+// permanece no repositorio apenas como referencia historica e NAO e mais
+// registrada aqui, para evitar montar duas vezes o mesmo path `/api/purchases`.
+// Ver `server/src/modules/purchases/README.md`.
+app.use('/api/purchases', require('./src/modules/purchases/presentation/routes/purchases'));
 app.use('/api/finance', require('./src/routes/finance'));
 app.use('/api/service-orders', require('./src/routes/serviceOrders'));
 app.use('/api/categories', require('./src/routes/categories'));
