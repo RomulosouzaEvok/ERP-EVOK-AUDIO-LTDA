@@ -72,8 +72,13 @@ app.use('/api/quality/non-conformities', require('./src/routes/nonConformities')
 app.use('/api/maintenance', require('./src/routes/maintenance'));
 app.use('/api/audit-logs', require('./src/routes/auditLogs'));
 
-// Fase 5 - Engenharia do Produto (BOM)
-app.use('/api/engineering/bom', require('./src/routes/bom'));
+// Fase 5/6 - Engenharia do Produto (BOM)
+// Módulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
+// A rota legada `./src/routes/bom.js` (+ `./src/controllers/bomController.js`)
+// permanece no repositório apenas como referência histórica e NÃO é mais
+// registrada aqui, para evitar montar duas vezes o mesmo path `/api/engineering/bom`.
+// Ver `server/src/modules/bom/README.md`.
+app.use('/api/engineering/bom', require('./src/modules/bom/presentation/routes/bom'));
 
 // Static files
 app.use('/uploads', express.static('uploads'));

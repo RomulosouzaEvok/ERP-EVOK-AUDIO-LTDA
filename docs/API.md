@@ -607,6 +607,81 @@ Lista produtos ativos com estoque em ou abaixo do ponto de reposição (`quantit
 
 ---
 
+## 9. Estrutura de Produto (BOM)
+
+Base URL: `/api/engineering/bom`
+
+### GET /api/engineering/bom
+Lista BOMs com paginação e filtros.
+
+**Query Params:** page, limit, status (draft/active/inactive/superseded), search (nome do produto), product_id
+
+### GET /api/engineering/bom/product/:productId
+Retorna a BOM ativa (`status=active`) de um produto, com itens.
+
+### GET /api/engineering/bom/product/:productId/versions
+**Novo.** Lista todas as versões (qualquer status) de BOM de um produto, ordenadas por data de criação (mais antiga primeiro).
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    { "id": 1, "product_id": 10, "revision": "00", "status": "superseded", "createdAt": "..." },
+    { "id": 5, "product_id": 10, "revision": "01", "status": "active", "createdAt": "..." }
+  ]
+}
+```
+
+### GET /api/engineering/bom/:id
+Detalhes da BOM com produto e itens (componentes).
+
+### POST /api/engineering/bom
+Cria uma nova BOM para um produto acabado (`product_type = 'finished'`). Marca automaticamente qualquer BOM `active` anterior do mesmo produto como `superseded` (versionamento).
+
+**Request:**
+```json
+{
+  "product_id": 1,
+  "revision": "00",
+  "notes": "BOM inicial Alto-Falante 12" PRO",
+  "items": [
+    { "component_product_id": 10, "quantity": 1, "unit": "un", "bom_level": 1 },
+    { "component_product_id": 11, "quantity": 1, "unit": "un", "bom_level": 1 }
+  ]
+}
+```
+
+### PUT /api/engineering/bom/:id
+Atualiza campos gerais (`revision`, `revision_notes`, `notes`, `status`). Quando `status` muda para `active`, o log de auditoria registra a ação como `approve`.
+
+### DELETE /api/engineering/bom/:id
+Inativa (soft delete) a BOM. Apenas BOMs em `draft` ou `active` podem ser inativadas.
+
+### GET /api/engineering/bom/:id/explode?qty=
+Explode a BOM (incluindo sub-BOMs recursivamente) para a quantidade informada.
+
+### GET /api/engineering/bom/:id/cost?qty=
+Calcula o custo total/unitário do produto baseado na BOM ativa.
+
+### GET /api/engineering/bom/:id/availability?qty=
+Verifica se há estoque suficiente dos componentes para produzir a quantidade desejada.
+
+### GET /api/engineering/bom/:id/tree
+Retorna a árvore hierárquica completa da BOM (útil para produtos com subconjuntos).
+
+### GET /api/engineering/bom/:id/items
+Lista os itens (componentes) de uma BOM.
+
+> Nota de arquitetura: os endpoints de `/api/engineering/bom` são servidos
+> pelo módulo `server/src/modules/bom/` (Clean Architecture). A lógica de
+> negócio pesada (explosão, custo, disponibilidade, versionamento)
+> permanece em `server/src/services/bomService.js`. Ver
+> `server/src/modules/bom/README.md` para detalhes de regras de negócio,
+> entidades e pendências.
+
+---
+
 ## Códigos de Erro
 
 | Código | Significado |
