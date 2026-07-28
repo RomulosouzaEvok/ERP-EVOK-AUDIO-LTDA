@@ -418,39 +418,42 @@ Use cases de producao (criados em `server/src/modules/production/application/use
 
 ## FASE 7 - Migracao gradual para TypeScript
 
-- [ ] Adicionar TypeScript ao projeto principal.
-- [ ] Criar `tsconfig.json`.
-- [ ] Criar `tsconfig.build.json`.
-- [ ] Adicionar `tsx`.
-- [ ] Adicionar tipos do Node, Express e runner de testes.
-- [ ] Configurar ESLint para JS + TS durante periodo hibrido.
-- [ ] Definir regra: arquivos novos de dominio/application devem nascer em TypeScript.
-- [ ] Migrar `validators.js` para TypeScript.
-- [ ] Migrar erros compartilhados.
-- [ ] Migrar services puros.
-- [ ] Migrar modulo `products`.
-- [ ] Migrar modulo `inventory`.
-- [ ] Migrar modulo `bom`.
-- [ ] Migrar modulo `production`.
-- [ ] Migrar modulo `sales`.
-- [ ] Migrar modulo `purchases`.
-- [ ] Migrar modulo `financial`.
+Status real (auditado em 2026-07-28, primeira rodada desta fase):
 
-Scripts desejados:
+- [x] Adicionar TypeScript ao projeto principal (`typescript` + `tsx` como devDependencies em `server/package.json`).
+- [x] Criar `tsconfig.json` (modo hibrido: `allowJs: true`, `checkJs: false`, `strict: true` para `.ts` novo).
+- [x] Criar `tsconfig.build.json` (extends `tsconfig.json`, `noEmitOnError: true`, usado pelo script `build`).
+- [x] Adicionar `tsx` (runtime usado pelos scripts `start`/`dev`, permite `require()` de `.ts` a partir de `.js` sem quebrar nada existente).
+- [ ] Adicionar tipos do Node, Express e runner de testes — **PARCIAL**. Adicionados `@types/node`, `@types/express`, `@types/jsonwebtoken`, `@types/bcryptjs`, `@types/cors`, `@types/multer`. Tipos de runner de testes ainda nao adicionados (depende da escolha do runner na Fase 9).
+- [ ] Configurar ESLint para JS + TS durante periodo hibrido — **NAO FEITO**. Nao existe configuracao de ESLint no projeto ainda.
+- [x] Definir regra: arquivos novos de dominio/application devem nascer em TypeScript — decisao registrada aqui no TODO; **nao e reforcada por lint/CI ainda** (depende do ESLint acima), e um acordo de processo por enquanto.
+- [x] Migrar `validators.js` para TypeScript (`server/src/utils/validators.ts`, mesma API publica via `export = Validators`, testado via `tsx` isoladamente e via boot completo do servidor).
+- [ ] Migrar erros compartilhados — **NAO FEITO** (`server/src/errors/` continua `.js`).
+- [ ] Migrar services puros — **NAO FEITO** (`inventoryService.js`, `bomService.js`, `auditLogService.js`, `uploadService.js`, `dashboardService.js`, `reportService.js`, `qrCodeService.js` continuam `.js`).
+- [ ] Migrar modulo `products` — **NAO FEITO**.
+- [ ] Migrar modulo `inventory` — **NAO FEITO**.
+- [ ] Migrar modulo `bom` — **NAO FEITO**.
+- [ ] Migrar modulo `production` — **NAO FEITO**.
+- [ ] Migrar modulo `sales` — **NAO FEITO**.
+- [ ] Migrar modulo `purchases` — **NAO FEITO**.
+- [ ] Migrar modulo `financial` — **NAO FEITO**.
 
-- [ ] `dev`
-- [ ] `build`
-- [ ] `start`
-- [ ] `test`
-- [ ] `test:unit`
-- [ ] `test:integration`
-- [ ] `test:e2e`
-- [ ] `test:coverage`
-- [ ] `lint`
-- [ ] `lint:fix`
-- [ ] `format`
-- [ ] `migration:run`
-- [ ] `docs:serve`
+Scripts desejados (status real em `server/package.json`):
+
+- [x] `dev` (`tsx watch index.js`)
+- [x] `build` (`tsc -p tsconfig.build.json`)
+- [x] `start` (`tsx index.js`; `start:node` mantido como fallback usando `node` puro)
+- [ ] `test` — **NAO FEITO** (Fase 9).
+- [ ] `test:unit` — **NAO FEITO**.
+- [ ] `test:integration` — **NAO FEITO**.
+- [ ] `test:e2e` — **NAO FEITO**.
+- [ ] `test:coverage` — **NAO FEITO**.
+- [ ] `lint` — **NAO FEITO** (depende do ESLint acima).
+- [ ] `lint:fix` — **NAO FEITO**.
+- [ ] `format` — **NAO FEITO**.
+- [ ] `migration:run` — **NAO FEITO** (Fase 11).
+- [ ] `docs:serve` — **NAO FEITO** (Fase 13).
+- [x] `typecheck` (`tsc -p tsconfig.json --noEmit`) — adicionado, nao estava na lista original mas e necessario para o modo hibrido.
 
 ## FASE 8 - Validacao de entrada com DTO + schema
 

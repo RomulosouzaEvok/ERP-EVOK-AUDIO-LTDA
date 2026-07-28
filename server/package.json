@@ -4,8 +4,11 @@
   "description": "Backend ERP EVOK ÁUDIO",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "tsx index.js",
+    "dev": "tsx watch index.js",
+    "start:node": "node index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -23,6 +26,14 @@
     "sequelize": "^6.37.8"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^26.1.2",
+    "nodemon": "^3.0.2",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
   }
 }
