@@ -42,7 +42,12 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 // registrada aqui, para evitar montar duas vezes o mesmo path `/api/auth`.
 // Ver `server/src/modules/auth/README.md`.
 app.use('/api/auth', require('./src/modules/auth/presentation/routes/auth'));
-app.use('/api/users', require('./src/routes/users'));
+// Modulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
+// A rota legada `./src/routes/users.js` (+ `./src/controllers/userController.js`)
+// permanece no repositorio apenas como referencia historica e NAO e mais
+// registrada aqui, para evitar montar duas vezes o mesmo path `/api/users`.
+// Ver `server/src/modules/users/README.md`.
+app.use('/api/users', require('./src/modules/users/presentation/routes/users'));
 // Módulo Produtos migrado para Clean Architecture (Fase 5/6 do TODO).
 // A rota legada `./src/routes/products.js` (+ `./src/controllers/productController.js`)
 // permanece no repositório apenas como referência histórica e NÃO é mais

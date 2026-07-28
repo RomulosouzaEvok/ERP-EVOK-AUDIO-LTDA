@@ -156,6 +156,132 @@ Retorna os dados do usuário autenticado.
 
 ---
 
+## 1.1 Usuários (Gestão)
+
+Endpoints de gestão de usuários do ERP (CRUD administrativo). Distintos de
+`/api/auth/register` (que também cria usuários, mas focado no fluxo de
+autenticação) — mesma validação de nome/email/senha é reutilizada
+internamente pelos dois. Todos os endpoints abaixo exigem `authenticate` +
+`authorize('admin')`.
+
+### GET /api/users
+Lista usuários com busca/filtro e paginação.
+
+**Headers:** Authorization: Bearer \<token\> (role: admin)
+
+**Query Params:**
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| page | int | Nº da página (default: 1) |
+| limit | int | Itens por página (default: 10) |
+| search | string | Busca por nome ou email |
+| role | string | Filtro exato: admin / operator / financial |
+| active | boolean | Filtro exato: true / false |
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "Administrador",
+      "email": "admin@evokaudio.com.br",
+      "role": "admin",
+      "active": true,
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 3,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  }
+}
+```
+
+### GET /api/users/:id
+Retorna os dados de um usuário específico (sem `password`).
+
+**Erro (404) — formato estruturado (`NotFoundError`):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Usuário não encontrado"
+  }
+}
+```
+
+### POST /api/users
+Cria um novo usuário.
+
+**Request:**
+```json
+{
+  "name": "Novo Usuário",
+  "email": "novo@evokaudio.com.br",
+  "password": "123456",
+  "role": "operator"
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 2,
+    "name": "Novo Usuário",
+    "email": "novo@evokaudio.com.br",
+    "role": "operator"
+  }
+}
+```
+
+**Erro (400) — email/senha inválidos ou `role` fora de `admin|operator|financial` (`ValidationError`); erro (409) — email já cadastrado (`ConflictError`).**
+
+### PUT /api/users/:id
+Atualiza nome/email/role/active de um usuário. **Não permite alterar senha** por este endpoint.
+
+**Request:**
+```json
+{
+  "name": "Nome Atualizado",
+  "role": "financial",
+  "active": true
+}
+```
+
+**Erro (400) — se `password` for enviado no corpo (`ValidationError`, mensagem `"Use endpoint específico para alterar senha"`); erro (409) — email já cadastrado.**
+
+### DELETE /api/users/:id
+Inativa (soft delete via `active=false`) um usuário. Bloqueia auto-inativação.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": { "message": "Usuário inativado com sucesso" }
+}
+```
+
+**Erro (422) — usuário tentando inativar a si mesmo (`BusinessRuleError`):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BUSINESS_RULE_VIOLATION",
+    "message": "Você não pode inativar seu próprio usuário"
+  }
+}
+```
+
+---
+
 ## 2. Clientes
 
 ### GET /api/clients
