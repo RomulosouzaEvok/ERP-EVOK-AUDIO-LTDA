@@ -1,6 +1,7 @@
 const { ProductionOrder, Product, Employee, User } = require('../models/index');
 const InventoryService = require('../services/inventoryService');
 const BomService = require('../services/bomService');
+const ProductionOrderEntity = require('../modules/production/domain/entities/ProductionOrderEntity');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const { logAction } = require('../services/auditLogService');
@@ -66,23 +67,21 @@ exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
     const { product_id, quantity, priority, due_date, responsible_id, sales_order_id, notes } = req.body;
-    if (!product_id || !quantity || !due_date) { await t.rollback(); return res.status(400).json({ success: false, error: 'Produto, quantidade e data de vencimento são obrigatórios' }); }
-    if (quantity <= 0) { await t.rollback(); return res.status(400).json({ success: false, error: 'Quantidade deve ser maior que zero' }); }
+    const entity = new ProductionOrderEntity({
+      product_id, quantity, priority, due_date, responsible_id, sales_order_id, notes
+    });
 
     const product = await Product.findByPk(product_id, { transaction: t });
-    if (!product) { await t.rollback(); return res.status(404).json({ success: false, error: 'Produto não encontrado' }); }
-    if (product.status !== 'active') { await t.rollback(); return res.status(400).json({ success: false, error: 'Produto inativo não pode ser produzido' }); }
-    if (product.product_type !== 'finished') { await t.rollback(); return res.status(400).json({ success: false, error: `Apenas produtos acabados têm OP. '${product.name}' é '${product.product_type}'` }); }
+    entity.assertCanBeCreatedFor(product);
 
     const year = new Date().getFullYear();
     const count = await ProductionOrder.count({ where: { order_number: { [Op.like]: `OP-${year}%` } }, transaction: t });
     const order_number = `OP-${year}-${String(count + 1).padStart(4, '0')}`;
 
-    const order = await ProductionOrder.create({
-      order_number, product_id, quantity,
-      priority: priority || 'normal', status: 'planned',
-      due_date, sales_order_id, responsible_id, notes, created_by: req.user.id
-    }, { transaction: t });
+    const order = await ProductionOrder.create(
+      entity.toCreatePersistence({ order_number, created_by: req.user.id }),
+      { transaction: t }
+    );
 
     await t.commit();
 
@@ -127,34 +126,19 @@ exports.updateStatus = async (req, res, next) => {
     const { status, quantity_produced } = req.body;
     if (!status) { await t.rollback(); return res.status(400).json({ success: false, error: 'Status é obrigatório' }); }
 
-    const validTransitions = {
-      'planned': ['released', 'canceled'],
-      'released': ['in_progress', 'canceled'],
-      'in_progress': ['completed', 'paused', 'canceled'],
-      'paused': ['in_progress', 'canceled'],
-      'completed': [], 'canceled': []
-    };
-
     // Lock pessimista na OP: impede que duas requisições concorrentes de
     // finalização (ex.: duplo clique) leiam o mesmo status 'in_progress' e
     // ambas tentem completar a mesma ordem, duplicando entrada de estoque.
     const order = await ProductionOrder.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
     if (!order) { await t.rollback(); return res.status(404).json({ success: false, error: 'Ordem de produção não encontrada' }); }
-    if (order.status === status) { await t.rollback(); return res.status(400).json({ success: false, error: `OP já está com status ${status}` }); }
-
-    const allowed = validTransitions[order.status] || [];
-    if (!allowed.includes(status)) { await t.rollback(); return res.status(400).json({ success: false, error: `Transição inválida: ${order.status} → ${status}` }); }
 
     const previousStatus = order.status;
     const orderNumber = order.order_number;
+    const entity = new ProductionOrderEntity(order.get({ plain: true }));
+    const updateData = entity.transitionTo(status, quantity_produced);
 
-    const updateData = { status };
-    if (status === 'in_progress') updateData.start_date = new Date();
     if (status === 'completed') {
-      const producedQty = quantity_produced !== undefined ? quantity_produced : order.quantity;
-      if (producedQty < 0) { await t.rollback(); return res.status(400).json({ success: false, error: 'Quantidade produzida não pode ser negativa' }); }
-      updateData.quantity_produced = producedQty;
-      updateData.completion_date = new Date();
+      const producedQty = updateData.quantity_produced;
       if (producedQty > 0) {
         try {
           // Consome os componentes da BOM ativa do produto acabado, se existir.
