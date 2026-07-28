@@ -149,18 +149,18 @@ Este plano nao substitui as correcoes criticas da Fase 4. Ele organiza a evoluca
 
 Status real (auditado em 2026-07-28), item a item:
 
-- [ ] Organizacao por modulo com camadas: `domain`, `application`, `infrastructure`, `presentation` — **PARCIAL**. Feito em 7 de 11 modulos (products, inventory, bom, purchases, sales, production, financial). Faltam: `auth`, `users`, `suppliers`, `clients`.
-- [ ] Entidades de dominio com regras de negocio fora dos controllers — **PARCIAL**, so nos 7 modulos migrados. Nos demais controllers (auth, users, suppliers, clients, categories, employees, departments, reports, assets, maintenance, nonConformities, serviceOrders, mobileInventory, auditLogs, dashboard, intelligentAuditor) a regra de negocio ainda esta solta no controller, formato antigo.
-- [ ] Use cases para operacoes importantes — **PARCIAL**, mesma cobertura dos 7 modulos migrados. Alem disso, os use cases hoje sao majoritariamente wrappers finos sobre services/models existentes (ex.: bomService.js), nao uma reescrita completa de dominio rico em todos os casos — ver notas especificas nas Fases 6.
+- [x] Organizacao por modulo com camadas: `domain`, `application`, `infrastructure`, `presentation` — **FEITO nos 11 modulos previstos na Fase 5** (products, inventory, bom, purchases, sales, production, financial, auth, users, suppliers, clients). Modulos fora do escopo original da Fase 5 (categories, employees, departments, reports, assets, maintenance, nonConformities, serviceOrders, mobileInventory, auditLogs, dashboard, intelligentAuditor) continuam no formato antigo — nunca estiveram no checklist da Fase 5.
+- [x] Entidades de dominio com regras de negocio fora dos controllers — feito nos 11 modulos migrados.
+- [x] Use cases para operacoes importantes — feito nos 11 modulos migrados. Ressalva: varios use cases (especialmente BOM) sao wrappers finos sobre services/models existentes (ex.: bomService.js), nao uma reescrita completa de dominio rico em todos os casos — ver notas especificas na Fase 6.
 - [ ] DTOs claros de entrada e saida — **NAO FEITO**. Nao existem classes/schemas de DTO formais; a validacao de entrada e feita por entidades leves (`*Entity.js`) que veem o `req.body` bruto. Isso e explicitamente escopo da Fase 8 (Zod), ainda nao iniciada.
-- [x] Interfaces de repositorio — feito nos 7 modulos migrados (`domain/repositories/*Repository.js` + implementacao Sequelize em `infrastructure/sequelize/`).
+- [x] Interfaces de repositorio — feito nos 11 modulos migrados (`domain/repositories/*Repository.js` + implementacao Sequelize em `infrastructure/sequelize/`).
 - [x] Erros padronizados — feito em todo o projeto (nao so nos modulos migrados): `AppError`/subclasses + `errorHandler` central, aplicado nos 25 controllers desde a Fase 4.1.
 - [ ] Testes unitarios de dominio — **NAO FEITO**. Zero arquivos de teste no projeto inteiro (nao ha `server/tests/` nem runner configurado). Escopo da Fase 9.
 - [ ] Testes de use cases — **NAO FEITO**, mesma razao acima.
 - [ ] Documentacao de arquitetura, banco, APIs, fluxos de negocio e guia de desenvolvimento — **PARCIAL**. Existe `docs/API.md` (atualizado a cada modulo migrado) e um `README.md` por modulo migrado (objetivo, entidades, regras, endpoints, permissoes, auditoria, pendencias). NAO existem os documentos formais previstos na Fase 10 (`docs/01-ARQUITETURA.md`, `docs/03-BANCO-DE-DADOS.md`, `docs/05-FLUXOS-DE-NEGOCIO.md`, `docs/06-GUIA-DE-DESENVOLVIMENTO.md`, C4 model, LOGBOOK).
 - [ ] Contrato OpenAPI/Swagger centralizado — **NAO FEITO**. Existem comentarios `@openapi` isolados no arquivo legado `server/src/routes/bom.js` (nao mais ativo) mas nao ha spec centralizada nem servida (`/docs`, Swagger UI). Escopo da Fase 13.
-- [x] Padrao de resposta JSON consistente — feito nos 7 modulos migrados (`{ success, data, pagination? }` e `{ success:false, error:{ code, message } }` via `AppError`); os controllers antigos (nao migrados) continuam no formato legado equivalente mas sem a garantia central do `AppError`.
-- [ ] Padrao de validacao e sanitizacao em todas as entradas — **PARCIAL**. Ha validacao de forma (entidades leves) nos 7 modulos migrados e sanitizacao de busca (`sanitizeSearch`) desde a Fase 3, mas nao ha padrao de schema/validacao centralizado (Zod) aplicado a todas as rotas — escopo da Fase 8.
+- [x] Padrao de resposta JSON consistente — feito nos 11 modulos migrados (`{ success, data, pagination? }` e `{ success:false, error:{ code, message } }` via `AppError`); os controllers ainda nao migrados continuam no formato legado equivalente mas sem a garantia central do `AppError`.
+- [ ] Padrao de validacao e sanitizacao em todas as entradas — **PARCIAL**. Ha validacao de forma (entidades leves) nos 11 modulos migrados e sanitizacao de busca (`sanitizeSearch`) desde a Fase 3, mas nao ha padrao de schema/validacao centralizado (Zod) aplicado a todas as rotas — escopo da Fase 8.
 
 ## FASE 4.1 - Estabilizacao obrigatoria antes da elegancia
 
@@ -619,49 +619,49 @@ Criterios de aceite:
 
 ### Semana 1 - Estabilidade critica
 
-- [ ] Corrigir CNPJ.
-- [ ] Corrigir race condition de estoque.
-- [ ] Criar `InventoryService`.
-- [ ] Remover uso critico de `sequelize.literal`.
-- [ ] Padronizar erro base com `AppError`.
-- [ ] Atualizar `errorHandler`.
-- [ ] Criar testes regressivos dos bugs corrigidos.
+- [x] Corrigir CNPJ.
+- [x] Corrigir race condition de estoque.
+- [x] Criar `InventoryService`.
+- [x] Remover uso critico de `sequelize.literal`.
+- [x] Padronizar erro base com `AppError`.
+- [x] Atualizar `errorHandler`.
+- [ ] Criar testes regressivos dos bugs corrigidos — **NAO FEITO**. Zero testes automatizados no projeto (escopo Fase 9).
 
 ### Semana 2 - Auditoria e seguranca
 
-- [ ] Criar `AuditLogService`.
-- [ ] Integrar auditoria em produtos, estoque, vendas, compras e OP.
-- [ ] Revisar rotas sem auth.
-- [ ] Revisar RBAC.
-- [ ] Revisar upload.
-- [ ] Atualizar documentacao de seguranca.
+- [x] Criar `AuditLogService`.
+- [x] Integrar auditoria em produtos, estoque, vendas, compras e OP.
+- [ ] Revisar rotas sem auth — **NAO FEITO** (nenhuma auditoria sistematica de rotas sem `authenticate` foi feita).
+- [ ] Revisar RBAC — **NAO FEITO** (escopo Fase 12).
+- [ ] Revisar upload — **NAO FEITO** desde a Fase 3 (upload ja tem sanitizacao/magic bytes, mas nao houve nova revisao nesta rodada).
+- [ ] Atualizar documentacao de seguranca — **NAO FEITO**.
 
 ### Semana 3 - Modularizacao inicial
 
-- [ ] Criar `server/src/shared`.
-- [ ] Criar `server/src/modules`.
-- [ ] Migrar modulo `products`.
-- [ ] Criar use cases de produto.
-- [ ] Criar DTOs/schemas de produto.
-- [ ] Criar README do modulo produtos.
+- [x] Criar `server/src/shared`.
+- [x] Criar `server/src/modules`.
+- [x] Migrar modulo `products`.
+- [x] Criar use cases de produto.
+- [ ] Criar DTOs/schemas de produto — **NAO FEITO** (so entidade leve de validacao de forma, sem Zod; escopo Fase 8).
+- [x] Criar README do modulo produtos.
 
 ### Semana 4 - Estoque e BOM em camadas
 
-- [ ] Migrar `inventory`.
-- [ ] Migrar `bom`.
-- [ ] Quebrar `bomService` em use cases.
-- [ ] Criar regras de dominio de BOM.
-- [ ] Criar testes unitarios de BOM e estoque.
-- [ ] Atualizar docs de producao/BOM.
+- [x] Migrar `inventory`.
+- [x] Migrar `bom`.
+- [ ] Quebrar `bomService` em use cases — **PARCIAL**. Use cases criados sao wrappers finos que chamam `bomService.js`; a logica pesada continua centralizada la, nao foi de fato particionada em classes menores.
+- [x] Criar regras de dominio de BOM (parcial — ver Fase 6 para detalhes do que falta: deteccao de ciclo).
+- [ ] Criar testes unitarios de BOM e estoque — **NAO FEITO**.
+- [ ] Atualizar docs de producao/BOM — **NAO FEITO** (docs/producao/06-BOM.md nao foi tocado; so o README do modulo e docs/API.md).
 
 ### Semana 5 - Producao, compras e vendas
 
-- [ ] Migrar `production`.
-- [ ] Migrar fluxos criticos de `sales`.
-- [ ] Migrar fluxos criticos de `purchases`.
-- [ ] Implementar reserva de estoque.
-- [ ] Corrigir contas a pagar.
-- [ ] Corrigir arredondamento de parcelas.
+- [x] Migrar `production`.
+- [x] Migrar fluxos criticos de `sales`.
+- [x] Migrar fluxos criticos de `purchases`.
+- [ ] Implementar reserva de estoque — **NAO FEITO** (schema nao tem `reserved_quantity`; `InventoryService.reserve` e stub).
+- [x] Corrigir contas a pagar (F21: AccountPayable gerado na aprovacao, nao no recebimento — ja estava correto antes desta rodada; atomicidade corrigida na migracao de purchases).
+- [x] Corrigir arredondamento de parcelas (F24: `toCents`/`fromCents`, ultima parcela absorve o resto — ja estava corrigido antes desta rodada).
 
 ### Semana 6 - TypeScript gradual e testes
 
