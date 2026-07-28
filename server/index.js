@@ -54,7 +54,12 @@ app.use('/api/users', require('./src/modules/users/presentation/routes/users'));
 // registrada aqui, para evitar montar duas vezes o mesmo path `/api/products`.
 // Ver `server/src/modules/products/README.md`.
 app.use('/api/products', require('./src/modules/products/presentation/routes/products'));
-app.use('/api/clients', require('./src/routes/clients'));
+// Modulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
+// A rota legada `./src/routes/clients.js` (+ `./src/controllers/clientController.js`)
+// permanece no repositorio apenas como referencia historica e NAO e mais
+// registrada aqui, para evitar montar duas vezes o mesmo path `/api/clients`.
+// Ver `server/src/modules/clients/README.md`.
+app.use('/api/clients', require('./src/modules/clients/presentation/routes/clients'));
 // Modulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
 // A rota legada `./src/routes/suppliers.js` (+ `./src/controllers/supplierController.js`)
 // permanece no repositorio apenas como referencia historica e NAO e mais
