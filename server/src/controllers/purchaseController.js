@@ -2,6 +2,36 @@ const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, InventoryMove
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
+const createPurchasePayable = async (purchase, userId, transaction) => {
+  if (!purchase.supplier_id) return;
+
+  const totalPayable = parseFloat(purchase.total_amount) || 0;
+  if (totalPayable <= 0) return;
+
+  const existingPayable = await AccountPayable.findOne({
+    where: { purchase_id: purchase.id },
+    transaction
+  });
+  if (existingPayable) return;
+
+  const dueDate = purchase.expected_date
+    ? new Date(new Date(purchase.expected_date).getTime() + 30 * 24 * 60 * 60 * 1000)
+    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  await AccountPayable.create({
+    description: `Fornecimento PO ${purchase.order_number}`,
+    amount: totalPayable,
+    due_date: dueDate.toISOString().slice(0, 10),
+    status: 'pending',
+    category: 'Fornecedores',
+    supplier_id: purchase.supplier_id,
+    purchase_id: purchase.id,
+    approved_by: userId,
+    approval_date: new Date(),
+    notes: `Gerado automaticamente na aprovacao do pedido ${purchase.order_number}`
+  }, { transaction });
+};
+
 exports.updateStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -30,6 +60,9 @@ exports.updateStatus = async (req, res) => {
 
     purchase.status = status;
     await purchase.save();
+    if (status === 'approved') {
+      await createPurchasePayable(purchase, req.user.id);
+    }
     res.json({ success: true, data: purchase });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -196,26 +229,6 @@ exports.receiveItems = async (req, res) => {
     const allReceived = updatedItems.every(i => i.status === 'received');
     purchase.status = allReceived ? 'received' : 'partial';
     await purchase.save({ transaction: t });
-
-    // Generate accounts payable if supplier_id exists
-    if (purchase.supplier_id && allReceived) {
-      const totalPayable = parseFloat(purchase.total_amount) || 0;
-      if (totalPayable > 0) {
-        const dueDate = purchase.expected_date
-          ? new Date(new Date(purchase.expected_date).getTime() + 30 * 24 * 60 * 60 * 1000)
-          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await AccountPayable.create({
-          description: `Fornecimento PO ${purchase.order_number}`,
-          amount: totalPayable,
-          due_date: dueDate.toISOString().slice(0, 10),
-          status: 'pending',
-          category: 'Fornecedores',
-          supplier_id: purchase.supplier_id,
-          purchase_id: purchase.id,
-          notes: `Gerado automaticamente no recebimento do pedido ${purchase.order_number}`
-        }, { transaction: t });
-      }
-    }
 
     await t.commit();
     const fullPurchase = await Purchase.findByPk(purchase.id, {

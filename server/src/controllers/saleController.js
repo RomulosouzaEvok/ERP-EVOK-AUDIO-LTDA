@@ -2,6 +2,9 @@ const { Sale, SaleItem, Product, Client, AccountReceivable, InventoryMovement } 
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
+const toCents = value => Math.round((parseFloat(value) || 0) * 100);
+const fromCents = cents => parseFloat((cents / 100).toFixed(2));
+
 exports.list = async (req, res) => {
   try {
     const { page = 1, limit = 10, status, start_date, end_date, customer_id } = req.query;
@@ -80,7 +83,7 @@ exports.create = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Desconto não pode ser negativo' });
     }
 
-    let totalAmount = 0;
+    let totalCents = 0;
     const processedItems = [];
 
     for (const item of items) {
@@ -99,6 +102,8 @@ exports.create = async (req, res) => {
         return res.status(400).json({ success: false, error: 'Preço unitário deve ser maior que zero' });
       }
 
+      const unitPriceCents = toCents(unitPrice);
+
       const product = await Product.findByPk(item.product_id, { transaction: t });
       if (!product) {
         await t.rollback();
@@ -115,19 +120,28 @@ exports.create = async (req, res) => {
           error: `Estoque insuficiente para ${product.name}. Disponível: ${product.quantity}`
         });
       }
-      const totalPrice = qty * unitPrice;
-      totalAmount += totalPrice;
-      processedItems.push({ product_id: item.product_id, quantity: qty, unit_price: unitPrice, total_price: totalPrice });
+      const totalPriceCents = qty * unitPriceCents;
+      totalCents += totalPriceCents;
+      processedItems.push({
+        product_id: item.product_id,
+        quantity: qty,
+        unit_price: fromCents(unitPriceCents),
+        total_price: fromCents(totalPriceCents)
+      });
     }
 
-    if (parsedDiscount > totalAmount) {
+    const discountCents = toCents(parsedDiscount);
+    if (discountCents > totalCents) {
       await t.rollback();
       return res.status(400).json({ success: false, error: 'Desconto não pode ser maior que o valor total' });
     }
 
+    const totalNetCents = totalCents - discountCents;
+    const totalNet = fromCents(totalNetCents);
+
     const sale = await Sale.create({
       customer_id, user_id: req.user.id,
-      total_amount: totalAmount - parsedDiscount, discount: parsedDiscount,
+      total_amount: totalNet, discount: fromCents(discountCents),
       status: 'confirmed', payment_method, installments, notes
     }, { transaction: t });
 
@@ -138,8 +152,25 @@ exports.create = async (req, res) => {
         quantity: item.quantity, unit_price: item.unit_price, total_price: item.total_price
       }, { transaction: t });
 
-      // Update stock
-      await Product.update({ quantity: sequelize.literal(`quantity - ${item.quantity}`) }, { where: { id: item.product_id }, transaction: t });
+      // Atomic stock debit: prevents concurrent sales from driving inventory negative.
+      const [updatedRows] = await Product.update(
+        { quantity: sequelize.literal(`quantity - ${item.quantity}`) },
+        {
+          where: {
+            id: item.product_id,
+            status: 'active',
+            quantity: { [Op.gte]: item.quantity }
+          },
+          transaction: t
+        }
+      );
+      if (updatedRows !== 1) {
+        await t.rollback();
+        return res.status(409).json({
+          success: false,
+          error: `Estoque insuficiente para o produto ID ${item.product_id}. Venda nao concluida.`
+        });
+      }
 
       // Inventory movement
       await InventoryMovement.create({
@@ -151,10 +182,9 @@ exports.create = async (req, res) => {
     }
 
 // Generate accounts receivable
-    const totalNet = totalAmount - parsedDiscount;
     if (installments > 1) {
-      const baseInstallment = Math.floor((totalNet / installments) * 100) / 100;
-      const remainder = Math.round((totalNet - baseInstallment * installments) * 100) / 100;
+      const baseInstallmentCents = Math.floor(totalNetCents / installments);
+      const remainderCents = totalNetCents % installments;
       const today = new Date();
       const day = today.getDate();
       for (let i = 1; i <= installments; i++) {
@@ -165,7 +195,7 @@ exports.create = async (req, res) => {
         const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
         const safeDay = Math.min(day, lastDayOfMonth);
         const dueDate = new Date(year, month, safeDay);
-        const amount = i === installments ? parseFloat((baseInstallment + remainder).toFixed(2)) : baseInstallment;
+        const amount = fromCents(baseInstallmentCents + (i === installments ? remainderCents : 0));
         await AccountReceivable.create({
           sale_id: sale.id, customer_id, installment: i,
           amount, due_date: dueDate, status: 'pending'
