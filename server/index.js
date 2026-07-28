@@ -54,7 +54,12 @@ app.use('/api/categories', require('./src/routes/categories'));
 app.use('/api/reports', require('./src/routes/reports'));
 app.use('/api/employees', require('./src/routes/employees'));
 app.use('/api/departments', require('./src/routes/departments'));
-app.use('/api/production-orders', require('./src/routes/productionOrders'));
+// Módulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
+// A rota legada `./src/routes/productionOrders.js` (+ `./src/controllers/productionOrderController.js`)
+// permanece no repositório apenas como referência histórica e NÃO é mais
+// registrada aqui, para evitar montar duas vezes o mesmo path `/api/production-orders`.
+// Ver `server/src/modules/production/README.md`.
+app.use('/api/production-orders', require('./src/modules/production/presentation/routes/productionOrders'));
 // MÃ³dulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
 // Ver `server/src/modules/inventory/README.md`.
 app.use('/api/inventory', require('./src/modules/inventory/presentation/routes/inventory'));

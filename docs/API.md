@@ -680,6 +680,60 @@ Lista os itens (componentes) de uma BOM.
 > `server/src/modules/bom/README.md` para detalhes de regras de negócio,
 > entidades e pendências.
 
+## 10. Ordens de Produção
+
+### GET /api/production-orders
+Lista ordens de produção. Filtros: `status`, `product_id`, `priority`, `start_date`, `end_date`; paginação: `page`, `limit`.
+```json
+{
+  "success": true,
+  "data": [ { "id": 1, "order_number": "OP-2026-0001", "status": "planned", "quantity": 100, "product": { "id": 5, "name": "Alto-falante 12in" } } ],
+  "summary": { "total": 10, "planned": 3, "in_progress": 2, "completed": 4, "overdue": 1 },
+  "pagination": { "total": 10, "page": 1, "limit": 10, "totalPages": 1 }
+}
+```
+
+### GET /api/production-orders/report
+Relatório de produção de um período (`start_date`, `end_date`), com totais planejados/produzidos, taxa de conclusão e distribuição por status.
+
+### GET /api/production-orders/:id
+Detalhes da OP (produto, responsável, criador).
+
+### POST /api/production-orders
+Cria uma OP. Requer papel `admin` ou `operator`.
+```json
+{
+  "product_id": 5,
+  "quantity": 100,
+  "due_date": "2026-08-30",
+  "priority": "normal",
+  "responsible_id": 3,
+  "notes": "Lote para pedido X"
+}
+```
+O `order_number` (`OP-<ano>-XXXX`) é gerado automaticamente. O produto deve estar `active` e ser do tipo `finished`.
+
+### PUT /api/production-orders/:id
+Atualiza campos gerais (`priority`, `due_date`, `responsible_id`, `notes`). **Não aceita** `status` — use `PUT /:id/status`.
+
+### PUT /api/production-orders/:id/status
+Muda o status da OP conforme a máquina de estados `planned → released → in_progress → completed/paused/canceled`.
+```json
+{ "status": "completed", "quantity_produced": 98 }
+```
+Ao transicionar para `completed`, consome os componentes da BOM ativa do produto (se houver) e dá entrada do produto acabado no estoque, em uma única transação com lock pessimista.
+
+### DELETE /api/production-orders/:id
+Remove a OP. Requer papel `admin`. Não permitido se a OP estiver `in_progress` ou `completed`.
+
+> Nota de arquitetura: os endpoints de `/api/production-orders` são servidos
+> pelo módulo `server/src/modules/production/` (Clean Architecture). O
+> consumo/entrada de estoque reutiliza `server/src/services/inventoryService.js`
+> (lock pessimista + transação) e a explosão de BOM reutiliza
+> `server/src/services/bomService.js`. Ver
+> `server/src/modules/production/README.md` para detalhes de regras de
+> negócio, a máquina de estados e pendências (ex.: registro de refugo).
+
 ---
 
 ## Códigos de Erro
