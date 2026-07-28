@@ -67,7 +67,20 @@ class ProductionOrderEntity extends Entity {
     }
   }
 
-  transitionTo(nextStatus, quantityProduced) {
+  /**
+   * @param {string} nextStatus - Status alvo da transicao.
+   * @param {number} [quantityProduced] - Quantidade produzida, usada apenas quando `nextStatus === 'completed'`.
+   * @param {Object} [options]
+   * @param {boolean} [options.allowOverproduction=false] - Quando `false` (padrao), bloqueia apontar
+   *   `quantityProduced` maior que a quantidade planejada (`this.quantity`) — regra explicita pedida no
+   *   TODO ("Apontamento nao pode exceder quantidade planejada sem regra explicita"). Passe `true` para
+   *   permitir producao acima do planejado deliberadamente (ex.: ordem consolidada, retrabalho).
+   * @returns {Object} Campos a persistir na OP.
+   * @throws {BusinessRuleError} Se a transicao de status nao for permitida ou a OP ja estiver no status alvo.
+   * @throws {ValidationError} Se `quantityProduced` for negativo ou exceder o planejado sem `allowOverproduction`.
+   */
+  transitionTo(nextStatus, quantityProduced, options = {}) {
+    const { allowOverproduction = false } = options;
     const allowed = STATUS_TRANSITIONS[this.status] || [];
     if (this.status === nextStatus) {
       throw new BusinessRuleError(`OP ja esta com status ${nextStatus}`);
@@ -82,6 +95,12 @@ class ProductionOrderEntity extends Entity {
       const produced = quantityProduced !== undefined ? Number(quantityProduced) : this.quantity;
       if (!Number.isFinite(produced) || produced < 0) {
         throw new ValidationError('Quantidade produzida nao pode ser negativa');
+      }
+      if (produced > this.quantity && !allowOverproduction) {
+        throw new ValidationError(
+          `Quantidade produzida (${produced}) excede a quantidade planejada (${this.quantity}). ` +
+          `Envie "allow_overproduction: true" na requisicao para confirmar producao acima do planejado.`
+        );
       }
       changes.quantity_produced = produced;
       changes.completion_date = new Date();

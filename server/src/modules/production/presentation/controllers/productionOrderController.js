@@ -150,10 +150,10 @@ exports.update = async (req, res, next) => {
  */
 exports.updateStatus = async (req, res, next) => {
   try {
-    const { status, quantity_produced } = req.body;
+    const { status, quantity_produced, allow_overproduction } = req.body;
     const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
     const { previousStatus, orderNumber, order, updateData } = await useCase.execute({
-      id: req.params.id, status, quantity_produced, user_id: req.user.id
+      id: req.params.id, status, quantity_produced, allow_overproduction, user_id: req.user.id
     });
 
     // Log de auditoria feito após o commit (dentro do use case) para não segurar locks de banco.

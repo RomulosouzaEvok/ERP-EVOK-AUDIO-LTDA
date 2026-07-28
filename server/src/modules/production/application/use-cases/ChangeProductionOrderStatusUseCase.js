@@ -41,14 +41,16 @@ class ChangeProductionOrderStatusUseCase extends UseCase {
    * @param {number} input.id - Id da OP.
    * @param {string} input.status - Status alvo.
    * @param {number} [input.quantity_produced] - Quantidade efetivamente produzida (usado apenas quando `status === 'completed'`).
+   * @param {boolean} [input.allow_overproduction=false] - Confirma explicitamente producao acima da quantidade planejada.
    * @param {number} input.user_id - Id do usuário que está executando a mudança de status (usado nos registros de estoque).
    * @returns {Promise<{ previousStatus: string, orderNumber: string, order: Object, updateData: Object }>}
-   * @throws {ValidationError} Se `status` estiver ausente, se já for o status atual, ou se `quantity_produced` for negativo.
+   * @throws {ValidationError} Se `status` estiver ausente, se já for o status atual, se `quantity_produced` for negativo,
+   *   ou se exceder a quantidade planejada sem `allow_overproduction`.
    * @throws {NotFoundError} Se a OP não existir.
    * @throws {BusinessRuleError} Se a transição de status não for permitida pela máquina de estados.
    * @throws {ConflictError} Se o consumo/entrada de estoque falhar (ex.: estoque insuficiente de algum componente).
    */
-  async execute({ id, status, quantity_produced, user_id }) {
+  async execute({ id, status, quantity_produced, allow_overproduction, user_id }) {
     if (!status) {
       throw new ValidationError('Status é obrigatório');
     }
@@ -65,7 +67,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase {
       const previousStatus = order.status;
       const orderNumber = order.order_number;
       const entity = new ProductionOrderEntity(order.get ? order.get({ plain: true }) : order);
-      const updateData = entity.transitionTo(status, quantity_produced);
+      const updateData = entity.transitionTo(status, quantity_produced, { allowOverproduction: !!allow_overproduction });
       if (status === 'completed') {
         await this._completeOrder(order, updateData.quantity_produced, user_id, t);
       }

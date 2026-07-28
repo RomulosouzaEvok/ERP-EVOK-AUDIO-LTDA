@@ -344,7 +344,7 @@ Criterios de aceite:
 - [x] Quantidade do item deve ser maior que zero.
 - [x] Percentual de perda deve ser limitado e documentado (`BOMEntity`, 0-100).
 - [x] Evitar componente duplicado no mesmo nivel quando nao for intencional (`BOMEntity`).
-- [ ] Detectar loop/ciclo de BOM — **NAO FEITO**. `MAX_BOM_DEPTH=10` limita profundidade e evita loop infinito na explosao, mas nao ha deteccao explicita de ciclo (ex.: A depende de B que depende de A) alem do estouro de profundidade.
+- [x] Detectar loop/ciclo de BOM — `BomService.explodeBOM` agora mantem um `ancestorPath` (Set de ids de produto) durante a recursao e lanca erro 422 explicito de "Ciclo detectado" assim que um componente reaparece como seu proprio ancestral, em vez de so estourar `MAX_BOM_DEPTH` silenciosamente.
 - [x] Controlar profundidade maxima (`MAX_BOM_DEPTH = 10`).
 - [x] Versionar BOM (campo `revision` + `status: superseded` automatico ao criar nova BOM ativa para o mesmo produto).
 - [x] Aprovar BOM antes de usar em producao (`ApproveBOMUseCase`/fluxo `status: active`; producao consome via `BomService.explodeBOM` que so busca BOM `active`).
@@ -397,7 +397,7 @@ Use cases de estoque (criados em `server/src/modules/inventory/application/use-c
 - [x] Status controlados: `planned`, `released`, `in_progress`, `paused`, `completed`, `canceled` (maquina de transicao em `ChangeProductionOrderStatusUseCase`/`ProductionOrderEntity`).
 - [x] Nao iniciar OP cancelada/concluida (validado pela tabela de transicoes permitidas).
 - [x] Nao finalizar OP duas vezes (lock pessimista na OP antes de validar a transicao).
-- [ ] Apontamento nao pode exceder quantidade planejada sem regra explicita — **NAO VALIDADO**. `quantity_produced` aceita qualquer valor >= 0, inclusive maior que `quantity` planejada.
+- [x] Apontamento nao pode exceder quantidade planejada sem regra explicita — `ProductionOrderEntity.transitionTo` agora bloqueia `quantity_produced > quantity` a menos que `allow_overproduction: true` seja enviado explicitamente no `PUT /:id/status`.
 - [ ] Registrar refugos — **NAO FEITO**. Nao existe campo `quantity_scrapped` no model `ProductionOrder` nem endpoint de refugo.
 - [ ] Calcular eficiencia — **NAO FEITO**.
 - [x] Consumir componentes conforme BOM (explode a BOM ativa e consome via `InventoryService.consume`, tolerante a produto sem BOM).

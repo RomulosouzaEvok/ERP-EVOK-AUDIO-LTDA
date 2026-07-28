@@ -204,11 +204,18 @@ class BomService {
     const errors = [];
     let totalCost = 0;
 
+    // Caminho de ancestrais (ids de produto) da recursão atual, usado para
+    // detectar ciclo real na BOM (ex.: A depende de B que depende de A),
+    // e não apenas estourar a profundidade máxima silenciosamente.
+    const ancestorPath = new Set([productId]);
+
     // Função recursiva para explodir BOM
     const explodeLevel = async (items, level, parentQty) => {
       if (level > maxDepth) {
-        errors.push(`Profundidade máxima (${maxDepth}) excedida. Possível loop na BOM.`);
-        return;
+        throw Object.assign(
+          new Error(`Profundidade máxima (${maxDepth}) excedida ao explodir a BOM do produto ID ${productId}. Possível ciclo não detectado pela checagem de ancestrais.`),
+          { statusCode: 422 }
+        );
       }
 
       for (const item of items) {
@@ -222,6 +229,13 @@ class BomService {
           continue;
         }
 
+        if (ancestorPath.has(item.component_product_id)) {
+          throw Object.assign(
+            new Error(`Ciclo detectado na BOM: o componente "${component.name}" (ID ${item.component_product_id}) é ancestral de si mesmo na árvore de estrutura do produto ID ${productId}.`),
+            { statusCode: 422 }
+          );
+        }
+
         // Verifica se este componente tem sua própria BOM (subconjunto)
         const subBOM = await BillOfMaterial.findOne({
           where: { product_id: item.component_product_id, status: 'active' }
@@ -233,7 +247,12 @@ class BomService {
             where: { bom_id: subBOM.id },
             order: [['bom_level', 'ASC'], ['sequence_order', 'ASC']]
           });
-          await explodeLevel(subItems, level + 1, netQty);
+          ancestorPath.add(item.component_product_id);
+          try {
+            await explodeLevel(subItems, level + 1, netQty);
+          } finally {
+            ancestorPath.delete(item.component_product_id);
+          }
         } else {
           // Componente folha (matéria-prima ou componente simples)
           const key = `${item.component_product_id}`;
