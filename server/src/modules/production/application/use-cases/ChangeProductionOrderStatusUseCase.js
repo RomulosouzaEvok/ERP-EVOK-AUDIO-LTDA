@@ -1,5 +1,6 @@
 const UseCase = require('../../../../shared/application/UseCase');
-const { NotFoundError, ValidationError, BusinessRuleError, ConflictError } = require('../../../../errors');
+const ProductionOrderEntity = require('../../domain/entities/ProductionOrderEntity');
+const { NotFoundError, ValidationError, ConflictError } = require('../../../../errors');
 const InventoryService = require('../../../../services/inventoryService');
 const BomService = require('../../../../services/bomService');
 const { sequelize } = require('../../../../config/database');
@@ -9,14 +10,7 @@ const { sequelize } = require('../../../../config/database');
  * Produção. Único ponto de verdade — reaproveitado por todas as transições
  * de status (ver decisão de simplificação no README do módulo).
  */
-const VALID_TRANSITIONS = {
-  planned: ['released', 'canceled'],
-  released: ['in_progress', 'canceled'],
-  in_progress: ['completed', 'paused', 'canceled'],
-  paused: ['in_progress', 'canceled'],
-  completed: [],
-  canceled: []
-};
+const VALID_TRANSITIONS = ProductionOrderEntity.STATUS_TRANSITIONS;
 
 /**
  * Muda o status de uma ordem de produção, cobrindo `PUT /api/production-orders/:id/status`.
@@ -68,22 +62,12 @@ class ChangeProductionOrderStatusUseCase extends UseCase {
       if (!order) {
         throw new NotFoundError('Ordem de produção não encontrada');
       }
-      if (order.status === status) {
-        throw new ValidationError(`OP já está com status ${status}`);
-      }
-
-      const allowed = VALID_TRANSITIONS[order.status] || [];
-      if (!allowed.includes(status)) {
-        throw new BusinessRuleError(`Transição inválida: ${order.status} → ${status}`);
-      }
-
       const previousStatus = order.status;
       const orderNumber = order.order_number;
-
-      const updateData = { status };
-      if (status === 'in_progress') updateData.start_date = new Date();
+      const entity = new ProductionOrderEntity(order.get ? order.get({ plain: true }) : order);
+      const updateData = entity.transitionTo(status, quantity_produced);
       if (status === 'completed') {
-        await this._completeOrder(order, quantity_produced, updateData, user_id, t);
+        await this._completeOrder(order, updateData.quantity_produced, user_id, t);
       }
 
       await this.productionOrderRepository.update(id, updateData, t);
@@ -103,22 +87,14 @@ class ChangeProductionOrderStatusUseCase extends UseCase {
    * componentes da BOM ativa e entrada do produto acabado no estoque.
    *
    * @param {Object} order - OP travada (lock pessimista) na transação corrente.
-   * @param {number|undefined} quantity_produced - Quantidade produzida informada na requisição.
-   * @param {Object} updateData - Objeto de atualização, mutado para incluir `quantity_produced`/`completion_date`.
+   * @param {number} producedQty - Quantidade produzida ja validada pela entidade.
    * @param {number} user_id - Id do usuário executando a operação.
    * @param {import('sequelize').Transaction} t - Transação corrente.
    * @returns {Promise<void>}
    * @throws {ValidationError} Se `quantity_produced` for negativo.
    * @throws {ConflictError} Se o estoque de algum componente for insuficiente.
    */
-  async _completeOrder(order, quantity_produced, updateData, user_id, t) {
-    const producedQty = quantity_produced !== undefined ? quantity_produced : order.quantity;
-    if (producedQty < 0) {
-      throw new ValidationError('Quantidade produzida não pode ser negativa');
-    }
-    updateData.quantity_produced = producedQty;
-    updateData.completion_date = new Date();
-
+  async _completeOrder(order, producedQty, user_id, t) {
     if (producedQty <= 0) return;
 
     try {

@@ -97,13 +97,17 @@ Autentica o usuário e retorna o token JWT.
 }
 ```
 
-**Erro (401):**
+**Erro (401) — formato estruturado (`UnauthorizedError`):**
 ```json
 {
   "success": false,
-  "error": "Email ou senha incorretos"
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Email ou senha incorretos"
+  }
 }
 ```
+> A mensagem é propositalmente idêntica tanto para "email não encontrado" quanto para "senha incorreta" — nunca revela se um email está cadastrado. Usuário inativo retorna a mesma estrutura com `message: "Usuário inativo. Contate o administrador."`.
 
 ### POST /api/auth/register
 Registra um novo usuário (apenas admin).
