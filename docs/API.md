@@ -945,6 +945,61 @@ Cada item não pode exceder a quantidade pendente (`quantity - received_quantity
 
 ---
 
+## 12. Fornecedores
+
+### GET /api/suppliers
+Lista fornecedores. Filtros: `search` (busca por `company_name`/`cnpj`, sanitizada), `status`; paginação: `page`, `limit`.
+```json
+{
+  "success": true,
+  "data": [ { "id": 2, "company_name": "Fornecedor X", "cnpj": "12345678000199", "status": "active", "rating": 3 } ],
+  "pagination": { "total": 1, "page": 1, "limit": 10, "totalPages": 1 }
+}
+```
+
+### GET /api/suppliers/:id
+Detalhes de um fornecedor. `404` (`{ "success": false, "error": "Fornecedor não encontrado" }`) se o id não existir.
+
+### POST /api/suppliers
+Cria um fornecedor.
+```json
+{
+  "company_name": "Fornecedor X Ltda",
+  "cnpj": "12.345.678/0001-99",
+  "trade_name": "Fornecedor X",
+  "ie": "123456789",
+  "phone": "(11) 99999-0000",
+  "email": "contato@fornecedorx.com",
+  "contact_name": "João",
+  "contact_phone": "(11) 98888-0000",
+  "payment_terms": "30/60/90",
+  "delivery_time": 15,
+  "notes": "Fornecedor de bobinas"
+}
+```
+`company_name` e `cnpj` são obrigatórios. O CNPJ é validado (dígito verificador) e salvo sem formatação (apenas dígitos). `rating` é sempre `3` e `status` sempre `"active"` na criação. CNPJ duplicado retorna `409`.
+
+### PUT /api/suppliers/:id
+Atualiza campos cadastrais (`company_name`, `trade_name`, `ie`, `phone`, `email`, `cep`, `street`, `number`, `complement`, `neighborhood`, `city`, `state`, `contact_name`, `contact_phone`, `payment_terms`, `delivery_time`, `rating`, `notes`). Não permite alterar `cnpj` nem `status` por este endpoint.
+
+### DELETE /api/suppliers/:id
+Inativa (soft delete, `status="inactive"`) um fornecedor. Bloqueado (`400`) se o fornecedor possuir pedidos de compra com status `pending`/`approved`/`sent`/`partial`:
+```json
+{ "success": false, "error": "Fornecedor possui 2 pedido(s) de compra pendente(s)." }
+```
+
+> Nota de arquitetura: os endpoints de `/api/suppliers` são servidos pelo
+> módulo `server/src/modules/suppliers/` (Clean Architecture). Todas as
+> rotas exigem apenas `authenticate` (sem `authorize` por papel). Erros de
+> validação/regra de negócio preservam exatamente o mesmo corpo de resposta
+> do controller legado (`{ success: false, error: "mensagem" }`), pois o
+> `errorHandler` devolve `err.message` como string simples para erros com
+> `statusCode < 500`. Este módulo **não gera auditoria** (`AuditLog`) em
+> nenhum endpoint — pendência conhecida documentada em
+> `server/src/modules/suppliers/README.md`.
+
+---
+
 ## Códigos de Erro
 
 | Código | Significado |
