@@ -580,6 +580,31 @@ Registra movimentação manual.
 }
 ```
 
+### GET /api/inventory/movements/:id
+Busca uma movimentação de estoque específica pelo id.
+
+### GET /api/inventory/stock-report
+Relatório consolidado de estoque: `{ summary: { total_products, total_items, total_value, low_stock_count }, products: [...] }`.
+
+### GET /api/inventory/low-stock
+Lista produtos ativos com estoque em ou abaixo do ponto de reposição (`quantity <= min_quantity`).
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    { "id": 1, "name": "...", "code": "...", "quantity": 2, "min_quantity": 5, "category": { "id": 1, "name": "..." } }
+  ]
+}
+```
+
+> Nota de arquitetura: os endpoints de `/api/inventory` são servidos pelo
+> módulo `server/src/modules/inventory/` (Clean Architecture). Ver
+> `server/src/modules/inventory/README.md` para detalhes de regras de
+> negócio, entidades e pendências (ex.: `reserved_quantity` ainda não
+> existe no schema).
+
 ---
 
 ## Códigos de Erro

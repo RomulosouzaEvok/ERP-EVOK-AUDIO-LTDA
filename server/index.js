@@ -55,7 +55,9 @@ app.use('/api/reports', require('./src/routes/reports'));
 app.use('/api/employees', require('./src/routes/employees'));
 app.use('/api/departments', require('./src/routes/departments'));
 app.use('/api/production-orders', require('./src/routes/productionOrders'));
-app.use('/api/inventory', require('./src/routes/inventory'));
+// Módulo migrado para Clean Architecture (domain/application/infrastructure/presentation).
+// Ver `server/src/modules/inventory/README.md`.
+app.use('/api/inventory', require('./src/modules/inventory/presentation/routes/inventory'));
 
 // Fase 2 - Expansão
 app.use('/api/assets', require('./src/routes/assets'));

@@ -1,4 +1,4 @@
-const { InventoryMovement, Product, User } = require('../models/index');
+const { InventoryMovement, Product, User, Category } = require('../models/index');
 const InventoryService = require('../services/inventoryService');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
