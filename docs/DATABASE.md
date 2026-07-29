@@ -2,7 +2,7 @@
 
 ## Tecnologia
 - **ORM:** Sequelize 6.x
-- **Banco:** MySQL 8.0+
+- **Banco:** PostgreSQL 8.0+
 - **Migrações:** `sequelize.sync({ alter: true })` (desenvolvimento) / Migrations (produção recomendado)
 
 ---

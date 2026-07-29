@@ -16,11 +16,11 @@ seguintes (`inventory`, `bom`, `production`, `purchases`, `sales`).
 
 O endpoint `/api/products` (mesmo path, mesmos métodos, mesmo formato de
 resposta JSON) agora é servido pelas rotas/controller deste módulo
-(`presentation/routes/products.js` → `presentation/controllers/productController.js`),
-registrado em `server/index.js`.
+(`presentation/routes/products.ts` → `presentation/controllers/productController.ts`),
+registrado em `server/index.ts`.
 
-Os arquivos legados `server/src/routes/products.js` e
-`server/src/controllers/productController.js` **permanecem no repositório**
+Os arquivos anteriors `server/src/routes/products.ts` e
+`server/src/controllers/productController.ts` **permanecem no repositório**
 como referência histórica, mas **não são mais montados em nenhuma rota**
 — evitando duplicidade de `/api/products` e o risco de duas
 implementações divergentes atenderem à mesma URL. Eles podem ser removidos
@@ -34,7 +34,7 @@ que erros lançados via `ValidationError`/`NotFoundError`/`ConflictError`/
 `BusinessRuleError` (classes de `server/src/errors`) chegam ao cliente como
 `error: { code, message }` (formato já adotado pelo `errorHandler` global
 desde a Fase 4.1), em vez de `error: "string"` como alguns branches do
-controller legado faziam manualmente. Isso já é o padrão vigente do
+controller anterior faziam manualmente. Isso já é o padrão vigente do
 projeto para módulos que usam `AppError`, então não é uma regressão.
 
 ## Estrutura
@@ -42,34 +42,34 @@ projeto para módulos que usam `AppError`, então não é uma regressão.
 ```
 server/src/modules/products/
   domain/
-    entities/ProductEntity.js            Regras de negócio do produto
-    value-objects/ThieleSmallParams.js   Parâmetros Thiele-Small (Fs, Qms, Qes, ...)
-    repositories/ProductRepository.js    Interface do repositório
+    entities/ProductEntity.ts            Regras de negócio do produto
+    value-objects/ThieleSmallParams.ts   Parâmetros Thiele-Small (Fs, Qms, Qes, ...)
+    repositories/ProductRepository.ts    Interface do repositório
   application/
     use-cases/
-      ListProductsUseCase.js
-      GetProductByIdUseCase.js
-      CreateProductUseCase.js
-      UpdateProductUseCase.js
-      DeactivateProductUseCase.js
-      ChangeProductStatusUseCase.js
-      CreateProductRevisionUseCase.js
-      RegisterProductMovementUseCase.js
+      ListProductsUseCase.ts
+      GetProductByIdUseCase.ts
+      CreateProductUseCase.ts
+      UpdateProductUseCase.ts
+      DeactivateProductUseCase.ts
+      ChangeProductStatusUseCase.ts
+      CreateProductRevisionUseCase.ts
+      RegisterProductMovementUseCase.ts
   infrastructure/
-    sequelize/SequelizeProductRepository.js  Implementação usando o model Product existente
-    mappers/ProductMapper.js                 Sequelize <-> ProductEntity
+    sequelize/SequelizeProductRepository.ts  Implementação usando o model Product existente
+    mappers/ProductMapper.ts                 Sequelize <-> ProductEntity
   presentation/
-    controllers/productController.js
-    routes/products.js
-    validators/productValidators.js
+    controllers/productController.ts
+    routes/products.ts
+    validators/productValidators.ts
 ```
 
 ## Modelos de dados utilizados
 
-- `server/src/models/Product.js` (Sequelize, reutilizado — nenhum model novo foi criado).
-- `server/src/models/Category.js` (associação `belongsTo`, apenas leitura).
-- `server/src/models/Sale.js` (consultado para checar vendas ativas antes de inativar um produto).
-- `server/src/models/InventoryMovement.js` (consultado/criado no fluxo de movimentação manual de estoque).
+- `server/src/models/Product.ts` (Sequelize, reutilizado — nenhum model novo foi criado).
+- `server/src/models/Category.ts` (associação `belongsTo`, apenas leitura).
+- `server/src/models/Sale.ts` (consultado para checar vendas ativas antes de inativar um produto).
+- `server/src/models/InventoryMovement.ts` (consultado/criado no fluxo de movimentação manual de estoque).
 
 ## Regras de negócio (em `ProductEntity` e use cases)
 
@@ -110,8 +110,8 @@ Fase 12 do `TODO.md` ("Revisar RBAC completo").
 ## Eventos / Auditoria
 
 Todas as escritas continuam chamando `logAction` (via
-`server/src/services/auditLogService.js`) nos mesmos pontos do controller
-legado:
+`server/src/services/auditLogService.ts`) nos mesmos pontos do controller
+anterior:
 
 - `create` → produto criado.
 - `update` → produto atualizado (com texto especial de revisão quando `revision` muda).
@@ -132,10 +132,10 @@ flowchart TD
   A[HTTP Request] --> B[productController]
   B --> C[Use Case]
   C --> D[SequelizeProductRepository]
-  D --> E[(MySQL - tabela products)]
+  D --> E[(PostgreSQL - tabela products)]
   C -->|regras de dominio| F[ProductEntity / ThieleSmallParams]
   B -->|apos sucesso| G[auditLogService.logAction]
-  G --> H[(MySQL - tabela audit_logs)]
+  G --> H[(PostgreSQL - tabela audit_logs)]
 ```
 
 ## Pendências conhecidas
@@ -149,10 +149,10 @@ flowchart TD
   pode criar/editar produtos).
 - Validação de entrada é manual (sem schema declarativo); migração para
   Zod está prevista para a Fase 8.
-- `value-objects/` contém apenas `ThieleSmallParams.js`; outros value
+- `value-objects/` contém apenas `ThieleSmallParams.ts`; outros value
   objects (ex.: `ProductCode`) não foram criados por não haver necessidade
   clara no momento — evitar objetos triviais sem regra própria.
-- O controller/rota legados (`server/src/controllers/productController.js`,
-  `server/src/routes/products.js`) foram deixados intactos no repositório
+- O controller/rota anteriors (`server/src/controllers/productController.ts`,
+  `server/src/routes/products.ts`) foram deixados intactos no repositório
   como referência histórica, mas não são mais usados; podem ser removidos
   em limpeza futura.

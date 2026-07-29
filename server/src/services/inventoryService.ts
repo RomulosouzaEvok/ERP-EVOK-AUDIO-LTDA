@@ -56,7 +56,10 @@ async function validateAndLock(
     });
   }
 
-  if (quantity !== undefined && product.quantity < quantity) {
+  const reserved = Number(product.reserved_quantity || 0);
+  const available = Number(product.quantity || 0) - reserved;
+
+  if (quantity !== undefined && available < quantity) {
     throw Object.assign(
       new Error(
         `Estoque insuficiente para "${product.name}". ` +
@@ -285,7 +288,7 @@ export async function adjust(
  *
  * @deprecated A reserva real depende da migration da coluna `reserved_quantity`.
  */
-export async function reserve(
+async function previousReserve(
   productId: number,
   quantity: number,
   userId: number,
@@ -301,7 +304,7 @@ export async function reserve(
       userId,
       type: 'adjustment',
       quantity,
-      description: options.description ?? `RESERVA (stub)`,
+      description: options.description ?? 'Reserva de estoque anterior',
       referenceId: options.referenceId,
       referenceType: options.referenceType ?? 'reservation'
     },
@@ -323,7 +326,7 @@ export async function reserve(
  *
  * @deprecated A reserva real depende da migration da coluna `reserved_quantity`.
  */
-export async function releaseReservation(
+async function previousReleaseReservation(
   productId: number,
   quantity: number,
   userId: number,
@@ -338,7 +341,7 @@ export async function releaseReservation(
       userId,
       type: 'adjustment',
       quantity,
-      description: options.description ?? `LIBERAÇÃO RESERVA (stub)`,
+      description: options.description ?? 'Liberacao de reserva anterior',
       referenceId: options.referenceId,
       referenceType: options.referenceType ?? 'reservation_release'
     },
@@ -355,5 +358,82 @@ export async function releaseReservation(
   };
 }
 
-// CommonJS compatibility for legacy JS modules
-module.exports = { consume, receive, adjust, reserve, releaseReservation };
+async function reserveStock(
+  productId: number,
+  quantity: number,
+  userId: number,
+  transaction: Transaction,
+  options: { description?: string; referenceId?: number; referenceType?: string } = {}
+): Promise<InventoryResult> {
+  const product = await validateAndLock(productId, quantity, transaction);
+  const reservedBefore = Number(product.reserved_quantity || 0);
+  await product.increment('reserved_quantity', { by: quantity, transaction });
+  await product.reload({ transaction });
+
+  const movement = await createMovement(
+    {
+      productId,
+      userId,
+      type: 'adjustment',
+      quantity,
+      description: options.description ?? 'Reserva de estoque',
+      referenceId: options.referenceId,
+      referenceType: options.referenceType ?? 'reservation'
+    },
+    transaction
+  );
+
+  return {
+    success: true,
+    productId,
+    productName: product.name,
+    quantityBefore: reservedBefore,
+    quantityAfter: reservedBefore + quantity,
+    movementId: movement.id
+  };
+}
+
+async function releaseStockReservation(
+  productId: number,
+  quantity: number,
+  userId: number,
+  transaction: Transaction,
+  options: { description?: string; referenceId?: number; referenceType?: string } = {}
+): Promise<InventoryResult> {
+  const product = await validateAndLock(productId, undefined, transaction);
+  const reservedBefore = Number(product.reserved_quantity || 0);
+  if (reservedBefore < quantity) {
+    throw Object.assign(new Error(`Reserva insuficiente. Reservado: ${reservedBefore}, solicitado: ${quantity}`), {
+      statusCode: 400
+    });
+  }
+  await product.decrement('reserved_quantity', { by: quantity, transaction });
+  await product.reload({ transaction });
+
+  const movement = await createMovement(
+    {
+      productId,
+      userId,
+      type: 'adjustment',
+      quantity,
+      description: options.description ?? 'Liberacao de reserva de estoque',
+      referenceId: options.referenceId,
+      referenceType: options.referenceType ?? 'reservation_release'
+    },
+    transaction
+  );
+
+  return {
+    success: true,
+    productId,
+    productName: product.name,
+    quantityBefore: reservedBefore,
+    quantityAfter: reservedBefore - quantity,
+    movementId: movement.id
+  };
+}
+
+export { reserveStock as reserve, releaseStockReservation as releaseReservation };
+
+// CommonJS compatibility for previous JS modules
+module.exports = { consume, receive, adjust, reserve: reserveStock, releaseReservation: releaseStockReservation };

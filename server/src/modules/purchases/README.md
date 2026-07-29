@@ -11,7 +11,7 @@ dos módulos `products`, `inventory`, `bom` e `production`.
 
 Este módulo **não reimplementa** a lógica transacional de entrada de
 estoque no recebimento — isso continua 100% centralizado em
-`server/src/services/inventoryService.js` (`InventoryService.receive`,
+`server/src/services/inventoryService.ts` (`InventoryService.receive`,
 com lock pessimista da linha do produto). Os use cases deste módulo são
 wrappers finos sobre os models Sequelize existentes
 (`Purchase`, `PurchaseItem`, `Product`, `Supplier`, `AccountPayable`) e
@@ -20,18 +20,18 @@ sobre `InventoryService`.
 ## Decisão de compatibilidade de rotas
 
 O endpoint `/api/purchases` (mesmos 6 paths, métodos e formato de resposta
-JSON do controller legado) agora é servido pelas rotas/controller deste
-módulo (`presentation/routes/purchases.js` →
-`presentation/controllers/purchaseController.js`), registrado em
-`server/index.js`.
+JSON do controller anterior) agora é servido pelas rotas/controller deste
+módulo (`presentation/routes/purchases.ts` →
+`presentation/controllers/purchaseController.ts`), registrado em
+`server/index.ts`.
 
-O arquivo legado `server/src/routes/purchases.js` e o controller
-`server/src/controllers/purchaseController.js` **permanecem no
+O arquivo anterior `server/src/routes/purchases.ts` e o controller
+`server/src/controllers/purchaseController.ts` **permanecem no
 repositório** como referência histórica, mas **não são mais montados em
 nenhuma rota** — evitando duplicidade de `/api/purchases` e o risco de
 duas implementações divergentes atenderem à mesma URL. Confirmado via
-`grep` que apenas `server/index.js` monta o módulo novo. Os arquivos
-legados podem ser removidos em uma limpeza futura, uma vez confirmada a
+`grep` que apenas `server/index.ts` monta o módulo novo. Os arquivos
+anteriors podem ser removidos em uma limpeza futura, uma vez confirmada a
 estabilidade da migração.
 
 Nenhum client precisa mudar: mesmos 6 endpoints, mesmos verbos HTTP, mesmo
@@ -42,25 +42,25 @@ erros de validação/regra de negócio agora são instâncias de `AppError`
 (`server/src/errors`) e chegam ao cliente como
 `{ success: false, error: { code, message } }` em vez do
 `{ success: false, error: "mensagem em string" }` usado pelo controller
-legado. O `statusCode` HTTP retornado é o mesmo em todos os casos (400,
+anterior. O `statusCode` HTTP retornado é o mesmo em todos os casos (400,
 404, 422). Erros inesperados (5xx) mantêm o fallback genérico do
-`errorHandler`, igual ao legado.
+`errorHandler`, igual ao anterior.
 
 ## Correção de bug pré-existente (atomicidade da aprovação)
 
-O controller legado chamava o helper `createPurchasePayable(purchase,
+O controller anterior chamava o helper `createPurchasePayable(purchase,
 userId, transaction)` a partir de `updateStatus` **sem abrir uma
 transaction e sem passar o parâmetro `transaction`**
-(`server/src/controllers/purchaseController.js:67`), ou seja, a mudança de
+(`server/src/controllers/purchaseController.ts:67`), ou seja, a mudança de
 status para `approved` (`purchase.save()`) e a criação da
 `AccountPayable` correspondente não eram atômicas: uma falha entre os dois
 passos podia deixar o pedido `approved` sem conta a pagar gerada.
 
 Nesta migração, `ChangePurchaseStatusUseCase` corrige esse problema: o
-controller (`presentation/controllers/purchaseController.js#updateStatus`)
+controller (`presentation/controllers/purchaseController.ts#updateStatus`)
 abre uma `sequelize.transaction()` e todo o fluxo — busca do pedido,
 validação da transição de status (`VALID_TRANSITIONS`, single source of
-truth preservada 1:1 do legado), `purchase.save({ transaction })` e a
+truth preservada 1:1 do anterior), `purchase.save({ transaction })` e a
 criação idempotente da `AccountPayable` — roda dentro dela, com
 `commit`/`rollback` no controller. É uma melhoria de baixo risco, alinhada
 ao objetivo de estabilidade transacional das Fases 4/5, sem alterar o
@@ -69,7 +69,7 @@ contrato HTTP.
 ## Notas sobre dívidas técnicas conhecidas (TODO.md)
 
 - **F21 — `AccountPayable` gerado no recebimento**: já estava **correto**
-  antes desta migração. O controller legado já gerava a `AccountPayable`
+  antes desta migração. O controller anterior já gerava a `AccountPayable`
   em `updateStatus` (na transição para `approved`), não em `receiveItems`.
   A entrada F21 do `TODO.md` descreve um problema que **já foi resolvido**
   em versão anterior do código; esta migração apenas preserva esse
@@ -77,7 +77,7 @@ contrato HTTP.
   Nenhuma mudança de regra de negócio foi feita quanto a "quando" a conta
   a pagar é gerada.
 - **F24 — Arredondamento de parcelas impreciso**: está relacionado a
-  `saleController.js` (módulo `sales`, ainda não migrado) e é **fora do
+  `saleController.ts` (módulo `sales`, ainda não migrado) e é **fora do
   escopo desta tarefa**. O módulo `purchases` não gera parcelas — apenas
   uma `AccountPayable` única por pedido — portanto não é afetado por F24.
 
@@ -86,30 +86,30 @@ contrato HTTP.
 ```
 server/src/modules/purchases/
   domain/
-    entities/PurchaseEntity.js                 Validação de forma na criação
-    repositories/PurchaseRepository.js         Interface do repositório
+    entities/PurchaseEntity.ts                 Validação de forma na criação
+    repositories/PurchaseRepository.ts         Interface do repositório
   application/
     use-cases/
-      ListPurchasesUseCase.js
-      GetPurchaseByIdUseCase.js
-      CreatePurchaseUseCase.js
-      UpdatePurchaseUseCase.js
-      ChangePurchaseStatusUseCase.js           Máquina de estados + AccountPayable (transacional)
-      ReceivePurchaseItemsUseCase.js           Wrapper fino sobre InventoryService.receive
+      ListPurchasesUseCase.ts
+      GetPurchaseByIdUseCase.ts
+      CreatePurchaseUseCase.ts
+      UpdatePurchaseUseCase.ts
+      ChangePurchaseStatusUseCase.ts           Máquina de estados + AccountPayable (transacional)
+      ReceivePurchaseItemsUseCase.ts           Wrapper fino sobre InventoryService.receive
   infrastructure/
-    sequelize/SequelizePurchaseRepository.js   Implementação usando os models existentes
+    sequelize/SequelizePurchaseRepository.ts   Implementação usando os models existentes
   presentation/
-    controllers/purchaseController.js
-    routes/purchases.js
+    controllers/purchaseController.ts
+    routes/purchases.ts
 ```
 
 ## Modelos de dados utilizados
 
-- `server/src/models/Purchase.js` (Sequelize, reutilizado — nenhum model novo foi criado).
-- `server/src/models/PurchaseItem.js`.
-- `server/src/models/Product.js` (leitura na validação de itens; escrita de `quantity` feita exclusivamente por `InventoryService.receive`).
-- `server/src/models/Supplier.js` (associação `belongsTo`, apenas leitura).
-- `server/src/models/AccountPayable.js` (criada na aprovação do pedido).
+- `server/src/models/Purchase.ts` (Sequelize, reutilizado — nenhum model novo foi criado).
+- `server/src/models/PurchaseItem.ts`.
+- `server/src/models/Product.ts` (leitura na validação de itens; escrita de `quantity` feita exclusivamente por `InventoryService.receive`).
+- `server/src/models/Supplier.ts` (associação `belongsTo`, apenas leitura).
+- `server/src/models/AccountPayable.ts` (criada na aprovação do pedido).
 
 ## Regras de negócio
 
@@ -150,9 +150,9 @@ completo"), mesma pendência documentada nos demais módulos migrados.
 ## Eventos / Auditoria
 
 Todos os endpoints de escrita continuam chamando `logAction` (via
-`server/src/services/auditLogService.js`) após o `commit`/persistência
+`server/src/services/auditLogService.ts`) após o `commit`/persistência
 (para não segurar locks de banco durante a escrita do log), preservando o
-comportamento do controller legado:
+comportamento do controller anterior:
 
 - `create` → entidade `Purchase` criada.
 - `update` → campos alterados do pedido.
@@ -161,7 +161,7 @@ comportamento do controller legado:
 - `update` → recebimento de itens (mudança de status do pedido pós-recebimento).
 
 `GET /` e `GET /:id` são somente leitura e não geram auditoria, mesmo
-comportamento do legado.
+comportamento do anterior.
 
 ## Fluxo simplificado (Mermaid)
 
@@ -173,12 +173,12 @@ flowchart TD
   C -->|leitura/escrita de Purchase e PurchaseItem| E[SequelizePurchaseRepository]
   C -->|recebimento: baixa de estoque| F[InventoryService.receive]
   C -->|aprovacao: gera conta a pagar| G[AccountPayable]
-  F -->|lock pessimista + transaction| H[(MySQL - tabela products)]
-  F --> I[(MySQL - tabela inventory_movements)]
-  E --> J[(MySQL - tabela purchases / purchase_items)]
-  G --> K[(MySQL - tabela account_payables)]
+  F -->|lock pessimista + transaction| H[(PostgreSQL - tabela products)]
+  F --> I[(PostgreSQL - tabela inventory_movements)]
+  E --> J[(PostgreSQL - tabela purchases / purchase_items)]
+  G --> K[(PostgreSQL - tabela account_payables)]
   B -->|apos commit| L[auditLogService.logAction]
-  L --> M[(MySQL - tabela audit_logs)]
+  L --> M[(PostgreSQL - tabela audit_logs)]
 ```
 
 ## Testes existentes
@@ -196,7 +196,7 @@ endpoints está prevista na Fase 9 do `TODO.md`.
   migração para Zod está prevista para a Fase 8.
 - F24 (arredondamento de parcelas) não se aplica a este módulo (ver seção
   acima) — permanece pendente apenas em `sales`.
-- O controller/rota legados (`server/src/controllers/purchaseController.js`,
-  `server/src/routes/purchases.js`) foram deixados intactos no repositório
+- O controller/rota anteriors (`server/src/controllers/purchaseController.ts`,
+  `server/src/routes/purchases.ts`) foram deixados intactos no repositório
   como referência histórica, mas não são mais usados; podem ser removidos
   em limpeza futura.

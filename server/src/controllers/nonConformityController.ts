@@ -5,7 +5,7 @@ exports.list = async (req: any, res: any, next: any): Promise<void> => {
   try {
     const { page = '1', limit = '10', status, severity } = req.query;
     const where: any = {}; if (status) where.status = status; if (severity) where.severity = severity;
-    const p = parseInt(page), l = parseInt(limit), o = (p - 1) * l;
+    const p = parseInt(String(page), 10), l = parseInt(String(limit), 10), o = (p - 1) * l;
     const { count, rows } = await NonConformity.findAndCountAll({ where, include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }, { model: User, as: 'reporter', attributes: ['id', 'name'] }], limit: l, offset: o, order: [['createdAt', 'DESC']] });
     res.json({ success: true, data: rows, pagination: { total: count, page: p, limit: l, totalPages: Math.ceil(count / l) } });
   } catch (error) { next(error); }
@@ -42,4 +42,5 @@ exports.remove = async (req: any, res: any, next: any): Promise<void> => {
     res.json({ success: true, data: { message: 'Não conformidade fechada' } });
   } catch (error) { next(error); }
 };
+
 

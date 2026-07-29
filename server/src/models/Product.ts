@@ -22,6 +22,7 @@ export interface ProductAttributes {
   price: number;
   cost_price: number;
   quantity: number;
+  reserved_quantity: number;
   min_quantity: number;
   status: 'active' | 'inactive';
   location: string;
@@ -33,6 +34,8 @@ export interface ProductAttributes {
   lead_time: number;
   drawing_number: string | null;
   revision: string;
+  lot_number: string | null;
+  serial_number: string | null;
   // Thiele-Small parameters
   ts_params_fs: number | null;
   ts_params_qms: number | null;
@@ -60,6 +63,7 @@ const Product = sequelize.define('Product', {
   price: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0, comment: 'Preço de venda' },
   cost_price: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, comment: 'Preço de custo' },
   quantity: { type: DataTypes.INTEGER, defaultValue: 0, comment: 'Estoque atual' },
+  reserved_quantity: { type: DataTypes.INTEGER, defaultValue: 0, comment: 'Estoque reservado para pedidos/OPs' },
   min_quantity: { type: DataTypes.INTEGER, defaultValue: 5, comment: 'Estoque mínimo para alerta' },
   status: { type: DataTypes.ENUM('active', 'inactive'), defaultValue: 'active', comment: 'Status do produto' },
   location: { type: DataTypes.STRING(100), defaultValue: '', comment: 'Localização física no estoque' },
@@ -70,6 +74,8 @@ const Product = sequelize.define('Product', {
   unit: { type: DataTypes.STRING(10), defaultValue: 'un', comment: 'Unidade de medida' },
   lead_time: { type: DataTypes.INTEGER, defaultValue: 0, comment: 'Lead time em dias' },
   drawing_number: DataTypes.STRING(50),
+  lot_number: { type: DataTypes.STRING(50), allowNull: true, comment: 'Lote de rastreabilidade industrial' },
+  serial_number: { type: DataTypes.STRING(80), allowNull: true, comment: 'Numero de serie para rastreabilidade' },
   revision: { type: DataTypes.STRING(10), defaultValue: '00', comment: 'Revisão técnica' },
   // Parâmetros Thiele-Small (específicos para alto-falantes)
   ts_params_fs: DataTypes.DECIMAL(10, 2),

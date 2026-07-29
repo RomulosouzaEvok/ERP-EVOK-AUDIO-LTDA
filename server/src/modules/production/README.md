@@ -18,23 +18,23 @@ do `TODO.md`, seguindo o mesmo padrão dos módulos `products`, `inventory` e
 Este módulo **não reimplementa** a lógica de consumo/entrada de estoque
 (lock pessimista + transação, corrigidos na Fase 4.1) nem a explosão de
 BOM — ambas continuam 100% centralizadas em
-`server/src/services/inventoryService.js` (`InventoryService.consume`/
-`InventoryService.receive`) e `server/src/services/bomService.js`
+`server/src/services/inventoryService.ts` (`InventoryService.consume`/
+`InventoryService.receive`) e `server/src/services/bomService.ts`
 (`BomService.explodeBOM`). Os use cases deste módulo orquestram essas
 chamadas dentro da mesma transação Sequelize que já existia no controller
-legado.
+anterior.
 
 ## Decisão de compatibilidade de rotas
 
 O endpoint `/api/production-orders` (mesmos 7 paths, métodos, middlewares
-de `authorize` e formato de resposta JSON do controller legado) agora é
+de `authorize` e formato de resposta JSON do controller anterior) agora é
 servido pelas rotas/controller deste módulo
-(`presentation/routes/productionOrders.js` →
-`presentation/controllers/productionOrderController.js`), registrado em
-`server/index.js`.
+(`presentation/routes/productionOrders.ts` →
+`presentation/controllers/productionOrderController.ts`), registrado em
+`server/index.ts`.
 
-Os arquivos legados `server/src/routes/productionOrders.js` e
-`server/src/controllers/productionOrderController.js` **permanecem no
+Os arquivos anteriors `server/src/routes/productionOrders.ts` e
+`server/src/controllers/productionOrderController.ts` **permanecem no
 repositório** como referência histórica, mas **não são mais montados em
 nenhuma rota** — evitando duplicidade de `/api/production-orders` e o risco
 de duas implementações divergentes atenderem à mesma URL. Podem ser
@@ -48,7 +48,7 @@ middlewares (`authorize('admin', 'operator')` em `POST /`,
 `NotFoundError`, `BusinessRuleError` e `ConflictError`
 (`server/src/errors`), todas subclasses de `AppError` com `statusCode`
 próprio; o controller do módulo responde `{ success: false, error: message
-}` no mesmo formato do controller legado (que usava `res.status(...).json(...)`
+}` no mesmo formato do controller anterior (que usava `res.status(...).JSON(...)`
 diretamente), preservando os mesmos códigos HTTP (400/404/409/422) para
 cada situação de erro.
 
@@ -58,7 +58,7 @@ O `TODO.md` (Fase 6) prevê use cases separados por transição
 (`ReleaseProductionOrderUseCase`, `StartProductionOrderUseCase`,
 `PauseProductionOrderUseCase`, `ResumeProductionOrderUseCase`,
 `CompleteProductionOrderUseCase`, `CancelProductionOrderUseCase`), mas o
-controller legado sempre teve um **único** método `updateStatus`, dirigido
+controller anterior sempre teve um **único** método `updateStatus`, dirigido
 por uma tabela `validTransitions` (máquina de estados), atendendo a um
 único endpoint `PUT /api/production-orders/:id/status` que recebe o status
 alvo no corpo da requisição.
@@ -77,22 +77,22 @@ por **`ChangeProductionOrderStatusUseCase`**, que:
   `_completeOrder`, que cobre exatamente o papel do
   `RegisterProductionOutputUseCase` previsto no TODO (registra
   `quantity_produced`, consome componentes via BOM, dá entrada do produto
-  acabado) — é isso que o controller legado já fazia inline dentro do
+  acabado) — é isso que o controller anterior já fazia inline dentro do
   mesmo método `updateStatus`.
 
 Essa é uma decisão de Clean Code: evitar duplicação da máquina de estados
 em seis classes é mais alinhado ao princípio DRY do que criar seis use
 cases finos que, na prática, só mudam uma string (`status`) e reexecutam a
 mesma validação de transição. O nome do endpoint HTTP e o formato de
-entrada/saída permanecem idênticos ao legado.
+entrada/saída permanecem idênticos ao anterior.
 
 ### `RegisterScrapUseCase` — não implementado (pendência de schema)
 
 O `TODO.md` lista `RegisterScrapUseCase` como use case esperado da Fase 6.
 **Não foi implementado nesta migração** porque não existe hoje nenhum
 campo de refugo/scrap (`quantity_scrapped` ou similar) no model
-`ProductionOrder` (`server/src/models/ProductionOrder.js`), nem qualquer
-endpoint ou lógica de registro de refugo no controller legado. Implementar
+`ProductionOrder` (`server/src/models/ProductionOrder.ts`), nem qualquer
+endpoint ou lógica de registro de refugo no controller anterior. Implementar
 esse use case agora exigiria inventar uma funcionalidade nova (schema +
 regra de negócio) fora do escopo desta tarefa de migração 1:1.
 
@@ -109,30 +109,30 @@ adicional no corpo de `PUT /:id/status`).
 ```
 server/src/modules/production/
   domain/
-    entities/ProductionOrderEntity.js         Validação de forma na criação
-    repositories/ProductionOrderRepository.js Interface do repositório
+    entities/ProductionOrderEntity.ts         Validação de forma na criação
+    repositories/ProductionOrderRepository.ts Interface do repositório
   application/
     use-cases/
-      ListProductionOrdersUseCase.js
-      GetProductionOrderByIdUseCase.js
-      CreateProductionOrderUseCase.js
-      UpdateProductionOrderUseCase.js
-      ChangeProductionOrderStatusUseCase.js   Máquina de estados única (ver decisão acima)
-      RemoveProductionOrderUseCase.js
-      GetProductionReportUseCase.js
+      ListProductionOrdersUseCase.ts
+      GetProductionOrderByIdUseCase.ts
+      CreateProductionOrderUseCase.ts
+      UpdateProductionOrderUseCase.ts
+      ChangeProductionOrderStatusUseCase.ts   Máquina de estados única (ver decisão acima)
+      RemoveProductionOrderUseCase.ts
+      GetProductionReportUseCase.ts
   infrastructure/
-    sequelize/SequelizeProductionOrderRepository.js  Implementação usando os models ProductionOrder/Product/Employee/User existentes
+    sequelize/SequelizeProductionOrderRepository.ts  Implementação usando os models ProductionOrder/Product/Employee/User existentes
   presentation/
-    controllers/productionOrderController.js
-    routes/productionOrders.js
+    controllers/productionOrderController.ts
+    routes/productionOrders.ts
 ```
 
 ## Modelos de dados utilizados
 
-- `server/src/models/ProductionOrder.js` (Sequelize, reutilizado — nenhum model novo foi criado).
-- `server/src/models/Product.js` (leitura: validação de produto `finished`/`active`; escrita de estoque feita via `InventoryService`).
-- `server/src/models/Employee.js` (leitura: responsável pela OP).
-- `server/src/models/User.js` (leitura: usuário criador).
+- `server/src/models/ProductionOrder.ts` (Sequelize, reutilizado — nenhum model novo foi criado).
+- `server/src/models/Product.ts` (leitura: validação de produto `finished`/`active`; escrita de estoque feita via `InventoryService`).
+- `server/src/models/Employee.ts` (leitura: responsável pela OP).
+- `server/src/models/User.ts` (leitura: usuário criador).
 
 ## Regras de negócio
 
@@ -166,15 +166,15 @@ Ver `docs/API.md` para exemplos completos de request/response.
 
 `authenticate` (JWT) obrigatório em todas as rotas. `authorize('admin', 'operator')`
 em `POST /` e `authorize('admin')` em `DELETE /:id`, preservados exatamente
-como no roteador legado. As demais rotas (`GET`, `PUT`) não têm restrição
-de papel adicional hoje — mesmo comportamento do legado; revisão de RBAC
+como no roteador anterior. As demais rotas (`GET`, `PUT`) não têm restrição
+de papel adicional hoje — mesmo comportamento do anterior; revisão de RBAC
 granular está prevista na Fase 12 do `TODO.md`.
 
 ## Eventos / Auditoria
 
 Os endpoints de escrita continuam chamando `logAction` (via
-`server/src/services/auditLogService.js`), preservando o comportamento do
-controller legado:
+`server/src/services/auditLogService.ts`), preservando o comportamento do
+controller anterior:
 
 - `POST /` → `action: 'create'`, entidade `ProductionOrder`, com `product_id`, `quantity` e `status: 'planned'`.
 - `PUT /:id` → `action: 'update'`, com `oldValues`/`newValues` apenas dos campos efetivamente alterados.
@@ -182,7 +182,7 @@ controller legado:
 - `DELETE /:id` → `action: 'delete'`, com `oldValues: { status: <status anterior> }`.
 
 Em todos os casos, o log é registrado **após o commit** da transação, para
-não segurar locks de banco (mesmo comentário/comportamento do legado).
+não segurar locks de banco (mesmo comentário/comportamento do anterior).
 
 ## Testes existentes
 
@@ -201,11 +201,11 @@ flowchart TD
   C -->|leitura/CRUD simples| E[SequelizeProductionOrderRepository]
   C -->|status = completed: explode BOM| F[BomService.explodeBOM]
   C -->|status = completed: consumo/entrada de estoque| G[InventoryService.consume / receive]
-  G -->|lock pessimista + transação| H[(MySQL - tabela products / stock_movements)]
-  E --> I[(MySQL - tabela production_orders)]
-  F --> J[(MySQL - tabela bill_of_materials)]
+  G -->|lock pessimista + transação| H[(PostgreSQL - tabela products / stock_movements)]
+  E --> I[(PostgreSQL - tabela production_orders)]
+  F --> J[(PostgreSQL - tabela bill_of_materials)]
   B -->|apos escrita| K[auditLogService.logAction]
-  K --> L[(MySQL - tabela audit_logs)]
+  K --> L[(PostgreSQL - tabela audit_logs)]
 ```
 
 ## Diagrama de estados da OP
@@ -231,10 +231,151 @@ stateDiagram-v2
 - `RegisterScrapUseCase` não foi implementado — não há campo de refugo no
   model `ProductionOrder` hoje. Ver decisão detalhada acima.
 - Não há RBAC granular por papel nas rotas `GET`/`PUT` (apenas `POST`/`DELETE`
-  restringem por papel, herdado do legado).
+  restringem por papel, herdado do anterior).
 - Validação de entrada é manual/via entidade (sem schema declarativo);
   migração para Zod está prevista para a Fase 8.
-- O controller/rota legados (`server/src/controllers/productionOrderController.js`,
-  `server/src/routes/productionOrders.js`) foram deixados intactos no
+- O controller/rota anteriors (`server/src/controllers/productionOrderController.ts`,
+  `server/src/routes/productionOrders.ts`) foram deixados intactos no
   repositório como referência histórica, mas não são mais usados; podem ser
   removidos em limpeza futura.
+
+## F04 - Roteiro De Producao
+
+A sprint F04 criou a base de dados inicial para roteiro industrial sem alterar
+o fluxo atual de OP. A criacao, mudanca de status e conclusao transacional da
+OP continuam funcionando como antes; os novos models entram como estrutura
+complementar para as proximas sprints de apontamento, eficiencia e OEE.
+
+Models adicionados:
+
+- `server/src/models/ProductionRoute.ts` / `.ts`: roteiro mestre por produto,
+  revisao, status, tempos padrao e aprovacao.
+- `server/src/models/ProductionRouteStep.ts` / `.ts`: etapas sequenciais do
+  roteiro, posto de trabalho, setup, tempo padrao, instrucao e exigencia de
+  qualidade.
+- `server/src/models/ProductionOrderTracking.ts` / `.ts`: apontamento por
+  etapa da OP, status operacional, operador, inicio/fim, quantidade boa e
+  refugo.
+
+Relacionamentos registrados em `server/src/models/index.ts` e `.ts`:
+
+- `Product -> ProductionRoute`
+- `ProductionRoute -> ProductionRouteStep`
+- `ProductionOrder -> ProductionOrderTracking`
+- `ProductionRouteStep -> ProductionOrderTracking`
+- `Employee -> ProductionOrderTracking`
+- `User -> ProductionRoute` como criador/aprovador
+
+Pendencias intencionais:
+
+- Criar endpoints/use cases CRUD de roteiro.
+- Popular tracking da OP automaticamente a partir do roteiro ativo.
+- Criar migrations formais dos novos models (Fase 11).
+
+## F05 - Apontamento De Producao
+
+A sprint F05 implementou o primeiro fluxo operacional de apontamento por etapa
+da OP, usando o model `ProductionOrderTracking` criado na F04. O objetivo foi
+liberar o registro de execucao de chao de fabrica sem alterar ainda a conclusao
+contabil/transacional da OP.
+
+Endpoints adicionados:
+
+| Metodo | Rota | Descricao |
+|---|---|---|
+| GET | `/api/production-orders/:id/tracking` | Lista etapas/apontamentos da OP |
+| POST | `/api/production-orders/:id/tracking` | Cria uma etapa manual de apontamento para a OP |
+| POST | `/api/production-orders/tracking/:trackingId/start` | Inicia uma etapa pendente/pausada |
+| POST | `/api/production-orders/tracking/:trackingId/complete` | Conclui uma etapa em andamento, registrando quantidade boa e refugo |
+
+Use cases adicionados:
+
+- `ListProductionTrackingUseCase`
+- `CreateProductionTrackingUseCase`
+- `StartProductionTrackingUseCase`
+- `CompleteProductionTrackingUseCase`
+
+Regras implementadas:
+
+- OP precisa existir para criar/listar apontamentos.
+- Sequencia da etapa deve ser maior que zero.
+- Etapa so inicia se estiver `pending` ou `paused`.
+- Etapa so conclui se estiver `in_progress`.
+- Quantidades boa/refugada nao podem ser negativas.
+- Inicio/conclusao usam transacao e lock pessimista na etapa de tracking.
+- Escritas de apontamento geram auditoria via `AuditLogService`.
+
+Pendencias intencionais:
+
+- Popular etapas automaticamente a partir do roteiro ativo.
+- Calcular OEE/eficiencia por posto/operador.
+- Consolidar `quantity_good`/`quantity_scrapped` no fechamento da OP.
+- Criar migrations formais dos novos endpoints/models (Fase 11).
+
+## F06 - Controle De Lote, Serie E Rastreabilidade
+
+A sprint F06 iniciou a base estrutural de rastreabilidade industrial. A
+entidade `Product` continua sendo a fonte unica para materia-prima,
+subconjunto e produto acabado; os novos models apenas vinculam origem,
+consumo e destino de lotes/series sem qualquer integracao com ERP anterior.
+
+Models adicionados:
+
+- `server/src/models/LotControl.ts` / `.ts`: lote por produto, com origem por
+  compra ou OP, status operacional, quantidade inicial, saldo disponivel e
+  datas de fabricacao/validade/recebimento.
+- `server/src/models/SerialNumber.ts` / `.ts`: numero de serie individual
+  vinculado a produto, lote, OP e venda.
+- `server/src/models/ProductionLotConsumption.ts` / `.ts`: vinculo entre OP,
+  produto consumido e lote usado na fabricacao.
+
+Relacionamentos registrados em `server/src/models/index.ts` e `.ts`:
+
+- `Product -> LotControl`
+- `Supplier -> LotControl`
+- `Purchase -> LotControl`
+- `ProductionOrder -> LotControl` como lotes gerados
+- `Product -> SerialNumber`
+- `LotControl -> SerialNumber`
+- `ProductionOrder -> SerialNumber`
+- `Sale -> SerialNumber`
+- `ProductionOrder -> ProductionLotConsumption`
+- `LotControl -> ProductionLotConsumption`
+- `Product -> ProductionLotConsumption`
+- `User -> ProductionLotConsumption`
+
+Pendencias intencionais:
+
+- Criar use cases/endpoints para criar, bloquear, consumir e consultar lotes.
+- Integrar consumo por lote ao fechamento transacional da OP.
+- Vincular numeros de serie ao faturamento/expedicao.
+- Criar migrations formais dos novos models (Fase 11).
+
+## F07 - Custeio Real Por Produto
+
+A sprint F07 iniciou o custeio real com ledger historico e custo medio
+ponderado no `Product.cost_price`. O fluxo continua isolado no PostgreSQL do
+ERP, sem qualquer consulta ou integracao com banco anterior.
+
+Estrutura adicionada:
+
+- `server/src/models/ProductCostLedger.ts` / `.ts`: historico de custo real
+  por produto, origem (`purchase`, `production`, `adjustment`), quantidade,
+  custo unitario, custo total, custo anterior e novo custo medio.
+- `server/src/services/costingService.ts` / `.ts`: calcula media ponderada e
+  grava o ledger dentro da mesma transacao de estoque.
+
+Fluxos integrados:
+
+- Recebimento de compra: usa `PurchaseItem.unit_price` como custo real de
+  entrada, registra `InventoryMovement.unit_cost`, atualiza `Product.cost_price`
+  e grava `ProductCostLedger`.
+- Fechamento de OP: explode a BOM com custo, registra custo unitario nos
+  consumos de componentes, calcula custo unitario do produto acabado e grava
+  ledger de producao.
+
+Pendencias intencionais:
+
+- Criar endpoint/relatorio para consultar ledger de custo por produto.
+- Separar custo de material, mao de obra, overhead e refugo em campos proprios.
+- Criar migrations formais do ledger (Fase 11).

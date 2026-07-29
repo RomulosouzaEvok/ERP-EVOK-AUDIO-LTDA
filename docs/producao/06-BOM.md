@@ -65,15 +65,15 @@ NÍVEL 0: Alto-Falante 12" PRO
 ```
 server/src/
 ├── models/
-│   ├── index.js                    # Registro de modelos e relacionamentos
-│   ├── BillOfMaterial.js           # Modelo da BOM (cabeçalho)
-│   └── BillOfMaterialItem.js       # Modelo dos itens (componentes)
+│   ├── index.ts                    # Registro de modelos e relacionamentos
+│   ├── BillOfMaterial.ts           # Modelo da BOM (cabeçalho)
+│   └── BillOfMaterialItem.ts       # Modelo dos itens (componentes)
 ├── controllers/
-│   └── bomController.js            # Controlador REST
+│   └── bomController.ts            # Controlador REST
 ├── services/
-│   └── bomService.js               # Serviço com regras de negócio
+│   └── bomService.ts               # Serviço com regras de negócio
 └── routes/
-    └── bom.js                      # Rotas Express
+    └── bom.ts                      # Rotas Express
 ```
 
 ---
@@ -327,7 +327,7 @@ Response:
 
 ### Fluxo: Criação de OP com BOM
 
-> Fluxo **alvo**. Hoje só os passos "Cria BOM" e "Explode BOM" (via `GET /explode`) existem no código. O restante (reserva automática de estoque, geração de lista de compras, apontamento de consumo) depende do MRP e do apontamento de produção, ainda não implementados — ver `docs/analises/03-ANALISE_QUARTA_RODADA_FALHAS_MELHORIAS.md` (F02, F03, F05).
+> Fluxo **alvo**. Hoje só os passos "Cria BOM" e "Explode BOM" (via `GET /explode`) existem no código. O restante (reserva automática de estoque, geração de lista de compras, apontamento de consumo) depende do MRP e do apontamento de produção, ainda não implementados — ver `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md.
 
 ```mermaid
 flowchart TD
@@ -357,7 +357,7 @@ sequenceDiagram
     participant PCP as PCP / Usuário
     participant API as API REST
     participant BOM as BomService
-    participant DB as MySQL
+    participant DB as PostgreSQL
 
     PCP->>API: GET /bom/:id/explode?qty=1000
     API->>BOM: explodeBOM(productId, 1000)

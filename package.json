@@ -2,10 +2,10 @@
   "name": "erp-evok-audio",
   "version": "1.0.0",
   "description": "ERP Completo para EVOK ÁUDIO",
-  "main": "server/index.js",
+  "main": "server/index.ts",
   "scripts": {
-    "start": "node server/index.js",
-    "server": "nodemon server/index.js",
+    "start": "npm run start --prefix server",
+    "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "install-all": "npm install && npm install --prefix client && npm install --prefix server"

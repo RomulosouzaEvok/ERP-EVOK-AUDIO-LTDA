@@ -27,7 +27,7 @@ Content-Type: application/json
 }
 ```
 
-**Erro (400/401/404/500) — formato legado (string):**
+**Erro (400/401/404/500) — formato anterior (string):**
 
 Ainda usado por respostas de validação simples e mensagens de negócio pontuais em alguns controllers:
 ```json
@@ -39,7 +39,7 @@ Ainda usado por respostas de validação simples e mensagens de negócio pontuai
 
 **Erro padronizado (`AppError` e subclasses) — formato estruturado:**
 
-Erros lançados via `server/src/errors` (`ValidationError`, `NotFoundError`, `UnauthorizedError`, `ForbiddenError`, `ConflictError`, `BusinessRuleError`) e tratados pelo `errorHandler` central (`server/src/middlewares/errorHandler.js`) retornam:
+Erros lançados via `server/src/errors` (`ValidationError`, `NotFoundError`, `UnauthorizedError`, `ForbiddenError`, `ConflictError`, `BusinessRuleError`) e tratados pelo `errorHandler` central (`server/src/middlewares/errorHandler.ts`) retornam:
 ```json
 {
   "success": false,
@@ -467,8 +467,8 @@ Lista todas as categorias.
 
 > Nota de arquitetura: os endpoints de `/api/sales` sao servidos pelo
 > modulo `server/src/modules/sales/` (Clean Architecture). A criacao
-> reutiliza `server/src/services/inventoryService.js` (lock pessimista +
-> transacao) para debitar estoque, e `server/src/shared/utils/money.js`
+> reutiliza `server/src/services/inventoryService.ts` (lock pessimista +
+> transacao) para debitar estoque, e `server/src/shared/utils/money.ts`
 > (toCents/fromCents) para o calculo em centavos das parcelas geradas em
 > AccountReceivable (ultima parcela absorve o resto da divisao). Erros de
 > validacao/regra de negocio retornam `{ success: false, error: { code,
@@ -824,7 +824,7 @@ Lista os itens (componentes) de uma BOM.
 > Nota de arquitetura: os endpoints de `/api/engineering/bom` são servidos
 > pelo módulo `server/src/modules/bom/` (Clean Architecture). A lógica de
 > negócio pesada (explosão, custo, disponibilidade, versionamento)
-> permanece em `server/src/services/bomService.js`. Ver
+> permanece em `server/src/services/bomService.ts`. Ver
 > `server/src/modules/bom/README.md` para detalhes de regras de negócio,
 > entidades e pendências.
 
@@ -876,9 +876,9 @@ Remove a OP. Requer papel `admin`. Não permitido se a OP estiver `in_progress` 
 
 > Nota de arquitetura: os endpoints de `/api/production-orders` são servidos
 > pelo módulo `server/src/modules/production/` (Clean Architecture). O
-> consumo/entrada de estoque reutiliza `server/src/services/inventoryService.js`
+> consumo/entrada de estoque reutiliza `server/src/services/inventoryService.ts`
 > (lock pessimista + transação) e a explosão de BOM reutiliza
-> `server/src/services/bomService.js`. Ver
+> `server/src/services/bomService.ts`. Ver
 > `server/src/modules/production/README.md` para detalhes de regras de
 > negócio, a máquina de estados e pendências (ex.: registro de refugo).
 
@@ -936,7 +936,7 @@ Cada item não pode exceder a quantidade pendente (`quantity - received_quantity
 
 > Nota de arquitetura: os endpoints de `/api/purchases` são servidos pelo
 > módulo `server/src/modules/purchases/` (Clean Architecture). O
-> recebimento reutiliza `server/src/services/inventoryService.js` (lock
+> recebimento reutiliza `server/src/services/inventoryService.ts` (lock
 > pessimista + transação). Erros de validação/regra de negócio retornam
 > `{ success: false, error: { code, message } }` (em vez de string simples,
 > mesmo padrão já adotado em `inventory`/`bom`/`production`). Ver
@@ -992,7 +992,7 @@ Inativa (soft delete, `status="inactive"`) um fornecedor. Bloqueado (`400`) se o
 > módulo `server/src/modules/suppliers/` (Clean Architecture). Todas as
 > rotas exigem apenas `authenticate` (sem `authorize` por papel). Erros de
 > validação/regra de negócio preservam exatamente o mesmo corpo de resposta
-> do controller legado (`{ success: false, error: "mensagem" }`), pois o
+> do controller anterior (`{ success: false, error: "mensagem" }`), pois o
 > `errorHandler` devolve `err.message` como string simples para erros com
 > `statusCode < 500`. Este módulo **não gera auditoria** (`AuditLog`) em
 > nenhum endpoint — pendência conhecida documentada em

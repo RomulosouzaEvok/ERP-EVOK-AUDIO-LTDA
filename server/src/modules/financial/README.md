@@ -20,18 +20,18 @@ existentes, além da criação manual de contas a pagar avulsas.
 ## Decisão de compatibilidade de rotas
 
 O endpoint `/api/finance` (mesmos 6 paths, métodos, middlewares e formato
-de resposta JSON do controller legado) agora é servido pelas
-rotas/controller deste módulo (`presentation/routes/finance.js` →
-`presentation/controllers/financialController.js`), registrado em
-`server/index.js`.
+de resposta JSON do controller anterior) agora é servido pelas
+rotas/controller deste módulo (`presentation/routes/finance.ts` →
+`presentation/controllers/financialController.ts`), registrado em
+`server/index.ts`.
 
-O arquivo legado `server/src/routes/finance.js` e o controller
-`server/src/controllers/financeController.js` **permanecem no
+O arquivo anterior `server/src/routes/finance.ts` e o controller
+`server/src/controllers/financeController.ts` **permanecem no
 repositório** como referência histórica, mas **não são mais montados em
 nenhuma rota** — evitando duplicidade de `/api/finance` e o risco de duas
 implementações divergentes atenderem à mesma URL. Confirmado via `grep`
-que apenas `server/index.js` monta o módulo novo (uma única ocorrência de
-`app.use('/api/finance', ...)`). Os arquivos legados podem ser removidos
+que apenas `server/index.ts` monta o módulo novo (uma única ocorrência de
+`app.use('/api/finance', ...)`). Os arquivos anteriors podem ser removidos
 em uma limpeza futura, uma vez confirmada a estabilidade da migração.
 
 O middleware `authorize('admin', 'financial')` em `POST /api/finance/payable`
@@ -40,7 +40,7 @@ foi preservado exatamente, na mesma posição da cadeia de middlewares
 
 Nenhum client precisa mudar: mesmos 6 endpoints, mesmos verbos HTTP, mesmo
 envelope `{ success, data }` / `{ success, error }` (respostas de sucesso),
-e o mesmo `statusCode` HTTP em todos os casos de erro do legado (400,
+e o mesmo `statusCode` HTTP em todos os casos de erro do anterior (400,
 404). Diferentemente de outros módulos migrados nesta iniciativa
 (`purchases`/`sales`/`production`), aqui `statusCode` foi preservado
 estritamente 1:1 — inclusive o caso "conta já paga/cancelada", que
@@ -53,13 +53,13 @@ padrão já adotado nos módulos `purchases`/`sales`/`inventory`/`bom`/
 `AppError` (`server/src/errors`) e chegam ao cliente como
 `{ success: false, error: { code, message } }` em vez do
 `{ success: false, error: "mensagem em string" }` usado pelo controller
-legado. Erros inesperados (5xx) mantêm o fallback genérico do
-`errorHandler`, igual ao legado.
+anterior. Erros inesperados (5xx) mantêm o fallback genérico do
+`errorHandler`, igual ao anterior.
 
-Mapeamento das mensagens de erro do legado para os novos tipos de
+Mapeamento das mensagens de erro do anterior para os novos tipos de
 `AppError` (mesma mensagem textual, `statusCode` preservado):
 
-| Situação | Legado | Novo |
+| Situação | anterior | Novo |
 |---|---|---|
 | Conta (a receber/pagar) não encontrada | `404` string | `NotFoundError` (404) |
 | Conta já paga / cancelada | `400` string | `ValidationError` (400) |
@@ -71,30 +71,30 @@ Mapeamento das mensagens de erro do legado para os novos tipos de
 ```
 server/src/modules/financial/
   domain/
-    entities/AccountPayableEntity.js           Validação de forma na criação de conta a pagar
-    repositories/FinancialRepository.js        Interface do repositório
+    entities/AccountPayableEntity.ts           Validação de forma na criação de conta a pagar
+    repositories/FinancialRepository.ts        Interface do repositório
   application/
     use-cases/
-      ListReceivablesUseCase.js
-      ReceivePaymentUseCase.js
-      ListPayablesUseCase.js
-      CreatePayableUseCase.js
-      PayPayableUseCase.js
-      GetCashFlowUseCase.js
+      ListReceivablesUseCase.ts
+      ReceivePaymentUseCase.ts
+      ListPayablesUseCase.ts
+      CreatePayableUseCase.ts
+      PayPayableUseCase.ts
+      GetCashFlowUseCase.ts
   infrastructure/
-    sequelize/SequelizeFinancialRepository.js  Implementação usando os models existentes
+    sequelize/SequelizeFinancialRepository.ts  Implementação usando os models existentes
   presentation/
-    controllers/financialController.js
-    routes/finance.js
+    controllers/financialController.ts
+    routes/finance.ts
 ```
 
 ## Modelos de dados utilizados
 
-- `server/src/models/AccountReceivable.js` (Sequelize, reutilizado — nenhum model novo foi criado).
-- `server/src/models/AccountPayable.js`.
-- `server/src/models/Client.js` (include em `AccountReceivable`, apenas leitura).
-- `server/src/models/Sale.js` (include em `AccountReceivable`, apenas leitura).
-- `server/src/models/Supplier.js` (referenciado por `supplier_id` na criação de conta a pagar; não incluído nas queries deste módulo, igual ao legado).
+- `server/src/models/AccountReceivable.ts` (Sequelize, reutilizado — nenhum model novo foi criado).
+- `server/src/models/AccountPayable.ts`.
+- `server/src/models/Client.ts` (include em `AccountReceivable`, apenas leitura).
+- `server/src/models/Sale.ts` (include em `AccountReceivable`, apenas leitura).
+- `server/src/models/Supplier.ts` (referenciado por `supplier_id` na criação de conta a pagar; não incluído nas queries deste módulo, igual ao anterior).
 
 ## Regras de negócio
 
@@ -124,7 +124,7 @@ Ver `docs/API.md` (seção 6 — Financeiro) para exemplos completos de request/
 (`authenticate`) — qualquer usuário autenticado pode registrar recebimentos
 e pagamentos hoje. Apenas `POST /api/finance/payable` (criação manual de
 conta a pagar) exige adicionalmente papel `admin` ou `financial`
-(`authorize('admin', 'financial')`), preservado exatamente do legado.
+(`authorize('admin', 'financial')`), preservado exatamente do anterior.
 RBAC mais granular está listado como pendência na Fase 12 do `TODO.md`
 ("Revisar RBAC completo"), mesma pendência documentada nos demais módulos
 migrados.
@@ -132,14 +132,14 @@ migrados.
 ## Eventos / Auditoria
 
 Todos os endpoints de escrita continuam chamando `logAction` (via
-`server/src/services/auditLogService.js`), preservando o comportamento do
-controller legado:
+`server/src/services/auditLogService.ts`), preservando o comportamento do
+controller anterior:
 
 - `create` → `AccountPayable` criada.
 - `status_change` → conta a receber ou a pagar marcada como `paid`.
 
 `GET /receivable`, `GET /payable` e `GET /cash-flow` são somente leitura e
-não geram auditoria, mesmo comportamento do legado.
+não geram auditoria, mesmo comportamento do anterior.
 
 ## Fluxo simplificado (Mermaid)
 
@@ -149,10 +149,10 @@ flowchart TD
   B --> C[Use Case]
   C -->|validacao de forma na criacao| D[AccountPayableEntity]
   C -->|leitura/escrita| E[SequelizeFinancialRepository]
-  E --> F[(MySQL - tabela account_receivables)]
-  E --> G[(MySQL - tabela account_payables)]
+  E --> F[(PostgreSQL - tabela account_receivables)]
+  E --> G[(PostgreSQL - tabela account_payables)]
   B -->|apos escrita| H[auditLogService.logAction]
-  H --> I[(MySQL - tabela audit_logs)]
+  H --> I[(PostgreSQL - tabela audit_logs)]
 ```
 
 ## Testes existentes
@@ -170,12 +170,12 @@ integração dos endpoints está prevista na Fase 9 do `TODO.md`.
 - Validação de entrada é manual/via entidade (sem schema declarativo);
   migração para Zod está prevista para a Fase 8.
 - `cashFlow` não gera série temporal diária (`daily_flow`); apenas
-  agregados por status no período — mesmo comportamento do legado. A
+  agregados por status no período — mesmo comportamento do anterior. A
   documentação anterior em `docs/API.md` descrevia um formato de resposta
   (`daily_flow`) que nunca correspondeu à implementação real; foi
   corrigida nesta migração para refletir o comportamento efetivo, sem
   alterar código.
-- O controller/rota legados (`server/src/controllers/financeController.js`,
-  `server/src/routes/finance.js`) foram deixados intactos no repositório
+- O controller/rota anteriors (`server/src/controllers/financeController.ts`,
+  `server/src/routes/finance.ts`) foram deixados intactos no repositório
   como referência histórica, mas não são mais usados; podem ser removidos
   em limpeza futura.

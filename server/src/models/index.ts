@@ -2,14 +2,14 @@
  * 🗄️ Barrel de Models — ponto central de importação de todos os modelos.
  *
  * Define os relacionamentos entre entidades e exporta a instância do Sequelize.
- * Compatível com importação CommonJS (require) de módulos .js legados.
+ * Compatível com importação CommonJS (require) de módulos .ts anteriors.
  *
  * @module models/index
  */
 
 import { sequelize } from '../config/database';
 
-// Import all models (.ts preferencialmente, fallback .js via tsx runtime)
+// Import all models (.ts preferencialmente, fallback .ts via tsx runtime)
 import User = require('./User');
 import Client = require('./Client');
 import Category = require('./Category');
@@ -22,9 +22,18 @@ import SaleItem = require('./SaleItem');
 import AccountReceivable = require('./AccountReceivable');
 import AccountPayable = require('./AccountPayable');
 import InventoryMovement = require('./InventoryMovement');
+import InventoryCount = require('./InventoryCount');
+import InventoryCountItem = require('./InventoryCountItem');
+import ProductCostLedger = require('./ProductCostLedger');
 import Department = require('./Department');
 import Employee = require('./Employee');
 import ProductionOrder = require('./ProductionOrder');
+import ProductionRoute = require('./ProductionRoute');
+import ProductionRouteStep = require('./ProductionRouteStep');
+import ProductionOrderTracking = require('./ProductionOrderTracking');
+import LotControl = require('./LotControl');
+import SerialNumber = require('./SerialNumber');
+import ProductionLotConsumption = require('./ProductionLotConsumption');
 import ServiceOrder = require('./ServiceOrder');
 import Asset = require('./Asset');
 import NonConformity = require('./NonConformity');
@@ -109,6 +118,28 @@ InventoryMovement.belongsTo(Product, { foreignKey: 'product_id', as: 'product' }
 User.hasMany(InventoryMovement, { foreignKey: 'user_id', as: 'inventory_movements' });
 InventoryMovement.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
+// ============================================
+// RELACIONAMENTOS - INVENTÁRIO CÍCLICO (F09)
+// ============================================
+
+// InventoryCount ↔ InventoryCountItem
+InventoryCount.hasMany(InventoryCountItem, { foreignKey: 'inventory_count_id', as: 'items' });
+InventoryCountItem.belongsTo(InventoryCount, { foreignKey: 'inventory_count_id', as: 'inventoryCount' });
+
+// Product ↔ InventoryCountItem
+Product.hasMany(InventoryCountItem, { foreignKey: 'product_id', as: 'inventory_count_items' });
+InventoryCountItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+// User ↔ InventoryCount (created by / approved by)
+User.hasMany(InventoryCount, { foreignKey: 'created_by', as: 'created_inventory_counts' });
+InventoryCount.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
+User.hasMany(InventoryCount, { foreignKey: 'approved_by', as: 'approved_inventory_counts' });
+InventoryCount.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' });
+
+// User ↔ InventoryCountItem (counted by)
+User.hasMany(InventoryCountItem, { foreignKey: 'counted_by', as: 'counted_inventory_items' });
+InventoryCountItem.belongsTo(User, { foreignKey: 'counted_by', as: 'countedBy' });
+
 // Product ↔ ProductionOrder
 Product.hasMany(ProductionOrder, { foreignKey: 'product_id', as: 'production_orders' });
 ProductionOrder.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
@@ -124,6 +155,75 @@ ProductionOrder.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
 // Sale ↔ ProductionOrder
 Sale.hasMany(ProductionOrder, { foreignKey: 'sales_order_id', as: 'production_orders' });
 ProductionOrder.belongsTo(Sale, { foreignKey: 'sales_order_id', as: 'salesOrder' });
+
+Product.hasMany(ProductionRoute, { foreignKey: 'product_id', as: 'production_routes' });
+ProductionRoute.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+ProductionRoute.hasMany(ProductionRouteStep, { foreignKey: 'production_route_id', as: 'steps' });
+ProductionRouteStep.belongsTo(ProductionRoute, { foreignKey: 'production_route_id', as: 'route' });
+
+ProductionOrder.hasMany(ProductionOrderTracking, { foreignKey: 'production_order_id', as: 'tracking' });
+ProductionOrderTracking.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+ProductionRouteStep.hasMany(ProductionOrderTracking, { foreignKey: 'production_route_step_id', as: 'tracking_entries' });
+ProductionOrderTracking.belongsTo(ProductionRouteStep, { foreignKey: 'production_route_step_id', as: 'routeStep' });
+
+Employee.hasMany(ProductionOrderTracking, { foreignKey: 'operator_id', as: 'production_tracking' });
+ProductionOrderTracking.belongsTo(Employee, { foreignKey: 'operator_id', as: 'operator' });
+
+User.hasMany(ProductionRoute, { foreignKey: 'created_by', as: 'created_production_routes' });
+ProductionRoute.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
+User.hasMany(ProductionRoute, { foreignKey: 'approved_by', as: 'approved_production_routes' });
+ProductionRoute.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' });
+
+// ============================================
+// RELACIONAMENTOS - RASTREABILIDADE LOTE/SERIE (F06)
+// ============================================
+
+Product.hasMany(LotControl, { foreignKey: 'product_id', as: 'lot_controls' });
+LotControl.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+Supplier.hasMany(LotControl, { foreignKey: 'supplier_id', as: 'lot_controls' });
+LotControl.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+
+Purchase.hasMany(LotControl, { foreignKey: 'purchase_id', as: 'lot_controls' });
+LotControl.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
+
+ProductionOrder.hasMany(LotControl, { foreignKey: 'production_order_id', as: 'generated_lots' });
+LotControl.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+User.hasMany(LotControl, { foreignKey: 'created_by', as: 'created_lot_controls' });
+LotControl.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
+
+Product.hasMany(SerialNumber, { foreignKey: 'product_id', as: 'serial_numbers' });
+SerialNumber.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+LotControl.hasMany(SerialNumber, { foreignKey: 'lot_control_id', as: 'serial_numbers' });
+SerialNumber.belongsTo(LotControl, { foreignKey: 'lot_control_id', as: 'lotControl' });
+
+ProductionOrder.hasMany(SerialNumber, { foreignKey: 'production_order_id', as: 'generated_serial_numbers' });
+SerialNumber.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+Sale.hasMany(SerialNumber, { foreignKey: 'sale_id', as: 'serial_numbers' });
+SerialNumber.belongsTo(Sale, { foreignKey: 'sale_id', as: 'sale' });
+
+ProductionOrder.hasMany(ProductionLotConsumption, { foreignKey: 'production_order_id', as: 'lot_consumptions' });
+ProductionLotConsumption.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+LotControl.hasMany(ProductionLotConsumption, { foreignKey: 'lot_control_id', as: 'production_consumptions' });
+ProductionLotConsumption.belongsTo(LotControl, { foreignKey: 'lot_control_id', as: 'lotControl' });
+
+Product.hasMany(ProductionLotConsumption, { foreignKey: 'product_id', as: 'production_lot_consumptions' });
+ProductionLotConsumption.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+User.hasMany(ProductionLotConsumption, { foreignKey: 'user_id', as: 'production_lot_consumptions' });
+ProductionLotConsumption.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// Product cost ledger (F07)
+Product.hasMany(ProductCostLedger, { foreignKey: 'product_id', as: 'cost_ledgers' });
+ProductCostLedger.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+User.hasMany(ProductCostLedger, { foreignKey: 'created_by', as: 'created_cost_ledgers' });
+ProductCostLedger.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
 
 // Client ↔ ServiceOrder
 Client.hasMany(ServiceOrder, { foreignKey: 'client_id', as: 'service_orders' });
@@ -221,9 +321,10 @@ export {
   User, Client, Category, Product, Supplier,
   Purchase, PurchaseItem, Sale, SaleItem,
   AccountReceivable, AccountPayable,
-  InventoryMovement, Department, Employee,
-  ProductionOrder, ServiceOrder, Asset,
+  InventoryMovement, InventoryCount, InventoryCountItem, ProductCostLedger, Department, Employee,
+  ProductionOrder, ProductionRoute, ProductionRouteStep, ProductionOrderTracking,
+  LotControl, SerialNumber, ProductionLotConsumption,
+  ServiceOrder, Asset,
   NonConformity, MaintenanceOrder, AuditLog,
   BillOfMaterial, BillOfMaterialItem
 };
-

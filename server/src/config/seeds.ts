@@ -68,7 +68,7 @@ const CATEGORIES: CategoryData[] = [
 
 /**
  * Popula o banco com dados iniciais se estiver vazio.
- * Executado automaticamente na inicialização pelo `config/db.js`.
+ * Executado automaticamente na inicialização pelo `config/db.ts`.
  * É idempotente: só insere se as tabelas estiverem vazias.
  */
 async function seedDatabase(): Promise<void> {

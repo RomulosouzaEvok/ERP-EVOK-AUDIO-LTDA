@@ -148,3 +148,4 @@ class ReportService {
 }
 
 export = ReportService;
+

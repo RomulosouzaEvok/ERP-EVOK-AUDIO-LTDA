@@ -130,7 +130,7 @@ export function authorize(...roles: string[]): (req: Request, res: Response, nex
   };
 }
 
-// Preserve CommonJS compatibility for legacy JS routes
+// Preserve CommonJS compatibility for previous JS routes
 module.exports = authenticate;
 module.exports.authenticate = authenticate;
 module.exports.authorize = authorize;

@@ -11,7 +11,7 @@ dos módulos `products`, `inventory`, `bom`, `production` e `purchases`.
 
 Este módulo **não reimplementa** a lógica transacional de baixa/entrada de
 estoque — isso continua 100% centralizado em
-`server/src/services/inventoryService.js` (`InventoryService.consume` na
+`server/src/services/inventoryService.ts` (`InventoryService.consume` na
 criação da venda, `InventoryService.receive` no cancelamento). Os use cases
 deste módulo são wrappers finos sobre os models Sequelize existentes
 (`Sale`, `SaleItem`, `Product`, `Client`, `AccountReceivable`) e sobre
@@ -20,21 +20,21 @@ deste módulo são wrappers finos sobre os models Sequelize existentes
 ## Decisão de compatibilidade de rotas
 
 O endpoint `/api/sales` (mesmos 4 paths, métodos e formato de resposta
-JSON do controller legado) agora é servido pelas rotas/controller deste
-módulo (`presentation/routes/sales.js` →
-`presentation/controllers/saleController.js`), registrado em
-`server/index.js`.
+JSON do controller anterior) agora é servido pelas rotas/controller deste
+módulo (`presentation/routes/sales.ts` →
+`presentation/controllers/saleController.ts`), registrado em
+`server/index.ts`.
 
-O arquivo legado `server/src/routes/sales.js` e o controller
-`server/src/controllers/saleController.js` **permanecem no repositório**
+O arquivo anterior `server/src/routes/sales.ts` e o controller
+`server/src/controllers/saleController.ts` **permanecem no repositório**
 como referência histórica, mas **não são mais montados em nenhuma rota** —
 evitando duplicidade de `/api/sales` e o risco de duas implementações
 divergentes atenderem à mesma URL. Confirmado via `grep` que apenas
-`server/index.js` monta o módulo novo. Os arquivos legados podem ser
+`server/index.ts` monta o módulo novo. Os arquivos anteriors podem ser
 removidos em uma limpeza futura, uma vez confirmada a estabilidade da
 migração.
 
-A rota legada importava `authorize` de `../middlewares/auth` mas nunca o
+A rota anterior importava `authorize` de `../middlewares/auth` mas nunca o
 utilizava em nenhum handler — apenas `authenticate` era aplicado às 4
 rotas. Esse comportamento foi preservado 1:1 no módulo novo (nenhuma rota
 de vendas exige papel/permissão específica hoje; ver seção "Permissões").
@@ -47,23 +47,23 @@ sucesso). Uma pequena diferença de formato existe apenas nas respostas de
 `AppError` (`server/src/errors`) e chegam ao cliente como
 `{ success: false, error: { code, message } }` em vez do
 `{ success: false, error: "mensagem em string" }` usado pelo controller
-legado. Erros propagados de `InventoryService` (que ainda usa
+anterior. Erros propagados de `InventoryService` (que ainda usa
 `Object.assign(new Error(...), { statusCode })`, não `AppError`) continuam
 retornando `{ success: false, error: "mensagem" }` (string), pois o
-`errorHandler` central já trata esse formato legado separadamente — nenhuma
+`errorHandler` central já trata esse formato anterior separadamente — nenhuma
 mudança de contrato nesse caso específico. O `statusCode` HTTP retornado é
 o mesmo em todos os casos (400, 404, 409, 422). Erros inesperados (5xx)
-mantêm o fallback genérico do `errorHandler`, igual ao legado.
+mantêm o fallback genérico do `errorHandler`, igual ao anterior.
 
 ## F24 — Arredondamento de parcelas (já corrigido antes desta migração)
 
 O `TODO.md` lista F24 como uma dívida técnica relacionada a arredondamento
-impreciso de parcelas em `saleController.js`. **Essa correção já havia sido
-aplicada antes desta migração** (o controller legado já calculava tudo em
+impreciso de parcelas em `saleController.ts`. **Essa correção já havia sido
+aplicada antes desta migração** (o controller anterior já calculava tudo em
 centavos usando helpers locais `toCents`/`fromCents`, com a última parcela
 absorvendo o resto da divisão inteira). Esta migração **não altera a
 regra**, apenas troca os helpers locais duplicados por
-`server/src/shared/utils/money.js` (`toCents`/`fromCents`/`round2`), que já
+`server/src/shared/utils/money.ts` (`toCents`/`fromCents`/`round2`), que já
 existiam e eram usados por outros módulos migrados — evitando duas
 implementações levemente distintas (`fromCents` local usava
 `toFixed`/`parseFloat`; a versão compartilhada usa correção por
@@ -81,7 +81,7 @@ Fluxo preservado em `CreateSaleUseCase`:
    exatamente igual ao total líquido da venda (nenhum centavo perdido ou
    sobrando por arredondamento).
 4. Se `installments === 1`: uma única `AccountReceivable` já é criada com
-   `status: 'paid'` (comportamento legado preservado — venda à vista é
+   `status: 'paid'` (comportamento anterior preservado — venda à vista é
    considerada quitada na criação).
 
 ## F22 — Reserva de estoque em quotes (pendência conhecida, não resolvida nesta migração)
@@ -96,39 +96,39 @@ já com `status: 'confirmed'` e debita o estoque imediatamente via
 Ou seja, o conceito de "orçamento" (quote) que reservaria estoque sem
 debitá-lo de fato (ex.: usando `InventoryService.reserve`, que já existe
 como "no-op defensivo" aguardando a coluna `reserved_quantity` no schema —
-ver `server/src/services/inventoryService.js`) **não está implementado**.
+ver `server/src/services/inventoryService.ts`) **não está implementado**.
 Isso é uma pendência conhecida, documentada no `TODO.md` como F22, e
 **permanece pendente após esta migração** — nenhuma mudança de
 comportamento foi feita quanto a isso, apenas preservação 1:1 do fluxo
-legado (que já tinha essa mesma lacuna).
+anterior (que já tinha essa mesma lacuna).
 
 ## Estrutura
 
 ```
 server/src/modules/sales/
   domain/
-    entities/SaleEntity.js                   Validação de forma na criação
-    repositories/SaleRepository.js           Interface do repositório
+    entities/SaleEntity.ts                   Validação de forma na criação
+    repositories/SaleRepository.ts           Interface do repositório
   application/
     use-cases/
-      ListSalesUseCase.js
-      GetSaleByIdUseCase.js
-      CreateSaleUseCase.js                   Cálculo em centavos + baixa de estoque + parcelas (transacional)
-      ChangeSaleStatusUseCase.js             Máquina de estados + cancelamento (restaura estoque, cancela parcelas)
+      ListSalesUseCase.ts
+      GetSaleByIdUseCase.ts
+      CreateSaleUseCase.ts                   Cálculo em centavos + baixa de estoque + parcelas (transacional)
+      ChangeSaleStatusUseCase.ts             Máquina de estados + cancelamento (restaura estoque, cancela parcelas)
   infrastructure/
-    sequelize/SequelizeSaleRepository.js     Implementação usando os models existentes
+    sequelize/SequelizeSaleRepository.ts     Implementação usando os models existentes
   presentation/
-    controllers/saleController.js
-    routes/sales.js
+    controllers/saleController.ts
+    routes/sales.ts
 ```
 
 ## Modelos de dados utilizados
 
-- `server/src/models/Sale.js` (Sequelize, reutilizado — nenhum model novo foi criado).
-- `server/src/models/SaleItem.js`.
-- `server/src/models/Product.js` (leitura na validação de itens; escrita de `quantity` feita exclusivamente por `InventoryService`).
-- `server/src/models/Client.js` (associação `belongsTo`, apenas leitura — a existência do cliente não é validada explicitamente na criação, mesmo comportamento do legado).
-- `server/src/models/AccountReceivable.js` (parcelas geradas na criação da venda; canceladas em massa no cancelamento).
+- `server/src/models/Sale.ts` (Sequelize, reutilizado — nenhum model novo foi criado).
+- `server/src/models/SaleItem.ts`.
+- `server/src/models/Product.ts` (leitura na validação de itens; escrita de `quantity` feita exclusivamente por `InventoryService`).
+- `server/src/models/Client.ts` (associação `belongsTo`, apenas leitura — a existência do cliente não é validada explicitamente na criação, mesmo comportamento do anterior).
+- `server/src/models/AccountReceivable.ts` (parcelas geradas na criação da venda; canceladas em massa no cancelamento).
 
 ## Regras de negócio
 
@@ -166,15 +166,15 @@ pendência documentada nos demais módulos migrados.
 ## Eventos / Auditoria
 
 Todos os endpoints de escrita continuam chamando `logAction` (via
-`server/src/services/auditLogService.js`) após o `commit`/persistência
+`server/src/services/auditLogService.ts`) após o `commit`/persistência
 (para não segurar locks de banco durante a escrita do log), preservando o
-comportamento do controller legado:
+comportamento do controller anterior:
 
 - `create` → entidade `Sale` criada.
 - `status_change` → mudança de status da venda.
 
 `GET /` e `GET /:id` são somente leitura e não geram auditoria, mesmo
-comportamento do legado.
+comportamento do anterior.
 
 ## Fluxo simplificado (Mermaid)
 
@@ -188,14 +188,14 @@ flowchart TD
   C -->|cancelamento: restaura estoque| G[InventoryService.receive]
   C -->|criacao: gera parcelas| H[AccountReceivable]
   C -->|cancelamento: cancela parcelas pendentes| H
-  F -->|lock pessimista + transaction| I[(MySQL - tabela products)]
-  F --> J[(MySQL - tabela inventory_movements)]
+  F -->|lock pessimista + transaction| I[(PostgreSQL - tabela products)]
+  F --> J[(PostgreSQL - tabela inventory_movements)]
   G --> I
   G --> J
-  E --> K[(MySQL - tabela sales / sale_items)]
-  H --> L[(MySQL - tabela account_receivables)]
+  E --> K[(PostgreSQL - tabela sales / sale_items)]
+  H --> L[(PostgreSQL - tabela account_receivables)]
   B -->|apos commit| M[auditLogService.logAction]
-  M --> N[(MySQL - tabela audit_logs)]
+  M --> N[(PostgreSQL - tabela audit_logs)]
 ```
 
 ## Testes existentes
@@ -213,11 +213,11 @@ endpoints está prevista na Fase 9 do `TODO.md`.
 - Não há RBAC granular por papel neste módulo (qualquer usuário
   autenticado pode criar/cancelar vendas).
 - A existência do `customer_id` não é validada explicitamente na criação
-  (mesma lacuna do controller legado — uma FK inválida cai no tratamento
+  (mesma lacuna do controller anterior — uma FK inválida cai no tratamento
   genérico de `SequelizeForeignKeyConstraintError` do `errorHandler`).
 - Validação de entrada é manual/via entidade (sem schema declarativo);
   migração para Zod está prevista para a Fase 8.
-- O controller/rota legados (`server/src/controllers/saleController.js`,
-  `server/src/routes/sales.js`) foram deixados intactos no repositório
+- O controller/rota anteriors (`server/src/controllers/saleController.ts`,
+  `server/src/routes/sales.ts`) foram deixados intactos no repositório
   como referência histórica, mas não são mais usados; podem ser removidos
   em limpeza futura.

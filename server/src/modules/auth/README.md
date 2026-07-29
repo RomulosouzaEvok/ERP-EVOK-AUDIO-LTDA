@@ -12,7 +12,7 @@ descrita na Fase 5 do `TODO.md`, seguindo o mesmo padrão dos módulos
 
 Este módulo **não reimplementa** hashing/comparação de senha nem a
 sanitização de `password` nas respostas — isso continua 100% centralizado
-no model `server/src/models/User.js` (`comparePassword`, hook
+no model `server/src/models/User.ts` (`comparePassword`, hook
 `beforeSave` que faz o hash, `toJSON` que remove `password`). Os use cases
 deste módulo são wrappers finos sobre esse model (via `AuthRepository`) e
 sobre `jsonwebtoken` (via `TokenService`).
@@ -20,19 +20,19 @@ sobre `jsonwebtoken` (via `TokenService`).
 ## Decisão de compatibilidade de rotas
 
 O endpoint `/api/auth` (mesmos 3 paths, métodos, middlewares e formato de
-sucesso JSON do controller legado) agora é servido pelas rotas/controller
-deste módulo (`presentation/routes/auth.js` →
-`presentation/controllers/authController.js`), registrado em
-`server/index.js`.
+sucesso JSON do controller anterior) agora é servido pelas rotas/controller
+deste módulo (`presentation/routes/auth.ts` →
+`presentation/controllers/authController.ts`), registrado em
+`server/index.ts`.
 
-O arquivo legado `server/src/routes/auth.js` e o controller
-`server/src/controllers/authController.js` **permanecem no repositório**
+O arquivo anterior `server/src/routes/auth.ts` e o controller
+`server/src/controllers/authController.ts` **permanecem no repositório**
 como referência histórica, mas **não são mais montados em nenhuma rota** —
 evitando duplicidade de `/api/auth` e o risco de duas implementações
 divergentes atenderem à mesma URL. Confirmado via `grep` que apenas
-`server/index.js` monta o módulo novo (`require('./src/modules/auth/...')`),
+`server/index.ts` monta o módulo novo (`require('./src/modules/auth/...')`),
 nenhuma outra ocorrência de `require('./src/routes/auth')` existe no
-arquivo. Os arquivos legados podem ser removidos em uma limpeza futura, uma
+arquivo. Os arquivos anteriors podem ser removidos em uma limpeza futura, uma
 vez confirmada a estabilidade da migração.
 
 Nenhum client precisa mudar quanto a **sucesso**: mesmos 3 endpoints,
@@ -45,9 +45,9 @@ padrão já adotado nos módulos `inventory`/`bom`/`production`/`purchases`/
 agora são instâncias de `AppError` (`server/src/errors`) e chegam ao
 cliente como `{ success: false, error: { code, message } }` em vez do
 `{ success: false, error: "mensagem em string" }` usado pelo controller
-legado. O `statusCode` HTTP retornado é o mesmo em todos os casos (400,
+anterior. O `statusCode` HTTP retornado é o mesmo em todos os casos (400,
 401, 403, 409). Erros inesperados (5xx) mantêm o fallback genérico do
-`errorHandler`, igual ao legado. `docs/API.md` foi atualizado para refletir
+`errorHandler`, igual ao anterior. `docs/API.md` foi atualizado para refletir
 o novo formato do erro 401 de `/login`.
 
 **Regra de segurança preservada 1:1 (não alterada por esta migração):** a
@@ -64,29 +64,29 @@ emails estão cadastrados no sistema. Essa regra está centralizada em
 ```
 server/src/modules/auth/
   domain/
-    entities/AuthCredentialsEntity.js   LoginCredentialsEntity + RegisterUserEntity (validação de forma)
-    repositories/AuthRepository.js      Interface do repositório
+    entities/AuthCredentialsEntity.ts   LoginCredentialsEntity + RegisterUserEntity (validação de forma)
+    repositories/AuthRepository.ts      Interface do repositório
   application/
     use-cases/
-      LoginUseCase.js                   Autentica, gera token, monta payload de auditoria (sucesso e falha)
-      RegisterUserUseCase.js            Cria usuário (role padrão 'operator', trata email duplicado)
-      GetMeUseCase.js                   Relê o usuário autenticado pelo id
+      LoginUseCase.ts                   Autentica, gera token, monta payload de auditoria (sucesso e falha)
+      RegisterUserUseCase.ts            Cria usuário (role padrão 'operator', trata email duplicado)
+      GetMeUseCase.ts                   Relê o usuário autenticado pelo id
   infrastructure/
-    sequelize/SequelizeAuthRepository.js Implementação usando o model User existente
-    jwt/TokenService.js                 Wrapper sobre jsonwebtoken (geração de token)
+    sequelize/SequelizeAuthRepository.ts Implementação usando o model User existente
+    jwt/TokenService.ts                 Wrapper sobre jsonwebtoken (geração de token)
   presentation/
-    controllers/authController.js
-    routes/auth.js
+    controllers/authController.ts
+    routes/auth.ts
 ```
 
 ## Modelos de dados utilizados
 
-- `server/src/models/User.js` (Sequelize, reutilizado — nenhum model novo
+- `server/src/models/User.ts` (Sequelize, reutilizado — nenhum model novo
   foi criado). Fornece `comparePassword` (bcryptjs), hash de senha via hook
   `beforeSave` e `toJSON` que remove `password` das serializações padrão
   (não usado diretamente aqui, pois os repositórios já excluem `password`
   via `attributes: { exclude: ['password'] }` quando aplicável, mesmo
-  comportamento do legado).
+  comportamento do anterior).
 
 ## Regras de negócio
 
@@ -124,23 +124,23 @@ request/response.
 - `POST /register`: exige JWT válido e papel `'admin'` (`authorize('admin')`).
 - `GET /me`: exige apenas JWT válido (qualquer papel).
 
-Mesmas regras do controller/rotas legados — nenhuma mudança de RBAC nesta
+Mesmas regras do controller/rotas anteriors — nenhuma mudança de RBAC nesta
 migração.
 
 ## Eventos / Auditoria
 
 `POST /login` chama `logAction` (via
-`server/src/services/auditLogService.js`) em **todos** os desfechos —
+`server/src/services/auditLogService.ts`) em **todos** os desfechos —
 sucesso e cada um dos três motivos de falha (email não encontrado, senha
 incorreta, usuário inativo) — preservando o comportamento do controller
-legado de auditar tentativas de login mal-sucedidas. Como o `LoginUseCase`
+anterior de auditar tentativas de login mal-sucedidas. Como o `LoginUseCase`
 não tem acesso a `req`, ele retorna (em caso de sucesso) ou anexa ao erro
 lançado (em caso de falha, via `error.audit`) o payload pronto para
 `logAction`; o controller é responsável por chamar `logAction(req, ...)`
 antes de responder/repassar o erro.
 
 `POST /register` e `GET /me` não geram auditoria, mesmo comportamento do
-legado (o controller legado nunca chamava `logAction` nesses dois
+anterior (o controller anterior nunca chamava `logAction` nesses dois
 endpoints).
 
 ## Fluxo simplificado (Mermaid)
@@ -152,9 +152,9 @@ flowchart TD
   C -->|validacao de forma| D[AuthCredentialsEntity]
   C -->|leitura/escrita de User| E[SequelizeAuthRepository]
   C -->|login: gera JWT| F[TokenService]
-  E --> G[(MySQL - tabela users)]
+  E --> G[(PostgreSQL - tabela users)]
   B -->|login: sucesso ou falha| H[auditLogService.logAction]
-  H --> I[(MySQL - tabela audit_logs)]
+  H --> I[(PostgreSQL - tabela audit_logs)]
 ```
 
 ## Testes existentes
@@ -167,10 +167,10 @@ integração dos 3 endpoints está prevista na Fase 9 do `TODO.md`.
 ## Pendências conhecidas
 
 - Não há refresh token nem revogação de token (logout é apenas client-side,
-  descartando o JWT armazenado) — mesmo comportamento do legado.
+  descartando o JWT armazenado) — mesmo comportamento do anterior.
 - Validação de entrada é manual/via entidade (sem schema declarativo);
   migração para Zod está prevista para a Fase 8.
-- O controller/rota legados (`server/src/controllers/authController.js`,
-  `server/src/routes/auth.js`) foram deixados intactos no repositório como
+- O controller/rota anteriors (`server/src/controllers/authController.ts`,
+  `server/src/routes/auth.ts`) foram deixados intactos no repositório como
   referência histórica, mas não são mais usados; podem ser removidos em
   limpeza futura.

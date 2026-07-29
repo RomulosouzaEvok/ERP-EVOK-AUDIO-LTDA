@@ -17,21 +17,21 @@ Este módulo **não reimplementa** a lógica de negócio complexa de BOM
 (explosão recursiva com proteção contra loop infinito via `MAX_BOM_DEPTH`,
 cálculo de custo por nível, verificação de disponibilidade, versionamento
 automático via `status: 'superseded'`) — essa lógica continua 100%
-centralizada em `server/src/services/bomService.js` (`BomService`). Os use
+centralizada em `server/src/services/bomService.ts` (`BomService`). Os use
 cases deste módulo são wrappers finos que chamam `BomService` ou o
 `SequelizeBOMRepository` (para as operações de leitura/CRUD simples que já
-eram feitas via query direta no controller legado).
+eram feitas via query direta no controller anterior).
 
 ## Decisão de compatibilidade de rotas
 
 O endpoint `/api/engineering/bom` (mesmos paths, métodos e formato de
 resposta JSON dos 11 endpoints existentes) agora é servido pelas
-rotas/controller deste módulo (`presentation/routes/bom.js` →
-`presentation/controllers/bomController.js`), registrado em
-`server/index.js`.
+rotas/controller deste módulo (`presentation/routes/bom.ts` →
+`presentation/controllers/bomController.ts`), registrado em
+`server/index.ts`.
 
-Os arquivos legados `server/src/routes/bom.js` e
-`server/src/controllers/bomController.js` **permanecem no repositório**
+Os arquivos anteriors `server/src/routes/bom.ts` e
+`server/src/controllers/bomController.ts` **permanecem no repositório**
 como referência histórica, mas **não são mais montados em nenhuma rota** —
 evitando duplicidade de `/api/engineering/bom` e o risco de duas
 implementações divergentes atenderem à mesma URL. Podem ser removidos em
@@ -41,7 +41,7 @@ Nenhum client precisa mudar: mesmos paths, mesmos verbos HTTP, mesmo
 envelope `{ success, data }` / `{ success, error }`. Erros lançados por
 `BomService` (objetos `Error` simples com `statusCode`, não `AppError`)
 continuam retornando `{ success: false, error: "mensagem" }` igual ao
-controller legado — o controller do módulo detecta esse formato
+controller anterior — o controller do módulo detecta esse formato
 (`error.statusCode && !error.code`) e responde da mesma forma. Erros de
 validação de forma lançados por `BOMEntity`/use cases usam `ValidationError`,
 `NotFoundError` e `BusinessRuleError` (`server/src/errors`) e chegam ao
@@ -51,7 +51,7 @@ Fase 4.1.
 Endpoint novo (aditivo, não quebra nada existente): `GET
 /api/engineering/bom/product/:productId/versions` — lista todas as versões
 (qualquer status: `draft`/`active`/`inactive`/`superseded`) de BOM de um
-produto, ordenadas por data de criação. Não existia no controller legado.
+produto, ordenadas por data de criação. Não existia no controller anterior.
 
 ### Decisões de desenho dos use cases (mapeamento com a Fase 6 do TODO.md)
 
@@ -59,15 +59,15 @@ produto, ordenadas por data de criação. Não existia no controller legado.
 |---|---|---|
 | `CreateBOMUseCase` | `CreateBOMUseCase` | Wrapper de `BomService.createBOM`. Já cuida do versionamento automático (marca BOMs ativas anteriores do produto como `superseded`). |
 | `ApproveBOMUseCase` | `ApproveBOMUseCase` | Wrapper dedicado que atualiza apenas `status: 'active'`. **Não é usado pela rota `PUT /:id`** hoje (ver abaixo); disponível para fluxos futuros de aprovação isolada. |
-| `SupersedeBOMUseCase` | **Não criado como use case HTTP distinto** | `BomService.createBOM` já executa o supersede automaticamente como parte da criação de uma nova BOM ativa — não existe (nem existia no controller legado) um endpoint HTTP para "supersede manual" isolado. Criar um use case sem endpoint correspondente violaria o princípio de não adicionar código morto. |
+| `SupersedeBOMUseCase` | **Não criado como use case HTTP distinto** | `BomService.createBOM` já executa o supersede automaticamente como parte da criação de uma nova BOM ativa — não existe (nem existia no controller anterior) um endpoint HTTP para "supersede manual" isolado. Criar um use case sem endpoint correspondente violaria o princípio de não adicionar código morto. |
 | `ExplodeBOMUseCase` | `ExplodeBOMUseCase` | Wrapper de `BomService.explodeBOM`. |
 | `CalculateBOMCostUseCase` | `CalculateBOMCostUseCase` | Wrapper de `BomService.calculateCost`. |
 | `CheckBOMAvailabilityUseCase` | `CheckBOMAvailabilityUseCase` | Wrapper de `BomService.checkAvailability`. |
 | `GetBOMTreeUseCase` | `GetBOMTreeUseCase` | Wrapper de `BomService.getBOMTree`. |
 | `ListBOMVersionsUseCase` | `ListBOMVersionsUseCase` | Novo endpoint aditivo `GET /product/:productId/versions` (não existia antes). |
-| — | `ListBOMsUseCase`, `GetBOMByIdUseCase`, `GetActiveBOMByProductUseCase`, `UpdateBOMUseCase`, `DeactivateBOMUseCase`, `ListBOMItemsUseCase` | Cobrem os demais endpoints legados (`list`, `getById`, `getByProduct`, `update`, `remove`, `listItems`). |
+| — | `ListBOMsUseCase`, `GetBOMByIdUseCase`, `GetActiveBOMByProductUseCase`, `UpdateBOMUseCase`, `DeactivateBOMUseCase`, `ListBOMItemsUseCase` | Cobrem os demais endpoints anteriors (`list`, `getById`, `getByProduct`, `update`, `remove`, `listItems`). |
 
-**Sobre `PUT /:id` e a dualidade Approve/Update:** o controller legado
+**Sobre `PUT /:id` e a dualidade Approve/Update:** o controller anterior
 tinha um único método `update` que aceitava todos os campos
 (`revision`, `revision_notes`, `notes`, `status`) em uma única chamada, e
 apenas *detectava* — via comparação de `status` antes/depois — se a
@@ -91,35 +91,35 @@ contrato existente de multi-campo por requisição.
 ```
 server/src/modules/bom/
   domain/
-    entities/BOMEntity.js                    Validação de forma na criação
-    repositories/BOMRepository.js            Interface do repositório
+    entities/BOMEntity.ts                    Validação de forma na criação
+    repositories/BOMRepository.ts            Interface do repositório
   application/
     use-cases/
-      ListBOMsUseCase.js
-      GetBOMByIdUseCase.js
-      GetActiveBOMByProductUseCase.js
-      ListBOMVersionsUseCase.js              Novo
-      CreateBOMUseCase.js                    Wrapper fino sobre BomService.createBOM
-      UpdateBOMUseCase.js
-      ApproveBOMUseCase.js                   Disponível, não usado pela rota PUT hoje (ver acima)
-      DeactivateBOMUseCase.js
-      ExplodeBOMUseCase.js                   Wrapper fino sobre BomService.explodeBOM
-      CalculateBOMCostUseCase.js             Wrapper fino sobre BomService.calculateCost
-      CheckBOMAvailabilityUseCase.js         Wrapper fino sobre BomService.checkAvailability
-      GetBOMTreeUseCase.js                   Wrapper fino sobre BomService.getBOMTree
-      ListBOMItemsUseCase.js
+      ListBOMsUseCase.ts
+      GetBOMByIdUseCase.ts
+      GetActiveBOMByProductUseCase.ts
+      ListBOMVersionsUseCase.ts              Novo
+      CreateBOMUseCase.ts                    Wrapper fino sobre BomService.createBOM
+      UpdateBOMUseCase.ts
+      ApproveBOMUseCase.ts                   Disponível, não usado pela rota PUT hoje (ver acima)
+      DeactivateBOMUseCase.ts
+      ExplodeBOMUseCase.ts                   Wrapper fino sobre BomService.explodeBOM
+      CalculateBOMCostUseCase.ts             Wrapper fino sobre BomService.calculateCost
+      CheckBOMAvailabilityUseCase.ts         Wrapper fino sobre BomService.checkAvailability
+      GetBOMTreeUseCase.ts                   Wrapper fino sobre BomService.getBOMTree
+      ListBOMItemsUseCase.ts
   infrastructure/
-    sequelize/SequelizeBOMRepository.js      Implementação usando os models BillOfMaterial/BillOfMaterialItem/Product existentes
+    sequelize/SequelizeBOMRepository.ts      Implementação usando os models BillOfMaterial/BillOfMaterialItem/Product existentes
   presentation/
-    controllers/bomController.js
-    routes/bom.js
+    controllers/bomController.ts
+    routes/bom.ts
 ```
 
 ## Modelos de dados utilizados
 
-- `server/src/models/BillOfMaterial.js` (Sequelize, reutilizado — nenhum model novo foi criado).
-- `server/src/models/BillOfMaterialItem.js` (Sequelize, reutilizado).
-- `server/src/models/Product.js` (leitura: produto acabado e componentes; escrita de custo/estoque não é feita por este módulo).
+- `server/src/models/BillOfMaterial.ts` (Sequelize, reutilizado — nenhum model novo foi criado).
+- `server/src/models/BillOfMaterialItem.ts` (Sequelize, reutilizado).
+- `server/src/models/Product.ts` (leitura: produto acabado e componentes; escrita de custo/estoque não é feita por este módulo).
 
 ## Regras de negócio
 
@@ -163,8 +163,8 @@ listado como pendência na Fase 12 do `TODO.md` ("Revisar RBAC completo").
 ## Eventos / Auditoria
 
 Os endpoints de escrita continuam chamando `logAction` (via
-`server/src/services/auditLogService.js`), preservando o comportamento do
-controller legado:
+`server/src/services/auditLogService.ts`), preservando o comportamento do
+controller anterior:
 
 - `POST /` → `action: 'create'`, entidade `BOM`, com `product_id`, `revision` e `items_count`.
 - `PUT /:id` → `action: 'approve'` quando `status` muda para `active` (comparando `before.status` com o novo valor), ou `action: 'update'` caso contrário; `oldValues`/`newValues` apenas dos campos efetivamente alterados.
@@ -172,7 +172,7 @@ controller legado:
 
 Os demais endpoints (`list`, `getById`, `getByProduct`, `listVersions`,
 `explode`, `cost`, `availability`, `tree`, `listItems`) são somente
-leitura e não geram auditoria, mesmo comportamento do legado.
+leitura e não geram auditoria, mesmo comportamento do anterior.
 
 ## Testes existentes
 
@@ -191,23 +191,23 @@ flowchart TD
   C -->|leitura/CRUD simples| E[SequelizeBOMRepository]
   C -->|explosão / custo / disponibilidade / árvore / versionamento| F[BomService]
   F -->|MAX_BOM_DEPTH: protege contra loop infinito| F
-  F -->|transação Sequelize| G[(MySQL - tabela bill_of_materials)]
-  F --> H[(MySQL - tabela bill_of_material_items)]
+  F -->|transação Sequelize| G[(PostgreSQL - tabela bill_of_materials)]
+  F --> H[(PostgreSQL - tabela bill_of_material_items)]
   E --> G
   E --> H
   B -->|apos escrita| I[auditLogService.logAction]
-  I --> J[(MySQL - tabela audit_logs)]
+  I --> J[(PostgreSQL - tabela audit_logs)]
 ```
 
 ## Pendências conhecidas
 
 - `SupersedeBOMUseCase` não foi criado como use case HTTP dedicado — o
   supersede acontece automaticamente dentro de `BomService.createBOM` e
-  não existe (nem existia no legado) um endpoint isolado para essa ação.
+  não existe (nem existia no anterior) um endpoint isolado para essa ação.
   Ver decisão detalhada acima.
 - `ApproveBOMUseCase` existe mas não é chamado pela rota `PUT /:id` hoje
   (que usa `UpdateBOMUseCase` para preservar o contrato multi-campo do
-  legado). Fica disponível para um futuro endpoint dedicado de aprovação
+  anterior). Fica disponível para um futuro endpoint dedicado de aprovação
   (ex.: `POST /:id/approve`) ou workflow de aprovação de engenharia.
 - Não há workflow formal de aprovação (múltiplos aprovadores, histórico de
   aprovação) — apenas a transição de `status` para `active`.
@@ -215,7 +215,7 @@ flowchart TD
   pode criar/aprovar/inativar BOMs).
 - Validação de entrada é manual/via entidade (sem schema declarativo);
   migração para Zod está prevista para a Fase 8.
-- O controller/rota legados (`server/src/controllers/bomController.js`,
-  `server/src/routes/bom.js`) foram deixados intactos no repositório como
+- O controller/rota anteriors (`server/src/controllers/bomController.ts`,
+  `server/src/routes/bom.ts`) foram deixados intactos no repositório como
   referência histórica, mas não são mais usados; podem ser removidos em
   limpeza futura.

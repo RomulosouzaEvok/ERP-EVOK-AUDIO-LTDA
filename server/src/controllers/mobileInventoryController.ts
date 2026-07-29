@@ -43,9 +43,10 @@ exports.batchScan = async (req: any, res: any, next: any): Promise<void> => {
 exports.listMovements = async (req: any, res: any, next: any): Promise<void> => {
   try {
     const { page = '1', limit = '10' } = req.query;
-    const p = parseInt(page), l = parseInt(limit), o = (p - 1) * l;
+    const p = parseInt(String(page), 10), l = parseInt(String(limit), 10), o = (p - 1) * l;
     const { count, rows } = await InventoryMovement.findAndCountAll({ include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }, { model: User, as: 'user', attributes: ['id', 'name'] }], limit: l, offset: o, order: [['createdAt', 'DESC']] });
     res.json({ success: true, data: rows, pagination: { total: count, page: p, limit: l, totalPages: Math.ceil(count / l) } });
   } catch (error) { next(error); }
 };
+
 

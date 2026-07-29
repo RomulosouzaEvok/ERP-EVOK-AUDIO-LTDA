@@ -19,8 +19,8 @@ const Validators = require('../utils/validators');
  */
 const ALLOWED_EXTENSIONS: Record<string, string[]> = {
   images: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
-  documents: ['.pdf', '.xml', '.json'],
-  all: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.xml', '.json']
+  documents: ['.pdf', '.xml', '.JSON'],
+  all: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.xml', '.JSON']
 };
 
 /**

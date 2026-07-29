@@ -14,29 +14,29 @@ seguindo o mesmo padrão dos módulos `auth`, `products`, `inventory`, `bom`,
 
 Este módulo **não reimplementa** a validação de nome/email/senha de
 criação de usuário: reutiliza `RegisterUserEntity`, já existente em
-`server/src/modules/auth/domain/entities/AuthCredentialsEntity.js`, pois as
-regras são idênticas às do controller legado (`name`/`email`/`password`
+`server/src/modules/auth/domain/entities/AuthCredentialsEntity.ts`, pois as
+regras são idênticas às do controller anterior (`name`/`email`/`password`
 obrigatórios, email com formato válido, senha com no mínimo 6 caracteres).
 Hash de senha, `comparePassword` e sanitização de `password` nas respostas
-continuam 100% centralizados no model `server/src/models/User.js`.
+continuam 100% centralizados no model `server/src/models/User.ts`.
 
 ## Decisão de compatibilidade de rotas
 
 O endpoint `/api/users` (mesmos 5 paths, métodos, middlewares e formato de
-sucesso JSON do controller legado) agora é servido pelas rotas/controller
-deste módulo (`presentation/routes/users.js` →
-`presentation/controllers/userController.js`), registrado em
-`server/index.js`.
+sucesso JSON do controller anterior) agora é servido pelas rotas/controller
+deste módulo (`presentation/routes/users.ts` →
+`presentation/controllers/userController.ts`), registrado em
+`server/index.ts`.
 
-O arquivo legado `server/src/routes/users.js` e o controller
-`server/src/controllers/userController.js` **permanecem no repositório**
+O arquivo anterior `server/src/routes/users.ts` e o controller
+`server/src/controllers/userController.ts` **permanecem no repositório**
 como referência histórica, mas **não são mais montados em nenhuma rota** —
 evitando duplicidade de `/api/users` e o risco de duas implementações
 divergentes atenderem à mesma URL. Confirmado via `grep` que apenas
-`server/index.js` monta o módulo novo
+`server/index.ts` monta o módulo novo
 (`require('./src/modules/users/presentation/routes/users')`), nenhuma outra
 ocorrência de `require('./src/routes/users')` existe no arquivo. Os
-arquivos legados podem ser removidos em uma limpeza futura, uma vez
+arquivos anteriors podem ser removidos em uma limpeza futura, uma vez
 confirmada a estabilidade da migração.
 
 Nenhum client precisa mudar quanto a **sucesso**: mesmos 5 endpoints,
@@ -49,54 +49,54 @@ padrão já adotado nos módulos `auth`/`inventory`/`bom`/`production`/
 validação/negócio agora são instâncias de `AppError` (`server/src/errors`)
 e chegam ao cliente como `{ success: false, error: { code, message } }` em
 vez do `{ success: false, error: "mensagem em string" }` usado pelo
-controller legado. O `statusCode` HTTP é o mesmo em quase todos os casos
+controller anterior. O `statusCode` HTTP é o mesmo em quase todos os casos
 (400, 404, 409), com **uma exceção documentada abaixo** (auto-inativação).
 Erros inesperados (5xx) mantêm o fallback genérico do `errorHandler`, igual
-ao legado. `docs/API.md` (seção "1.1 Usuários (Gestão)") foi atualizado
+ao anterior. `docs/API.md` (seção "1.1 Usuários (Gestão)") foi atualizado
 para refletir o novo formato dos erros.
 
 ### Desvio 1:1 documentado: status HTTP da auto-inativação
 
-O controller legado (`userController.js#remove`) respondia **400** para a
+O controller anterior (`userController.ts#remove`) respondia **400** para a
 tentativa de um usuário inativar a si mesmo. Este módulo usa
 `BusinessRuleError`, que mapeia para **422** — mesma convenção já adotada
 por regras de negócio análogas em outros módulos migrados (ex.:
-`purchases/application/use-cases/ChangePurchaseStatusUseCase.js`,
-`ReceivePurchaseItemsUseCase.js`). A mensagem de erro
+`purchases/application/use-cases/ChangePurchaseStatusUseCase.ts`,
+`ReceivePurchaseItemsUseCase.ts`). A mensagem de erro
 (`'Você não pode inativar seu próprio usuário'`) permanece idêntica; apenas
 o código de status HTTP passa de 400 para 422 e o corpo passa a ser
 `{ success: false, error: { code: 'BUSINESS_RULE_VIOLATION', message } }`.
 Esse é o único desvio de status HTTP desta migração; todas as demais
-respostas de erro preservam o `statusCode` do legado.
+respostas de erro preservam o `statusCode` do anterior.
 
 ## Estrutura
 
 ```
 server/src/modules/users/
   domain/
-    entities/UpdateUserEntity.js        Validação de forma do PUT (bloqueia senha, valida email) + VALID_ROLES
-    repositories/UsersRepository.js     Interface do repositório
+    entities/UpdateUserEntity.ts        Validação de forma do PUT (bloqueia senha, valida email) + VALID_ROLES
+    repositories/UsersRepository.ts     Interface do repositório
   application/
     use-cases/
-      ListUsersUseCase.js               Busca/filtro/paginação
-      GetUserByIdUseCase.js             Busca por id
-      CreateUserUseCase.js              Reusa RegisterUserEntity (módulo auth) + valida role + audita
-      UpdateUserUseCase.js              Atualiza campos permitidos, audita oldValues/newValues
-      DeactivateUserUseCase.js          Soft delete (active=false), bloqueia auto-inativação, audita
+      ListUsersUseCase.ts               Busca/filtro/paginação
+      GetUserByIdUseCase.ts             Busca por id
+      CreateUserUseCase.ts              Reusa RegisterUserEntity (módulo auth) + valida role + audita
+      UpdateUserUseCase.ts              Atualiza campos permitidos, audita oldValues/newValues
+      DeactivateUserUseCase.ts          Soft delete (active=false), bloqueia auto-inativação, audita
   infrastructure/
-    sequelize/SequelizeUsersRepository.js Implementação usando o model User existente
+    sequelize/SequelizeUsersRepository.ts Implementação usando o model User existente
   presentation/
-    controllers/userController.js
-    routes/users.js
+    controllers/userController.ts
+    routes/users.ts
 ```
 
 ## Modelos de dados utilizados
 
-- `server/src/models/User.js` (Sequelize, reutilizado — nenhum model novo
+- `server/src/models/User.ts` (Sequelize, reutilizado — nenhum model novo
   foi criado). Fornece hash de senha via hook `beforeSave` e
   `comparePassword` (não usados diretamente por este módulo, apenas pelo
   módulo `auth`). Todas as leituras deste módulo excluem `password` via
-  `attributes: { exclude: ['password'] }`, mesmo comportamento do legado.
+  `attributes: { exclude: ['password'] }`, mesmo comportamento do anterior.
 
 ## Regras de negócio
 
@@ -138,18 +138,18 @@ de request/response.
 ## Permissões
 
 Todas as rotas exigem JWT válido e papel `'admin'` (`authorize('admin')`) —
-mesma regra do controller/rotas legados, sem exceção e sem mudança de RBAC
+mesma regra do controller/rotas anteriors, sem exceção e sem mudança de RBAC
 nesta migração.
 
 ## Eventos / Auditoria
 
 `POST /`, `PUT /:id` e `DELETE /:id` chamam `logAction` (via
-`server/src/services/auditLogService.js`) em caso de sucesso, preservando
-o comportamento do controller legado: `create` registra `newValues`
+`server/src/services/auditLogService.ts`) em caso de sucesso, preservando
+o comportamento do controller anterior: `create` registra `newValues`
 (name/email/role); `update` registra `oldValues`/`newValues` apenas dos
 campos alterados; `soft_delete` registra a transição `active: true → false`.
 `GET /` e `GET /:id` não geram auditoria (leituras), mesmo comportamento do
-legado.
+anterior.
 
 ## Fluxo simplificado (Mermaid)
 
@@ -160,9 +160,9 @@ flowchart TD
   C -->|criacao: valida nome/email/senha| D[RegisterUserEntity - modulo auth]
   C -->|atualizacao: valida forma| E[UpdateUserEntity]
   C -->|leitura/escrita de User| F[SequelizeUsersRepository]
-  F --> G[(MySQL - tabela users)]
+  F --> G[(PostgreSQL - tabela users)]
   B -->|criacao, atualizacao, inativacao: sucesso| H[auditLogService.logAction]
-  H --> I[(MySQL - tabela audit_logs)]
+  H --> I[(PostgreSQL - tabela audit_logs)]
 ```
 
 ## Testes existentes
@@ -175,11 +175,11 @@ prevista na Fase 9 do `TODO.md`.
 ## Pendências conhecidas
 
 - Não existe endpoint dedicado para troca de senha pelo próprio usuário ou
-  por um admin neste módulo — mesma lacuna do legado (fora de escopo desta
+  por um admin neste módulo — mesma lacuna do anterior (fora de escopo desta
   migração).
 - Validação de entrada é manual/via entidade (sem schema declarativo);
   migração para Zod está prevista para a Fase 8.
-- O controller/rota legados (`server/src/controllers/userController.js`,
-  `server/src/routes/users.js`) foram deixados intactos no repositório
+- O controller/rota anteriors (`server/src/controllers/userController.ts`,
+  `server/src/routes/users.ts`) foram deixados intactos no repositório
   como referência histórica, mas não são mais usados; podem ser removidos
   em limpeza futura.

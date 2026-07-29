@@ -9,7 +9,7 @@ exports.list = async (req: any, res: any, next: any): Promise<void> => {
     if (search) { const s = Validators.sanitizeSearch(search); where[Op.or] = [{ name: { [Op.like]: `%${s}%` } }, { cpf: { [Op.like]: `%${s}%` } }]; }
     if (status) where.status = status;
     if (department_id) where.department_id = department_id;
-    const p = parseInt(page), l = parseInt(limit), o = (p - 1) * l;
+    const p = parseInt(String(page), 10), l = parseInt(String(limit), 10), o = (p - 1) * l;
     const { count, rows } = await Employee.findAndCountAll({ where, include: [{ model: Department, as: 'department', attributes: ['id', 'name'] }], limit: l, offset: o, order: [['name', 'ASC']] });
     res.json({ success: true, data: rows, pagination: { total: count, page: p, limit: l, totalPages: Math.ceil(count / l) } });
   } catch (error) { next(error); }
@@ -48,4 +48,5 @@ exports.remove = async (req: any, res: any, next: any): Promise<void> => {
     res.json({ success: true, data: { message: 'Funcionário desligado com sucesso' } });
   } catch (error) { next(error); }
 };
+
 

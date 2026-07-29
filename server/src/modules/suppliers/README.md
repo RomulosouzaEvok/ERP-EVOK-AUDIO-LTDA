@@ -13,33 +13,33 @@ compra pendentes. Migrado para a arquitetura em camadas (`domain` /
 
 Este módulo **não reimplementa** a validação de dígito verificador do
 CNPJ: reutiliza `Validators.validateDocument`
-(`server/src/utils/validators.js`), chamada pelo use case
+(`server/src/utils/validators.ts`), chamada pelo use case
 `CreateSupplierUseCase`, e `Validators.sanitizeSearch` para sanitizar o
 termo de busca em `ListSuppliersUseCase` — mesmas funções já usadas pelo
-controller legado, sem duplicação.
+controller anterior, sem duplicação.
 
 ## Decisão de compatibilidade de rotas
 
 O endpoint `/api/suppliers` (mesmos 5 paths, métodos, middlewares e
-formato de sucesso JSON do controller legado) agora é servido pelas
-rotas/controller deste módulo (`presentation/routes/suppliers.js` →
-`presentation/controllers/supplierController.js`), registrado em
-`server/index.js`.
+formato de sucesso JSON do controller anterior) agora é servido pelas
+rotas/controller deste módulo (`presentation/routes/suppliers.ts` →
+`presentation/controllers/supplierController.ts`), registrado em
+`server/index.ts`.
 
-O arquivo legado `server/src/routes/suppliers.js` e o controller
-`server/src/controllers/supplierController.js` **permanecem no
+O arquivo anterior `server/src/routes/suppliers.ts` e o controller
+`server/src/controllers/supplierController.ts` **permanecem no
 repositório** como referência histórica, mas **não são mais montados em
 nenhuma rota** — evitando duplicidade de `/api/suppliers` e o risco de
 duas implementações divergentes atenderem à mesma URL. Confirmado via
-`grep` que apenas `server/index.js` monta o módulo novo
+`grep` que apenas `server/index.ts` monta o módulo novo
 (`require('./src/modules/suppliers/presentation/routes/suppliers')`),
 nenhuma outra ocorrência de `require('./src/routes/suppliers')` existe no
-arquivo. Os arquivos legados podem ser removidos em uma limpeza futura,
+arquivo. Os arquivos anteriors podem ser removidos em uma limpeza futura,
 uma vez confirmada a estabilidade da migração.
 
 Nenhum client precisa mudar quanto a **sucesso**: mesmos 5 endpoints,
 mesmos verbos HTTP, mesmo middleware (`authenticate` em **todas** as
-rotas, sem `authorize` por papel — preservado 1:1 do legado, que já não
+rotas, sem `authorize` por papel — preservado 1:1 do anterior, que já não
 restringia este módulo por role).
 
 Uma diferença de formato existe apenas nas respostas de **erro** (mesmo
@@ -48,18 +48,18 @@ padrão já adotado nos módulos `auth`/`inventory`/`bom`/`production`/
 validação/negócio agora são instâncias de `AppError`
 (`server/src/errors`). Como `ValidationError`/`NotFoundError`/`ConflictError`
 são subclasses de `AppError`, o `errorHandler`
-(`server/src/middlewares/errorHandler.js`) entra no primeiro branch
+(`server/src/middlewares/errorHandler.ts`) entra no primeiro branch
 (`err instanceof AppError`) e devolve
 `{ success: false, error: { code, message } }` — um **objeto**, não mais a
-string simples usada pelo controller legado (`{ success: false, error: "mensagem" }`).
-O `statusCode` HTTP continua o mesmo em todos os casos do legado (400, 404,
+string simples usada pelo controller anterior (`{ success: false, error: "mensagem" }`).
+O `statusCode` HTTP continua o mesmo em todos os casos do anterior (400, 404,
 409); não há desvio de status nesta migração, só do formato do corpo de
 erro (mesma mudança já documentada nos demais módulos migrados).
 
-Mapeamento das mensagens de erro do legado para os novos tipos de
+Mapeamento das mensagens de erro do anterior para os novos tipos de
 `AppError` (mesma mensagem textual, `statusCode` preservado):
 
-| Situação | Legado | Novo |
+| Situação | anterior | Novo |
 |---|---|---|
 | Fornecedor não encontrado (`GET`/`PUT`/`DELETE :id`) | `404` string | `NotFoundError` (404) |
 | `company_name`/`cnpj` ausentes na criação | `400` string | `ValidationError` (400) |
@@ -72,29 +72,29 @@ Mapeamento das mensagens de erro do legado para os novos tipos de
 ```
 server/src/modules/suppliers/
   domain/
-    entities/SupplierEntity.js              Validação de forma na criação (company_name/cnpj obrigatórios)
-    repositories/SuppliersRepository.js     Interface do repositório
+    entities/SupplierEntity.ts              Validação de forma na criação (company_name/cnpj obrigatórios)
+    repositories/SuppliersRepository.ts     Interface do repositório
   application/
     use-cases/
-      ListSuppliersUseCase.js               Busca/filtro/paginação
-      GetSupplierByIdUseCase.js             Busca por id
-      CreateSupplierUseCase.js              Valida CNPJ via Validators.validateDocument, salva CNPJ limpo
-      UpdateSupplierUseCase.js              Atualiza campos permitidos
-      DeactivateSupplierUseCase.js          Soft delete (status='inactive'), bloqueia se houver compras pendentes
+      ListSuppliersUseCase.ts               Busca/filtro/paginação
+      GetSupplierByIdUseCase.ts             Busca por id
+      CreateSupplierUseCase.ts              Valida CNPJ via Validators.validateDocument, salva CNPJ limpo
+      UpdateSupplierUseCase.ts              Atualiza campos permitidos
+      DeactivateSupplierUseCase.ts          Soft delete (status='inactive'), bloqueia se houver compras pendentes
   infrastructure/
-    sequelize/SequelizeSuppliersRepository.js Implementação usando os models Supplier/Purchase existentes
+    sequelize/SequelizeSuppliersRepository.ts Implementação usando os models Supplier/Purchase existentes
   presentation/
-    controllers/supplierController.js
-    routes/suppliers.js
+    controllers/supplierController.ts
+    routes/suppliers.ts
 ```
 
 ## Modelos de dados utilizados
 
-- `server/src/models/Supplier.js` (Sequelize, reutilizado — nenhum model
+- `server/src/models/Supplier.ts` (Sequelize, reutilizado — nenhum model
   novo foi criado por este módulo).
-- `server/src/models/Purchase.js` (usado apenas para contar pedidos de
+- `server/src/models/Purchase.ts` (usado apenas para contar pedidos de
   compra pendentes ao inativar um fornecedor; não incluído nas queries de
-  listagem, mesmo comportamento do legado).
+  listagem, mesmo comportamento do anterior).
 
 ## Regras de negócio
 
@@ -112,7 +112,7 @@ server/src/modules/suppliers/
   `street`, `number`, `complement`, `neighborhood`, `city`, `state`,
   `contact_name`, `contact_phone`, `payment_terms`, `delivery_time`,
   `rating`, `notes`); não permite alterar `cnpj` nem `status` por este
-  endpoint, mesmo comportamento do legado.
+  endpoint, mesmo comportamento do anterior.
 - **Inativação (soft delete)** (`remove`): define `status='inactive'`;
   **bloqueia** a inativação se o fornecedor possuir pedidos de compra com
   status `pending`/`approved`/`sent`/`partial` (mensagem inclui a
@@ -137,14 +137,14 @@ request/response.
 
 Todas as rotas exigem apenas JWT válido (`authenticate`) — não há
 `authorize` por papel neste módulo, mesma regra do controller/rotas
-legados, sem mudança de RBAC nesta migração. RBAC mais granular está
+anteriors, sem mudança de RBAC nesta migração. RBAC mais granular está
 listado como pendência na Fase 12 do `TODO.md` ("Revisar RBAC completo"),
 mesma pendência documentada nos demais módulos migrados.
 
 ## Eventos / Auditoria
 
-**Nenhum endpoint deste módulo chama `logAction`** — o controller legado
-(`server/src/controllers/supplierController.js`) nunca teve integração
+**Nenhum endpoint deste módulo chama `logAction`** — o controller anterior
+(`server/src/controllers/supplierController.ts`) nunca teve integração
 com `auditLogService`, e este comportamento foi preservado
 intencionalmente nesta migração (instrução explícita: não adicionar
 auditoria que não existia). Diferente de `users`/`purchases`/`financial`,
@@ -160,8 +160,8 @@ flowchart TD
   C -->|criacao: valida forma| D[SupplierEntity]
   C -->|criacao: valida digito verificador| E[Validators.validateDocument]
   C -->|leitura/escrita| F[SequelizeSuppliersRepository]
-  F --> G[(MySQL - tabela suppliers)]
-  F -->|inativacao: conta compras pendentes| H[(MySQL - tabela purchases)]
+  F --> G[(PostgreSQL - tabela suppliers)]
+  F -->|inativacao: conta compras pendentes| H[(PostgreSQL - tabela purchases)]
 ```
 
 ## Testes existentes
@@ -176,14 +176,14 @@ testes unitários de `SupplierEntity`/use cases e testes de integração dos
 - **Sem auditoria (`AuditLog`)**: nenhuma escrita neste módulo (criação,
   atualização, inativação) gera registro em `audit_logs`, diferente da
   maioria dos demais módulos já migrados (`users`, `purchases`,
-  `financial`, etc.). Isso já era verdade no controller legado; recomenda-se
+  `financial`, etc.). Isso já era verdade no controller anterior; recomenda-se
   avaliar a adição de `logAction` em uma iteração futura para rastreabilidade
   de alterações cadastrais de fornecedores.
 - Não há `authorize` por papel neste módulo — qualquer usuário autenticado
   pode criar, atualizar ou inativar fornecedores.
 - Validação de entrada é manual/via entidade (sem schema declarativo);
   migração para Zod está prevista para a Fase 8.
-- O controller/rota legados (`server/src/controllers/supplierController.js`,
-  `server/src/routes/suppliers.js`) foram deixados intactos no repositório
+- O controller/rota anteriors (`server/src/controllers/supplierController.ts`,
+  `server/src/routes/suppliers.ts`) foram deixados intactos no repositório
   como referência histórica, mas não são mais usados; podem ser removidos
   em limpeza futura.

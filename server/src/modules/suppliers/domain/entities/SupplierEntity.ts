@@ -1,0 +1,75 @@
+/**
+ * Entidade de dominio de Fornecedor.
+ *
+ * @module modules/suppliers/domain/entities/SupplierEntity
+ */
+
+import Entity from '../../../../shared/domain/Entity';
+import { ValidationError } from '../../../../errors';
+
+interface SupplierProps {
+  id?: number;
+  company_name: string;
+  cnpj: string;
+  trade_name?: string | null;
+  ie?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  contact_name?: string | null;
+  contact_phone?: string | null;
+  payment_terms?: string | null;
+  delivery_time?: number | null;
+  notes?: string | null;
+}
+
+class SupplierEntity extends Entity {
+  public company_name: string;
+  public cnpj: string;
+  public trade_name: string | null;
+  public ie: string | null;
+  public phone: string | null;
+  public email: string | null;
+  public address: string | null;
+  public contact_name: string | null;
+  public contact_phone: string | null;
+  public payment_terms: string | null;
+  public delivery_time: number;
+  public notes: string | null;
+
+  /**
+   * @param props - Propriedades do fornecedor.
+   * @throws {ValidationError} Se `company_name` ou `cnpj` estiverem ausentes.
+   */
+  public constructor(props: SupplierProps) {
+    super({ id: props.id });
+    this.company_name = props.company_name;
+    this.cnpj = props.cnpj;
+    this.trade_name = props.trade_name ?? null;
+    this.ie = props.ie ?? null;
+    this.phone = props.phone ?? null;
+    this.email = props.email ?? null;
+    this.address = props.address ?? null;
+    this.contact_name = props.contact_name ?? null;
+    this.contact_phone = props.contact_phone ?? null;
+    this.payment_terms = props.payment_terms ?? null;
+    this.delivery_time = props.delivery_time ?? 15;
+    this.notes = props.notes ?? null;
+
+    this.validate();
+  }
+
+  /**
+   * Executa todas as validacoes de forma da entidade.
+   *
+   * @returns void
+   * @throws {ValidationError} Se `company_name` ou `cnpj` estiverem ausentes.
+   */
+  public validate(): void {
+    if (!this.company_name || !this.cnpj) {
+      throw new ValidationError('Razão social e CNPJ são obrigatórios');
+    }
+  }
+}
+
+export = SupplierEntity;

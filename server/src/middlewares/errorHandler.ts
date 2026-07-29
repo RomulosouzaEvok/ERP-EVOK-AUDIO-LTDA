@@ -52,7 +52,7 @@ const errorHandler = (err: ExtendedError, req: Request, res: Response, _next: Ne
     return res.status(statusCode).json({ success: false, error: errorBody });
   }
 
-  // 2. Erros legados com statusCode < 500
+  // 2. Erros anteriors com statusCode < 500
   if (typeof err.statusCode === 'number' && err.statusCode < 500) {
     return res.status(err.statusCode).json({ success: false, error: err.message ?? 'Erro' });
   }

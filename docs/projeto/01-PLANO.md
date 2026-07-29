@@ -3,7 +3,7 @@
 ## Visão Geral
 
 Sistema ERP completo para **EVOK ÁUDIO** - indústria de alto-falantes e componentes de áudio.
-Backend: Node.js + Express + Sequelize + MySQL.
+Backend: Node.ts + Express + Sequelize + PostgreSQL.
 Frontend: React (planejado).
 
 ---
@@ -19,9 +19,9 @@ erp-evok-audio/
 │   │   ├── routes/            # 19 arquivos de rotas
 │   │   ├── middlewares/       # auth + errorHandler
 │   │   ├── services/          # dashboard, reports, qrcode, upload
-│   │   └── config/            # database.js, seeds.js
-│   ├── config/                # db.js (conexão MySQL)
-│   └── index.js               # Entry point
+│   │   └── config/            # database.ts, seeds.ts
+│   ├── config/                # db.ts (conexão PostgreSQL)
+│   └── index.ts               # Entry point
 ├── docs/                      # Documentação completa
 │   ├── ANALISE_PROFUNDA.md    # Análise de segurança e lógica
 │   ├── API.md                 # Documentação da API
@@ -37,10 +37,10 @@ erp-evok-audio/
 
 | Camada | Tecnologia | Versão | Status |
 |--------|------------|--------|--------|
-| Backend | Node.js | 18+ | ✅ |
+| Backend | Node.ts | 18+ | ✅ |
 | Framework | Express | 4.18 | ✅ |
 | ORM | Sequelize | 6.37 | ✅ |
-| Banco | MySQL | 8.0+ | ✅ |
+| Banco | PostgreSQL | 8.0+ | ✅ |
 | Autenticação | JWT + bcryptjs | - | ✅ |
 | Upload | Multer | 2.2 | ✅ |
 | QR Code | qrcode | 1.5 | ✅ |
@@ -228,7 +228,7 @@ erp-evok-audio/
 ### Fase 2 - Prioridade Baixa
 - [ ] Frontend React
 - [ ] Testes automatizados (Jest + Supertest)
-- [ ] Remover dependência mongoose não utilizada
+- [ ] Remover dependência dependencia removida não utilizada
 - [ ] Cursor-based pagination
 - [ ] CI/CD pipeline
 
@@ -255,7 +255,7 @@ erp-evok-audio/
 ### Boas Práticas
 - ✅ Paginação em todas as listagens
 - ✅ Índices nas foreign keys
-- ✅ Pool de conexões MySQL (max: 10/20)
+- ✅ Pool de conexões PostgreSQL (max: 10/20)
 - ✅ Transações em operações críticas (vendas, compras, produção)
 
 ### Pontos de Atenção
