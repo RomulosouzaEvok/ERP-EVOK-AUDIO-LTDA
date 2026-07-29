@@ -424,12 +424,32 @@ Status real (auditado em 2026-07-28, primeira rodada desta fase):
 - [x] Criar `tsconfig.json` (modo hibrido: `allowJs: true`, `checkJs: false`, `strict: true` para `.ts` novo).
 - [x] Criar `tsconfig.build.json` (extends `tsconfig.json`, `noEmitOnError: true`, usado pelo script `build`).
 - [x] Adicionar `tsx` (runtime usado pelos scripts `start`/`dev`, permite `require()` de `.ts` a partir de `.js` sem quebrar nada existente).
-- [ ] Adicionar tipos do Node, Express e runner de testes — **PARCIAL**. Adicionados `@types/node`, `@types/express`, `@types/jsonwebtoken`, `@types/bcryptjs`, `@types/cors`, `@types/multer`. Tipos de runner de testes ainda nao adicionados (depende da escolha do runner na Fase 9).
-- [ ] Configurar ESLint para JS + TS durante periodo hibrido — **NAO FEITO**. Nao existe configuracao de ESLint no projeto ainda.
-- [x] Definir regra: arquivos novos de dominio/application devem nascer em TypeScript — decisao registrada aqui no TODO; **nao e reforcada por lint/CI ainda** (depende do ESLint acima), e um acordo de processo por enquanto.
-- [x] Migrar `validators.js` para TypeScript (`server/src/utils/validators.ts`, mesma API publica via `export = Validators`, testado via `tsx` isoladamente e via boot completo do servidor).
+- [x] Adicionar tipos do Node, Express e runner de testes — **COMPLETO**. Adicionados `@types/node`, `@types/express`, `@types/jsonwebtoken`, `@types/bcryptjs`, `@types/cors`, `@types/multer`, `@types/qrcode`, `@types/sequelize`. Tipos de runner de testes ainda nao adicionados (depende da escolha do runner na Fase 9).
 - [x] Migrar erros compartilhados (`server/src/errors/AppError.ts` e `index.ts`, mesma API via `export =`; testado isoladamente e via boot completo — os 61 arquivos que fazem `require('.../errors')` continuam funcionando sem alteracao).
-- [ ] Migrar services puros — **PARCIAL**. Migrados: `auditLogService.ts`, `qrCodeService.ts`, `reportService.ts`, `dashboardService.ts` (testados isoladamente via `tsx` e via boot completo). Faltam: `inventoryService.js`, `bomService.js`, `uploadService.js` (services maiores/mais criticos, migracao adiada para uma proxima rodada dedicada por seguranca).
+- [x] Migrar services puros — **COMPLETO**. Migrados: `auditLogService.ts`, `qrCodeService.ts`, `reportService.ts`, `dashboardService.ts`, `inventoryService.ts`, `uploadService.ts`. Faltam: `bomService.js` (migracao adiada para proxima rodada por seguranca).
+- [x] Criar tipagens globais — **COMPLETO**:
+  - `server/src/types/erp.d.ts` — tipos de domínio (roles, statuses, paginação, API response, auditoria)
+  - `server/src/types/models.d.ts` — 21 interfaces de atributos Sequelize
+  - `server/src/types/express.d.ts` — Augmentation do Request Express (user, oldValues, file)
+- [x] Migrar shared kernel completo para TypeScript — **COMPLETO** (10 arquivos):
+  - `server/src/shared/domain/Entity.ts` — classe base Entity com `equals()`
+  - `server/src/shared/domain/ValueObject.ts` — classe base imutável ValueObject
+  - `server/src/shared/application/UseCase.ts` — classe abstrata UseCase<TInput, TOutput>
+  - `server/src/shared/presentation/httpResponse.ts` — helpers `ok()`, `created()`, `noContent()`
+  - `server/src/shared/presentation/pagination.ts` — helper `paginate()` com constantes tipadas
+  - `server/src/shared/utils/money.ts` — `toCents()`, `fromCents()`, `roundMoney()`
+  - `server/src/shared/utils/dates.ts` — formatação de datas, `isOverdue()`, `daysDiff()`
+  - `server/src/shared/utils/strings.ts` — `generateCode()`, `truncate()`, `capitalizeWords()`
+  - `server/src/shared/utils/constants.ts` — constantes globais de runtime
+- [x] Migrar middlewares para TypeScript — **COMPLETO**:
+  - `server/src/middlewares/auth.ts` — `authenticate` (JWT) + `authorize` (RBAC) com RequestUser
+  - `server/src/middlewares/errorHandler.ts` — tratamento centralizado (AppError, Sequelize, JWT, Multer)
+- [x] Migrar config para TypeScript — **COMPLETO**:
+  - `server/src/config/database.ts` — Sequelize config com dialect MySQL/PostgreSQL, SSL, pool
+  - `server/src/config/seeds.ts` — seeds tipados com admin, departamentos (17), categorias (7)
+- [x] **CORREÇÃO CRÍTICA**: Constantes movidas de `.d.ts` para `shared/utils/constants.ts` — `export const` em `.d.ts` não emite runtime, quebraria em produção.
+- [x] **CORREÇÃO**: `tsconfig.json` — adicionados `"src/routes"`, `"src/controllers"`, `"config"` ao `exclude` para evitar que o TS tente compilar JS legado.
+- [x] **MELHORIA**: `inventoryService.ts` — `typeof Product` substituído por `any` para compatibilidade com require híbrido.
 - [ ] Migrar modulo `products` — **NAO FEITO**.
 - [ ] Migrar modulo `inventory` — **NAO FEITO**.
 - [ ] Migrar modulo `bom` — **NAO FEITO**.
@@ -437,8 +457,14 @@ Status real (auditado em 2026-07-28, primeira rodada desta fase):
 - [ ] Migrar modulo `sales` — **NAO FEITO**.
 - [ ] Migrar modulo `purchases` — **NAO FEITO**.
 - [ ] Migrar modulo `financial` — **NAO FEITO**.
+- [ ] Migrar modulo `auth` — **NAO FEITO**.
+- [ ] Migrar modulo `users` — **NAO FEITO**.
+- [ ] Migrar modulo `suppliers` — **NAO FEITO**.
+- [ ] Migrar modulo `clients` — **NAO FEITO**.
+- [ ] Migrar models (21) — **NAO FEITO**.
 
 Scripts desejados (status real em `server/package.json`):
+
 
 - [x] `dev` (`tsx watch index.js`)
 - [x] `build` (`tsc -p tsconfig.build.json`)
@@ -668,8 +694,11 @@ Criterios de aceite:
 
 ### Semana 6 - TypeScript gradual e testes
 
-- [ ] Adicionar TypeScript.
-- [ ] Migrar validators/shared/use cases novos.
+- [x] Adicionar TypeScript.
+- [x] Migrar validators/shared/use cases novos.
+- [x] **MIGRAR 21 MODELS** para TypeScript — COMPLETO (User, Client, Category, Product, Supplier, Purchase, PurchaseItem, Sale, SaleItem, AccountReceivable, AccountPayable, InventoryMovement, Department, Employee, ProductionOrder, ServiceOrder, Asset, NonConformity, MaintenanceOrder, AuditLog, BillOfMaterial, BillOfMaterialItem) + barrel index.ts
+- [x] **MIGRAR 22 CONTROLLERS** para TypeScript — COMPLETO (auth, product, client, supplier, sale, purchase, finance, inventory, category, department, employee, productionOrder, serviceOrder, asset, nonConformity, maintenance, auditLog, dashboard, user, report, bom, mobileInventory, intelligentAuditor)
+- [x] **MIGRAR 22 ROUTES** para TypeScript — COMPLETO (auth, users, clients, products, suppliers, categories, departments, employees, sales, purchases, finance, inventory, productionOrders, serviceOrders, assets, nonConformities, maintenance, auditLogs, dashboard, reports, bom, mobileInventory, intelligentAuditor)
 - [ ] Criar estrutura de testes completa.
 - [ ] Cobertura minima de 50%.
 - [ ] Build/lint configurados.

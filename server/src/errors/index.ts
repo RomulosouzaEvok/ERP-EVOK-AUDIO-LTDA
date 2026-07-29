@@ -1,10 +1,20 @@
-import AppError = require('./AppError');
+/**
+ * 🚨 Barrel de exportação de erros padronizados.
+ *
+ * Todos os erros operacionais da aplicação herdam de {@link AppError}
+ * e seguem o mesmo formato de resposta JSON:
+ * `{ success: false, error: { code, message, details? } }`.
+ *
+ * @module errors
+ */
+
+import { AppError } from './AppError';
 
 /**
  * Erro de validação de dados de entrada (ex.: campo obrigatório ausente,
  * formato inválido). HTTP 400.
  */
-class ValidationError extends AppError {
+export class ValidationError extends AppError {
   constructor(message = 'Dados inválidos.', details?: unknown) {
     super(message, 400, 'VALIDATION_ERROR', details);
   }
@@ -13,7 +23,7 @@ class ValidationError extends AppError {
 /**
  * Erro de recurso não encontrado (ex.: registro inexistente no banco). HTTP 404.
  */
-class NotFoundError extends AppError {
+export class NotFoundError extends AppError {
   constructor(message = 'Recurso não encontrado.', details?: unknown) {
     super(message, 404, 'NOT_FOUND', details);
   }
@@ -22,7 +32,7 @@ class NotFoundError extends AppError {
 /**
  * Erro de autenticação ausente ou inválida. HTTP 401.
  */
-class UnauthorizedError extends AppError {
+export class UnauthorizedError extends AppError {
   constructor(message = 'Não autenticado.', details?: unknown) {
     super(message, 401, 'UNAUTHORIZED', details);
   }
@@ -31,7 +41,7 @@ class UnauthorizedError extends AppError {
 /**
  * Erro de autorização: usuário autenticado mas sem permissão. HTTP 403.
  */
-class ForbiddenError extends AppError {
+export class ForbiddenError extends AppError {
   constructor(message = 'Acesso negado.', details?: unknown) {
     super(message, 403, 'FORBIDDEN', details);
   }
@@ -40,7 +50,7 @@ class ForbiddenError extends AppError {
 /**
  * Erro de conflito de estado (ex.: registro duplicado, violação de unicidade). HTTP 409.
  */
-class ConflictError extends AppError {
+export class ConflictError extends AppError {
   constructor(message = 'Conflito de dados.', details?: unknown) {
     super(message, 409, 'CONFLICT', details);
   }
@@ -50,13 +60,15 @@ class ConflictError extends AppError {
  * Erro de violação de regra de negócio (ex.: cliente com vendas ativas não
  * pode ser inativado, estoque insuficiente para produção). HTTP 422.
  */
-class BusinessRuleError extends AppError {
+export class BusinessRuleError extends AppError {
   constructor(message = 'Operação não permitida pelas regras de negócio.', details?: unknown) {
     super(message, 422, 'BUSINESS_RULE_VIOLATION', details);
   }
 }
 
-export = {
+export { AppError };
+
+const Errors = {
   AppError,
   ValidationError,
   NotFoundError,
@@ -65,3 +77,5 @@ export = {
   ConflictError,
   BusinessRuleError
 };
+
+export default Errors;
