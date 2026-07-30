@@ -32,3 +32,12 @@ export function authToken(): string {
 export function integrationEnabled(): boolean {
   return process.env.RUN_INTEGRATION === 'true';
 }
+
+/**
+ * Indica se o ambiente minimo para testes de integracao esta pronto.
+ *
+ * @returns Verdadeiro quando a API e as credenciais basicas estao configuradas.
+ */
+export function hasIntegrationPrerequisites(): boolean {
+  return integrationEnabled() && Boolean(process.env.TEST_AUTH_TOKEN) && Boolean(process.env.TEST_API_URL);
+}

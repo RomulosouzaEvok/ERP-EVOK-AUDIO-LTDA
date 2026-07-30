@@ -72,6 +72,11 @@ app.use('/api/audit-logs', require('./src/routes/auditLogs'));
 
 // Engenharia do Produto (BOM)
 app.use('/api/engineering/bom', require('./src/modules/bom/presentation/routes/bom'));
+app.use('/api/items', require('./src/modules/items/presentation/routes/items'));
+app.use('/api/mrp', require('./src/modules/mrp/presentation/routes/mrp'));
+
+// Fase 4 - Rastreabilidade Industrial
+app.use('/api/traceability', require('./src/modules/traceability/presentation/routes/traceability'));
 
 // Static files
 app.use('/uploads', express.static('uploads'));

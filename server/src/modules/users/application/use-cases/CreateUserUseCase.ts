@@ -1,4 +1,4 @@
-const UseCase = require('../../../../shared/application/UseCase');
+const { UseCase } = require('../../../../shared/application/UseCase');
 const { RegisterUserEntity } = require('../../../auth/domain/entities/AuthCredentialsEntity');
 const { VALID_ROLES } = require('../../domain/entities/UpdateUserEntity');
 const { ValidationError, ConflictError } = require('../../../../errors');

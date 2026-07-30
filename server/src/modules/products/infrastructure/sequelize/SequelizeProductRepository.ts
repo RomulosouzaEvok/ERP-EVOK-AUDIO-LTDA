@@ -1,6 +1,7 @@
 const { Op, col } = require('sequelize');
 const ProductRepository = require('../../domain/repositories/ProductRepository');
 const { Product, Category, Sale } = require('../../../../models/index');
+const Validators = require('../../../../utils/validators');
 
 /**
  * Implementação Sequelize/PostgreSQL do contrato `ProductRepository`.
@@ -26,9 +27,10 @@ class SequelizeProductRepository extends ProductRepository {
   async list(filters: any = {}, pagination: any = {}) {
     const where: any = {};
     if (filters.search) {
+      const sanitized = Validators.sanitizeSearch(filters.search);
       where[Op.or] = [
-        { name: { [Op.like]: `%${filters.search}%` } },
-        { code: { [Op.like]: `%${filters.search}%` } }
+        { name: { [Op.like]: `%${sanitized}%` } },
+        { code: { [Op.like]: `%${sanitized}%` } }
       ];
     }
     if (filters.category_id) where.category_id = filters.category_id;

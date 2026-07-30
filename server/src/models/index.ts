@@ -41,6 +41,9 @@ import MaintenanceOrder = require('./MaintenanceOrder');
 import AuditLog = require('./AuditLog');
 import BillOfMaterial = require('./BillOfMaterial');
 import BillOfMaterialItem = require('./BillOfMaterialItem');
+import Item = require('./Item');
+import ItemEstrutura = require('./ItemEstrutura');
+import MrpOrdemPlanejada = require('./MrpOrdemPlanejada');
 
 // ============================================
 // RELACIONAMENTOS
@@ -225,6 +228,25 @@ ProductCostLedger.belongsTo(Product, { foreignKey: 'product_id', as: 'product' }
 User.hasMany(ProductCostLedger, { foreignKey: 'created_by', as: 'created_cost_ledgers' });
 ProductCostLedger.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
 
+// ============================================
+// RELACIONAMENTOS - MODELO CANONICO INDUSTRIAL
+// ============================================
+
+Supplier.hasMany(Item, { foreignKey: 'fornecedor_padrao_id', as: 'itens_padrao' });
+Item.belongsTo(Supplier, { foreignKey: 'fornecedor_padrao_id', as: 'fornecedorPadrao' });
+
+Item.hasMany(ItemEstrutura, { foreignKey: 'item_pai_id', as: 'estruturas_filhas' });
+ItemEstrutura.belongsTo(Item, { foreignKey: 'item_pai_id', as: 'itemPai', onDelete: 'RESTRICT' });
+
+Item.hasMany(ItemEstrutura, { foreignKey: 'item_componente_id', as: 'estruturas_componente' });
+ItemEstrutura.belongsTo(Item, { foreignKey: 'item_componente_id', as: 'itemComponente', onDelete: 'RESTRICT' });
+
+User.hasMany(ItemEstrutura, { foreignKey: 'criado_por', as: 'estruturas_criadas' });
+ItemEstrutura.belongsTo(User, { foreignKey: 'criado_por', as: 'criadoPor' });
+
+Item.hasMany(MrpOrdemPlanejada, { foreignKey: 'item_id', as: 'ordens_mrp_planejadas' });
+MrpOrdemPlanejada.belongsTo(Item, { foreignKey: 'item_id', as: 'item', onDelete: 'RESTRICT' });
+
 // Client ↔ ServiceOrder
 Client.hasMany(ServiceOrder, { foreignKey: 'client_id', as: 'service_orders' });
 ServiceOrder.belongsTo(Client, { foreignKey: 'client_id', as: 'client' });
@@ -326,5 +348,6 @@ export {
   LotControl, SerialNumber, ProductionLotConsumption,
   ServiceOrder, Asset,
   NonConformity, MaintenanceOrder, AuditLog,
-  BillOfMaterial, BillOfMaterialItem
+  BillOfMaterial, BillOfMaterialItem,
+  Item, ItemEstrutura, MrpOrdemPlanejada
 };

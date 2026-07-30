@@ -1,4 +1,4 @@
-const Entity = require('../../../../shared/domain/Entity');
+const { Entity } = require('../../../../shared/domain/Entity');
 const { ValidationError } = require('../../../../errors');
 const { EMAIL_REGEX } = require('../../../auth/domain/entities/AuthCredentialsEntity');
 

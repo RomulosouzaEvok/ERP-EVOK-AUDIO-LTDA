@@ -5,17 +5,20 @@
  */
 
 import { Op } from 'sequelize';
-import SuppliersRepository, { SuppliersListOptions } from '../../domain/repositories/SuppliersRepository';
+import SuppliersRepository from '../../domain/repositories/SuppliersRepository';
 const { Supplier, Purchase }: any = require('../../../../models/index');
+const Validators = require('../../../../utils/validators');
+type SuppliersListOptions = { limit: number; offset: number; search?: string; status?: string };
 
 class SequelizeSuppliersRepository extends SuppliersRepository {
   /** @inheritdoc */
   public async list({ limit, offset, search, status }: SuppliersListOptions): Promise<{ rows: any[]; count: number }> {
     const where: any = {};
     if (search) {
+      const sanitized = Validators.sanitizeSearch(search);
       where[Op.or] = [
-        { company_name: { [Op.like]: `%${search}%` } },
-        { cnpj: { [Op.like]: `%${search}%` } }
+        { company_name: { [Op.like]: `%${sanitized}%` } },
+        { cnpj: { [Op.like]: `%${sanitized}%` } }
       ];
     }
     if (status) where.status = status;

@@ -1,4 +1,4 @@
-const UseCase = require('../../../../shared/application/UseCase');
+const { UseCase } = require('../../../../shared/application/UseCase');
 const { UpdateUserEntity } = require('../../domain/entities/UpdateUserEntity');
 const { NotFoundError, ConflictError } = require('../../../../errors');
 const { logAction } = require('../../../../services/auditLogService');

@@ -1,0 +1,77 @@
+import { z } from 'zod';
+import { ValidationError } from '../../../../errors';
+
+/**
+ * Schema para validar quantidades industriais com ate 6 casas decimais.
+ * Usa comparacao de string para evitar falsos positivos por arredondamento
+ * de ponto flutuante (ex: 0.1 + 0.2 !== 0.3).
+ */
+const decimalLike = z.coerce.number().positive().refine((value) => {
+  const parts = value.toString().split('.');
+  if (parts.length > 1 && parts[1].length > 6) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Valor decimal deve ter no maximo 6 casas.',
+});
+
+/** Schema para criar item industrial. */
+export const createItemSchema = z.object({
+  codigo: z.string().trim().min(1).max(80),
+  descricao: z.string().trim().min(1).max(240),
+  tipo: z.enum(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO']),
+  unidade: z.string().trim().min(1).max(12),
+  status: z.enum(['ATIVO', 'INATIVO', 'BLOQUEADO']).optional(),
+  estoque_atual: z.coerce.number().min(0).optional(),
+  estoque_reservado: z.coerce.number().min(0).optional(),
+  estoque_seguranca: z.coerce.number().min(0).optional(),
+  lote_minimo: z.coerce.number().min(0).optional(),
+  lead_time_dias: z.coerce.number().int().min(0).optional(),
+  custo_padrao: z.coerce.number().min(0).optional(),
+  fornecedor_padrao_id: z.string().uuid().nullable().optional(),
+}).strict();
+
+/** Schema para criar ligacao de estrutura. */
+export const createItemStructureSchema = z.object({
+  item_pai_id: z.string().uuid(),
+  item_componente_id: z.string().uuid(),
+  quantidade: decimalLike,
+  perda_percentual: z.coerce.number().min(0).max(100).optional(),
+  nivel: z.coerce.number().int().min(1).optional(),
+  sequencia: z.coerce.number().int().min(0).optional(),
+  ativo: z.boolean().optional(),
+  revisao: z.string().trim().min(1).max(20).optional(),
+  observacoes: z.string().trim().max(5000).nullable().optional(),
+  criado_por: z.any().optional(),
+}).strict();
+
+/** Query para listagem de itens. */
+export const listItemsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  search: z.string().trim().max(120).optional(),
+  tipo: z.enum(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO']).optional(),
+  status: z.enum(['ATIVO', 'INATIVO', 'BLOQUEADO']).optional(),
+});
+
+/** Query para explosao da estrutura. */
+export const explodeItemStructureQuerySchema = z.object({
+  quantity: decimalLike,
+  due_date: z.string().date().optional(),
+});
+
+const schemas = {
+  createItemSchema,
+  createItemStructureSchema,
+  listItemsQuerySchema,
+  explodeItemStructureQuerySchema,
+};
+
+module.exports = schemas;
+module.exports.handleZodError = (error: any) => {
+  if (error?.issues) {
+    throw new ValidationError('Payload invalido.', error.issues);
+  }
+  throw error;
+};

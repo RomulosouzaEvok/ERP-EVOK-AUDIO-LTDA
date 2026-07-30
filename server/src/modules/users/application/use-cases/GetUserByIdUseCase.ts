@@ -1,4 +1,4 @@
-const UseCase = require('../../../../shared/application/UseCase');
+const { UseCase } = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
 
 /**

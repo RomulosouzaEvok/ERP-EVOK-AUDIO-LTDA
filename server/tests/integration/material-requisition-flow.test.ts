@@ -1,6 +1,6 @@
-import { api, authToken, integrationEnabled } from '../helpers/testApi';
+import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
-const describeIntegration = integrationEnabled() ? describe : describe.skip;
+const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
 describeIntegration('Fluxo Engenharia -> Compras -> Aprovacao', () => {
   /**

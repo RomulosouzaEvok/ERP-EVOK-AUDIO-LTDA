@@ -1,4 +1,4 @@
-const UseCase = require('../../../../shared/application/UseCase');
+const { UseCase } = require('../../../../shared/application/UseCase');
 
 /**
  * Lista usuários com busca/filtro e paginação, cobrindo o fluxo de

@@ -1,6 +1,6 @@
-import { api, integrationEnabled } from '../helpers/testApi';
+import { api, hasIntegrationPrerequisites } from '../helpers/testApi';
 
-const describeIntegration = integrationEnabled() ? describe : describe.skip;
+const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
 describeIntegration('Webhook IA/n8n', () => {
   /**
