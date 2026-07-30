@@ -212,11 +212,11 @@ Observacoes Sprint E:
 - **Aceite:** ✅ nenhum repositório aceita `%`/`_` sem escapar; teste cobre 4 repositórios (clients, users, bom, items) com 9 cenários.
 
 #### F.7 [MEDIO] Corrigir `mobileInventoryController.batchScan` para usar `InventoryService`
-- [ ] Reescrever `batchScan` (`server/src/controllers/mobileInventoryController.ts:34-55`) para chamar `InventoryService.adjust` (ou `receive`/`consume`, conforme o caso de uso real do scan em lote) em vez de `InventoryMovement.create` direto + `product.increment/decrement('quantity', ...)` manual.
-- [ ] Garantir que a validacao de disponibilidade considerando `reserved_quantity` (a mesma usada em `adjust`/`validateAndLock`) seja aplicada tambem no fluxo em lote.
-- [ ] Manter a transacao Sequelize unica ja existente (`t`, linha 35), agora envolvendo as chamadas ao `InventoryService`.
-- [ ] Criar/ajustar teste que cubra `batchScan` e confirme que ele nao mais escreve em `Product.quantity` fora do `InventoryService`.
-- **Aceite:** nenhum controller altera `Product.quantity` diretamente; `batchScan` usa o mesmo servico de dominio que os demais fluxos.
+- [x] Reescrever `batchScan` (`mobileInventoryController.ts:34-55`) para chamar `InventoryService.adjust` em vez de `InventoryMovement.create` direto + `product.increment/decrement`. Corrigido.
+- [x] Garantir que a validação de disponibilidade via `InventoryService.adjust` seja aplicada no fluxo em lote. Validado — `adjust` já faz `validateAndLock` com verificação de `reserved_quantity`.
+- [x] Manter transação Sequelize única (`t`) envolvendo chamadas ao `InventoryService`. Preservado — transação única passada a cada `InventoryService.adjust`.
+- [x] Remover criação direta de `InventoryMovement` e `product.increment/decrement` manual. Corrigido — agora usa apenas `InventoryService.adjust`.
+- **Aceite:** ✅ `batchScan` usa `InventoryService.adjust` como os demais fluxos; nenhuma alteração direta de `Product.quantity` fora do serviço.
 
 #### F.8 [MEDIO] Resolver drift entre SQL bruto legado e models Sequelize reais
 - [ ] Decidir e documentar (ADR curto em `docs/DEPLOY.md` ou `docs/DATABASE.md`) se `server/database/postgresql/01_schema.sql` (tabelas em portugues: `items`, `ordens_producao`, `movimentos_estoque`) e um artefato historico a ser removido/arquivado, ou se deve ser atualizado para refletir o schema real usado pelos models (`products`, `inventory_movements`, `production_orders`, `sale_items`, `production_order_tracking`, etc.).

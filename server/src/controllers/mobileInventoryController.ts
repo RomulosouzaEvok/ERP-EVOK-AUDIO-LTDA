@@ -40,14 +40,21 @@ exports.batchScan = async (req: any, res: any, next: any): Promise<void> => {
     for (const item of items) {
       const { product_code, quantity, type, description } = item;
       if (!product_code || quantity === undefined || !type) { await t.rollback(); res.status(400).json({ success: false, error: 'Cada item deve ter product_code, quantity e type' }); return; }
-      const qty = parseInt(quantity); if (qty <= 0) { await t.rollback(); res.status(400).json({ success: false, error: `Quantidade inválida para ${product_code}` }); return; }
+      const qty = parseFloat(quantity); if (qty <= 0) { await t.rollback(); res.status(400).json({ success: false, error: `Quantidade inválida para ${product_code}` }); return; }
       if (!['in', 'out'].includes(type)) { await t.rollback(); res.status(400).json({ success: false, error: `Tipo inválido para ${product_code}` }); return; }
-      const product = await Product.findOne({ where: { [Op.or]: [{ code: product_code }, { id: isNaN(product_code) ? undefined : product_code }] }, lock: t.LOCK.UPDATE, transaction: t });
+      const product = await Product.findOne({ where: { [Op.or]: [{ code: product_code }, { id: isNaN(product_code) ? undefined : product_code }] } });
       if (!product) { await t.rollback(); res.status(404).json({ success: false, error: `Produto ${product_code} não encontrado` }); return; }
-      if (type === 'out' && product.quantity < qty) { await t.rollback(); res.status(400).json({ success: false, error: `Estoque insuficiente para ${product.name}. Disponível: ${product.quantity}` }); return; }
-      const movement = await InventoryMovement.create({ product_id: product.id, user_id: req.user.id, type, quantity: qty, description: description || `Batch scan ${type}`, reference_type: 'adjustment' }, { transaction: t });
-      if (type === 'in') { await product.increment('quantity', { by: qty, transaction: t }); } else { await product.decrement('quantity', { by: qty, transaction: t }); }
-      results.push({ product_code, product_name: product.name, type, quantity: qty, movement_id: movement.id });
+
+      // Usar InventoryService.adjust para operação atômica com lock pessimista e validação
+      const movement = await InventoryService.adjust(
+        product.id,
+        type,
+        qty,
+        req.user.id,
+        description || `Batch scan ${type}`,
+        t
+      );
+      results.push({ product_code, product_name: product.name, type, quantity: qty, movement_id: movement.movementId });
     }
     await t.commit();
     res.json({ success: true, data: { items_processed: results.length, results } });
