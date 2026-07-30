@@ -82,14 +82,26 @@ async function seedDatabase(): Promise<void> {
     console.log('🌱 Iniciando seeds...');
 
     // Criar admin padrão
-    const adminPassword: string = process.env.ADMIN_SEED_PASSWORD || 'REMOVED_CREDENTIAL';
-    if (adminPassword.length < 8) {
+    // Em produção a senha é obrigatória: sem ela o seed abortaria criando um
+    // admin com credencial previsível. Em dev, cai num valor local de conveniência.
+    const adminPassword: string | undefined = process.env.ADMIN_SEED_PASSWORD;
+    if (!adminPassword) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'ADMIN_SEED_PASSWORD é obrigatória em produção. ' +
+          'Defina a variável de ambiente antes de inicializar o servidor.'
+        );
+      }
+      console.warn('⚠️ ADMIN_SEED_PASSWORD ausente. Usando senha de desenvolvimento.');
+    }
+    const resolvedPassword: string = adminPassword || 'dev-only-change-me';
+    if (resolvedPassword.length < 8) {
       console.warn('⚠️ ADMIN_SEED_PASSWORD muito curta. Use no mínimo 8 caracteres.');
     }
     await User.create({
       name: 'Administrador',
       email: 'admin@evokaudio.com.br',
-      password: adminPassword,
+      password: resolvedPassword,
       role: 'admin',
       active: true
     });
