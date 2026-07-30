@@ -19,3 +19,8 @@ export abstract class UseCase<TInput = unknown, TOutput = unknown> {
 }
 
 export default UseCase;
+
+// Compatibilidade com imports CommonJS legados (`require(...)`) usados no projeto.
+module.exports = UseCase;
+module.exports.UseCase = UseCase;
+module.exports.default = UseCase;

@@ -4,7 +4,10 @@
  * @module config/database
  */
 
+import dotenv from 'dotenv';
 import { Options, Sequelize } from 'sequelize';
+
+dotenv.config();
 
 /**
  * Obtem a configuracao PostgreSQL com base no ambiente atual.

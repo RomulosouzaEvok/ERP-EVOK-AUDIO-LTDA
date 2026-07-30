@@ -33,3 +33,8 @@ export class ValueObject {
 }
 
 export default ValueObject;
+
+// Compatibilidade com imports CommonJS legados (`require(...)`) usados no projeto.
+module.exports = ValueObject;
+module.exports.ValueObject = ValueObject;
+module.exports.default = ValueObject;

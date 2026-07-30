@@ -69,3 +69,111 @@
 - F4, F5 e F6 estão refletidos no código e no checklist principal.
 - F7 existe como suíte, mas ainda não está 100% verde.
 - F8 está consolidada no histórico: `.env.example`, guardas de prerequisito e documentação de deploy estão prontos; a remoção total de qualquer fallback operacional segue em aberto.
+
+## F9 - Pre-Produção
+**Responsavel tecnico:** Lead Architect + QA/DevSecOps  
+**Objetivo:** fechar o que precisa estar pronto antes de colocar o ERP em uso real pela fabrica.
+
+## F9.1 - Plano de Correcao por Sprint (Auditoria 2026-07-30)
+**Origem:** auditoria profunda de codigo, rastreabilidade e DevSecOps realizada em 2026-07-30.  
+**Regra:** este plano complementa F9/F10 e deve ser executado antes da liberacao.
+
+### Sprint A - Bloqueios Criticos de Execucao
+- [ ] Corrigir a assinatura e todas as chamadas de `InventoryService.receive/consume` nos fluxos de compras e producao.
+- [ ] Garantir persistencia correta de `user_id`, `reference_id` e `reference_type` em todas as movimentacoes de estoque.
+- [ ] Validar subida real da API em ambiente local/homologacao com PostgreSQL limpo.
+- [ ] Confirmar `npm run build` + healthcheck `/api` sem erro de runtime.
+
+### Sprint B - Rastreabilidade Ponta a Ponta
+- [ ] Refatorar `SequelizeTraceabilityRepository` para usar tabelas e colunas reais do schema PostgreSQL atual.
+- [ ] Registrar `ProductionLotConsumption` no consumo real da OP.
+- [ ] Gerar `LotControl` para produto acabado ao concluir OP.
+- [ ] Gerar ou vincular `SerialNumber` quando aplicavel.
+- [ ] Validar os 3 cenarios de aceite:
+- [ ] Produto acabado encontra todos os insumos consumidos.
+- [ ] Lote de MP encontra todas as OPs consumidoras.
+- [ ] Entrada de compra encontra movimentos e consumos derivados.
+
+### Sprint C - Regras de Negocio Omitidas
+- [ ] Bloquear criacao/liberacao de OP sem disponibilidade minima de materiais.
+- [ ] Implementar reserva real de estoque para OP.
+- [ ] Bloquear conclusao de OP sem consumo rastreavel por lote quando o item exigir rastreabilidade.
+- [ ] Revisar recebimento de compra para criar/associar lote no ato da entrada.
+- [ ] Revisar coerencia entre `Product/BillOfMaterial` e camada canonica `Item/ItemEstrutura`.
+
+### Sprint D - Integridade, Decimais e Validacao
+- [ ] Migrar quantidades de estoque e movimento para decimal industrial.
+- [ ] Revisar arredondamento para compra, estoque, BOM, MRP e custo medio.
+- [ ] Corrigir `DeactivateItemUseCase` para consultar campos/status reais.
+- [ ] Adicionar validacao de payload nas rotas criticas de compras, estoque e producao.
+
+### Sprint E - Hardening de Pre-Producao
+- [ ] Remover ou alinhar `.env.example` raiz legado com MongoDB.
+- [ ] Revisar e remover artefatos de drift/legado como `_fix_database.ts`.
+- [ ] Remover `@types/sequelize` deprecated.
+- [ ] Executar `npm audit` com registro de decisao tecnica.
+- [ ] Fechar F9/F10 somente apos as sprints A-D estarem concluidas.
+
+### Ordem de Execução
+1. Congelar o escopo da versao.
+2. Corrigir apenas erros que impedem uso real, sem iniciar funcionalidades novas.
+3. Validar ambiente local, banco, integração e documentação.
+4. Confirmar que o rollback existe e foi entendido.
+5. Liberar somente depois de checklist 100% coerente.
+
+### Checklist de Preparação
+- [ ] Confirmar que o branch de release nao tem alteracoes nao revisadas.
+- [ ] Confirmar que `npm run typecheck` passa sem erros.
+- [ ] Confirmar que `npm run build` gera artefatos sem erro.
+- [ ] Confirmar que `npm test` passa nas suites unitarias relevantes.
+- [ ] Confirmar que `RUN_INTEGRATION=true npm run test:integration` executa com prerequisitos reais.
+- [ ] Confirmar que os testes que dependem de token/URL estao configurados com valores de homologacao.
+- [ ] Confirmar que `server/.env.example` nao possui senha real, token real ou URL real.
+- [ ] Confirmar que `docs/DEPLOY.md` descreve instalacao, inicializacao e rollback.
+- [ ] Confirmar que `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` e TODO estao atualizados.
+- [ ] Confirmar que os módulos `items`, `mrp` e `traceability` respondem corretamente em ambiente de teste.
+- [ ] Confirmar que os endpoints novos possuem validacao e retornam erro estruturado em payload invalido.
+- [ ] Confirmar que o banco de producao sera acessado apenas por credenciais exclusivas do ERP novo.
+- [ ] Confirmar que `InventoryService` foi corrigido e testado em compras e producao.
+- [ ] Confirmar que a rastreabilidade usa schema real (`inventory_movements`, `lot_controls`, `production_lot_consumptions`, `serial_numbers`).
+- [ ] Confirmar que criacao/conclusao de OP respeita material disponivel, reserva e consumo rastreavel.
+- [ ] Confirmar que quantidades fracionadas (KG/L/M) funcionam sem truncamento indevido.
+
+### Como Executar Cada Verificacao
+- [ ] Para o tipo de compilacao, executar `cd server` e depois `npm run typecheck`.
+- [ ] Para o build, executar `cd server` e depois `npm run build`.
+- [ ] Para os testes unitarios, executar `cd server` e depois `npm test`.
+- [ ] Para integracao, definir `RUN_INTEGRATION=true`, `TEST_API_URL`, `TEST_AUTH_TOKEN` e demais variaveis exigidas antes de rodar `npm run test:integration`.
+- [ ] Se uma variavel nao existir, nao prosseguir como se fosse sucesso; marcar como bloqueio.
+- [ ] Se um teste falhar por ambiente, registrar a causa exata e nao transformar isso em "ok".
+- [ ] Se um teste falhar por codigo, abrir correcao antes de liberar.
+
+### Aceite da Fase
+- [ ] Nenhum teste critico falha.
+- [ ] Nenhum segredo real existe nos arquivos de exemplo.
+- [ ] Nenhuma dependencia ao banco legado existe.
+- [ ] O rollback foi documentado e entendido.
+- [ ] O responsavel tecnico assinou a liberacao.
+- [ ] Nenhum ponto cego de rastreabilidade permanece aberto nos fluxos de compra, estoque e producao.
+
+## F10 - Go Live Controlado
+**Responsavel tecnico:** Lead Architect  
+**Objetivo:** entrar em producao com risco controlado e possibilidade real de retorno.
+
+### Checklist de Go Live
+- [ ] Criar tag ou identificador da versao.
+- [ ] Registrar hash do commit liberado.
+- [ ] Confirmar backup recente do banco PostgreSQL Hostinger.
+- [ ] Confirmar que o `.env` de producao foi gerado fora do repositório.
+- [ ] Confirmar que o Cloudflare Tunnel responde para a API.
+- [ ] Confirmar que n8n esta online e com workflows ativos.
+- [ ] Confirmar que o fluxo WhatsApp/IA foi validado com dados de teste.
+- [ ] Confirmar que os logs estao sendo gerados.
+- [ ] Confirmar que monitoramento basico foi ativado.
+- [ ] Confirmar contato de rollback e suporte.
+
+### Critério de Aceite
+- [ ] API responde em produção sem erro 5xx nos endpoints críticos.
+- [ ] Autenticação funciona com usuário real.
+- [ ] Fluxo de pedido, compra e rastreabilidade funciona.
+- [ ] Rollback pode ser executado sem perda de dados não planejada.

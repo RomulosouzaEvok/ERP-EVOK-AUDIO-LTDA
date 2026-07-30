@@ -48,3 +48,8 @@ export class Entity {
 }
 
 export default Entity;
+
+// Compatibilidade com imports CommonJS legados (`require(...)`) usados no projeto.
+module.exports = Entity;
+module.exports.Entity = Entity;
+module.exports.default = Entity;

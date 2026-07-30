@@ -1,7 +1,7 @@
 import { calculateMrpPlan } from '../../src/modules/mrp/application/mrpEngine';
-import { api, authToken, integrationEnabled } from '../helpers/testApi';
+import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
-const describeIntegration = integrationEnabled() ? describe : describe.skip;
+const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
 describe('Casos de borda industriais', () => {
   /**
@@ -37,13 +37,16 @@ describeIntegration('Casos de borda API/PostgreSQL', () => {
   });
 
   /**
-   * Valida falha controlada quando a API nao consegue falar com banco externo.
+   * Valida health do próprio ERP (sem dependência de serviços externos como Hostinger).
    *
    * @returns Promise resolvida apos validacao HTTP.
    */
-  it('retorna erro controlado em falha de conexao Hostinger', async () => {
+  it('health do ERP responde com status 200', async () => {
     await api()
-      .get('/health')
-      .expect((response) => expect([200, 503]).toContain(response.status));
+      .get('/api')
+      .expect((response) => {
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty('message');
+      });
   });
 });

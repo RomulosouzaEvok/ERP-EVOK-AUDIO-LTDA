@@ -17,6 +17,16 @@ Stack autorizada: Node.js, TypeScript, Express, Sequelize, PostgreSQL.
 | Schema alvo | Scripts SQL ja definem `items`, `item_estruturas`, `mrp_ordens_planejadas`. |
 | Rastreabilidade | Parcial; a trilha de consultas foi adicionada, mas a cadeia operacional completa ainda depende de consolidacao de fluxo e dados reais. |
 
+## 1.1 Replanejamento por Auditoria - 2026-07-30
+
+Auditoria profunda realizada em 2026-07-30 confirmou que o projeto ainda possui bloqueios de producao que precisam entrar explicitamente no cronograma:
+
+- Fluxos criticos de compra e producao estao chamando `InventoryService` com assinatura incorreta.
+- A camada de rastreabilidade consulta schema canonico que nao corresponde ao schema ativo do backend.
+- Criacao e conclusao de OP ainda nao fecham o ciclo exigido de material disponivel, reserva, consumo por lote e geracao de lote/serie do acabado.
+- Quantidades fracionadas sao aceitas em partes do dominio, mas o estoque principal ainda usa campos `INTEGER`.
+- F9 e F10 nao podem ser considerados liberaveis enquanto esses itens estiverem abertos.
+
 ## 2. Regra de Trabalho Para o Blackbox
 
 1. Nao recriar arquivos `.js` em `server/src`, `server/config` ou `server/index`.
@@ -52,6 +62,8 @@ RUN_INTEGRATION=true npm run test:integration
 | F6 | Validacao Zod e sanitizacao de buscas | Alto | 1-2 dias |
 | F7 | Testes de integracao reais | Alto | 1 dia |
 | F8 | Hardening DevSecOps e `.env.example` | Alto | 1 dia |
+| F9 | Pré-produção guiada com validações finais | Alto | 1-2 dias |
+| F10 | Go live controlado com rollback documentado | Critico | 1 dia |
 
 ## 4. F1 - Models Canonicos Industriais
 
@@ -168,6 +180,8 @@ Fechar a cadeia de custodia: requisicao, entrada, lote, consumo, OP e produto ac
 - [ ] Dado um produto acabado, localizar todos os insumos consumidos.
 - [ ] Dado um lote de materia-prima, localizar todas as OPs que consumiram esse lote.
 - [ ] Dado uma entrada de NF, localizar os movimentos e consumos derivados.
+- [ ] Confirmar que o repositorio de rastreabilidade usa as tabelas reais do schema atual (`inventory_movements`, `lot_controls`, `production_orders`, `production_lot_consumptions`, `serial_numbers`).
+- [ ] Confirmar que a conclusao da OP persiste `ProductionLotConsumption`, `LotControl` e `SerialNumber` quando aplicavel.
 
 ## 8. F5 - Protecao de Item Vinculado
 
@@ -257,6 +271,8 @@ RUN_INTEGRATION=true npm run test:integration
 - [ ] Fluxo compra/aprovacao passa.
 - [ ] Concorrencia de estoque nao deixa saldo negativo.
 - [ ] Webhook n8n/IA responde 200 ou 202.
+- [ ] Fluxo de conclusao de OP prova consumo rastreavel e entrada de produto acabado.
+- [ ] Endpoint `/api/traceability/production-orders/:id` responde com dados reais do schema atual.
 
 ## 11. F8 - DevSecOps
 
@@ -272,6 +288,9 @@ Preparar producao Ubuntu 24.04 sem segredo hardcoded.
 - [ ] Revisar `npm audit`.
 - [x] Nao usar `npm audit fix --force` sem revisao.
 - [x] Criar `docs/DEPLOY.md`.
+- [ ] Remover ou alinhar `.env.example` raiz legado que ainda referencia MongoDB.
+- [ ] Revisar e remover artefatos de drift/legado como `_fix_database.ts`.
+- [ ] Remover `@types/sequelize` deprecated do backend.
 
 ### Criterio de Aceite
 
@@ -279,7 +298,95 @@ Preparar producao Ubuntu 24.04 sem segredo hardcoded.
 - [x] Deploy documentado.
 - [ ] Rollback documentado.
 
-## 12. Comandos de Validacao Final
+## 12. F9 - Pre-Producao Guiada
+
+### Objetivo
+
+Conferir, com calma e em ordem, tudo que precisa estar pronto antes da liberacao final.
+
+### Responsavel
+
+- Lead Architect
+- QA/DevSecOps
+
+### Ordem de Execucao
+
+1. Congelar o escopo da versao que sera liberada.
+2. Fechar primeiro os bloqueios criticos da auditoria de 2026-07-30.
+3. Revisar o status das fases F1 a F8.
+4. Executar os testes unitarios e registrar o resultado.
+5. Executar os testes de integracao com prerequisitos validos.
+6. Validar a documentacao de deploy e rollback.
+7. Validar o arquivo `.env.example` como modelo seguro.
+8. Confirmar que nao existe dependencia ao banco legado.
+9. Liberar somente quando todos os itens de aceite estiverem marcados.
+
+### Sprints de Correcao Obrigatorias Antes do Aceite
+
+- [ ] Sprint A - Corrigir assinatura/chamada de `InventoryService` e restaurar consistencia dos fluxos de compra/producao.
+- [ ] Sprint B - Corrigir rastreabilidade para schema real e fechar cadeia lote/serie/consumo.
+- [ ] Sprint C - Fechar regras omitidas de OP: disponibilidade, reserva e consumo rastreavel.
+- [ ] Sprint D - Migrar quantidades de estoque para decimal industrial e revisar arredondamentos.
+- [ ] Sprint E - Hardening final de ambiente, dependencias e artefatos legados.
+
+### Checklist
+
+- [ ] Verificar se o branch de release esta limpo ou com mudancas revisadas.
+- [ ] Verificar se `npm run typecheck` passa.
+- [ ] Verificar se `npm run build` passa.
+- [ ] Verificar se `npm test` passa para as suites relevantes.
+- [ ] Verificar se `RUN_INTEGRATION=true npm run test:integration` passa com ambiente configurado.
+- [ ] Verificar se `TEST_API_URL` aponta para o ambiente certo.
+- [ ] Verificar se `TEST_AUTH_TOKEN` existe e e valido.
+- [ ] Verificar se `TEST_PRODUCT_ID`, `TEST_SUPPLIER_ID`, `TEST_LOW_STOCK_PRODUCT_ID` e `TEST_BOM_LINKED_PRODUCT_ID` existem.
+- [ ] Verificar se `server/.env.example` nao contem segredo real.
+- [ ] Verificar se `docs/DEPLOY.md` explica instalacao, inicializacao e rollback.
+- [ ] Verificar se os modulos `items`, `mrp` e `traceability` estao montados em `server/index.ts`.
+- [ ] Verificar se os endpoints novos retornam erro estruturado em payload invalido.
+- [ ] Verificar se nao existe leitura do banco legado.
+- [ ] Verificar se `InventoryService` foi corrigido e testado em `ReceivePurchaseItemsUseCase` e `ChangeProductionOrderStatusUseCase`.
+- [ ] Verificar se o repositorio de rastreabilidade consulta o schema real do backend.
+- [ ] Verificar se criacao/conclusao de OP respeita material disponivel, reserva e consumo por lote.
+- [ ] Verificar se quantidades fracionadas (KG/L/M) nao sofrem truncamento em estoque e movimentos.
+
+### Critérios de Aceite
+
+- [ ] Todos os testes obrigatorios passaram.
+- [ ] Nenhum segredo real ficou em arquivo exemplo.
+- [ ] Nenhuma dependencia ao ecossistema antigo foi introduzida.
+- [ ] O procedimento de rollback esta claro para uma pessoa nova no projeto.
+- [ ] Nenhum ponto cego de rastreabilidade permanece aberto nos fluxos de compra, estoque e producao.
+
+## 13. F10 - Go Live Controlado
+
+### Objetivo
+
+Liberar a versao para producao com o menor risco possivel e com retorno facil se algo falhar.
+
+### Responsavel
+
+- Lead Architect
+
+### Checklist
+
+- [ ] Registrar o hash do commit liberado.
+- [ ] Criar ou registrar a tag da release.
+- [ ] Confirmar backup recente do banco.
+- [ ] Confirmar Cloudflare Tunnel ativo.
+- [ ] Confirmar n8n ativo.
+- [ ] Confirmar workflows de WhatsApp e IA habilitados.
+- [ ] Confirmar logs e monitoramento basico ativos.
+- [ ] Confirmar que a equipe sabe quem acionar em caso de falha.
+- [ ] Confirmar que existe instrução de rollback escrita.
+
+### Critério de Aceite
+
+- [ ] API sobe sem erro.
+- [ ] Autenticacao funciona.
+- [ ] Cadastro, BOM, MRP e rastreabilidade respondem.
+- [ ] Existe caminho claro para voltar a versao anterior.
+- [ ] Fluxo de pedido, compra, OP e rastreabilidade ponta a ponta foi validado em homologacao com dados reais de teste.
+## 14. Comandos de Validacao Final
 
 ```bash
 cd server
@@ -289,7 +396,7 @@ npm test
 RUN_INTEGRATION=true npm run test:integration
 ```
 
-## 13. Varredura Obrigatoria
+## 15. Varredura Obrigatoria
 
 ```bash
 rg -n "MySQL|mysql|DB_DIALECT|MONGODB_URI|ERP antigo|password.*=.*['\"]|token.*=.*['\"]" server/src server/config server/package.json
