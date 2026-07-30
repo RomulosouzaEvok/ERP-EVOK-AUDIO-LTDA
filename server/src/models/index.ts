@@ -247,6 +247,16 @@ ItemEstrutura.belongsTo(Item, { foreignKey: 'item_componente_id', as: 'itemCompo
 User.hasMany(ItemEstrutura, { foreignKey: 'criado_por', as: 'estruturas_criadas' });
 ItemEstrutura.belongsTo(User, { foreignKey: 'criado_por', as: 'criadoPor' });
 
+// ItemEstrutura (Fase 2A - novos campos)
+User.hasMany(ItemEstrutura, { foreignKey: 'approved_by', as: 'estruturas_aprovadas' });
+ItemEstrutura.belongsTo(User, { foreignKey: 'approved_by', as: 'aprovadorPor' });
+
+ItemEstrutura.hasMany(ItemEstrutura, { foreignKey: 'parent_item_estrutura_id', as: 'sub_estruturas' });
+ItemEstrutura.belongsTo(ItemEstrutura, { foreignKey: 'parent_item_estrutura_id', as: 'estruturaPai', onDelete: 'SET NULL' });
+
+Item.hasMany(ItemEstrutura, { foreignKey: 'alternative_product_id', as: 'estruturas_alternativas' });
+ItemEstrutura.belongsTo(Item, { foreignKey: 'alternative_product_id', as: 'itemAlternativo' });
+
 Item.hasMany(MrpOrdemPlanejada, { foreignKey: 'item_id', as: 'ordens_mrp_planejadas' });
 MrpOrdemPlanejada.belongsTo(Item, { foreignKey: 'item_id', as: 'item', onDelete: 'RESTRICT' });
 
