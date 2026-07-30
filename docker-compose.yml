@@ -6,7 +6,9 @@ services:
     environment:
       POSTGRES_DB: erp_evok_audio
       POSTGRES_USER: evok_admin
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD obrigatoria - defina no .env}
+      # Default apenas para desenvolvimento local. Em qualquer ambiente
+      # compartilhado, defina DB_PASSWORD no .env (nao versionado).
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-evok_local_dev}
     ports:
       - "5432:5432"
     volumes:
