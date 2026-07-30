@@ -4,11 +4,15 @@
  * @module tests/integration/traceability.test
  */
 
-describe('Traceability Integration Tests', () => {
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { hasIntegrationPrerequisites } = require('../helpers/testApi');
+
+const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
+
+describeIntegration('Traceability Integration Tests', () => {
   let authToken: string | undefined;
 
   beforeAll(async () => {
-    if (process.env.RUN_INTEGRATION !== 'true') return;
 
     const request = require('supertest'); // eslint-disable-line @typescript-eslint/no-var-requires
     const expressApp = require('../../app'); // eslint-disable-line @typescript-eslint/no-var-requires
@@ -32,7 +36,7 @@ describe('Traceability Integration Tests', () => {
   });
 
   it('GET /api/traceability/items/:id - id invalido deve retornar 400', async () => {
-    if (process.env.RUN_INTEGRATION !== 'true' || !authToken) return;
+    if (!authToken) return;
 
     const request = require('supertest'); // eslint-disable-line @typescript-eslint/no-var-requires
     const expressApp = require('../../app'); // eslint-disable-line @typescript-eslint/no-var-requires

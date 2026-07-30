@@ -1,0 +1,327 @@
+/**
+ * Test: Production Order Lifecycle (F.10 Sprint F)
+ *
+ * Valida o ciclo de vida de Ordens de Producao:
+ * CreateProductionOrderUseCase, ChangeProductionOrderStatusUseCase, CompleteProductionTrackingUseCase.
+ * Cobre: bloqueio de indisponibilidade, reserva/liberacao de materiais, rastreabilidade obrigatoria,
+ * validacoes de transicao de status e gerenciamento de lotes.
+ *
+ * @group unit
+ * @ticket F.10-Sprint-F
+ */
+
+jest.mock('../../src/config/database', () => ({
+  sequelize: {
+    transaction: jest.fn(async (callback?: any) => {
+      if (callback) {
+        return callback({ id: 'tx-1', LOCK: { UPDATE: 'UPDATE' }, commit: jest.fn(), rollback: jest.fn() });
+      }
+      return { id: 'tx-1', LOCK: { UPDATE: 'UPDATE' }, commit: jest.fn(), rollback: jest.fn() };
+    }),
+  },
+}));
+
+jest.mock('../../src/services/bomService', () => ({
+  checkAvailability: jest.fn(),
+  explodeBOM: jest.fn(),
+}));
+
+jest.mock('../../src/services/inventoryService', () => ({
+  reserve: jest.fn(async () => ({})),
+  consume: jest.fn(async () => ({})),
+  receive: jest.fn(async () => ({ product: { id: 1, name: 'Test Product', quantity: 10 } })),
+  releaseReservation: jest.fn(async () => ({})),
+}));
+
+jest.mock('../../src/services/costingService', () => ({
+  registerWeightedAverageCost: jest.fn(async () => ({ ledger: { id: 1 }, previousCost: 0, newCost: 10, totalCost: 100 })),
+}));
+
+jest.mock('../../src/models/index', () => ({
+  LotControl: {
+    create: jest.fn(async () => ({ id: 1, lot_number: 'LOT-001', status: 'available', quantity_available: 10 })),
+    findOne: jest.fn(),
+    findAll: jest.fn(),
+  },
+  ProductionLotConsumption: {
+    create: jest.fn(async () => ({ id: 1 })),
+  },
+  SerialNumber: {
+    create: jest.fn(async () => ({ id: 1, serial_number: 'SN-001' })),
+  },
+}));
+
+import CreateProductionOrderUseCase = require('../../src/modules/production/application/use-cases/CreateProductionOrderUseCase');
+import ChangeProductionOrderStatusUseCase = require('../../src/modules/production/application/use-cases/ChangeProductionOrderStatusUseCase');
+import CompleteProductionTrackingUseCase = require('../../src/modules/production/application/use-cases/CompleteProductionTrackingUseCase');
+import { BusinessRuleError, ValidationError, NotFoundError } from '../../src/errors';
+
+const BomService = require('../../src/services/bomService');
+const InventoryService = require('../../src/services/inventoryService');
+const CostingService = require('../../src/services/costingService');
+const { LotControl, ProductionLotConsumption, SerialNumber } = require('../../src/models/index');
+
+describe('Production Order Lifecycle (F.10)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('CreateProductionOrderUseCase', () => {
+    it('bloqueia criacao quando BomService.checkAvailability retorna indisponibilidade', async () => {
+      const productionOrderRepository = {
+        findProductById: jest.fn(async () => ({ id: 1, status: 'active', product_type: 'finished', name: 'Produto A' })),
+        countByOrderNumberPrefix: jest.fn(async () => 0),
+        create: jest.fn(),
+      };
+
+      BomService.checkAvailability.mockResolvedValueOnce({
+        available: false,
+        max_possible_quantity: 0,
+        missing_items: [{ item_id: 101, missing_quantity: 5 }],
+      });
+
+      const useCase = new CreateProductionOrderUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({ product_id: 1, quantity: 10, due_date: '2026-08-20', created_by: 1 })
+      ).rejects.toBeInstanceOf(BusinessRuleError);
+
+      expect(productionOrderRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('cria OP normalmente quando material esta disponivel', async () => {
+      const productionOrderRepository = {
+        findProductById: jest.fn(async () => ({ id: 1, status: 'active', product_type: 'finished', name: 'Produto A' })),
+        countByOrderNumberPrefix: jest.fn(async () => 0),
+        create: jest.fn(async () => ({ id: 1, order_number: 'OP-2026-0001', status: 'planned' })),
+      };
+
+      BomService.checkAvailability.mockResolvedValueOnce({
+        available: true,
+        max_possible_quantity: 20,
+        missing_items: [],
+      });
+
+      const useCase = new CreateProductionOrderUseCase(productionOrderRepository);
+      const result = await useCase.execute({ product_id: 1, quantity: 10, due_date: '2026-08-20', created_by: 1 });
+
+      expect(result).toBeDefined();
+      expect(productionOrderRepository.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('ChangeProductionOrderStatusUseCase', () => {
+    it('bloqueia liberacao quando checkAvailability retorna indisponibilidade', async () => {
+      const productionOrderRepository = {
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'planned',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(async () => ({ id: 1, status: 'released' })),
+      };
+
+      BomService.checkAvailability.mockResolvedValueOnce({
+        available: false,
+        max_possible_quantity: 5,
+        missing_items: [{ item_id: 101, missing_quantity: 3 }],
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({ id: 1, status: 'released', user_id: 1 })
+      ).rejects.toBeInstanceOf(BusinessRuleError);
+
+      expect(productionOrderRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('reserva materiais ao liberar com disponibilidade confirmada', async () => {
+      const productionOrderRepository = {
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'planned',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(async () => ({ id: 1, status: 'released' })),
+      };
+
+      BomService.checkAvailability.mockResolvedValueOnce({ available: true });
+      BomService.explodeBOM.mockResolvedValueOnce({
+        components: [
+          { component_id: 101, quantity: 5 },
+          { component_id: 102, quantity: 3 },
+        ],
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+      await useCase.execute({ id: 1, status: 'released', user_id: 1 });
+
+      expect(InventoryService.reserve).toHaveBeenCalledTimes(2);
+    });
+
+    it('libera reservas ao cancelar OP em status released/in_progress/paused', async () => {
+      const productionOrderRepository = {
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'released',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(async () => ({ id: 1, status: 'canceled' })),
+        findProductById: jest.fn(async () => ({ id: 101, reserved_quantity: 5 })),
+      };
+
+      BomService.explodeBOM.mockResolvedValueOnce({
+        components: [{ component_id: 101, quantity: 5 }],
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+      await useCase.execute({ id: 1, status: 'canceled', user_id: 1 });
+
+      expect(InventoryService.releaseReservation).toHaveBeenCalled();
+    });
+
+    it('exige lot_consumptions explicitos ao concluir OP com componentes', async () => {
+      const productionOrderRepository = {
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'in_progress',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(async () => ({ id: 1, status: 'completed' })),
+      };
+
+      BomService.explodeBOM.mockResolvedValueOnce({
+        components: [{ component_id: 101, quantity: 5 }],
+        total_cost: 100,
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({
+          id: 1,
+          status: 'completed',
+          quantity_produced: 10,
+          user_id: 1,
+          lot_consumptions: undefined,
+        })
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('conclui OP com lot_consumptions validos sem erro de rastreabilidade', async () => {
+      jest.clearAllMocks(); // Clear mocks from previous tests
+
+      const productionOrderRepository = {
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'in_progress',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(async () => ({ id: 1, status: 'completed' })),
+        findProductById: jest.fn(async () => ({ id: 101, reserved_quantity: 5 })),
+      };
+
+      BomService.explodeBOM.mockResolvedValue({
+        components: [{ component_id: 101, quantity: 5 }],
+        total_cost: 100,
+      });
+
+      LotControl.findOne.mockResolvedValue({
+        id: 1,
+        lot_number: 'LOT-2026-001',
+        quantity_available: 10,
+        update: jest.fn(async () => ({})),
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      // Change status diretamente para completed do in_progress sem passar por released
+      await useCase.execute({
+        id: 1,
+        status: 'completed',
+        quantity_produced: 10,
+        user_id: 1,
+        lot_consumptions: [{ product_id: 101, lot_control_id: 1, quantity: 5 }],
+        finished_lot_number: 'LOT-FINISHED-001',
+      });
+
+      expect(productionOrderRepository.update).toHaveBeenCalled();
+      expect(LotControl.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('CompleteProductionTrackingUseCase', () => {
+    it('rejeita quantidades negativas', async () => {
+      const productionOrderRepository = {
+        findTrackingByIdForUpdate: jest.fn(),
+        updateTracking: jest.fn(),
+      };
+
+      const useCase = new CompleteProductionTrackingUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({ tracking_id: 1, quantity_good: -1, quantity_scrapped: 0 })
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('rejeita conclusao de tracking nao em in_progress', async () => {
+      const productionOrderRepository = {
+        findTrackingByIdForUpdate: jest.fn(async () => ({ id: 1, status: 'completed' })),
+        updateTracking: jest.fn(),
+      };
+
+      const useCase = new CompleteProductionTrackingUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({ tracking_id: 1, quantity_good: 10, quantity_scrapped: 0 })
+      ).rejects.toBeInstanceOf(BusinessRuleError);
+    });
+
+    it('conclui tracking com sucesso atualizando status para completed', async () => {
+      const productionOrderRepository = {
+        findTrackingByIdForUpdate: jest.fn(async () => ({ id: 1, status: 'in_progress' })),
+        updateTracking: jest.fn(async () => ({})),
+        findTrackingById: jest.fn(async () => ({ id: 1, status: 'completed', quantity_good: 10, quantity_scrapped: 0 })),
+      };
+
+      const useCase = new CompleteProductionTrackingUseCase(productionOrderRepository);
+      const result = await useCase.execute({ tracking_id: 1, quantity_good: 10, quantity_scrapped: 0 });
+
+      expect(productionOrderRepository.updateTracking).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          status: 'completed',
+          quantity_good: 10,
+          quantity_scrapped: 0,
+        }),
+        expect.any(Object)
+      );
+
+      expect(result).toBeDefined();
+    });
+  });
+});

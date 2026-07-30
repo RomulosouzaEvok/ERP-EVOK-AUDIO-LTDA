@@ -8,12 +8,15 @@
 const request = require('supertest'); // CommonJS for Jest/SWC compatibility
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const expressApp = require('../../app');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { hasIntegrationPrerequisites } = require('../helpers/testApi');
 
-describe('MRP Integration Tests', () => {
+const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
+
+describeIntegration('MRP Integration Tests', () => {
   let authToken: string | undefined;
 
   beforeAll(async () => {
-    if (process.env.RUN_INTEGRATION !== 'true') return;
 
     const adminSeedPassword = process.env.ADMIN_SEED_PASSWORD;
     const jwtSecret = process.env.JWT_SECRET;
@@ -34,7 +37,7 @@ describe('MRP Integration Tests', () => {
   });
 
   it('POST /api/mrp/plan - deve gerar ordens planejadas', async () => {
-    if (process.env.RUN_INTEGRATION !== 'true' || !authToken) return;
+    if (!authToken) return;
 
     const response = await request(expressApp)
       .post('/api/mrp/plan')

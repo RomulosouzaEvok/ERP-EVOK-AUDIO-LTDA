@@ -1,19 +1,19 @@
 /**
  * 🧠 Service: BomService
- * 
+ *
  * Motor de negócio para gestão de Estrutura de Produto (BOM).
- * Contém toda a lógica de explosão de BOM, cálculo de custos, 
+ * Contém toda a lógica de explosão de BOM, cálculo de custos,
  * verificação de disponibilidade e geração de necessidades para o MRP.
- * 
+ *
  * @module services/bomService
- * 
+ *
  * @description
  * Este serviço implementa as regras de negócio complexas para:
  * 1. **Explosão de BOM**: Dado um produto e quantidade, lista todos os componentes necessários
  * 2. **Cálculo de Custo**: Calcula o custo total do produto baseado na BOM + perdas
  * 3. **Verificação de Disponibilidade**: Checa se há estoque suficiente dos componentes
  * 4. **Versões e Revisões**: Gerencia histórico de alterações de engenharia
- * 
+ *
  * **Princípios SOLID aplicados:**
  * - SRP: Responsabilidade única de calcular/motrar BOM
  * - DIP: Depende de abstrações (models) não de implementações concretas
@@ -23,6 +23,7 @@
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const { BillOfMaterial, BillOfMaterialItem, Product } = require('../models/index');
+const { roundQuantity } = require('../shared/utils/decimal');
 
 class BomService {
 
@@ -199,7 +200,6 @@ class BomService {
       );
     }
 
-    // Mapa para evitar duplicatas e acumular quantidades
     const componentMap = new Map();
     const errors = [];
     let totalCost = 0;
@@ -221,7 +221,7 @@ class BomService {
       for (const item of items) {
         const totalQty = parseFloat(item.quantity) * parentQty;
         const scrapMultiplier = 1 + (parseFloat(item.scrap_percentage || 0) / 100);
-        const netQty = totalQty * scrapMultiplier;
+        const netQty = roundQuantity(totalQty * scrapMultiplier);
 
         const component = await Product.findByPk(item.component_product_id);
         if (!component) {
@@ -291,7 +291,7 @@ class BomService {
 
     const components = Array.from(componentMap.values());
     const totalComponents = components.length;
-    const totalQuantityNeeded = components.reduce((sum, c) => sum + c.quantity, 0);
+    const totalQuantityNeeded = roundQuantity(components.reduce((sum, c) => sum + c.quantity, 0));
 
     return {
       bom_id: bom.id,

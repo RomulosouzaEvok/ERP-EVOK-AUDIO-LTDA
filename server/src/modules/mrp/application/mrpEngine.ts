@@ -6,6 +6,7 @@
  */
 
 import { BusinessRuleError } from '../../../errors';
+import { roundQuantity as sharedRoundQuantity } from '../../../shared/utils/decimal';
 
 export type ItemType = 'MATERIA_PRIMA' | 'SUBCONJUNTO' | 'PRODUTO_ACABADO';
 
@@ -110,16 +111,7 @@ export interface MrpPlannedOrder {
 }
 
 const DECIMAL_SCALE = 6;
-
-/**
- * Arredonda quantidades industriais para seis casas decimais.
- *
- * @param value - Valor numerico a arredondar.
- * @returns Valor arredondado com precisao operacional.
- */
-function roundQuantity(value: number): number {
-  return Number(value.toFixed(DECIMAL_SCALE));
-}
+const roundQuantity = sharedRoundQuantity;
 
 /**
  * Subtrai dias corridos de uma data.

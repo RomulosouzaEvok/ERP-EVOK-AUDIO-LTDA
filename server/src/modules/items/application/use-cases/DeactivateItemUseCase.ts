@@ -54,7 +54,7 @@ class DeactivateItemUseCase extends UseCase<DeactivateItemInput, any> {
    * @param input - Dados com itemId.
    * @returns Item atualizado com status INATIVO.
    * @throws NotFoundError se item nao existir.
-   * @throws BusinessRuleError se houver vinculos ativos.
+   * @throws ConflictError se houver vinculos ativos.
    */
   public async execute(input: DeactivateItemInput): Promise<any> {
     const item = await this.itemRepository.findById(input.itemId);
