@@ -355,6 +355,72 @@ psql -U postgres -d erp_evok -f server/src/scripts/backfill/02d_validation.sql |
 
 ---
 
+## Fase 4.1 — Expand-Contract: inventory_movements (Concluída)
+
+**Data**: 2026-07-30  
+**Escopo**: Adicionar coluna `item_id UUID` em paralelo ao `product_id` INTEGER, com backfill via crosswalk e dual-read no código.  
+**Status**: ✅ Concluído (4.1a + 4.1b + 4.1c + 4.1d)
+
+### Padrão expand-contract para Fase 4
+
+Fase 4 migra 15 tabelas com `product_id INTEGER` para suportar `item_id UUID` em paralelo. `inventory_movements` é a primeira:
+
+1. **4.1a** (SQL): `ALTER TABLE inventory_movements ADD COLUMN item_id UUID` + 3 índices
+2. **4.1b** (TypeScript backfill): mapear `product_id` → `item_id` via `migracao_product_item_map`, transacional por lote (5.000 registros)
+3. **4.1c** (SQL validation): 5 blocos de integridade (cobertura, FK, dual-consistency, somas, distribuição)
+4. **4.1d** (TypeScript dual-read): repositório aceita `product_id` OU `item_id`, preferindo `item_id`
+
+### Resultado da execução
+
+**Dados de teste**: 15 linhas de `inventory_movements` (3 produtos, tipos `in`/`out`/`adjustment`, referências variadas)
+
+**Backfill**: 15/15 preenchidas com sucesso (100%)
+
+**Validação (04c_validation.sql)**:
+- ✅ BLOCO 1: Cobertura = 100% (`PASS`)
+- ✅ BLOCO 2: FK Integrity = 0 orphãos (`PASS`)
+- ✅ BLOCO 3: Dual Consistency = 0 mismatches (`PASS`)
+- ✅ BLOCO 4: Somas por item_id = médias/min/max corretas (`PASS`)
+- ✅ BLOCO 5: Distribuição por tipo = 100% em todas as categorias (`PASS`)
+
+### Arquivos criados
+
+1. `server/database/postgresql/04a_inventory_movements_expand.sql` — ALTER TABLE + 3 índices (idempotente, `IF NOT EXISTS`)
+2. `server/src/scripts/backfill/04a_inventory_movements_expand.ts` — Backfill script (transacional por lote)
+3. `server/src/scripts/backfill/04c_validation.sql` — Validação com 5 blocos de integridade
+
+### Arquivos modificados
+
+1. `server/src/models/InventoryMovement.ts` — Adicionado field `item_id?: string | null` (UUID)
+2. `server/src/models/index.ts` — Adicionadas associações `Item.hasMany(InventoryMovement, ...) / InventoryMovement.belongsTo(Item, ...)`
+3. `server/src/modules/inventory/infrastructure/sequelize/SequelizeInventoryRepository.ts` — Dual-read: `listMovements()` aceita `?product_id` OU `?item_id`, preferindo `item_id`; `findMovementById()` inclui `Item` associado
+
+### Decisões de design
+
+- **Alias Sequelize**: Nova associação usa `as: 'item_movements'` para evitar colisão com `User.hasMany(InventoryMovement, { as: 'inventory_movements' })`
+- **Dual-read logic**: Se ambos `product_id` e `item_id` especificados em query, loga aviso de drift e usa `item_id` (preferred)
+- **Backfill skip**: Produtos órfãos (sem mapeamento em crosswalk) deixam `item_id = NULL`; foram 0 neste run
+- **Índices**: 3 novos índices em `inventory_movements` para suportar queries futuros por `item_id`
+
+### Testes críticos para Codex validar
+
+1. **Tabela estrutura**: `\d+ inventory_movements` — confirmar coluna `item_id uuid` e 3 índices criados
+2. **Dados backfilled**: `SELECT COUNT(CASE WHEN item_id IS NOT NULL THEN 1 END) FROM inventory_movements` → 15
+3. **Dual-read runtime**: Chamar `GET /api/inventory/movements?item_id=<uuid>` (modo novo) e `GET /api/inventory/movements?product_id=<int>` (modo legado) — ambos devem retornar registros corretamente
+4. **Regressão legada**: Queries antigas com `product_id` continuam funcionando sem erro
+5. **Sem duplicação**: Confirmar nenhuma linha tem `product_id` deletado (apenas `item_id` adicionado)
+
+### Roadmap posterior
+
+As próximas 14 tabelas (Fase 4.2–4.15) seguem o mesmo padrão 4 sub-passos (a/b/c/d):
+- `purchase_order_items`, `sale_items`, `production_orders`, `production_lot_consumptions`, `bill_of_material_items` (em Fase 5 será removida), `lot_controls`, `serial_numbers`, `non_conformities`, `service_orders`, `assets`, `product_cost_ledgers`, `inventory_count_items` (antes de outros repositórios que a usam).
+
+Cada tabela é sua própria micro-entrega + commit, executadas na ordem de risco documentada em `docs/PHASE_5_MODULES_MIGRATION.md` (Suppliers → Purchases → Inventory → Sales → Production → ...).
+
+Só após todas as 15 tabelas expandidas (Fase 4 "expand" finalizada) é que módulos de aplicação serão migrados (Fase 5, com dual-read em repositories e use-cases) e `product_id` será removido das tabelas (Fase 4 "contract" final).
+
+---
+
 **Desenvolvedor**: Claude Code (Backend Engineer)  
 **Data**: 2026-07-30  
-**Próximo checkpoint**: Aprovação de Codex para prosseguir para Fase 2 (Backfill)
+**Próximo checkpoint**: Fase 4.2 (próxima tabela) ou Fase 5 (módulos de aplicação)

@@ -57,6 +57,24 @@ INSERT INTO bill_of_material_items (bom_id, component_product_id, quantity, unit
 -- BOM Items (BOM 3)
 INSERT INTO bill_of_material_items (bom_id, component_product_id, quantity, unit, bom_level, sequence_order, component_type, scrap_percentage, unit_cost, total_cost, is_critical, created_at, updated_at) VALUES
 (3, 7, 2.0, 'un', 1, 1, 'semi_finished', 1.0, 34.00, 68.00, true, now(), now());
+
+-- Movimentos de estoque (teste para Fase 4.1)
+INSERT INTO inventory_movements (product_id, user_id, type, quantity, unit_cost, description, reference_id, reference_type, created_at, updated_at) VALUES
+(1, 1, 'in', 50.0, 180.00, 'Entrada de compra lote 001', NULL, 'purchase', now(), now()),
+(1, 1, 'out', 10.0, 180.00, 'Saída venda SO-001', NULL, 'sale', now(), now()),
+(1, 1, 'adjustment', 2.5, 180.00, 'Ajuste de perda em estoque', NULL, 'adjustment', now(), now()),
+(2, 1, 'in', 30.0, 260.00, 'Entrada compra lote 002', NULL, 'purchase', now(), now()),
+(2, 1, 'out', 5.0, 260.00, 'Saída venda SO-002', NULL, 'sale', now(), now()),
+(3, 1, 'in', 20.0, 350.00, 'Entrada produção interna', NULL, 'production', now(), now()),
+(3, 1, 'out', 3.0, 350.00, 'Saída produção OP-001', NULL, 'production', now(), now()),
+(4, 1, 'adjustment', 1.0, 480.00, 'Contagem física diferença', NULL, 'adjustment', now(), now()),
+(5, 1, 'in', 100.0, 48.00, 'Entrada componente semi', NULL, 'purchase', now(), now()),
+(5, 1, 'out', 25.0, 48.00, 'Consumo produção lote A', NULL, 'production', now(), now()),
+(6, 1, 'in', 150.0, 18.00, 'Entrada cone papel lote 003', NULL, 'purchase', now(), now()),
+(7, 1, 'in', 50.0, 34.00, 'Entrada chassis lote 004', NULL, 'purchase', now(), now()),
+(8, 1, 'in', 200.0, 10.00, 'Entrada imã neodímio', NULL, 'purchase', now(), now()),
+(11, 1, 'in', 1000.0, 6.00, 'Entrada papel kraft', NULL, 'purchase', now(), now()),
+(13, 1, 'in', 500.0, 18.00, 'Entrada aço SAE', NULL, 'purchase', now(), now());
 `;
 
   try {

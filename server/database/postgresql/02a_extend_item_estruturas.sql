@@ -10,9 +10,18 @@
 
 BEGIN;
 
--- Criar ENUMs se ainda não existirem
-CREATE TYPE IF NOT EXISTS item_estrutura_status AS ENUM ('draft', 'active', 'inactive', 'superseded');
-CREATE TYPE IF NOT EXISTS item_estrutura_component_type AS ENUM ('raw_material', 'component', 'semi_finished', 'packaging', 'consumable', 'other');
+-- Criar ENUMs (DROP se já existirem)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'item_estrutura_status') THEN
+    DROP TYPE IF EXISTS item_estrutura_status CASCADE;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'item_estrutura_component_type') THEN
+    DROP TYPE IF EXISTS item_estrutura_component_type CASCADE;
+  END IF;
+END $$;
+
+CREATE TYPE item_estrutura_status AS ENUM ('draft', 'active', 'inactive', 'superseded');
+CREATE TYPE item_estrutura_component_type AS ENUM ('raw_material', 'component', 'semi_finished', 'packaging', 'consumable', 'other');
 
 -- ALTER TABLE: Adicionar 9 novos campos
 ALTER TABLE item_estruturas

@@ -29,7 +29,7 @@ const ItemEspecificacaoTecnica: ModelDefined<ItemEspecificacaoTecnicaAttributes,
     comment: 'Referência ao Item (FK para items.id)',
   },
   familia_tecnica: {
-    type: DataTypes.VARCHAR(40),
+    type: DataTypes.STRING(40),
     allowNull: false,
     comment: 'Família/tipo de especificação técnica (ex: ALTO_FALANTE, CABO, AMPLIFICADOR)',
   },

@@ -124,6 +124,10 @@ InventoryMovement.belongsTo(Product, { foreignKey: 'product_id', as: 'product' }
 User.hasMany(InventoryMovement, { foreignKey: 'user_id', as: 'inventory_movements' });
 InventoryMovement.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
+// Item ↔ InventoryMovement (Fase 4.1 expand-contract)
+Item.hasMany(InventoryMovement, { foreignKey: 'item_id', as: 'item_movements' });
+InventoryMovement.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
 // ============================================
 // RELACIONAMENTOS - INVENTÁRIO CÍCLICO (F09)
 // ============================================

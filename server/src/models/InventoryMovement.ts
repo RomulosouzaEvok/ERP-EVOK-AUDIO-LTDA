@@ -13,6 +13,7 @@ import { sequelize } from '../config/database';
 export interface InventoryMovementAttributes {
   id: number;
   product_id: number;
+  item_id?: string | null;
   user_id: number;
   type: 'in' | 'out' | 'adjustment';
   quantity: number;
@@ -26,7 +27,8 @@ export interface InventoryMovementAttributes {
 
 const InventoryMovement = sequelize.define('InventoryMovement', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id' },
+  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id (LEGADO)' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (NOVO, parallel to product_id)' },
   user_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → users.id (responsável)' },
   type: { type: DataTypes.ENUM('in', 'out', 'adjustment'), allowNull: false, comment: 'Tipo: in=entrada, out=saída, adjustment=ajuste' },
   quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, comment: 'Quantidade movimentada' },
