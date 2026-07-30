@@ -292,6 +292,7 @@ async function backfillBomToItemEstrutura(opts: { start?: number; limit?: number
       }
     );
     stats.totalBoms = totalCount[0]?.count || 0;
+    const bomLimit = limit === Infinity ? stats.totalBoms : Math.min(limit, stats.totalBoms);
     console.log(`📦 Total de BOMs a migrar: ${stats.totalBoms}`);
 
     if (stats.totalBoms === 0) {

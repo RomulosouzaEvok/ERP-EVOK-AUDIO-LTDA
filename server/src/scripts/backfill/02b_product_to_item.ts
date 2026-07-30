@@ -241,15 +241,15 @@ async function backfillProductToItem(opts: { start?: number; limit?: number } = 
   try {
     // Contar total de produtos
     const totalCount: any = await sequelize.query(
-      'SELECT COUNT(*) as count FROM products LIMIT :limit OFFSET :offset',
+      'SELECT COUNT(*) as count FROM products',
       {
-        replacements: { limit, offset: startOffset },
         type: 'SELECT' as any,
       }
     );
+    const allCount = totalCount[0]?.count || 0;
     stats.totalProducts = Math.min(
-      totalCount[0]?.count || 0,
-      limit === Infinity ? Number.MAX_SAFE_INTEGER : limit
+      allCount,
+      limit === Infinity ? allCount : limit
     );
     console.log(`📦 Total de produtos a migrar: ${stats.totalProducts}`);
 
