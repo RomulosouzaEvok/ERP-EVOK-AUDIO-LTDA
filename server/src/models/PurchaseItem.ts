@@ -14,6 +14,7 @@ export interface PurchaseItemAttributes {
   id: number;
   purchase_id: number;
   product_id: number;
+  item_id?: string | null;
   quantity: number;
   unit_price: number;
   total_price: number;
@@ -27,6 +28,7 @@ const PurchaseItem = sequelize.define('PurchaseItem', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   purchase_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → purchase_orders.id' },
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (expand-contract Fase 4.2)' },
   quantity: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Quantidade pedida' },
   unit_price: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Preço unitário' },
   total_price: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Total (qtd × preço)' },

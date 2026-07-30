@@ -84,6 +84,10 @@ PurchaseItem.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
 Product.hasMany(PurchaseItem, { foreignKey: 'product_id', as: 'purchase_items' });
 PurchaseItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
+// Item ↔ PurchaseItem (Fase 4.2 expand-contract)
+Item.hasMany(PurchaseItem, { foreignKey: 'item_id', as: 'purchase_items' });
+PurchaseItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
 // Client ↔ Sale
 Client.hasMany(Sale, { foreignKey: 'customer_id', as: 'sales' });
 Sale.belongsTo(Client, { foreignKey: 'customer_id', as: 'customer' });

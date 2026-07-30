@@ -1,6 +1,6 @@
 const { Op } = require('sequelize');
 const PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
-const { Purchase, PurchaseItem, Product, Supplier, AccountPayable } = require('../../../../models/index');
+const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item } = require('../../../../models/index');
 
 /**
  * Implementação Sequelize/PostgreSQL do contrato `PurchaseRepository`.
@@ -26,7 +26,10 @@ class SequelizePurchaseRepository extends PurchaseRepository {
       where,
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] },
-        { model: PurchaseItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }] }
+        { model: PurchaseItem, as: 'items', include: [
+          { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+          { model: Item, as: 'item', attributes: ['id', 'nome_item'] }
+        ] }
       ],
       limit: pagination.limit,
       offset: pagination.offset,
@@ -41,7 +44,10 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     return Purchase.findByPk(id, {
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'company_name', 'cnpj'] },
-        { model: PurchaseItem, as: 'items', include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }] }
+        { model: PurchaseItem, as: 'items', include: [
+          { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+          { model: Item, as: 'item', attributes: ['id', 'nome_item'] }
+        ] }
       ]
     });
   }
@@ -54,7 +60,11 @@ class SequelizePurchaseRepository extends PurchaseRepository {
   /** @inheritdoc */
   async findPurchaseWithItems(id, transaction) {
     return Purchase.findByPk(id, {
-      include: [{ model: PurchaseItem, as: 'items' }],
+      include: [
+        { model: PurchaseItem, as: 'items', include: [
+          { model: Item, as: 'item', attributes: ['id', 'nome_item'] }
+        ] }
+      ],
       transaction
     });
   }
