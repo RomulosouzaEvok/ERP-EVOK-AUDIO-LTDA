@@ -5,6 +5,8 @@
  * @module modules/mrp/application/mrpEngine
  */
 
+import { BusinessRuleError } from '../../../errors';
+
 export type ItemType = 'MATERIA_PRIMA' | 'SUBCONJUNTO' | 'PRODUTO_ACABADO';
 
 /**
@@ -177,7 +179,7 @@ export function explodeBomRequirements(
 
     for (const edge of children) {
       if (path.includes(edge.componentItemId)) {
-        throw new Error(`Ciclo detectado na BOM: ${[...path, edge.componentItemId].join(' -> ')}`);
+        throw new BusinessRuleError(`Ciclo detectado na BOM: ${[...path, edge.componentItemId].join(' -> ')}`);
       }
 
       const scrapMultiplier = 1 + ((edge.scrapPercentage ?? 0) / 100);

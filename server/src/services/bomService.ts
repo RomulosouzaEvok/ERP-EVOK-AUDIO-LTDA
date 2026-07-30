@@ -275,8 +275,8 @@ class BomService {
               unit_cost: unitCost,
               total_cost: itemCost,
               scrap_percentage: parseFloat(item.scrap_percentage || 0),
-              stock_available: component.quantity,
-              stock_minimum: component.min_quantity,
+              stock_available: parseFloat(component.quantity || 0),
+              stock_minimum: parseFloat(component.min_quantity || 0),
               is_critical: item.is_critical,
               bom_level: level,
               notes: item.notes

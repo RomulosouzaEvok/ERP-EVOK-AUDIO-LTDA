@@ -1,4 +1,5 @@
 import { explodeBomRequirements, MrpBomEdge } from '../../src/modules/mrp/application/mrpEngine';
+import { BusinessRuleError } from '../../src/errors';
 
 describe('BOM multinivel recursiva', () => {
   /**
@@ -36,6 +37,23 @@ describe('BOM multinivel recursiva', () => {
     ];
 
     expect(() => explodeBomRequirements('A', 1, new Date('2026-08-10T00:00:00.000Z'), edges))
-      .toThrow('Ciclo detectado na BOM');
+      .toThrow(BusinessRuleError);
+  });
+
+  it('retorna HTTP 422 quando ciclo detectado na BOM', () => {
+    const edges: MrpBomEdge[] = [
+      { parentItemId: 'A', componentItemId: 'B', quantityPer: 1 },
+      { parentItemId: 'B', componentItemId: 'A', quantityPer: 1 },
+    ];
+
+    try {
+      explodeBomRequirements('A', 1, new Date('2026-08-10T00:00:00.000Z'), edges);
+      fail('Esperava BusinessRuleError ser lancado');
+    } catch (error: any) {
+      expect(error).toBeInstanceOf(BusinessRuleError);
+      expect(error.statusCode).toBe(422);
+      expect(error.code).toBe('BUSINESS_RULE_VIOLATION');
+      expect(error.message).toContain('Ciclo detectado na BOM');
+    }
   });
 });

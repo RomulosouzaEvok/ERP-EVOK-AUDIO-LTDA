@@ -10,7 +10,7 @@
  */
 
 import UseCase from '../../../../shared/application/UseCase';
-import { BusinessRuleError, NotFoundError } from '../../../../errors';
+import { ConflictError, NotFoundError } from '../../../../errors';
 import ItemRepository from '../../domain/repositories/ItemRepository';
 import ItemEstruturaRepository from '../../domain/repositories/ItemEstruturaRepository';
 const { Op } = require('sequelize');
@@ -66,7 +66,7 @@ class DeactivateItemUseCase extends UseCase<DeactivateItemInput, any> {
 
     const hasVinculos = Object.values(vinculos).some(Boolean);
     if (hasVinculos) {
-      throw new BusinessRuleError(
+      throw new ConflictError(
         'Item possui vinculos ativos e nao pode ser inativado.',
         vinculos,
       );

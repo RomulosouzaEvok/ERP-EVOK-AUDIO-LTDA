@@ -163,6 +163,81 @@ Observacoes Sprint E:
 - Decisao tecnica registrada: nao aplicar `npm audit fix --force`; manter versoes atuais e tratar upgrade de Jest/Sequelize de forma planejada, fora desta rodada de hardening.
 - Bootstrap real validado em 2026-07-30 via artefato compilado (`node dist/index.js` + `GET /api` 200). O bloqueio remanescente deixou de ser "API nao sobe" e passou a ser "smoke autenticado/integracao real ainda nao executados com `RUN_INTEGRATION=true` e credenciais homologadas".
 
+### Sprint F - Correcoes da Auditoria QA/DevSecOps (2026-07-30, segunda rodada)
+**Origem:** auditoria executiva de release-gate (Lead QA/DevSecOps) sobre o estado real do codigo apos as Sprints A-E, comparando `TODO.md`/`docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` com o codigo-fonte linha a linha.
+**Regra:** nenhum item de F9/F10 pode ser fechado enquanto os itens `[CRITICO]` desta sprint nao estiverem corrigidos e cobertos por teste automatizado. Corrigir na ordem listada evita conflito entre correcoes (ex.: nao alterar o retorno HTTP de `DeactivateItemUseCase` antes de atualizar o teste que hoje so cobre a regra de negocio).
+
+#### F.1 [CRITICO] Corrigir corrupcao de estoque por concatenacao de string em DECIMAL
+- [x] Em `server/src/modules/products/application/use-cases/RegisterProductMovementUseCase.ts:62`, envolver `product.quantity` com `parseFloat(...)` antes de somar/subtrair. Corrigido.
+- [x] Revisar `server/src/services/bomService.ts:278-279` e aplicar `parseFloat`. Corrigido.
+- [x] Grep para buscar outros pontos que leem `.quantity`/`.reserved_quantity`/`.min_quantity` de models Sequelize sem proteção. Validado — `inventoryService.ts` ja usa `Number()` nos pontos críticos.
+- [x] Criar teste unitario de regressao em `server/tests/unit/product-movement-decimal-regression.test.ts` com 6 cenários cobrindo string/null/undefined/precisão. Todos passam.
+- **Aceite:** ✅ nenhuma operacao de estoque concatena; teste de regressao criado e verde (6/6 testes passam).
+
+#### F.2 [CRITICO] Corrigir codigo HTTP de exclusao de item vinculado (deve ser 409, hoje e 422)
+- [x] Em `server/src/modules/items/application/use-cases/DeactivateItemUseCase.ts:69`, trocar `BusinessRuleError` por `ConflictError` (já existe em `server/src/errors/index.ts:53-57`, mapeia para HTTP 409). Corrigido.
+- [x] Revisar controller (`itemController.ts` / `PATCH /api/items/:id/inactivate`) — nenhum catch reescreve o status. Validado.
+- [x] Criar teste unitario em `server/tests/unit/deactivate-item-http-409.test.ts` com 4 cenários: BOM ativa (409), com detalhes de vinculos (409), sem vinculos (sucesso), item inexistente (404). Todos passam.
+- [x] Status HTTP validado explicitamente em teste: `error.statusCode === 409` e `error.code === 'CONFLICT'`.
+- **Aceite:** ✅ `DeactivateItemUseCase` lanca `ConflictError` (HTTP 409) para item vinculado; teste automatizado cobre status code.
+
+#### F.3 [CRITICO] Corrigir ciclo de BOM na explosao/MRP para retornar 422 (hoje retorna 500)
+- [x] Em `server/src/modules/mrp/application/mrpEngine.ts:180`, trocar `throw new Error` por `throw new BusinessRuleError`. Adicionado import de `BusinessRuleError` e corrigido.
+- [x] Confirmar que `ExplodeItemStructureUseCase.ts:31` propaga o erro sem try/catch que o transforme. Validado — sem try/catch que engula.
+- [x] Atualizar `server/tests/unit/bom-recursive.test.ts` para validar `BusinessRuleError` (não apenas mensagem). Adicionado teste específico `retorna HTTP 422 quando ciclo detectado na BOM` com asserts de `statusCode === 422` e `code === 'BUSINESS_RULE_VIOLATION'`.
+- [x] Testes de integração de BOM/MRP já cobrem ciclo (integração via routes API que mapeiam o erro para HTTP 422).
+- **Aceite:** ✅ ciclo de BOM detectado retorna HTTP 422 (BusinessRuleError) na explosao/MRP; teste automatizado cobre status code.
+
+#### F.4 [ALTO] Corrigir falha silenciosa de `ADMIN_SEED_PASSWORD` ausente em producao
+- [ ] Em `server/src/config/seeds.ts:74-122`, mover o `throw new Error(...)` de obrigatoriedade em producao para fora do `try/catch` que o engole, ou re-lancar a excecao dentro do `catch` (linhas 119-121) quando `NODE_ENV === 'production'` e a causa for ausencia de `ADMIN_SEED_PASSWORD`.
+- [ ] Confirmar que `server/config/db.ts:34` (`await seedDatabase()`) e `server/index.ts:92-98` interrompem o boot (`process.exit(1)` ou rejeitar a promise de inicializacao) quando essa excecao ocorrer em producao, em vez de seguir para `app.listen()`.
+- [ ] Atualizar `server/.env.example` apenas se o comportamento documentado (linha ~30, "o servidor falhara na inicializacao se nao definido") precisar de ajuste de texto apos a correcao — o texto deve continuar dizendo que o boot falha, e agora isso deve ser verdade.
+- [ ] Criar teste (unitario ou script de smoke) que simule `NODE_ENV=production` sem `ADMIN_SEED_PASSWORD` e confirme que o processo de boot falha/aborta.
+- **Aceite:** subir a API em `NODE_ENV=production` sem `ADMIN_SEED_PASSWORD` falha o boot de forma explicita, nao apenas loga um erro.
+
+#### F.5 [ALTO] Adicionar validacao de payload (Zod) no modulo de vendas
+- [ ] Criar `server/src/modules/sales/presentation/validators/saleValidators.ts` (ou local equivalente ao padrao dos demais modulos) com schemas Zod `.strict()` para `create` e `updateStatus` de venda, cobrindo: itens (quantidade > 0, escala decimal ate 6 casas), enums de status, rejeicao de campos desconhecidos.
+- [ ] Aplicar os schemas em `saleController.ts` (`list`, `getById`, `create`, `updateStatus`) no mesmo padrao usado por `itemController.ts`/`purchaseController.ts`/`productionOrderController.ts` (chamada `schema.safeParse(req.body)` antes da regra de negocio, retornando `ValidationError`/400 em caso de falha).
+- [ ] Criar teste automatizado (unitario de validator + teste de rota) que confirme que payload invalido/com campo desconhecido retorna 400 estruturado em `POST /api/sales` e na rota de mudanca de status.
+- **Aceite:** rotas de vendas rejeitam payload invalido/desconhecido com erro estruturado, igual aos demais modulos criticos.
+
+#### F.6 [MEDIO] Sanitizar `Op.like` nos repositorios de clients, users e BOM
+- [ ] Aplicar `Validators.sanitizeSearch` (o mesmo helper ja usado em `SequelizeProductRepository.ts:32-33` e `SequelizeSuppliersRepository.ts:20-21`) no valor de busca usado em `Op.like` de:
+  - `server/src/modules/clients/infrastructure/sequelize/SequelizeClientsRepository.ts:17-19`
+  - `server/src/modules/users/infrastructure/sequelize/SequelizeUsersRepository.ts:19-20`
+  - `server/src/modules/bom/infrastructure/sequelize/SequelizeBOMRepository.ts:30`
+- [ ] Confirmar em `ListClientsUseCase`/controller correspondente se ja existe alguma sanitizacao antes de chegar ao repositorio; se existir, torna-la redundante mas correta (defesa em profundidade) e nao remover a sanitizacao no repositorio.
+- [ ] Reforcar `server/src/modules/items/infrastructure/sequelize/SequelizeItemRepository.ts:15-16` com sanitizacao defensiva propria, mesmo que hoje o `itemController.ts:22` ja sanitize antes de repassar (evitar quebra futura se o repositorio for chamado de outro lugar).
+- [ ] Criar teste unitario que envie busca com `%`/`_` para cada repositorio corrigido e confirme que o padrao e escapado antes do `Op.like`.
+- **Aceite:** nenhum repositorio aceita `%`/`_` de busca de usuario sem escapar; teste cobre os 4 repositorios (clients, users, bom, items).
+
+#### F.7 [MEDIO] Corrigir `mobileInventoryController.batchScan` para usar `InventoryService`
+- [ ] Reescrever `batchScan` (`server/src/controllers/mobileInventoryController.ts:34-55`) para chamar `InventoryService.adjust` (ou `receive`/`consume`, conforme o caso de uso real do scan em lote) em vez de `InventoryMovement.create` direto + `product.increment/decrement('quantity', ...)` manual.
+- [ ] Garantir que a validacao de disponibilidade considerando `reserved_quantity` (a mesma usada em `adjust`/`validateAndLock`) seja aplicada tambem no fluxo em lote.
+- [ ] Manter a transacao Sequelize unica ja existente (`t`, linha 35), agora envolvendo as chamadas ao `InventoryService`.
+- [ ] Criar/ajustar teste que cubra `batchScan` e confirme que ele nao mais escreve em `Product.quantity` fora do `InventoryService`.
+- **Aceite:** nenhum controller altera `Product.quantity` diretamente; `batchScan` usa o mesmo servico de dominio que os demais fluxos.
+
+#### F.8 [MEDIO] Resolver drift entre SQL bruto legado e models Sequelize reais
+- [ ] Decidir e documentar (ADR curto em `docs/DEPLOY.md` ou `docs/DATABASE.md`) se `server/database/postgresql/01_schema.sql` (tabelas em portugues: `items`, `ordens_producao`, `movimentos_estoque`) e um artefato historico a ser removido/arquivado, ou se deve ser atualizado para refletir o schema real usado pelos models (`products`, `inventory_movements`, `production_orders`, `sale_items`, `production_order_tracking`, etc.).
+- [ ] Criar processo formal de migration (Sequelize migrations ou script SQL versionado) para garantir que colunas de quantidade em producao (`products.quantity`, `inventory_movements.quantity`, `production_orders.quantity`/`quantity_produced`, `sale_items.quantity`, `production_order_tracking.quantity_good`/`quantity_scrapped`) estejam de fato como `DECIMAL(18,6)` no banco real, nao apenas no model TypeScript.
+- [ ] Rodar a migration/script em ambiente de homologacao com PostgreSQL Hostinger (ou equivalente) e registrar evidencia do `\d+ <tabela>` confirmando o tipo real da coluna.
+- **Aceite:** existe processo de migration versionado; evidencia registrada de que o schema real do Postgres usado pelos models esta em `DECIMAL(18,6)`, sem depender de `sequelize.sync({alter:true})` em producao.
+
+#### F.9 [BAIXO] Corrigir metrica de skip em testes de integracao e remover fallback de senha fraca em dev
+- [ ] Em `server/tests/integration/mrp.test.ts:16,37` e `traceability.test.ts:11,35`, trocar o `if (!hasIntegrationPrerequisites()) return;` inline por `describe.skip`/`it.skip` condicional, no mesmo padrao ja usado em `n8n-webhook.test.ts`, `material-requisition-flow.test.ts`, `stock-concurrency.test.ts` e `edge/industrial-edge-cases.test.ts` (via `hasIntegrationPrerequisites()` de `server/tests/helpers/testApi.ts`).
+- [ ] Avaliar se `docker-compose.yml:11` (`${DB_PASSWORD:-evok_local_dev}`) deve exigir a variavel sem fallback mesmo em dev, ou manter o fallback mas adicionar um aviso/checagem que bloqueie subida se `NODE_ENV=production` usar esse compose.
+- **Aceite:** contagem de "skip" reportada por `npm test` reflete a realidade (nao conta como "passed" um teste sem asserção); fallback de senha de dev nao pode ser usado em producao.
+
+#### F.10 [LACUNA DE TESTE] Criar cobertura automatizada para o ciclo de vida de Ordem de Producao
+- [ ] Criar `server/tests/unit/production-order-lifecycle.test.ts` (ou arquivo equivalente) cobrindo `CreateProductionOrderUseCase`, `ChangeProductionOrderStatusUseCase` e `CompleteProductionTrackingUseCase`: bloqueio de criacao sem material minimo, reserva ao liberar, liberacao de reserva ao cancelar, exigencia de `lot_consumptions` explicitos na conclusao, geracao de `LotControl`/`SerialNumber` do produto acabado.
+- [ ] Nenhum arquivo em `server/tests/` referencia hoje esses use cases — hoje esse modulo critico nao tem nenhuma rede de seguranca automatizada.
+- **Aceite:** modulo de producao tem suite unitaria propria cobrindo os criterios criticos de disponibilidade/reserva/consumo rastreavel.
+
+Observacoes Sprint F:
+- Diferente das Sprints A-E, a Sprint B (rastreabilidade) foi auditada e confirmada **mais avancada do que este `TODO.md` registra**: `LotControl`, `ProductionLotConsumption` e `SerialNumber` ja sao gerados nos fluxos reais de recebimento de compra e conclusao de OP (ver `ReceivePurchaseItemsUseCase.ts:108-145` e `ChangeProductionOrderStatusUseCase.ts:347-513`). Os itens de Sprint B abaixo marcados `[ ]` devem ser reconferidos e marcados `[x]` apos validacao, em vez de tratados como trabalho pendente do zero.
+- Esta sprint nao reabre nem invalida o que foi validado nas Sprints A-E; ela endereca desvios encontrados numa segunda auditoria mais profunda, linha a linha, apos a conclusao daquelas sprints.
+
 ### Ordem de Execução
 1. Congelar o escopo da versao.
 2. Corrigir apenas erros que impedem uso real, sem iniciar funcionalidades novas.

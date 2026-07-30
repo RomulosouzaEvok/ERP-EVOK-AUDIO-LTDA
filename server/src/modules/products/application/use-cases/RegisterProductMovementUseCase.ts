@@ -58,8 +58,8 @@ class RegisterProductMovementUseCase extends UseCase {
       reference_type: 'adjustment'
     });
 
-    const previousQuantity = product.quantity;
-    const newQuantity = product.quantity + (type === 'in' ? quantity : -quantity);
+    const previousQuantity = parseFloat(product.quantity || 0);
+    const newQuantity = previousQuantity + (type === 'in' ? quantity : -quantity);
     await this.productRepository.update(product_id, { quantity: newQuantity });
 
     return { movement, product, previousQuantity, newQuantity };
