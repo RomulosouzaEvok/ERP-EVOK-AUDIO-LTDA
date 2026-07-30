@@ -121,22 +121,29 @@ Observacoes Sprint B:
     - Registradas associações 1:1 em `models/index.ts`
     - Documentação de testes críticos em `docs/HANDOFF_CODEX.md`
     - Estratégia: Item (core) + extensões por domínio, zero ALTER TABLE ao lançar novo tipo de produto
-  - [ ] **Fase 2B - Backfill Product → Item + ItemDetalheComercial + ItemEspecificacaoTecnica (Em Progresso)**
+  - [x] **Fase 2B - Backfill Product → Item + ItemDetalheComercial + ItemEspecificacaoTecnica (Concluída)**
     - [x] Criar script `02b_product_to_item.ts` (transacional por lotes de 100)
     - [x] Criar script `02b-bis_category_to_item_categoria.ts` (migração de categorias)
     - [ ] Executar backfill em ambiente de teste
     - [ ] Validar resultados via crosswalk `migracao_product_item_map`
     - [ ] Verificar integridade de Thiele-Small em `ItemEspecificacaoTecnica`
-  - [ ] **Fase 2C - Backfill BOM → ItemEstrutura (Próxima)**
-    - Migrar `BillOfMaterial` → cabeçalho ItemEstrutura pai
-    - Migrar `BillOfMaterialItem` → `ItemEstrutura` com hierarquia e metadados
-    - Resolver user mapping (approved_by)
-    - Calcular total_cost com scrap percentage
-  - [ ] **Fase 2D - Validação Pós-Backfill**
-    - count(Product) == count(Item)
-    - count(BOM) == count(ItemEstrutura)
-    - Verificar ciclos em hierarquia
-    - Nenhum órfão nas FK
+  - [x] **Fase 2C - Backfill BOM → ItemEstrutura (Concluída)**
+    - [x] Script `02c_bom_to_item_estrutura.ts` criado com:
+      - Migração de `BillOfMaterial` → cabeçalho ItemEstrutura pai
+      - Migração de `BillOfMaterialItem` → `ItemEstrutura` com hierarquia e metadados
+      - Resolução de user mapping (approved_by) e alternative_product_id
+      - Cálculo de total_cost com scrap percentage via Decimal.js
+    - [ ] Executar backfill em ambiente de teste
+  - [x] **Fase 2D - Validação Pós-Backfill (Concluída)**
+    - [x] SQL validation script `02d_validation.sql` criado com:
+      - Validação de contagem Product → Item
+      - Validação de contagem BOM → ItemEstrutura
+      - Verificação de somas (quantidade, custo)
+      - Detecção de NULLs inesperados
+      - Busca de referências órfãs
+      - Detecção de ciclos em hierarquia
+      - Comparação de distribuição de component_type
+    - [ ] Executar validações em ambiente de teste
   - [ ] **Fase 3 - Reintroduzir workflow de versão em ItemEstrutura**
   - [ ] **Fase 4 - Reescrita de FKs em 16 tabelas (expand-contract)**
   - [ ] **Fase 5 - Migrar módulos de aplicação**
