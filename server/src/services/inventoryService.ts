@@ -28,6 +28,7 @@ export interface InventoryResult {
   quantityBefore: number;
   quantityAfter: number;
   movementId?: number;
+  product?: any;
   error?: string;
 }
 
@@ -155,6 +156,7 @@ export async function consume(
     productName: product.name,
     quantityBefore: qtyBefore,
     quantityAfter: qtyAfter,
+    product,
     movementId: movement.id
   };
 }
@@ -209,6 +211,7 @@ export async function receive(
     productName: product.name,
     quantityBefore: qtyBefore,
     quantityAfter: qtyAfter,
+    product,
     movementId: movement.id
   };
 }
@@ -275,6 +278,7 @@ export async function adjust(
     productName: product.name,
     quantityBefore: qtyBefore,
     quantityAfter: qtyAfter,
+    product,
     movementId: movement.id
   };
 }
@@ -317,6 +321,7 @@ async function previousReserve(
     productName: product.name,
     quantityBefore: product.quantity,
     quantityAfter: product.quantity,
+    product,
     movementId: movement.id
   };
 }
@@ -354,6 +359,7 @@ async function previousReleaseReservation(
     productName: product.name,
     quantityBefore: product.quantity,
     quantityAfter: product.quantity,
+    product,
     movementId: movement.id
   };
 }
@@ -389,6 +395,7 @@ async function reserveStock(
     productName: product.name,
     quantityBefore: reservedBefore,
     quantityAfter: reservedBefore + quantity,
+    product,
     movementId: movement.id
   };
 }
@@ -429,6 +436,7 @@ async function releaseStockReservation(
     productName: product.name,
     quantityBefore: reservedBefore,
     quantityAfter: reservedBefore - quantity,
+    product,
     movementId: movement.id
   };
 }

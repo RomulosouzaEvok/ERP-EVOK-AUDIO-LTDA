@@ -323,18 +323,117 @@ Conferir, com calma e em ordem, tudo que precisa estar pronto antes da liberacao
 
 ### Sprints de Correcao Obrigatorias Antes do Aceite
 
-- [ ] Sprint A - Corrigir assinatura/chamada de `InventoryService` e restaurar consistencia dos fluxos de compra/producao.
+- [x] Sprint A - Corrigir assinatura/chamada de `InventoryService` e restaurar consistencia dos fluxos criticos de compra/producao/venda.
 - [ ] Sprint B - Corrigir rastreabilidade para schema real e fechar cadeia lote/serie/consumo.
 - [ ] Sprint C - Fechar regras omitidas de OP: disponibilidade, reserva e consumo rastreavel.
 - [ ] Sprint D - Migrar quantidades de estoque para decimal industrial e revisar arredondamentos.
 - [ ] Sprint E - Hardening final de ambiente, dependencias e artefatos legados.
 
+### Registro Sprint A - 2026-07-30
+
+- Corrigidas as chamadas de `InventoryService.receive`/`consume` em `ReceivePurchaseItemsUseCase`, `ChangeProductionOrderStatusUseCase`, `CreateSaleUseCase` e `ChangeSaleStatusUseCase`, passando `userId` e `transaction` na assinatura real do servico.
+- Corrigido `mobileInventoryController.scanItem` para abrir e fechar transacao Sequelize valida antes de chamar `InventoryService.adjust`.
+- `server/src/services/inventoryService.ts` voltou a retornar o `product` atualizado junto com `movementId`, preservando o encadeamento com `CostingService.registerWeightedAverageCost`.
+- Validacoes executadas com sucesso em 2026-07-30:
+  - `cd server && npm run typecheck`
+  - `cd server && npm run build`
+- Ainda pendente nesta fase:
+  - subida real da API com healthcheck em PostgreSQL limpo;
+  - validacao de runtime/homologacao;
+  - rastreabilidade ponta a ponta das Sprints B/C.
+
+### Registro Sprint B - 2026-07-30 (parcial)
+
+- Refatorado `server/src/modules/traceability/infrastructure/sequelize/SequelizeTraceabilityRepository.ts` para usar os models reais do backend em vez de SQL legado apontando para tabelas/colunas inexistentes.
+- Alinhados os contratos e validators do modulo de rastreabilidade para IDs numericos positivos, coerentes com `products`, `lot_controls` e `production_orders`.
+- Endpoints cobertos:
+  - `GET /api/traceability/items/:id`
+  - `GET /api/traceability/lots/:id`
+  - `GET /api/traceability/production-orders/:id`
+- Validacoes executadas com sucesso em 2026-07-30:
+  - `cd server && npm run typecheck`
+  - `cd server && npm run build`
+- Gap ainda aberto para concluir a Sprint B:
+  - `ReceivePurchaseItemsUseCase` ainda nao gera `LotControl` no recebimento;
+  - `ChangeProductionOrderStatusUseCase` ainda nao persiste `ProductionLotConsumption`, `LotControl` do acabado nem `SerialNumber`;
+  - por isso os criterios de aceite ponta a ponta ainda nao podem ser marcados.
+
+### Registro Sprint C - 2026-07-30 (parcial)
+
+- `server/src/modules/production/application/use-cases/CreateProductionOrderUseCase.ts` agora bloqueia criacao de OP sem disponibilidade minima de materiais, usando `BomService.checkAvailability`.
+- `server/src/modules/production/application/use-cases/ChangeProductionOrderStatusUseCase.ts` agora:
+  - bloqueia liberacao sem material disponivel;
+  - reserva estoque dos componentes ao mudar para `released`;
+  - libera reservas ao cancelar;
+  - libera reservas antes do consumo real na conclusao;
+  - exige `lot_consumptions` explicitos para todos os componentes na conclusao da OP.
+- Validacoes executadas com sucesso em 2026-07-30:
+  - `cd server && npm run typecheck`
+  - `cd server && npm run build`
+- Gap ainda aberto para fechar a Sprint C completamente:
+  - nao houve ainda reconciliacao arquitetural entre `Product/BillOfMaterial` e a camada canonica `Item/ItemEstrutura`;
+  - nao foram adicionados testes de integracao especificos para criacao/liberacao/conclusao de OP com esses novos bloqueios.
+
+### Registro Sprint D - 2026-07-30 (parcial)
+
+- `server/src/models/Product.ts` agora usa `DECIMAL(18, 6)` em `quantity`, `reserved_quantity` e `min_quantity`.
+- `server/src/models/InventoryMovement.ts` agora usa `DECIMAL(18, 6)` em `quantity`.
+- `server/src/models/ProductionOrder.ts`, `server/src/models/SaleItem.ts` e `server/src/models/ProductionOrderTracking.ts` tambem foram ajustados para quantidades decimais no codigo.
+- Foram adicionados validators Zod com `strict()` para payloads criticos em:
+  - `server/src/modules/inventory/presentation/validators/inventoryValidators.ts`
+  - `server/src/modules/purchases/presentation/validators/purchaseValidators.ts`
+  - `server/src/modules/production/presentation/validators/productionValidators.ts`
+- Os controllers criticos de compras, estoque e producao passaram a validar payload antes de executar regra de negocio.
+- `server/src/modules/items/application/use-cases/DeactivateItemUseCase.ts` foi corrigido para usar campos/status reais do backend atual.
+- Ajustes adicionais de quantidade fracionada foram aplicados em venda, disponibilidade/explosao/custo de BOM e apontamento de producao.
+- Validacoes executadas com sucesso em 2026-07-30:
+  - `cd server && npm run typecheck`
+  - `cd server && npm run build`
+- Gap ainda aberto para concluir a Sprint D:
+  - ainda falta uma revisao completa de arredondamento ponta a ponta em compra, estoque, BOM, MRP e custo medio.
+
+### Registro Sprint E - 2026-07-30 (parcial)
+
+- `.env.example` raiz foi alinhado ao backend PostgreSQL atual e deixou de referenciar MongoDB.
+- `_fix_database.ts` foi removido por ser um artefato legado que reintroduzia `mysql`.
+- `@types/sequelize` deprecated foi removido de `server/package.json` e `server/package-lock.json`.
+- `npm audit` foi executado em 2026-07-30 e retornou:
+  - vulnerabilidades altas em cadeia transitoria de `brace-expansion`/`glob` ligada ao ecossistema Jest;
+  - vulnerabilidade moderada em `uuid` transitivo sob `sequelize`.
+- Decisao tecnica:
+  - nao executar `npm audit fix --force`, porque a sugestao automatica degradaria para `jest@25.0.0` e `sequelize@3.30.0`, ambas mudancas breaking e incompativeis com o hardening seguro desta rodada.
+- Validacoes executadas com sucesso em 2026-07-30:
+  - `cd server && npm run typecheck`
+  - `cd server && npm run build`
+- Gap ainda aberto para concluir a Sprint E:
+  - ainda falta fechar a revisao final de ambiente/runtime e os bloqueios de integracao/homologacao para F9/F10.
+
+### Registro F9 - Evidencias 2026-07-30
+
+- `cd server && npm test` executado com sucesso em 2026-07-30:
+  - 8 suites aprovadas;
+  - 3 suites em `skip`;
+  - 12 testes aprovados;
+  - 5 testes em `skip`.
+- `cd server && npm start` executado em 2026-07-30 nao concluiu bootstrap da API:
+  - falha de runtime em `tsx`/Node antes da subida do servidor;
+  - erro observado: `SystemError [ERR_SYSTEM_ERROR]: uv_os_get_passwd returned ENOMEM`;
+- Validacao complementar executada em 2026-07-30 com artefato compilado:
+  - `cd server && npm run build` com sucesso;
+  - `cd server && node dist/index.js` subiu a API com PostgreSQL conectado;
+  - `GET http://127.0.0.1:5000/api` respondeu `200` com payload `{ "message": "API ERP EVOK AUDIO - Online", "version": "2.0.0 (PostgreSQL/Sequelize/TypeScript)" }`.
+- Ajuste aplicado no bootstrap:
+  - `server/config/db.ts` nao executa mais `sequelize.sync()` por padrao;
+  - alteracao automatica de schema agora exige opt-in explicito (`DB_FORCE_SYNC=true` ou `DB_AUTO_ALTER=true` junto de `DB_ALLOW_UNSAFE_ALTER=true`);
+  - isso evita o DDL invalido observado no PostgreSQL legado (`ALTER COLUMN ... TYPE ... UNIQUE`).
+
 ### Checklist
 
 - [ ] Verificar se o branch de release esta limpo ou com mudancas revisadas.
-- [ ] Verificar se `npm run typecheck` passa.
-- [ ] Verificar se `npm run build` passa.
-- [ ] Verificar se `npm test` passa para as suites relevantes.
+- [x] Verificar se `npm run typecheck` passa.
+- [x] Verificar se `npm run build` passa.
+- [x] Verificar se `npm test` passa para as suites relevantes.
+- [x] Verificar se o healthcheck real `GET /api` responde em execucao local.
 - [ ] Verificar se `RUN_INTEGRATION=true npm run test:integration` passa com ambiente configurado.
 - [ ] Verificar se `TEST_API_URL` aponta para o ambiente certo.
 - [ ] Verificar se `TEST_AUTH_TOKEN` existe e e valido.
@@ -342,9 +441,10 @@ Conferir, com calma e em ordem, tudo que precisa estar pronto antes da liberacao
 - [ ] Verificar se `server/.env.example` nao contem segredo real.
 - [ ] Verificar se `docs/DEPLOY.md` explica instalacao, inicializacao e rollback.
 - [ ] Verificar se os modulos `items`, `mrp` e `traceability` estao montados em `server/index.ts`.
+- [ ] Executar smoke autenticado dos endpoints F9/F10 (`items`, `mrp`, `traceability`, `inventory-counts`) agora que o bootstrap HTTP foi validado.
 - [ ] Verificar se os endpoints novos retornam erro estruturado em payload invalido.
 - [ ] Verificar se nao existe leitura do banco legado.
-- [ ] Verificar se `InventoryService` foi corrigido e testado em `ReceivePurchaseItemsUseCase` e `ChangeProductionOrderStatusUseCase`.
+- [x] Verificar se `InventoryService` foi corrigido em `ReceivePurchaseItemsUseCase` e `ChangeProductionOrderStatusUseCase`.
 - [ ] Verificar se o repositorio de rastreabilidade consulta o schema real do backend.
 - [ ] Verificar se criacao/conclusao de OP respeita material disponivel, reserva e consumo por lote.
 - [ ] Verificar se quantidades fracionadas (KG/L/M) nao sofrem truncamento em estoque e movimentos.

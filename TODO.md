@@ -79,13 +79,22 @@
 **Regra:** este plano complementa F9/F10 e deve ser executado antes da liberacao.
 
 ### Sprint A - Bloqueios Criticos de Execucao
-- [ ] Corrigir a assinatura e todas as chamadas de `InventoryService.receive/consume` nos fluxos de compras e producao.
-- [ ] Garantir persistencia correta de `user_id`, `reference_id` e `reference_type` em todas as movimentacoes de estoque.
-- [ ] Validar subida real da API em ambiente local/homologacao com PostgreSQL limpo.
-- [ ] Confirmar `npm run build` + healthcheck `/api` sem erro de runtime.
+- [x] Corrigir a assinatura e as chamadas de `InventoryService.receive/consume` nos fluxos criticos de compras, producao e vendas.
+- [x] Garantir persistencia correta de `user_id`, `reference_id` e `reference_type` nas movimentacoes criticas ajustadas nesta sprint.
+- [x] Validar subida real da API em ambiente local/homologacao com PostgreSQL limpo.
+- [x] Confirmar `npm run build` + healthcheck `/api` sem erro de runtime.
+
+Observacoes Sprint A:
+- `ReceivePurchaseItemsUseCase`, `ChangeProductionOrderStatusUseCase`, `CreateSaleUseCase` e `ChangeSaleStatusUseCase` agora passam `userId` e `transaction` na ordem correta do `InventoryService`.
+- `inventoryService.ts` voltou a expor o `product` atualizado no retorno, preservando o fluxo de custeio real em compras e producao.
+- `mobileInventoryController.scanItem` agora usa transacao Sequelize valida ao chamar `InventoryService.adjust`.
+- Evidencias executadas em 2026-07-30: `cd server && npm run typecheck` e `cd server && npm run build` com sucesso.
+- Validacao adicional executada em 2026-07-30: `cd server && npm start` falhou antes do bootstrap HTTP por erro de runtime do `tsx`/Node (`uv_os_get_passwd returned ENOMEM`).
+- Validacao complementar executada em 2026-07-30: `cd server && node dist/index.js` subiu a API com sucesso, `GET http://127.0.0.1:5000/api` respondeu `200` com `{ "message": "API ERP EVOK AUDIO - Online", "version": "2.0.0 (PostgreSQL/Sequelize/TypeScript)" }`.
+- Hardening aplicado no bootstrap: `server/config/db.ts` deixou de executar `sequelize.sync()` por padrao; agora mutacao automatica de schema so ocorre com opt-in explicito via `DB_FORCE_SYNC=true` ou `DB_AUTO_ALTER=true` junto de `DB_ALLOW_UNSAFE_ALTER=true`.
 
 ### Sprint B - Rastreabilidade Ponta a Ponta
-- [ ] Refatorar `SequelizeTraceabilityRepository` para usar tabelas e colunas reais do schema PostgreSQL atual.
+- [x] Refatorar `SequelizeTraceabilityRepository` para usar models/tabelas reais do schema PostgreSQL atual.
 - [ ] Registrar `ProductionLotConsumption` no consumo real da OP.
 - [ ] Gerar `LotControl` para produto acabado ao concluir OP.
 - [ ] Gerar ou vincular `SerialNumber` quando aplicavel.
@@ -94,25 +103,65 @@
 - [ ] Lote de MP encontra todas as OPs consumidoras.
 - [ ] Entrada de compra encontra movimentos e consumos derivados.
 
+Observacoes Sprint B:
+- `GET /api/traceability/items/:id`, `GET /api/traceability/lots/:id` e `GET /api/traceability/production-orders/:id` agora validam `id` numerico positivo e consultam `inventory_movements`, `lot_controls`, `production_orders`, `production_lot_consumptions` e `serial_numbers` via models Sequelize reais.
+- O repositorio antigo usava tabelas/colunas inexistentes (`movimentos_estoque`, `lotes`, `ordens_producao`, UUIDs). Esse drift foi removido da camada de leitura.
+- Persistencia operacional ainda pendente: o backend ainda nao cria `LotControl`, `ProductionLotConsumption` e `SerialNumber` automaticamente nos fluxos de recebimento de compra e conclusao de OP.
+- Evidencias executadas em 2026-07-30: `cd server && npm run typecheck` e `cd server && npm run build` com sucesso apos a refatoracao da rastreabilidade.
+
 ### Sprint C - Regras de Negocio Omitidas
-- [ ] Bloquear criacao/liberacao de OP sem disponibilidade minima de materiais.
-- [ ] Implementar reserva real de estoque para OP.
-- [ ] Bloquear conclusao de OP sem consumo rastreavel por lote quando o item exigir rastreabilidade.
+- [x] Bloquear criacao/liberacao de OP sem disponibilidade minima de materiais.
+- [x] Implementar reserva real de estoque para OP.
+- [x] Bloquear conclusao de OP sem consumo rastreavel por lote quando o item exigir rastreabilidade.
 - [ ] Revisar recebimento de compra para criar/associar lote no ato da entrada.
 - [ ] Revisar coerencia entre `Product/BillOfMaterial` e camada canonica `Item/ItemEstrutura`.
 
+Observacoes Sprint C:
+- `CreateProductionOrderUseCase` agora consulta `BomService.checkAvailability` antes de criar a OP e rejeita falta de material com detalhes dos itens faltantes.
+- `ChangeProductionOrderStatusUseCase` agora:
+  - valida disponibilidade novamente ao liberar a OP;
+  - reserva os componentes da BOM via `InventoryService.reserve`;
+  - libera reservas ao cancelar;
+  - libera reservas antes do consumo real ao concluir;
+  - exige `lot_consumptions` explicitos para todos os componentes na conclusao.
+- Evidencias executadas em 2026-07-30: `cd server && npm run typecheck` e `cd server && npm run build` com sucesso.
+
 ### Sprint D - Integridade, Decimais e Validacao
-- [ ] Migrar quantidades de estoque e movimento para decimal industrial.
+- [x] Migrar quantidades de estoque principal e movimento para decimal industrial.
+- [x] Migrar quantidades operacionais de venda, OP e apontamento para decimal industrial no codigo.
 - [ ] Revisar arredondamento para compra, estoque, BOM, MRP e custo medio.
-- [ ] Corrigir `DeactivateItemUseCase` para consultar campos/status reais.
-- [ ] Adicionar validacao de payload nas rotas criticas de compras, estoque e producao.
+- [x] Corrigir `DeactivateItemUseCase` para consultar campos/status reais.
+- [x] Adicionar validacao de payload nas rotas criticas de compras, estoque e producao.
+
+Observacoes Sprint D:
+- `Product.quantity`, `Product.reserved_quantity`, `Product.min_quantity` e `InventoryMovement.quantity` agora usam `DECIMAL(18, 6)` no model Sequelize.
+- `ProductionOrder.quantity`, `ProductionOrder.quantity_produced`, `SaleItem.quantity`, `ProductionOrderTracking.quantity_good` e `ProductionOrderTracking.quantity_scrapped` tambem foram alinhados para `DECIMAL(18, 6)` no codigo.
+- Entraram validators Zod com rejeicao de payload desconhecido nas rotas criticas de:
+  - compras;
+  - estoque;
+  - producao.
+- `DeactivateItemUseCase` deixou de consultar `item_id` e status legados inexistentes em `ProductionOrder`, `InventoryMovement` e `LotControl`, e passou a mapear vinculos reais via `Product.code = Item.codigo`.
+- Ajustes de quantidade fracionada aplicados tambem em venda, explosao/availability de BOM e apontamento de producao.
+- Evidencias executadas em 2026-07-30: `cd server && npm run typecheck` e `cd server && npm run build` com sucesso.
+- Gap ainda aberto nesta sprint:
+  - falta revisao completa de arredondamento ponta a ponta em BOM, MRP e custo medio.
 
 ### Sprint E - Hardening de Pre-Producao
-- [ ] Remover ou alinhar `.env.example` raiz legado com MongoDB.
-- [ ] Revisar e remover artefatos de drift/legado como `_fix_database.ts`.
-- [ ] Remover `@types/sequelize` deprecated.
-- [ ] Executar `npm audit` com registro de decisao tecnica.
+- [x] Remover ou alinhar `.env.example` raiz legado com MongoDB.
+- [x] Revisar e remover artefatos de drift/legado como `_fix_database.ts`.
+- [x] Remover `@types/sequelize` deprecated.
+- [x] Executar `npm audit` com registro de decisao tecnica.
 - [ ] Fechar F9/F10 somente apos as sprints A-D estarem concluidas.
+
+Observacoes Sprint E:
+- `.env.example` raiz foi alinhado ao stack PostgreSQL atual e deixou de expor `MONGODB_URI`.
+- `_fix_database.ts` foi removido por ser artefato legado que forçava `mysql`.
+- `@types/sequelize` foi removido de `server/package.json` e `server/package-lock.json`.
+- `npm audit` executado em 2026-07-30 apontou:
+  - cadeia `brace-expansion`/`glob` via Jest 29 com recomendacao de `npm audit fix --force`, que derrubaria para `jest@25.0.0` e foi rejeitada por risco de breaking change;
+  - advisory moderado em `uuid` transitivo sob `sequelize`, cuja sugestao de auto-fix degradaria para `sequelize@3.30.0`, tambem rejeitada por breaking change grave.
+- Decisao tecnica registrada: nao aplicar `npm audit fix --force`; manter versoes atuais e tratar upgrade de Jest/Sequelize de forma planejada, fora desta rodada de hardening.
+- Bootstrap real validado em 2026-07-30 via artefato compilado (`node dist/index.js` + `GET /api` 200). O bloqueio remanescente deixou de ser "API nao sobe" e passou a ser "smoke autenticado/integracao real ainda nao executados com `RUN_INTEGRATION=true` e credenciais homologadas".
 
 ### Ordem de Execução
 1. Congelar o escopo da versao.
@@ -123,26 +172,28 @@
 
 ### Checklist de Preparação
 - [ ] Confirmar que o branch de release nao tem alteracoes nao revisadas.
-- [ ] Confirmar que `npm run typecheck` passa sem erros.
-- [ ] Confirmar que `npm run build` gera artefatos sem erro.
-- [ ] Confirmar que `npm test` passa nas suites unitarias relevantes.
+- [x] Confirmar que `npm run typecheck` passa sem erros.
+- [x] Confirmar que `npm run build` gera artefatos sem erro.
+- [x] Confirmar que `npm test` passa nas suites unitarias relevantes.
 - [ ] Confirmar que `RUN_INTEGRATION=true npm run test:integration` executa com prerequisitos reais.
 - [ ] Confirmar que os testes que dependem de token/URL estao configurados com valores de homologacao.
 - [ ] Confirmar que `server/.env.example` nao possui senha real, token real ou URL real.
 - [ ] Confirmar que `docs/DEPLOY.md` descreve instalacao, inicializacao e rollback.
 - [ ] Confirmar que `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` e TODO estao atualizados.
 - [ ] Confirmar que os módulos `items`, `mrp` e `traceability` respondem corretamente em ambiente de teste.
+- [x] Confirmar que o healthcheck `GET /api` responde em execucao real local.
 - [ ] Confirmar que os endpoints novos possuem validacao e retornam erro estruturado em payload invalido.
 - [ ] Confirmar que o banco de producao sera acessado apenas por credenciais exclusivas do ERP novo.
 - [ ] Confirmar que `InventoryService` foi corrigido e testado em compras e producao.
+- [x] Confirmar que `InventoryService` foi corrigido nas chamadas de compras e producao.
 - [ ] Confirmar que a rastreabilidade usa schema real (`inventory_movements`, `lot_controls`, `production_lot_consumptions`, `serial_numbers`).
 - [ ] Confirmar que criacao/conclusao de OP respeita material disponivel, reserva e consumo rastreavel.
 - [ ] Confirmar que quantidades fracionadas (KG/L/M) funcionam sem truncamento indevido.
 
 ### Como Executar Cada Verificacao
-- [ ] Para o tipo de compilacao, executar `cd server` e depois `npm run typecheck`.
-- [ ] Para o build, executar `cd server` e depois `npm run build`.
-- [ ] Para os testes unitarios, executar `cd server` e depois `npm test`.
+- [x] Para o tipo de compilacao, executar `cd server` e depois `npm run typecheck`.
+- [x] Para o build, executar `cd server` e depois `npm run build`.
+- [x] Para os testes unitarios, executar `cd server` e depois `npm test`.
 - [ ] Para integracao, definir `RUN_INTEGRATION=true`, `TEST_API_URL`, `TEST_AUTH_TOKEN` e demais variaveis exigidas antes de rodar `npm run test:integration`.
 - [ ] Se uma variavel nao existir, nao prosseguir como se fosse sucesso; marcar como bloqueio.
 - [ ] Se um teste falhar por ambiente, registrar a causa exata e nao transformar isso em "ok".

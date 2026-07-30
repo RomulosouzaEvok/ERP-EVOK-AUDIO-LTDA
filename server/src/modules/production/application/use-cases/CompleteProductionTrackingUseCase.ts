@@ -27,8 +27,8 @@ class CompleteProductionTrackingUseCase extends UseCase<Record<string, any>, Pro
    * @throws {BusinessRuleError} Se a etapa nao estiver em andamento.
    */
   public async execute(input: Record<string, any>): Promise<any> {
-    const good = parseInt(String(input.quantity_good ?? 0), 10);
-    const scrapped = parseInt(String(input.quantity_scrapped ?? 0), 10);
+    const good = parseFloat(String(input.quantity_good ?? 0));
+    const scrapped = parseFloat(String(input.quantity_scrapped ?? 0));
     if (good < 0 || scrapped < 0) throw new ValidationError('Quantidades boa/refugada nao podem ser negativas');
 
     const t = await sequelize.transaction();

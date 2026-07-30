@@ -11,7 +11,7 @@ import TraceabilityRepository from '../../domain/repositories/TraceabilityReposi
  * Retorna o historico completo de movimentacoes de um item industrial,
  * incluindo detalhes de lotes e numeros de serie.
  */
-class GetItemTraceabilityUseCase extends UseCase<string, any[]> {
+class GetItemTraceabilityUseCase extends UseCase<number, any[]> {
   private readonly traceabilityRepository: TraceabilityRepository;
 
   public constructor(traceabilityRepository: TraceabilityRepository) {
@@ -22,10 +22,10 @@ class GetItemTraceabilityUseCase extends UseCase<string, any[]> {
   /**
    * Executa a consulta de rastreabilidade por item.
    *
-   * @param itemId - UUID do item canonico.
+   * @param itemId - ID numerico do item/produto.
    * @returns Lista de movimentos do item.
    */
-  public async execute(itemId: string): Promise<any[]> {
+  public async execute(itemId: number): Promise<any[]> {
     return this.traceabilityRepository.getItemHistory(itemId);
   }
 }

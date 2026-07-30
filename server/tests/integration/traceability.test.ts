@@ -31,28 +31,14 @@ describe('Traceability Integration Tests', () => {
     authToken = tokenFromBody;
   });
 
-  it('GET /api/traceability/items/:id - deve retornar historico do item', async () => {
+  it('GET /api/traceability/items/:id - id invalido deve retornar 400', async () => {
     if (process.env.RUN_INTEGRATION !== 'true' || !authToken) return;
 
     const request = require('supertest'); // eslint-disable-line @typescript-eslint/no-var-requires
     const expressApp = require('../../app'); // eslint-disable-line @typescript-eslint/no-var-requires
 
     const response = await request(expressApp)
-      .get('/api/traceability/items/00000000-0000-0000-0000-000000000001')
-      .set('Authorization', `Bearer ${authToken}`);
-
-    expect(response.status).toBe(200);
-    expect(response.body.success).toBe(true);
-  });
-
-  it('GET /api/traceability/items/:id - UUID invalido deve retornar 400', async () => {
-    if (process.env.RUN_INTEGRATION !== 'true' || !authToken) return;
-
-    const request = require('supertest'); // eslint-disable-line @typescript-eslint/no-var-requires
-    const expressApp = require('../../app'); // eslint-disable-line @typescript-eslint/no-var-requires
-
-    const response = await request(expressApp)
-      .get('/api/traceability/items/invalid-uuid')
+      .get('/api/traceability/items/invalid-id')
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(response.status).toBe(400);

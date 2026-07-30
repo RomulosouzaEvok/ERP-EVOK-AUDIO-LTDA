@@ -6,10 +6,11 @@
 
 import UseCase from '../../../../shared/application/UseCase';
 import ProductionOrderEntity from '../../domain/entities/ProductionOrderEntity';
-import { NotFoundError, ValidationError, ConflictError } from '../../../../errors';
+import { NotFoundError, ValidationError, ConflictError, BusinessRuleError } from '../../../../errors';
 const InventoryService: any = require('../../../../services/inventoryService');
 const CostingService: any = require('../../../../services/costingService');
 const BomService: any = require('../../../../services/bomService');
+const { LotControl, ProductionLotConsumption, SerialNumber }: any = require('../../../../models/index');
 import { sequelize } from '../../../../config/database';
 
 interface ChangeProductionOrderStatusInput {
@@ -17,6 +18,14 @@ interface ChangeProductionOrderStatusInput {
   status: string;
   quantity_produced?: number;
   allow_overproduction?: boolean;
+  lot_consumptions?: Array<{
+    product_id: number;
+    lot_control_id: number;
+    quantity: number;
+    notes?: string;
+  }>;
+  finished_lot_number?: string;
+  serial_numbers?: string[];
   user_id: number;
 }
 
@@ -54,8 +63,16 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
         allowOverproduction: !!input.allow_overproduction
       });
 
+      if (input.status === 'released') {
+        await this.reserveMaterials(order, input.user_id, t);
+      }
+
       if (input.status === 'completed') {
-        await this.completeOrder(order, updateData.quantity_produced || 0, input.user_id, t);
+        await this.completeOrder(order, previousStatus, updateData.quantity_produced || 0, input, t);
+      }
+
+      if (input.status === 'canceled') {
+        await this.releaseMaterialsIfReserved(order, input.user_id, t, `Liberacao por cancelamento da OP ${order.order_number}`);
       }
 
       await this.productionOrderRepository.update(input.id, updateData, t);
@@ -73,13 +90,14 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * Completa a OP consumindo componentes, recebendo produto acabado e registrando custo real.
    *
    * @param order - OP travada.
+   * @param previousStatus - Status anterior.
    * @param producedQty - Quantidade produzida.
-   * @param userId - Usuario executor.
+   * @param input - Dados de conclusao.
    * @param transaction - Transacao ativa.
    * @returns void
    * @throws {ConflictError} Se estoque/custo falhar.
    */
-  private async completeOrder(order: any, producedQty: number, userId: number, transaction: any): Promise<void> {
+  private async completeOrder(order: any, previousStatus: string, producedQty: number, input: ChangeProductionOrderStatusInput, transaction: any): Promise<void> {
     if (producedQty <= 0) return;
 
     try {
@@ -91,25 +109,51 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       }
 
       if (explosion) {
+        this.assertTrackedConsumptionInput(explosion.components, input.lot_consumptions);
+        if (['released', 'in_progress', 'paused'].includes(previousStatus)) {
+          await this.releaseReservationsForQuantity(order, input.user_id, producedQty, transaction);
+        }
+        const normalizedConsumptions = this.normalizeLotConsumptions(input.lot_consumptions);
         for (const component of explosion.components) {
-          await InventoryService.consume(component.component_id, component.quantity, transaction, {
-            user_id: userId,
+          await InventoryService.consume(component.component_id, component.quantity, input.user_id, transaction, {
             description: `Consumo de componente - Producao ${order.order_number}`,
-            reference_id: order.id,
-            reference_type: 'production',
-            unit_cost: component.unit_cost || 0
+            referenceId: order.id,
+            referenceType: 'production'
+          });
+
+          await this.consumeLotsForComponent({
+            order,
+            productId: component.component_id,
+            quantity: component.quantity,
+            userId: input.user_id,
+            transaction,
+            requestedConsumptions: normalizedConsumptions.get(component.component_id) ?? []
           });
         }
       }
 
       const totalCost = explosion ? parseFloat(explosion.total_cost || 0) : 0;
       const unitCost = producedQty > 0 ? totalCost / producedQty : 0;
-      const { product } = await InventoryService.receive(order.product_id, producedQty, transaction, {
-        user_id: userId,
+      const { product } = await InventoryService.receive(order.product_id, producedQty, input.user_id, transaction, {
         description: `Producao concluida - ${order.order_number}`,
-        reference_id: order.id,
-        reference_type: 'production',
-        unit_cost: unitCost
+        referenceId: order.id,
+        referenceType: 'production'
+      });
+
+      const finishedLot = await this.createFinishedLot({
+        order,
+        producedQty,
+        userId: input.user_id,
+        transaction,
+        finishedLotNumber: input.finished_lot_number
+      });
+
+      await this.createSerialNumbersIfNeeded({
+        order,
+        lotControlId: finishedLot.id,
+        serialNumbers: input.serial_numbers,
+        userId: input.user_id,
+        transaction
       });
 
       await CostingService.registerWeightedAverageCost({
@@ -118,11 +162,353 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
         unitCost,
         sourceType: 'production',
         sourceId: order.id,
-        userId,
+        userId: input.user_id,
         notes: `Custo real de producao - ${order.order_number}`
       }, transaction);
     } catch (stockError: any) {
       throw new ConflictError(stockError.message);
+    }
+  }
+
+  /**
+   * Reserva materiais da BOM ao liberar a OP.
+   *
+   * @param order - Ordem travada.
+   * @param userId - Usuario executor.
+   * @param transaction - Transacao ativa.
+   * @returns void
+   */
+  private async reserveMaterials(order: any, userId: number, transaction: any): Promise<void> {
+    const availability = await BomService.checkAvailability(order.product_id, Number(order.quantity));
+    if (!availability.available) {
+      throw new BusinessRuleError(
+        `Nao e possivel liberar a OP ${order.order_number} sem material disponivel.`,
+        {
+          production_order_id: order.id,
+          requested_quantity: order.quantity,
+          max_possible_quantity: availability.max_possible_quantity,
+          missing_items: availability.missing_items
+        }
+      );
+    }
+
+    const explosion = await BomService.explodeBOM(order.product_id, Number(order.quantity), { includeCost: false });
+    for (const component of explosion.components) {
+      await InventoryService.reserve(component.component_id, component.quantity, userId, transaction, {
+        description: `Reserva de componente - Producao ${order.order_number}`,
+        referenceId: order.id,
+        referenceType: 'production'
+      });
+    }
+  }
+
+  /**
+   * Libera reservas inteiras da quantidade planejada quando a OP e cancelada.
+   *
+   * @param order - Ordem travada.
+   * @param userId - Usuario executor.
+   * @param transaction - Transacao ativa.
+   * @param description - Motivo da liberacao.
+   * @returns void
+   */
+  private async releaseMaterialsIfReserved(order: any, userId: number, transaction: any, description: string): Promise<void> {
+    if (!['released', 'in_progress', 'paused'].includes(order.status)) {
+      return;
+    }
+
+    const explosion = await BomService.explodeBOM(order.product_id, Number(order.quantity), { includeCost: false });
+    for (const component of explosion.components) {
+      await this.releaseReservedQuantity(component.component_id, component.quantity, order.id, userId, transaction, description);
+    }
+  }
+
+  /**
+   * Libera a reserva planejada antes do consumo real da conclusao.
+   *
+   * @param order - Ordem travada.
+   * @param userId - Usuario executor.
+   * @param producedQty - Quantidade real produzida.
+   * @param transaction - Transacao ativa.
+   * @returns void
+   */
+  private async releaseReservationsForQuantity(order: any, userId: number, producedQty: number, transaction: any): Promise<void> {
+    const plannedExplosion = await BomService.explodeBOM(order.product_id, Number(order.quantity), { includeCost: false });
+    const actualExplosion = await BomService.explodeBOM(order.product_id, producedQty, { includeCost: false });
+    const actualByComponent = new Map<number, number>();
+
+    for (const component of actualExplosion.components) {
+      actualByComponent.set(component.component_id, component.quantity);
+    }
+
+    for (const component of plannedExplosion.components) {
+      const actualQty = actualByComponent.get(component.component_id) ?? 0;
+      const quantityToRelease = Math.max(component.quantity, actualQty);
+      await this.releaseReservedQuantity(
+        component.component_id,
+        quantityToRelease,
+        order.id,
+        userId,
+        transaction,
+        `Liberacao de reserva antes do consumo - Producao ${order.order_number}`
+      );
+    }
+  }
+
+  /**
+   * Libera uma quantidade reservada sem falhar quando a reserva real for menor.
+   *
+   * @param productId - Produto do componente.
+   * @param desiredQuantity - Quantidade desejada.
+   * @param orderId - Ordem de producao relacionada.
+   * @param userId - Usuario executor.
+   * @param transaction - Transacao ativa.
+   * @param description - Motivo da liberacao.
+   * @returns void
+   */
+  private async releaseReservedQuantity(
+    productId: number,
+    desiredQuantity: number,
+    orderId: number,
+    userId: number,
+    transaction: any,
+    description: string
+  ): Promise<void> {
+    const product = await this.productionOrderRepository.findProductById(productId, transaction);
+    const reservedQuantity = parseFloat(String(product?.reserved_quantity || 0));
+    const quantityToRelease = Math.min(reservedQuantity, desiredQuantity);
+
+    if (quantityToRelease <= 0) {
+      return;
+    }
+
+    await InventoryService.releaseReservation(productId, quantityToRelease, userId, transaction, {
+      description,
+      referenceId: orderId,
+      referenceType: 'production'
+    });
+  }
+
+  /**
+   * Exige payload explicito de consumo por lote quando a OP tem componentes.
+   *
+   * @param components - Componentes da BOM explodida.
+   * @param lotConsumptions - Payload recebido.
+   * @returns void
+   */
+  private assertTrackedConsumptionInput(components: any[], lotConsumptions?: ChangeProductionOrderStatusInput['lot_consumptions']): void {
+    if (components.length === 0) {
+      return;
+    }
+
+    if (!lotConsumptions || lotConsumptions.length === 0) {
+      throw new ValidationError('Conclusao da OP exige lot_consumptions explicitos para rastreabilidade dos insumos.');
+    }
+
+    const providedProducts = new Set(lotConsumptions.map((item) => Number(item.product_id)));
+    const missingProducts = components
+      .map((component) => component.component_id)
+      .filter((componentId) => !providedProducts.has(componentId));
+
+    if (missingProducts.length > 0) {
+      throw new ValidationError('Conclusao da OP exige consumo rastreavel por lote para todos os componentes.', {
+        missing_product_ids: missingProducts
+      });
+    }
+  }
+
+  /**
+   * Agrupa consumos de lote informados por produto.
+   *
+   * @param lotConsumptions - Payload opcional recebido do controller.
+   * @returns Mapa por produto.
+   */
+  private normalizeLotConsumptions(lotConsumptions?: ChangeProductionOrderStatusInput['lot_consumptions']): Map<number, Array<{ lot_control_id: number; quantity: number; notes?: string }>> {
+    const grouped = new Map<number, Array<{ lot_control_id: number; quantity: number; notes?: string }>>();
+    for (const row of lotConsumptions ?? []) {
+      const productId = Number(row.product_id);
+      const lotControlId = Number(row.lot_control_id);
+      const quantity = parseFloat(String(row.quantity));
+      if (!Number.isFinite(productId) || !Number.isFinite(lotControlId) || !Number.isFinite(quantity) || quantity <= 0) {
+        throw new ValidationError('lot_consumptions deve conter product_id, lot_control_id e quantity validos.');
+      }
+      const current = grouped.get(productId) ?? [];
+      current.push({ lot_control_id: lotControlId, quantity, notes: row.notes });
+      grouped.set(productId, current);
+    }
+    return grouped;
+  }
+
+  /**
+   * Consome lotes de um componente, usando payload explicito ou FIFO.
+   *
+   * @param params - Contexto de consumo.
+   * @returns void
+   */
+  private async consumeLotsForComponent(params: {
+    order: any;
+    productId: number;
+    quantity: number;
+    userId: number;
+    transaction: any;
+    requestedConsumptions: Array<{ lot_control_id: number; quantity: number; notes?: string }>;
+  }): Promise<void> {
+    const requested = params.requestedConsumptions;
+    let remaining = params.quantity;
+
+    if (requested.length > 0) {
+      const requestedTotal = requested.reduce((sum, entry) => sum + entry.quantity, 0);
+      if (Math.abs(requestedTotal - params.quantity) > 0.0001) {
+        throw new BusinessRuleError(`Consumo por lote do produto ${params.productId} difere da quantidade exigida pela OP.`);
+      }
+      for (const entry of requested) {
+        const lot = await LotControl.findOne({
+          where: { id: entry.lot_control_id, product_id: params.productId },
+          transaction: params.transaction,
+          lock: params.transaction.LOCK.UPDATE
+        });
+        if (!lot) {
+          throw new NotFoundError(`Lote ${entry.lot_control_id} do produto ${params.productId} nao encontrado.`);
+        }
+        await this.applyLotConsumption({
+          lot,
+          quantity: entry.quantity,
+          orderId: params.order.id,
+          productId: params.productId,
+          userId: params.userId,
+          transaction: params.transaction,
+          notes: entry.notes ?? `Consumo OP ${params.order.order_number}`
+        });
+      }
+      return;
+    }
+
+    const candidateLots = await LotControl.findAll({
+      where: { product_id: params.productId, status: 'available' },
+      transaction: params.transaction,
+      lock: params.transaction.LOCK.UPDATE,
+      order: [['received_at', 'ASC'], ['manufactured_at', 'ASC'], ['createdAt', 'ASC']]
+    });
+
+    for (const lot of candidateLots) {
+      if (remaining <= 0) break;
+      const available = parseFloat(String(lot.quantity_available || 0));
+      if (available <= 0) continue;
+      const toConsume = Math.min(available, remaining);
+      await this.applyLotConsumption({
+        lot,
+        quantity: toConsume,
+        orderId: params.order.id,
+        productId: params.productId,
+        userId: params.userId,
+        transaction: params.transaction,
+        notes: `Consumo FIFO OP ${params.order.order_number}`
+      });
+      remaining -= toConsume;
+    }
+
+    if (remaining > 0.0001) {
+      throw new BusinessRuleError(`Nao ha lotes suficientes para rastrear o consumo do produto ${params.productId} na OP ${params.order.order_number}.`);
+    }
+  }
+
+  /**
+   * Aplica consumo em um lote e persiste a linha de rastreabilidade.
+   *
+   * @param params - Dados do consumo.
+   * @returns void
+   */
+  private async applyLotConsumption(params: {
+    lot: any;
+    quantity: number;
+    orderId: number;
+    productId: number;
+    userId: number;
+    transaction: any;
+    notes: string;
+  }): Promise<void> {
+    const available = parseFloat(String(params.lot.quantity_available || 0));
+    if (available + 0.0001 < params.quantity) {
+      throw new BusinessRuleError(`Lote ${params.lot.lot_number} sem saldo suficiente para consumo.`);
+    }
+
+    const nextAvailable = available - params.quantity;
+    await params.lot.update({
+      quantity_available: nextAvailable,
+      status: nextAvailable <= 0.0001 ? 'consumed' : 'available'
+    }, { transaction: params.transaction });
+
+    await ProductionLotConsumption.create({
+      production_order_id: params.orderId,
+      lot_control_id: params.lot.id,
+      product_id: params.productId,
+      quantity_consumed: params.quantity,
+      consumed_at: new Date(),
+      user_id: params.userId,
+      notes: params.notes
+    }, { transaction: params.transaction });
+  }
+
+  /**
+   * Cria o lote do produto acabado gerado pela OP.
+   *
+   * @param params - Dados da producao concluida.
+   * @returns Lote criado.
+   */
+  private async createFinishedLot(params: {
+    order: any;
+    producedQty: number;
+    userId: number;
+    transaction: any;
+    finishedLotNumber?: string;
+  }): Promise<any> {
+    const lotNumber = params.finishedLotNumber?.trim() || `${params.order.order_number}-FG`;
+    return LotControl.create({
+      product_id: params.order.product_id,
+      production_order_id: params.order.id,
+      lot_number: lotNumber,
+      status: 'available',
+      quantity_initial: params.producedQty,
+      quantity_available: params.producedQty,
+      manufactured_at: new Date(),
+      created_by: params.userId,
+      notes: `Produto acabado gerado pela OP ${params.order.order_number}`
+    }, { transaction: params.transaction });
+  }
+
+  /**
+   * Persiste numeros de serie do produto acabado quando informados.
+   *
+   * @param params - Dados seriais.
+   * @returns void
+   */
+  private async createSerialNumbersIfNeeded(params: {
+    order: any;
+    lotControlId: number;
+    serialNumbers?: string[];
+    userId: number;
+    transaction: any;
+  }): Promise<void> {
+    const serialNumbers = (params.serialNumbers ?? [])
+      .map((serial) => String(serial).trim())
+      .filter((serial) => serial.length > 0);
+
+    if (serialNumbers.length === 0) return;
+
+    const uniqueSerials = new Set(serialNumbers);
+    if (uniqueSerials.size !== serialNumbers.length) {
+      throw new ValidationError('serial_numbers nao pode conter valores duplicados.');
+    }
+
+    for (const serialNumber of serialNumbers) {
+      await SerialNumber.create({
+        product_id: params.order.product_id,
+        lot_control_id: params.lotControlId,
+        production_order_id: params.order.id,
+        serial_number: serialNumber,
+        status: 'available',
+        manufactured_at: new Date(),
+        notes: `Serie gerada na OP ${params.order.order_number} por usuario ${params.userId}`
+      }, { transaction: params.transaction });
     }
   }
 }

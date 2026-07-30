@@ -61,7 +61,7 @@ class SaleEntity extends Entity {
       if (!item.product_id || item.quantity === undefined || item.unit_price === undefined) {
         throw new ValidationError('Cada item deve ter product_id, quantity e unit_price');
       }
-      const qty = parseInt(item.quantity);
+      const qty = parseFloat(item.quantity);
       if (Number.isNaN(qty) || qty <= 0) {
         throw new ValidationError('Quantidade deve ser maior que zero');
       }

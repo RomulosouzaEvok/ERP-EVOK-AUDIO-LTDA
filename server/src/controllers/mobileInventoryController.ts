@@ -12,8 +12,22 @@ exports.scanItem = async (req: any, res: any, next: any): Promise<void> => {
     const product = await Product.findOne({ where: { [Op.or]: [{ code: product_code }, { id: isNaN(product_code) ? undefined : product_code }] } });
     if (!product) { res.status(404).json({ success: false, error: 'Produto não encontrado' }); return; }
     if (type === 'out' && product.quantity < qty) { res.status(400).json({ success: false, error: `Estoque insuficiente. Disponível: ${product.quantity}` }); return; }
-    const movement = await InventoryService.adjust(product.id, type, qty, req.user.id, description || `Scan mobile ${type}`, { reference_type: 'adjustment' });
-    res.json({ success: true, data: { product: { id: product.id, name: product.name, code: product.code }, movement, new_quantity: type === 'in' ? product.quantity + qty : product.quantity - qty } });
+    const t = await sequelize.transaction();
+    try {
+      const movement = await InventoryService.adjust(
+        product.id,
+        type,
+        qty,
+        req.user.id,
+        description || `Scan mobile ${type}`,
+        t
+      );
+      await t.commit();
+      res.json({ success: true, data: { product: { id: product.id, name: product.name, code: product.code }, movement, new_quantity: movement.quantityAfter } });
+    } catch (error) {
+      await t.rollback();
+      throw error;
+    }
   } catch (error) { next(error); }
 };
 

@@ -11,7 +11,7 @@ import TraceabilityRepository from '../../domain/repositories/TraceabilityReposi
  * Retorna o historico completo de um lote, desde a entrada ate o consumo
  * em ordens de producao.
  */
-class GetLotTraceabilityUseCase extends UseCase<string, any[]> {
+class GetLotTraceabilityUseCase extends UseCase<number, any[]> {
   private readonly traceabilityRepository: TraceabilityRepository;
 
   public constructor(traceabilityRepository: TraceabilityRepository) {
@@ -22,10 +22,10 @@ class GetLotTraceabilityUseCase extends UseCase<string, any[]> {
   /**
    * Executa a consulta de rastreabilidade por lote.
    *
-   * @param lotId - UUID do lote.
+   * @param lotId - ID numerico do lote.
    * @returns Lista de movimentos do lote.
    */
-  public async execute(lotId: string): Promise<any[]> {
+  public async execute(lotId: number): Promise<any[]> {
     return this.traceabilityRepository.getLotHistory(lotId);
   }
 }

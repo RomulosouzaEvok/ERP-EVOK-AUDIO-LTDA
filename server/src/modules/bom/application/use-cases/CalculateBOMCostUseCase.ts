@@ -24,8 +24,8 @@ class CalculateBOMCostUseCase extends UseCase {
    * @throws {NotFoundError} Se a BOM não existir.
    */
   async execute({ id, qty }) {
-    const quantity = parseInt(qty) || 1;
-    if (quantity <= 0) {
+    const quantity = qty === undefined ? 1 : parseFloat(String(qty));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new ValidationError('Quantidade deve ser maior que zero');
     }
 

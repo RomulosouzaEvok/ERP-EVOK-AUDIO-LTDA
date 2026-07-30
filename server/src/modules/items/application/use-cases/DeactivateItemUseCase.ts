@@ -14,7 +14,13 @@ import { BusinessRuleError, NotFoundError } from '../../../../errors';
 import ItemRepository from '../../domain/repositories/ItemRepository';
 import ItemEstruturaRepository from '../../domain/repositories/ItemEstruturaRepository';
 const { Op } = require('sequelize');
-const { LotControl, ProductionOrder, InventoryMovement, MrpOrdemPlanejada } = require('../../../../models/index');
+const {
+  LotControl,
+  ProductionOrder,
+  InventoryMovement,
+  MrpOrdemPlanejada,
+  Product
+} = require('../../../../models/index');
 
 interface DeactivateItemInput {
   itemId: string;
@@ -56,7 +62,7 @@ class DeactivateItemUseCase extends UseCase<DeactivateItemInput, any> {
       throw new NotFoundError('Item nao encontrado.');
     }
 
-    const vinculos = await this.verificarVinculos(input.itemId);
+    const vinculos = await this.verificarVinculos(item);
 
     const hasVinculos = Object.values(vinculos).some(Boolean);
     if (hasVinculos) {
@@ -72,10 +78,11 @@ class DeactivateItemUseCase extends UseCase<DeactivateItemInput, any> {
   /**
    * Verifica todos os possiveis vinculos de um item.
    *
-   * @param itemId - UUID do item.
+   * @param item - Item canonico.
    * @returns Objeto com todos os vinculos verificados.
    */
-  private async verificarVinculos(itemId: string): Promise<VinculosVerificados> {
+  private async verificarVinculos(item: any): Promise<VinculosVerificados> {
+    const relatedProductIds = await this.resolveRelatedProductIds(item);
     const [
       estruturaAtiva,
       opAberta,
@@ -84,31 +91,31 @@ class DeactivateItemUseCase extends UseCase<DeactivateItemInput, any> {
       ordemMrp,
     ] = await Promise.all([
       // 1. Verifica se o item aparece em alguma estrutura BOM ativa (como pai ou componente)
-      this.itemEstruturaRepository.hasActiveParentOrComponent(itemId),
+      this.itemEstruturaRepository.hasActiveParentOrComponent(item.id),
 
       // 2. Verifica se existem ordens de producao abertas para este item
       ProductionOrder.count({
         where: {
-          item_id: itemId,
-          status: { [Op.in]: ['RASCUNHO', 'APROVADA', 'EM_EXECUCAO'] },
+          product_id: { [Op.in]: relatedProductIds },
+          status: { [Op.in]: ['planned', 'released', 'in_progress', 'paused'] },
         },
       }).then((count: number) => count > 0),
 
       // 3. Verifica se existem movimentos de estoque para este item
       InventoryMovement.count({
-        where: { item_id: itemId },
+        where: { product_id: { [Op.in]: relatedProductIds } },
       }).then((count: number) => count > 0),
 
       // 4. Verifica se existem lotes vinculados
       LotControl.count({
-        where: { item_id: itemId },
+        where: { product_id: { [Op.in]: relatedProductIds } },
       }).then((count: number) => count > 0),
 
       // 5. Verifica se existem ordens MRP planejadas
       MrpOrdemPlanejada.count({
         where: {
-          item_id: itemId,
-          status: { [Op.in]: ['RASCUNHO', 'APROVADA', 'EM_EXECUCAO'] },
+          item_id: item.id,
+          status: { [Op.notIn]: ['CANCELADA', 'CONCLUIDA'] },
         },
       }).then((count: number) => count > 0),
     ]);
@@ -120,6 +127,21 @@ class DeactivateItemUseCase extends UseCase<DeactivateItemInput, any> {
       lote_vinculado: loteVinculado,
       ordem_mrp: ordemMrp,
     };
+  }
+
+  /**
+   * Resolve os products legados relacionados a um item canonico pelo codigo.
+   *
+   * @param item - Item canonico.
+   * @returns number[] com IDs de products relacionados ou [-1] se nao houver.
+   */
+  private async resolveRelatedProductIds(item: any): Promise<number[]> {
+    const products = await Product.findAll({
+      where: { code: item.codigo },
+      attributes: ['id']
+    });
+    const ids = products.map((product: any) => Number(product.id)).filter((id: number) => Number.isFinite(id));
+    return ids.length > 0 ? ids : [-1];
   }
 }
 

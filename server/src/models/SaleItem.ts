@@ -24,7 +24,7 @@ const SaleItem = sequelize.define('SaleItem', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   sale_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → sales.id' },
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id' },
-  quantity: { type: DataTypes.INTEGER, allowNull: false, comment: 'Quantidade vendida' },
+  quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, comment: 'Quantidade vendida' },
   unit_price: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Preço unitário' },
   total_price: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Total (qtd × preço)' }
 }, {

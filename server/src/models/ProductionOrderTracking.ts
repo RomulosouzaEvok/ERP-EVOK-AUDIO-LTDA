@@ -34,8 +34,8 @@ const ProductionOrderTracking = sequelize.define('ProductionOrderTracking', {
   started_at: { type: DataTypes.DATE, allowNull: true },
   finished_at: { type: DataTypes.DATE, allowNull: true },
   operator_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> employees.id' },
-  quantity_good: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
-  quantity_scrapped: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  quantity_good: { type: DataTypes.DECIMAL(18, 6), allowNull: false, defaultValue: 0 },
+  quantity_scrapped: { type: DataTypes.DECIMAL(18, 6), allowNull: false, defaultValue: 0 },
   notes: { type: DataTypes.TEXT, allowNull: true }
 }, {
   tableName: 'production_order_tracking',

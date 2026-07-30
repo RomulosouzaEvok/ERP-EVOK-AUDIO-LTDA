@@ -6,6 +6,7 @@ const GetInventoryMovementByIdUseCase = require('../../application/use-cases/Get
 const CreateInventoryMovementUseCase = require('../../application/use-cases/CreateInventoryMovementUseCase');
 const GetStockReportUseCase = require('../../application/use-cases/GetStockReportUseCase');
 const ListLowStockUseCase = require('../../application/use-cases/ListLowStockUseCase');
+const { createInventoryMovementSchema, handleZodError } = require('../validators/inventoryValidators');
 
 /**
  * Controller enxuto do módulo `inventory`. Interpreta `req`, delega toda a
@@ -69,7 +70,9 @@ exports.getById = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { product_id, type, quantity, description, reference_id, reference_type } = req.body;
+    const parsed = createInventoryMovementSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { product_id, type, quantity, description, reference_id, reference_type } = parsed.data;
     const useCase = new CreateInventoryMovementUseCase();
     const { movement } = await useCase.execute({
       product_id, type, quantity, description, reference_id, reference_type,

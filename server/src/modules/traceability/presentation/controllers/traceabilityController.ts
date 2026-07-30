@@ -9,6 +9,7 @@ const GetItemTraceabilityUseCase = require('../../application/use-cases/GetItemT
 const GetLotTraceabilityUseCase = require('../../application/use-cases/GetLotTraceabilityUseCase');
 const GetProductionOrderTraceabilityUseCase = require('../../application/use-cases/GetProductionOrderTraceabilityUseCase');
 const { NotFoundError, ValidationError } = require('../../../../errors');
+const { traceabilityIdParamSchema } = require('../validators/traceabilityValidators');
 
 const traceabilityRepository = new SequelizeTraceabilityRepository();
 
@@ -18,11 +19,13 @@ const traceabilityRepository = new SequelizeTraceabilityRepository();
  */
 exports.getItemTraceability = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    if (!id) return next(new ValidationError('Parametro id e obrigatorio.'));
+    const parsed = traceabilityIdParamSchema.safeParse(req.params);
+    if (!parsed.success) {
+      return next(new ValidationError('Parametro id invalido. Informe um inteiro positivo.', parsed.error.flatten()));
+    }
 
     const useCase = new GetItemTraceabilityUseCase(traceabilityRepository);
-    const data = await useCase.execute(id);
+    const data = await useCase.execute(parsed.data.id);
 
     if (!data || data.length === 0) {
       return next(new NotFoundError('Nenhum movimento encontrado para o item informado.'));
@@ -40,11 +43,13 @@ exports.getItemTraceability = async (req, res, next) => {
  */
 exports.getLotTraceability = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    if (!id) return next(new ValidationError('Parametro id e obrigatorio.'));
+    const parsed = traceabilityIdParamSchema.safeParse(req.params);
+    if (!parsed.success) {
+      return next(new ValidationError('Parametro id invalido. Informe um inteiro positivo.', parsed.error.flatten()));
+    }
 
     const useCase = new GetLotTraceabilityUseCase(traceabilityRepository);
-    const data = await useCase.execute(id);
+    const data = await useCase.execute(parsed.data.id);
 
     if (!data || data.length === 0) {
       return next(new NotFoundError('Nenhum movimento encontrado para o lote informado.'));
@@ -62,11 +67,13 @@ exports.getLotTraceability = async (req, res, next) => {
  */
 exports.getProductionOrderTraceability = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    if (!id) return next(new ValidationError('Parametro id e obrigatorio.'));
+    const parsed = traceabilityIdParamSchema.safeParse(req.params);
+    if (!parsed.success) {
+      return next(new ValidationError('Parametro id invalido. Informe um inteiro positivo.', parsed.error.flatten()));
+    }
 
     const useCase = new GetProductionOrderTraceabilityUseCase(traceabilityRepository);
-    const data = await useCase.execute(id);
+    const data = await useCase.execute(parsed.data.id);
 
     if (!data) {
       return next(new NotFoundError('Ordem de producao nao encontrada.'));

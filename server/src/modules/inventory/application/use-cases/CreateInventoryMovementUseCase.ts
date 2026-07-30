@@ -38,13 +38,9 @@ class CreateInventoryMovementUseCase extends UseCase {
       input.product_id,
       input.type,
       input.quantity,
+      userId,
       input.description,
       transaction,
-      {
-        user_id: userId,
-        reference_id: input.reference_id,
-        reference_type: input.reference_type
-      }
     );
   }
 }

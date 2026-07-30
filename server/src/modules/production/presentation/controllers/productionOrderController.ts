@@ -18,6 +18,12 @@ import ListProductionTrackingUseCase = require('../../application/use-cases/List
 import CreateProductionTrackingUseCase = require('../../application/use-cases/CreateProductionTrackingUseCase');
 import StartProductionTrackingUseCase = require('../../application/use-cases/StartProductionTrackingUseCase');
 import CompleteProductionTrackingUseCase = require('../../application/use-cases/CompleteProductionTrackingUseCase');
+const {
+  createProductionOrderSchema,
+  updateProductionOrderSchema,
+  updateProductionOrderStatusSchema,
+  handleZodError
+} = require('../validators/productionValidators');
 
 const productionOrderRepository = new SequelizeProductionOrderRepository();
 
@@ -65,8 +71,10 @@ export async function getById(req: Request, res: Response, next: NextFunction): 
 export async function create(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const user = (req as any).user;
+    const parsed = createProductionOrderSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
     const useCase = new CreateProductionOrderUseCase(productionOrderRepository);
-    const order = await useCase.execute({ ...req.body, created_by: user.id });
+    const order = await useCase.execute({ ...parsed.data, created_by: user.id });
     logAction(req, {
       action: 'create',
       entityType: 'ProductionOrder',
@@ -82,8 +90,10 @@ export async function create(req: Request, res: Response, next: NextFunction): P
 /** @param req - Request. @param res - Response. @param next - Next. @returns Promise<void>. */
 export async function update(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const parsed = updateProductionOrderSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
     const useCase = new UpdateProductionOrderUseCase(productionOrderRepository);
-    const { before, updateData, order } = await useCase.execute({ id: Number(req.params.id), data: req.body });
+    const { before, updateData, order } = await useCase.execute({ id: Number(req.params.id), data: parsed.data });
     const oldValues: Record<string, unknown> = {};
     for (const field of Object.keys(updateData)) oldValues[field] = before[field];
     logAction(req, {
@@ -103,12 +113,17 @@ export async function update(req: Request, res: Response, next: NextFunction): P
 export async function updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const user = (req as any).user;
+    const parsed = updateProductionOrderStatusSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
     const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
     const { previousStatus, orderNumber, order, updateData } = await useCase.execute({
       id: Number(req.params.id),
-      status: req.body.status,
-      quantity_produced: req.body.quantity_produced,
-      allow_overproduction: req.body.allow_overproduction,
+      status: parsed.data.status,
+      quantity_produced: parsed.data.quantity_produced,
+      allow_overproduction: parsed.data.allow_overproduction,
+      lot_consumptions: parsed.data.lot_consumptions,
+      finished_lot_number: parsed.data.finished_lot_number,
+      serial_numbers: parsed.data.serial_numbers,
       user_id: user.id
     });
     logAction(req, {
@@ -117,8 +132,8 @@ export async function updateStatus(req: Request, res: Response, next: NextFuncti
       entityId: order.id,
       entityDescription: orderNumber,
       oldValues: { status: previousStatus },
-      newValues: { status: req.body.status, ...(updateData.quantity_produced !== undefined ? { quantity_produced: updateData.quantity_produced } : {}) },
-      description: `Ordem de producao ${orderNumber}: status alterado de ${previousStatus} para ${req.body.status}`
+      newValues: { status: parsed.data.status, ...(updateData.quantity_produced !== undefined ? { quantity_produced: updateData.quantity_produced } : {}) },
+      description: `Ordem de producao ${orderNumber}: status alterado de ${previousStatus} para ${parsed.data.status}`
     });
     res.json({ success: true, data: order });
   } catch (error) { handleError(error, res, next); }

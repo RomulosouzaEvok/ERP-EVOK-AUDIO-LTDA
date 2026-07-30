@@ -6,13 +6,13 @@
 
 import { z } from 'zod';
 
-/** Valida parametro UUID para consulta de rastreabilidade. */
-export const uuidParamSchema = z.object({
-  id: z.string().uuid(),
+/** Valida parametro numerico positivo para consulta de rastreabilidade. */
+export const traceabilityIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
 });
 
 const schemas = {
-  uuidParamSchema,
+  traceabilityIdParamSchema,
 };
 
 module.exports = schemas;

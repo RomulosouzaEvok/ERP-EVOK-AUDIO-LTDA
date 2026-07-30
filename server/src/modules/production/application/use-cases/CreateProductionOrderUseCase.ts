@@ -7,6 +7,7 @@
 import UseCase from '../../../../shared/application/UseCase';
 import ProductionOrderEntity from '../../domain/entities/ProductionOrderEntity';
 import { NotFoundError, BusinessRuleError } from '../../../../errors';
+const BomService: any = require('../../../../services/bomService');
 import { sequelize } from '../../../../config/database';
 
 class CreateProductionOrderUseCase extends UseCase<Record<string, any>, Promise<any>> {
@@ -37,6 +38,19 @@ class CreateProductionOrderUseCase extends UseCase<Record<string, any>, Promise<
       if (product.status !== 'active') throw new BusinessRuleError('Produto inativo nao pode ser produzido');
       if (product.product_type !== 'finished') {
         throw new BusinessRuleError(`Apenas produtos acabados tem OP. '${product.name}' e '${product.product_type}'`);
+      }
+
+      const availability = await BomService.checkAvailability(entity.product_id, entity.quantity);
+      if (!availability.available) {
+        throw new BusinessRuleError(
+          `Nao e possivel criar a OP sem material minimo disponivel para ${product.name}.`,
+          {
+            product_id: entity.product_id,
+            requested_quantity: entity.quantity,
+            max_possible_quantity: availability.max_possible_quantity,
+            missing_items: availability.missing_items
+          }
+        );
       }
 
       const year = new Date().getFullYear();

@@ -29,7 +29,7 @@ const InventoryMovement = sequelize.define('InventoryMovement', {
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id' },
   user_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → users.id (responsável)' },
   type: { type: DataTypes.ENUM('in', 'out', 'adjustment'), allowNull: false, comment: 'Tipo: in=entrada, out=saída, adjustment=ajuste' },
-  quantity: { type: DataTypes.INTEGER, allowNull: false, comment: 'Quantidade movimentada' },
+  quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, comment: 'Quantidade movimentada' },
   unit_cost: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, comment: 'Custo unitário no momento' },
   description: DataTypes.TEXT,
   reference_id: DataTypes.INTEGER,

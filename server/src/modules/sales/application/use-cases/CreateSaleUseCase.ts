@@ -53,7 +53,7 @@ class CreateSaleUseCase extends UseCase {
     const processedItems = [];
 
     for (const item of entity.items) {
-      const qty = parseInt(item.quantity);
+      const qty = parseFloat(item.quantity);
       const unitPrice = parseFloat(item.unit_price);
       const unitPriceCents = toCents(unitPrice);
 
@@ -110,11 +110,10 @@ class CreateSaleUseCase extends UseCase {
 
       // Erros lançados aqui (statusCode 404/409) propagam para o controller,
       // que já está preparado para repassá-los ao errorHandler central.
-      await InventoryService.consume(item.product_id, item.quantity, transaction, {
-        user_id: userId,
+      await InventoryService.consume(item.product_id, item.quantity, userId, transaction, {
         description: `Venda #${sale.id} - ${entity.payment_method}`,
-        reference_id: sale.id,
-        reference_type: 'sale'
+        referenceId: sale.id,
+        referenceType: 'sale'
       });
     }
 

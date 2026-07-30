@@ -24,7 +24,8 @@ class CheckBOMAvailabilityUseCase extends UseCase {
    * @throws {NotFoundError} Se a BOM não existir.
    */
   async execute({ id, qty }) {
-    if (!qty || parseInt(qty) <= 0) {
+    const parsedQty = parseFloat(String(qty));
+    if (!qty || !Number.isFinite(parsedQty) || parsedQty <= 0) {
       throw new ValidationError('Parâmetro "qty" (quantidade) é obrigatório');
     }
 
@@ -33,7 +34,7 @@ class CheckBOMAvailabilityUseCase extends UseCase {
       throw new NotFoundError('BOM não encontrada');
     }
 
-    return BomService.checkAvailability(bom.product_id, parseInt(qty));
+    return BomService.checkAvailability(bom.product_id, parsedQty);
   }
 }
 

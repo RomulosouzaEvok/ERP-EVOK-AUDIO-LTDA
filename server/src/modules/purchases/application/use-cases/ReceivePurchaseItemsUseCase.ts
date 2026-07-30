@@ -1,7 +1,21 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const InventoryService = require('../../../../services/inventoryService');
 const CostingService = require('../../../../services/costingService');
+const { LotControl } = require('../../../../models/index');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
+
+/**
+ * Gera um codigo de lote deterministico para recebimentos sem lote informado.
+ *
+ * @param {Object} params
+ * @param {string} params.orderNumber
+ * @param {number} params.purchaseItemId
+ * @param {number} params.sequence
+ * @returns {string}
+ */
+function buildGeneratedLotNumber({ orderNumber, purchaseItemId, sequence }) {
+  return `${orderNumber}-ITEM${purchaseItemId}-R${String(sequence).padStart(3, '0')}`;
+}
 
 /**
  * Registra o recebimento (total ou parcial) dos itens de um pedido de
@@ -46,6 +60,8 @@ class ReceivePurchaseItemsUseCase extends UseCase {
 
     const previousStatus = purchase.status;
 
+    let generatedLotSequence = 0;
+
     for (const received of items) {
       if (!received.item_id || received.quantity === undefined) {
         throw new ValidationError('Cada item deve ter item_id e quantity');
@@ -75,13 +91,60 @@ class ReceivePurchaseItemsUseCase extends UseCase {
       // duplicado/excedente já é bloqueado acima pelo check de maxReceivable
       // contra received_quantity.
       const unitCost = parseFloat(item.unit_price || 0);
-      const { product } = await InventoryService.receive(item.product_id, qty, transaction, {
-        user_id: userId,
+      const { product } = await InventoryService.receive(item.product_id, qty, userId, transaction, {
         description: `Recebimento PO ${purchase.order_number}`,
-        reference_id: purchase.id,
-        reference_type: 'purchase',
-        unit_cost: unitCost
+        referenceId: purchase.id,
+        referenceType: 'purchase'
       });
+
+      const providedLotNumber = received.lot_number ? String(received.lot_number).trim() : '';
+      generatedLotSequence += 1;
+      const lotNumber = providedLotNumber || buildGeneratedLotNumber({
+        orderNumber: purchase.order_number,
+        purchaseItemId: item.id,
+        sequence: generatedLotSequence
+      });
+
+      const existingLot = await LotControl.findOne({
+        where: {
+          product_id: item.product_id,
+          purchase_id: purchase.id,
+          lot_number: lotNumber
+        },
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      });
+
+      if (existingLot) {
+        const nextInitial = parseFloat(existingLot.quantity_initial || 0) + qty;
+        const nextAvailable = parseFloat(existingLot.quantity_available || 0) + qty;
+        await existingLot.update({
+          supplier_id: purchase.supplier_id,
+          status: 'available',
+          quantity_initial: nextInitial,
+          quantity_available: nextAvailable,
+          received_at: received.received_at || purchase.delivery_date || purchase.invoice_date || new Date(),
+          manufactured_at: received.manufactured_at || existingLot.manufactured_at || null,
+          expires_at: received.expires_at || existingLot.expires_at || null,
+          created_by: userId,
+          notes: received.lot_notes || existingLot.notes || `Recebimento PO ${purchase.order_number}`
+        }, { transaction });
+      } else {
+        await LotControl.create({
+          product_id: item.product_id,
+          supplier_id: purchase.supplier_id,
+          purchase_id: purchase.id,
+          lot_number: lotNumber,
+          status: 'available',
+          quantity_initial: qty,
+          quantity_available: qty,
+          received_at: received.received_at || purchase.delivery_date || purchase.invoice_date || new Date(),
+          manufactured_at: received.manufactured_at || null,
+          expires_at: received.expires_at || null,
+          created_by: userId,
+          notes: received.lot_notes || `Recebimento PO ${purchase.order_number}`
+        }, { transaction });
+      }
 
       await CostingService.registerWeightedAverageCost({
         product,

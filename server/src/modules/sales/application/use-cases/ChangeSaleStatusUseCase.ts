@@ -67,11 +67,10 @@ class ChangeSaleStatusUseCase extends UseCase {
 
     if (status === 'canceled') {
       for (const item of sale.items) {
-        await InventoryService.receive(item.product_id, item.quantity, transaction, {
-          user_id: userId,
+        await InventoryService.receive(item.product_id, item.quantity, userId, transaction, {
           description: `Cancelamento venda #${sale.id} - estoque restaurado`,
-          reference_id: sale.id,
-          reference_type: 'adjustment'
+          referenceId: sale.id,
+          referenceType: 'adjustment'
         });
       }
       await this.saleRepository.cancelPendingReceivables(sale.id, transaction);

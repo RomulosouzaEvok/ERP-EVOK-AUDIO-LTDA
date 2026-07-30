@@ -7,6 +7,13 @@ const CreatePurchaseUseCase = require('../../application/use-cases/CreatePurchas
 const UpdatePurchaseUseCase = require('../../application/use-cases/UpdatePurchaseUseCase');
 const ChangePurchaseStatusUseCase = require('../../application/use-cases/ChangePurchaseStatusUseCase');
 const ReceivePurchaseItemsUseCase = require('../../application/use-cases/ReceivePurchaseItemsUseCase');
+const {
+  createPurchaseSchema,
+  updatePurchaseSchema,
+  updatePurchaseStatusSchema,
+  receivePurchaseItemsSchema,
+  handleZodError
+} = require('../validators/purchaseValidators');
 
 /**
  * Controller enxuto do módulo `purchases`. Interpreta `req`, delega toda a
@@ -67,7 +74,9 @@ exports.getById = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { supplier_id, items, notes, expected_date } = req.body;
+    const parsed = createPurchaseSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { supplier_id, items, notes, expected_date } = parsed.data;
     const useCase = new CreatePurchaseUseCase(purchaseRepository);
     const { purchase, totalAmount } = await useCase.execute({
       supplier_id, items, notes, expected_date, userId: req.user.id, transaction: t
@@ -103,8 +112,10 @@ exports.create = async (req, res, next) => {
  */
 exports.update = async (req, res, next) => {
   try {
+    const parsed = updatePurchaseSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
     const useCase = new UpdatePurchaseUseCase(purchaseRepository);
-    const { updated, oldValues, updateData } = await useCase.execute({ id: req.params.id, body: req.body });
+    const { updated, oldValues, updateData } = await useCase.execute({ id: req.params.id, body: parsed.data });
 
     logAction(req, {
       action: 'update',
@@ -134,7 +145,9 @@ exports.update = async (req, res, next) => {
 exports.updateStatus = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { status } = req.body;
+    const parsed = updatePurchaseStatusSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { status } = parsed.data;
     const useCase = new ChangePurchaseStatusUseCase(purchaseRepository);
     const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, status, userId: req.user.id, transaction: t });
 
@@ -171,7 +184,9 @@ exports.updateStatus = async (req, res, next) => {
 exports.receiveItems = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { items } = req.body;
+    const parsed = receivePurchaseItemsSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { items } = parsed.data;
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
     const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, items, userId: req.user.id, transaction: t });
 

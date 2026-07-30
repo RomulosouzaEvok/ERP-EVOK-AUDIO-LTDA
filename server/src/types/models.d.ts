@@ -61,6 +61,7 @@ export interface ProductAttributes extends BaseAttributes {
   price: number;
   cost_price?: number;
   quantity: number;
+  reserved_quantity?: number;
   min_quantity?: number;
   status: 'active' | 'inactive';
   location?: string;
