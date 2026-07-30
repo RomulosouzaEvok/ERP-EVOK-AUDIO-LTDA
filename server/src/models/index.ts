@@ -104,6 +104,10 @@ SaleItem.belongsTo(Sale, { foreignKey: 'sale_id', as: 'sale' });
 Product.hasMany(SaleItem, { foreignKey: 'product_id', as: 'sale_items' });
 SaleItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
+// Item ↔ SaleItem (Fase 4.3 expand-contract)
+Item.hasMany(SaleItem, { foreignKey: 'item_id', as: 'sale_items' });
+SaleItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
 // Sale ↔ AccountReceivable
 Sale.hasMany(AccountReceivable, { foreignKey: 'sale_id', as: 'accounts_receivable' });
 AccountReceivable.belongsTo(Sale, { foreignKey: 'sale_id', as: 'sale' });
