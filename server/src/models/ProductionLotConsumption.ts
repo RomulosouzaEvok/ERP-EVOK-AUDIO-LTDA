@@ -16,6 +16,7 @@ export interface ProductionLotConsumptionAttributes {
   production_order_id: number;
   lot_control_id: number;
   product_id: number;
+  item_id?: string | null;
   quantity_consumed: number;
   consumed_at: Date;
   user_id: number | null;
@@ -29,6 +30,7 @@ const ProductionLotConsumption = sequelize.define('ProductionLotConsumption', {
   production_order_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> production_orders.id' },
   lot_control_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> lot_controls.id' },
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id consumido' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK -> items.id consumido (expand-contract F4.5)' },
   quantity_consumed: {
     type: DataTypes.DECIMAL(12, 4),
     allowNull: false,

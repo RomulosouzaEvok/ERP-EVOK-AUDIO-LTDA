@@ -162,6 +162,10 @@ InventoryCountItem.belongsTo(User, { foreignKey: 'counted_by', as: 'countedBy' }
 Product.hasMany(ProductionOrder, { foreignKey: 'product_id', as: 'production_orders' });
 ProductionOrder.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
+// Item ↔ ProductionOrder (Fase 4.4 expand-contract)
+Item.hasMany(ProductionOrder, { foreignKey: 'item_id', as: 'production_orders' });
+ProductionOrder.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
 // Employee ↔ ProductionOrder (responsible)
 Employee.hasMany(ProductionOrder, { foreignKey: 'responsible_id', as: 'production_orders' });
 ProductionOrder.belongsTo(Employee, { foreignKey: 'responsible_id', as: 'responsible' });
@@ -201,6 +205,10 @@ ProductionRoute.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' })
 Product.hasMany(LotControl, { foreignKey: 'product_id', as: 'lot_controls' });
 LotControl.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
+// Item ↔ LotControl (Fase 4.6 expand-contract)
+Item.hasMany(LotControl, { foreignKey: 'item_id', as: 'lot_controls' });
+LotControl.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
 Supplier.hasMany(LotControl, { foreignKey: 'supplier_id', as: 'lot_controls' });
 LotControl.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
 
@@ -236,6 +244,10 @@ ProductionLotConsumption.belongsTo(Product, { foreignKey: 'product_id', as: 'pro
 
 User.hasMany(ProductionLotConsumption, { foreignKey: 'user_id', as: 'production_lot_consumptions' });
 ProductionLotConsumption.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// Item ↔ ProductionLotConsumption (Fase 4.5 expand-contract)
+Item.hasMany(ProductionLotConsumption, { foreignKey: 'item_id', as: 'production_lot_consumptions' });
+ProductionLotConsumption.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
 
 // Product cost ledger (F07)
 Product.hasMany(ProductCostLedger, { foreignKey: 'product_id', as: 'cost_ledgers' });

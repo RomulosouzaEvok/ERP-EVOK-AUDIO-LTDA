@@ -16,6 +16,7 @@ export type LotControlStatus = 'available' | 'reserved' | 'consumed' | 'blocked'
 export interface LotControlAttributes {
   id: number;
   product_id: number;
+  item_id?: string | null;
   supplier_id: number | null;
   purchase_id: number | null;
   production_order_id: number | null;
@@ -34,7 +35,8 @@ export interface LotControlAttributes {
 
 const LotControl = sequelize.define('LotControl', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id' },
+  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id (legado)' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK -> items.id (Fase 4.6 expand-contract)' },
   supplier_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> suppliers.id quando o lote veio de compra' },
   purchase_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> purchase_orders.id quando o lote veio de recebimento' },
   production_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> production_orders.id quando o lote foi produzido internamente' },

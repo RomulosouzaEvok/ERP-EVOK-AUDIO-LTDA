@@ -26,6 +26,7 @@ export interface ProductionOrderAttributes {
   responsible_id: number | null;
   notes: string | null;
   created_by: number | null;
+  item_id?: string | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -44,7 +45,8 @@ const ProductionOrder = sequelize.define('ProductionOrder', {
   sales_order_id: { type: DataTypes.INTEGER, comment: 'FK → sales.id (pedido de venda associado)' },
   responsible_id: { type: DataTypes.INTEGER, comment: 'FK → employees.id (responsável)' },
   notes: DataTypes.TEXT,
-  created_by: { type: DataTypes.INTEGER, comment: 'FK → users.id (criador)' }
+  created_by: { type: DataTypes.INTEGER, comment: 'FK → users.id (criador)' },
+  item_id: { type: DataTypes.UUID, comment: 'FK → items.id (Fase 4.4 expand-contract)' }
 }, {
   tableName: 'production_orders',
   underscored: true,
