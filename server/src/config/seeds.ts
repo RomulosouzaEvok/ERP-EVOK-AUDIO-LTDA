@@ -119,6 +119,11 @@ async function seedDatabase(): Promise<void> {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     console.error('❌ Erro nos seeds:', message);
+
+    // Em produção, falhas críticas no seed devem interromper o boot.
+    if (process.env.NODE_ENV === 'production') {
+      throw error;
+    }
   }
 }
 

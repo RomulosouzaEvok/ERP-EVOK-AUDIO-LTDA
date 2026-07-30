@@ -523,8 +523,8 @@ A auditoria confirmou que `server/src/modules/traceability/infrastructure/sequel
 
 ### 16.3 Achados Altos
 
-- [ ] **F.4** — `server/src/config/seeds.ts:74-122`: o erro de `ADMIN_SEED_PASSWORD` ausente em producao e lancado dentro de um `try` cujo `catch` (119-121) apenas loga e engole a excecao; o servidor sobe normalmente sem admin seedado. Corrigir para que o boot falhe de fato em producao, conforme ja documentado em `server/.env.example`.
-- [ ] **F.5** — Modulo de vendas (`saleController.ts`) nao possui validacao Zod de payload em `create`/`updateStatus`, violando a regra da secao 2 ("toda rota nova deve ter validacao de payload"). Criar `saleValidators.ts` com `.strict()` e aplicar no controller, no mesmo padrao dos demais modulos criticos.
+- [x] **F.4** — Re-lançar exceção em produção no `catch` de `seedDatabase()`. Corrigido: "if (NODE_ENV === 'production') throw error" agora impede boot sem `ADMIN_SEED_PASSWORD`. Teste criado em `seeds-production-boot.test.ts` (5/5 testes passam).
+- [x] **F.5** — Validação Zod no módulo de vendas. Criados `saleValidators.ts` com schemas `.strict()` para todos os 4 endpoints e aplicados no `saleController.ts`. Teste criado em `sales-validators.test.ts` (17/17 testes passam).
 
 ### 16.4 Achados Medios
 

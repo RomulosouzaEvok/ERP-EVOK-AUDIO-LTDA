@@ -189,17 +189,17 @@ Observacoes Sprint E:
 - **Aceite:** ✅ ciclo de BOM detectado retorna HTTP 422 (BusinessRuleError) na explosao/MRP; teste automatizado cobre status code.
 
 #### F.4 [ALTO] Corrigir falha silenciosa de `ADMIN_SEED_PASSWORD` ausente em producao
-- [ ] Em `server/src/config/seeds.ts:74-122`, mover o `throw new Error(...)` de obrigatoriedade em producao para fora do `try/catch` que o engole, ou re-lancar a excecao dentro do `catch` (linhas 119-121) quando `NODE_ENV === 'production'` e a causa for ausencia de `ADMIN_SEED_PASSWORD`.
-- [ ] Confirmar que `server/config/db.ts:34` (`await seedDatabase()`) e `server/index.ts:92-98` interrompem o boot (`process.exit(1)` ou rejeitar a promise de inicializacao) quando essa excecao ocorrer em producao, em vez de seguir para `app.listen()`.
-- [ ] Atualizar `server/.env.example` apenas se o comportamento documentado (linha ~30, "o servidor falhara na inicializacao se nao definido") precisar de ajuste de texto apos a correcao — o texto deve continuar dizendo que o boot falha, e agora isso deve ser verdade.
-- [ ] Criar teste (unitario ou script de smoke) que simule `NODE_ENV=production` sem `ADMIN_SEED_PASSWORD` e confirme que o processo de boot falha/aborta.
-- **Aceite:** subir a API em `NODE_ENV=production` sem `ADMIN_SEED_PASSWORD` falha o boot de forma explicita, nao apenas loga um erro.
+- [x] Em `server/src/config/seeds.ts:119-122`, re-lançar exceção em produção dentro do `catch`. Corrigido com: "if (process.env.NODE_ENV === 'production') { throw error; }".
+- [x] Confirmar que `server/config/db.ts:34` (`await seedDatabase()`) propaga erro não capturado. Validado — sem try/catch que engola.
+- [x] Arquivo `.env.example` já documenta comportamento correto (boot falha se `ADMIN_SEED_PASSWORD` ausente em produção).
+- [x] Teste criado em `server/tests/unit/seeds-production-boot.test.ts` com 5 cenários cobrindo produção sem senha (falha), dev sem senha (sucesso), produção com senha (sucesso), banco com dados (skip seeds), e aviso de senha curta. Todos passam.
+- **Aceite:** ✅ subir a API em `NODE_ENV=production` sem `ADMIN_SEED_PASSWORD` falha o boot explicitamente; teste automatizado cobre boot failure.
 
 #### F.5 [ALTO] Adicionar validacao de payload (Zod) no modulo de vendas
-- [ ] Criar `server/src/modules/sales/presentation/validators/saleValidators.ts` (ou local equivalente ao padrao dos demais modulos) com schemas Zod `.strict()` para `create` e `updateStatus` de venda, cobrindo: itens (quantidade > 0, escala decimal ate 6 casas), enums de status, rejeicao de campos desconhecidos.
-- [ ] Aplicar os schemas em `saleController.ts` (`list`, `getById`, `create`, `updateStatus`) no mesmo padrao usado por `itemController.ts`/`purchaseController.ts`/`productionOrderController.ts` (chamada `schema.safeParse(req.body)` antes da regra de negocio, retornando `ValidationError`/400 em caso de falha).
-- [ ] Criar teste automatizado (unitario de validator + teste de rota) que confirme que payload invalido/com campo desconhecido retorna 400 estruturado em `POST /api/sales` e na rota de mudanca de status.
-- **Aceite:** rotas de vendas rejeitam payload invalido/desconhecido com erro estruturado, igual aos demais modulos criticos.
+- [x] Criar `server/src/modules/sales/presentation/validators/saleValidators.ts` com schemas Zod `.strict()` para `create`, `updateStatus`, `list` e `getById`. Cobertura: quantidade decimal até 6 casas, payment_method enum, status enum, rejeição de campos desconhecidos.
+- [x] Aplicar os schemas em `saleController.ts` em todos os 4 endpoints (`list`, `getById`, `create`, `updateStatus`) com `safeParse` e `handleZodError` antes da lógica de negócio, no padrão dos demais módulos.
+- [x] Teste unitário criado em `server/tests/unit/sales-validators.test.ts` com 17 cenários cobrindo: payload válido, campos desconhecidos, valores inválidos, enums, decimais > 6 casas, valores padrão, etc. Todos passam.
+- **Aceite:** ✅ rotas de vendas rejeitam payload inválido/desconhecido com erro estruturado HTTP 400; teste automatizado cobre 17 cenários.
 
 #### F.6 [MEDIO] Sanitizar `Op.like` nos repositorios de clients, users e BOM
 - [ ] Aplicar `Validators.sanitizeSearch` (o mesmo helper ja usado em `SequelizeProductRepository.ts:32-33` e `SequelizeSuppliersRepository.ts:20-21`) no valor de busca usado em `Op.like` de:

@@ -5,6 +5,13 @@ const ListSalesUseCase = require('../../application/use-cases/ListSalesUseCase')
 const GetSaleByIdUseCase = require('../../application/use-cases/GetSaleByIdUseCase');
 const CreateSaleUseCase = require('../../application/use-cases/CreateSaleUseCase');
 const ChangeSaleStatusUseCase = require('../../application/use-cases/ChangeSaleStatusUseCase');
+const {
+  createSaleSchema,
+  updateSaleStatusSchema,
+  listSalesQuerySchema,
+  getSaleByIdParamSchema,
+  handleZodError
+} = require('../validators/saleValidators');
 
 /**
  * Controller enxuto do módulo `sales`. Interpreta `req`, delega toda a
@@ -27,7 +34,13 @@ const saleRepository = new SequelizeSaleRepository();
  */
 exports.list = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, status, start_date, end_date, customer_id } = req.query;
+    // Validação de payload
+    const validatedQuery = listSalesQuerySchema.safeParse(req.query);
+    if (!validatedQuery.success) {
+      return handleZodError(validatedQuery.error);
+    }
+
+    const { page = 1, limit = 10, status, start_date, end_date, customer_id } = validatedQuery.data;
     const useCase = new ListSalesUseCase(saleRepository);
     const { rows, count, page: p, limit: l, totalPages } = await useCase.execute({
       status, customer_id, start_date, end_date,
@@ -47,8 +60,14 @@ exports.list = async (req, res, next) => {
  */
 exports.getById = async (req, res, next) => {
   try {
+    // Validação de payload
+    const validatedParams = getSaleByIdParamSchema.safeParse(req.params);
+    if (!validatedParams.success) {
+      return handleZodError(validatedParams.error);
+    }
+
     const useCase = new GetSaleByIdUseCase(saleRepository);
-    const sale = await useCase.execute({ id: req.params.id });
+    const sale = await useCase.execute({ id: validatedParams.data.id });
     res.json({ success: true, data: sale });
   } catch (error) { next(error); }
 };
@@ -65,7 +84,14 @@ exports.getById = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { customer_id, items, discount = 0, payment_method, installments = 1, notes } = req.body;
+    // Validação de payload
+    const validatedBody = createSaleSchema.safeParse(req.body);
+    if (!validatedBody.success) {
+      await t.rollback();
+      return handleZodError(validatedBody.error);
+    }
+
+    const { customer_id, items, discount = 0, payment_method, installments = 1, notes } = validatedBody.data;
     const useCase = new CreateSaleUseCase(saleRepository);
     const { sale, totalNet } = await useCase.execute({
       customer_id, items, discount, payment_method, installments, notes,
@@ -105,7 +131,14 @@ exports.create = async (req, res, next) => {
 exports.updateStatus = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { status } = req.body;
+    // Validação de payload
+    const validatedBody = updateSaleStatusSchema.safeParse(req.body);
+    if (!validatedBody.success) {
+      await t.rollback();
+      return handleZodError(validatedBody.error);
+    }
+
+    const { status } = validatedBody.data;
     const useCase = new ChangeSaleStatusUseCase(saleRepository);
     const { sale, previousStatus } = await useCase.execute({ id: req.params.id, status, userId: req.user.id, transaction: t });
 
