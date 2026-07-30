@@ -1,6 +1,7 @@
 const { User } = require('../../../../models/index');
 const { Op } = require('sequelize');
 const UsersRepository = require('../../domain/repositories/UsersRepository');
+const Validators = require('../../../../utils/validators');
 
 /**
  * Implementação Sequelize/PostgreSQL de `UsersRepository`, usando exclusivamente
@@ -15,9 +16,10 @@ class SequelizeUsersRepository extends UsersRepository {
   async list({ page, limit, search, role, active }) {
     const where: any = {};
     if (search) {
+      const sanitized = Validators.sanitizeSearch(search);
       where[Op.or] = [
-        { name: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } }
+        { name: { [Op.like]: `%${sanitized}%` } },
+        { email: { [Op.like]: `%${sanitized}%` } }
       ];
     }
     if (role) where.role = role;

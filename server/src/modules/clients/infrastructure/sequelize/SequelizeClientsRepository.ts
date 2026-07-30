@@ -7,16 +7,18 @@
 import { Op } from 'sequelize';
 import ClientsRepository, { ClientsListOptions } from '../../domain/repositories/ClientsRepository';
 const { Client, Sale }: any = require('../../../../models/index');
+const Validators = require('../../../../utils/validators');
 
 class SequelizeClientsRepository extends ClientsRepository {
   /** @inheritdoc */
   public async list({ limit, offset, search, status }: ClientsListOptions): Promise<{ rows: any[]; count: number }> {
     const where: any = {};
     if (search) {
+      const sanitized = Validators.sanitizeSearch(search);
       where[Op.or] = [
-        { name: { [Op.like]: `%${search}%` } },
-        { cpf_cnpj: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } }
+        { name: { [Op.like]: `%${sanitized}%` } },
+        { cpf_cnpj: { [Op.like]: `%${sanitized}%` } },
+        { email: { [Op.like]: `%${sanitized}%` } }
       ];
     }
     if (status) where.status = status;

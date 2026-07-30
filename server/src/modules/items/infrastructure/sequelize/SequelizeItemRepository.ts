@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import ItemRepository from '../../domain/repositories/ItemRepository';
 const { Item } = require('../../../../models/index');
+const Validators = require('../../../../utils/validators');
 type ItemListOptions = { limit: number; offset: number; search?: string; tipo?: string; status?: string };
 
 /**
@@ -11,9 +12,10 @@ class SequelizeItemRepository extends ItemRepository {
   public async list({ limit, offset, search, tipo, status }: ItemListOptions): Promise<{ rows: any[]; count: number }> {
     const where: any = {};
     if (search) {
+      const sanitized = Validators.sanitizeSearch(search);
       where[Op.or] = [
-        { codigo: { [Op.like]: `%${search}%` } },
-        { descricao: { [Op.like]: `%${search}%` } },
+        { codigo: { [Op.like]: `%${sanitized}%` } },
+        { descricao: { [Op.like]: `%${sanitized}%` } },
       ];
     }
     if (tipo) where.tipo = tipo;

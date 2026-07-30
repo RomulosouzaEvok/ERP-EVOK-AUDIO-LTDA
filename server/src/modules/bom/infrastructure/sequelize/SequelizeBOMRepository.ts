@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const { BillOfMaterial, BillOfMaterialItem, Product } = require('../../../../models/index');
 const BOMRepository = require('../../domain/repositories/BOMRepository');
+const Validators = require('../../../../utils/validators');
 
 /**
  * Implementação Sequelize do `BOMRepository`, reutilizando os models
@@ -27,7 +28,8 @@ class SequelizeBOMRepository extends BOMRepository {
 
     const productWhere: any = {};
     if (search) {
-      productWhere.name = { [Op.like]: `%${search}%` };
+      const sanitized = Validators.sanitizeSearch(search);
+      productWhere.name = { [Op.like]: `%${sanitized}%` };
     }
 
     return BillOfMaterial.findAndCountAll({

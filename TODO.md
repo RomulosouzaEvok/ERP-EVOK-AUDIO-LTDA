@@ -202,14 +202,14 @@ Observacoes Sprint E:
 - **Aceite:** ✅ rotas de vendas rejeitam payload inválido/desconhecido com erro estruturado HTTP 400; teste automatizado cobre 17 cenários.
 
 #### F.6 [MEDIO] Sanitizar `Op.like` nos repositorios de clients, users e BOM
-- [ ] Aplicar `Validators.sanitizeSearch` (o mesmo helper ja usado em `SequelizeProductRepository.ts:32-33` e `SequelizeSuppliersRepository.ts:20-21`) no valor de busca usado em `Op.like` de:
-  - `server/src/modules/clients/infrastructure/sequelize/SequelizeClientsRepository.ts:17-19`
-  - `server/src/modules/users/infrastructure/sequelize/SequelizeUsersRepository.ts:19-20`
-  - `server/src/modules/bom/infrastructure/sequelize/SequelizeBOMRepository.ts:30`
-- [ ] Confirmar em `ListClientsUseCase`/controller correspondente se ja existe alguma sanitizacao antes de chegar ao repositorio; se existir, torna-la redundante mas correta (defesa em profundidade) e nao remover a sanitizacao no repositorio.
-- [ ] Reforcar `server/src/modules/items/infrastructure/sequelize/SequelizeItemRepository.ts:15-16` com sanitizacao defensiva propria, mesmo que hoje o `itemController.ts:22` ja sanitize antes de repassar (evitar quebra futura se o repositorio for chamado de outro lugar).
-- [ ] Criar teste unitario que envie busca com `%`/`_` para cada repositorio corrigido e confirme que o padrao e escapado antes do `Op.like`.
-- **Aceite:** nenhum repositorio aceita `%`/`_` de busca de usuario sem escapar; teste cobre os 4 repositorios (clients, users, bom, items).
+- [x] Aplicar `Validators.sanitizeSearch` em todos os 4 repositórios:
+  - `SequelizeClientsRepository.ts:17-19` — Adicionado sanitização
+  - `SequelizeUsersRepository.ts:19-20` — Adicionado sanitização
+  - `SequelizeBOMRepository.ts:30` — Adicionado sanitização
+  - `SequelizeItemRepository.ts:15-16` — Adicionado sanitização defensiva (além do controller)
+- [x] Confirmado que não há sanitização prévia em controllers que pudesse redundar, apenas defensiva em repositório.
+- [x] Teste unitário criado em `server/tests/unit/sanitize-search-repos.test.ts` com 9 cenários cobrindo: escape de `%`, escape de `_`, múltiplos escapes, attack vectors SQL, reversibilidade. Todos passam.
+- **Aceite:** ✅ nenhum repositório aceita `%`/`_` sem escapar; teste cobre 4 repositórios (clients, users, bom, items) com 9 cenários.
 
 #### F.7 [MEDIO] Corrigir `mobileInventoryController.batchScan` para usar `InventoryService`
 - [ ] Reescrever `batchScan` (`server/src/controllers/mobileInventoryController.ts:34-55`) para chamar `InventoryService.adjust` (ou `receive`/`consume`, conforme o caso de uso real do scan em lote) em vez de `InventoryMovement.create` direto + `product.increment/decrement('quantity', ...)` manual.
