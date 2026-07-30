@@ -19,6 +19,7 @@ export interface InventoryCountItemAttributes {
   id: number;
   inventory_count_id: number;
   product_id: number;
+  item_id?: string | null;
   system_quantity: number;
   counted_quantity: number | null;
   variance_quantity: number | null;
@@ -33,7 +34,8 @@ export interface InventoryCountItemAttributes {
 const InventoryCountItem = sequelize.define('InventoryCountItem', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   inventory_count_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → inventory_counts.id' },
-  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id' },
+  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id (LEGADO)' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (NOVO, parallel to product_id)' },
   system_quantity: { type: DataTypes.DECIMAL(12, 3), allowNull: false, defaultValue: 0, comment: 'Quantidade em sistema no momento em que o item entrou na contagem' },
   counted_quantity: { type: DataTypes.DECIMAL(12, 3), comment: 'Quantidade contada fisicamente' },
   variance_quantity: { type: DataTypes.DECIMAL(12, 3), comment: 'counted_quantity - system_quantity' },
@@ -52,6 +54,7 @@ const InventoryCountItem = sequelize.define('InventoryCountItem', {
   indexes: [
     { fields: ['inventory_count_id'] },
     { fields: ['product_id'] },
+    { fields: ['item_id'] },
     { fields: ['status'] }
   ]
 });

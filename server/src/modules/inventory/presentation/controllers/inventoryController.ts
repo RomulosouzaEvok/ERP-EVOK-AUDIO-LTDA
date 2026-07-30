@@ -24,6 +24,8 @@ const inventoryRepository = new SequelizeInventoryRepository();
 /**
  * `GET /api/inventory/movements` — lista movimentações de estoque com filtros e paginação.
  *
+ * DUAL-READ: Aceita `product_id` (legado) OU `item_id` (novo, PREFERIDO).
+ *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
@@ -31,11 +33,17 @@ const inventoryRepository = new SequelizeInventoryRepository();
  */
 exports.list = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, product_id, type, start_date, end_date } = req.query;
+    const { page = 1, limit = 10, product_id, item_id, type, start_date, end_date } = req.query;
     const useCase = new ListInventoryMovementsUseCase(inventoryRepository);
     const { rows, count, page: p, limit: l, totalPages } = await useCase.execute({
-      product_id, type, start_date, end_date,
-      limit: parseInt(String(limit), 10), offset: (parseInt(String(page), 10) - 1) * parseInt(String(limit), 10), page: parseInt(String(page), 10)
+      product_id: product_id ? parseInt(String(product_id), 10) : undefined,
+      item_id: String(item_id || '').trim() || undefined,
+      type,
+      start_date,
+      end_date,
+      limit: parseInt(String(limit), 10),
+      offset: (parseInt(String(page), 10) - 1) * parseInt(String(limit), 10),
+      page: parseInt(String(page), 10)
     });
     res.json({ success: true, data: rows, pagination: { total: count, page: p, limit: l, totalPages } });
   } catch (error) { next(error); }
@@ -62,6 +70,8 @@ exports.getById = async (req, res, next) => {
  * (entrada/saída/ajuste), aplicando lock pessimista e transação via
  * `InventoryService.adjust` (Fase 4.1).
  *
+ * DUAL-READ: Aceita `product_id` (legado) OU `item_id` (novo, PREFERIDO).
+ *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
@@ -72,29 +82,35 @@ exports.create = async (req, res, next) => {
   try {
     const parsed = createInventoryMovementSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { product_id, type, quantity, description, reference_id, reference_type } = parsed.data;
+    const { product_id, item_id, type, quantity, description, reference_id, reference_type } = parsed.data;
     const useCase = new CreateInventoryMovementUseCase();
-    const { movement } = await useCase.execute({
-      product_id, type, quantity, description, reference_id, reference_type,
-      userId: req.user.id,
-      transaction: t
-    });
+    try {
+      const { movement } = await useCase.execute({
+        product_id, item_id, type, quantity, description, reference_id, reference_type,
+        userId: req.user.id,
+        transaction: t
+      });
 
-    await t.commit();
+      await t.commit();
 
-    // Log de auditoria feito após o commit para não segurar locks de banco.
-    logAction(req, {
-      action: type === 'out' ? 'update' : 'create',
-      entityType: 'InventoryMovement',
-      entityId: movement.id,
-      entityDescription: `Produto #${product_id}`,
-      newValues: { type, quantity },
-      description: `Movimentação de estoque (${type}) - quantidade ${quantity}`
-    });
+      // Log de auditoria feito após o commit para não segurar locks de banco.
+      const entityDesc = item_id ? `Item #${item_id}` : `Produto #${product_id}`;
+      logAction(req, {
+        action: type === 'out' ? 'update' : 'create',
+        entityType: 'InventoryMovement',
+        entityId: movement.id,
+        entityDescription: entityDesc,
+        newValues: { type, quantity },
+        description: `Movimentação de estoque (${type}) - quantidade ${quantity}`
+      });
 
-    res.status(201).json({ success: true, data: movement });
+      res.status(201).json({ success: true, data: movement });
+    } catch (innerError) {
+      await t.rollback();
+      throw innerError;
+    }
   } catch (error) {
-    await t.rollback();
+    if (!error.statusCode) await t.rollback();
     if (error.statusCode && !error.code) {
       // Erros lançados por InventoryService (Error simples com statusCode),
       // mantém o mesmo formato de resposta do controller anterior.
