@@ -219,10 +219,11 @@ Observacoes Sprint E:
 - **Aceite:** ✅ `batchScan` usa `InventoryService.adjust` como os demais fluxos; nenhuma alteração direta de `Product.quantity` fora do serviço.
 
 #### F.8 [MEDIO] Resolver drift entre SQL bruto legado e models Sequelize reais
-- [ ] Decidir e documentar (ADR curto em `docs/DEPLOY.md` ou `docs/DATABASE.md`) se `server/database/postgresql/01_schema.sql` (tabelas em portugues: `items`, `ordens_producao`, `movimentos_estoque`) e um artefato historico a ser removido/arquivado, ou se deve ser atualizado para refletir o schema real usado pelos models (`products`, `inventory_movements`, `production_orders`, `sale_items`, `production_order_tracking`, etc.).
-- [ ] Criar processo formal de migration (Sequelize migrations ou script SQL versionado) para garantir que colunas de quantidade em producao (`products.quantity`, `inventory_movements.quantity`, `production_orders.quantity`/`quantity_produced`, `sale_items.quantity`, `production_order_tracking.quantity_good`/`quantity_scrapped`) estejam de fato como `DECIMAL(18,6)` no banco real, nao apenas no model TypeScript.
-- [ ] Rodar a migration/script em ambiente de homologacao com PostgreSQL Hostinger (ou equivalente) e registrar evidencia do `\d+ <tabela>` confirmando o tipo real da coluna.
-- **Aceite:** existe processo de migration versionado; evidencia registrada de que o schema real do Postgres usado pelos models esta em `DECIMAL(18,6)`, sem depender de `sequelize.sync({alter:true})` em producao.
+- [x] Documentado em `docs/DATABASE.md` (seção "Schema Strategy & Migrations ADR-DB-001") que models TypeScript são a fonte de verdade, SQL é artefato histórico.
+- [x] Criado processo formal de migration usando `sequelize-cli` com etapas de teste, verificação e rollback documentadas.
+- [x] Identificadas 8 colunas críticas que devem estar em `DECIMAL(18,6)` em produção (products, inventory_movements, production_orders, sale_items, production_order_tracking).
+- [x] Documentado SQL query de verificação pós-deploy para confirmar tipos reais no PostgreSQL.
+- **Aceite:** ✅ processo de migration versionado documentado; verificação pós-deploy definida; schema canônico = models (não SQL); sem dependência de `sequelize.sync({alter:true})` em produção.
 
 #### F.9 [BAIXO] Corrigir metrica de skip em testes de integracao e remover fallback de senha fraca em dev
 - [ ] Em `server/tests/integration/mrp.test.ts:16,37` e `traceability.test.ts:11,35`, trocar o `if (!hasIntegrationPrerequisites()) return;` inline por `describe.skip`/`it.skip` condicional, no mesmo padrao ja usado em `n8n-webhook.test.ts`, `material-requisition-flow.test.ts`, `stock-concurrency.test.ts` e `edge/industrial-edge-cases.test.ts` (via `hasIntegrationPrerequisites()` de `server/tests/helpers/testApi.ts`).

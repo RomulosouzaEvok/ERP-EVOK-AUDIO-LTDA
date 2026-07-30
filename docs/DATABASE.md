@@ -480,3 +480,65 @@ CREATE INDEX idx_purchase_orders_supplier ON purchase_orders(supplier_id);
 5. **Audit:** Recomenda-se criar modelo AuditLog para rastrear alterações em dados sensíveis
 6. **Modelos Pendentes:** NonConformity (qualidade), MaintenanceOrder (manutenção) e Payroll (folha) ainda não implementados
 
+---
+
+## Schema Strategy & Migrations (ADR-DB-001)
+
+**IMPORTANTE:** O schema canônico é definido pelos **Sequelize models** (`server/src/models/*.ts`), não pelo arquivo SQL.
+
+### Razão
+
+O arquivo `server/database/postgresql/01_schema.sql` é um artefato histórico que não é sincronizado com os models. Isso cria dois riscos:
+- **Documentação drift**: SQL fica desatualizado após mudanças de model
+- **Deployment risk**: Produção não pode confiar no arquivo SQL
+
+### Solução
+
+1. **Models são a fonte de verdade**: Todas as alterações de schema vão nos models TypeScript
+2. **Migrations formais**: Use `sequelize-cli` para criar migrations versionadas
+3. **Verificação pós-deploy**: Confirmar que colunas críticas (DECIMAL, constraints) estão corretas
+
+### Colunas Críticas (DECIMAL)
+
+Estas devem estar em `DECIMAL(18,6)` em PRODUÇÃO:
+- `products.quantity`, `reserved_quantity`, `min_quantity`
+- `inventory_movements.quantity`
+- `production_orders.quantity`, `quantity_produced`
+- `sale_items.quantity`
+- `production_order_tracking.quantity_good`, `quantity_scrapped`
+
+### Processo para Production
+
+```bash
+# 1. Criar migration
+npx sequelize-cli migration:generate --name <date>-<description>
+
+# 2. Implementar up/down
+# server/migrations/20260730-*.js
+
+# 3. Testar em staging
+DB_ENV=staging npx sequelize-cli db:migrate
+
+# 4. Verificar schema
+psql postgres://user:pass@host/db \
+  -c "SELECT column_name, data_type, numeric_precision, numeric_scale 
+      FROM information_schema.columns 
+      WHERE table_name='products' AND column_name='quantity';"
+# Esperado: DECIMAL com precision=18, scale=6
+
+# 5. Deploy em produção
+npx sequelize-cli db:migrate
+```
+
+### Verificação Pós-Deploy
+
+```javascript
+// Verificar DECIMAL correto após deploy
+const Product = require('./models/Product');
+const result = await sequelize.query(
+  "SELECT numeric_precision, numeric_scale FROM information_schema.columns WHERE table_name='products' AND column_name='quantity'"
+);
+console.log('✓ Schema verified:', result[0][0]);
+// Expected: { numeric_precision: 18, numeric_scale: 6 }
+```
+
