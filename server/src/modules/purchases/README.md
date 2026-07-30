@@ -6,7 +6,7 @@ Gerenciar o ciclo de vida de Pedidos de Compra (Purchase Orders) junto a
 fornecedores: criação, edição, aprovação/transições de status, e
 recebimento (total ou parcial) de itens com baixa de estoque. Migrado para
 a arquitetura em camadas (`domain` / `application` / `infrastructure` /
-`presentation`) descrita na Fase 5 do `TODO.md`, seguindo o mesmo padrão
+`presentation`) descrita na Fase 5 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão
 dos módulos `products`, `inventory`, `bom` e `production`.
 
 Este módulo **não reimplementa** a lógica transacional de entrada de
@@ -66,12 +66,12 @@ criação idempotente da `AccountPayable` — roda dentro dela, com
 ao objetivo de estabilidade transacional das Fases 4/5, sem alterar o
 contrato HTTP.
 
-## Notas sobre dívidas técnicas conhecidas (TODO.md)
+## Notas sobre dívidas técnicas conhecidas (docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md)
 
 - **F21 — `AccountPayable` gerado no recebimento**: já estava **correto**
   antes desta migração. O controller anterior já gerava a `AccountPayable`
   em `updateStatus` (na transição para `approved`), não em `receiveItems`.
-  A entrada F21 do `TODO.md` descreve um problema que **já foi resolvido**
+  A entrada F21 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` descreve um problema que **já foi resolvido**
   em versão anterior do código; esta migração apenas preserva esse
   comportamento correto (e corrige a lacuna de atomicidade descrita acima).
   Nenhuma mudança de regra de negócio foi feita quanto a "quando" a conta
@@ -144,7 +144,7 @@ Ver `docs/API.md` para exemplos completos de request/response.
 Todas as rotas exigem JWT válido (`authenticate`). O projeto ainda não
 possui um middleware de RBAC granular por rota neste módulo — qualquer
 usuário autenticado pode criar/aprovar/receber pedidos de compra hoje.
-Isso está listado como pendência na Fase 12 do `TODO.md` ("Revisar RBAC
+Isso está listado como pendência na Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` ("Revisar RBAC
 completo"), mesma pendência documentada nos demais módulos migrados.
 
 ## Eventos / Auditoria
@@ -186,7 +186,7 @@ flowchart TD
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `PurchaseEntity`/use cases e testes de integração dos
-endpoints está prevista na Fase 9 do `TODO.md`.
+endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Pendências conhecidas
 

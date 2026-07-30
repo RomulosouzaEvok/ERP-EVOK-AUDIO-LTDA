@@ -8,7 +8,7 @@ CNPJ), atualização de dados cadastrais e inativação (soft delete via
 `status='inactive'`), bloqueada quando o fornecedor possui pedidos de
 compra pendentes. Migrado para a arquitetura em camadas (`domain` /
 `application` / `infrastructure` / `presentation`) descrita na Fase 5/6 do
-`TODO.md`, seguindo o mesmo padrão dos módulos `users`, `products`,
+`docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão dos módulos `users`, `products`,
 `inventory`, `bom`, `production`, `purchases`, `sales` e `financial`.
 
 Este módulo **não reimplementa** a validação de dígito verificador do
@@ -138,7 +138,7 @@ request/response.
 Todas as rotas exigem apenas JWT válido (`authenticate`) — não há
 `authorize` por papel neste módulo, mesma regra do controller/rotas
 anteriors, sem mudança de RBAC nesta migração. RBAC mais granular está
-listado como pendência na Fase 12 do `TODO.md` ("Revisar RBAC completo"),
+listado como pendência na Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` ("Revisar RBAC completo"),
 mesma pendência documentada nos demais módulos migrados.
 
 ## Eventos / Auditoria
@@ -169,7 +169,7 @@ flowchart TD
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `SupplierEntity`/use cases e testes de integração dos
-5 endpoints está prevista na Fase 9 do `TODO.md`.
+5 endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Pendências conhecidas
 

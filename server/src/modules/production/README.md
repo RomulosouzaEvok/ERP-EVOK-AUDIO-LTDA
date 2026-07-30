@@ -12,7 +12,7 @@ estoque, tudo em uma única transação com lock pessimista.
 
 É o quarto módulo migrado para a arquitetura em camadas (`domain` /
 `application` / `infrastructure` / `presentation`) descrita nas Fases 5/6
-do `TODO.md`, seguindo o mesmo padrão dos módulos `products`, `inventory` e
+do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão dos módulos `products`, `inventory` e
 `bom`.
 
 Este módulo **não reimplementa** a lógica de consumo/entrada de estoque
@@ -54,7 +54,7 @@ cada situação de erro.
 
 ## Decisão de desenho: um único `ChangeProductionOrderStatusUseCase`
 
-O `TODO.md` (Fase 6) prevê use cases separados por transição
+O `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` (Fase 6) prevê use cases separados por transição
 (`ReleaseProductionOrderUseCase`, `StartProductionOrderUseCase`,
 `PauseProductionOrderUseCase`, `ResumeProductionOrderUseCase`,
 `CompleteProductionOrderUseCase`, `CancelProductionOrderUseCase`), mas o
@@ -88,7 +88,7 @@ entrada/saída permanecem idênticos ao anterior.
 
 ### `RegisterScrapUseCase` — não implementado (pendência de schema)
 
-O `TODO.md` lista `RegisterScrapUseCase` como use case esperado da Fase 6.
+O `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` lista `RegisterScrapUseCase` como use case esperado da Fase 6.
 **Não foi implementado nesta migração** porque não existe hoje nenhum
 campo de refugo/scrap (`quantity_scrapped` ou similar) no model
 `ProductionOrder` (`server/src/models/ProductionOrder.ts`), nem qualquer
@@ -168,7 +168,7 @@ Ver `docs/API.md` para exemplos completos de request/response.
 em `POST /` e `authorize('admin')` em `DELETE /:id`, preservados exatamente
 como no roteador anterior. As demais rotas (`GET`, `PUT`) não têm restrição
 de papel adicional hoje — mesmo comportamento do anterior; revisão de RBAC
-granular está prevista na Fase 12 do `TODO.md`.
+granular está prevista na Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Eventos / Auditoria
 
@@ -189,7 +189,7 @@ não segurar locks de banco (mesmo comentário/comportamento do anterior).
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `ProductionOrderEntity`/use cases e testes de
-integração dos endpoints está prevista na Fase 9 do `TODO.md`.
+integração dos endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Fluxo simplificado (Mermaid)
 

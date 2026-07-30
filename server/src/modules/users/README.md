@@ -8,7 +8,7 @@ dados cadastrais (sem senha) e inativação (soft delete). Distinto do
 módulo `auth`, que trata login, o próprio registro (`POST /api/auth/register`,
 mesma regra de negócio) e leitura do usuário autenticado (`GET /api/auth/me`).
 Migrado para a arquitetura em camadas (`domain` / `application` /
-`infrastructure` / `presentation`) descrita na Fase 5 do `TODO.md`,
+`infrastructure` / `presentation`) descrita na Fase 5 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`,
 seguindo o mesmo padrão dos módulos `auth`, `products`, `inventory`, `bom`,
 `production`, `purchases`, `sales` e `financial`.
 
@@ -170,7 +170,7 @@ flowchart TD
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários dos use cases e testes de integração dos 5 endpoints está
-prevista na Fase 9 do `TODO.md`.
+prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Pendências conhecidas
 

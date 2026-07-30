@@ -145,7 +145,7 @@ exports.create = async (req, res, next) => {
  * (via `UpdateBOMUseCase`, que aceita todos os campos permitidos incluindo
  * `status`). Quando `status` muda para `active`, o log de auditoria usa
  * `action: 'approve'` (mesma detecção `isApproval` do controller anterior).
- * `ApproveBOMUseCase` existe como wrapper dedicado (Fase 6 do TODO.md) e
+ * `ApproveBOMUseCase` existe como wrapper dedicado (Fase 6 do docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md) e
  * pode ser usado por fluxos futuros de aprovação isolada — ver README.
  *
  * @param {import('express').Request} req

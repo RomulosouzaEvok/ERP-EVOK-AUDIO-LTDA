@@ -7,7 +7,7 @@ relatórios de posição de estoque e o **inventário cíclico** (contagem
 física periódica com workflow de aprovação, Fase F09) dos produtos da
 fábrica de alto-falantes. É o segundo módulo migrado para a arquitetura em
 camadas (`domain` / `application` / `infrastructure` / `presentation`)
-descrita na Fase 5 do `TODO.md`, seguindo o mesmo padrão do módulo
+descrita na Fase 5 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão do módulo
 `products`.
 
 Este módulo **não reimplementa** a lógica transacional de alteração de
@@ -120,7 +120,7 @@ documentados na seção dedicada abaixo.
 Todas as rotas exigem JWT válido (`authenticate`). O projeto ainda não
 possui um middleware de RBAC granular por rota neste módulo — qualquer
 usuário autenticado pode registrar movimentações de estoque hoje. Isso está
-listado como pendência na Fase 12 do `TODO.md` ("Revisar RBAC completo").
+listado como pendência na Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` ("Revisar RBAC completo").
 
 ## Eventos / Auditoria
 
@@ -140,7 +140,7 @@ são somente leitura e não geram auditoria, mesmo comportamento do anterior.
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `InventoryMovementEntity`/use cases e testes de
-integração dos endpoints está prevista na Fase 9 do `TODO.md`.
+integração dos endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Fluxo simplificado (Mermaid)
 
@@ -263,7 +263,7 @@ Nenhuma migration formal foi criada nesta sprint. As tabelas
 `sequelize.sync({ alter: true })` (`server/config/db.ts`), seguindo o mesmo
 padrão híbrido usado por todos os demais models do projeto até a Fase 11.
 **Migrations formais (com `up`/`down` versionados) ficam pendentes para a
-Fase 11 do `TODO.md`** ("Banco de dados, migrations e producao"), quando
+Fase 11 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`** ("Banco de dados, migrations e producao"), quando
 todo o schema atual deverá ser migrado para migrations reais.
 
 ### Pendências conhecidas (F09)
@@ -282,15 +282,15 @@ todo o schema atual deverá ser migrado para migrations reais.
   /:id/approve`/`reject`, mesma limitação já documentada para o restante do
   módulo `inventory`.
 - Testes automatizados não foram criados (mesma pendência geral do projeto,
-  Fase 9 do `TODO.md`).
+  Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`).
 
 ## Pendências conhecidas
 
 - **`reserved_quantity` não existe no schema do `Product`** (dívida técnica
-  documentada na Prioridade 5 do `TODO.md`, seção "Sistema de Reserva de
+  documentada na Prioridade 5 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seção "Sistema de Reserva de
   Estoque (F22)"). Consequentemente, os use cases `ReserveStockUseCase` /
   `ReleaseStockReservationUseCase` / `TransferStockUseCase` previstos na
-  Fase 6 do `TODO.md` **não foram criados** nesta migração — o
+  Fase 6 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` **não foram criados** nesta migração — o
   `InventoryService.reserve`/`releaseReservation` já existentes são
   "no-op defensivo" (validam entrada e disponibilidade, mas não persistem
   reserva nenhuma) até a coluna ser adicionada ao schema. Quando essa

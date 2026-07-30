@@ -11,7 +11,7 @@ hierárquica (para produtos com subconjuntos/sub-BOMs).
 
 É o terceiro módulo migrado para a arquitetura em camadas (`domain` /
 `application` / `infrastructure` / `presentation`) descrita nas Fases 5/6
-do `TODO.md`, seguindo o mesmo padrão dos módulos `products` e `inventory`.
+do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão dos módulos `products` e `inventory`.
 
 Este módulo **não reimplementa** a lógica de negócio complexa de BOM
 (explosão recursiva com proteção contra loop infinito via `MAX_BOM_DEPTH`,
@@ -53,7 +53,7 @@ Endpoint novo (aditivo, não quebra nada existente): `GET
 (qualquer status: `draft`/`active`/`inactive`/`superseded`) de BOM de um
 produto, ordenadas por data de criação. Não existia no controller anterior.
 
-### Decisões de desenho dos use cases (mapeamento com a Fase 6 do TODO.md)
+### Decisões de desenho dos use cases (mapeamento com a Fase 6 do docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md)
 
 | Use case previsto no TODO | Implementado como | Observação |
 |---|---|---|
@@ -78,7 +78,7 @@ outros campos juntos no mesmo `PUT`), a rota `PUT /api/engineering/bom/:id`
 usa sempre `UpdateBOMUseCase` (que aceita todos os campos permitidos) e o
 controller replica a mesma lógica de detecção `isApproval` apenas para
 decidir a `action` do log de auditoria. `ApproveBOMUseCase` foi criado
-como use case dedicado (conforme pedido pela Fase 6 do TODO.md) e é
+como use case dedicado (conforme pedido pela Fase 6 do docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md) e é
 funcionalmente equivalente a invocar `UpdateBOMUseCase` apenas com
 `{ status: 'active' }`; fica disponível para uso por outros
 controllers/fluxos que precisem de uma operação de aprovação isolada (ex.:
@@ -158,7 +158,7 @@ Ver `docs/API.md` para exemplos completos de request/response.
 Todas as rotas exigem JWT válido (`authenticate`). O projeto ainda não
 possui um middleware de RBAC granular por rota neste módulo — qualquer
 usuário autenticado pode criar/aprovar/inativar BOMs hoje. Isso está
-listado como pendência na Fase 12 do `TODO.md` ("Revisar RBAC completo").
+listado como pendência na Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` ("Revisar RBAC completo").
 
 ## Eventos / Auditoria
 
@@ -179,7 +179,7 @@ leitura e não geram auditoria, mesmo comportamento do anterior.
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `BOMEntity`/use cases e testes de integração dos
-endpoints está prevista na Fase 9 do `TODO.md`.
+endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Fluxo simplificado (Mermaid)
 

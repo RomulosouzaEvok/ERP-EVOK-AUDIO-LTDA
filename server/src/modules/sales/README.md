@@ -6,7 +6,7 @@ Gerenciar o ciclo de vida de Vendas ao cliente final: criação (com itens,
 baixa de estoque e geração de parcelas em contas a receber) e transições de
 status (`quote` → `confirmed` → `invoiced`/`canceled`). Migrado para a
 arquitetura em camadas (`domain` / `application` / `infrastructure` /
-`presentation`) descrita na Fase 5 do `TODO.md`, seguindo o mesmo padrão
+`presentation`) descrita na Fase 5 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão
 dos módulos `products`, `inventory`, `bom`, `production` e `purchases`.
 
 Este módulo **não reimplementa** a lógica transacional de baixa/entrada de
@@ -57,7 +57,7 @@ mantêm o fallback genérico do `errorHandler`, igual ao anterior.
 
 ## F24 — Arredondamento de parcelas (já corrigido antes desta migração)
 
-O `TODO.md` lista F24 como uma dívida técnica relacionada a arredondamento
+O `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` lista F24 como uma dívida técnica relacionada a arredondamento
 impreciso de parcelas em `saleController.ts`. **Essa correção já havia sido
 aplicada antes desta migração** (o controller anterior já calculava tudo em
 centavos usando helpers locais `toCents`/`fromCents`, com a última parcela
@@ -97,7 +97,7 @@ Ou seja, o conceito de "orçamento" (quote) que reservaria estoque sem
 debitá-lo de fato (ex.: usando `InventoryService.reserve`, que já existe
 como "no-op defensivo" aguardando a coluna `reserved_quantity` no schema —
 ver `server/src/services/inventoryService.ts`) **não está implementado**.
-Isso é uma pendência conhecida, documentada no `TODO.md` como F22, e
+Isso é uma pendência conhecida, documentada no `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` como F22, e
 **permanece pendente após esta migração** — nenhuma mudança de
 comportamento foi feita quanto a isso, apenas preservação 1:1 do fluxo
 anterior (que já tinha essa mesma lacuna).
@@ -160,7 +160,7 @@ Ver `docs/API.md` para exemplos completos de request/response.
 Todas as rotas exigem JWT válido (`authenticate`). O projeto ainda não
 possui um middleware de RBAC granular por rota neste módulo — qualquer
 usuário autenticado pode criar/cancelar vendas hoje. Isso está listado
-como pendência na Fase 12 do `TODO.md` ("Revisar RBAC completo"), mesma
+como pendência na Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` ("Revisar RBAC completo"), mesma
 pendência documentada nos demais módulos migrados.
 
 ## Eventos / Auditoria
@@ -203,7 +203,7 @@ flowchart TD
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `SaleEntity`/use cases e testes de integração dos
-endpoints está prevista na Fase 9 do `TODO.md`.
+endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Pendências conhecidas
 

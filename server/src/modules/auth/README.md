@@ -6,7 +6,7 @@ Gerenciar autenticação e criação de usuários do ERP: login (emissão de
 token JWT), registro de novos usuários (restrito a administradores) e
 leitura dos dados do usuário autenticado. Migrado para a arquitetura em
 camadas (`domain` / `application` / `infrastructure` / `presentation`)
-descrita na Fase 5 do `TODO.md`, seguindo o mesmo padrão dos módulos
+descrita na Fase 5 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão dos módulos
 `products`, `inventory`, `bom`, `production`, `purchases`, `sales` e
 `financial`.
 
@@ -162,7 +162,7 @@ flowchart TD
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `LoginUseCase`/`RegisterUserUseCase` e testes de
-integração dos 3 endpoints está prevista na Fase 9 do `TODO.md`.
+integração dos 3 endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Pendências conhecidas
 

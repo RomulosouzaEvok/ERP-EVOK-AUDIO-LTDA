@@ -14,7 +14,7 @@
  * - Validação de arquivos (magic bytes)
  * - Sanitização de strings para busca segura
  *
- * Primeiro arquivo migrado para TypeScript (Fase 7 do TODO.md) — mantém a
+ * Primeiro arquivo migrado para TypeScript (Fase 7 do docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md) — mantém a
  * mesma API pública (`module.exports = Validators`) para não quebrar os
  * dezenas de `require('../utils/validators')` já existentes em código JS.
  */

@@ -7,7 +7,7 @@ partir de vendas), contas a pagar (avulsas ou geradas na aprovação de
 pedidos de compra pelo módulo `purchases`) e um relatório simples de fluxo
 de caixa agregado por status em um período. Migrado para a arquitetura em
 camadas (`domain` / `application` / `infrastructure` / `presentation`)
-descrita na Fase 5/6 do `TODO.md`, seguindo o mesmo padrão dos módulos
+descrita na Fase 5/6 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão dos módulos
 `purchases`, `sales` e `production`.
 
 Este módulo **não reimplementa** a geração automática de `AccountReceivable`
@@ -125,7 +125,7 @@ Ver `docs/API.md` (seção 6 — Financeiro) para exemplos completos de request/
 e pagamentos hoje. Apenas `POST /api/finance/payable` (criação manual de
 conta a pagar) exige adicionalmente papel `admin` ou `financial`
 (`authorize('admin', 'financial')`), preservado exatamente do anterior.
-RBAC mais granular está listado como pendência na Fase 12 do `TODO.md`
+RBAC mais granular está listado como pendência na Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`
 ("Revisar RBAC completo"), mesma pendência documentada nos demais módulos
 migrados.
 
@@ -160,7 +160,7 @@ flowchart TD
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `AccountPayableEntity`/use cases e testes de
-integração dos endpoints está prevista na Fase 9 do `TODO.md`.
+integração dos endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Pendências conhecidas
 

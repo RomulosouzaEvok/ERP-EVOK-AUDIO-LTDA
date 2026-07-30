@@ -14,7 +14,7 @@ const BomService = require('../../../../services/bomService');
  *
  * Por já cuidar do versionamento automático (supersede) internamente, este
  * use case cobre também o papel do `SupersedeBOMUseCase` previsto no
- * `TODO.md`; não há um endpoint HTTP separado para "supersede manual" hoje
+ * `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`; não há um endpoint HTTP separado para "supersede manual" hoje
  * — ver decisão documentada no README do módulo.
  */
 class CreateBOMUseCase extends UseCase {

@@ -7,7 +7,7 @@ busca/filtro/paginação, consulta individual, criação (com validação de
 CPF/CNPJ), atualização de dados cadastrais e inativação (soft delete via
 `status='inactive'`), bloqueada quando o cliente possui vendas ativas.
 Migrado para a arquitetura em camadas (`domain` / `application` /
-`infrastructure` / `presentation`) descrita na Fase 5/6 do `TODO.md`,
+`infrastructure` / `presentation`) descrita na Fase 5/6 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`,
 seguindo o mesmo padrão dos módulos `users`, `products`, `inventory`,
 `bom`, `production`, `purchases`, `sales`, `financial` e `suppliers`.
 
@@ -157,7 +157,7 @@ request/response.
 Todas as rotas exigem apenas JWT válido (`authenticate`) — não há
 `authorize` por papel neste módulo, mesma regra do controller/rotas
 anteriors, sem mudança de RBAC nesta migração. RBAC mais granular está
-listado como pendência na Fase 12 do `TODO.md` ("Revisar RBAC completo"),
+listado como pendência na Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` ("Revisar RBAC completo"),
 mesma pendência documentada nos demais módulos migrados.
 
 ## Eventos / Auditoria
@@ -188,7 +188,7 @@ flowchart TD
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `ClientEntity`/use cases e testes de integração dos
-5 endpoints está prevista na Fase 9 do `TODO.md`.
+5 endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Pendências conhecidas
 

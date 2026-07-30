@@ -25,7 +25,7 @@ O módulo **BOM (Bill of Materials)** é o coração da Engenharia do Produto. E
    │       ├── Surround de borracha (1 un)
    │       └── Cola especial (30g)
    │
-   ├── 🔄 MRP usa a BOM para calcular (ainda não implementado, ver TODO.md):
+   ├── 🔄 MRP usa a BOM para calcular (ainda não implementado, ver docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md):
    │       ├── Quanto comprar de cada insumo
    │       ├── Quando comprar (baseado em lead time)
    │       └── Custo real do produto

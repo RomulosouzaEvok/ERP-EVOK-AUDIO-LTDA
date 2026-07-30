@@ -9,7 +9,7 @@ acústicos Thiele-Small usados em engenharia/PCP.
 
 Este módulo é o primeiro migrado para a arquitetura em camadas
 (`domain` / `application` / `infrastructure` / `presentation`) descrita na
-Fase 5 do `TODO.md`, servindo de referência para a migração dos módulos
+Fase 5 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, servindo de referência para a migração dos módulos
 seguintes (`inventory`, `bom`, `production`, `purchases`, `sales`).
 
 ## Decisão de compatibilidade de rotas
@@ -105,7 +105,7 @@ Todas as rotas exigem JWT válido (`authenticate`). O projeto ainda não
 possui um middleware de RBAC granular por rota neste módulo (ex.:
 `authorize('admin', 'pcp')`) — qualquer usuário autenticado pode
 criar/editar/inativar produtos hoje. Isso está listado como pendência na
-Fase 12 do `TODO.md` ("Revisar RBAC completo").
+Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` ("Revisar RBAC completo").
 
 ## Eventos / Auditoria
 
@@ -123,7 +123,7 @@ anterior:
 Nenhum teste automatizado existe hoje para este módulo (nem para o
 restante do projeto — `server/tests/` ainda não existe). Cobertura de
 testes unitários de `ProductEntity`/use cases e testes de integração dos
-endpoints está prevista na Fase 9 do `TODO.md`.
+endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Fluxo simplificado (Mermaid)
 

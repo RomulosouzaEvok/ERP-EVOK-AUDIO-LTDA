@@ -509,7 +509,7 @@ O resultado esperado e vazio, exceto usos legitimos de `process.env`.
 
 ### Objetivo
 
-Auditoria executiva de release-gate (Lead QA/DevSecOps), comparando este documento e o `TODO.md` com o codigo-fonte linha a linha apos as Sprints A-E. Encontrou 3 violacoes criticas de criterios de aceite ja definidos neste cronograma, 2 achados altos e itens medios/baixos. Nenhum item de F9/F10 pode ser fechado enquanto os itens criticos abaixo nao forem corrigidos e cobertos por teste.
+Auditoria executiva de release-gate (Lead QA/DevSecOps), comparando este documento e o `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` com o codigo-fonte linha a linha apos as Sprints A-E. Encontrou 3 violacoes criticas de criterios de aceite ja definidos neste cronograma, 2 achados altos e itens medios/baixos. Nenhum item de F9/F10 pode ser fechado enquanto os itens criticos abaixo nao forem corrigidos e cobertos por teste.
 
 ### 16.1 Reconciliacao - Sprint B estava mais avancada do que o documentado
 
@@ -555,5 +555,5 @@ A auditoria confirmou que `server/src/modules/traceability/infrastructure/sequel
 - [x] Achados altos (F.4, F.5) completos com testes.
 - [x] Achados medios (F.6, F.7, F.8) completamente endereçados.
 - [x] Achados baixos (F.9) e lacuna de teste (F.10) completamente resolvidos.
-- [x] `TODO.md` e este documento foram atualizados refletindo o status real apos as correcoes (secao 16.1 reconciliacao completa, secao 16.2-16.6 todos os achados concluídos).
+- [x] `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` e este documento foram atualizados refletindo o status real apos as correcoes (secao 16.1 reconciliacao completa, secao 16.2-16.6 todos os achados concluídos).
 - **✅ Sprint F completa. F9/F10 desbloqueadas para execução.**
