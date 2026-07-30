@@ -181,6 +181,10 @@ ProductionOrder.belongsTo(Sale, { foreignKey: 'sales_order_id', as: 'salesOrder'
 Product.hasMany(ProductionRoute, { foreignKey: 'product_id', as: 'production_routes' });
 ProductionRoute.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
+// Item ↔ ProductionRoute (Fase 4.8 expand-contract)
+Item.hasMany(ProductionRoute, { foreignKey: 'item_id', as: 'production_routes' });
+ProductionRoute.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
 ProductionRoute.hasMany(ProductionRouteStep, { foreignKey: 'production_route_id', as: 'steps' });
 ProductionRouteStep.belongsTo(ProductionRoute, { foreignKey: 'production_route_id', as: 'route' });
 
@@ -232,6 +236,10 @@ SerialNumber.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as:
 
 Sale.hasMany(SerialNumber, { foreignKey: 'sale_id', as: 'serial_numbers' });
 SerialNumber.belongsTo(Sale, { foreignKey: 'sale_id', as: 'sale' });
+
+// Item ↔ SerialNumber (Fase 4.7 expand-contract)
+Item.hasMany(SerialNumber, { foreignKey: 'item_id', as: 'serial_numbers' });
+SerialNumber.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
 
 ProductionOrder.hasMany(ProductionLotConsumption, { foreignKey: 'production_order_id', as: 'lot_consumptions' });
 ProductionLotConsumption.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
@@ -379,6 +387,10 @@ BillOfMaterialItem.belongsTo(BillOfMaterial, { foreignKey: 'bom_id', as: 'bom' }
 // Product ↔ BillOfMaterialItem (component)
 Product.hasMany(BillOfMaterialItem, { foreignKey: 'component_product_id', as: 'bom_references' });
 BillOfMaterialItem.belongsTo(Product, { foreignKey: 'component_product_id', as: 'componentProduct' });
+
+// Item ↔ BillOfMaterialItem (Fase 4.9 expand-contract)
+Item.hasMany(BillOfMaterialItem, { foreignKey: 'item_id', as: 'bill_of_material_items' });
+BillOfMaterialItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
 
 // BillOfMaterialItem self-reference (parent item)
 BillOfMaterialItem.belongsTo(BillOfMaterialItem, { foreignKey: 'parent_item_id', as: 'parentItem' });

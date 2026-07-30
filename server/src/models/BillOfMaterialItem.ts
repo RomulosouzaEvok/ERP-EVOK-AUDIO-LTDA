@@ -19,6 +19,7 @@ export interface BillOfMaterialItemAttributes {
   id: number;
   bom_id: number;
   component_product_id: number;
+  item_id?: string | null;
   quantity: number;
   unit: string;
   bom_level: number;
@@ -38,7 +39,8 @@ export interface BillOfMaterialItemAttributes {
 const BillOfMaterialItem = sequelize.define('BillOfMaterialItem', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true, comment: 'Identificador único do item da BOM' },
   bom_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → bill_of_materials.id' },
-  component_product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → Product.id (o componente)' },
+  component_product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → Product.id (o componente, LEGADO)' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (NOVO, parallel to component_product_id)' },
   quantity: {
     type: DataTypes.DECIMAL(12, 4),
     allowNull: false,
@@ -69,6 +71,8 @@ const BillOfMaterialItem = sequelize.define('BillOfMaterialItem', {
   indexes: [
     { fields: ['bom_id'], name: 'idx_bom_item_bom' },
     { fields: ['component_product_id'], name: 'idx_bom_item_component' },
+    { fields: ['item_id'], name: 'idx_bom_item_item_id' },
+    { fields: ['item_id', 'bom_id'], name: 'idx_bom_item_item_id_bom' },
     { fields: ['bom_id', 'bom_level'], name: 'idx_bom_item_level' },
     { fields: ['parent_item_id'], name: 'idx_bom_item_parent' }
   ]

@@ -15,6 +15,7 @@ export type SerialNumberStatus = 'available' | 'reserved' | 'sold' | 'blocked' |
 export interface SerialNumberAttributes {
   id: number;
   product_id: number;
+  item_id: string | null;
   lot_control_id: number | null;
   production_order_id: number | null;
   sale_id: number | null;
@@ -29,7 +30,8 @@ export interface SerialNumberAttributes {
 
 const SerialNumber = sequelize.define('SerialNumber', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id' },
+  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id (legado)' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK -> items.id (novo UUID)' },
   lot_control_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> lot_controls.id' },
   production_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> production_orders.id' },
   sale_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> sales.id' },
@@ -48,7 +50,9 @@ const SerialNumber = sequelize.define('SerialNumber', {
   timestamps: true,
   indexes: [
     { unique: true, fields: ['serial_number'] },
-    { fields: ['product_id', 'status'] }
+    { fields: ['product_id', 'status'] },
+    { fields: ['item_id'] },
+    { fields: ['item_id', 'status'] }
   ]
 });
 

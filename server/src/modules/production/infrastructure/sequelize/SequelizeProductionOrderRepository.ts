@@ -6,7 +6,7 @@
 
 import { Op } from 'sequelize';
 import ProductionOrderRepository from '../../domain/repositories/ProductionOrderRepository';
-const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRouteStep }: any = require('../../../../models/index');
+const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRouteStep, Item }: any = require('../../../../models/index');
 
 class SequelizeProductionOrderRepository extends ProductionOrderRepository {
   /**
@@ -31,7 +31,8 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
       where,
       include: [
         { model: Product, as: 'product', attributes: ['id', 'name', 'code', 'product_type'] },
-        { model: Employee, as: 'responsible', attributes: ['id', 'name'] }
+        { model: Employee, as: 'responsible', attributes: ['id', 'name'] },
+        { model: Item, as: 'item', attributes: ['id', 'codigo', 'descricao'] }
       ],
       limit,
       offset,
@@ -55,7 +56,8 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
       include: [
         { model: Product, as: 'product', attributes: ['id', 'name', 'code', 'product_type'] },
         { model: Employee, as: 'responsible', attributes: ['id', 'name'] },
-        { model: User, as: 'createdBy', attributes: ['id', 'name'] }
+        { model: User, as: 'createdBy', attributes: ['id', 'name'] },
+        { model: Item, as: 'item', attributes: ['id', 'codigo', 'descricao'] }
       ]
     });
   }
@@ -114,7 +116,10 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
     }
     return ProductionOrder.findAll({
       where,
-      include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }]
+      include: [
+        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+        { model: Item, as: 'item', attributes: ['id', 'codigo', 'descricao'] }
+      ]
     });
   }
 
