@@ -114,7 +114,20 @@ Observacoes Sprint B:
 - [x] Implementar reserva real de estoque para OP.
 - [x] Bloquear conclusao de OP sem consumo rastreavel por lote quando o item exigir rastreabilidade.
 - [ ] Revisar recebimento de compra para criar/associar lote no ato da entrada.
-- [ ] Revisar coerencia entre `Product/BillOfMaterial` e camada canonica `Item/ItemEstrutura`.
+- [MIGRACAO] Revisar coerencia entre `Product/BillOfMaterial` e camada canonica `Item/ItemEstrutura`.
+  - [x] **Fase 1 - Fundação de Schema (Concluída em 2026-07-30)**
+    - Criados modelos Sequelize: `ItemCategoria`, `ItemDetalheComercial`, `ItemEspecificacaoTecnica`
+    - Adicionadas 3 tabelas SQL com índices em `01_schema.sql`
+    - Registradas associações 1:1 em `models/index.ts`
+    - Documentação de testes críticos em `docs/HANDOFF_CODEX.md`
+    - Estratégia: Item (core) + extensões por domínio, zero ALTER TABLE ao lançar novo tipo de produto
+  - [ ] **Fase 2 - Backfill de dados (Próxima)**
+    - Migrar `Product` → `Item` + extensões
+    - Migrar `BillOfMaterial` → `ItemEstrutura` (com decisão sobre workflow de versão)
+  - [ ] **Fase 3 - Reintroduzir workflow de versão em ItemEstrutura**
+  - [ ] **Fase 4 - Reescrita de FKs em 16 tabelas (expand-contract)**
+  - [ ] **Fase 5 - Migrar módulos de aplicação**
+  - [ ] **Fase 6 - Descomissionar Product/BillOfMaterial**
 
 Observacoes Sprint C:
 - `CreateProductionOrderUseCase` agora consulta `BomService.checkAvailability` antes de criar a OP e rejeita falta de material com detalhes dos itens faltantes.
