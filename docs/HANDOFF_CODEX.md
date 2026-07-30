@@ -75,9 +75,275 @@ Esta separação evita:
    WHERE atributos @> '{"fs": 40.5}'::jsonb;
    ```
 
-### Próximas fases (não iniciadas)
-- **Fase 2**: Backfill de dados `Product` → `Item` + extensões
-- **Fase 3**: Workflow de versão em `ItemEstrutura` (draft/active/inactive/superseded)
+---
+
+## Fase 2A — Extensão de ItemEstrutura (Concluída)
+
+**Data**: 2026-07-30  
+**Escopo**: Adicionar 9 novos campos a ItemEstrutura para suportar workflow, custo e hierarquia de BOM.  
+**Status**: ✅ Concluído
+
+### Arquivos modificados
+
+#### Criados
+- `server/database/postgresql/02a_extend_item_estruturas.sql` — ALTER TABLE com 9 novos campos, 7 índices, 2 tabelas de suporte
+- Tabelas temporárias: `migracao_product_item_map` (crosswalk Product→Item), `migracao_bom_log` (auditoria BOM)
+
+#### Modificados
+- `server/src/models/ItemEstrutura.ts` — Adicionadas 9 novos campos com tipos e defaults:
+  - `status` ENUM (draft/active/inactive/superseded) — mapeado de BOM.status
+  - `approved_by` UUID | null — FK para User (aprovador)
+  - `approval_date` DATE | null
+  - `unit_cost` DECIMAL(18,6) — cache do custo unitário
+  - `total_cost` DECIMAL(18,6) — cache com scrap: qty × unit_cost × (1 + scrap%)
+  - `parent_item_estrutura_id` UUID | null — self-ref para hierarquia (sub-BOMs)
+  - `component_type` ENUM (raw_material/component/semi_finished/packaging/consumable/other)
+  - `is_critical` BOOLEAN
+  - `alternative_product_id` UUID | null — FK para Item alternativo
+- `server/src/models/index.ts` — Adicionadas 3 associações:
+  - `User.hasMany(ItemEstrutura, { foreignKey: 'approved_by', as: 'estruturas_aprovadas' })`
+  - `ItemEstrutura.belongsTo(User, { foreignKey: 'approved_by', as: 'aprovadorPor' })`
+  - `ItemEstrutura.hasMany(ItemEstrutura, { foreignKey: 'parent_item_estrutura_id', as: 'sub_estruturas' })`
+  - `ItemEstrutura.belongsTo(ItemEstrutura, { foreignKey: 'parent_item_estrutura_id', as: 'estruturaPai', onDelete: 'SET NULL' })`
+  - `Item.hasMany(ItemEstrutura, { foreignKey: 'alternative_product_id', as: 'estruturas_alternativas' })`
+  - `ItemEstrutura.belongsTo(Item, { foreignKey: 'alternative_product_id', as: 'itemAlternativo' })`
+
+### Testes críticos para Codex validar
+
+1. **Schema**: verificar que `item_estruturas` tem 9 novos campos com tipos/defaults corretos
+   ```sql
+   \d+ item_estruturas
+   ```
+
+2. **Índices**: confirmar que os 7 novos índices existem
+   ```sql
+   SELECT * FROM pg_indexes WHERE tablename = 'item_estruturas' ORDER BY indexname;
+   ```
+
+3. **Tabelas de suporte**: validar `migracao_product_item_map` e `migracao_bom_log`
+   ```sql
+   \d+ migracao_product_item_map
+   \d+ migracao_bom_log
+   ```
+
+4. **Sequelize sync**: verificar que `ItemEstrutura.sync({ force: false, alter: false })` não altera nada
+   ```bash
+   DB_FORCE_SYNC=false npm test -- --testPathPattern="sequelize"
+   ```
+
+5. **Associações**: testar que as 3 novas associações carregam corretamente
+   ```bash
+   npm test -- --testPathPattern="associations"
+   ```
+
+---
+
+## Fase 2B — Backfill Product → Item (Scripts Criados)
+
+**Data**: 2026-07-30  
+**Escopo**: Criar scripts transacionais para migração de dados Product → Item + extensões.  
+**Status**: ✅ Scripts concluídos (execução pendente em ambiente de teste)
+
+### Arquivos criados
+
+#### Scripts de backfill
+- `server/src/scripts/backfill/02b_product_to_item.ts` — Migração de Product → Item (+ ItemDetalheComercial + ItemEspecificacaoTecnica)
+  - Processa em **lotes de 100 produtos** (cada lote = transação isolada)
+  - Mapeamento de campos:
+    - `Product.code` → `Item.codigo`
+    - `Product.name` → `Item.descricao`
+    - `Product.product_type` → `Item.tipo` (finished→PRODUTO_ACABADO, semi_finished→SUBCONJUNTO, component/raw_material→MATERIA_PRIMA)
+    - `Product.quantity` → `Item.estoque_atual`
+    - `Product.reserved_quantity` → `Item.estoque_reservado`
+    - `Product.min_quantity` → `Item.estoque_seguranca` + `lote_minimo`
+    - `Product.cost_price` → `Item.custo_padrao`
+    - `Product.lead_time` → `Item.lead_time_dias`
+    - `Product.status` → `Item.status` (active→ATIVO, inactive→INATIVO)
+    - `Product.unit` → `Item.unidade` (default 'un')
+  - Para cada Product:
+    1. Cria Item (UUID)
+    2. Cria ItemDetalheComercial 1:1 (obrigatório):
+       - `Product.price` → `preco_venda`
+       - `Product.ncm/cest` → `ncm/cest`
+       - `Product.weight` → `peso_kg`
+       - `Product.location` → `localizacao_estoque`
+       - `Product.drawing_number/revision` → `numero_desenho/revisao_tecnica`
+       - `Product.lot_number/serial_number` → `lote_rastreabilidade/numero_serie`
+    3. Se houver Thiele-Small preenchido (qualquer um dos 13 ts_params_* não NULL):
+       - Cria ItemEspecificacaoTecnica (1:1 opcional)
+       - `familia_tecnica = 'ALTO_FALANTE'`
+       - `atributos` = JSON com 13 campos: fs, qms, qes, qts, vas, sd, xmax, re, le, bl, mms, cms, spl
+    4. Registra na `migracao_product_item_map` com status SUCESSO/ERRO
+  - **Rollback automático** por lote em caso de falha
+  - CLI: `npm run backfill -- 02b [--start 0] [--limit 1000]`
+
+- `server/src/scripts/backfill/02b-bis_category_to_item_categoria.ts` — Migração de categorias
+  - Transação **all-or-nothing** (sem lotes)
+  - Migra `product_categories` → `item_categorias`
+  - Gera código único por categoria (format: `CAT-{id}-{nome}`)
+  - Cria `migracao_categoria_map` (crosswalk para referência futura)
+  - CLI: `npm run backfill -- 02b-bis`
+
+### Verificação pré-backfill
+
+- Verificar que `migracao_product_item_map` está vazia (ou pronta para re-execução)
+- Verificar que `products` tem dados consistentes (sem NULLs em campos obrigatórios)
+- Fazer snapshot/backup do banco antes de executar
+
+### Testes críticos para Codex validar (pós-execução)
+
+1. **Contagem**: `count(Product) == count(Item)`
+   ```sql
+   SELECT COUNT(*) FROM products;
+   SELECT COUNT(*) FROM items;
+   SELECT COUNT(*) FROM migracao_product_item_map WHERE status = 'SUCESSO';
+   ```
+
+2. **ItemDetalheComercial**: todos os Items têm exatamente 1 detalhe comercial
+   ```sql
+   SELECT COUNT(*) FROM items WHERE id NOT IN (SELECT item_id FROM item_detalhes_comerciais);
+   ```
+
+3. **ItemEspecificacaoTecnica**: apenas alto-falantes têm especificação técnica
+   ```sql
+   SELECT COUNT(*) FROM item_especificacoes_tecnicas WHERE familia_tecnica = 'ALTO_FALANTE';
+   ```
+
+4. **Thiele-Small**: integridade de JSON em `atributos`
+   ```sql
+   SELECT atributos FROM item_especificacoes_tecnicas LIMIT 5;
+   ```
+
+5. **Somas**: quantidade e custo coincidem
+   ```sql
+   SELECT
+     SUM(quantity) as total_qty_products,
+     SUM(estoque_atual::numeric) as total_qty_items
+   FROM (
+     SELECT quantity FROM products
+     UNION ALL
+     SELECT estoque_atual::numeric FROM items
+   ) AS t;
+   ```
+
+---
+
+## Fase 2C — Backfill BOM → ItemEstrutura (Script Criado)
+
+**Data**: 2026-07-30  
+**Escopo**: Script de migração BOM → ItemEstrutura com hierarquia e auditoria.  
+**Status**: ✅ Script concluído (execução pendente em ambiente de teste)
+
+### Arquivos criados
+
+#### Script de backfill
+- `server/src/scripts/backfill/02c_bom_to_item_estrutura.ts` — Migração de BOM → ItemEstrutura
+  - Processa **por BOM** (tudo ou nada, sem lotes)
+  - Para cada BOM:
+    1. Busca Item pai via crosswalk `migracao_product_item_map`
+    2. Se não encontrado: falha com erro rastreável
+    3. Para cada BOMItem (ordenado por bom_level, sequence_order):
+       - Busca Item componente via crosswalk
+       - Se não encontrado: registra SKIP (não falha BOM inteira)
+       - Resolve `parent_item_estrutura_id` se houver `parent_item_id`
+       - Calcula `total_cost = qty × unit_cost × (1 + scrap%/100)` com Decimal.js
+       - Cria ItemEstrutura com mapeamento completo:
+         - BOM.status → ItemEstrutura.status (draft/active/inactive/superseded)
+         - BOM.approved_by → ItemEstrutura.approved_by (INT→UUID, TODO: implementar user mapping)
+         - BOM.approval_date → ItemEstrutura.approval_date
+         - BOM.revision → ItemEstrutura.revisao
+         - BMI.quantity → ItemEstrutura.quantidade
+         - BMI.scrap_percentage → ItemEstrutura.perda_percentual
+         - BMI.component_type → ItemEstrutura.component_type (enum igual)
+         - BMI.unit_cost → ItemEstrutura.unit_cost
+         - BMI.total_cost → ItemEstrutura.total_cost (ou recalculado)
+         - BMI.is_critical → ItemEstrutura.is_critical
+         - BMI.sequence_order → ItemEstrutura.sequencia
+         - BMI.bom_level → ItemEstrutura.nivel
+         - BMI.notes → ItemEstrutura.observacoes
+       - Registra na `migracao_bom_log` com status SUCESSO/SKIP
+    4. Registra sucesso/erro de toda BOM (rollback automático se falhar)
+  - **Rollback automático** por BOM em caso de erro
+  - **Hierarquia multinível**: resolve parent_item_estrutura_id via ID mapping para sub-BOMs
+  - CLI: `npm run backfill -- 02c [--start 0] [--limit 1000]`
+
+### Verificação pré-backfill
+
+- Executar Fase 2B antes (Product → Item)
+- Verificar que `migracao_product_item_map` tem todos os produtos mapeados
+- Verificar que `bill_of_materials` tem dados consistentes
+- Fazer snapshot/backup do banco
+
+### Testes críticos para Codex validar (pós-execução)
+
+1. **Contagem**: `count(BOM) ~= count(ItemEstrutura com item_pai_id único)`
+   ```sql
+   SELECT COUNT(DISTINCT item_pai_id) FROM item_estruturas;
+   SELECT COUNT(DISTINCT bill_of_material_id) FROM migracao_bom_log WHERE status = 'SUCESSO';
+   ```
+
+2. **Hierarquia**: sem ciclos (ciclos = profundidade > 50)
+   ```sql
+   -- Veja 02d_validation.sql, seção "VALIDAÇÃO DE HIERARQUIA"
+   ```
+
+3. **Cálculo de custo**: total_cost bate com qty × unit_cost × (1 + scrap%)
+   ```sql
+   SELECT
+     SUM(quantidade::numeric * unit_cost::numeric * (1 + perda_percentual::numeric / 100)) as calc_total,
+     SUM(total_cost::numeric) as stored_total,
+     ABS(SUM(quantidade::numeric * unit_cost::numeric * (1 + perda_percentual::numeric / 100)) - SUM(total_cost::numeric)) as diff
+   FROM item_estruturas
+   WHERE total_cost > 0
+   GROUP BY TRUE;
+   ```
+
+4. **Componentes sem mapeamento**: validar SKIPs (não devem bloquear BOM)
+   ```sql
+   SELECT COUNT(*) as skipped FROM migracao_bom_log WHERE status = 'SKIP';
+   ```
+
+---
+
+## Fase 2D — Validação Pós-Backfill (Script SQL Criado)
+
+**Data**: 2026-07-30  
+**Escopo**: Queries SQL para validação de integridade pós-migração.  
+**Status**: ✅ Script concluído (execução pendente em ambiente de teste)
+
+### Arquivo criado
+
+- `server/src/scripts/backfill/02d_validation.sql` — 8 blocos de validação (read-only)
+  1. **Contagem Product → Item**: total, migrados, falhados, órfãos
+  2. **Contagem BOM → ItemEstrutura**: total, sucesso, falhado, estruturas criadas
+  3. **Somas**: quantidade e custo por amostragem (produto com maior BOM)
+  4. **NULLs**: detecção de campos NULL inesperados (Item, ItemDetalheComercial, ItemEstrutura)
+  5. **Órfãos**: referências FK quebradas (item_pai_id, item_componente_id inexistentes)
+  6. **Ciclos**: detecção de ciclos em hierarquia via parent_item_estrutura_id
+  7. **Distribuição**: comparação de component_type (legado vs novo)
+  8. **Resumo executivo**: status de Fase 2B e 2C
+
+### Uso
+
+```bash
+# Executar validações
+psql -U postgres -d erp_evok -f server/src/scripts/backfill/02d_validation.sql | tee validation_results.log
+```
+
+### Critérios de sucesso
+
+- ✅ count(Product) == count(Item) com status='SUCESSO'
+- ✅ count(BOM) == count(ItemEstrutura com item_pai_id único) com status='SUCESSO'
+- ✅ Nenhum órfão em FK (item_pai_id, item_componente_id)
+- ✅ Nenhum ciclo em hierarquia (profundidade < 50)
+- ✅ Somas de quantidade/custo batem com aceitação de ±5% (rounding)
+- ✅ Distribuição de component_type é razoável (não há outliers óbvios)
+
+---
+
+## Próximas fases (não iniciadas)
+- **Fase 2E**: Backfill de categoria_id em ItemDetalheComercial (via migracao_categoria_map)
+- **Fase 3**: Workflow de versão em `ItemEstrutura` (decisão: cabeçalho vs tabela de revisão)
 - **Fase 4**: Reescrita de FKs em 16 tabelas (expand-contract)
 - **Fase 5**: Migração de módulos de aplicação
 - **Fase 6**: Descomissionamento de `Product`/`BillOfMaterial`
