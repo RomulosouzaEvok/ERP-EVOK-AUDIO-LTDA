@@ -219,4 +219,42 @@ CREATE TABLE auditoria_eventos (
   criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Tabelas de extensão do modelo canônico Item (Fase 1 - Unificação Product/Item)
+CREATE TABLE item_categorias (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  codigo VARCHAR(50) NOT NULL UNIQUE,
+  descricao VARCHAR(240) NOT NULL,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_item_categorias_codigo_unique ON item_categorias(codigo);
+
+CREATE TABLE item_detalhes_comerciais (
+  item_id UUID PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+  preco_venda NUMERIC(14,2) NOT NULL DEFAULT 0,
+  categoria_id UUID REFERENCES item_categorias(id),
+  ncm VARCHAR(10) NOT NULL DEFAULT '85182100',
+  cest VARCHAR(10),
+  peso_kg NUMERIC(10,3) NOT NULL DEFAULT 0,
+  localizacao_estoque VARCHAR(100),
+  numero_desenho VARCHAR(50),
+  revisao_tecnica VARCHAR(10) NOT NULL DEFAULT '00',
+  lote_rastreabilidade VARCHAR(50),
+  numero_serie VARCHAR(80),
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_item_detalhes_comerciais_categoria_id ON item_detalhes_comerciais(categoria_id);
+CREATE INDEX idx_item_detalhes_comerciais_ncm ON item_detalhes_comerciais(ncm);
+
+CREATE TABLE item_especificacoes_tecnicas (
+  item_id UUID PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+  familia_tecnica VARCHAR(40) NOT NULL,
+  atributos JSONB NOT NULL DEFAULT '{}',
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_item_especificacoes_tecnicas_familia ON item_especificacoes_tecnicas(familia_tecnica);
+CREATE INDEX idx_item_especificacoes_tecnicas_atributos_gin ON item_especificacoes_tecnicas USING GIN (atributos jsonb_path_ops);
+
 COMMIT;

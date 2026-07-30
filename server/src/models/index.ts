@@ -43,6 +43,9 @@ import BillOfMaterial = require('./BillOfMaterial');
 import BillOfMaterialItem = require('./BillOfMaterialItem');
 import Item = require('./Item');
 import ItemEstrutura = require('./ItemEstrutura');
+import ItemCategoria = require('./ItemCategoria');
+import ItemDetalheComercial = require('./ItemDetalheComercial');
+import ItemEspecificacaoTecnica = require('./ItemEspecificacaoTecnica');
 import MrpOrdemPlanejada = require('./MrpOrdemPlanejada');
 
 // ============================================
@@ -247,6 +250,18 @@ ItemEstrutura.belongsTo(User, { foreignKey: 'criado_por', as: 'criadoPor' });
 Item.hasMany(MrpOrdemPlanejada, { foreignKey: 'item_id', as: 'ordens_mrp_planejadas' });
 MrpOrdemPlanejada.belongsTo(Item, { foreignKey: 'item_id', as: 'item', onDelete: 'RESTRICT' });
 
+// ItemCategoria ↔ ItemDetalheComercial
+ItemCategoria.hasMany(ItemDetalheComercial, { foreignKey: 'categoria_id', as: 'itens_detalhe' });
+ItemDetalheComercial.belongsTo(ItemCategoria, { foreignKey: 'categoria_id', as: 'categoria' });
+
+// Item ↔ ItemDetalheComercial (1:1)
+Item.hasOne(ItemDetalheComercial, { foreignKey: 'item_id', as: 'detalheComercial', onDelete: 'CASCADE' });
+ItemDetalheComercial.belongsTo(Item, { foreignKey: 'item_id', as: 'item', onDelete: 'CASCADE' });
+
+// Item ↔ ItemEspecificacaoTecnica (1:1 optional)
+Item.hasOne(ItemEspecificacaoTecnica, { foreignKey: 'item_id', as: 'especificacaoTecnica', onDelete: 'CASCADE' });
+ItemEspecificacaoTecnica.belongsTo(Item, { foreignKey: 'item_id', as: 'item', onDelete: 'CASCADE' });
+
 // Client ↔ ServiceOrder
 Client.hasMany(ServiceOrder, { foreignKey: 'client_id', as: 'service_orders' });
 ServiceOrder.belongsTo(Client, { foreignKey: 'client_id', as: 'client' });
@@ -349,5 +364,5 @@ export {
   ServiceOrder, Asset,
   NonConformity, MaintenanceOrder, AuditLog,
   BillOfMaterial, BillOfMaterialItem,
-  Item, ItemEstrutura, MrpOrdemPlanejada
+  Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada
 };
