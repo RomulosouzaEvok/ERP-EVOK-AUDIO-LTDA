@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Eye } from 'lucide-react';
 
 import * as purchasesApi from '@/api/purchases';
 import * as suppliersApi from '@/api/suppliers';
@@ -17,6 +17,10 @@ import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { DetailField } from '@/components/DetailField';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
 const STATUS_LABEL: Record<purchasesApi.PurchaseStatus, string> = {
   pending: 'Pendente',
@@ -53,8 +57,13 @@ export default function PurchasesPage() {
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [receivingPurchase, setReceivingPurchase] = React.useState<purchasesApi.Purchase | null>(null);
+  const [detailsPurchase, setDetailsPurchase] = React.useState<purchasesApi.Purchase | null>(null);
+  const [page, setPage] = React.useState(1);
 
-  const { data, isLoading, isError } = useQuery({ queryKey: ['purchases'], queryFn: () => purchasesApi.listPurchases({ limit: 50 }) });
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['purchases', page],
+    queryFn: () => purchasesApi.listPurchases({ limit: 20, page }),
+  });
   const { data: suppliers } = useQuery({ queryKey: ['suppliers-all'], queryFn: () => suppliersApi.listSuppliers({ limit: 200 }) });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
 
@@ -172,11 +181,7 @@ export default function PurchasesPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={5}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={5} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-destructive">
@@ -187,15 +192,22 @@ export default function PurchasesPage() {
           {data?.data.map((purchase) => {
             const next = NEXT_STATUS[purchase.status];
             return (
-              <TableRow key={purchase.id}>
-                <TableCell>{purchase.order_number ?? purchase.id}</TableCell>
+              <TableRow
+                key={purchase.id}
+                className="cursor-pointer hover:bg-accent/50"
+                onClick={() => setDetailsPurchase(purchase)}
+              >
+                <TableCell className="font-medium">{purchase.order_number ?? purchase.id}</TableCell>
                 <TableCell>{purchase.supplier?.company_name ?? purchase.supplier_id}</TableCell>
                 <TableCell>R$ {Number(purchase.total_amount).toFixed(2)}</TableCell>
                 <TableCell>
                   <Badge variant="secondary">{STATUS_LABEL[purchase.status]}</Badge>
                 </TableCell>
                 {canWrite && (
-                  <TableCell className="flex gap-2">
+                  <TableCell className="flex gap-2" onClick={(event) => event.stopPropagation()}>
+                    <Button size="sm" variant="ghost" onClick={() => setDetailsPurchase(purchase)}>
+                      <Eye className="size-4" /> Detalhes
+                    </Button>
                     {next && (
                       <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: purchase.id, status: next })}>
                         Avançar para "{STATUS_LABEL[next]}"
@@ -234,8 +246,85 @@ export default function PurchasesPage() {
         </TableBody>
       </Table>
 
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
+
       <ReceiveItemsDialog purchase={receivingPurchase} onClose={() => setReceivingPurchase(null)} />
+      <PurchaseDetailSheet purchase={detailsPurchase} onClose={() => setDetailsPurchase(null)} />
     </div>
+  );
+}
+
+function PurchaseDetailSheet({ purchase, onClose }: { purchase: purchasesApi.Purchase | null; onClose: () => void }) {
+  const items = purchase?.items ?? [];
+  const itemsTotal = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), 0);
+
+  return (
+    <Sheet open={Boolean(purchase)} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent>
+        {purchase && (
+          <>
+            <SheetHeader>
+              <SheetTitle>Pedido de compra {purchase.order_number ?? `#${purchase.id}`}</SheetTitle>
+              <SheetDescription>Detalhes completos da operação de compra.</SheetDescription>
+            </SheetHeader>
+
+            <div className="grid grid-cols-2 gap-4">
+              <DetailField label="Fornecedor" value={purchase.supplier?.company_name ?? `#${purchase.supplier_id}`} />
+              <DetailField label="Status" value={<Badge variant="secondary">{STATUS_LABEL[purchase.status]}</Badge>} />
+              <DetailField label="Criado em" value={new Date(purchase.createdAt).toLocaleDateString('pt-BR')} />
+              <DetailField
+                label="Previsão de entrega"
+                value={purchase.expected_date ? new Date(purchase.expected_date).toLocaleDateString('pt-BR') : 'Não informada'}
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-semibold">Itens do pedido</p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Qtd.</TableHead>
+                    <TableHead>Recebido</TableHead>
+                    <TableHead>Preço unit.</TableHead>
+                    <TableHead>Subtotal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.product ? `${item.product.code} — ${item.product.name}` : item.product_id}</TableCell>
+                      <TableCell>{Number(item.quantity)}</TableCell>
+                      <TableCell>{Number(item.received_quantity)}</TableCell>
+                      <TableCell>R$ {Number(item.unit_price).toFixed(2)}</TableCell>
+                      <TableCell>R$ {(Number(item.quantity) * Number(item.unit_price)).toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {items.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        Itens não disponíveis.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex flex-col gap-1 rounded-lg border bg-muted/30 p-4">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Soma dos itens</span>
+                <span>R$ {itemsTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-base font-semibold">
+                <span>Total do pedido</span>
+                <span>R$ {Number(purchase.total_amount).toFixed(2)}</span>
+              </div>
+            </div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }
 

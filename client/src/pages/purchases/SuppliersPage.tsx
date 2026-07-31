@@ -13,6 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
 const supplierSchema = z.object({
   company_name: z.string().min(1, 'Informe a razão social.'),
@@ -30,12 +32,13 @@ export default function SuppliersPage() {
   const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState('');
+  const [page, setPage] = React.useState(1);
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['suppliers', search],
-    queryFn: () => suppliersApi.listSuppliers({ search: search || undefined, limit: 50 }),
+    queryKey: ['suppliers', search, page],
+    queryFn: () => suppliersApi.listSuppliers({ search: search || undefined, limit: 20, page }),
   });
 
   const {
@@ -109,7 +112,16 @@ export default function SuppliersPage() {
         )}
       </div>
 
-      <Input placeholder="Buscar por razão social ou CNPJ..." value={search} onChange={(event) => setSearch(event.target.value)} className="max-w-sm" />
+      <Input
+        aria-label="Buscar fornecedores por razão social ou CNPJ"
+        placeholder="Buscar por razão social ou CNPJ..."
+        value={search}
+        onChange={(event) => {
+          setSearch(event.target.value);
+          setPage(1);
+        }}
+        className="max-w-sm"
+      />
 
       <Table>
         <TableHeader>
@@ -121,11 +133,7 @@ export default function SuppliersPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={4}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={4} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-destructive">
@@ -150,6 +158,8 @@ export default function SuppliersPage() {
           )}
         </TableBody>
       </Table>
+
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
     </div>
   );
 }

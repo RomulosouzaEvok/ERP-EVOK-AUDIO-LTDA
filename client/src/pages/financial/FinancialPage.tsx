@@ -14,9 +14,12 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
-const STATUS_VARIANT: Record<string, 'default' | 'success' | 'destructive' | 'secondary'> = {
+const STATUS_VARIANT: Record<string, 'default' | 'success' | 'destructive' | 'secondary' | 'warning'> = {
   pending: 'secondary',
+  partial: 'warning',
   paid: 'success',
   overdue: 'destructive',
   canceled: 'secondary',
@@ -24,10 +27,22 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'destructive' | 'se
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Pendente',
+  partial: 'Parcial',
   paid: 'Pago',
   overdue: 'Atrasado',
   canceled: 'Cancelado',
 };
+
+/** Pede o valor a pagar/receber (branco = quita o restante). Retorna `undefined` se cancelado. */
+function promptPaymentAmount(remaining: number): number | undefined {
+  const input = window.prompt(
+    `Valor a registrar (restante: R$ ${remaining.toFixed(2)}). Deixe em branco para quitar o valor total restante.`,
+  );
+  if (input === null) return undefined;
+  if (input.trim() === '') return remaining;
+  const parsed = Number(input.replace(',', '.'));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 const payableSchema = z.object({
   description: z.string().min(1, 'Informe a descrição.'),
@@ -42,14 +57,16 @@ export default function FinancialPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
+  const [payablesPage, setPayablesPage] = React.useState(1);
+  const [receivablesPage, setReceivablesPage] = React.useState(1);
 
-  const { data: payables, isLoading: loadingPayables } = useQuery({
-    queryKey: ['payables'],
-    queryFn: () => financialApi.listPayables({ limit: 50 }),
+  const { data: payables, isLoading: loadingPayables, isError: errorPayables } = useQuery({
+    queryKey: ['payables', payablesPage],
+    queryFn: () => financialApi.listPayables({ limit: 20, page: payablesPage }),
   });
-  const { data: receivables, isLoading: loadingReceivables } = useQuery({
-    queryKey: ['receivables'],
-    queryFn: () => financialApi.listReceivables({ limit: 50 }),
+  const { data: receivables, isLoading: loadingReceivables, isError: errorReceivables } = useQuery({
+    queryKey: ['receivables', receivablesPage],
+    queryFn: () => financialApi.listReceivables({ limit: 20, page: receivablesPage }),
   });
 
   const {
@@ -71,13 +88,13 @@ export default function FinancialPage() {
   });
 
   const payMutation = useMutation({
-    mutationFn: (id: number) => financialApi.payPayable(id),
+    mutationFn: ({ id, amount }: { id: number; amount?: number }) => financialApi.payPayable(id, amount),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payables'] }),
     onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível registrar o pagamento.')),
   });
 
   const receiveMutation = useMutation({
-    mutationFn: (id: number) => financialApi.receivePayment(id),
+    mutationFn: ({ id, amount }: { id: number; amount?: number }) => financialApi.receivePayment(id, amount),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['receivables'] }),
     onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível registrar o recebimento.')),
   });
@@ -133,43 +150,61 @@ export default function FinancialPage() {
               <TableRow>
                 <TableHead>Descrição</TableHead>
                 <TableHead>Valor</TableHead>
+                <TableHead>Pago</TableHead>
                 <TableHead>Vencimento</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loadingPayables && (
+              {loadingPayables && <TableSkeletonRows columns={6} />}
+              {errorPayables && (
                 <TableRow>
-                  <TableCell colSpan={5}>Carregando...</TableCell>
+                  <TableCell colSpan={6} className="text-center text-destructive">
+                    Não foi possível carregar as contas a pagar. Tente novamente.
+                  </TableCell>
                 </TableRow>
               )}
-              {payables?.data.map((account) => (
-                <TableRow key={account.id}>
-                  <TableCell>{account.description}</TableCell>
-                  <TableCell>R$ {Number(account.amount).toFixed(2)}</TableCell>
-                  <TableCell>{new Date(account.due_date).toLocaleDateString('pt-BR')}</TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {account.status === 'pending' && (
-                      <Button size="sm" onClick={() => payMutation.mutate(account.id)}>
-                        Registrar pagamento
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!loadingPayables && payables?.data.length === 0 && (
+              {payables?.data.map((account) => {
+                const remaining = Number(account.amount) - Number(account.amount_paid ?? 0);
+                return (
+                  <TableRow key={account.id}>
+                    <TableCell>{account.description}</TableCell>
+                    <TableCell>R$ {Number(account.amount).toFixed(2)}</TableCell>
+                    <TableCell className="text-muted-foreground">R$ {Number(account.amount_paid ?? 0).toFixed(2)}</TableCell>
+                    <TableCell>{new Date(account.due_date).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {(account.status === 'pending' || account.status === 'partial' || account.status === 'overdue') && (
+                        <Button
+                          size="sm"
+                          disabled={payMutation.isPending}
+                          onClick={() => {
+                            const amount = promptPaymentAmount(remaining);
+                            if (amount !== undefined) payMutation.mutate({ id: account.id, amount });
+                          }}
+                        >
+                          Registrar pagamento
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {!loadingPayables && !errorPayables && payables?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     Nenhuma conta a pagar.
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+          <div className="mt-3">
+            <Pagination pagination={payables?.pagination} onPageChange={setPayablesPage} />
+          </div>
         </CardContent>
       </Card>
 
@@ -183,43 +218,61 @@ export default function FinancialPage() {
               <TableRow>
                 <TableHead>#</TableHead>
                 <TableHead>Valor</TableHead>
+                <TableHead>Recebido</TableHead>
                 <TableHead>Vencimento</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loadingReceivables && (
+              {loadingReceivables && <TableSkeletonRows columns={6} />}
+              {errorReceivables && (
                 <TableRow>
-                  <TableCell colSpan={5}>Carregando...</TableCell>
+                  <TableCell colSpan={6} className="text-center text-destructive">
+                    Não foi possível carregar as contas a receber. Tente novamente.
+                  </TableCell>
                 </TableRow>
               )}
-              {receivables?.data.map((account) => (
-                <TableRow key={account.id}>
-                  <TableCell>{account.id}</TableCell>
-                  <TableCell>R$ {Number(account.amount).toFixed(2)}</TableCell>
-                  <TableCell>{new Date(account.due_date).toLocaleDateString('pt-BR')}</TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {account.status === 'pending' && (
-                      <Button size="sm" onClick={() => receiveMutation.mutate(account.id)}>
-                        Registrar recebimento
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!loadingReceivables && receivables?.data.length === 0 && (
+              {receivables?.data.map((account) => {
+                const remaining = Number(account.amount) - Number(account.amount_paid ?? 0);
+                return (
+                  <TableRow key={account.id}>
+                    <TableCell>{account.id}</TableCell>
+                    <TableCell>R$ {Number(account.amount).toFixed(2)}</TableCell>
+                    <TableCell className="text-muted-foreground">R$ {Number(account.amount_paid ?? 0).toFixed(2)}</TableCell>
+                    <TableCell>{new Date(account.due_date).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {(account.status === 'pending' || account.status === 'partial' || account.status === 'overdue') && (
+                        <Button
+                          size="sm"
+                          disabled={receiveMutation.isPending}
+                          onClick={() => {
+                            const amount = promptPaymentAmount(remaining);
+                            if (amount !== undefined) receiveMutation.mutate({ id: account.id, amount });
+                          }}
+                        >
+                          Registrar recebimento
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {!loadingReceivables && !errorReceivables && receivables?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     Nenhuma conta a receber.
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+          <div className="mt-3">
+            <Pagination pagination={receivables?.pagination} onPageChange={setReceivablesPage} />
+          </div>
         </CardContent>
       </Card>
       <p className="text-xs text-muted-foreground">

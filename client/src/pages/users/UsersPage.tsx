@@ -14,6 +14,8 @@ import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
 const ROLE_LABEL: Record<string, string> = {
   admin: 'Administrador',
@@ -35,8 +37,12 @@ export default function UsersPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
+  const [page, setPage] = React.useState(1);
 
-  const { data, isLoading, isError } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.listUsers({ limit: 50 }) });
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['users', page],
+    queryFn: () => usersApi.listUsers({ limit: 20, page }),
+  });
 
   const {
     register,
@@ -130,11 +136,7 @@ export default function UsersPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={5}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={5} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-destructive">
@@ -179,6 +181,8 @@ export default function UsersPage() {
           )}
         </TableBody>
       </Table>
+
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
     </div>
   );
 }

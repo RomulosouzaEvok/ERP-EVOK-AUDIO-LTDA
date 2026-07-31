@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Eye, FileText, RefreshCw, Ban } from 'lucide-react';
 
 import * as salesApi from '@/api/sales';
+import * as fiscalApi from '@/api/fiscal';
 import * as clientsApi from '@/api/clients';
 import * as productsApi from '@/api/products';
 import { extractApiErrorMessage } from '@/api/httpClient';
@@ -17,6 +18,10 @@ import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { DetailField } from '@/components/DetailField';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
 const STATUS_VARIANT: Record<salesApi.SaleStatus, 'default' | 'success' | 'destructive' | 'secondary'> = {
   quote: 'secondary',
@@ -30,6 +35,31 @@ const STATUS_LABEL: Record<salesApi.SaleStatus, string> = {
   confirmed: 'Confirmada',
   invoiced: 'Faturada',
   canceled: 'Cancelada',
+};
+
+const NFE_STATUS_LABEL: Record<string, string> = {
+  pending: 'Não emitida',
+  processing: 'Processando',
+  authorized: 'Autorizada',
+  denied: 'Negada',
+  cancelled: 'Cancelada',
+};
+
+const NFE_STATUS_VARIANT: Record<string, 'default' | 'success' | 'destructive' | 'secondary' | 'warning'> = {
+  pending: 'secondary',
+  processing: 'warning',
+  authorized: 'success',
+  denied: 'destructive',
+  cancelled: 'secondary',
+};
+
+const PAYMENT_LABEL: Record<string, string> = {
+  cash: 'Dinheiro',
+  credit_card: 'Cartão de crédito',
+  debit_card: 'Cartão de débito',
+  pix: 'Pix',
+  boleto: 'Boleto',
+  check: 'Cheque',
 };
 
 const saleItemSchema = z.object({
@@ -52,10 +82,12 @@ export default function SalesPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
+  const [detailsSale, setDetailsSale] = React.useState<salesApi.Sale | null>(null);
+  const [page, setPage] = React.useState(1);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['sales'],
-    queryFn: () => salesApi.listSales({ limit: 50 }),
+    queryKey: ['sales', page],
+    queryFn: () => salesApi.listSales({ limit: 20, page }),
   });
 
   const { data: clients } = useQuery({ queryKey: ['clients-all'], queryFn: () => clientsApi.listClients({ limit: 200 }) });
@@ -192,11 +224,7 @@ export default function SalesPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={6}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={6} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={6} className="text-center text-destructive">
@@ -205,8 +233,8 @@ export default function SalesPage() {
             </TableRow>
           )}
           {data?.data.map((sale) => (
-            <TableRow key={sale.id}>
-              <TableCell>{sale.id}</TableCell>
+            <TableRow key={sale.id} className="cursor-pointer hover:bg-accent/50" onClick={() => setDetailsSale(sale)}>
+              <TableCell className="font-medium">{sale.id}</TableCell>
               <TableCell>{sale.customer?.name ?? sale.customer_id}</TableCell>
               <TableCell>R$ {Number(sale.total_amount).toFixed(2)}</TableCell>
               <TableCell>
@@ -214,7 +242,10 @@ export default function SalesPage() {
               </TableCell>
               <TableCell>{new Date(sale.createdAt).toLocaleDateString('pt-BR')}</TableCell>
               {canWrite && (
-                <TableCell>
+                <TableCell className="flex gap-2" onClick={(event) => event.stopPropagation()}>
+                  <Button size="sm" variant="ghost" onClick={() => setDetailsSale(sale)}>
+                    <Eye className="size-4" /> Detalhes
+                  </Button>
                   {sale.status === 'confirmed' && (
                     <Button
                       size="sm"
@@ -241,6 +272,186 @@ export default function SalesPage() {
           )}
         </TableBody>
       </Table>
+
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
+
+      <SaleDetailSheet sale={detailsSale} onClose={() => setDetailsSale(null)} />
     </div>
+  );
+}
+
+function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClose: () => void }) {
+  const { hasRole } = useAuth();
+  const queryClient = useQueryClient();
+  const [nfeOverride, setNfeOverride] = React.useState<salesApi.Sale | null>(null);
+  const [nfeError, setNfeError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setNfeOverride(null);
+    setNfeError(null);
+  }, [sale?.id]);
+
+  const current = nfeOverride ?? sale;
+  const items = current?.items ?? [];
+  const itemsTotal = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), 0);
+
+  const invalidateSales = () => queryClient.invalidateQueries({ queryKey: ['sales'] });
+
+  const issueMutation = useMutation({
+    mutationFn: () => fiscalApi.issueSaleNfe(current!.id),
+    onSuccess: (updated) => {
+      setNfeOverride(updated);
+      setNfeError(null);
+      invalidateSales();
+    },
+    onError: (error) => setNfeError(extractApiErrorMessage(error, 'Não foi possível emitir a NF-e.')),
+  });
+
+  const checkStatusMutation = useMutation({
+    mutationFn: () => fiscalApi.getSaleNfeStatus(current!.id),
+    onSuccess: (updated) => {
+      setNfeOverride(updated);
+      setNfeError(null);
+      invalidateSales();
+    },
+    onError: (error) => setNfeError(extractApiErrorMessage(error, 'Não foi possível consultar o status da NF-e.')),
+  });
+
+  const cancelNfeMutation = useMutation({
+    mutationFn: (reason: string) => fiscalApi.cancelSaleNfe(current!.id, reason),
+    onSuccess: (updated) => {
+      setNfeOverride(updated);
+      setNfeError(null);
+      invalidateSales();
+    },
+    onError: (error) => setNfeError(extractApiErrorMessage(error, 'Não foi possível cancelar a NF-e.')),
+  });
+
+  const nfeStatus = current?.nfe_status ?? 'pending';
+  const nfeBusy = issueMutation.isPending || checkStatusMutation.isPending || cancelNfeMutation.isPending;
+
+  return (
+    <Sheet open={Boolean(sale)} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent>
+        {current && (
+          <>
+            <SheetHeader>
+              <SheetTitle>Venda #{current.id}</SheetTitle>
+              <SheetDescription>Detalhes completos da operação de venda.</SheetDescription>
+            </SheetHeader>
+
+            <div className="grid grid-cols-2 gap-4">
+              <DetailField label="Cliente" value={current.customer?.name ?? `#${current.customer_id}`} />
+              <DetailField label="Status" value={<Badge variant={STATUS_VARIANT[current.status]}>{STATUS_LABEL[current.status]}</Badge>} />
+              <DetailField label="Data" value={new Date(current.createdAt).toLocaleDateString('pt-BR')} />
+              <DetailField label="Forma de pagamento" value={PAYMENT_LABEL[current.payment_method ?? ''] ?? 'Não informada'} />
+              {current.installments > 1 && <DetailField label="Parcelas" value={`${current.installments}x`} />}
+              {Number(current.discount) > 0 && <DetailField label="Desconto" value={`R$ ${Number(current.discount).toFixed(2)}`} />}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-semibold">Itens da venda</p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Qtd.</TableHead>
+                    <TableHead>Preço unit.</TableHead>
+                    <TableHead>Subtotal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.product ? `${item.product.code} — ${item.product.name}` : item.product_id}</TableCell>
+                      <TableCell>{Number(item.quantity)}</TableCell>
+                      <TableCell>R$ {Number(item.unit_price).toFixed(2)}</TableCell>
+                      <TableCell>R$ {Number(item.total_price ?? Number(item.quantity) * Number(item.unit_price)).toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {items.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        Itens não disponíveis.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex flex-col gap-1 rounded-lg border bg-muted/30 p-4">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Soma dos itens</span>
+                <span>R$ {itemsTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-base font-semibold">
+                <span>Total da venda</span>
+                <span>R$ {Number(current.total_amount).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-lg border p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Nota fiscal (NF-e)</p>
+                <Badge variant={NFE_STATUS_VARIANT[nfeStatus] ?? 'secondary'}>{NFE_STATUS_LABEL[nfeStatus] ?? nfeStatus}</Badge>
+              </div>
+
+              {current.nfe_number && (
+                <p className="text-xs text-muted-foreground">
+                  Número {current.nfe_number}
+                  {current.nfe_issued_at && ` — emitida em ${new Date(current.nfe_issued_at).toLocaleDateString('pt-BR')}`}
+                </p>
+              )}
+              {current.nfe_error_message && <p className="text-sm text-destructive">{current.nfe_error_message}</p>}
+              {nfeError && <p className="text-sm text-destructive">{nfeError}</p>}
+
+              {(current.nfe_danfe_url || current.nfe_xml_url) && (
+                <div className="flex gap-3 text-sm">
+                  {current.nfe_danfe_url && (
+                    <a href={current.nfe_danfe_url} target="_blank" rel="noreferrer" className="text-primary underline-offset-4 hover:underline">
+                      Ver DANFE
+                    </a>
+                  )}
+                  {current.nfe_xml_url && (
+                    <a href={current.nfe_xml_url} target="_blank" rel="noreferrer" className="text-primary underline-offset-4 hover:underline">
+                      Baixar XML
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {hasRole('admin', 'operator') && (
+                <div className="flex flex-wrap gap-2">
+                  {current.status === 'confirmed' && (nfeStatus === 'pending' || nfeStatus === 'denied') && (
+                    <Button size="sm" disabled={nfeBusy} onClick={() => issueMutation.mutate()}>
+                      <FileText className="size-4" /> {issueMutation.isPending ? 'Emitindo...' : 'Emitir NF-e'}
+                    </Button>
+                  )}
+                  {nfeStatus === 'processing' && (
+                    <Button size="sm" variant="outline" disabled={nfeBusy} onClick={() => checkStatusMutation.mutate()}>
+                      <RefreshCw className="size-4" /> {checkStatusMutation.isPending ? 'Consultando...' : 'Consultar status'}
+                    </Button>
+                  )}
+                  {nfeStatus === 'authorized' && hasRole('admin') && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={nfeBusy}
+                      onClick={() => {
+                        const reason = window.prompt('Motivo do cancelamento da NF-e:');
+                        if (reason) cancelNfeMutation.mutate(reason);
+                      }}
+                    >
+                      <Ban className="size-4" /> {cancelNfeMutation.isPending ? 'Cancelando...' : 'Cancelar NF-e'}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

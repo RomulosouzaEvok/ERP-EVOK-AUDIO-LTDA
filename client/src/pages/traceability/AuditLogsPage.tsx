@@ -5,14 +5,17 @@ import * as auditLogsApi from '@/api/auditLogs';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
 /** `FE6`: log de auditoria (somente leitura, admin), filtrável por entidade. */
 export default function AuditLogsPage() {
   const [entityType, setEntityType] = React.useState('');
+  const [page, setPage] = React.useState(1);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['audit-logs', entityType],
-    queryFn: () => auditLogsApi.listAuditLogs({ entity_type: entityType || undefined, limit: 50 }),
+    queryKey: ['audit-logs', entityType, page],
+    queryFn: () => auditLogsApi.listAuditLogs({ entity_type: entityType || undefined, limit: 20, page }),
   });
 
   return (
@@ -20,9 +23,13 @@ export default function AuditLogsPage() {
       <h1 className="text-2xl font-semibold">Log de auditoria</h1>
 
       <Input
+        aria-label="Filtrar log de auditoria por tipo de entidade"
         placeholder="Filtrar por tipo de entidade (ex.: Sale, Product, User)..."
         value={entityType}
-        onChange={(event) => setEntityType(event.target.value)}
+        onChange={(event) => {
+          setEntityType(event.target.value);
+          setPage(1);
+        }}
         className="max-w-sm"
       />
 
@@ -38,11 +45,7 @@ export default function AuditLogsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={6}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={6} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={6} className="text-center text-destructive">
@@ -73,6 +76,8 @@ export default function AuditLogsPage() {
           )}
         </TableBody>
       </Table>
+
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
     </div>
   );
 }

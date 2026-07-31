@@ -23,6 +23,13 @@ export interface Sale {
   createdAt: string;
   customer?: { id: number; name: string };
   items?: SaleItem[];
+  nfe_status?: 'pending' | 'processing' | 'authorized' | 'denied' | 'cancelled';
+  nfe_number?: string | null;
+  nfe_key?: string | null;
+  nfe_xml_url?: string | null;
+  nfe_danfe_url?: string | null;
+  nfe_error_message?: string | null;
+  nfe_issued_at?: string | null;
 }
 
 export interface SaleItemInput {

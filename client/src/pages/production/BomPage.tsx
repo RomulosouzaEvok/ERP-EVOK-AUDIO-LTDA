@@ -16,6 +16,8 @@ import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
 const bomItemSchema = z.object({
   component_product_id: z.coerce.number().int().positive('Selecione um componente.'),
@@ -38,8 +40,12 @@ export default function BomPage() {
   const [formError, setFormError] = React.useState<string | null>(null);
   const [explodedBom, setExplodedBom] = React.useState<bomApi.Bom | null>(null);
   const [exploded, setExploded] = React.useState<bomApi.ExplodedComponent[] | null>(null);
+  const [page, setPage] = React.useState(1);
 
-  const { data, isLoading, isError } = useQuery({ queryKey: ['boms'], queryFn: () => bomApi.listBoms({ limit: 50 }) });
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['boms', page],
+    queryFn: () => bomApi.listBoms({ limit: 20, page }),
+  });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
 
   const {
@@ -157,11 +163,7 @@ export default function BomPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={4}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={4} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-destructive">
@@ -194,6 +196,8 @@ export default function BomPage() {
           )}
         </TableBody>
       </Table>
+
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
 
       <Dialog
         open={Boolean(explodedBom)}

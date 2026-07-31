@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus } from 'lucide-react';
+import { Plus, Eye } from 'lucide-react';
 
 import * as productionApi from '@/api/production';
+import * as bomApi from '@/api/bom';
 import * as productsApi from '@/api/products';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
@@ -16,7 +17,18 @@ import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { DetailField } from '@/components/DetailField';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 import CompleteProductionOrderDialog from './CompleteProductionOrderDialog';
+
+const PRIORITY_LABEL: Record<string, string> = {
+  low: 'Baixa',
+  normal: 'Normal',
+  high: 'Alta',
+  urgent: 'Urgente',
+};
 
 const STATUS_LABEL: Record<productionApi.ProductionStatus, string> = {
   planned: 'Planejada',
@@ -51,8 +63,13 @@ export default function ProductionOrdersPage() {
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [completingOrder, setCompletingOrder] = React.useState<productionApi.ProductionOrder | null>(null);
+  const [detailsOrder, setDetailsOrder] = React.useState<productionApi.ProductionOrder | null>(null);
+  const [page, setPage] = React.useState(1);
 
-  const { data, isLoading, isError } = useQuery({ queryKey: ['production-orders'], queryFn: () => productionApi.listProductionOrders({ limit: 50 }) });
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['production-orders', page],
+    queryFn: () => productionApi.listProductionOrders({ limit: 20, page }),
+  });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
 
   const {
@@ -157,11 +174,7 @@ export default function ProductionOrdersPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={6}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={6} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={6} className="text-center text-destructive">
@@ -172,8 +185,8 @@ export default function ProductionOrdersPage() {
           {data?.data.map((order) => {
             const next = NEXT_STATUS[order.status];
             return (
-              <TableRow key={order.id}>
-                <TableCell>{order.order_number ?? order.id}</TableCell>
+              <TableRow key={order.id} className="cursor-pointer hover:bg-accent/50" onClick={() => setDetailsOrder(order)}>
+                <TableCell className="font-medium">{order.order_number ?? order.id}</TableCell>
                 <TableCell>{order.product?.name ?? order.product_id}</TableCell>
                 <TableCell>{order.quantity}</TableCell>
                 <TableCell>{new Date(order.due_date).toLocaleDateString('pt-BR')}</TableCell>
@@ -181,7 +194,10 @@ export default function ProductionOrdersPage() {
                   <Badge variant="secondary">{STATUS_LABEL[order.status]}</Badge>
                 </TableCell>
                 {canWrite && (
-                  <TableCell className="flex gap-2">
+                  <TableCell className="flex gap-2" onClick={(event) => event.stopPropagation()}>
+                    <Button size="sm" variant="ghost" onClick={() => setDetailsOrder(order)}>
+                      <Eye className="size-4" /> Detalhes
+                    </Button>
                     {next && (
                       <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: order.id, status: next })}>
                         Avançar para "{STATUS_LABEL[next]}"
@@ -220,7 +236,105 @@ export default function ProductionOrdersPage() {
         </TableBody>
       </Table>
 
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
+
       <CompleteProductionOrderDialog order={completingOrder} onClose={() => setCompletingOrder(null)} />
+      <ProductionOrderDetailSheet order={detailsOrder} onClose={() => setDetailsOrder(null)} />
     </div>
+  );
+}
+
+function ProductionOrderDetailSheet({
+  order,
+  onClose,
+}: {
+  order: productionApi.ProductionOrder | null;
+  onClose: () => void;
+}) {
+  const { data: activeBom } = useQuery({
+    queryKey: ['bom-active-by-product', order?.product_id],
+    queryFn: () => bomApi.getActiveBomByProduct(order!.product_id),
+    enabled: Boolean(order),
+  });
+
+  const {
+    data: explosion,
+    isLoading: loadingExplosion,
+    isError: errorExplosion,
+  } = useQuery({
+    queryKey: ['bom-explosion', activeBom?.id, order?.quantity],
+    queryFn: () => bomApi.explodeBom(activeBom!.id, Number(order!.quantity)),
+    enabled: Boolean(activeBom?.id && order),
+  });
+
+  return (
+    <Sheet open={Boolean(order)} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent>
+        {order && (
+          <>
+            <SheetHeader>
+              <SheetTitle>Ordem de produção {order.order_number ?? `#${order.id}`}</SheetTitle>
+              <SheetDescription>Detalhes completos da ordem de produção.</SheetDescription>
+            </SheetHeader>
+
+            <div className="grid grid-cols-2 gap-4">
+              <DetailField label="Produto" value={order.product ? `${order.product.code} — ${order.product.name}` : order.product_id} />
+              <DetailField label="Status" value={<Badge variant="secondary">{STATUS_LABEL[order.status]}</Badge>} />
+              <DetailField label="Quantidade planejada" value={order.quantity} />
+              <DetailField label="Prioridade" value={order.priority ? PRIORITY_LABEL[order.priority] ?? order.priority : 'Normal'} />
+              <DetailField label="Data prevista" value={new Date(order.due_date).toLocaleDateString('pt-BR')} />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-semibold">Consumo previsto (BOM ativa)</p>
+              {!activeBom && (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma BOM ativa cadastrada para este produto — cadastre em "Produção &gt; BOM" para ver o consumo previsto.
+                </p>
+              )}
+              {activeBom && loadingExplosion && <p className="text-sm text-muted-foreground">Calculando consumo...</p>}
+              {activeBom && errorExplosion && (
+                <p className="text-sm text-destructive">Não foi possível calcular o consumo previsto.</p>
+              )}
+              {explosion && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Componente</TableHead>
+                      <TableHead>Necessário</TableHead>
+                      <TableHead>Em estoque</TableHead>
+                      <TableHead>Custo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {explosion.components.map((component) => {
+                      const insufficient = component.stock_available < component.quantity;
+                      return (
+                        <TableRow key={component.component_id}>
+                          <TableCell>
+                            {component.component_code} — {component.component_name}
+                          </TableCell>
+                          <TableCell>{component.quantity}</TableCell>
+                          <TableCell className={insufficient ? 'text-destructive font-medium' : ''}>
+                            {component.stock_available}
+                            {insufficient && ' (insuficiente)'}
+                          </TableCell>
+                          <TableCell>R$ {Number(component.total_cost).toFixed(2)}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              O consumo de lotes e a quantidade produzida são registrados ao concluir a ordem (botão "Concluir produção"),
+              com rastreabilidade completa dos insumos utilizados.
+            </p>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

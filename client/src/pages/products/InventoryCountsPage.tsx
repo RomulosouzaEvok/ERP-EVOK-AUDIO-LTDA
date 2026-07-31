@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
 const STATUS_LABEL: Record<inventoryApi.InventoryCountStatus, string> = {
   draft: 'Rascunho',
@@ -30,10 +32,11 @@ export default function InventoryCountsPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [selectedProductIds, setSelectedProductIds] = React.useState<number[]>([]);
   const [openCountId, setOpenCountId] = React.useState<number | null>(null);
+  const [page, setPage] = React.useState(1);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['inventory-counts'],
-    queryFn: () => inventoryApi.listInventoryCounts({ limit: 50 }),
+    queryKey: ['inventory-counts', page],
+    queryFn: () => inventoryApi.listInventoryCounts({ limit: 20, page }),
   });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
 
@@ -115,11 +118,7 @@ export default function InventoryCountsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={4}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={4} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-destructive">
@@ -167,6 +166,8 @@ export default function InventoryCountsPage() {
           )}
         </TableBody>
       </Table>
+
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
 
       <CountItemsDialog countId={openCountId} onClose={() => setOpenCountId(null)} onSubmitted={submitMutation.mutate} />
     </div>

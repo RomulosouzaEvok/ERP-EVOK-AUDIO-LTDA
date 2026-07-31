@@ -55,8 +55,11 @@ Para subir o PostgreSQL local via Docker:
 docker compose up -d
 ```
 
-O compose usa `DB_PASSWORD` do `.env`; sem ela, aplica um default apenas de
-desenvolvimento. Não use esse default em ambiente compartilhado.
+O compose usa `DB_PASSWORD` do `.env` e **não tem default**: se a variável
+não estiver definida, `docker compose up` falha explicitamente em vez de subir
+com uma senha previsível. Guia completo de conexão e troubleshooting (dois PCs
+diferentes, `DB_HOST` local vs. dentro do Compose, erros comuns):
+[`docs/DOCKER_POSTGRES_SETUP.md`](docs/DOCKER_POSTGRES_SETUP.md).
 
 Na primeira execução o servidor roda os seeds automaticamente (usuário
 administrador, departamentos e categorias). O seed é idempotente: não faz nada

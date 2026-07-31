@@ -13,6 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Informe o nome.'),
@@ -29,12 +31,13 @@ export default function ClientsPage() {
   const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState('');
+  const [page, setPage] = React.useState(1);
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['clients', search],
-    queryFn: () => clientsApi.listClients({ search: search || undefined, limit: 50 }),
+    queryKey: ['clients', search, page],
+    queryFn: () => clientsApi.listClients({ search: search || undefined, limit: 20, page }),
   });
 
   const {
@@ -104,7 +107,16 @@ export default function ClientsPage() {
         )}
       </div>
 
-      <Input placeholder="Buscar por nome ou CPF/CNPJ..." value={search} onChange={(event) => setSearch(event.target.value)} className="max-w-sm" />
+      <Input
+        aria-label="Buscar clientes por nome ou CPF/CNPJ"
+        placeholder="Buscar por nome ou CPF/CNPJ..."
+        value={search}
+        onChange={(event) => {
+          setSearch(event.target.value);
+          setPage(1);
+        }}
+        className="max-w-sm"
+      />
 
       <Table>
         <TableHeader>
@@ -116,11 +128,7 @@ export default function ClientsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={4}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={4} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-destructive">
@@ -145,6 +153,8 @@ export default function ClientsPage() {
           )}
         </TableBody>
       </Table>
+
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
     </div>
   );
 }

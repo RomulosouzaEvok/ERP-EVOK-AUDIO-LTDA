@@ -1,12 +1,13 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
 
-export type AccountStatus = 'pending' | 'paid' | 'overdue' | 'canceled';
+export type AccountStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'canceled';
 
 export interface AccountPayable {
   id: number;
   description: string;
   amount: string;
+  amount_paid: string;
   due_date: string;
   status: AccountStatus;
   supplier_id?: number | null;
@@ -15,6 +16,7 @@ export interface AccountPayable {
 export interface AccountReceivable {
   id: number;
   amount: string;
+  amount_paid: string;
   due_date: string;
   status: AccountStatus;
   customer_id?: number | null;

@@ -16,6 +16,8 @@ import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { QrCodeDialog } from '@/components/QrCodeDialog';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 
 const ASSET_TYPE_LABEL: Record<string, string> = {
   machine: 'Máquina',
@@ -57,10 +59,11 @@ export default function AssetsPage() {
   const [photoAssetId, setPhotoAssetId] = React.useState<number | null>(null);
   const [qrCodeAsset, setQrCodeAsset] = React.useState<assetsApi.Asset | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [page, setPage] = React.useState(1);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['assets'],
-    queryFn: () => assetsApi.listAssets({ limit: 50 }),
+    queryKey: ['assets', page],
+    queryFn: () => assetsApi.listAssets({ limit: 20, page }),
   });
 
   const {
@@ -197,11 +200,7 @@ export default function AssetsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={7}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={7} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={7} className="text-center text-destructive">
@@ -251,6 +250,8 @@ export default function AssetsPage() {
           )}
         </TableBody>
       </Table>
+
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
 
       {qrCodeAsset && (
         <QrCodeDialog

@@ -23,6 +23,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { QrCodeDialog } from '@/components/QrCodeDialog';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { Pagination } from '@/components/Pagination';
 import { useAuth } from '@/context/AuthContext';
 
 const productSchema = z.object({
@@ -44,6 +46,7 @@ export default function ProductsPage() {
   const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState('');
+  const [page, setPage] = React.useState(1);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [movementProduct, setMovementProduct] = React.useState<productsApi.Product | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
@@ -52,8 +55,8 @@ export default function ProductsPage() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['products', search],
-    queryFn: () => productsApi.listProducts({ search: search || undefined, limit: 50 }),
+    queryKey: ['products', search, page],
+    queryFn: () => productsApi.listProducts({ search: search || undefined, limit: 20, page }),
   });
 
   const { data: categories } = useQuery({
@@ -197,9 +200,13 @@ export default function ProductsPage() {
       </div>
 
       <Input
+        aria-label="Buscar produtos por nome ou código"
         placeholder="Buscar por nome ou código..."
         value={search}
-        onChange={(event) => setSearch(event.target.value)}
+        onChange={(event) => {
+          setSearch(event.target.value);
+          setPage(1);
+        }}
         className="max-w-sm"
       />
 
@@ -219,11 +226,7 @@ export default function ProductsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell colSpan={7}>Carregando...</TableCell>
-            </TableRow>
-          )}
+          {isLoading && <TableSkeletonRows columns={7} />}
           {isError && (
             <TableRow>
               <TableCell colSpan={7} className="text-center text-destructive">
@@ -299,6 +302,8 @@ export default function ProductsPage() {
           )}
         </TableBody>
       </Table>
+
+      <Pagination pagination={data?.pagination} onPageChange={setPage} />
 
       <StockMovementDialog product={movementProduct} onClose={() => setMovementProduct(null)} />
 
