@@ -61,7 +61,13 @@ app.use('/api/auth/forgot-password', passwordRecoveryLimiter);
 app.use('/api/auth/reset-password', passwordRecoveryLimiter);
 app.use('/api', apiLimiter);
 
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({
+  limit: '5mb',
+  // Guarda o corpo bruto (antes do parse) para permitir verificacao HMAC
+  // exata de assinatura em webhooks (ex.: /api/webhooks/n8n), sem afetar
+  // o restante das rotas que so usam req.body ja parseado.
+  verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 app.use('/api/auth', require('./src/modules/auth/presentation/routes/auth'));

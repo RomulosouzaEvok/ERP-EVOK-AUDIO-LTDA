@@ -254,10 +254,12 @@ async function runJestSuite(suiteName, env) {
 async function main() {
   const suite = process.argv[2] || 'api';
   const port = process.env.TEST_API_PORT || '3101';
+  const n8nWebhookSecret = process.env.N8N_WEBHOOK_SECRET || 'ci-n8n-webhook-secret-for-integration-tests';
   const baseEnv = {
     ...process.env,
     NODE_ENV: 'test',
     PORT: port,
+    N8N_WEBHOOK_SECRET: n8nWebhookSecret,
   };
 
   await spawnLogged(npmCommand(), ['run', 'migration:up'], { env: baseEnv });
@@ -288,7 +290,7 @@ async function main() {
       TEST_LOW_STOCK_QUANTITY: '999999',
       TEST_BOM_LINKED_PRODUCT_ID: String(fixtures.bomLinkedProductId),
       TEST_N8N_WEBHOOK_PATH: '/api/webhooks/n8n',
-      TEST_N8N_SIGNATURE: 'ci-signature',
+      TEST_N8N_WEBHOOK_SECRET: n8nWebhookSecret,
     };
 
     if (suite === 'integration') {

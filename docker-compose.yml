@@ -6,11 +6,15 @@ services:
     environment:
       POSTGRES_DB: erp_evok_audio
       POSTGRES_USER: evok_admin
-      # Default apenas para desenvolvimento local. Em qualquer ambiente
-      # compartilhado, defina DB_PASSWORD no .env (nao versionado).
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-evok_local_dev}
+      # DB_PASSWORD e obrigatorio (sem fallback fraco): falha explicita no
+      # startup se nao estiver definido no .env, em vez de subir com uma
+      # senha default previsivel silenciosamente.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env antes de subir o Postgres}
     ports:
-      - "5432:5432"
+      # Vinculado apenas a localhost: a API acessa via rede interna do
+      # compose (DB_HOST=postgres); acesso administrativo remoto deve usar
+      # tunel SSH, nunca expor 0.0.0.0:5432 publicamente.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,6 +22,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   api:
     build:
@@ -36,12 +45,14 @@ services:
       DB_PORT: 5432
       DB_NAME: erp_evok_audio
       DB_USER: evok_admin
-      DB_PASSWORD: ${DB_PASSWORD:-evok_local_dev}
+      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env antes de subir a API}
       DB_SSL: ${DB_SSL:-false}
+      DB_SSL_CA_PATH: ${DB_SSL_CA_PATH:-}
       DB_LOGGING: ${DB_LOGGING:-false}
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-please-change-me-123456789}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-dev-only-change-me-please}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
     ports:
       - "5000:5000"
     healthcheck:
@@ -50,6 +61,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
   postgres_data:
