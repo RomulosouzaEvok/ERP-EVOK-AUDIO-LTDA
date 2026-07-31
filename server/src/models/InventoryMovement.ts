@@ -39,7 +39,17 @@ const InventoryMovement = sequelize.define('InventoryMovement', {
 }, {
   tableName: 'inventory_movements',
   underscored: true,
-  timestamps: true
+  timestamps: true,
+  indexes: [
+    // Consulta mais comum: historico/rastreabilidade de um produto por
+    // periodo (GET /api/inventory/movements?product_id=X). Sem indice,
+    // table scan completo nesta tabela que cresce a cada entrada/saida/
+    // ajuste do ERP inteiro.
+    { fields: ['product_id', 'created_at'] },
+    // Consulta reversa: todas as movimentacoes originadas por uma venda/
+    // compra/ordem de producao especifica (auditoria/estorno).
+    { fields: ['reference_type', 'reference_id'] }
+  ]
 });
 
 export = InventoryMovement;

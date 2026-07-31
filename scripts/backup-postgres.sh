@@ -26,6 +26,24 @@ DB="${DB:-erp_evok_audio}"
 DB_USER="${DB_USER:-evok_admin}"
 OUT_DIR="${OUT_DIR:-backups}"
 RETENTION="${RETENTION:-14}"
+MAX_ATTEMPTS="${BACKUP_MAX_ATTEMPTS:-3}"
+RETRY_WAIT_SECONDS="${BACKUP_RETRY_WAIT_SECONDS:-30}"
+
+# Notifica o webhook de alerta ja usado por outras falhas criticas do
+# sistema (AUDIT_ALERT_WEBHOOK_URL) quando o backup falha apos todas as
+# tentativas -- sem isso, um backup agendado que falha silenciosamente
+# (ex.: container ainda subindo apos reboot) so seria percebido no dia em
+# que alguem precisasse restaurar e nao encontrasse o arquivo esperado.
+notify_failure() {
+  local message="$1"
+  echo "ERRO: ${message}" >&2
+  if [[ -n "${AUDIT_ALERT_WEBHOOK_URL:-}" ]]; then
+    curl -fsS -X POST "${AUDIT_ALERT_WEBHOOK_URL}" \
+      -H 'Content-Type: application/json' \
+      -d "{\"text\": \"[ERP EVOK AUDIO] Falha no backup do Postgres (${DB}): ${message}\"}" \
+      >/dev/null 2>&1 || echo "Falha ao notificar webhook de alerta." >&2
+  fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -54,9 +72,29 @@ CONTAINER_TMP_PATH="/tmp/${FILE_NAME}"
 
 echo "Iniciando dump de '${DB}' no container '${CONTAINER}'..."
 
-docker exec "$CONTAINER" pg_dump -U "$DB_USER" -d "$DB" -Fc -Z 9 -f "$CONTAINER_TMP_PATH"
-( cd "$REPO_ROOT" && docker cp "${CONTAINER}:${CONTAINER_TMP_PATH}" "./${HOST_FILE_REL_PATH}" )
-docker exec "$CONTAINER" rm -f "$CONTAINER_TMP_PATH"
+# Retry com backoff: uma falha pontual (ex.: container ainda subindo logo
+# apos um reboot, quando o backup roda via tarefa agendada) nao deve
+# desistir na primeira tentativa e so voltar a rodar 24h depois.
+attempt=1
+dump_succeeded=0
+while (( attempt <= MAX_ATTEMPTS )); do
+  if docker exec "$CONTAINER" pg_dump -U "$DB_USER" -d "$DB" -Fc -Z 9 -f "$CONTAINER_TMP_PATH" \
+    && ( cd "$REPO_ROOT" && docker cp "${CONTAINER}:${CONTAINER_TMP_PATH}" "./${HOST_FILE_REL_PATH}" ) \
+    && docker exec "$CONTAINER" rm -f "$CONTAINER_TMP_PATH"; then
+    dump_succeeded=1
+    break
+  fi
+  echo "Tentativa ${attempt}/${MAX_ATTEMPTS} de backup falhou." >&2
+  attempt=$(( attempt + 1 ))
+  if (( attempt <= MAX_ATTEMPTS )); then
+    sleep "$RETRY_WAIT_SECONDS"
+  fi
+done
+
+if (( dump_succeeded == 0 )); then
+  notify_failure "pg_dump/docker cp falharam apos ${MAX_ATTEMPTS} tentativas."
+  exit 1
+fi
 
 SIZE_KB=$(( $(stat -c%s "$HOST_FILE_PATH" 2>/dev/null || stat -f%z "$HOST_FILE_PATH") / 1024 ))
 echo "Backup criado: ${HOST_FILE_PATH} (${SIZE_KB} KB)"

@@ -83,6 +83,14 @@ jobs:
         run: npm run migration:up
         working-directory: server
 
+      - name: Verify last migration is reversible (down + up)
+        # Garante que toda migration nova tem um `down()` que realmente
+        # funciona, nao apenas documentalmente -- sem este passo, uma
+        # migration com down() quebrado so seria descoberta na hora real
+        # de um rollback em producao.
+        run: npm run migration:down && npm run migration:up
+        working-directory: server
+
       - name: Run smoke container
         run: |
           docker run -d --name evok-api-smoke \

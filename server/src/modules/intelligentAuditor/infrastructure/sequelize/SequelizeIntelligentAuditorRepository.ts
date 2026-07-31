@@ -18,11 +18,18 @@ class SequelizeIntelligentAuditorRepository extends IntelligentAuditorRepository
       raw: true
     });
     const positiveStock = await Product.findAll({ where: { quantity: { [Op.gt]: 0 } }, raw: true });
-    const noMovementProducts: any[] = [];
-    for (const p of positiveStock) {
-      const m = await InventoryMovement.findOne({ where: { product_id: p.id }, raw: true });
-      if (!m) noMovementProducts.push(p);
-    }
+
+    // Uma unica query agregada para descobrir quais produtos JA TEM
+    // movimentacao, em vez de um SELECT por produto em loop (N+1 real:
+    // com milhares de produtos ativos, isso disparava milhares de queries
+    // sequenciais e podia esgotar o pool de conexoes / estourar timeout).
+    const productIdsWithMovement = new Set(
+      (await InventoryMovement.findAll({
+        attributes: [[sequelize.fn('DISTINCT', sequelize.col('product_id')), 'product_id']],
+        raw: true
+      })).map((row: any) => row.product_id)
+    );
+    const noMovementProducts = positiveStock.filter((p: any) => !productIdsWithMovement.has(p.id));
     return {
       negative_stock: negative,
       no_movement: noMovementProducts,
