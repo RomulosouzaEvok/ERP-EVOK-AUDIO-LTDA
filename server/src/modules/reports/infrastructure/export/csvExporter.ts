@@ -19,7 +19,12 @@ export interface CsvColumn<T> {
  */
 function escapeCsvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const text = String(value);
+  let text = String(value);
+  // Neutraliza injecao de formula (CSV/Excel/Sheets interpretam celulas que
+  // comecam com =, +, -, @, tab ou CR como formula/comando ao abrir o arquivo).
+  if (/^[=+\-@\t\r]/.test(text)) {
+    text = `'${text}`;
+  }
   if (/[",\n\r]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }

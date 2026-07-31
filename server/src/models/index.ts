@@ -39,6 +39,7 @@ import Asset = require('./Asset');
 import NonConformity = require('./NonConformity');
 import MaintenanceOrder = require('./MaintenanceOrder');
 import AuditLog = require('./AuditLog');
+import WebhookEvent = require('./WebhookEvent');
 import BillOfMaterial = require('./BillOfMaterial');
 import BillOfMaterialItem = require('./BillOfMaterialItem');
 import Item = require('./Item');
@@ -408,7 +409,7 @@ export {
   ProductionOrder, ProductionRoute, ProductionRouteStep, ProductionOrderTracking,
   LotControl, SerialNumber, ProductionLotConsumption,
   ServiceOrder, Asset,
-  NonConformity, MaintenanceOrder, AuditLog,
+  NonConformity, MaintenanceOrder, AuditLog, WebhookEvent,
   BillOfMaterial, BillOfMaterialItem,
   Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada
 };
