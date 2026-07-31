@@ -11,6 +11,7 @@ import GetClientByIdUseCase = require('../../application/use-cases/GetClientById
 import CreateClientUseCase = require('../../application/use-cases/CreateClientUseCase');
 import UpdateClientUseCase = require('../../application/use-cases/UpdateClientUseCase');
 import DeactivateClientUseCase = require('../../application/use-cases/DeactivateClientUseCase');
+const { createClientSchema, updateClientSchema, handleZodError }: any = require('../validators/clientValidators');
 
 const clientsRepository = new SequelizeClientsRepository();
 
@@ -47,16 +48,11 @@ export async function getById(req: Request, res: Response, next: NextFunction): 
 /** `POST /api/clients` — cria um novo cliente. @param req - Request. @param res - Response. @param next - Next. @returns Promise<void>. */
 export async function create(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const {
-      name, cpf_cnpj, phone, email, address, notes, tax_regime, ie, im,
-      city, state, cep, street, number, complement, neighborhood
-    } = req.body;
+    const parsed = createClientSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
 
     const useCase = new CreateClientUseCase(clientsRepository);
-    const client = await useCase.execute({
-      name, cpf_cnpj, phone, email, address, notes, tax_regime, ie, im,
-      city, state, cep, street, number, complement, neighborhood
-    });
+    const client = await useCase.execute(parsed.data);
 
     res.status(201).json({ success: true, data: client });
   } catch (error) {
@@ -67,8 +63,11 @@ export async function create(req: Request, res: Response, next: NextFunction): P
 /** `PUT /api/clients/:id` — atualiza um cliente existente. @param req - Request. @param res - Response. @param next - Next. @returns Promise<void>. */
 export async function update(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const parsed = updateClientSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
     const useCase = new UpdateClientUseCase(clientsRepository);
-    const client = await useCase.execute({ id: Number(req.params.id), body: req.body });
+    const client = await useCase.execute({ id: Number(req.params.id), body: parsed.data });
     res.json({ success: true, data: client });
   } catch (error) {
     next(error);

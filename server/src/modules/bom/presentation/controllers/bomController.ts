@@ -12,6 +12,7 @@ const CalculateBOMCostUseCase = require('../../application/use-cases/CalculateBO
 const CheckBOMAvailabilityUseCase = require('../../application/use-cases/CheckBOMAvailabilityUseCase');
 const GetBOMTreeUseCase = require('../../application/use-cases/GetBOMTreeUseCase');
 const ListBOMItemsUseCase = require('../../application/use-cases/ListBOMItemsUseCase');
+const { createBomSchema, updateBomSchema, handleZodError } = require('../validators/bomValidators');
 
 /**
  * Controller enxuto do módulo `bom` (Estrutura de Produto). Interpreta
@@ -122,7 +123,9 @@ exports.listVersions = async (req, res, next) => {
  */
 exports.create = async (req, res, next) => {
   try {
-    const { product_id, items, revision, revision_notes, notes } = req.body;
+    const parsed = createBomSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { product_id, items, revision, revision_notes, notes } = parsed.data;
     const useCase = new CreateBOMUseCase();
     const result = await useCase.execute({ product_id, items, revision, revision_notes, notes, userId: req.user.id });
 
@@ -160,8 +163,11 @@ exports.update = async (req, res, next) => {
     // aplicava todos os campos enviados em uma única chamada. ApproveBOMUseCase
     // fica disponível como wrapper dedicado para fluxos futuros que precisem
     // de uma aprovação isolada (ver README do módulo).
+    const parsed = updateBomSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
     const useCase = new UpdateBOMUseCase(bomRepository);
-    const { before, updateData, bom } = await useCase.execute({ id: req.params.id, data: req.body });
+    const { before, updateData, bom } = await useCase.execute({ id: req.params.id, data: parsed.data });
 
     const oldValues: any = {};
     for (const field of Object.keys(updateData)) oldValues[field] = before[field];

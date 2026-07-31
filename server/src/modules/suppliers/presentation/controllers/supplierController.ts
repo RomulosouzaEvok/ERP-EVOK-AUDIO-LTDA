@@ -4,6 +4,7 @@ const GetSupplierByIdUseCase = require('../../application/use-cases/GetSupplierB
 const CreateSupplierUseCase = require('../../application/use-cases/CreateSupplierUseCase');
 const UpdateSupplierUseCase = require('../../application/use-cases/UpdateSupplierUseCase');
 const DeactivateSupplierUseCase = require('../../application/use-cases/DeactivateSupplierUseCase');
+const { createSupplierSchema, updateSupplierSchema, handleZodError } = require('../validators/supplierValidators');
 
 /**
  * Controller enxuto do módulo `suppliers`. Interpreta `req`, delega toda a
@@ -70,16 +71,11 @@ exports.getById = async (req, res, next) => {
  */
 exports.create = async (req, res, next) => {
   try {
-    const {
-      company_name, trade_name, cnpj, ie, phone, email, address,
-      contact_name, contact_phone, payment_terms, delivery_time, notes
-    } = req.body;
+    const parsed = createSupplierSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
 
     const useCase = new CreateSupplierUseCase(suppliersRepository);
-    const supplier = await useCase.execute({
-      company_name, trade_name, cnpj, ie, phone, email, address,
-      contact_name, contact_phone, payment_terms, delivery_time, notes
-    });
+    const supplier = await useCase.execute(parsed.data);
 
     res.status(201).json({ success: true, data: supplier });
   } catch (error) {
@@ -97,8 +93,11 @@ exports.create = async (req, res, next) => {
  */
 exports.update = async (req, res, next) => {
   try {
+    const parsed = updateSupplierSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
     const useCase = new UpdateSupplierUseCase(suppliersRepository);
-    const supplier = await useCase.execute({ id: req.params.id, body: req.body });
+    const supplier = await useCase.execute({ id: req.params.id, body: parsed.data });
     res.json({ success: true, data: supplier });
   } catch (error) {
     next(error);

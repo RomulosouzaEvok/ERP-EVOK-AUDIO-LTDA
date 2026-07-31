@@ -6,6 +6,7 @@ const ListPayablesUseCase = require('../../application/use-cases/ListPayablesUse
 const CreatePayableUseCase = require('../../application/use-cases/CreatePayableUseCase');
 const PayPayableUseCase = require('../../application/use-cases/PayPayableUseCase');
 const GetCashFlowUseCase = require('../../application/use-cases/GetCashFlowUseCase');
+const { createPayableSchema, payAccountSchema, handleZodError } = require('../validators/financialValidators');
 
 /**
  * Controller enxuto do módulo `financial`. Interpreta `req`, delega toda a
@@ -48,7 +49,9 @@ exports.listReceivable = async (req, res, next) => {
  */
 exports.receivePayment = async (req, res, next) => {
   try {
-    const { payment_date, payment_method, amount } = req.body;
+    const parsed = payAccountSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { payment_date, payment_method, amount } = parsed.data;
     const useCase = new ReceivePaymentUseCase(financialRepository);
     const { account, previousStatus } = await useCase.execute({ id: req.params.id, payment_date, payment_method, amount });
 
@@ -96,7 +99,9 @@ exports.listPayable = async (req, res, next) => {
  */
 exports.createPayable = async (req, res, next) => {
   try {
-    const { description, amount, due_date, category, supplier_id, purchase_id, notes } = req.body;
+    const parsed = createPayableSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { description, amount, due_date, category, supplier_id, purchase_id, notes } = parsed.data;
     const useCase = new CreatePayableUseCase(financialRepository);
     const account = await useCase.execute({ description, amount, due_date, category, supplier_id, purchase_id, notes });
 
@@ -123,7 +128,9 @@ exports.createPayable = async (req, res, next) => {
  */
 exports.payPayable = async (req, res, next) => {
   try {
-    const { payment_date, payment_method, amount } = req.body;
+    const parsed = payAccountSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { payment_date, payment_method, amount } = parsed.data;
     const useCase = new PayPayableUseCase(financialRepository);
     const { account, previousStatus } = await useCase.execute({ id: req.params.id, payment_date, payment_method, amount });
 
