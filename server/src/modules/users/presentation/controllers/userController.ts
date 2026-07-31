@@ -4,6 +4,7 @@ const GetUserByIdUseCase = require('../../application/use-cases/GetUserByIdUseCa
 const CreateUserUseCase = require('../../application/use-cases/CreateUserUseCase');
 const UpdateUserUseCase = require('../../application/use-cases/UpdateUserUseCase');
 const DeactivateUserUseCase = require('../../application/use-cases/DeactivateUserUseCase');
+const RevokeUserSessionsUseCase = require('../../application/use-cases/RevokeUserSessionsUseCase');
 
 /**
  * Controller enxuto do módulo `users`. Interpreta `req`, delega toda a
@@ -113,6 +114,26 @@ exports.remove = async (req, res, next) => {
   try {
     const useCase = new DeactivateUserUseCase(usersRepository);
     const result = await useCase.execute({ id: parseInt(req.params.id), currentUserId: req.user.id, req });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * `POST /api/users/:id/revoke-sessions` — revogação emergencial (SEC-12):
+ * invalida imediatamente todos os tokens JWT já emitidos para este usuário,
+ * sem exigir/alterar a senha atual dele.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.revokeSessions = async (req, res, next) => {
+  try {
+    const useCase = new RevokeUserSessionsUseCase(usersRepository);
+    const result = await useCase.execute({ id: parseInt(req.params.id), req });
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);

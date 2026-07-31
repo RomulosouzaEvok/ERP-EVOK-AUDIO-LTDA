@@ -44,7 +44,31 @@ do tipo `/c/Gilwagno .../backups/arquivo.dump` falha com
 `invalid output path` por causa da conversao de path do MSYS. A correcao
 aplicada no script foi rodar o `docker cp` com **caminho relativo**
 (`./backups/arquivo.dump`) a partir da raiz do repo, o que funciona em Git
-Bash e também em Linux/CI sem alteracao.
+Bash e também em Linux/CI sem alteracao. O script `.sh` tambem define
+`MSYS_NO_PATHCONV=1` internamente para o `docker exec` interno funcionar sem
+exigir essa variavel manualmente.
+
+### Agendamento automatico (atualizado em 2026-07-31, segunda rodada)
+
+Criados dois scripts de registro de agendamento, um por plataforma:
+
+- `scripts/schedule-backup-task.ps1` — registra uma tarefa diaria no
+  Agendador de Tarefas do Windows (`Register-ScheduledTask`), rodando
+  `scripts/backup-postgres.ps1` no horario definido (default `03:00`) com a
+  retencao desejada (default 14). Requer sessao PowerShell administrativa.
+- `scripts/schedule-backup-cron.sh` — registra uma entrada no `crontab` do
+  usuario atual (default `0 3 * * *`), rodando `scripts/backup-postgres.sh`
+  com log redirecionado para `backups/backup-cron.log`. Idempotente: reroda
+  sem duplicar a entrada (usa um marcador de comentario para substituir a
+  linha anterior).
+
+**Ambos os scripts foram validados apenas por analise de sintaxe** (parser
+PowerShell e `bash -n`) nesta sessao — **nenhum foi executado de fato**,
+porque isso registraria uma tarefa agendada real na maquina de
+desenvolvimento local, que nao e o servidor de producao. Quando o servidor
+real (VPS/on-premise) estiver definido, rodar um dos dois scripts la (o que
+corresponder ao SO do servidor) e a unica acao pendente para fechar `DB-10`
+por completo.
 
 ## DB-11 + DB-12 — Backup real, restore isolado e medicao de RPO/RTO
 
@@ -148,6 +172,49 @@ alterado ou apagado durante este teste — o container principal nao foi tocado
 em nenhum momento (nem `DROP DATABASE`, nem restore, nem rollback foram
 executados nele).
 
+### 7. Recalibracao com volume representativo (2026-07-31, segunda rodada)
+
+A medicao original acima (`0.917s`/`1.322s`) foi feita contra um banco de
+`252 KB` (dados de desenvolvimento/seed) — nao representativo de um ERP em
+producao apos meses de uso. Para uma estimativa mais realista, sem usar dados
+reais de producao (que ainda nao existem), foi criado um **terceiro ambiente
+isolado** (`evok-postgres-rpo-test`, rede `evok-rpo-net`, destruido ao final),
+inflado com carga sintetica:
+
+```
+$ docker exec evok-postgres-rpo-test psql -U evok_admin -d erp_evok_audio -c "
+INSERT INTO audit_logs (...)
+SELECT ... FROM generate_series(1, 800000) AS g;
+"
+INSERT 0 800000
+```
+
+Banco resultante: `356 MB` (contra `12 MB` do banco de desenvolvimento atual e
+`252 KB` da medicao original).
+
+| Medicao | Valor real observado |
+|---|---|
+| RPO (tempo de `pg_dump -Fc -Z 9`, banco de 356 MB) | `2.109s` (dump comprimido resultante: `14.85 MB`) |
+| RTO (tempo de `pg_restore` em container novo, ate ficar consultavel) | `5.535s` |
+| Validacao pos-restore | `select count(*) from audit_logs` = `800207` (identico a origem: `800000` sinteticos + `207` pre-existentes) |
+
+**Interpretacao**: RPO e RTO cresceram de forma sub-linear em relacao ao
+tamanho do banco (356 MB / 252 KB ≈ 1400x o tamanho, mas RTO cresceu apenas
+~4.2x) — esperado, pois parte do tempo de dump/restore e custo fixo de
+conexao/schema, nao proporcional aos dados. Ainda assim, **estes numeros
+tambem nao devem ser extrapolados diretamente para o volume real de
+producao**: dados sinteticos repetitivos comprimem muito melhor que dados
+reais variados (fotos, textos livres, JSON variado), e o volume real pode ser
+ordens de grandeza maior. Esta recalibracao serve para confirmar que o
+processo de backup/restore continua funcional e rapido (segundos, nao
+minutos) numa ordem de grandeza mais realista — a medicao definitiva de
+RPO/RTO para o SLA formal de producao deve ser refeita com uma copia real do
+banco de producao antes do go-live definitivo.
+
+Ambiente de teste encerrado ao final: `evok-postgres-rpo-test`,
+`evok-postgres-rpo-restore` e a rede `evok-rpo-net` foram removidos; nenhum
+impacto no banco principal de desenvolvimento (`evok-postgres`).
+
 ## DB-13 — Rollback de migration compativel com rollback de aplicacao
 
 ### Teste real executado (no banco de restore isolado, nao no principal)
@@ -241,24 +308,30 @@ foi executado nesta sessão, pois nenhuma imagem de produção foi implantada.
 
 | Item | Resultado |
 |---|---|
-| DB-10 | Scripts `scripts/backup-postgres.ps1` e `scripts/backup-postgres.sh` criados; retencao configuravel (default 14); saida em `backups/` (fora do volume, no `.gitignore`). |
+| DB-10 | Scripts `scripts/backup-postgres.ps1` e `scripts/backup-postgres.sh` criados; retencao configuravel (default 14); saida em `backups/` (fora do volume, no `.gitignore`). Scripts de agendamento (`scripts/schedule-backup-task.ps1` Windows / `scripts/schedule-backup-cron.sh` Linux) criados e com sintaxe validada; ativacao real pendente do servidor definitivo. |
 | DB-11 | Backup real gerado a partir de `evok-postgres`; restaurado com sucesso em container isolado `evok-postgres-restore-test` (porta 5433); container isolado removido ao final. |
-| DB-12 | RPO (tempo de dump): `0.917s`. RTO (tempo de `pg_restore`): `1.322s`. Validacao de consulta pos-restore: `0.214s`. Banco: `252 KB` / `258.461 bytes` de dump. |
+| DB-12 | Medicao inicial (banco de `252 KB`): RPO `0.917s`, RTO `1.322s`. Recalibracao com volume sintetico representativo (banco de `356 MB`, 800k registros): RPO `2.109s`, RTO `5.535s`, validado por contagem identica (`800207`). Ambos ainda nao substituem medicao final com copia real de producao antes do go-live. |
 | DB-13 | `migration:down` testado no restore isolado: reverteu a migration `20260731-000010-add-user-password-version` em `0.015s` (execucao total do comando `0.901s`), confirmado via `migration:status`. Procedimento combinado de rollback documentado acima. |
 
 ## Riscos residuais
 
-- O volume de dados atual (ambiente de desenvolvimento/seed, `252 KB`) e
-  muito menor que um banco de producao real; os tempos de RPO/RTO medidos
-  aqui **nao devem ser extrapolados linearmente** para o volume de producao
-  — recomenda-se repetir esta mesma medicao com uma copia representativa do
-  volume de dados de producao antes do go-live, para calibrar SLA real de
-  RPO/RTO.
-- Nao existe ainda agendamento automatico (cron/Task Scheduler/CI job) para
-  rodar `scripts/backup-postgres.ps1`/`.sh` periodicamente; o script existe e
-  foi validado manualmente, mas o agendamento em si (frequencia, armazenamento
-  externo redundante, alertas de falha) fica fora do escopo desta sessão e
-  deve ser tratado como item de infraestrutura de operação (Gate G5).
-- O passo 1 do procedimento de rollback (reverter a imagem da aplicação) não
-  foi testado nesta sessão porque depende do orquestrador de deploy definido
-  em G5, ainda não implementado.
+- A medicao original (banco de `252 KB`) foi recalibrada com um volume
+  sintetico de `356 MB`/800k registros (RPO `2.109s`, RTO `5.535s` — ver
+  secao "Recalibracao com volume representativo" acima). Ainda assim, dados
+  sinteticos repetitivos comprimem melhor que dados reais e o volume real de
+  producao pode ser maior; **a medicao definitiva de SLA de RPO/RTO deve ser
+  refeita com uma copia real do banco de producao** antes do go-live
+  definitivo.
+- O agendamento automatico (`scripts/schedule-backup-task.ps1`/`schedule-backup-cron.sh`)
+  foi criado e tem sintaxe validada, mas **nao foi ativado de fato** — rodar
+  qualquer um dos dois registraria uma tarefa real na maquina onde ele
+  executa, e a maquina de desenvolvimento local nao e o servidor de
+  producao. Falta apenas rodar o script correspondente no servidor real
+  quando ele existir. Armazenamento externo redundante (fora do proprio
+  servidor) e alertas de falha de backup continuam fora do escopo desta
+  sessão (infraestrutura de operação, Gate G5).
+- O passo de reverter a imagem da aplicação (rollback) **foi testado** em
+  ensaio de canario local em 2026-07-31 (parar o container candidato e subir
+  a tag anterior aprovada contra o mesmo banco) — ver
+  `docs/UAT_RELEASE_G6_2026-07-31.md`. O que falta é repetir esse mesmo teste
+  contra o orquestrador de deploy do servidor real, ainda nao definido.

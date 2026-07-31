@@ -27,6 +27,8 @@ export interface UserAttributes {
   department: string;
   active: boolean;
   passwordVersion: number;
+  resetPasswordTokenHash: string | null;
+  resetPasswordExpiresAt: Date | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -88,6 +90,18 @@ const User = sequelize.define('User', {
     defaultValue: 1,
     field: 'password_version',
     comment: 'Versao de senha, incrementada a cada troca para invalidar tokens JWT antigos'
+  },
+  resetPasswordTokenHash: {
+    type: DataTypes.STRING(64),
+    allowNull: true,
+    field: 'reset_password_token_hash',
+    comment: 'Hash SHA-256 do token de recuperacao de senha (SEC-12)'
+  },
+  resetPasswordExpiresAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'reset_password_expires_at',
+    comment: 'Expiracao do token de recuperacao de senha (SEC-12)'
   }
 }, {
   tableName: 'users',
@@ -131,6 +145,8 @@ const User = sequelize.define('User', {
 (User as any).prototype.toJSON = function (): Record<string, unknown> {
   const values = { ...this.get() };
   delete values.password;
+  delete values.resetPasswordTokenHash;
+  delete values.resetPasswordExpiresAt;
   return values;
 };
 

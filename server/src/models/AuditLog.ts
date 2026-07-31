@@ -109,28 +109,27 @@ const AuditLog = sequelize.define<AuditLogInstance>('AuditLog', {
   success?: boolean;
   errorMessage?: string;
 }): Promise<void> {
-  try {
-    await AuditLog.create({
-      user_id: data.userId !== undefined ? Number(data.userId) : (data.req?.user?.id ?? null),
-      user_name: data.userName ?? data.req?.user?.name ?? null,
-      user_ip: (data.req?.ip as string) ?? null,
-      user_agent: typeof data.req?.headers?.['user-agent'] === 'string' ? data.req.headers['user-agent'] : null,
-      action: data.action,
-      entity_type: data.entityType,
-      entity_id: data.entityId !== undefined && data.entityId !== null ? Number(data.entityId) : null,
-      entity_description: data.entityDescription ?? null,
-      old_values: data.oldValues ?? null,
-      new_values: data.newValues ?? null,
-      description: data.description ?? `${data.action} em ${data.entityType} #${data.entityId}`,
-      success: data.success ?? true,
-      error_message: data.errorMessage ?? null,
-      route: data.req?.originalUrl ?? null,
-      method: data.req?.method ?? null
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error('Erro ao registrar audit log:', message);
-  }
+  // Propositalmente NAO engole erro aqui: quem decide o que fazer com uma
+  // falha de gravacao (retry, persistencia em arquivo, alerta via webhook)
+  // e `services/auditLogService.ts#logAction`, que envolve esta chamada.
+  // Engolir o erro aqui tornaria aquele tratamento morto (nunca acionado).
+  await AuditLog.create({
+    user_id: data.userId !== undefined ? Number(data.userId) : (data.req?.user?.id ?? null),
+    user_name: data.userName ?? data.req?.user?.name ?? null,
+    user_ip: (data.req?.ip as string) ?? null,
+    user_agent: typeof data.req?.headers?.['user-agent'] === 'string' ? data.req.headers['user-agent'] : null,
+    action: data.action,
+    entity_type: data.entityType,
+    entity_id: data.entityId !== undefined && data.entityId !== null ? Number(data.entityId) : null,
+    entity_description: data.entityDescription ?? null,
+    old_values: data.oldValues ?? null,
+    new_values: data.newValues ?? null,
+    description: data.description ?? `${data.action} em ${data.entityType} #${data.entityId}`,
+    success: data.success ?? true,
+    error_message: data.errorMessage ?? null,
+    route: data.req?.originalUrl ?? null,
+    method: data.req?.method ?? null
+  });
 };
 
 export = AuditLog;

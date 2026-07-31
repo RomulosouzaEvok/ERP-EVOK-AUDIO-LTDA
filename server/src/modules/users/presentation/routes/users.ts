@@ -16,6 +16,7 @@ router.get('/:id', authenticate, authorize('admin'), userController.getById);
 router.post('/', authenticate, authorize('admin'), userController.create);
 router.put('/:id', authenticate, authorize('admin'), userController.update);
 router.delete('/:id', authenticate, authorize('admin'), userController.remove);
+router.post('/:id/revoke-sessions', authenticate, authorize('admin'), userController.revokeSessions);
 
 module.exports = router;
 

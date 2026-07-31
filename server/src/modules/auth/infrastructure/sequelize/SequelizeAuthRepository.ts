@@ -31,6 +31,18 @@ class SequelizeAuthRepository extends AuthRepository {
   public async findUserByIdWithPasswordForUpdate(id: number, transaction?: unknown): Promise<any | null> {
     return User.findByPk(id, transaction ? { transaction, lock: (transaction as any).LOCK?.UPDATE } : undefined);
   }
+
+  /**
+   * @param tokenHash - Hash SHA-256 do token de recuperacao de senha.
+   * @param transaction - Transacao Sequelize opcional, usada para bloquear a linha (`FOR UPDATE`).
+   * @returns Instancia do model `User` (com `password`) ou null.
+   */
+  public async findUserByResetTokenHash(tokenHash: string, transaction?: unknown): Promise<any | null> {
+    return User.findOne({
+      where: { resetPasswordTokenHash: tokenHash },
+      ...(transaction ? { transaction, lock: (transaction as any).LOCK?.UPDATE } : {}),
+    });
+  }
 }
 
 export = SequelizeAuthRepository;

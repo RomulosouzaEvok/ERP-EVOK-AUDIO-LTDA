@@ -60,6 +60,14 @@ class SequelizeUsersRepository extends UsersRepository {
     const [updated] = await User.update(data, { where: { id } });
     return updated;
   }
+
+  /**
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  async incrementPasswordVersion(id) {
+    await User.increment('passwordVersion', { where: { id } });
+  }
 }
 
 module.exports = SequelizeUsersRepository;

@@ -50,6 +50,19 @@ class AuthRepository {
   public async findUserByIdWithPasswordForUpdate(id: number, transaction?: unknown): Promise<any | null> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('AuthRepository.findUserByIdWithPasswordForUpdate não implementado.');
   }
+
+  /**
+   * Busca um usuario pelo hash SHA-256 do token de recuperacao de senha
+   * (SEC-12), com lock pessimista opcional para uso transacional.
+   *
+   * @param tokenHash - Hash SHA-256 do token recebido do usuario.
+   * @param transaction - Transacao Sequelize opcional.
+   * @returns Usuario encontrado ou null.
+   * @throws {Error} Se nao implementado.
+   */
+  public async findUserByResetTokenHash(tokenHash: string, transaction?: unknown): Promise<any | null> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    throw new Error('AuthRepository.findUserByResetTokenHash não implementado.');
+  }
 }
 
 export = AuthRepository;

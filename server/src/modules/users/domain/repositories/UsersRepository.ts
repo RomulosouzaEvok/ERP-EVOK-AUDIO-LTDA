@@ -55,6 +55,19 @@ class UsersRepository {
   async update(id, data) { // eslint-disable-line no-unused-vars
     throw new Error('UsersRepository.update não implementado.');
   }
+
+  /**
+   * Incrementa atomicamente `password_version`, invalidando de imediato
+   * todos os tokens JWT emitidos anteriormente para este usuário — sem
+   * alterar a senha (revogação emergencial de sessão, SEC-12).
+   *
+   * @abstract
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  async incrementPasswordVersion(id) { // eslint-disable-line no-unused-vars
+    throw new Error('UsersRepository.incrementPasswordVersion não implementado.');
+  }
 }
 
 module.exports = UsersRepository;

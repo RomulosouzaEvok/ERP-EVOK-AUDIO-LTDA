@@ -12,7 +12,9 @@ import LoginUseCase = require('../../application/use-cases/LoginUseCase');
 import RegisterUserUseCase = require('../../application/use-cases/RegisterUserUseCase');
 import GetMeUseCase = require('../../application/use-cases/GetMeUseCase');
 import ChangePasswordUseCase = require('../../application/use-cases/ChangePasswordUseCase');
-const { changePasswordSchema, handleZodError }: any = require('../validators/authValidators');
+import ForgotPasswordUseCase = require('../../application/use-cases/ForgotPasswordUseCase');
+import ResetPasswordUseCase = require('../../application/use-cases/ResetPasswordUseCase');
+const { changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, handleZodError }: any = require('../validators/authValidators');
 
 const authRepository = new SequelizeAuthRepository();
 const tokenService = new TokenService();
@@ -115,6 +117,71 @@ export async function changePassword(req: Request, res: Response, next: NextFunc
 
     res.json({ success: true, data: { message: 'Senha alterada com sucesso. Faça login novamente.' } });
   } catch (error: any) {
+    next(error);
+  }
+}
+
+/**
+ * `POST /api/auth/forgot-password` — solicita a recuperacao de senha
+ * (SEC-12). Sempre responde com a mesma mensagem generica, exista ou nao o
+ * e-mail, para impedir enumeracao de contas.
+ *
+ * @param req - Request.
+ * @param res - Response.
+ * @param next - Next.
+ * @returns Promise<void>.
+ */
+export async function forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    let body: { email: string };
+    try {
+      body = forgotPasswordSchema.parse(req.body);
+    } catch (error: any) {
+      return handleZodError(error);
+    }
+
+    const useCase = new ForgotPasswordUseCase(authRepository);
+    await useCase.execute({ email: body.email });
+
+    res.json({
+      success: true,
+      data: { message: 'Se o e-mail informado existir, enviaremos instruções de recuperação em instantes.' },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * `POST /api/auth/reset-password` — conclui a recuperacao de senha com o
+ * token recebido por e-mail (SEC-12), invalidando sessoes antigas (SEC-10).
+ *
+ * @param req - Request.
+ * @param res - Response.
+ * @param next - Next.
+ * @returns Promise<void>.
+ */
+export async function resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    let body: { token: string; newPassword: string };
+    try {
+      body = resetPasswordSchema.parse(req.body);
+    } catch (error: any) {
+      return handleZodError(error);
+    }
+
+    const useCase = new ResetPasswordUseCase(authRepository);
+    const result = await useCase.execute({ token: body.token, newPassword: body.newPassword });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'User',
+      entityId: result.id,
+      description: 'Senha redefinida via fluxo de recuperação (token de uso único). Sessões anteriores invalidadas.',
+    });
+
+    res.json({ success: true, data: { message: 'Senha redefinida com sucesso. Faça login novamente.' } });
+  } catch (error) {
     next(error);
   }
 }
