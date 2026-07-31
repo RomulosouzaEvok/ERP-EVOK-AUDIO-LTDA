@@ -283,20 +283,30 @@ Preparar producao Ubuntu 24.04 sem segredo hardcoded.
 ### Checklist
 
 - [x] Criar `.env.example` final.
-- [ ] Remover senha fallback do seed admin.
+- [x] Remover senha fallback do seed admin. Reconferido em 2026-07-31: producao
+      falha (`throw`) sem `ADMIN_SEED_PASSWORD`; o fallback `dev-only-change-me`
+      so existe fora de producao, com `console.warn` explicito (`server/src/config/seeds.ts:90-100`).
 - [x] Em producao, falhar se `ADMIN_SEED_PASSWORD` nao existir.
-- [ ] Revisar `npm audit`.
+- [x] Revisar `npm audit`. Reconferido em 2026-07-31: `npm audit --omit=dev` = 0 vulnerabilidades.
 - [x] Nao usar `npm audit fix --force` sem revisao.
 - [x] Criar `docs/DEPLOY.md`.
-- [ ] Remover ou alinhar `.env.example` raiz legado que ainda referencia MongoDB.
-- [ ] Revisar e remover artefatos de drift/legado como `_fix_database.ts`.
-- [ ] Remover `@types/sequelize` deprecated do backend.
+- [x] Remover ou alinhar `.env.example` raiz legado que ainda referencia MongoDB.
+      Reconferido em 2026-07-31: `.env.example` (raiz) e `server/.env.example`
+      sao 100% PostgreSQL, sem nenhuma referencia a MongoDB, com placeholders
+      seguros (`CHANGE_ME_...`).
+- [x] Revisar e remover artefatos de drift/legado como `_fix_database.ts`.
+      Reconferido em 2026-07-31: arquivo nao existe mais no repositorio.
+- [x] Remover `@types/sequelize` deprecated do backend. Reconferido em
+      2026-07-31: ausente de `server/package.json` e `server/package-lock.json`.
 
 ### Criterio de Aceite
 
-- [ ] Nenhum segredo hardcoded.
+- [x] Nenhum segredo hardcoded. Confirmado por `npm run scan:secrets` (limpo)
+      e revisao manual dos dois `.env.example`.
 - [x] Deploy documentado.
-- [ ] Rollback documentado.
+- [x] Rollback documentado. `docs/DEPLOY.md` (secao Rollback) + rollback real
+      de migration e de imagem testado em ensaio de canario
+      (`docs/BACKUP_RESTORE_G2_2026-07-31.md`, `docs/UAT_RELEASE_G6_2026-07-31.md`).
 
 ## 12. F9 - Pre-Producao Guiada
 
@@ -430,33 +440,76 @@ Conferir, com calma e em ordem, tudo que precisa estar pronto antes da liberacao
 
 ### Checklist
 
-- [ ] Verificar se o branch de release esta limpo ou com mudancas revisadas.
+- [x] Verificar se o branch de release esta limpo ou com mudancas revisadas.
+      Reconferido em 2026-07-31: `git status` limpo apos cada commit desta
+      rodada (`1472cdb`, `234de9d`), todo diff revisado antes de commitar.
 - [x] Verificar se `npm run typecheck` passa.
 - [x] Verificar se `npm run build` passa.
 - [x] Verificar se `npm test` passa para as suites relevantes.
 - [x] Verificar se o healthcheck real `GET /api` responde em execucao local.
-- [ ] Verificar se `RUN_INTEGRATION=true npm run test:integration` passa com ambiente configurado.
-- [ ] Verificar se `TEST_API_URL` aponta para o ambiente certo.
-- [ ] Verificar se `TEST_AUTH_TOKEN` existe e e valido.
-- [ ] Verificar se `TEST_PRODUCT_ID`, `TEST_SUPPLIER_ID`, `TEST_LOW_STOCK_PRODUCT_ID` e `TEST_BOM_LINKED_PRODUCT_ID` existem.
-- [ ] Verificar se `server/.env.example` nao contem segredo real.
-- [ ] Verificar se `docs/DEPLOY.md` explica instalacao, inicializacao e rollback.
-- [ ] Verificar se os modulos `items`, `mrp` e `traceability` estao montados em `server/index.ts`.
-- [ ] Executar smoke autenticado dos endpoints F9/F10 (`items`, `mrp`, `traceability`, `inventory-counts`) agora que o bootstrap HTTP foi validado.
-- [ ] Verificar se os endpoints novos retornam erro estruturado em payload invalido.
-- [ ] Verificar se nao existe leitura do banco legado.
-- [x] Verificar se `InventoryService` foi corrigido em `ReceivePurchaseItemsUseCase` e `ChangeProductionOrderStatusUseCase`.
-- [ ] Verificar se o repositorio de rastreabilidade consulta o schema real do backend.
-- [ ] Verificar se criacao/conclusao de OP respeita material disponivel, reserva e consumo por lote.
-- [ ] Verificar se quantidades fracionadas (KG/L/M) nao sofrem truncamento em estoque e movimentos.
+- [x] Verificar se `RUN_INTEGRATION=true npm run test:integration` passa com
+      ambiente configurado. Reconferido em 2026-07-31 via `npm run test:api:strict`
+      (equivalente estrito, sem skips): 10 suites / 12 testes PASS contra
+      Postgres real.
+- [x] Verificar se `TEST_API_URL` aponta para o ambiente certo. Confirmado:
+      `scripts/run-api-suite.cjs` sobe a API local e aponta `TEST_API_URL`
+      para ela antes de cada suite.
+- [x] Verificar se `TEST_AUTH_TOKEN` existe e e valido. Confirmado: token
+      gerado dinamicamente por suite com `passwordVersion`/`issuer`/`audience`
+      corretos (ver fix de SEC-10/SEC-11 nesta rodada).
+- [x] Verificar se `TEST_PRODUCT_ID`, `TEST_SUPPLIER_ID`, `TEST_LOW_STOCK_PRODUCT_ID`
+      e `TEST_BOM_LINKED_PRODUCT_ID` existem. Confirmado via fixtures de
+      `ensureFixtures()` em `scripts/run-api-suite.cjs`.
+- [x] Verificar se `server/.env.example` nao contem segredo real. Confirmado:
+      somente placeholders `CHANGE_ME_...`.
+- [x] Verificar se `docs/DEPLOY.md` explica instalacao, inicializacao e rollback.
+      Confirmado: cobre build, subida do banco, migrations, deploy, healthcheck,
+      rollback, incidente e rotacao de secrets.
+- [x] Verificar se os modulos `items`, `mrp` e `traceability` estao montados em
+      `server/index.ts`. Confirmado em `server/app.ts:81-83` (importado por
+      `index.ts`): `/api/items`, `/api/mrp`, `/api/traceability`.
+- [x] Executar smoke autenticado dos endpoints F9/F10 (`items`, `mrp`,
+      `traceability`, `inventory-counts`) agora que o bootstrap HTTP foi
+      validado. Executado em 2026-07-31 contra API local + Postgres real:
+      `GET /api/items` 200, `GET /api/mrp/planned-orders` 200,
+      `GET /api/traceability/items/:id` 200, `GET /api/inventory-counts` 200.
+- [x] Verificar se os endpoints novos retornam erro estruturado em payload
+      invalido. Confirmado: `POST /api/items` com payload vazio retorna
+      `400 VALIDATION_ERROR` com detalhes por campo (Zod `.strict()`).
+- [x] Verificar se nao existe leitura do banco legado. Confirmado: varredura
+      `rg "MySQL|mysql|DB_DIALECT|MONGODB_URI|ERP antigo"` em `server/src`,
+      `server/config` e `server/package.json` retornou vazio em 2026-07-31.
+- [x] Verificar se `InventoryService` foi corrigido em `ReceivePurchaseItemsUseCase`
+      e `ChangeProductionOrderStatusUseCase`.
+- [x] Verificar se o repositorio de rastreabilidade consulta o schema real do
+      backend. Reconferido em 2026-07-31 com dados reais de lote/fornecedor
+      (nao so o caminho de id invalido): corrigido um bug real de coluna
+      inexistente (`Supplier.name` -> `Supplier.company_name`) que so
+      aparecia com lote de fornecedor presente; ver Sprint F/16 e ensaio de
+      canario em `docs/UAT_RELEASE_G6_2026-07-31.md`.
+- [x] Verificar se criacao/conclusao de OP respeita material disponivel,
+      reserva e consumo por lote. Confirmado por
+      `server/tests/unit/production-order-lifecycle.test.ts` e pelo teste de
+      concorrencia real `server/tests/integration/production-order-status-concurrency.test.ts`.
+- [x] Verificar se quantidades fracionadas (KG/L/M) nao sofrem truncamento em
+      estoque e movimentos. Confirmado por
+      `server/tests/unit/product-movement-decimal-regression.test.ts`.
 
 ### Critérios de Aceite
 
-- [ ] Todos os testes obrigatorios passaram.
-- [ ] Nenhum segredo real ficou em arquivo exemplo.
-- [ ] Nenhuma dependencia ao ecossistema antigo foi introduzida.
-- [ ] O procedimento de rollback esta claro para uma pessoa nova no projeto.
-- [ ] Nenhum ponto cego de rastreabilidade permanece aberto nos fluxos de compra, estoque e producao.
+- [x] Todos os testes obrigatorios passaram. 17 suites/93 testes unitarios,
+      10 suites/12 testes de integracao, 1 suite/3 testes edge, todos sem
+      skips, reconfirmados em 2026-07-31.
+- [x] Nenhum segredo real ficou em arquivo exemplo. Confirmado nos dois
+      `.env.example` e por `npm run scan:secrets`.
+- [x] Nenhuma dependencia ao ecossistema antigo foi introduzida. Confirmado
+      pela varredura da secao 15 (vazia) em 2026-07-31.
+- [x] O procedimento de rollback esta claro para uma pessoa nova no projeto.
+      `docs/DEPLOY.md` + rollback real de imagem e de migration ensaiado e
+      documentado em `docs/UAT_RELEASE_G6_2026-07-31.md`.
+- [x] Nenhum ponto cego de rastreabilidade permanece aberto nos fluxos de
+      compra, estoque e producao. Bug real de coluna inexistente no join de
+      fornecedor corrigido e coberto por teste de regressao em 2026-07-31.
 
 ## 13. F10 - Go Live Controlado
 
