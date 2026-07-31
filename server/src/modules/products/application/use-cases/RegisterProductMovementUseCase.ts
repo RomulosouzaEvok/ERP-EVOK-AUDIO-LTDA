@@ -1,21 +1,25 @@
 const UseCase = require('../../../../shared/application/UseCase');
-const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
-const { InventoryMovement } = require('../../../../models/index');
+const { ValidationError } = require('../../../../errors');
+const InventoryService = require('../../../../services/inventoryService');
 
 /**
  * Registra uma movimentação manual de estoque (entrada/saída) para um
  * produto, preservando o comportamento do endpoint anterior
  * `POST /api/products/movements`.
  *
- * Observação: este use case ainda acessa o model `InventoryMovement`
- * diretamente e altera `Product.quantity` via update simples (sem lock
- * pessimista), pois a migração completa do domínio de Estoque (com
- * `InventoryService.consume/receive` transacional) é escopo da Fase 5/6 do
- * módulo `inventory`, ainda não migrado. Ver pendências no README do módulo.
+ * Corrigido (auditoria "pente fino"): antes lia `Product.quantity` e
+ * escrevia de volta sem transação nem lock pessimista, permitindo que duas
+ * requisições concorrentes de saída deixassem o estoque negativo (a mesma
+ * classe de bug já corrigida em `/api/inventory/movements` via
+ * `InventoryService`, mas que este endpoint mais antigo ainda tinha).
+ * Agora delega inteiramente a `InventoryService.adjust`, que trava a linha
+ * do produto (`SELECT ... FOR UPDATE`) dentro da transação fornecida pelo
+ * controller, revalida estoque suficiente sob lock, e cria o
+ * `InventoryMovement` atomicamente.
  */
 class RegisterProductMovementUseCase extends UseCase {
   /**
-   * @param {import('../../domain/repositories/ProductRepository')} productRepository
+   * @param {import('../../domain/repositories/ProductRepository')} productRepository - Mantido no construtor por compatibilidade, não usado neste fluxo (a leitura/escrita passa a ser feita via `InventoryService`, que já trava a linha).
    */
   constructor(productRepository) {
     super();
@@ -29,12 +33,12 @@ class RegisterProductMovementUseCase extends UseCase {
    * @param {number} input.quantity
    * @param {string} [input.description]
    * @param {number} input.userId - Id do usuário que realizou a movimentação.
+   * @param {import('sequelize').Transaction} input.transaction - Transação Sequelize ativa (aberta pelo controller).
    * @returns {Promise<{ movement: Object, product: Object, previousQuantity: number, newQuantity: number }>}
    * @throws {ValidationError} Se produto, tipo ou quantidade forem inválidos.
-   * @throws {NotFoundError} Se o produto não existir.
-   * @throws {BusinessRuleError} Se a saída exceder o estoque disponível.
+   * @throws {Error} Com `statusCode` 404/409 propagado de `InventoryService.adjust` se o produto não existir ou o estoque for insuficiente (revalidado sob lock).
    */
-  async execute({ product_id, type, quantity, description, userId }) {
+  async execute({ product_id, type, quantity, description, userId, transaction }) {
     if (!product_id || !type || !quantity) {
       throw new ValidationError('Produto, tipo e quantidade são obrigatórios');
     }
@@ -42,30 +46,22 @@ class RegisterProductMovementUseCase extends UseCase {
       throw new ValidationError('Quantidade deve ser maior que zero');
     }
 
-    const product = await this.productRepository.findById(product_id, { withCategory: false });
-    if (!product) throw new NotFoundError('Produto não encontrado');
-
-    if (type === 'out' && product.quantity < quantity) {
-      throw new BusinessRuleError(`Estoque insuficiente. Disponível: ${product.quantity}, Solicitado: ${quantity}`);
-    }
-
-    const movement = await InventoryMovement.create({
+    const result = await InventoryService.adjust(
       product_id,
-      user_id: userId,
       type,
       quantity,
-      description: description || 'Movimentação manual',
-      reference_type: 'adjustment'
-    });
+      userId,
+      description || 'Movimentação manual',
+      transaction
+    );
 
-    const previousQuantity = parseFloat(product.quantity || 0);
-    const newQuantity = previousQuantity + (type === 'in' ? quantity : -quantity);
-    await this.productRepository.update(product_id, { quantity: newQuantity });
-
-    return { movement, product, previousQuantity, newQuantity };
+    return {
+      movement: { id: result.movementId },
+      product: result.product,
+      previousQuantity: result.quantityBefore,
+      newQuantity: result.quantityAfter
+    };
   }
 }
 
 module.exports = RegisterProductMovementUseCase;
-
-

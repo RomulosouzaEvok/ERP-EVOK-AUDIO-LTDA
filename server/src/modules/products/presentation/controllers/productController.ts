@@ -1,3 +1,4 @@
+const { sequelize } = require('../../../../config/database');
 const { logAction } = require('../../../../services/auditLogService');
 const SequelizeProductRepository = require('../../infrastructure/sequelize/SequelizeProductRepository');
 const ListProductsUseCase = require('../../application/use-cases/ListProductsUseCase');
@@ -6,7 +7,7 @@ const CreateProductUseCase = require('../../application/use-cases/CreateProductU
 const UpdateProductUseCase = require('../../application/use-cases/UpdateProductUseCase');
 const DeactivateProductUseCase = require('../../application/use-cases/DeactivateProductUseCase');
 const RegisterProductMovementUseCase = require('../../application/use-cases/RegisterProductMovementUseCase');
-const { validateMovementBody } = require('../validators/productValidators');
+const { createProductSchema, updateProductSchema, productMovementSchema, handleZodError } = require('../validators/productValidators');
 
 /**
  * Controller enxuto do módulo `products`. Interpreta `req`, delega toda a
@@ -65,8 +66,11 @@ exports.getById = async (req, res, next) => {
  */
 exports.create = async (req, res, next) => {
   try {
+    const parsed = createProductSchema.safeParse(req.body);
+    if (!parsed.success) return handleZodError(parsed.error);
+
     const useCase = new CreateProductUseCase(productRepository);
-    const product = await useCase.execute({ ...req.body, tsParams: extractTsParams(req.body) });
+    const product = await useCase.execute({ ...parsed.data, tsParams: extractTsParams(parsed.data) });
 
     logAction(req, {
       action: 'create',
@@ -94,8 +98,11 @@ exports.create = async (req, res, next) => {
  */
 exports.update = async (req, res, next) => {
   try {
+    const parsed = updateProductSchema.safeParse(req.body);
+    if (!parsed.success) return handleZodError(parsed.error);
+
     const useCase = new UpdateProductUseCase(productRepository);
-    const { product, oldValues, updateData, isRevision, before } = await useCase.execute({ id: req.params.id, body: req.body });
+    const { product, oldValues, updateData, isRevision, before } = await useCase.execute({ id: req.params.id, body: parsed.data });
 
     logAction(req, {
       action: 'update',
@@ -152,14 +159,21 @@ exports.remove = async (req, res, next) => {
  * @returns {Promise<void>}
  */
 exports.movement = async (req, res, next) => {
+  let t;
   try {
-    validateMovementBody(req.body);
-    const { product_id, type, quantity, description } = req.body;
+    const parsed = productMovementSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
+    const { product_id, type, quantity, description } = parsed.data;
+    t = await sequelize.transaction();
     const useCase = new RegisterProductMovementUseCase(productRepository);
     const { movement, product, previousQuantity, newQuantity } = await useCase.execute({
-      product_id, type, quantity, description, userId: req.user.id
+      product_id, type, quantity, description, userId: req.user.id, transaction: t
     });
 
+    await t.commit();
+
+    // Log de auditoria feito após o commit para não segurar locks de banco.
     logAction(req, {
       action: 'create',
       entityType: 'InventoryMovement',
@@ -170,8 +184,14 @@ exports.movement = async (req, res, next) => {
       description: `Movimentação manual de estoque (${type}) - produto ${product.code}`
     });
 
-    res.status(201).json({ success: true, data: movement });
-  } catch (error) { next(error); }
+    res.status(201).json({ success: true, data: { product, movementId: movement.id } });
+  } catch (error) {
+    if (t && !t.finished) await t.rollback();
+    if (error.statusCode && !error.code) {
+      return res.status(error.statusCode).json({ success: false, error: error.message });
+    }
+    next(error);
+  }
 };
 
 /**
