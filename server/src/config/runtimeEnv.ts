@@ -177,6 +177,9 @@ export function loadRuntimeEnv(): RuntimeEnv {
   return cachedRuntimeEnv;
 }
 
+export const JWT_ISSUER = 'erp-evok-audio';
+export const JWT_AUDIENCE = 'erp-evok-audio-api';
+
 export function getJwtRuntimeConfig(): { secret: string; expiresIn: string } {
   const runtimeEnv = loadRuntimeEnv();
 

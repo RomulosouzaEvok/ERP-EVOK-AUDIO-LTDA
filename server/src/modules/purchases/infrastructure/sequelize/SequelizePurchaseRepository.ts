@@ -77,19 +77,29 @@ class SequelizePurchaseRepository extends PurchaseRepository {
   }
 
   async findPurchaseWithItemsForUpdate(id, transaction) {
-    return Purchase.findByPk(id, {
-      include: [
-        {
-          model: PurchaseItem,
-          as: 'items',
-          include: [
-            { model: Item, as: 'item', attributes: ['id', 'descricao'] },
-          ],
-        },
-      ],
+    // Nao usar `include` (LEFT OUTER JOIN) junto de `lock` aqui: o Postgres
+    // rejeita "FOR UPDATE" no lado nullable de um outer join
+    // ("FOR UPDATE cannot be applied to the nullable side of an outer
+    // join"), o que derrubava o recebimento de compras com 500 em runtime
+    // real mesmo com testes unitarios (mockados) passando. Trava o pedido
+    // e os itens em duas queries de tabela unica, sem join.
+    const purchase = await Purchase.findByPk(id, {
       transaction,
       lock: transaction.LOCK.UPDATE,
     });
+    if (!purchase) return null;
+
+    const items = await PurchaseItem.findAll({
+      where: { purchase_id: id },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    // Atribuicao direta (nao `setDataValue`): o alias `items` do hasMany so
+    // ganha getter/property quando populado via `include`; ao buscar em
+    // duas queries precisamos atribuir a propriedade manualmente para que
+    // `purchase.items` funcione no restante do use case.
+    purchase.items = items;
+    return purchase;
   }
 
   async createPurchase(data, transaction) {

@@ -69,7 +69,7 @@ class LoginUseCase extends UseCase<LoginInput, LoginOutput> {
       });
     }
 
-    const token = this.tokenService.generateToken(user.id);
+    const token = this.tokenService.generateToken(user.id, user.passwordVersion);
 
     return {
       token,

@@ -91,11 +91,27 @@ class SequelizeSaleRepository extends SaleRepository {
    * @returns {Promise<Object|null>}
    */
   async findSaleWithItemsForUpdate(id, transaction) {
-    return Sale.findByPk(id, {
-      include: [{ model: SaleItem, as: 'items' }],
+    // Nao usar `include` (LEFT OUTER JOIN) junto de `lock` aqui: o Postgres
+    // rejeita "FOR UPDATE" no lado nullable de um outer join
+    // ("FOR UPDATE cannot be applied to the nullable side of an outer
+    // join"), o que derrubava o cancelamento de vendas com 500 em runtime
+    // real mesmo com testes unitarios (mockados) passando. Trava a venda e
+    // os itens em duas queries de tabela unica, sem join.
+    const sale = await Sale.findByPk(id, {
       transaction,
       lock: transaction.LOCK.UPDATE
     });
+    if (!sale) return null;
+
+    const items = await SaleItem.findAll({
+      where: { sale_id: id },
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    // Atribuicao direta (nao `setDataValue`): o alias `items` do hasMany so
+    // ganha getter/property quando populado via `include`.
+    sale.items = items;
+    return sale;
   }
 
   /**

@@ -13,5 +13,6 @@ const router = express.Router();
 router.post('/login', authController.login);
 router.post('/register', authenticate, authorize('admin'), authController.register);
 router.get('/me', authenticate, authController.getMe);
+router.put('/change-password', authenticate, authController.changePassword);
 
 export = router;

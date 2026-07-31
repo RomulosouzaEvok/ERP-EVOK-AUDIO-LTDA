@@ -226,6 +226,7 @@ async function ensureFixtures() {
 
     return {
       adminId: admin.id,
+      adminPasswordVersion: admin.passwordVersion,
       supplierId: supplier.id,
       purchaseProductId: purchaseProduct.id,
       lowStockProductId: lowStockProduct.id,
@@ -271,7 +272,11 @@ async function main() {
     await waitForReady(`http://127.0.0.1:${port}/health/ready`, 60000);
     const fixtures = await ensureFixtures();
 
-    const token = jwt.sign({ id: fixtures.adminId }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(
+      { id: fixtures.adminId, passwordVersion: fixtures.adminPasswordVersion },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h', issuer: 'erp-evok-audio', audience: 'erp-evok-audio-api' },
+    );
     const testEnv = {
       ...baseEnv,
       RUN_INTEGRATION: 'true',

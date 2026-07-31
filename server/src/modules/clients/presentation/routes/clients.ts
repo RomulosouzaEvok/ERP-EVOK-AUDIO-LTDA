@@ -5,15 +5,15 @@
  */
 
 import express = require('express');
-const { authenticate }: any = require('../../../../middlewares/auth');
+const { authenticate, authorize }: any = require('../../../../middlewares/auth');
 const clientController: any = require('../controllers/clientController');
 
 const router = express.Router();
 
 router.get('/', authenticate, clientController.list);
 router.get('/:id', authenticate, clientController.getById);
-router.post('/', authenticate, clientController.create);
-router.put('/:id', authenticate, clientController.update);
-router.delete('/:id', authenticate, clientController.remove);
+router.post('/', authenticate, authorize('admin', 'operator'), clientController.create);
+router.put('/:id', authenticate, authorize('admin', 'operator'), clientController.update);
+router.delete('/:id', authenticate, authorize('admin'), clientController.remove);
 
 export = router;

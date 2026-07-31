@@ -37,6 +37,19 @@ class AuthRepository {
   public async createUser(data: Record<string, unknown>): Promise<any> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('AuthRepository.createUser não implementado.');
   }
+
+  /**
+   * Busca um usuario pelo id, incluindo o hash da senha, com lock pessimista
+   * opcional (para uso em transacao de troca de senha).
+   *
+   * @param id - Id do usuario.
+   * @param transaction - Transacao Sequelize opcional.
+   * @returns Usuario encontrado ou null.
+   * @throws {Error} Se nao implementado.
+   */
+  public async findUserByIdWithPasswordForUpdate(id: number, transaction?: unknown): Promise<any | null> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    throw new Error('AuthRepository.findUserByIdWithPasswordForUpdate não implementado.');
+  }
 }
 
 export = AuthRepository;

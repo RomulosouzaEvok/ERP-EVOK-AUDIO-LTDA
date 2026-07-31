@@ -26,6 +26,7 @@ export interface UserAttributes {
   role: 'admin' | 'operator' | 'financial';
   department: string;
   active: boolean;
+  passwordVersion: number;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -39,6 +40,7 @@ export interface UserCreationAttributes {
   role?: 'admin' | 'operator' | 'financial';
   department?: string;
   active?: boolean;
+  passwordVersion?: number;
 }
 
 const User = sequelize.define('User', {
@@ -79,6 +81,13 @@ const User = sequelize.define('User', {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
     comment: 'Status ativo/inativo (soft delete)'
+  },
+  passwordVersion: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 1,
+    field: 'password_version',
+    comment: 'Versao de senha, incrementada a cada troca para invalidar tokens JWT antigos'
   }
 }, {
   tableName: 'users',
@@ -92,6 +101,12 @@ const User = sequelize.define('User', {
     beforeSave: async (user: any) => {
       if (user.changed('password')) {
         user.password = await bcrypt.hash(user.password, 10);
+
+        // Qualquer troca de senha (self-service ou administrativa) invalida
+        // tokens JWT emitidos anteriormente, incrementando a versao da senha.
+        if (!user.isNewRecord) {
+          user.passwordVersion = (user.passwordVersion || 1) + 1;
+        }
       }
     }
   }

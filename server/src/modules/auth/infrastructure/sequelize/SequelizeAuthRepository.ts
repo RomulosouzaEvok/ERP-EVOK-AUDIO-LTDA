@@ -22,6 +22,15 @@ class SequelizeAuthRepository extends AuthRepository {
   public async createUser(data: Record<string, unknown>): Promise<any> {
     return User.create(data);
   }
+
+  /**
+   * @param id - Id do usuario.
+   * @param transaction - Transacao Sequelize opcional, usada para bloquear a linha (`FOR UPDATE`).
+   * @returns Instancia do model `User` (com `password`) ou null.
+   */
+  public async findUserByIdWithPasswordForUpdate(id: number, transaction?: unknown): Promise<any | null> {
+    return User.findByPk(id, transaction ? { transaction, lock: (transaction as any).LOCK?.UPDATE } : undefined);
+  }
 }
 
 export = SequelizeAuthRepository;

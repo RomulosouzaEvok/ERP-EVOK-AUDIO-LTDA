@@ -36,7 +36,7 @@ interface ExtendedError extends Error {
 
 const errorHandler = (err: ExtendedError, req: Request, res: Response, _next: NextFunction): Response | void => {
   // Log interno (nunca exposto ao cliente)
-  if (process.env.NODE_ENV !== 'test') {
+  if (process.env.NODE_ENV !== 'test' || process.env.DEBUG_ERRORS === 'true') {
     console.error(`[${new Date().toISOString()}] ERROR:`, err.message);
     console.error(err.stack);
   }

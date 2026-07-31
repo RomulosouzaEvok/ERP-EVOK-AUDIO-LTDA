@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
-import { getJwtRuntimeConfig } from '../config/runtimeEnv';
+import { getJwtRuntimeConfig, JWT_ISSUER, JWT_AUDIENCE } from '../config/runtimeEnv';
 
 // Models are CommonJS - dynamic require is safest for the current hybrid setup.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -9,6 +9,7 @@ const { User } = require('../models/index');
 
 interface JwtPayload {
   id: number;
+  passwordVersion?: number;
   iat?: number;
   exp?: number;
 }
@@ -34,7 +35,10 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, secret) as JwtPayload;
+    const decoded = jwt.verify(token, secret, {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    }) as JwtPayload;
 
     const user = await User.findByPk(decoded.id, {
       attributes: { exclude: ['password'] },
@@ -47,6 +51,12 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
 
     if (!user.active) {
       res.status(401).json({ success: false, error: 'Usuario inativo' });
+      return;
+    }
+
+    const tokenPasswordVersion = decoded.passwordVersion ?? 1;
+    if (tokenPasswordVersion !== user.passwordVersion) {
+      res.status(401).json({ success: false, error: 'Sessao invalidada, faca login novamente' });
       return;
     }
 

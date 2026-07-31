@@ -10,3 +10,4 @@ server/dist/
 server/tmp/
 server/=1
 .claude/
+backups/

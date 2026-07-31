@@ -11,6 +11,8 @@ import TokenService = require('../../infrastructure/jwt/TokenService');
 import LoginUseCase = require('../../application/use-cases/LoginUseCase');
 import RegisterUserUseCase = require('../../application/use-cases/RegisterUserUseCase');
 import GetMeUseCase = require('../../application/use-cases/GetMeUseCase');
+import ChangePasswordUseCase = require('../../application/use-cases/ChangePasswordUseCase');
+const { changePasswordSchema, handleZodError }: any = require('../validators/authValidators');
 
 const authRepository = new SequelizeAuthRepository();
 const tokenService = new TokenService();
@@ -74,6 +76,45 @@ export async function getMe(req: Request, res: Response, next: NextFunction): Pr
     const user = await useCase.execute({ userId: (req as any).user.id });
     res.json({ success: true, data: user });
   } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * `PUT /api/auth/change-password` — troca a senha do usuario autenticado e
+ * invalida sessoes/tokens JWT emitidos antes da troca (SEC-09 + SEC-10).
+ *
+ * @param req - Request.
+ * @param res - Response.
+ * @param next - Next.
+ * @returns Promise<void>.
+ */
+export async function changePassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    let body: { currentPassword: string; newPassword: string };
+    try {
+      body = changePasswordSchema.parse(req.body);
+    } catch (error: any) {
+      return handleZodError(error);
+    }
+
+    const useCase = new ChangePasswordUseCase(authRepository);
+    const result = await useCase.execute({
+      userId: (req as any).user.id,
+      currentPassword: body.currentPassword,
+      newPassword: body.newPassword,
+    });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'User',
+      entityId: result.id,
+      entityDescription: (req as any).user.email,
+      description: 'Senha alterada pelo proprio usuario. Sessoes anteriores invalidadas.',
+    });
+
+    res.json({ success: true, data: { message: 'Senha alterada com sucesso. Faça login novamente.' } });
+  } catch (error: any) {
     next(error);
   }
 }

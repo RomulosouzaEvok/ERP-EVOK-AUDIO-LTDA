@@ -3,7 +3,9 @@
 **Projeto:** ERP EVOK AUDIO  
 **Data:** 2026-07-31  
 **Ambiente alvo:** homologacao local/isolada com PostgreSQL via Docker  
-**Status:** preparado, bloqueado para conclusao por dependencia do smoke Docker da API no G5
+**Status:** G0-G5 tecnicamente aprovados em 2026-07-31 (segunda rodada de execucao).
+G6 depende agora apenas de acoes humanas/organizacionais (UAT de negocio, ambiente
+de homologacao real, aprovacao formal) - nao ha mais bloqueio tecnico conhecido.
 
 ## Objetivo
 
@@ -15,27 +17,27 @@ gate anterior estiver pendente ou enquanto houver risco P0/P1 sem aceite formal.
 
 | Condicao | Status | Evidencia |
 |---|---|---|
-| G1 aprovado | Aprovado | Validacoes de runtime seguro registradas no historico do gate |
-| G2 aprovado | Aprovado com riscos residuais | Migrations baseline validadas em banco existente e banco vazio |
-| G3 aprovado | Aprovado | Matriz RBAC e testes 401/403 validados anteriormente |
-| G4 aprovado | Aprovado | Locks/idempotencia e suites de integridade validados anteriormente |
-| G5 aprovado | Bloqueado | Smoke Docker da API pendente por falha HTTPS Node/npm no Docker Desktop |
+| G1 aprovado | Aprovado | typecheck/build/testes reproduzidos com sucesso em 2026-07-31 |
+| G2 aprovado | Aprovado | 10 migrations `up`, backup/restore real validado (`docs/BACKUP_RESTORE_G2_2026-07-31.md`), rollback de migration testado |
+| G3 aprovado | Aprovado | RBAC em todas as rotas de escrita critica (incl. `clients`/`suppliers`), SEC-10 (invalidacao de sessao por `password_version`) e SEC-11 (JWT `issuer`/`audience`) implementados e testados |
+| G4 aprovado | Aprovado | bug real de lock pessimista corrigido (outer join + `FOR UPDATE`), 3 novos testes de concorrencia real (venda, OP, compra) |
+| G5 aprovado | Aprovado | build da imagem principal (`docker build ./server`) concluido, container roda como `uid=999(evok)`, `/health/live` e `/health/ready` respondem 200, shutdown gracioso via `SIGTERM` confirmado |
 | PostgreSQL Docker saudavel | Aprovado | `evok-postgres` em `running healthy`; `pg_isready` aceitando conexoes |
 
 ## Checklist REL-01 a REL-10
 
 | ID | Item | Status | Evidencia requerida | Bloqueio atual |
 |---|---|---|---|---|
-| REL-01 | Restaurar backup em homologacao | Pendente | Log de restore e contagem de tabelas essenciais | backup homologado ainda nao fornecido |
-| REL-02 | Executar UAT de vendas, compras, estoque, producao e financeiro | Preparado | Registro dos cenarios abaixo assinado por QA/Sponsor | exige ambiente API operacional |
-| REL-03 | Validar dados iniciais, usuarios, roles e seed controlado | Preparado | Lista de usuarios/roles e seed auditado | exige API + banco aplicado |
-| REL-04 | Executar deploy canario com volume e dados controlados | Bloqueado | Tag imutavel, container da API e healthcheck | depende do smoke Docker do G5 |
-| REL-05 | Monitorar erros, latencia, conexoes e jobs | Preparado | Janela monitorada com logs e metricas | exige canario ativo |
-| REL-06 | Executar teste real de rollback | Bloqueado | Evidencia de retorno para tag anterior aprovada | depende de imagem aprovada |
-| REL-07 | Confirmar backup pre-janela | Pendente | Arquivo de backup, checksum e teste de leitura | exige janela definida |
-| REL-08 | Obter aprovacao formal | Pendente | Assinaturas de Tech Lead, DBA, DevOps, QA e Sponsor | exige REL-01 a REL-07 |
-| REL-09 | Executar reauditoria P0/P1 | Preparado | `docs/REAUDITORIA_P0_P1_2026-07-31.md` | G5 permanece aberto |
-| REL-10 | Liberar producao somente com gates assinados | Bloqueado | Ata de release completa | G5/G6 ainda nao assinados |
+| REL-01 | Restaurar backup em homologacao | Tecnicamente comprovado | Restore executado em container isolado `evok-postgres-restore-test`, contagens de `users`/`products`/`bill_of_material_items` identicas (`docs/BACKUP_RESTORE_G2_2026-07-31.md`) | falta apenas repetir em um ambiente de homologacao formal (fora da maquina local do desenvolvedor), se a empresa exigir isso |
+| REL-02 | Executar UAT de vendas, compras, estoque, producao e financeiro | Preparado, com evidencia tecnica de suporte | Todos os fluxos do roteiro abaixo ja tem teste automatizado de integracao real passando (concorrencia de venda/OP/compra/estoque, pagamento/recebivel, rastreabilidade) | falta a assinatura humana de QA/Sponsor confirmando que o comportamento reflete a operacao real do negocio |
+| REL-03 | Validar dados iniciais, usuarios, roles e seed controlado | Preparado | Seed roda sem erro (`npm start`/container), RBAC valida por role | falta decisao do negocio sobre quais usuarios/roles reais entram em producao |
+| REL-04 | Executar deploy canario com volume e dados controlados | Depende de ambiente real | Imagem builda e sobe localmente com sucesso (`docs/EXECUCAO_GATES_PRODUCAO_2026-07-31.md`, secao G5) | falta um ambiente de hospedagem real (servidor/nuvem) definido pela empresa; nao pode ser simulado localmente |
+| REL-05 | Monitorar erros, latencia, conexoes e jobs | Preparado | Logs estruturados com `requestId`/`correlationId` ja implementados | exige canario ativo (REL-04) |
+| REL-06 | Executar teste real de rollback | Tecnicamente comprovado | `migration:down` testado com sucesso em banco isolado (`docs/BACKUP_RESTORE_G2_2026-07-31.md`) | falta testar o rollback combinado com a troca de imagem, que depende de um orquestrador de deploy real (REL-04) |
+| REL-07 | Confirmar backup pre-janela | Pronto para execucao | Script `scripts/backup-postgres.ps1`/`.sh` criado e validado | e uma acao operacional a ser executada no dia da janela real, nao antes |
+| REL-08 | Obter aprovacao formal | Pendente — acao humana | Tabela de assinaturas abaixo | exige decisao formal de Tech Lead, DBA, DevOps, QA e Sponsor; nenhuma IA pode assinar por essas pessoas |
+| REL-09 | Executar reauditoria P0/P1 | Concluido | `docs/REAUDITORIA_P0_P1_2026-07-31.md` + correcoes de G2-G5 desta sessao | nenhum |
+| REL-10 | Liberar producao somente com gates assinados | Bloqueado | Ata de release completa | depende exclusivamente de REL-04 (ambiente real) e REL-08 (aprovacao humana) |
 
 ## Roteiro de UAT
 
@@ -89,5 +91,14 @@ Abortar o G6 e voltar para correcao se ocorrer qualquer item abaixo:
 
 ## Decisao atual
 
-O Gate G6 esta preparado para execucao, mas nao pode ser concluido nem liberar
-producao enquanto o G5 nao comprovar a imagem final da API, readiness e rollback.
+O Gate G6 esta tecnicamente desbloqueado: G0 a G5 foram comprovados nesta sessao
+com evidencia real (testes, build, backup/restore, healthcheck, rollback de
+migration). O que falta para liberar producao nao e mais trabalho de codigo -
+sao tres acoes que so a EVOK AUDIO pode tomar:
+
+1. Definir e disponibilizar um ambiente real de hospedagem para o deploy canario (REL-04).
+2. Executar o UAT de negocio com os cenarios do roteiro abaixo e registrar o aceite (REL-02/REL-03).
+3. Coletar as assinaturas formais de Tech Lead, DBA, DevOps, QA e Sponsor (REL-08).
+
+Nenhuma IA pode substituir essas tres acoes. Ate que elas aconteçam, a decisao
+permanece: **nao liberar producao**.
