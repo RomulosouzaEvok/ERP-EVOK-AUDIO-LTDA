@@ -460,25 +460,40 @@ class BomService {
       throw Object.assign(new Error(`BOM ID ${bomId} não encontrada`), { statusCode: 404 });
     }
 
-    // Constrói árvore hierárquica
-    const buildTree = (parentId = null) => {
+    // Constrói árvore hierárquica. Protegida contra ciclo/profundidade
+    // excessiva em `parent_item_id` (mesma defesa de `explodeBOM`) — sem
+    // isso, um dado corrompido (ex.: item apontando para um descendente
+    // dele mesmo) causaria recursão infinita e derrubaria o processo.
+    const visitedItemIds = new Set<number>();
+    const buildTree = (parentId = null, depth = 0) => {
+      if (depth > this.MAX_BOM_DEPTH) {
+        throw Object.assign(new Error(`Árvore da BOM ${bomId} excede a profundidade máxima permitida (${this.MAX_BOM_DEPTH}) — possível ciclo em parent_item_id.`), { statusCode: 422 });
+      }
+
       const children = bom.items
         .filter(item => item.parent_item_id === parentId)
         .sort((a, b) => a.sequence_order - b.sequence_order);
 
-      return children.map(item => ({
-        id: item.id,
-        component: item.componentProduct ?
-          { id: item.componentProduct.id, name: item.componentProduct.name, code: item.componentProduct.code, type: item.componentProduct.product_type }
-          : { id: item.component_product_id },
-        quantity: item.quantity,
-        unit: item.unit,
-        level: item.bom_level,
-        scrap: item.scrap_percentage,
-        cost: item.total_cost,
-        notes: item.notes,
-        children: buildTree(item.id)
-      }));
+      return children.map(item => {
+        if (visitedItemIds.has(item.id)) {
+          throw Object.assign(new Error(`Ciclo detectado na árvore da BOM ${bomId} no item #${item.id}.`), { statusCode: 422 });
+        }
+        visitedItemIds.add(item.id);
+
+        return {
+          id: item.id,
+          component: item.componentProduct ?
+            { id: item.componentProduct.id, name: item.componentProduct.name, code: item.componentProduct.code, type: item.componentProduct.product_type }
+            : { id: item.component_product_id },
+          quantity: item.quantity,
+          unit: item.unit,
+          level: item.bom_level,
+          scrap: item.scrap_percentage,
+          cost: item.total_cost,
+          notes: item.notes,
+          children: buildTree(item.id, depth + 1)
+        };
+      });
     };
 
     return {

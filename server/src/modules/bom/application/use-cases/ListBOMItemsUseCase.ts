@@ -17,7 +17,22 @@ class ListBOMItemsUseCase extends UseCase {
    * @returns {Promise<Object[]>} Lista de itens da BOM.
    */
   async execute({ id }) {
-    return this.bomRepository.listItems(id);
+    const items = await this.bomRepository.listItems(id);
+
+    // `unit_cost` persistido e um snapshot; expoe o custo ATUAL do
+    // componente ao lado (ja carregado via include, sem query extra) —
+    // mesma correcao de `GetBOMByIdUseCase` para o achado de auditoria de
+    // custo de BOM desatualizado.
+    for (const item of items) {
+      const currentUnitCost = item.componentProduct ? parseFloat(item.componentProduct.cost_price || 0) : 0;
+      if (item.setDataValue) {
+        item.setDataValue('current_unit_cost', currentUnitCost);
+      } else {
+        item.current_unit_cost = currentUnitCost;
+      }
+    }
+
+    return items;
   }
 }
 
