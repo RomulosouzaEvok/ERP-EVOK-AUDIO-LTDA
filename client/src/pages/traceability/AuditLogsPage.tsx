@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 export default function AuditLogsPage() {
   const [entityType, setEntityType] = React.useState('');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['audit-logs', entityType],
     queryFn: () => auditLogsApi.listAuditLogs({ entity_type: entityType || undefined, limit: 50 }),
   });
@@ -43,6 +43,13 @@ export default function AuditLogsPage() {
               <TableCell colSpan={6}>Carregando...</TableCell>
             </TableRow>
           )}
+          {isError && (
+            <TableRow>
+              <TableCell colSpan={6} className="text-center text-destructive">
+                Não foi possível carregar o log de auditoria. Tente novamente.
+              </TableCell>
+            </TableRow>
+          )}
           {data?.data.map((log) => (
             <TableRow key={log.id}>
               <TableCell>{new Date(log.createdAt).toLocaleString('pt-BR')}</TableCell>
@@ -57,7 +64,7 @@ export default function AuditLogsPage() {
               </TableCell>
             </TableRow>
           ))}
-          {!isLoading && data?.data.length === 0 && (
+          {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={6} className="text-center text-muted-foreground">
                 Nenhum evento encontrado.

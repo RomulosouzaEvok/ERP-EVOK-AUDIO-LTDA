@@ -31,7 +31,7 @@ export default function InventoryCountsPage() {
   const [selectedProductIds, setSelectedProductIds] = React.useState<number[]>([]);
   const [openCountId, setOpenCountId] = React.useState<number | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['inventory-counts'],
     queryFn: () => inventoryApi.listInventoryCounts({ limit: 50 }),
   });
@@ -120,6 +120,13 @@ export default function InventoryCountsPage() {
               <TableCell colSpan={4}>Carregando...</TableCell>
             </TableRow>
           )}
+          {isError && (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-destructive">
+                Não foi possível carregar as contagens. Tente novamente.
+              </TableCell>
+            </TableRow>
+          )}
           {data?.data.map((count) => (
             <TableRow key={count.id}>
               <TableCell>{count.count_number}</TableCell>
@@ -151,7 +158,7 @@ export default function InventoryCountsPage() {
               </TableCell>
             </TableRow>
           ))}
-          {!isLoading && data?.data.length === 0 && (
+          {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">
                 Nenhuma contagem registrada.

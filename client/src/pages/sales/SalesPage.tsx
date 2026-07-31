@@ -53,7 +53,7 @@ export default function SalesPage() {
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['sales'],
     queryFn: () => salesApi.listSales({ limit: 50 }),
   });
@@ -170,7 +170,7 @@ export default function SalesPage() {
 
                 {formError && <p className="text-sm text-destructive">{formError}</p>}
                 <DialogFooter>
-                  <Button type="submit" disabled={isSubmitting}>
+                  <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar venda'}
                   </Button>
                 </DialogFooter>
@@ -195,6 +195,13 @@ export default function SalesPage() {
           {isLoading && (
             <TableRow>
               <TableCell colSpan={6}>Carregando...</TableCell>
+            </TableRow>
+          )}
+          {isError && (
+            <TableRow>
+              <TableCell colSpan={6} className="text-center text-destructive">
+                Não foi possível carregar as vendas. Tente novamente.
+              </TableCell>
             </TableRow>
           )}
           {data?.data.map((sale) => (
@@ -225,7 +232,7 @@ export default function SalesPage() {
               )}
             </TableRow>
           ))}
-          {!isLoading && data?.data.length === 0 && (
+          {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={6} className="text-center text-muted-foreground">
                 Nenhuma venda registrada.

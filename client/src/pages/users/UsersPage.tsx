@@ -36,7 +36,7 @@ export default function UsersPage() {
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.listUsers({ limit: 50 }) });
+  const { data, isLoading, isError } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.listUsers({ limit: 50 }) });
 
   const {
     register,
@@ -110,7 +110,7 @@ export default function UsersPage() {
               </div>
               {formError && <p className="text-sm text-destructive">{formError}</p>}
               <DialogFooter>
-                <Button type="submit" disabled={isSubmitting}>
+                <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                   {isSubmitting ? 'Salvando...' : 'Criar usuário'}
                 </Button>
               </DialogFooter>
@@ -133,6 +133,13 @@ export default function UsersPage() {
           {isLoading && (
             <TableRow>
               <TableCell colSpan={5}>Carregando...</TableCell>
+            </TableRow>
+          )}
+          {isError && (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center text-destructive">
+                Não foi possível carregar os usuários. Tente novamente.
+              </TableCell>
             </TableRow>
           )}
           {data?.data.map((user) => (
@@ -163,7 +170,7 @@ export default function UsersPage() {
               </TableCell>
             </TableRow>
           ))}
-          {!isLoading && data?.data.length === 0 && (
+          {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-muted-foreground">
                 Nenhum usuário encontrado.

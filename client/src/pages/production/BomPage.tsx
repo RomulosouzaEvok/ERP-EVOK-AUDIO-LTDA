@@ -39,7 +39,7 @@ export default function BomPage() {
   const [explodedBom, setExplodedBom] = React.useState<bomApi.Bom | null>(null);
   const [exploded, setExploded] = React.useState<bomApi.ExplodedComponent[] | null>(null);
 
-  const { data, isLoading } = useQuery({ queryKey: ['boms'], queryFn: () => bomApi.listBoms({ limit: 50 }) });
+  const { data, isLoading, isError } = useQuery({ queryKey: ['boms'], queryFn: () => bomApi.listBoms({ limit: 50 }) });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
 
   const {
@@ -137,7 +137,7 @@ export default function BomPage() {
 
                 {formError && <p className="text-sm text-destructive">{formError}</p>}
                 <DialogFooter>
-                  <Button type="submit" disabled={isSubmitting}>
+                  <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar estrutura'}
                   </Button>
                 </DialogFooter>
@@ -162,6 +162,13 @@ export default function BomPage() {
               <TableCell colSpan={4}>Carregando...</TableCell>
             </TableRow>
           )}
+          {isError && (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-destructive">
+                Não foi possível carregar as estruturas. Tente novamente.
+              </TableCell>
+            </TableRow>
+          )}
           {data?.data.map((bom) => (
             <TableRow key={bom.id}>
               <TableCell>{bom.product?.name ?? bom.product_id}</TableCell>
@@ -178,7 +185,7 @@ export default function BomPage() {
               </TableCell>
             </TableRow>
           ))}
-          {!isLoading && data?.data.length === 0 && (
+          {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">
                 Nenhuma estrutura cadastrada.

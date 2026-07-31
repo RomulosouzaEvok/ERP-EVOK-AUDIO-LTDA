@@ -16,22 +16,22 @@ import { Badge } from '@/components/ui/badge';
 export default function DashboardPage() {
   const { user, hasRole } = useAuth();
 
-  const { data: lowStock, isLoading: loadingLowStock } = useQuery({
+  const { data: lowStock, isLoading: loadingLowStock, isError: errorLowStock } = useQuery({
     queryKey: ['dashboard-low-stock'],
     queryFn: inventoryApi.listLowStock,
   });
 
-  const { data: pendingPurchases, isLoading: loadingPurchases } = useQuery({
+  const { data: pendingPurchases, isLoading: loadingPurchases, isError: errorPurchases } = useQuery({
     queryKey: ['dashboard-purchases-pending'],
     queryFn: () => purchasesApi.listPurchases({ status: 'pending', limit: 1 }),
   });
 
-  const { data: openProduction, isLoading: loadingProduction } = useQuery({
+  const { data: openProduction, isLoading: loadingProduction, isError: errorProduction } = useQuery({
     queryKey: ['dashboard-production-in-progress'],
     queryFn: () => productionApi.listProductionOrders({ status: 'in_progress', limit: 1 }),
   });
 
-  const { data: overduePayables, isLoading: loadingPayables } = useQuery({
+  const { data: overduePayables, isLoading: loadingPayables, isError: errorPayables } = useQuery({
     queryKey: ['dashboard-payables-overdue'],
     queryFn: () => financialApi.listPayables({ status: 'overdue', limit: 1 }),
     enabled: hasRole('admin', 'financial'),
@@ -49,28 +49,30 @@ export default function DashboardPage() {
           to="/products"
           icon={AlertTriangle}
           label="Produtos com estoque baixo"
-          value={loadingLowStock ? '...' : String(lowStock?.length ?? 0)}
-          tone={lowStock && lowStock.length > 0 ? 'destructive' : 'default'}
+          value={loadingLowStock ? '...' : errorLowStock ? '—' : String(lowStock?.length ?? 0)}
+          tone={errorLowStock ? 'error' : lowStock && lowStock.length > 0 ? 'destructive' : 'default'}
         />
         <KpiCard
           to="/purchases"
           icon={Truck}
           label="Compras pendentes"
-          value={loadingPurchases ? '...' : String(pendingPurchases?.pagination.total ?? 0)}
+          value={loadingPurchases ? '...' : errorPurchases ? '—' : String(pendingPurchases?.pagination.total ?? 0)}
+          tone={errorPurchases ? 'error' : 'default'}
         />
         <KpiCard
           to="/production"
           icon={Factory}
           label="Ordens em produção"
-          value={loadingProduction ? '...' : String(openProduction?.pagination.total ?? 0)}
+          value={loadingProduction ? '...' : errorProduction ? '—' : String(openProduction?.pagination.total ?? 0)}
+          tone={errorProduction ? 'error' : 'default'}
         />
         {hasRole('admin', 'financial') && (
           <KpiCard
             to="/financial"
             icon={Wallet}
             label="Contas a pagar atrasadas"
-            value={loadingPayables ? '...' : String(overduePayables?.pagination.total ?? 0)}
-            tone={overduePayables && overduePayables.pagination.total > 0 ? 'destructive' : 'default'}
+            value={loadingPayables ? '...' : errorPayables ? '—' : String(overduePayables?.pagination.total ?? 0)}
+            tone={errorPayables ? 'error' : overduePayables && overduePayables.pagination.total > 0 ? 'destructive' : 'default'}
           />
         )}
       </div>
@@ -140,18 +142,23 @@ function KpiCard({
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
-  tone?: 'default' | 'destructive';
+  tone?: 'default' | 'destructive' | 'error';
 }) {
+  // 'error' (falha ao carregar) e visualmente distinto de 'destructive'
+  // (dado real que exige atencao, ex.: estoque baixo) — sem isso, uma
+  // falha de rede exibia "0 pendencias" identico a um KPI zerado
+  // legitimo, escondendo do usuario que os dados estao desatualizados.
+  const toneClass = tone === 'destructive' ? 'text-destructive' : tone === 'error' ? 'text-muted-foreground' : '';
   return (
     <Link to={to}>
       <Card className="transition-colors hover:bg-accent/50">
         <CardContent className="flex items-center gap-3 pt-6">
           <Icon className={tone === 'destructive' ? 'size-8 text-destructive' : 'size-8 text-muted-foreground'} />
           <div>
-            <p className={tone === 'destructive' ? 'text-2xl font-semibold text-destructive' : 'text-2xl font-semibold'}>
-              {value}
+            <p className={`text-2xl font-semibold ${toneClass}`}>{value}</p>
+            <p className="text-xs text-muted-foreground">
+              {tone === 'error' ? `${label} (falha ao carregar)` : label}
             </p>
-            <p className="text-xs text-muted-foreground">{label}</p>
           </div>
         </CardContent>
       </Card>

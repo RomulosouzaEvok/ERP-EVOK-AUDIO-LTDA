@@ -47,7 +47,7 @@ export default function ProductsPage() {
   const [movementProduct, setMovementProduct] = React.useState<productsApi.Product | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['products', search],
     queryFn: () => productsApi.listProducts({ search: search || undefined, limit: 50 }),
   });
@@ -160,7 +160,7 @@ export default function ProductsPage() {
                   </div>
                   {formError && <p className="text-sm text-destructive">{formError}</p>}
                   <DialogFooter>
-                    <Button type="submit" disabled={isSubmitting}>
+                    <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                       {isSubmitting ? 'Salvando...' : 'Criar produto'}
                     </Button>
                   </DialogFooter>
@@ -193,6 +193,13 @@ export default function ProductsPage() {
           {isLoading && (
             <TableRow>
               <TableCell colSpan={6}>Carregando...</TableCell>
+            </TableRow>
+          )}
+          {isError && (
+            <TableRow>
+              <TableCell colSpan={6} className="text-center text-destructive">
+                Não foi possível carregar os produtos. Tente novamente.
+              </TableCell>
             </TableRow>
           )}
           {data?.data.map((product) => {
@@ -236,7 +243,7 @@ export default function ProductsPage() {
               </TableRow>
             );
           })}
-          {!isLoading && data?.data.length === 0 && (
+          {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={6} className="text-center text-muted-foreground">
                 Nenhum produto encontrado.
@@ -307,7 +314,7 @@ function StockMovementDialog({ product, onClose }: { product: productsApi.Produc
           </div>
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <DialogFooter>
-            <Button type="submit" disabled={isSubmitting || !product}>
+            <Button type="submit" disabled={isSubmitting || !product || mutation.isPending}>
               {isSubmitting ? 'Salvando...' : 'Confirmar movimentação'}
             </Button>
           </DialogFooter>

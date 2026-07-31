@@ -54,7 +54,7 @@ export default function PurchasesPage() {
   const [formError, setFormError] = React.useState<string | null>(null);
   const [receivingPurchase, setReceivingPurchase] = React.useState<purchasesApi.Purchase | null>(null);
 
-  const { data, isLoading } = useQuery({ queryKey: ['purchases'], queryFn: () => purchasesApi.listPurchases({ limit: 50 }) });
+  const { data, isLoading, isError } = useQuery({ queryKey: ['purchases'], queryFn: () => purchasesApi.listPurchases({ limit: 50 }) });
   const { data: suppliers } = useQuery({ queryKey: ['suppliers-all'], queryFn: () => suppliersApi.listSuppliers({ limit: 200 }) });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
 
@@ -151,7 +151,7 @@ export default function PurchasesPage() {
 
                 {formError && <p className="text-sm text-destructive">{formError}</p>}
                 <DialogFooter>
-                  <Button type="submit" disabled={isSubmitting}>
+                  <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar pedido'}
                   </Button>
                 </DialogFooter>
@@ -175,6 +175,13 @@ export default function PurchasesPage() {
           {isLoading && (
             <TableRow>
               <TableCell colSpan={5}>Carregando...</TableCell>
+            </TableRow>
+          )}
+          {isError && (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center text-destructive">
+                Não foi possível carregar os pedidos de compra. Tente novamente.
+              </TableCell>
             </TableRow>
           )}
           {data?.data.map((purchase) => {
@@ -217,7 +224,7 @@ export default function PurchasesPage() {
               </TableRow>
             );
           })}
-          {!isLoading && data?.data.length === 0 && (
+          {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-muted-foreground">
                 Nenhum pedido registrado.

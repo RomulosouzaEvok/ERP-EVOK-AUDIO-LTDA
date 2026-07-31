@@ -32,7 +32,7 @@ export default function ClientsPage() {
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['clients', search],
     queryFn: () => clientsApi.listClients({ search: search || undefined, limit: 50 }),
   });
@@ -94,7 +94,7 @@ export default function ClientsPage() {
                 </div>
                 {formError && <p className="text-sm text-destructive">{formError}</p>}
                 <DialogFooter>
-                  <Button type="submit" disabled={isSubmitting}>
+                  <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar cliente'}
                   </Button>
                 </DialogFooter>
@@ -121,6 +121,13 @@ export default function ClientsPage() {
               <TableCell colSpan={4}>Carregando...</TableCell>
             </TableRow>
           )}
+          {isError && (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-destructive">
+                Não foi possível carregar os clientes. Tente novamente.
+              </TableCell>
+            </TableRow>
+          )}
           {data?.data.map((client) => (
             <TableRow key={client.id}>
               <TableCell>{client.name}</TableCell>
@@ -129,7 +136,7 @@ export default function ClientsPage() {
               <TableCell>{client.email ?? '-'}</TableCell>
             </TableRow>
           ))}
-          {!isLoading && data?.data.length === 0 && (
+          {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">
                 Nenhum cliente encontrado.

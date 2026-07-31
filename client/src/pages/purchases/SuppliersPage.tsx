@@ -33,7 +33,7 @@ export default function SuppliersPage() {
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['suppliers', search],
     queryFn: () => suppliersApi.listSuppliers({ search: search || undefined, limit: 50 }),
   });
@@ -99,7 +99,7 @@ export default function SuppliersPage() {
                 </div>
                 {formError && <p className="text-sm text-destructive">{formError}</p>}
                 <DialogFooter>
-                  <Button type="submit" disabled={isSubmitting}>
+                  <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar fornecedor'}
                   </Button>
                 </DialogFooter>
@@ -126,6 +126,13 @@ export default function SuppliersPage() {
               <TableCell colSpan={4}>Carregando...</TableCell>
             </TableRow>
           )}
+          {isError && (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-destructive">
+                Não foi possível carregar os fornecedores. Tente novamente.
+              </TableCell>
+            </TableRow>
+          )}
           {data?.data.map((supplier) => (
             <TableRow key={supplier.id}>
               <TableCell>{supplier.company_name}</TableCell>
@@ -134,7 +141,7 @@ export default function SuppliersPage() {
               <TableCell>{supplier.email ?? '-'}</TableCell>
             </TableRow>
           ))}
-          {!isLoading && data?.data.length === 0 && (
+          {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={4} className="text-center text-muted-foreground">
                 Nenhum fornecedor encontrado.

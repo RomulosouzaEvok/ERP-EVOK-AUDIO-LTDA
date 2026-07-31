@@ -119,7 +119,7 @@ export default function FinancialPage() {
                 </div>
                 {formError && <p className="text-sm text-destructive">{formError}</p>}
                 <DialogFooter>
-                  <Button type="submit" disabled={isSubmitting}>
+                  <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar conta'}
                   </Button>
                 </DialogFooter>
