@@ -67,6 +67,61 @@ esperado, resultado observado e evidencia de auditoria/log quando aplicavel.
 7. Monitorar logs por periodo definido pela equipe.
 8. Encerrar canario com decisao: aprovar, reprovar ou aceitar risco formal.
 
+## Ensaio de canario executado em 2026-07-31 (ambiente local, ainda nao e o ambiente real de producao)
+
+Como ainda nao existe um ambiente de hospedagem real definido pela EVOK AUDIO,
+o roteiro acima foi ensaiado de ponta a ponta usando Docker local como
+"canario de ensaio": Postgres isolado (`evok-postgres-canario`, separado do
+banco de desenvolvimento), backup real restaurado nele, imagem com tag
+imutavel por commit (`erp-evok-audio-server:<hash>`) subida contra esse banco,
+e o roteiro de UAT executado com chamadas HTTP reais (nao simuladas).
+
+**O ensaio encontrou e corrigiu 3 bugs reais que so apareceriam em uso real:**
+
+1. **Critico** — `POST /api/sales` e `PUT /api/sales/:id/status` com payload
+   invalido derrubavam o processo Node inteiro (nao so a requisicao): o
+   controller fazia `rollback()` da transacao antes de chamar
+   `handleZodError` (que sempre lanca), e o `catch` externo tentava fazer
+   `rollback()` de novo numa transacao ja finalizada, o que o Sequelize trata
+   como erro fatal nao capturado. Qualquer usuario podia derrubar a API
+   inteira so enviando um payload de venda malformado. Corrigido em
+   `server/src/modules/sales/presentation/controllers/saleController.ts`;
+   teste de regressao em `server/tests/integration/sale-invalid-payload-no-crash.test.ts`.
+2. **Alto** — `GET /api/audit-logs?entity_type=...` retornava 500 (filtrava
+   por `where.entity`, coluna inexistente; a coluna real e `entity_type`).
+   Corrigido em `server/src/controllers/auditLogController.ts`.
+3. **Alto** — `GET /api/traceability/items/:id` retornava 500 sempre que o
+   item tinha lote recebido de fornecedor (`include` de `Supplier` pedia a
+   coluna `name`, que nao existe — a coluna real e `company_name`). O teste
+   de integracao anterior so cobria o caminho de id invalido, nunca um item
+   com lote real, por isso nunca foi pego antes. Corrigido em
+   `server/src/modules/traceability/infrastructure/sequelize/SequelizeTraceabilityRepository.ts`;
+   teste de regressao em `server/tests/integration/traceability-and-audit-log-regression.test.ts`.
+
+Apos as correcoes, o ensaio completo passou:
+- Healthcheck `/health/live` e `/health/ready`: 200.
+- Login com usuario ativo: token com `passwordVersion`, `iss` e `aud` corretos.
+- Autenticacao: sem token (401), token invalido (401), token valido (200).
+- RBAC: operador tentando criar conta a pagar (403); operador criando produto (201).
+- Venda: criacao (201), cancelamento (200), segundo cancelamento bloqueado
+  (400, idempotente, sem duplicar estoque).
+- Auditoria: `GET /api/audit-logs?entity_type=Sale` retorna os eventos reais
+  de criacao/cancelamento da venda.
+- Rastreabilidade: `GET /api/traceability/items/:id` retorna o historico real
+  de movimentos apos a venda/cancelamento.
+- Rollback real: parar o container candidato e subir a tag anterior aprovada
+  (`erp-evok-audio-server:1472cdb`) contra o mesmo banco — `/health/ready`
+  voltou a 200 imediatamente (schema compativel entre as duas tags, sem
+  migration nova entre elas neste caso).
+- Ambiente de ensaio encerrado e removido ao final (Postgres/imagens isolados),
+  sem qualquer impacto no banco de desenvolvimento principal (`evok-postgres`).
+
+**Conclusao do ensaio:** o roteiro de UAT funciona tecnicamente de ponta a
+ponta e o processo de rollback é viável. O ensaio não substitui REL-02
+(assinatura de negócio confirmando que o comportamento reflete a operação
+real) nem REL-04 (ainda depende de um ambiente de hospedagem real, que a EVOK
+AUDIO ainda não definiu).
+
 ## Criterios de abortagem
 
 Abortar o G6 e voltar para correcao se ocorrer qualquer item abaixo:

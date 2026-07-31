@@ -84,10 +84,10 @@ exports.getById = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    // Validação de payload
+    // Validação de payload. `handleZodError` sempre lança; o rollback desta
+    // transação acontece uma única vez, no catch abaixo.
     const validatedBody = createSaleSchema.safeParse(req.body);
     if (!validatedBody.success) {
-      await t.rollback();
       return handleZodError(validatedBody.error);
     }
 
@@ -113,7 +113,7 @@ exports.create = async (req, res, next) => {
     const fullSale = await saleRepository.findSaleWithCustomerSummary(sale.id);
     res.status(201).json({ success: true, data: fullSale });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     next(error);
   }
 };
@@ -131,10 +131,10 @@ exports.create = async (req, res, next) => {
 exports.updateStatus = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    // Validação de payload
+    // Validação de payload. `handleZodError` sempre lança; o rollback desta
+    // transação acontece uma única vez, no catch abaixo.
     const validatedBody = updateSaleStatusSchema.safeParse(req.body);
     if (!validatedBody.success) {
-      await t.rollback();
       return handleZodError(validatedBody.error);
     }
 
@@ -157,7 +157,7 @@ exports.updateStatus = async (req, res, next) => {
 
     res.json({ success: true, data: sale });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     next(error);
   }
 };

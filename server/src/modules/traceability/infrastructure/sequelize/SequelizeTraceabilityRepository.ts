@@ -64,7 +64,7 @@ class SequelizeTraceabilityRepository extends TraceabilityRepository {
           as: 'lot_controls',
           include: [
             { model: Purchase, as: 'purchase', attributes: ['id', 'order_number', 'invoice_number'] },
-            { model: Supplier, as: 'supplier', attributes: ['id', 'name'] },
+            { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] },
             { model: ProductionOrder, as: 'productionOrder', attributes: ['id', 'order_number', 'status'] },
             { model: SerialNumber, as: 'serial_numbers', attributes: ['id', 'serial_number', 'status'] },
             {
@@ -133,7 +133,7 @@ class SequelizeTraceabilityRepository extends TraceabilityRepository {
           status: lot.status,
           quantity_available: toNumber(lot.quantity_available),
           purchase: lot.purchase ? { id: lot.purchase.id, order_number: lot.purchase.order_number } : null,
-          supplier: lot.supplier ? { id: lot.supplier.id, name: lot.supplier.name } : null,
+          supplier: lot.supplier ? { id: lot.supplier.id, name: lot.supplier.company_name } : null,
           production_order: lot.productionOrder ? { id: lot.productionOrder.id, order_number: lot.productionOrder.order_number } : null
         }
       });
@@ -182,7 +182,7 @@ class SequelizeTraceabilityRepository extends TraceabilityRepository {
       include: [
         { model: Product, as: 'product', attributes: ['id', 'name', 'code', 'product_type'] },
         { model: Purchase, as: 'purchase', attributes: ['id', 'order_number', 'invoice_number', 'status'] },
-        { model: Supplier, as: 'supplier', attributes: ['id', 'name'] },
+        { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] },
         { model: ProductionOrder, as: 'productionOrder', attributes: ['id', 'order_number', 'status'] },
         { model: SerialNumber, as: 'serial_numbers', attributes: ['id', 'serial_number', 'status', 'createdAt'] },
         {
@@ -215,7 +215,7 @@ class SequelizeTraceabilityRepository extends TraceabilityRepository {
         metadata: {
           status: lot.status,
           quantity_available: toNumber(lot.quantity_available),
-          supplier: lot.supplier ? { id: lot.supplier.id, name: lot.supplier.name } : null,
+          supplier: lot.supplier ? { id: lot.supplier.id, name: lot.supplier.company_name } : null,
           purchase: lot.purchase ? { id: lot.purchase.id, order_number: lot.purchase.order_number, status: lot.purchase.status } : null,
           production_order: lot.productionOrder ? { id: lot.productionOrder.id, order_number: lot.productionOrder.order_number, status: lot.productionOrder.status } : null
         }

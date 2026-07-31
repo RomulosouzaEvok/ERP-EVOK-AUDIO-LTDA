@@ -15,6 +15,12 @@
 
 set -euo pipefail
 
+# Git Bash (MSYS) no Windows converte automaticamente argumentos com "/" em
+# caminhos Windows antes de chamar docker.exe, quebrando o path de container
+# `/tmp/...` usado abaixo. Desativar essa conversao e um no-op inofensivo no
+# Linux/CI (a variavel simplesmente nao existe fora do MSYS).
+export MSYS_NO_PATHCONV=1
+
 CONTAINER="${CONTAINER:-evok-postgres}"
 DB="${DB:-erp_evok_audio}"
 DB_USER="${DB_USER:-evok_admin}"

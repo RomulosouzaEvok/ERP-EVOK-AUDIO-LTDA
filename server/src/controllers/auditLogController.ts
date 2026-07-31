@@ -3,9 +3,10 @@ const { Op } = require('sequelize');
 
 exports.list = async (req: any, res: any, next: any): Promise<void> => {
   try {
-    const { page = '1', limit = '10', entity_type, action, start_date, end_date } = req.query;
+    const { page = '1', limit = '10', entity_type, entity_id, action, start_date, end_date } = req.query;
     const where: any = {};
-    if (entity_type) where.entity = entity_type;
+    if (entity_type) where.entity_type = entity_type;
+    if (entity_id) where.entity_id = Number(entity_id);
     if (action) where.action = action;
     if (start_date || end_date) { where.createdAt = {}; if (start_date) where.createdAt[Op.gte] = new Date(start_date); if (end_date) where.createdAt[Op.lte] = new Date(end_date); }
     const p = parseInt(String(page), 10), l = parseInt(String(limit), 10), o = (p - 1) * l;
