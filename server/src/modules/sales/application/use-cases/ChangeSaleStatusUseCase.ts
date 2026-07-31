@@ -50,6 +50,14 @@ class ChangeSaleStatusUseCase extends UseCase {
       throw new ValidationError('Status e obrigatorio');
     }
 
+    if (status === 'invoiced') {
+      // 'invoiced' agora reflete uma NF-e de fato autorizada (modulo
+      // fiscal) — nao pode mais ser setado manualmente via este endpoint
+      // generico, sob risco de marcar uma venda como faturada sem NF-e
+      // real. Use POST /api/sales/:id/nfe.
+      throw new BusinessRuleError("Status 'invoiced' e definido automaticamente pela emissao de NF-e (POST /api/sales/:id/nfe), nao pode ser setado manualmente.");
+    }
+
     const sale = await this.saleRepository.findSaleWithItemsForUpdate(id, transaction);
     if (!sale) {
       throw new NotFoundError('Venda nao encontrada');

@@ -78,6 +78,7 @@ app.use('/api/suppliers', require('./src/modules/suppliers/presentation/routes/s
 app.use('/api/sales', require('./src/modules/sales/presentation/routes/sales'));
 app.use('/api/purchases', require('./src/modules/purchases/presentation/routes/purchases'));
 app.use('/api/finance', require('./src/modules/financial/presentation/routes/finance'));
+app.use('/api/fiscal', require('./src/modules/fiscal/presentation/routes/fiscal'));
 
 app.use('/api/service-orders', require('./src/modules/serviceOrders/presentation/routes/serviceOrders'));
 app.use('/api/categories', require('./src/modules/categories/presentation/routes/categories'));

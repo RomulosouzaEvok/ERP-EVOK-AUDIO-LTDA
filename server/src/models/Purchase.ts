@@ -27,6 +27,11 @@ export interface PurchaseAttributes {
   notes: string | null;
   invoice_number: string | null;
   invoice_date: string | null;
+  nfe_key: string | null;
+  nfe_series: string | null;
+  nfe_xml_path: string | null;
+  nfe_registered_by: number | null;
+  nfe_registered_at: Date | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -46,7 +51,12 @@ const Purchase = sequelize.define('Purchase', {
   total_amount: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, comment: 'Valor total do pedido' },
   notes: DataTypes.TEXT,
   invoice_number: DataTypes.STRING(50),
-  invoice_date: DataTypes.DATEONLY
+  invoice_date: DataTypes.DATEONLY,
+  nfe_key: DataTypes.STRING(50),
+  nfe_series: DataTypes.STRING(10),
+  nfe_xml_path: DataTypes.STRING(500),
+  nfe_registered_by: DataTypes.INTEGER,
+  nfe_registered_at: DataTypes.DATE
 }, {
   tableName: 'purchase_orders',
   underscored: true,

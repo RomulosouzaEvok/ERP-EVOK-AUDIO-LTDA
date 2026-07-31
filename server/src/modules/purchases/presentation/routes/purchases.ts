@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../../../../middlewares/auth');
 const purchaseController = require('../controllers/purchaseController');
+const fiscalController = require('../../../fiscal/presentation/controllers/fiscalController');
 
 /**
  * Rotas do módulo `purchases` (Clean Architecture). Mantém exatamente o
@@ -16,6 +17,7 @@ router.post('/', authenticate, authorize('admin', 'operator'), purchaseControlle
 router.put('/:id', authenticate, authorize('admin', 'operator'), purchaseController.update);
 router.put('/:id/status', authenticate, authorize('admin', 'operator'), purchaseController.updateStatus);
 router.post('/:id/receive', authenticate, authorize('admin', 'operator'), purchaseController.receiveItems);
+router.post('/:id/nfe', authenticate, authorize('admin', 'operator'), fiscalController.registerIncomingNfe);
 
 module.exports = router;
 

@@ -10,6 +10,7 @@ const webhookController = require('../controllers/webhookController');
 const router = express.Router();
 
 router.post('/n8n', webhookController.n8n);
+router.post('/focus-nfe', webhookController.focusNfeStatusChange);
 
 export default router;
 module.exports = router;

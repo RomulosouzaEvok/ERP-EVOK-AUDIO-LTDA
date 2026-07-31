@@ -23,6 +23,14 @@ export interface SaleAttributes {
   nfe_number: string | null;
   nfe_status: 'pending' | 'processing' | 'authorized' | 'denied' | 'cancelled';
   nfe_key: string | null;
+  nfe_series: number | null;
+  nfe_protocol: string | null;
+  nfe_environment: 'homologacao' | 'producao' | null;
+  nfe_provider_ref: string | null;
+  nfe_xml_url: string | null;
+  nfe_danfe_url: string | null;
+  nfe_error_message: string | null;
+  nfe_issued_at: Date | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -39,7 +47,15 @@ const Sale = sequelize.define('Sale', {
   notes: { type: DataTypes.TEXT, defaultValue: '' },
   nfe_number: DataTypes.STRING(50),
   nfe_status: { type: DataTypes.ENUM('pending', 'processing', 'authorized', 'denied', 'cancelled'), defaultValue: 'pending' },
-  nfe_key: DataTypes.STRING(50)
+  nfe_key: DataTypes.STRING(50),
+  nfe_series: DataTypes.INTEGER,
+  nfe_protocol: DataTypes.STRING(50),
+  nfe_environment: DataTypes.ENUM('homologacao', 'producao'),
+  nfe_provider_ref: DataTypes.STRING(100),
+  nfe_xml_url: DataTypes.STRING(500),
+  nfe_danfe_url: DataTypes.STRING(500),
+  nfe_error_message: DataTypes.TEXT,
+  nfe_issued_at: DataTypes.DATE
 }, {
   tableName: 'sales',
   underscored: true,

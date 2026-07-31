@@ -31,6 +31,7 @@ export interface ClientAttributes {
   ind_final: '0' | '1';
   ind_ie: '1' | '2' | '9';
   cnae: string | null;
+  city_ibge_code: string | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -55,7 +56,8 @@ const Client = sequelize.define('Client', {
   im: DataTypes.STRING(20),
   ind_final: { type: DataTypes.ENUM('0', '1'), defaultValue: '0', comment: 'Consumidor final (0=não, 1=sim)' },
   ind_ie: { type: DataTypes.ENUM('1', '2', '9'), defaultValue: '9', comment: 'Contribuinte ICMS (1=contribuinte, 2=isento, 9=não contribuinte)' },
-  cnae: DataTypes.STRING(10)
+  cnae: DataTypes.STRING(10),
+  city_ibge_code: DataTypes.STRING(7)
 }, {
   tableName: 'clients',
   underscored: true,

@@ -100,7 +100,7 @@ function waitForReady(url, timeoutMs) {
 
 async function ensureFixtures() {
   const models = require(path.join(serverDir, 'dist', 'src', 'models', 'index.js'));
-  const { sequelize, User, Supplier, Product, BillOfMaterial } = models;
+  const { sequelize, User, Supplier, Product, BillOfMaterial, CompanyFiscalConfig } = models;
 
   try {
     await sequelize.authenticate();
@@ -222,6 +222,28 @@ async function ensureFixtures() {
       status: 'active',
       approved_by: admin.id,
       approval_date: new Date().toISOString().slice(0, 10),
+    });
+
+    await CompanyFiscalConfig.findOrCreate({
+      where: { id: 1 },
+      defaults: {
+        id: 1,
+        legal_name: 'EVOK Audio Ltda (CI)',
+        cnpj: '11222333000199',
+        ie: 'ISENTO',
+        crt: '3',
+        cep: '00000-000',
+        street: 'Rua CI',
+        number: '1',
+        neighborhood: 'Centro',
+        city: 'Homologacao',
+        city_ibge_code: '3550308',
+        state: 'SP',
+        nfe_series: 1,
+        nfe_next_number: 1,
+        nfe_environment: 'homologacao',
+        nfe_provider: 'mock',
+      },
     });
 
     return {
