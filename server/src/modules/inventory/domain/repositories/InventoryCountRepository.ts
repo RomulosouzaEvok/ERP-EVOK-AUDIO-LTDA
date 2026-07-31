@@ -85,6 +85,19 @@ class InventoryCountRepository {
   }
 
   /**
+   * Busca uma contagem "crua" com lock pessimista (`SELECT ... FOR UPDATE`),
+   * usado para serializar aprovação/rejeição concorrente da mesma contagem.
+   *
+   * @abstract
+   * @param {number} id
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Object|null>}
+   */
+  async findRawByIdForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
+    throw new Error('InventoryCountRepository.findRawByIdForUpdate não implementado.');
+  }
+
+  /**
    * Atualiza campos do cabeçalho da contagem.
    *
    * @abstract
@@ -95,6 +108,23 @@ class InventoryCountRepository {
    */
   async update(id, data, transaction) { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.update não implementado.');
+  }
+
+  /**
+   * Atualiza o cabeçalho da contagem apenas se `status` ainda for
+   * `expectedStatus` (transição atômica condicionada), retornando o número
+   * de linhas afetadas (0 = já foi alterada por outra requisição
+   * concorrente).
+   *
+   * @abstract
+   * @param {number} id
+   * @param {string} expectedStatus
+   * @param {Object} data
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<number>}
+   */
+  async updateIfStatus(id, expectedStatus, data, transaction) { // eslint-disable-line no-unused-vars
+    throw new Error('InventoryCountRepository.updateIfStatus não implementado.');
   }
 
   /**

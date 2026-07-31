@@ -1,5 +1,5 @@
 const UseCase = require('../../../../shared/application/UseCase');
-const { NotFoundError, BusinessRuleError } = require('../../../../errors');
+const { NotFoundError, BusinessRuleError, ConflictError } = require('../../../../errors');
 
 /**
  * Rejeita uma contagem de inventário (transição `pending_approval` →
@@ -33,12 +33,19 @@ class RejectInventoryCountUseCase extends UseCase {
 
     const notes = reason ? `${count.notes ? `${count.notes}\n` : ''}Rejeitada: ${reason}` : count.notes;
 
-    await this.inventoryCountRepository.update(id, {
+    // Transicao atomica condicionada ao status ainda ser 'pending_approval'
+    // (evita rejeitar/duplicar sobre uma contagem ja aprovada/rejeitada por
+    // outra requisicao concorrente).
+    const affected = await this.inventoryCountRepository.updateIfStatus(id, 'pending_approval', {
       status: 'rejected',
       approved_by: approverId,
       approved_at: new Date(),
       notes
     });
+
+    if (affected === 0) {
+      throw new ConflictError('Esta contagem já foi aprovada ou rejeitada por outra requisição.');
+    }
 
     return this.inventoryCountRepository.findById(id);
   }

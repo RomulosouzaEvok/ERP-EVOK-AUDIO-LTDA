@@ -32,18 +32,29 @@ class PayPayableUseCase extends UseCase {
 
       const previousStatus = account.status;
 
-      if (amount !== undefined) {
-        const parsedAmount = parseFloat(amount);
-        if (parsedAmount <= 0) throw new ValidationError('Valor deve ser maior que zero');
-        if (parsedAmount > parseFloat(account.amount)) {
-          throw new ValidationError(`Valor (R$ ${parsedAmount}) excede o valor da conta (R$ ${account.amount})`);
-        }
-        account.amount = parsedAmount;
+      // Trabalha sempre em centavos para evitar erro de ponto flutuante.
+      const totalCents = Math.round(parseFloat(account.amount) * 100);
+      const alreadyPaidCents = Math.round(parseFloat(account.amount_paid || 0) * 100);
+      const remainingCents = totalCents - alreadyPaidCents;
+
+      const paymentCents = amount !== undefined
+        ? Math.round(parseFloat(amount) * 100)
+        : remainingCents;
+
+      if (paymentCents <= 0) throw new ValidationError('Valor deve ser maior que zero');
+      if (paymentCents > remainingCents) {
+        throw new ValidationError(`Valor (R$ ${(paymentCents / 100).toFixed(2)}) excede o saldo devedor da conta (R$ ${(remainingCents / 100).toFixed(2)})`);
       }
 
+      const newAmountPaidCents = alreadyPaidCents + paymentCents;
+
+      // `amount` (valor total original) NUNCA e sobrescrito por um
+      // pagamento parcial — apenas `amount_paid` acumula. Status so vira
+      // 'paid' quando o saldo devedor chega a zero.
+      account.amount_paid = newAmountPaidCents / 100;
+      account.status = newAmountPaidCents >= totalCents ? 'paid' : 'partial';
       account.payment_date = payment_date || new Date();
       account.payment_method = payment_method || account.payment_method;
-      account.status = 'paid';
       await account.save({ transaction });
 
       return { account, previousStatus };

@@ -16,9 +16,10 @@ export interface AccountReceivableAttributes {
   customer_id: number;
   installment: number;
   amount: number;
+  amount_paid: number;
   due_date: string;
   payment_date: string | null;
-  status: 'pending' | 'paid' | 'overdue' | 'canceled';
+  status: 'pending' | 'partial' | 'paid' | 'overdue' | 'canceled';
   payment_method: string | null;
   invoice_number: string | null;
   barcode: string | null;
@@ -39,10 +40,11 @@ const AccountReceivable = sequelize.define('AccountReceivable', {
   sale_id: { type: DataTypes.INTEGER, comment: 'FK → sales.id (venda de origem)' },
   customer_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → clients.id' },
   installment: { type: DataTypes.INTEGER, defaultValue: 1, comment: 'Nº da parcela' },
-  amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Valor da parcela' },
+  amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Valor TOTAL da parcela (nunca sobrescrito por pagamentos parciais)' },
+  amount_paid: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0, comment: 'Soma de todos os valores ja recebidos' },
   due_date: { type: DataTypes.DATEONLY, allowNull: false, comment: 'Data de vencimento' },
   payment_date: DataTypes.DATEONLY,
-  status: { type: DataTypes.ENUM('pending', 'paid', 'overdue', 'canceled'), defaultValue: 'pending' },
+  status: { type: DataTypes.ENUM('pending', 'partial', 'paid', 'overdue', 'canceled'), defaultValue: 'pending' },
   payment_method: DataTypes.STRING(30),
   invoice_number: DataTypes.STRING(50),
   barcode: DataTypes.STRING(50),

@@ -1,5 +1,5 @@
 const UseCase = require('../../../../shared/application/UseCase');
-const { NotFoundError, BusinessRuleError } = require('../../../../errors');
+const { NotFoundError, BusinessRuleError, ConflictError } = require('../../../../errors');
 const { sequelize } = require('../../../../config/database');
 const InventoryService = require('../../../../services/inventoryService');
 
@@ -32,16 +32,19 @@ class ApproveInventoryCountUseCase extends UseCase {
    * @throws {Error} Propagado por `InventoryService.adjust` (produto não encontrado, estoque insuficiente para saída, etc.), com `statusCode`.
    */
   async execute({ id, approverId }) {
-    const count = await this.inventoryCountRepository.findRawById(id);
-    if (!count) {
-      throw new NotFoundError('Contagem de inventário não encontrada');
-    }
-    if (count.status !== 'pending_approval') {
-      throw new BusinessRuleError(`Apenas contagens em status 'pending_approval' podem ser aprovadas. Status atual: '${count.status}'.`);
-    }
-
     const t = await sequelize.transaction();
     try {
+      // Lock pessimista: serializa aprovações concorrentes da MESMA
+      // contagem. A segunda requisição espera aqui ate a primeira commitar
+      // (ou dar rollback), e entao le o status ja atualizado.
+      const count = await this.inventoryCountRepository.findRawByIdForUpdate(id, t);
+      if (!count) {
+        throw new NotFoundError('Contagem de inventário não encontrada');
+      }
+      if (count.status !== 'pending_approval') {
+        throw new BusinessRuleError(`Apenas contagens em status 'pending_approval' podem ser aprovadas. Status atual: '${count.status}'.`);
+      }
+
       const items = await this.inventoryCountRepository.listItems(id, t);
       const adjustments = [];
 
@@ -60,18 +63,27 @@ class ApproveInventoryCountUseCase extends UseCase {
         await this.inventoryCountRepository.updateItem(item.id, { status: 'adjusted' }, t);
       }
 
-      await this.inventoryCountRepository.update(id, {
+      // Transicao condicionada (defesa em profundidade alem do lock): so
+      // marca 'adjusted' se ainda estiver 'pending_approval'. Zero linhas
+      // afetadas indica uma corrida que o lock nao deveria mais permitir,
+      // mas evita aplicar o ajuste de estoque silenciosamente sobre uma
+      // contagem ja finalizada por outra transacao.
+      const affected = await this.inventoryCountRepository.updateIfStatus(id, 'pending_approval', {
         status: 'adjusted',
         approved_by: approverId,
         approved_at: new Date()
       }, t);
+
+      if (affected === 0) {
+        throw new ConflictError('Esta contagem já foi aprovada ou rejeitada por outra requisição.');
+      }
 
       await t.commit();
 
       const updated = await this.inventoryCountRepository.findById(id);
       return { count: updated, adjustments };
     } catch (error) {
-      await t.rollback();
+      if (!t.finished) await t.rollback();
       throw error;
     }
   }

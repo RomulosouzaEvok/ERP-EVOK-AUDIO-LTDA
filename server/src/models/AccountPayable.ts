@@ -14,9 +14,10 @@ export interface AccountPayableAttributes {
   id: number;
   description: string;
   amount: number;
+  amount_paid: number;
   due_date: string;
   payment_date: string | null;
-  status: 'pending' | 'paid' | 'overdue' | 'canceled';
+  status: 'pending' | 'partial' | 'paid' | 'overdue' | 'canceled';
   category: string | null;
   supplier_id: number | null;
   purchase_id: number | null;
@@ -34,10 +35,11 @@ export interface AccountPayableAttributes {
 const AccountPayable = sequelize.define('AccountPayable', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   description: { type: DataTypes.STRING(200), allowNull: false, comment: 'Descrição da conta' },
-  amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Valor' },
+  amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Valor TOTAL da conta (nunca sobrescrito por pagamentos parciais)' },
+  amount_paid: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0, comment: 'Soma de todos os valores ja pagos' },
   due_date: { type: DataTypes.DATEONLY, allowNull: false, comment: 'Data de vencimento' },
   payment_date: DataTypes.DATEONLY,
-  status: { type: DataTypes.ENUM('pending', 'paid', 'overdue', 'canceled'), defaultValue: 'pending' },
+  status: { type: DataTypes.ENUM('pending', 'partial', 'paid', 'overdue', 'canceled'), defaultValue: 'pending' },
   category: DataTypes.STRING(100),
   supplier_id: { type: DataTypes.INTEGER, comment: 'FK → suppliers.id' },
   purchase_id: { type: DataTypes.INTEGER, comment: 'FK → purchase_orders.id' },

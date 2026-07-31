@@ -127,7 +127,11 @@ describe('Integrity transaction guards', () => {
     expect(save).toHaveBeenCalledWith(expect.objectContaining({
       transaction: expect.objectContaining({ id: 'tx-int-1' }),
     }));
-    expect(result.account.status).toBe('paid');
+    // Pagamento de 100 de uma conta de 120: fica 'partial', nao 'paid' —
+    // amount (total) nunca e sobrescrito por um valor parcial.
+    expect(result.account.status).toBe('partial');
+    expect(result.account.amount).toBe(120);
+    expect(result.account.amount_paid).toBe(100);
   });
 
   it('bloqueia recebimento de conta ja paga antes de novo save', async () => {
@@ -171,7 +175,10 @@ describe('Integrity transaction guards', () => {
     expect(save).toHaveBeenCalledWith(expect.objectContaining({
       transaction: expect.objectContaining({ id: 'tx-int-1' }),
     }));
-    expect(result.account.status).toBe('paid');
+    // Pagamento de 250 de uma conta de 300: fica 'partial', nao 'paid'.
+    expect(result.account.status).toBe('partial');
+    expect(result.account.amount).toBe(300);
+    expect(result.account.amount_paid).toBe(250);
   });
 
   it('aprova pedido usando lock no registro principal', async () => {

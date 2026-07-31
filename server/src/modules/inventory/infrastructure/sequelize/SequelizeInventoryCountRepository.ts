@@ -70,9 +70,36 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
     return InventoryCount.findByPk(id, { transaction });
   }
 
+  /**
+   * Busca a contagem com lock pessimista (`SELECT ... FOR UPDATE`), usado
+   * para serializar aprovação/rejeição concorrente da mesma contagem.
+   *
+   * @inheritdoc
+   */
+  async findRawByIdForUpdate(id, transaction) {
+    return InventoryCount.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+  }
+
   /** @inheritdoc */
   async update(id, data, transaction) {
     const [updated] = await InventoryCount.update(data, { where: { id }, transaction });
+    return updated;
+  }
+
+  /**
+   * Atualiza a contagem apenas se ainda estiver no `expectedStatus`
+   * informado (`UPDATE ... WHERE id = :id AND status = :expectedStatus`).
+   * Retorna o número de linhas afetadas (0 ou 1) — usado para detectar,
+   * de forma atômica, uma segunda aprovação/rejeição concorrente que
+   * tenha vencido a corrida mesmo com o lock pessimista já liberado.
+   *
+   * @inheritdoc
+   */
+  async updateIfStatus(id, expectedStatus, data, transaction) {
+    const [updated] = await InventoryCount.update(data, {
+      where: { id, status: expectedStatus },
+      transaction
+    });
     return updated;
   }
 
