@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { Route, Routes } from 'react-router-dom';
 
 import { ProtectedRoute, RoleRoute } from '@/routes/ProtectedRoute';
@@ -5,21 +6,28 @@ import AppLayout from '@/layouts/AppLayout';
 import LoginPage from '@/pages/LoginPage';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/ResetPasswordPage';
-import ChangePasswordPage from '@/pages/ChangePasswordPage';
 import DashboardPage from '@/pages/DashboardPage';
-import ProductsPage from '@/pages/products/ProductsPage';
-import InventoryCountsPage from '@/pages/products/InventoryCountsPage';
-import ClientsPage from '@/pages/sales/ClientsPage';
-import SalesPage from '@/pages/sales/SalesPage';
-import SuppliersPage from '@/pages/purchases/SuppliersPage';
-import PurchasesPage from '@/pages/purchases/PurchasesPage';
-import BomPage from '@/pages/production/BomPage';
-import ProductionOrdersPage from '@/pages/production/ProductionOrdersPage';
-import FinancialPage from '@/pages/financial/FinancialPage';
-import TraceabilityPage from '@/pages/traceability/TraceabilityPage';
-import AuditLogsPage from '@/pages/traceability/AuditLogsPage';
-import UsersPage from '@/pages/users/UsersPage';
-import NotFoundPage from '@/pages/NotFoundPage';
+
+// Paginas internas carregadas sob demanda (code-splitting): reduz o bundle
+// inicial, que so precisa do essencial para renderizar o login/dashboard.
+const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
+const ProductsPage = lazy(() => import('@/pages/products/ProductsPage'));
+const InventoryCountsPage = lazy(() => import('@/pages/products/InventoryCountsPage'));
+const ClientsPage = lazy(() => import('@/pages/sales/ClientsPage'));
+const SalesPage = lazy(() => import('@/pages/sales/SalesPage'));
+const SuppliersPage = lazy(() => import('@/pages/purchases/SuppliersPage'));
+const PurchasesPage = lazy(() => import('@/pages/purchases/PurchasesPage'));
+const BomPage = lazy(() => import('@/pages/production/BomPage'));
+const ProductionOrdersPage = lazy(() => import('@/pages/production/ProductionOrdersPage'));
+const FinancialPage = lazy(() => import('@/pages/financial/FinancialPage'));
+const TraceabilityPage = lazy(() => import('@/pages/traceability/TraceabilityPage'));
+const AuditLogsPage = lazy(() => import('@/pages/traceability/AuditLogsPage'));
+const UsersPage = lazy(() => import('@/pages/users/UsersPage'));
+const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+
+function PageFallback() {
+  return <div className="p-6 text-sm text-muted-foreground">Carregando...</div>;
+}
 
 export default function App() {
   return (
@@ -31,32 +39,130 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/change-password" element={<ChangePasswordPage />} />
+          <Route
+            path="/change-password"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ChangePasswordPage />
+              </Suspense>
+            }
+          />
 
-          <Route path="/products" element={<ProductsPage />} />
-          <Route path="/products/inventory-counts" element={<InventoryCountsPage />} />
+          <Route
+            path="/products"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ProductsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/products/inventory-counts"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <InventoryCountsPage />
+              </Suspense>
+            }
+          />
 
-          <Route path="/sales" element={<SalesPage />} />
-          <Route path="/sales/clients" element={<ClientsPage />} />
+          <Route
+            path="/sales"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <SalesPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/sales/clients"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ClientsPage />
+              </Suspense>
+            }
+          />
 
-          <Route path="/purchases" element={<PurchasesPage />} />
-          <Route path="/purchases/suppliers" element={<SuppliersPage />} />
+          <Route
+            path="/purchases"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <PurchasesPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/purchases/suppliers"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <SuppliersPage />
+              </Suspense>
+            }
+          />
 
-          <Route path="/production" element={<ProductionOrdersPage />} />
-          <Route path="/production/bom" element={<BomPage />} />
+          <Route
+            path="/production"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ProductionOrdersPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/production/bom"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <BomPage />
+              </Suspense>
+            }
+          />
 
           <Route element={<RoleRoute roles={['admin', 'financial']} />}>
-            <Route path="/financial" element={<FinancialPage />} />
+            <Route
+              path="/financial"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <FinancialPage />
+                </Suspense>
+              }
+            />
           </Route>
 
-          <Route path="/traceability" element={<TraceabilityPage />} />
+          <Route
+            path="/traceability"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <TraceabilityPage />
+              </Suspense>
+            }
+          />
 
           <Route element={<RoleRoute roles={['admin']} />}>
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/audit-logs" element={<AuditLogsPage />} />
+            <Route
+              path="/users"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <UsersPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/audit-logs"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <AuditLogsPage />
+                </Suspense>
+              }
+            />
           </Route>
 
-          <Route path="*" element={<NotFoundPage />} />
+          <Route
+            path="*"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <NotFoundPage />
+              </Suspense>
+            }
+          />
         </Route>
       </Route>
     </Routes>

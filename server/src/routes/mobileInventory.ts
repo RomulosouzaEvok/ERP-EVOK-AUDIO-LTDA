@@ -1,10 +1,11 @@
 const { Router } = require('express');
 const router = Router();
-const { authenticate } = require('../middlewares/auth');
+const { authenticate, authorize } = require('../middlewares/auth');
 const mobileInventoryController = require('../controllers/mobileInventoryController');
 
-router.post('/scan', authenticate, mobileInventoryController.scanItem);
-router.post('/batch', authenticate, mobileInventoryController.batchScan);
+// Afeta estoque de verdade - mesmo RBAC de /api/inventory/movements.
+router.post('/scan', authenticate, authorize('admin', 'operator'), mobileInventoryController.scanItem);
+router.post('/batch', authenticate, authorize('admin', 'operator'), mobileInventoryController.batchScan);
 router.get('/movements', authenticate, mobileInventoryController.listMovements);
 
 module.exports = router;

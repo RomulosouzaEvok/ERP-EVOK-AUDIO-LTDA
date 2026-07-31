@@ -44,11 +44,21 @@ const apiLimiter = rateLimit({
   max: 100,
   message: { success: false, error: 'Muitas requisicoes. Tente novamente em 15 minutos.' },
 });
+// Limiter proprio (nao compartilhado com login) para recuperacao de senha
+// (SEC-12): login/forgot-password/reset-password sao ameacas distintas
+// (brute-force de credencial vs. abuso de recuperacao) e nao devem
+// consumir a mesma cota - do contrario, uma sequencia legitima de
+// forgot+reset+login esgota o limite de login mais rapido do que deveria.
+const passwordRecoveryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { success: false, error: 'Muitas tentativas. Tente novamente em 15 minutos.' },
+});
 
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', registerLimiter);
-app.use('/api/auth/forgot-password', authLimiter);
-app.use('/api/auth/reset-password', authLimiter);
+app.use('/api/auth/forgot-password', passwordRecoveryLimiter);
+app.use('/api/auth/reset-password', passwordRecoveryLimiter);
 app.use('/api', apiLimiter);
 
 app.use(express.json({ limit: '5mb' }));
