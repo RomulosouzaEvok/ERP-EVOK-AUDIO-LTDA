@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const router = Router();
 const { authenticate, authorize } = require('../../../../middlewares/auth');
+const imageUpload = require('../../../../middlewares/imageUpload');
 const assetController = require('../controllers/assetController');
 
 /**
@@ -14,5 +15,7 @@ router.get('/:id', authenticate, assetController.getById);
 router.post('/', authenticate, authorize('admin', 'operator'), assetController.create);
 router.put('/:id', authenticate, authorize('admin', 'operator'), assetController.update);
 router.delete('/:id', authenticate, authorize('admin'), assetController.remove);
+router.post('/:id/photo', authenticate, authorize('admin', 'operator'), imageUpload.single('photo'), assetController.uploadPhoto);
+router.get('/:id/qrcode', authenticate, assetController.getQrCode);
 
 module.exports = router;

@@ -50,6 +50,7 @@ export interface ProductAttributes {
   ts_params_mms: number | null;
   ts_params_cms: number | null;
   ts_params_spl: number | null;
+  photo_path: string | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -90,7 +91,8 @@ const Product = sequelize.define('Product', {
   ts_params_bl: DataTypes.DECIMAL(10, 2),
   ts_params_mms: DataTypes.DECIMAL(10, 2),
   ts_params_cms: DataTypes.DECIMAL(10, 2),
-  ts_params_spl: DataTypes.DECIMAL(10, 2)
+  ts_params_spl: DataTypes.DECIMAL(10, 2),
+  photo_path: DataTypes.STRING(500)
 }, {
   tableName: 'products',
   underscored: true,

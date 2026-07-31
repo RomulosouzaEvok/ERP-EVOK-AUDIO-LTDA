@@ -4,6 +4,8 @@ const GetAssetByIdUseCase = require('../../application/use-cases/GetAssetByIdUse
 const CreateAssetUseCase = require('../../application/use-cases/CreateAssetUseCase');
 const UpdateAssetUseCase = require('../../application/use-cases/UpdateAssetUseCase');
 const DeactivateAssetUseCase = require('../../application/use-cases/DeactivateAssetUseCase');
+const UploadEntityPhotoUseCase = require('../../../../shared/application/UploadEntityPhotoUseCase');
+const GenerateEntityQrCodeUseCase = require('../../../../shared/application/GenerateEntityQrCodeUseCase');
 
 /**
  * Controller enxuto do módulo `assets`. Delega toda a regra de negócio aos
@@ -62,6 +64,41 @@ exports.remove = async (req, res, next) => {
   try {
     const useCase = new DeactivateAssetUseCase(assetsRepository);
     const result = await useCase.execute({ id: req.params.id });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** `POST /api/assets/:id/photo` — envia/substitui a foto do ativo. */
+exports.uploadPhoto = async (req, res, next) => {
+  try {
+    const useCase = new UploadEntityPhotoUseCase();
+    const { entity } = await useCase.execute({
+      repository: assetsRepository,
+      id: req.params.id,
+      file: req.file,
+      subfolder: 'assets',
+      entityLabel: 'Ativo',
+    });
+    res.json({ success: true, data: entity });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** `GET /api/assets/:id/qrcode` — gera o QR Code do ativo (PNG ou SVG via `?format=svg`). */
+exports.getQrCode = async (req, res, next) => {
+  try {
+    const useCase = new GenerateEntityQrCodeUseCase();
+    const result = await useCase.execute({
+      repository: assetsRepository,
+      id: req.params.id,
+      entityType: 'asset',
+      entityLabel: 'Ativo',
+      format: req.query.format === 'svg' ? 'svg' : 'png',
+      buildData: (asset) => ({ tag: asset.tag, name: asset.name }),
+    });
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);

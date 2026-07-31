@@ -31,6 +31,7 @@ export interface AssetAttributes {
   qr_code: string | null;
   notes: string | null;
   last_inventory_date: string | null;
+  photo_path: string | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -55,7 +56,8 @@ const Asset = sequelize.define('Asset', {
   status: { type: DataTypes.ENUM('active', 'in_maintenance', 'decommissioned', 'lost'), defaultValue: 'active' },
   qr_code: DataTypes.STRING(255),
   notes: DataTypes.TEXT,
-  last_inventory_date: DataTypes.DATEONLY
+  last_inventory_date: DataTypes.DATEONLY,
+  photo_path: DataTypes.STRING(500)
 }, {
   tableName: 'assets',
   underscored: true,

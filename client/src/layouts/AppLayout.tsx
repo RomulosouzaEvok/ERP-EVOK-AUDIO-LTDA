@@ -11,6 +11,7 @@ import {
   Users,
   KeyRound,
   LogOut,
+  Boxes,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -31,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Vendas', to: '/sales', icon: ShoppingCart },
   { label: 'Compras', to: '/purchases', icon: Truck },
   { label: 'Produção', to: '/production', icon: Factory },
+  { label: 'Patrimônio', to: '/patrimonio', icon: Boxes },
   { label: 'Financeiro', to: '/financial', icon: Wallet, roles: ['admin', 'financial'] },
   { label: 'Rastreabilidade', to: '/traceability', icon: Search },
   { label: 'Usuários', to: '/users', icon: Users, roles: ['admin'] },

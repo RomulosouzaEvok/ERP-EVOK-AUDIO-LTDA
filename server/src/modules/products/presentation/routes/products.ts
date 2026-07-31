@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../../../../middlewares/auth');
+const imageUpload = require('../../../../middlewares/imageUpload');
 const productController = require('../controllers/productController');
 
 /**
@@ -16,6 +17,8 @@ router.post('/', authenticate, authorize('admin', 'operator'), productController
 router.put('/:id', authenticate, authorize('admin', 'operator'), productController.update);
 router.delete('/:id', authenticate, authorize('admin', 'operator'), productController.remove);
 router.post('/movements', authenticate, authorize('admin', 'operator'), productController.movement);
+router.post('/:id/photo', authenticate, authorize('admin', 'operator'), imageUpload.single('photo'), productController.uploadPhoto);
+router.get('/:id/qrcode', authenticate, productController.getQrCode);
 
 module.exports = router;
 

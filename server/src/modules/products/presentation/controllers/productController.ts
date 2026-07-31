@@ -7,6 +7,8 @@ const CreateProductUseCase = require('../../application/use-cases/CreateProductU
 const UpdateProductUseCase = require('../../application/use-cases/UpdateProductUseCase');
 const DeactivateProductUseCase = require('../../application/use-cases/DeactivateProductUseCase');
 const RegisterProductMovementUseCase = require('../../application/use-cases/RegisterProductMovementUseCase');
+const UploadEntityPhotoUseCase = require('../../../../shared/application/UploadEntityPhotoUseCase');
+const GenerateEntityQrCodeUseCase = require('../../../../shared/application/GenerateEntityQrCodeUseCase');
 const { createProductSchema, updateProductSchema, productMovementSchema, handleZodError } = require('../validators/productValidators');
 
 /**
@@ -192,6 +194,62 @@ exports.movement = async (req, res, next) => {
     }
     next(error);
   }
+};
+
+/**
+ * `POST /api/products/:id/photo` — envia/substitui a foto do produto.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.uploadPhoto = async (req, res, next) => {
+  try {
+    const useCase = new UploadEntityPhotoUseCase();
+    const { photo_path, entity } = await useCase.execute({
+      repository: productRepository,
+      id: req.params.id,
+      file: req.file,
+      subfolder: 'products',
+      entityLabel: 'Produto',
+    });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'Product',
+      entityId: entity.id,
+      entityDescription: entity.code,
+      newValues: { photo_path },
+      description: `Foto do produto ${entity.code} atualizada`
+    });
+
+    res.json({ success: true, data: entity });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/products/:id/qrcode` — gera o QR Code do produto (PNG ou SVG via `?format=svg`).
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.getQrCode = async (req, res, next) => {
+  try {
+    const useCase = new GenerateEntityQrCodeUseCase();
+    const result = await useCase.execute({
+      repository: productRepository,
+      id: req.params.id,
+      entityType: 'product',
+      entityLabel: 'Produto',
+      format: req.query.format === 'svg' ? 'svg' : 'png',
+      buildData: (product) => ({ code: product.code, name: product.name }),
+    });
+
+    res.json({ success: true, data: result });
+  } catch (error) { next(error); }
 };
 
 /**

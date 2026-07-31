@@ -4,10 +4,10 @@ import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus } from 'lucide-react';
+import { Plus, Camera, QrCode } from 'lucide-react';
 
 import * as productsApi from '@/api/products';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { extractApiErrorMessage, getUploadUrl } from '@/api/httpClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { QrCodeDialog } from '@/components/QrCodeDialog';
 import { useAuth } from '@/context/AuthContext';
 
 const productSchema = z.object({
@@ -46,6 +47,9 @@ export default function ProductsPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [movementProduct, setMovementProduct] = React.useState<productsApi.Product | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
+  const [photoProductId, setPhotoProductId] = React.useState<number | null>(null);
+  const [qrCodeProduct, setQrCodeProduct] = React.useState<productsApi.Product | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['products', search],
@@ -80,6 +84,27 @@ export default function ProductsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
     onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível inativar o produto.')),
   });
+
+  const uploadPhotoMutation = useMutation({
+    mutationFn: ({ id, file }: { id: number; file: File }) => productsApi.uploadProductPhoto(id, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      setPhotoProductId(null);
+    },
+    onError: (error) => window.alert(extractApiErrorMessage(error)),
+  });
+
+  const handlePhotoButtonClick = (productId: number) => {
+    setPhotoProductId(productId);
+    requestAnimationFrame(() => fileInputRef.current?.click());
+  };
+
+  const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || photoProductId === null) return;
+    uploadPhotoMutation.mutate({ id: photoProductId, file });
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -178,26 +203,30 @@ export default function ProductsPage() {
         className="max-w-sm"
       />
 
+      {/* Input de arquivo escondido, compartilhado entre todas as linhas da tabela. */}
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelected} />
+
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Foto</TableHead>
             <TableHead>Código</TableHead>
             <TableHead>Nome</TableHead>
             <TableHead>Estoque</TableHead>
             <TableHead>Preço</TableHead>
             <TableHead>Status</TableHead>
-            {canWrite && <TableHead>Ações</TableHead>}
+            <TableHead>Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isLoading && (
             <TableRow>
-              <TableCell colSpan={6}>Carregando...</TableCell>
+              <TableCell colSpan={7}>Carregando...</TableCell>
             </TableRow>
           )}
           {isError && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-destructive">
+              <TableCell colSpan={7} className="text-center text-destructive">
                 Não foi possível carregar os produtos. Tente novamente.
               </TableCell>
             </TableRow>
@@ -208,6 +237,16 @@ export default function ProductsPage() {
             const isLow = quantity <= minQuantity;
             return (
               <TableRow key={product.id}>
+                <TableCell>
+                  {product.photo_path ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={getUploadUrl(product.photo_path)} alt={product.name} className="size-10 rounded object-cover" />
+                  ) : (
+                    <div className="flex size-10 items-center justify-center rounded bg-muted text-muted-foreground">
+                      <Camera className="size-4" />
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell>{product.code}</TableCell>
                 <TableCell>{product.name}</TableCell>
                 <TableCell>
@@ -220,32 +259,40 @@ export default function ProductsPage() {
                     {product.status === 'active' ? 'Ativo' : 'Inativo'}
                   </Badge>
                 </TableCell>
-                {canWrite && (
-                  <TableCell className="flex gap-2">
+                <TableCell className="flex gap-2">
+                  {canWrite && (
+                    <Button size="sm" variant="outline" onClick={() => handlePhotoButtonClick(product.id)}>
+                      <Camera className="size-4" /> Foto
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => setQrCodeProduct(product)}>
+                    <QrCode className="size-4" /> QR Code
+                  </Button>
+                  {canWrite && (
                     <Button size="sm" variant="outline" onClick={() => setMovementProduct(product)}>
                       Movimentar
                     </Button>
-                    {product.status === 'active' && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          if (window.confirm(`Inativar o produto "${product.name}"?`)) {
-                            deactivateMutation.mutate(product.id);
-                          }
-                        }}
-                      >
-                        Inativar
-                      </Button>
-                    )}
-                  </TableCell>
-                )}
+                  )}
+                  {canWrite && product.status === 'active' && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (window.confirm(`Inativar o produto "${product.name}"?`)) {
+                          deactivateMutation.mutate(product.id);
+                        }
+                      }}
+                    >
+                      Inativar
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
             );
           })}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell colSpan={7} className="text-center text-muted-foreground">
                 Nenhum produto encontrado.
               </TableCell>
             </TableRow>
@@ -254,6 +301,16 @@ export default function ProductsPage() {
       </Table>
 
       <StockMovementDialog product={movementProduct} onClose={() => setMovementProduct(null)} />
+
+      {qrCodeProduct && (
+        <QrCodeDialog
+          open={Boolean(qrCodeProduct)}
+          onOpenChange={(open) => !open && setQrCodeProduct(null)}
+          title={`${qrCodeProduct.code} — ${qrCodeProduct.name}`}
+          queryKey={['product-qrcode', qrCodeProduct.id]}
+          fetchQrCode={() => productsApi.getProductQrCode(qrCodeProduct.id)}
+        />
+      )}
     </div>
   );
 }

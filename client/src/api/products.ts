@@ -14,6 +14,14 @@ export interface Product {
   status: 'active' | 'inactive';
   unit: string;
   product_type?: string;
+  photo_path?: string | null;
+}
+
+export interface QrCodeResult {
+  format: 'png' | 'svg';
+  qrDataUrl?: string;
+  qrSvg?: string;
+  qrCodeData: string;
 }
 
 export interface ProductListParams {
@@ -73,6 +81,24 @@ export async function createStockMovement(input: StockMovementInput) {
     '/api/products/movements',
     input,
   );
+  return data.data;
+}
+
+/** `POST /api/products/:id/photo` — envia/substitui a foto do produto. */
+export async function uploadProductPhoto(id: number, file: File) {
+  const formData = new FormData();
+  formData.append('photo', file);
+  // Content-Type explicitamente indefinido: deixa o navegador computar o
+  // boundary do multipart automaticamente.
+  const { data } = await httpClient.post<ItemResponse<Product>>(`/api/products/${id}/photo`, formData, {
+    headers: { 'Content-Type': undefined },
+  });
+  return data.data;
+}
+
+/** `GET /api/products/:id/qrcode` — gera o QR Code do produto. */
+export async function getProductQrCode(id: number, format: 'png' | 'svg' = 'png') {
+  const { data } = await httpClient.get<ItemResponse<QrCodeResult>>(`/api/products/${id}/qrcode`, { params: { format } });
   return data.data;
 }
 

@@ -25,10 +25,17 @@ export function registerUnauthorizedHandler(handler: () => void): void {
   onUnauthorized = handler;
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export const httpClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 });
+
+/** Monta a URL absoluta de um arquivo servido em `/uploads` (ex.: `photo_path` de produto/ativo). */
+export function getUploadUrl(relativePath: string): string {
+  return `${API_BASE_URL}/${relativePath.replace(/^\/+/, '')}`;
+}
 
 httpClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = getStoredToken();
