@@ -25,6 +25,23 @@ const { sequelize } = require('../config/database');
 const { BillOfMaterial, BillOfMaterialItem, Product } = require('../models/index');
 const { roundQuantity } = require('../shared/utils/decimal');
 
+const VALID_COMPONENT_TYPES = new Set(['raw_material', 'component', 'semi_finished', 'packaging', 'consumable', 'other']);
+
+/**
+ * `Product.product_type` (`finished`, `raw_material`, `component`, ...) e
+ * `BillOfMaterialItem.component_type` são enums distintos e incompatíveis
+ * (`finished` não existe em `component_type`). Usar o `product_type` do
+ * componente como fallback só é seguro quando o valor também é um
+ * `component_type` válido; caso contrário cai no default genérico
+ * `'component'` em vez de deixar o INSERT quebrar com erro de enum.
+ *
+ * @param {string} productType - `product_type` do produto usado como componente.
+ * @returns {string} Um `component_type` válido.
+ */
+function mapProductTypeToComponentType(productType) {
+  return VALID_COMPONENT_TYPES.has(productType) ? productType : 'component';
+}
+
 class BomService {
 
   // ======================================================================
@@ -138,7 +155,7 @@ class BomService {
           unit: item.unit || 'un',
           bom_level: item.bom_level || 1,
           sequence_order: item.sequence_order || i,
-          component_type: item.component_type || component.product_type || 'component',
+          component_type: item.component_type || mapProductTypeToComponentType(component.product_type),
           scrap_percentage: scrapPct,
           unit_cost: unitCost,
           total_cost: totalCost,

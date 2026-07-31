@@ -155,5 +155,41 @@ exports.listLowStock = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+/**
+ * `GET /api/inventory/lots?product_id=X` — lista lotes com saldo disponível
+ * (`status='available'`, `quantity_available > 0`) de um produto. Endpoint
+ * novo (aditivo), usado para escolher lotes na conclusão de OP
+ * (`lot_consumptions` exigido por `ChangeProductionOrderStatusUseCase`).
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.listAvailableLots = async (req, res, next) => {
+  try {
+    const { product_id } = req.query;
+    if (!product_id || Number.isNaN(Number(product_id))) {
+      res.status(400).json({ success: false, error: 'product_id é obrigatório e deve ser numérico.' });
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { LotControl } = require('../../../../models/index');
+    const { Op } = require('sequelize');
+
+    const lots = await LotControl.findAll({
+      where: {
+        product_id: Number(product_id),
+        status: 'available',
+        quantity_available: { [Op.gt]: 0 }
+      },
+      order: [['createdAt', 'ASC']]
+    });
+
+    res.json({ success: true, data: lots });
+  } catch (error) { next(error); }
+};
+
 
 
