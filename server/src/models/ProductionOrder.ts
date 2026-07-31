@@ -17,6 +17,8 @@ export interface ProductionOrderAttributes {
   product_id: number;
   quantity: number;
   quantity_produced: number;
+  quantity_scrapped: number;
+  scrap_reason: string | null;
   priority: 'low' | 'normal' | 'high' | 'urgent';
   status: 'planned' | 'released' | 'in_progress' | 'completed' | 'paused' | 'canceled';
   start_date: string | null;
@@ -37,6 +39,8 @@ const ProductionOrder = sequelize.define('ProductionOrder', {
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id' },
   quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, comment: 'Quantidade planejada' },
   quantity_produced: { type: DataTypes.DECIMAL(18, 6), defaultValue: 0, comment: 'Quantidade produzida' },
+  quantity_scrapped: { type: DataTypes.DECIMAL(18, 6), defaultValue: 0, comment: 'Quantidade refugada na conclusao da OP (nao entra em estoque)' },
+  scrap_reason: { type: DataTypes.TEXT, allowNull: true, comment: 'Motivo do refugo registrado na conclusao da OP' },
   priority: { type: DataTypes.ENUM('low', 'normal', 'high', 'urgent'), defaultValue: 'normal' },
   status: { type: DataTypes.ENUM('planned', 'released', 'in_progress', 'completed', 'paused', 'canceled'), defaultValue: 'planned' },
   start_date: DataTypes.DATEONLY,

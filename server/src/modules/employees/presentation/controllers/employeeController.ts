@@ -1,0 +1,69 @@
+const SequelizeEmployeesRepository = require('../../infrastructure/sequelize/SequelizeEmployeesRepository');
+const ListEmployeesUseCase = require('../../application/use-cases/ListEmployeesUseCase');
+const GetEmployeeByIdUseCase = require('../../application/use-cases/GetEmployeeByIdUseCase');
+const CreateEmployeeUseCase = require('../../application/use-cases/CreateEmployeeUseCase');
+const UpdateEmployeeUseCase = require('../../application/use-cases/UpdateEmployeeUseCase');
+const DeactivateEmployeeUseCase = require('../../application/use-cases/DeactivateEmployeeUseCase');
+
+/**
+ * Controller enxuto do módulo `employees`. Delega toda a regra de negócio
+ * aos use cases da camada de aplicação, mantendo o mesmo contrato JSON e os
+ * mesmos 5 endpoints do controller anterior
+ * (`server/src/controllers/employeeController.ts`).
+ */
+const employeesRepository = new SequelizeEmployeesRepository();
+
+/** `GET /api/employees` — lista funcionários (busca/filtro/paginação). */
+exports.list = async (req, res, next) => {
+  try {
+    const useCase = new ListEmployeesUseCase(employeesRepository);
+    const { rows, total, page, limit, totalPages } = await useCase.execute(req.query);
+    res.json({ success: true, data: rows, pagination: { total, page, limit, totalPages } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** `GET /api/employees/:id` — busca um funcionário pelo id. */
+exports.getById = async (req, res, next) => {
+  try {
+    const useCase = new GetEmployeeByIdUseCase(employeesRepository);
+    const employee = await useCase.execute({ id: req.params.id });
+    res.json({ success: true, data: employee });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** `POST /api/employees` — cria um novo funcionário. */
+exports.create = async (req, res, next) => {
+  try {
+    const useCase = new CreateEmployeeUseCase(employeesRepository);
+    const employee = await useCase.execute(req.body);
+    res.status(201).json({ success: true, data: employee });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** `PUT /api/employees/:id` — atualiza um funcionário existente. */
+exports.update = async (req, res, next) => {
+  try {
+    const useCase = new UpdateEmployeeUseCase(employeesRepository);
+    const employee = await useCase.execute({ id: req.params.id, body: req.body });
+    res.json({ success: true, data: employee });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** `DELETE /api/employees/:id` — desliga (soft delete) um funcionário. */
+exports.remove = async (req, res, next) => {
+  try {
+    const useCase = new DeactivateEmployeeUseCase(employeesRepository);
+    const result = await useCase.execute({ id: req.params.id });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};

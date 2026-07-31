@@ -33,6 +33,11 @@ export const updateProductionOrderSchema = z.object({
 export const updateProductionOrderStatusSchema = z.object({
   status: z.enum(['planned', 'released', 'in_progress', 'paused', 'completed', 'canceled']),
   quantity_produced: decimalQuantity.optional(),
+  quantity_scrapped: z.coerce.number().nonnegative().refine((value) => {
+    const [, decimals = ''] = value.toString().split('.');
+    return decimals.length <= 6;
+  }, { message: 'Quantidade refugada deve ter no maximo 6 casas decimais.' }).optional(),
+  scrap_reason: z.string().trim().max(1000).nullable().optional(),
   allow_overproduction: z.boolean().optional(),
   lot_consumptions: z.array(lotConsumptionSchema).optional(),
   finished_lot_number: z.string().trim().min(1).max(80).optional(),

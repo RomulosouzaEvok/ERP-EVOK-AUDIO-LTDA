@@ -272,6 +272,95 @@ describe('Production Order Lifecycle (F.10)', () => {
       expect(productionOrderRepository.update).toHaveBeenCalled();
       expect(LotControl.create).toHaveBeenCalled();
     });
+
+    it('conclui OP registrando quantity_scrapped e scrap_reason sem afetar estoque de insumos', async () => {
+      jest.clearAllMocks();
+
+      const productionOrderRepository = {
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'in_progress',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(async () => ({
+          id: 1,
+          status: 'completed',
+          quantity_produced: 7,
+          quantity_scrapped: 3,
+          scrap_reason: 'Falha de solda',
+        })),
+        findProductById: jest.fn(async () => ({ id: 101, reserved_quantity: 5 })),
+      };
+
+      BomService.explodeBOM.mockResolvedValue({
+        components: [{ component_id: 101, quantity: 5 }],
+        total_cost: 100,
+      });
+
+      LotControl.findOne.mockResolvedValue({
+        id: 1,
+        lot_number: 'LOT-2026-001',
+        quantity_available: 10,
+        update: jest.fn(async () => ({})),
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      const result = await useCase.execute({
+        id: 1,
+        status: 'completed',
+        quantity_produced: 7,
+        quantity_scrapped: 3,
+        scrap_reason: 'Falha de solda',
+        user_id: 1,
+        lot_consumptions: [{ product_id: 101, lot_control_id: 1, quantity: 5 }],
+        finished_lot_number: 'LOT-FINISHED-001',
+      });
+
+      expect(productionOrderRepository.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ quantity_produced: 7, quantity_scrapped: 3, scrap_reason: 'Falha de solda' }),
+        expect.anything()
+      );
+      // Recebimento de estoque usa apenas a quantidade PRODUZIDA boa, nunca o total com refugo.
+      expect(InventoryService.receive).toHaveBeenCalledWith(1, 7, 1, expect.anything(), expect.any(Object));
+      expect(result.updateData.quantity_scrapped).toBe(3);
+    });
+
+    it('bloqueia conclusao quando quantity_produced + quantity_scrapped excede o planejado sem allow_overproduction', async () => {
+      const productionOrderRepository = {
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'in_progress',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(),
+      };
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({
+          id: 1,
+          status: 'completed',
+          quantity_produced: 9,
+          quantity_scrapped: 5,
+          user_id: 1,
+        })
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(productionOrderRepository.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('CompleteProductionTrackingUseCase', () => {

@@ -120,6 +120,8 @@ export async function updateStatus(req: Request, res: Response, next: NextFuncti
       id: Number(req.params.id),
       status: parsed.data.status,
       quantity_produced: parsed.data.quantity_produced,
+      quantity_scrapped: parsed.data.quantity_scrapped,
+      scrap_reason: parsed.data.scrap_reason,
       allow_overproduction: parsed.data.allow_overproduction,
       lot_consumptions: parsed.data.lot_consumptions,
       finished_lot_number: parsed.data.finished_lot_number,
@@ -132,7 +134,12 @@ export async function updateStatus(req: Request, res: Response, next: NextFuncti
       entityId: order.id,
       entityDescription: orderNumber,
       oldValues: { status: previousStatus },
-      newValues: { status: parsed.data.status, ...(updateData.quantity_produced !== undefined ? { quantity_produced: updateData.quantity_produced } : {}) },
+      newValues: {
+        status: parsed.data.status,
+        ...(updateData.quantity_produced !== undefined ? { quantity_produced: updateData.quantity_produced } : {}),
+        ...(updateData.quantity_scrapped !== undefined ? { quantity_scrapped: updateData.quantity_scrapped } : {}),
+        ...(updateData.scrap_reason !== undefined && updateData.scrap_reason !== null ? { scrap_reason: updateData.scrap_reason } : {})
+      },
       description: `Ordem de producao ${orderNumber}: status alterado de ${previousStatus} para ${parsed.data.status}`
     });
     res.json({ success: true, data: order });

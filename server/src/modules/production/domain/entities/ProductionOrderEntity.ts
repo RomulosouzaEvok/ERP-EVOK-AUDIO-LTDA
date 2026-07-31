@@ -38,12 +38,16 @@ interface ProductionProductSnapshot {
 
 interface ProductionTransitionOptions {
   allowOverproduction?: boolean;
+  quantityScrapped?: number;
+  scrapReason?: string | null;
 }
 
 interface ProductionTransitionChanges {
   status: ProductionStatus;
   start_date?: Date;
   quantity_produced?: number;
+  quantity_scrapped?: number;
+  scrap_reason?: string | null;
   completion_date?: Date;
 }
 
@@ -149,7 +153,7 @@ class ProductionOrderEntity extends Entity {
     quantityProduced?: number,
     options: ProductionTransitionOptions = {}
   ): ProductionTransitionChanges {
-    const { allowOverproduction = false } = options;
+    const { allowOverproduction = false, quantityScrapped, scrapReason } = options;
     const allowed = STATUS_TRANSITIONS[this.status] || [];
     if (this.status === nextStatus) throw new BusinessRuleError(`OP ja esta com status ${nextStatus}`);
     if (!allowed.includes(nextStatus)) throw new BusinessRuleError(`Transicao invalida: ${this.status} -> ${nextStatus}`);
@@ -165,7 +169,19 @@ class ProductionOrderEntity extends Entity {
           'Envie "allow_overproduction: true" na requisicao para confirmar producao acima do planejado.'
         );
       }
+
+      const scrapped = quantityScrapped !== undefined ? Number(quantityScrapped) : 0;
+      if (!Number.isFinite(scrapped) || scrapped < 0) throw new ValidationError('Quantidade refugada nao pode ser negativa');
+      if (produced + scrapped > this.quantity && !allowOverproduction) {
+        throw new ValidationError(
+          `Producao boa + refugo (${produced + scrapped}) excede a quantidade planejada (${this.quantity}). ` +
+          'Envie "allow_overproduction: true" na requisicao para confirmar producao acima do planejado.'
+        );
+      }
+
       changes.quantity_produced = produced;
+      changes.quantity_scrapped = scrapped;
+      changes.scrap_reason = scrapped > 0 ? (scrapReason ?? null) : null;
       changes.completion_date = new Date();
     }
 

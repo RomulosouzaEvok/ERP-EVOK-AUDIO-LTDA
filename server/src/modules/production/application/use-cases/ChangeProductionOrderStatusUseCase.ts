@@ -17,6 +17,8 @@ interface ChangeProductionOrderStatusInput {
   id: number;
   status: string;
   quantity_produced?: number;
+  quantity_scrapped?: number;
+  scrap_reason?: string | null;
   allow_overproduction?: boolean;
   lot_consumptions?: Array<{
     product_id: number;
@@ -60,7 +62,9 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       const orderNumber = order.order_number;
       const entity = new ProductionOrderEntity(order.get ? order.get({ plain: true }) : order);
       const updateData = entity.transitionTo(input.status as any, input.quantity_produced, {
-        allowOverproduction: !!input.allow_overproduction
+        allowOverproduction: !!input.allow_overproduction,
+        quantityScrapped: input.quantity_scrapped,
+        scrapReason: input.scrap_reason
       });
 
       if (input.status === 'released') {

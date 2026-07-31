@@ -86,23 +86,36 @@ cases finos que, na prática, só mudam uma string (`status`) e reexecutam a
 mesma validação de transição. O nome do endpoint HTTP e o formato de
 entrada/saída permanecem idênticos ao anterior.
 
-### `RegisterScrapUseCase` — não implementado (pendência de schema)
+### Registro de refugo na conclusão da OP — implementado
 
-O `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` lista `RegisterScrapUseCase` como use case esperado da Fase 6.
-**Não foi implementado nesta migração** porque não existe hoje nenhum
-campo de refugo/scrap (`quantity_scrapped` ou similar) no model
-`ProductionOrder` (`server/src/models/ProductionOrder.ts`), nem qualquer
-endpoint ou lógica de registro de refugo no controller anterior. Implementar
-esse use case agora exigiria inventar uma funcionalidade nova (schema +
-regra de negócio) fora do escopo desta tarefa de migração 1:1.
+O campo de refugo (`quantity_scrapped`/`scrap_reason`) foi adicionado ao
+model `ProductionOrder` (`server/src/models/ProductionOrder.ts`) e à
+migration `20260731-000012-add-production-order-scrap-fields.cjs`
+(idempotente, `up`/`down` simétricos).
 
-**Pendência registrada para fase futura:** adicionar o campo
-`quantity_scrapped` (INTEGER, default 0) ao model `ProductionOrder`, criar
-`RegisterScrapUseCase` (validando `quantity_scrapped >= 0` e que a soma
-`quantity_produced + quantity_scrapped` não ultrapasse `quantity`
-planejada, dentro da mesma transação de conclusão) e o endpoint
-correspondente (ex.: `POST /api/production-orders/:id/scrap` ou um campo
-adicional no corpo de `PUT /:id/status`).
+Decisão de schema: **não** foi criada uma tabela dedicada de eventos de
+refugo. `production_orders` ganhou apenas dois campos escalares
+(`quantity_scrapped DECIMAL(18,6) default 0` e `scrap_reason TEXT
+nullable`), porque o refugo aqui é um resultado agregado e único da
+conclusão da OP (`PUT /:id/status` com `status: 'completed'`), no mesmo
+nível de granularidade que `quantity_produced` — não é um evento
+multi-lote/multi-motivo que justificasse rastreabilidade por lote como
+`ProductionLotConsumption`/`LotControl`/`SerialNumber` (esses continuam
+existindo para os *insumos consumidos* e o *lote do produto acabado bom*,
+não para o refugo). Se no futuro for necessário registrar múltiplos
+eventos de refugo por etapa/motivo, o model `ProductionOrderTracking`
+(F05, já grava `quantity_scrapped` por apontamento de etapa) é o lugar
+natural para evoluir isso — o campo em `ProductionOrder` é o total
+"oficial" registrado no fechamento contábil da OP.
+
+Regras implementadas em `ChangeProductionOrderStatusUseCase`/
+`ProductionOrderEntity.transitionTo` (`status === 'completed'`):
+
+- `quantity_scrapped` é opcional no payload de `PUT /:id/status` (default `0`); `scrap_reason` é opcional (string livre, ignorado se `quantity_scrapped` for `0`).
+- `quantity_scrapped` não pode ser negativo.
+- `quantity_produced + quantity_scrapped` não pode ultrapassar a `quantity` planejada, a menos que `allow_overproduction: true` seja enviado (mesma trava já existente para `quantity_produced` isolado).
+- O refugo **não** entra em `InventoryService.receive` (não vira estoque de produto acabado) e **não** afeta o consumo de componentes já debitado via BOM/lotes — é puramente um registro de auditoria sobre a quantidade produzida que saiu ruim.
+- A mudança é persistida na mesma transação da conclusão da OP e auditada via `logAction` (`action: 'status_change'`, `newValues.quantity_scrapped`/`scrap_reason` quando aplicável).
 
 ## Estrutura
 
@@ -228,8 +241,6 @@ stateDiagram-v2
 
 ## Pendências conhecidas
 
-- `RegisterScrapUseCase` não foi implementado — não há campo de refugo no
-  model `ProductionOrder` hoje. Ver decisão detalhada acima.
 - Não há RBAC granular por papel nas rotas `GET`/`PUT` (apenas `POST`/`DELETE`
   restringem por papel, herdado do anterior).
 - Validação de entrada é manual/via entidade (sem schema declarativo);

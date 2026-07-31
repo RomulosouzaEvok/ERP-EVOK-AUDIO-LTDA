@@ -91,10 +91,10 @@ exports.create = async (req, res, next) => {
       return handleZodError(validatedBody.error);
     }
 
-    const { customer_id, items, discount = 0, payment_method, installments = 1, notes } = validatedBody.data;
+    const { customer_id, items, discount = 0, payment_method, installments = 1, notes, status = 'confirmed' } = validatedBody.data;
     const useCase = new CreateSaleUseCase(saleRepository);
     const { sale, totalNet } = await useCase.execute({
-      customer_id, items, discount, payment_method, installments, notes,
+      customer_id, items, discount, payment_method, installments, notes, status,
       userId: req.user.id, transaction: t
     });
 
@@ -106,8 +106,8 @@ exports.create = async (req, res, next) => {
       entityType: 'Sale',
       entityId: sale.id,
       entityDescription: `Venda #${sale.id}`,
-      newValues: { customer_id, total_amount: totalNet, status: 'confirmed' },
-      description: `Venda #${sale.id} criada`
+      newValues: { customer_id, total_amount: totalNet, status: sale.status },
+      description: `Venda #${sale.id} criada (${sale.status})`
     });
 
     const fullSale = await saleRepository.findSaleWithCustomerSummary(sale.id);

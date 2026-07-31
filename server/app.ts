@@ -73,27 +73,27 @@ app.use('/api/sales', require('./src/modules/sales/presentation/routes/sales'));
 app.use('/api/purchases', require('./src/modules/purchases/presentation/routes/purchases'));
 app.use('/api/finance', require('./src/modules/financial/presentation/routes/finance'));
 
-app.use('/api/service-orders', require('./src/routes/serviceOrders'));
-app.use('/api/categories', require('./src/routes/categories'));
+app.use('/api/service-orders', require('./src/modules/serviceOrders/presentation/routes/serviceOrders'));
+app.use('/api/categories', require('./src/modules/categories/presentation/routes/categories'));
 app.use('/api/reports', require('./src/routes/reports'));
-app.use('/api/employees', require('./src/routes/employees'));
-app.use('/api/departments', require('./src/routes/departments'));
+app.use('/api/employees', require('./src/modules/employees/presentation/routes/employees'));
+app.use('/api/departments', require('./src/modules/departments/presentation/routes/departments'));
 app.use('/api/production-orders', require('./src/modules/production/presentation/routes/productionOrders'));
 app.use('/api/inventory', require('./src/modules/inventory/presentation/routes/inventory'));
 app.use('/api/inventory-counts', require('./src/modules/inventory/presentation/routes/inventoryCounts'));
 
-app.use('/api/assets', require('./src/routes/assets'));
-app.use('/api/mobile-inventory', require('./src/routes/mobileInventory'));
-app.use('/api/auditor', require('./src/routes/intelligentAuditor'));
-app.use('/api/dashboard', require('./src/routes/dashboard'));
-app.use('/api/quality/non-conformities', require('./src/routes/nonConformities'));
-app.use('/api/maintenance', require('./src/routes/maintenance'));
-app.use('/api/audit-logs', require('./src/routes/auditLogs'));
+app.use('/api/assets', require('./src/modules/assets/presentation/routes/assets'));
+app.use('/api/mobile-inventory', require('./src/modules/mobileInventory/presentation/routes/mobileInventory'));
+app.use('/api/auditor', require('./src/modules/intelligentAuditor/presentation/routes/intelligentAuditor'));
+app.use('/api/dashboard', require('./src/modules/dashboard/presentation/routes/dashboard'));
+app.use('/api/quality/non-conformities', require('./src/modules/nonConformities/presentation/routes/nonConformities'));
+app.use('/api/maintenance', require('./src/modules/maintenance/presentation/routes/maintenance'));
+app.use('/api/audit-logs', require('./src/modules/auditLogs/presentation/routes/auditLogs'));
 app.use('/api/engineering/bom', require('./src/modules/bom/presentation/routes/bom'));
 app.use('/api/items', require('./src/modules/items/presentation/routes/items'));
 app.use('/api/mrp', require('./src/modules/mrp/presentation/routes/mrp'));
 app.use('/api/traceability', require('./src/modules/traceability/presentation/routes/traceability'));
-app.use('/api/webhooks', require('./src/routes/webhooks'));
+app.use('/api/webhooks', require('./src/modules/webhooks/presentation/routes/webhooks'));
 
 app.use('/uploads', express.static('uploads'));
 

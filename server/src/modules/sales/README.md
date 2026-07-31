@@ -84,23 +84,30 @@ Fluxo preservado em `CreateSaleUseCase`:
    `status: 'paid'` (comportamento anterior preservado — venda à vista é
    considerada quitada na criação).
 
-## F22 — Reserva de estoque em quotes (pendência conhecida, não resolvida nesta migração)
+## F22 — Orçamento (`quote`) sem baixa de estoque na criação (implementado)
 
 O enum de `status` da venda inclui `'quote'` e a máquina de estados
 (`ChangeSaleStatusUseCase.VALID_TRANSITIONS`) permite a transição
-`quote → confirmed`. **Porém, hoje não existe nenhum fluxo real que crie
-uma venda com `status: 'quote'`**: `CreateSaleUseCase` sempre cria a venda
-já com `status: 'confirmed'` e debita o estoque imediatamente via
-`InventoryService.consume`, dentro da mesma transação de criação.
+`quote → confirmed`. O fluxo real de orçamento está implementado:
 
-Ou seja, o conceito de "orçamento" (quote) que reservaria estoque sem
-debitá-lo de fato (ex.: usando `InventoryService.reserve`, que já existe
-como "no-op defensivo" aguardando a coluna `reserved_quantity` no schema —
-ver `server/src/services/inventoryService.ts`) **não está implementado**.
-Isso é uma pendência conhecida, documentada no `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` como F22, e
-**permanece pendente após esta migração** — nenhuma mudança de
-comportamento foi feita quanto a isso, apenas preservação 1:1 do fluxo
-anterior (que já tinha essa mesma lacuna).
+- `POST /api/sales` aceita um campo opcional `status` (`'quote'` ou
+  `'confirmed'`, default `'confirmed'` — preserva 100% o comportamento
+  anterior quando omitido).
+- Com `status: 'quote'`: `CreateSaleUseCase` cria a venda e os `SaleItem`
+  normalmente, mas **não chama `InventoryService.consume`** (nenhum estoque
+  é debitado) **e não gera nenhuma `AccountReceivable`**. A validação de
+  quantidade disponível em estoque também é adiada (um orçamento pode ser
+  criado mesmo sem estoque suficiente no momento).
+- Com `status: 'confirmed'` (ou omitido): comportamento idêntico ao
+  anterior — débito de estoque e geração de parcelas acontecem na criação.
+- A confirmação de um orçamento (`PUT /api/sales/:id/status` com
+  `{ "status": "confirmed" }`, transição `quote → confirmed`) é o momento em
+  que `ChangeSaleStatusUseCase` debita o estoque de cada item via
+  `InventoryService.consume` (revalidando disponibilidade sob lock, mesma
+  regra de erro 404/409 da criação confirmada direta) e gera as parcelas em
+  `AccountReceivable` a partir de `total_amount`/`installments`/
+  `payment_method` já persistidos na venda, com o mesmo arredondamento em
+  centavos (F24).
 
 ## Estrutura
 
@@ -132,9 +139,9 @@ server/src/modules/sales/
 
 ## Regras de negócio
 
-- Criação: `customer_id` obrigatório; `items` não pode ser vazio; cada item precisa de `product_id`/`quantity > 0`/`unit_price > 0` (validado por `SaleEntity`); `installments >= 1`; `discount >= 0`. Cada produto referenciado deve existir, estar `status: 'active'` e ter estoque suficiente (validado no use case, dentro da transação, e revalidado sob lock por `InventoryService.consume`). `total_amount` é calculado no backend em centavos a partir dos itens e do desconto.
-- Baixa de estoque: `InventoryService.consume` por item, com lock pessimista (`SELECT ... FOR UPDATE`) na mesma transação da criação da venda — previne condição de corrida entre vendas concorrentes do mesmo produto (corrigida na Fase 4.1, preservada aqui).
-- Geração de parcelas: ver seção F24 acima.
+- Criação: `customer_id` obrigatório; `items` não pode ser vazio; cada item precisa de `product_id`/`quantity > 0`/`unit_price > 0` (validado por `SaleEntity`); `installments >= 1`; `discount >= 0`; `status` opcional (`'quote'`|`'confirmed'`, default `'confirmed'` — ver seção F22). Cada produto referenciado deve existir e estar `status: 'active'`. Estoque suficiente é exigido apenas quando `status: 'confirmed'` (validado no use case, dentro da transação, e revalidado sob lock por `InventoryService.consume`); para `status: 'quote'` essa checagem é adiada para a confirmação. `total_amount` é calculado no backend em centavos a partir dos itens e do desconto.
+- Baixa de estoque: `InventoryService.consume` por item, com lock pessimista (`SELECT ... FOR UPDATE`), executada dentro da transação da criação (venda `confirmed`) ou dentro da transação de confirmação (`quote → confirmed`, ver F22) — previne condição de corrida entre vendas concorrentes do mesmo produto (corrigida na Fase 4.1, preservada aqui).
+- Geração de parcelas: ver seção F24/F22 acima — na criação (venda `confirmed`) ou na confirmação do orçamento (`quote → confirmed`).
 - Máquina de estados (`ChangeSaleStatusUseCase.VALID_TRANSITIONS`, single source of truth):
   - `quote` → `confirmed` | `canceled`
   - `confirmed` → `invoiced` | `canceled`
@@ -150,8 +157,8 @@ Base URL: `/api/sales` (autenticação obrigatória via middleware `authenticate
 |---|---|---|
 | GET | `/api/sales` | Lista vendas (filtros: `status`, `customer_id`, `start_date`, `end_date`; paginação: `page`, `limit`) |
 | GET | `/api/sales/:id` | Busca venda por id (com cliente e itens + produto) |
-| POST | `/api/sales` | Cria venda com itens — transacional; debita estoque e gera parcelas |
-| PUT | `/api/sales/:id/status` | Altera status (máquina de estados) — transacional; ao cancelar, restaura estoque e cancela parcelas pendentes |
+| POST | `/api/sales` | Cria venda com itens — transacional; com `status: 'confirmed'` (default) debita estoque e gera parcelas na hora; com `status: 'quote'` não debita estoque nem gera parcelas (F22) |
+| PUT | `/api/sales/:id/status` | Altera status (máquina de estados) — transacional; ao confirmar um orçamento (`quote → confirmed`) debita estoque e gera parcelas; ao cancelar, restaura estoque e cancela parcelas pendentes |
 
 Ver `docs/API.md` para exemplos completos de request/response.
 
@@ -200,23 +207,20 @@ flowchart TD
 
 ## Testes existentes
 
-Nenhum teste automatizado existe hoje para este módulo (nem para o
-restante do projeto — `server/tests/` ainda não existe). Cobertura de
-testes unitários de `SaleEntity`/use cases e testes de integração dos
-endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
+- `server/tests/unit/sales-validators.test.ts` — schemas Zod (`createSaleSchema`, `updateSaleStatusSchema`, `listSalesQuerySchema`, `getSaleByIdParamSchema`).
+- `server/tests/unit/integrity-transaction-guards.test.ts` — `ChangeSaleStatusUseCase` (cancelamento com lock/restauração de estoque).
+- `server/tests/unit/create-sale-quote.test.ts` — `CreateSaleUseCase` com `status: 'quote'` não debita estoque nem gera `AccountReceivable`.
+- `server/tests/integration/sale-cancel-concurrency.test.ts` — concorrência de cancelamento (Postgres real).
+- `server/tests/integration/sale-invalid-payload-no-crash.test.ts` — payload inválido não derruba a API.
+- `server/tests/integration/sale-quote-confirm.test.ts` — cria venda `quote` (estoque não muda), confirma via `PUT /status` e valida que o débito só acontece na confirmação (Postgres real, F22).
 
 ## Pendências conhecidas
 
-- **F22 — reserva de estoque em quotes**: não implementada (ver seção
-  dedicada acima) — toda venda é criada já `confirmed`, com débito
-  imediato de estoque; não existe fluxo real de `'quote'`.
 - Não há RBAC granular por papel neste módulo (qualquer usuário
   autenticado pode criar/cancelar vendas).
 - A existência do `customer_id` não é validada explicitamente na criação
   (mesma lacuna do controller anterior — uma FK inválida cai no tratamento
   genérico de `SequelizeForeignKeyConstraintError` do `errorHandler`).
-- Validação de entrada é manual/via entidade (sem schema declarativo);
-  migração para Zod está prevista para a Fase 8.
 - O controller/rota anteriors (`server/src/controllers/saleController.ts`,
   `server/src/routes/sales.ts`) foram deixados intactos no repositório
   como referência histórica, mas não são mais usados; podem ser removidos

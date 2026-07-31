@@ -26,6 +26,12 @@ export const createSaleSchema = z.object({
   payment_method: z.enum(['cash', 'credit_card', 'debit_card', 'pix', 'boleto', 'check']).optional(),
   installments: z.coerce.number().int().min(1).optional().default(1),
   notes: z.string().trim().max(4000).optional(),
+  // F22: cria a venda ja `confirmed` (default, debita estoque e gera
+  // parcelas na hora) ou como `quote` (orcamento, sem debito de estoque
+  // nem parcelas ate a confirmacao via PUT /api/sales/:id/status).
+  // `invoiced`/`canceled` nao sao permitidos aqui - exigem transicao
+  // explicita pela maquina de estados.
+  status: z.enum(['quote', 'confirmed']).optional().default('confirmed'),
 }).strict();
 
 export const updateSaleStatusSchema = z.object({
