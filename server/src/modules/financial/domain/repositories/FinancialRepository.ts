@@ -1,14 +1,14 @@
 /**
- * Interface (contrato) de repositório do módulo Financeiro (contas a
+ * Interface (contrato) de repositÃ³rio do mÃ³dulo Financeiro (contas a
  * receber, contas a pagar e fluxo de caixa).
  *
- * Define os métodos que qualquer implementação de persistência deve
- * fornecer. A camada de aplicação (use cases) depende apenas desta
- * interface, nunca de uma implementação concreta.
+ * Define os mÃ©todos que qualquer implementaÃ§Ã£o de persistÃªncia deve
+ * fornecer. A camada de aplicaÃ§Ã£o (use cases) depende apenas desta
+ * interface, nunca de uma implementaÃ§Ã£o concreta.
  */
 class FinancialRepository {
   /**
-   * Lista contas a receber com filtros e paginação.
+   * Lista contas a receber com filtros e paginaÃ§Ã£o.
    *
    * @abstract
    * @param {Object} [filters] - `{ status, customer_id, start_date, end_date }`.
@@ -16,7 +16,7 @@ class FinancialRepository {
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
   async listReceivables(filters, pagination) { // eslint-disable-line no-unused-vars
-    throw new Error('FinancialRepository.listReceivables não implementado.');
+    throw new Error('FinancialRepository.listReceivables nÃ£o implementado.');
   }
 
   /**
@@ -27,11 +27,23 @@ class FinancialRepository {
    * @returns {Promise<Object|null>}
    */
   async findReceivableById(id) { // eslint-disable-line no-unused-vars
-    throw new Error('FinancialRepository.findReceivableById não implementado.');
+    throw new Error('FinancialRepository.findReceivableById nÃ£o implementado.');
   }
 
   /**
-   * Lista contas a pagar com filtros e paginação.
+   * Busca uma conta a receber com lock pessimista para impedir baixa dupla.
+   *
+   * @abstract
+   * @param {number} id
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Object|null>}
+   */
+  async findReceivableByIdForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
+    throw new Error('FinancialRepository.findReceivableByIdForUpdate nÃ£o implementado.');
+  }
+
+  /**
+   * Lista contas a pagar com filtros e paginaÃ§Ã£o.
    *
    * @abstract
    * @param {Object} [filters] - `{ status, start_date, end_date }`.
@@ -39,7 +51,7 @@ class FinancialRepository {
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
   async listPayables(filters, pagination) { // eslint-disable-line no-unused-vars
-    throw new Error('FinancialRepository.listPayables não implementado.');
+    throw new Error('FinancialRepository.listPayables nÃ£o implementado.');
   }
 
   /**
@@ -50,7 +62,19 @@ class FinancialRepository {
    * @returns {Promise<Object|null>}
    */
   async findPayableById(id) { // eslint-disable-line no-unused-vars
-    throw new Error('FinancialRepository.findPayableById não implementado.');
+    throw new Error('FinancialRepository.findPayableById nÃ£o implementado.');
+  }
+
+  /**
+   * Busca uma conta a pagar com lock pessimista para impedir pagamento duplo.
+   *
+   * @abstract
+   * @param {number} id
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Object|null>}
+   */
+  async findPayableByIdForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
+    throw new Error('FinancialRepository.findPayableByIdForUpdate nÃ£o implementado.');
   }
 
   /**
@@ -61,7 +85,7 @@ class FinancialRepository {
    * @returns {Promise<Object>}
    */
   async createPayable(data) { // eslint-disable-line no-unused-vars
-    throw new Error('FinancialRepository.createPayable não implementado.');
+    throw new Error('FinancialRepository.createPayable nÃ£o implementado.');
   }
 
   /**
@@ -73,7 +97,7 @@ class FinancialRepository {
    * @returns {Promise<Array<{status: string, total: number}>>}
    */
   async sumReceivableByStatus(start, end) { // eslint-disable-line no-unused-vars
-    throw new Error('FinancialRepository.sumReceivableByStatus não implementado.');
+    throw new Error('FinancialRepository.sumReceivableByStatus nÃ£o implementado.');
   }
 
   /**
@@ -85,10 +109,8 @@ class FinancialRepository {
    * @returns {Promise<Array<{status: string, total: number}>>}
    */
   async sumPayableByStatus(start, end) { // eslint-disable-line no-unused-vars
-    throw new Error('FinancialRepository.sumPayableByStatus não implementado.');
+    throw new Error('FinancialRepository.sumPayableByStatus nÃ£o implementado.');
   }
 }
 
 module.exports = FinancialRepository;
-
-

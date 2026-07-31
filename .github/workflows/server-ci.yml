@@ -1,0 +1,115 @@
+name: server-ci
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: erp_evok_audio_ci
+          POSTGRES_USER: evok_admin
+          POSTGRES_PASSWORD: evok_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U evok_admin -d erp_evok_audio_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      PORT: 3101
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_NAME: erp_evok_audio_ci
+      DB_USER: evok_admin
+      DB_PASSWORD: evok_ci_password
+      DB_SSL: false
+      DB_LOGGING: false
+      JWT_SECRET: ci-test-secret-with-at-least-32-characters
+      CORS_ORIGIN: http://localhost:5173
+      ADMIN_SEED_PASSWORD: EvokCiAdmin123456!
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: Secret scan
+        run: npm run scan:secrets
+        working-directory: server
+
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: server
+
+      - name: Build
+        run: npm run build
+        working-directory: server
+
+      - name: Unit tests without skips
+        run: npm run test:unit:strict
+        working-directory: server
+
+      - name: Integration and edge suites without skips
+        run: npm run test:api:strict
+        working-directory: server
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=moderate
+        working-directory: server
+
+      - name: Build immutable Docker image
+        run: docker build -t erp-evok-audio-server:${{ github.sha }} ./server
+
+      - name: Prepare schema for smoke container
+        run: npm run migration:up
+        working-directory: server
+
+      - name: Run smoke container
+        run: |
+          docker run -d --name evok-api-smoke \
+            --add-host host.docker.internal:host-gateway \
+            -e NODE_ENV=test \
+            -e PORT=5000 \
+            -e DB_HOST=host.docker.internal \
+            -e DB_PORT=5432 \
+            -e DB_NAME=erp_evok_audio_ci \
+            -e DB_USER=evok_admin \
+            -e DB_PASSWORD=evok_ci_password \
+            -e DB_SSL=false \
+            -e DB_LOGGING=false \
+            -e JWT_SECRET=ci-test-secret-with-at-least-32-characters \
+            -e CORS_ORIGIN=http://localhost:5173 \
+            -e ADMIN_SEED_PASSWORD=EvokCiAdmin123456! \
+            -p 5000:5000 \
+            erp-evok-audio-server:${{ github.sha }}
+          for attempt in {1..30}; do
+            if curl --fail http://127.0.0.1:5000/health/ready; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs evok-api-smoke
+          exit 1
+
+      - name: Stop smoke container
+        if: always()
+        run: docker rm -f evok-api-smoke || true

@@ -3,8 +3,7 @@ const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../
 const InventoryService = require('../../../../services/inventoryService');
 
 /**
- * Máquina de estados de status da venda — single source of truth, migrada
- * 1:1 do controller anterior `server/src/controllers/saleController.ts`.
+ * Maquina de estados de status da venda.
  */
 const VALID_TRANSITIONS = {
   quote: ['confirmed', 'canceled'],
@@ -14,13 +13,11 @@ const VALID_TRANSITIONS = {
 };
 
 /**
- * Altera o status de uma venda respeitando `VALID_TRANSITIONS`, cobrindo o
- * fluxo do endpoint `PUT /api/sales/:id/status`.
+ * Altera o status de uma venda respeitando `VALID_TRANSITIONS`.
  *
  * Ao cancelar (`status === 'canceled'`), restaura o estoque de cada item
  * via `InventoryService.receive` e cancela todas as `AccountReceivable`
- * pendentes/não pagas da venda — comportamento preservado 1:1 do controller
- * anterior, já transacional.
+ * pendentes/nao pagas da venda dentro da mesma transacao.
  */
 class ChangeSaleStatusUseCase extends UseCase {
   /**
@@ -34,33 +31,30 @@ class ChangeSaleStatusUseCase extends UseCase {
   /**
    * @param {Object} input
    * @param {number} input.id
-   * @param {string} input.status - Novo status desejado.
-   * @param {number} input.userId - Id do usuário que altera o status (autor do `InventoryMovement` de restauração, quando aplicável).
-   * @param {import('sequelize').Transaction} input.transaction - Transação Sequelize ativa (criada pelo controller).
+   * @param {string} input.status
+   * @param {number} input.userId
+   * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ sale: Object, previousStatus: string }>}
-   * @throws {ValidationError} Se `status` ausente ou igual ao atual.
-   * @throws {NotFoundError} Se a venda não existir.
-   * @throws {BusinessRuleError} Se a transição de status for inválida.
    */
   async execute({ id, status, userId, transaction }) {
     if (!status) {
-      throw new ValidationError('Status é obrigatório');
+      throw new ValidationError('Status e obrigatorio');
     }
 
-    const sale = await this.saleRepository.findSaleWithItems(id, transaction);
+    const sale = await this.saleRepository.findSaleWithItemsForUpdate(id, transaction);
     if (!sale) {
-      throw new NotFoundError('Venda não encontrada');
+      throw new NotFoundError('Venda nao encontrada');
+    }
+
+    if (sale.status === status) {
+      throw new ValidationError(`Venda ja esta com status ${status}`);
     }
 
     const allowed = VALID_TRANSITIONS[sale.status] || [];
     if (!allowed.includes(status)) {
       throw new BusinessRuleError(
-        `Transição de status inválida: ${sale.status} → ${status}. Permitidas: ${allowed.join(', ') || 'nenhuma'}`
+        `Transicao de status invalida: ${sale.status} -> ${status}. Permitidas: ${allowed.join(', ') || 'nenhuma'}`
       );
-    }
-
-    if (sale.status === status) {
-      throw new ValidationError(`Venda já está com status ${status}`);
     }
 
     const previousStatus = sale.status;
@@ -73,6 +67,7 @@ class ChangeSaleStatusUseCase extends UseCase {
           referenceType: 'adjustment'
         });
       }
+
       await this.saleRepository.cancelPendingReceivables(sale.id, transaction);
     }
 
@@ -85,5 +80,3 @@ class ChangeSaleStatusUseCase extends UseCase {
 
 module.exports = ChangeSaleStatusUseCase;
 module.exports.VALID_TRANSITIONS = VALID_TRANSITIONS;
-
-

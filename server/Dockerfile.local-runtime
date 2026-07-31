@@ -1,0 +1,20 @@
+FROM node:24-bookworm-slim AS runtime
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+COPY node_modules ./node_modules
+COPY dist ./dist
+COPY config ./config
+
+RUN groupadd --system evok && useradd --system --gid evok --create-home evok \
+  && mkdir -p /app/uploads \
+  && chown -R evok:evok /app
+
+USER evok
+EXPOSE 5000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 CMD node -e "const http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));"
+
+CMD ["node", "dist/index.js"]

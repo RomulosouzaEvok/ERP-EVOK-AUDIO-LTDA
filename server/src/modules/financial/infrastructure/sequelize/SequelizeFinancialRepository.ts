@@ -43,6 +43,14 @@ class SequelizeFinancialRepository extends FinancialRepository {
   }
 
   /** @inheritdoc */
+  async findReceivableByIdForUpdate(id, transaction) {
+    return AccountReceivable.findByPk(id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+  }
+
+  /** @inheritdoc */
   async listPayables(filters: any = {}, pagination: any = {}) {
     const where: any = {};
     if (filters.status) where.status = filters.status;
@@ -65,6 +73,14 @@ class SequelizeFinancialRepository extends FinancialRepository {
   /** @inheritdoc */
   async findPayableById(id) {
     return AccountPayable.findByPk(id);
+  }
+
+  /** @inheritdoc */
+  async findPayableByIdForUpdate(id, transaction) {
+    return AccountPayable.findByPk(id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
   }
 
   /** @inheritdoc */

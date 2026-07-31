@@ -1,40 +1,27 @@
-﻿/**
+/**
  * TypeScript database bootstrap for Sequelize.
  */
+
 const { sequelize, testConnection } = require('../src/config/database');
+const { loadRuntimeEnv } = require('../src/config/runtimeEnv');
 const { seedDatabase } = require('../src/config/seeds');
 
 const connectDB = async () => {
+  const runtimeEnv = loadRuntimeEnv();
   await testConnection();
 
-  // Sincronizar modelos apenas quando explicitamente solicitado.
-  // Em PostgreSQL, alter automático tem gerado DDL inválido em alguns schemas legados.
-  const force = process.env.DB_FORCE_SYNC === 'true';
-  const allowUnsafeAlter = process.env.DB_ALLOW_UNSAFE_ALTER === 'true';
-  const alter = process.env.DB_AUTO_ALTER === 'true'
-    && allowUnsafeAlter
-    && process.env.NODE_ENV !== 'production';
-  
-  if (force) {
-    console.log('âš ï¸ ForÃ§ando recriaÃ§Ã£o das tabelas...');
+  const force = runtimeEnv.dbForceSync;
+  const allowUnsafeAlter = runtimeEnv.dbAllowUnsafeAlter;
+
+  if (force || runtimeEnv.dbAutoAlter || allowUnsafeAlter) {
+    throw new Error(
+      'DDL automatico no bootstrap foi removido. DB_FORCE_SYNC, DB_AUTO_ALTER e DB_ALLOW_UNSAFE_ALTER nao sao mais suportados; use migrations versionadas.'
+    );
   }
 
-  if (process.env.DB_AUTO_ALTER === 'true' && !allowUnsafeAlter) {
-    console.log('âš ï¸ DB_AUTO_ALTER ignorado. Defina DB_ALLOW_UNSAFE_ALTER=true para habilitar sync alter localmente.');
-  }
-
-  if (force || alter) {
-    await sequelize.sync({ force, alter: !force && alter });
-    console.log(`ðŸ“¦ Tabelas sincronizadas${force ? ' (recriadas)' : ''}`);
-  } else {
-    console.log('ðŸ“¦ Sync de schema desabilitado no bootstrap. Usando schema existente.');
-  }
-
-  // Seeds (apenas se tabelas vazias)
+  console.log('Bootstrap sem DDL automatico. Use migrations versionadas para evolucao de schema.');
   await seedDatabase();
 };
 
 module.exports = connectDB;
-
-
-
+export default connectDB;

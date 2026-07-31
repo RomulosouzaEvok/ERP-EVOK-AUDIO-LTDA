@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../../../../middlewares/auth');
+const { authenticate, authorize } = require('../../../../middlewares/auth');
 const saleController = require('../controllers/saleController');
 
 /**
@@ -17,8 +17,8 @@ const saleController = require('../controllers/saleController');
 
 router.get('/', authenticate, saleController.list);
 router.get('/:id', authenticate, saleController.getById);
-router.post('/', authenticate, saleController.create);
-router.put('/:id/status', authenticate, saleController.updateStatus);
+router.post('/', authenticate, authorize('admin', 'operator'), saleController.create);
+router.put('/:id/status', authenticate, authorize('admin', 'operator'), saleController.updateStatus);
 
 module.exports = router;
 

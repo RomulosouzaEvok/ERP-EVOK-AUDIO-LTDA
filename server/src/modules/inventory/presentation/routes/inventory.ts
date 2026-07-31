@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../../../../middlewares/auth');
+const { authenticate, authorize } = require('../../../../middlewares/auth');
 const inventoryController = require('../controllers/inventoryController');
 
 /**
@@ -13,7 +13,7 @@ const inventoryController = require('../controllers/inventoryController');
 
 router.get('/movements', authenticate, inventoryController.list);
 router.get('/movements/:id', authenticate, inventoryController.getById);
-router.post('/movements', authenticate, inventoryController.create);
+router.post('/movements', authenticate, authorize('admin', 'operator'), inventoryController.create);
 router.get('/stock-report', authenticate, inventoryController.getStockReport);
 router.get('/low-stock', authenticate, inventoryController.listLowStock);
 

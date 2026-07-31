@@ -2,9 +2,7 @@ const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
 
 /**
- * Máquina de estados de status do pedido de compra — single source of
- * truth, migrada 1:1 do controller anterior
- * `server/src/controllers/purchaseController.ts`.
+ * Maquina de estados de status do pedido de compra.
  */
 const VALID_TRANSITIONS = {
   pending: ['approved', 'canceled'],
@@ -15,20 +13,6 @@ const VALID_TRANSITIONS = {
   canceled: []
 };
 
-/**
- * Altera o status de um pedido de compra respeitando `VALID_TRANSITIONS` e,
- * ao transicionar para `approved`, gera a `AccountPayable` correspondente
- * (via `createPurchasePayable`), cobrindo o fluxo do endpoint
- * `PUT /api/purchases/:id/status`.
- *
- * Correção de bug pré-existente (documentada no README do módulo): o
- * controller anterior chamava `createPurchasePayable` sem passar a
- * `transaction` do Sequelize (na verdade nem abria uma transaction em
- * `updateStatus`), então a mudança de status e a criação da conta a pagar
- * não eram atômicas. Aqui, o controller abre uma transaction e todo o
- * fluxo (busca, validação de transição, `save()` do status e criação da
- * `AccountPayable`) roda dentro dela.
- */
 class ChangePurchaseStatusUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/PurchaseRepository')} purchaseRepository
@@ -41,30 +25,28 @@ class ChangePurchaseStatusUseCase extends UseCase {
   /**
    * @param {Object} input
    * @param {number} input.id
-   * @param {string} input.status - Novo status desejado.
-   * @param {number} input.userId - Id do usuário que aprova (usado em `AccountPayable.approved_by`).
-   * @param {import('sequelize').Transaction} input.transaction - Transação Sequelize ativa (criada pelo controller).
+   * @param {string} input.status
+   * @param {number} input.userId
+   * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
-   * @throws {ValidationError} Se `status` ausente, igual ao atual, ou transição inválida.
-   * @throws {NotFoundError} Se o pedido não existir.
    */
   async execute({ id, status, userId, transaction }) {
     if (!status) {
-      throw new ValidationError('Status é obrigatório');
+      throw new ValidationError('Status e obrigatorio');
     }
 
-    const purchase = await this.purchaseRepository.findPurchaseByIdRaw(id, transaction);
+    const purchase = await this.purchaseRepository.findPurchaseByIdRawForUpdate(id, transaction);
     if (!purchase) {
-      throw new NotFoundError('Pedido não encontrado');
+      throw new NotFoundError('Pedido nao encontrado');
     }
     if (purchase.status === status) {
-      throw new ValidationError(`Pedido já está com status ${status}`);
+      throw new ValidationError(`Pedido ja esta com status ${status}`);
     }
 
     const allowed = VALID_TRANSITIONS[purchase.status] || [];
     if (!allowed.includes(status)) {
       throw new BusinessRuleError(
-        `Transição de status inválida: ${purchase.status} → ${status}. Permitidas: ${allowed.join(', ') || 'nenhuma'}`
+        `Transicao de status invalida: ${purchase.status} -> ${status}. Permitidas: ${allowed.join(', ') || 'nenhuma'}`
       );
     }
 
@@ -79,18 +61,6 @@ class ChangePurchaseStatusUseCase extends UseCase {
     return { purchase, previousStatus };
   }
 
-  /**
-   * Gera a `AccountPayable` referente ao pedido aprovado (idempotente: não
-   * cria duplicata se já existir uma para o mesmo `purchase_id`). Lógica
-   * migrada 1:1 do helper interno `createPurchasePayable` do controller
-   * anterior, agora sempre executada dentro de uma transaction.
-   *
-   * @param {Object} purchase - Instância Sequelize do pedido (já com `status = 'approved'`).
-   * @param {number} userId - Id do usuário aprovador.
-   * @param {import('sequelize').Transaction} transaction
-   * @returns {Promise<void>}
-   * @private
-   */
   async _createPurchasePayable(purchase, userId, transaction) {
     if (!purchase.supplier_id) return;
 
@@ -108,10 +78,15 @@ class ChangePurchaseStatusUseCase extends UseCase {
       description: `Fornecimento PO ${purchase.order_number}`,
       amount: totalPayable,
       due_date: dueDate.toISOString().slice(0, 10),
+      payment_date: null,
       status: 'pending',
       category: 'Fornecedores',
       supplier_id: purchase.supplier_id,
       purchase_id: purchase.id,
+      invoice_number: null,
+      barcode: null,
+      payment_type: null,
+      cost_center: null,
       approved_by: userId,
       approval_date: new Date(),
       notes: `Gerado automaticamente na aprovacao do pedido ${purchase.order_number}`
@@ -121,5 +96,3 @@ class ChangePurchaseStatusUseCase extends UseCase {
 
 module.exports = ChangePurchaseStatusUseCase;
 module.exports.VALID_TRANSITIONS = VALID_TRANSITIONS;
-
-

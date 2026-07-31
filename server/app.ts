@@ -1,36 +1,34 @@
 /**
- * Express application instance for both runtime and tests.
- * This module must not bootstrap DB or start listening.
+ * Express application instance shared by runtime and tests.
+ * This module must not connect to the database or start listening.
  */
 
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+import cors from 'cors';
+import express from 'express';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+
+import { loadRuntimeEnv } from './src/config/runtimeEnv';
+import healthRouter from './src/routes/health';
 
 const errorHandler = require('./src/middlewares/errorHandler');
+const requestContext = require('./src/middlewares/requestContext');
 
-dotenv.config();
-
+const runtimeEnv = loadRuntimeEnv();
 const app = express();
 
-/** @type {string} */
-const corsOrigins =
-  process.env.NODE_ENV === 'production'
-    ? (process.env.CORS_ORIGIN || 'https://app.evokaudio.com.br')
-    : (process.env.CORS_ORIGIN || 'http://localhost:5173');
-
 const corsOptions = {
-  origin: corsOrigins.split(',').map((o: string) => o.trim()),
+  origin: runtimeEnv.corsOrigin.split(',').map((origin) => origin.trim()),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 app.use(helmet());
 app.use(cors(corsOptions));
+app.use(requestContext);
 
-// Rate limiting
+app.use('/health', healthRouter);
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -44,7 +42,7 @@ const registerLimiter = rateLimit({
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: { success: false, error: 'Muitas requisições. Tente novamente em 15 minutos.' },
+  message: { success: false, error: 'Muitas requisicoes. Tente novamente em 15 minutos.' },
 });
 
 app.use('/api/auth/login', authLimiter);
@@ -54,9 +52,6 @@ app.use('/api', apiLimiter);
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
-// ==========================================
-// ROTAS
-// ==========================================
 app.use('/api/auth', require('./src/modules/auth/presentation/routes/auth'));
 app.use('/api/users', require('./src/modules/users/presentation/routes/users'));
 app.use('/api/products', require('./src/modules/products/presentation/routes/products'));
@@ -71,50 +66,35 @@ app.use('/api/categories', require('./src/routes/categories'));
 app.use('/api/reports', require('./src/routes/reports'));
 app.use('/api/employees', require('./src/routes/employees'));
 app.use('/api/departments', require('./src/routes/departments'));
-
 app.use('/api/production-orders', require('./src/modules/production/presentation/routes/productionOrders'));
 app.use('/api/inventory', require('./src/modules/inventory/presentation/routes/inventory'));
-
-// Submodulo de Inventario Ciclico (Fase F09) - ver server/src/modules/inventory/README.md
 app.use('/api/inventory-counts', require('./src/modules/inventory/presentation/routes/inventoryCounts'));
 
-// Fase 2 - Expansão
 app.use('/api/assets', require('./src/routes/assets'));
 app.use('/api/mobile-inventory', require('./src/routes/mobileInventory'));
 app.use('/api/auditor', require('./src/routes/intelligentAuditor'));
-
-// Fase 3 - Melhorias
 app.use('/api/dashboard', require('./src/routes/dashboard'));
-
-// Fase 4 - Qualidade, Manutenção e Auditoria
 app.use('/api/quality/non-conformities', require('./src/routes/nonConformities'));
 app.use('/api/maintenance', require('./src/routes/maintenance'));
 app.use('/api/audit-logs', require('./src/routes/auditLogs'));
-
-// Engenharia do Produto (BOM)
 app.use('/api/engineering/bom', require('./src/modules/bom/presentation/routes/bom'));
 app.use('/api/items', require('./src/modules/items/presentation/routes/items'));
 app.use('/api/mrp', require('./src/modules/mrp/presentation/routes/mrp'));
+app.use('/api/traceability', require('./src/modules/traceability/presentation/routes/traceability'));
+app.use('/api/webhooks', require('./src/routes/webhooks'));
 
-// Fase 4 - Rastreabilidade Industrial
-app.use(
-  '/api/traceability',
-  require('./src/modules/traceability/presentation/routes/traceability')
-);
-
-// Static files
 app.use('/uploads', express.static('uploads'));
 
-// Error handler
-app.use(errorHandler);
-
-// Health check
-app.get('/api', (req: any, res: any) => {
+app.get('/api', (_req, res) => {
   res.json({
     message: 'API ERP EVOK AUDIO - Online',
     version: '2.0.0 (PostgreSQL/Sequelize/TypeScript)',
   });
 });
 
-declare const module: any;
+app.use(errorHandler);
+
+declare const module: { exports: unknown };
+
 module.exports = app;
+export default app;

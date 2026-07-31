@@ -87,6 +87,19 @@ class SequelizeSaleRepository extends SaleRepository {
 
   /**
    * @param {number} id
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Object|null>}
+   */
+  async findSaleWithItemsForUpdate(id, transaction) {
+    return Sale.findByPk(id, {
+      include: [{ model: SaleItem, as: 'items' }],
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+  }
+
+  /**
+   * @param {number} id
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */

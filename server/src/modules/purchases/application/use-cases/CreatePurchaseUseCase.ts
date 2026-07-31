@@ -54,8 +54,13 @@ class CreatePurchaseUseCase extends UseCase {
       total_amount: totalAmount,
       order_date: new Date(),
       expected_date: entity.expected_date || null,
+      delivery_date: null,
+      freight_type: null,
+      freight_value: 0,
       status: 'pending',
-      notes: entity.notes
+      notes: entity.notes || null,
+      invoice_number: null,
+      invoice_date: null
     }, transaction);
 
     for (const item of entity.items) {

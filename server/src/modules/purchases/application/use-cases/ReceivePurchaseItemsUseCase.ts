@@ -4,28 +4,10 @@ const CostingService = require('../../../../services/costingService');
 const { LotControl } = require('../../../../models/index');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
 
-/**
- * Gera um codigo de lote deterministico para recebimentos sem lote informado.
- *
- * @param {Object} params
- * @param {string} params.orderNumber
- * @param {number} params.purchaseItemId
- * @param {number} params.sequence
- * @returns {string}
- */
 function buildGeneratedLotNumber({ orderNumber, purchaseItemId, sequence }) {
   return `${orderNumber}-ITEM${purchaseItemId}-R${String(sequence).padStart(3, '0')}`;
 }
 
-/**
- * Registra o recebimento (total ou parcial) dos itens de um pedido de
- * compra, cobrindo o fluxo do endpoint `POST /api/purchases/:id/receive`.
- *
- * Toda a atualização real de estoque (lock pessimista + `InventoryMovement`)
- * continua 100% deanterior a `InventoryService.receive` (mesma
- * `server/src/services/inventoryService.ts` usada pelo controller anterior),
- * dentro da mesma transação recebida do controller — não duplicada aqui.
- */
 class ReceivePurchaseItemsUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/PurchaseRepository')} purchaseRepository
@@ -37,29 +19,25 @@ class ReceivePurchaseItemsUseCase extends UseCase {
 
   /**
    * @param {Object} input
-   * @param {number} input.id - Id do pedido de compra.
-   * @param {Array<{item_id:number, quantity:number}>} input.items - Itens recebidos.
-   * @param {number} input.userId - Id do usuário que realiza o recebimento.
-   * @param {import('sequelize').Transaction} input.transaction - Transação Sequelize ativa (criada pelo controller).
+   * @param {number} input.id
+   * @param {Array<{item_id:number, quantity:number}>} input.items
+   * @param {number} input.userId
+   * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
-   * @throws {NotFoundError} Se o pedido ou algum item referenciado não existir.
-   * @throws {ValidationError} Se a lista de itens for inválida ou alguma quantidade for inválida.
-   * @throws {BusinessRuleError} Se o pedido não estiver `sent`/`partial`, ou a quantidade recebida exceder o máximo pendente.
    */
   async execute({ id, items, userId, transaction }) {
-    const purchase = await this.purchaseRepository.findPurchaseWithItems(id, transaction);
+    const purchase = await this.purchaseRepository.findPurchaseWithItemsForUpdate(id, transaction);
     if (!purchase) {
-      throw new NotFoundError('Pedido não encontrado');
+      throw new NotFoundError('Pedido nao encontrado');
     }
     if (!['sent', 'partial'].includes(purchase.status)) {
       throw new BusinessRuleError('Apenas pedidos enviados ou com recebimento parcial podem ser recebidos');
     }
     if (!items || items.length === 0) {
-      throw new ValidationError('Lista de itens é obrigatória');
+      throw new ValidationError('Lista de itens e obrigatoria');
     }
 
     const previousStatus = purchase.status;
-
     let generatedLotSequence = 0;
 
     for (const received of items) {
@@ -71,25 +49,21 @@ class ReceivePurchaseItemsUseCase extends UseCase {
         throw new ValidationError('Quantidade deve ser maior que zero');
       }
 
-      const item = purchase.items.find((i) => i.id === parseInt(received.item_id, 10));
+      const item = purchase.items.find((candidate) => candidate.id === parseInt(received.item_id, 10));
       if (!item) {
-        throw new ValidationError(`Item ${received.item_id} não encontrado`);
+        throw new ValidationError(`Item ${received.item_id} nao encontrado`);
       }
 
       const currentReceived = parseFloat(item.received_quantity) || 0;
       const maxReceivable = parseFloat(item.quantity) - currentReceived;
       if (qty > maxReceivable) {
-        throw new BusinessRuleError(`Quantidade excedente. Máximo: ${maxReceivable}`);
+        throw new BusinessRuleError(`Quantidade excedente. Maximo: ${maxReceivable}`);
       }
 
       const newReceived = currentReceived + qty;
       const itemStatus = newReceived >= parseFloat(item.quantity) ? 'received' : 'partial';
       await this.purchaseRepository.updatePurchaseItem(item.id, { received_quantity: newReceived, status: itemStatus }, transaction);
 
-      // InventoryService faz o lock da linha do Product e registra o
-      // InventoryMovement atomicamente na mesma transação. Recebimento
-      // duplicado/excedente já é bloqueado acima pelo check de maxReceivable
-      // contra received_quantity.
       const unitCost = parseFloat(item.unit_price || 0);
       const { product } = await InventoryService.receive(item.product_id, qty, userId, transaction, {
         description: `Recebimento PO ${purchase.order_number}`,
@@ -157,8 +131,8 @@ class ReceivePurchaseItemsUseCase extends UseCase {
       }, transaction);
     }
 
-    const updatedItems = await this.purchaseRepository.findPurchaseItems(purchase.id, transaction);
-    const allReceived = updatedItems.every((i) => i.status === 'received');
+    const updatedItems = await this.purchaseRepository.findPurchaseItemsForUpdate(purchase.id, transaction);
+    const allReceived = updatedItems.every((item) => item.status === 'received');
     purchase.status = allReceived ? 'received' : 'partial';
     await purchase.save({ transaction });
 
@@ -167,5 +141,3 @@ class ReceivePurchaseItemsUseCase extends UseCase {
 }
 
 module.exports = ReceivePurchaseItemsUseCase;
-
-

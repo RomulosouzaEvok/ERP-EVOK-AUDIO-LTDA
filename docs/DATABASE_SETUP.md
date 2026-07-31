@@ -101,7 +101,7 @@ psql -h seu-servidor.hostinger.com -U evok_admin -d erp_evok_audio -f server/dat
 | `DB_USER` | Usuário PostgreSQL | `evok_admin` | `evok_admin` |
 | `DB_PASSWORD` | Senha (segura!) | `evok_local_dev` | `SenhaForte123!` |
 | `DB_SSL` | Usar SSL/TLS | `false` | `true` |
-| `DB_FORCE_SYNC` | Force sync Sequelize | `false` (dev: true 1x) | `false` |
+| `DB_FORCE_SYNC` | Flag legada, não suportada | `false` | `false` |
 | `NODE_ENV` | Ambiente | `development` | `production` |
 
 ---
@@ -187,19 +187,16 @@ psql -h localhost -U evok_admin -d erp_evok_audio -f server/database/postgresql/
 
 ### Tabelas legadas não existem
 
-Falta executar Sequelize.sync. Temporariamente em `.env`:
-```
-DB_FORCE_SYNC=true
-```
-
-Depois iniciar o servidor uma vez e desativar:
+Falta aplicar a baseline e as migrations versionadas:
 ```bash
-npm start  # Cria tabelas legadas
-# Ctrl+C
-
-# Editar .env
-DB_FORCE_SYNC=false
+cd server
+npm run migration:up
 ```
+
+Se a baseline falhar, revisar:
+- build atual em `dist/`
+- configuração em `server/config/sequelize-cli.config.cjs`
+- conexão PostgreSQL do `.env`
 
 ---
 

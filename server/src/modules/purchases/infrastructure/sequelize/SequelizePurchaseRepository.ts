@@ -2,16 +2,7 @@ const { Op } = require('sequelize');
 const PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
 const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item } = require('../../../../models/index');
 
-/**
- * Implementação Sequelize/PostgreSQL do contrato `PurchaseRepository`.
- *
- * Reutiliza os models Sequelize já existentes `Purchase`, `PurchaseItem`,
- * `Product`, `Supplier` e `AccountPayable` — nenhum model novo é criado por
- * este módulo. As queries reproduzem exatamente as do controller anterior
- * `server/src/controllers/purchaseController.ts`.
- */
 class SequelizePurchaseRepository extends PurchaseRepository {
-  /** @inheritdoc */
   async listPurchases(filters: any = {}, pagination: any = {}) {
     const where: any = {};
     if (filters.status) where.status = filters.status;
@@ -26,92 +17,120 @@ class SequelizePurchaseRepository extends PurchaseRepository {
       where,
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] },
-        { model: PurchaseItem, as: 'items', include: [
-          { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
-          { model: Item, as: 'item', attributes: ['id', 'nome_item'] }
-        ] }
+        {
+          model: PurchaseItem,
+          as: 'items',
+          include: [
+            { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+            { model: Item, as: 'item', attributes: ['id', 'descricao'] },
+          ],
+        },
       ],
       limit: pagination.limit,
       offset: pagination.offset,
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
     });
 
     return { rows, count };
   }
 
-  /** @inheritdoc */
   async findPurchaseById(id) {
     return Purchase.findByPk(id, {
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'company_name', 'cnpj'] },
-        { model: PurchaseItem, as: 'items', include: [
-          { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
-          { model: Item, as: 'item', attributes: ['id', 'nome_item'] }
-        ] }
-      ]
+        {
+          model: PurchaseItem,
+          as: 'items',
+          include: [
+            { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+            { model: Item, as: 'item', attributes: ['id', 'descricao'] },
+          ],
+        },
+      ],
     });
   }
 
-  /** @inheritdoc */
   async findPurchaseByIdRaw(id, transaction) {
     return Purchase.findByPk(id, { transaction });
   }
 
-  /** @inheritdoc */
-  async findPurchaseWithItems(id, transaction) {
+  async findPurchaseByIdRawForUpdate(id, transaction) {
     return Purchase.findByPk(id, {
-      include: [
-        { model: PurchaseItem, as: 'items', include: [
-          { model: Item, as: 'item', attributes: ['id', 'nome_item'] }
-        ] }
-      ],
-      transaction
+      transaction,
+      lock: transaction.LOCK.UPDATE,
     });
   }
 
-  /** @inheritdoc */
+  async findPurchaseWithItems(id, transaction) {
+    return Purchase.findByPk(id, {
+      include: [
+        {
+          model: PurchaseItem,
+          as: 'items',
+          include: [
+            { model: Item, as: 'item', attributes: ['id', 'descricao'] },
+          ],
+        },
+      ],
+      transaction,
+    });
+  }
+
+  async findPurchaseWithItemsForUpdate(id, transaction) {
+    return Purchase.findByPk(id, {
+      include: [
+        {
+          model: PurchaseItem,
+          as: 'items',
+          include: [
+            { model: Item, as: 'item', attributes: ['id', 'descricao'] },
+          ],
+        },
+      ],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+  }
+
   async createPurchase(data, transaction) {
     return Purchase.create(data, { transaction });
   }
 
-  /** @inheritdoc */
   async createPurchaseItem(data, transaction) {
     return PurchaseItem.create(data, { transaction });
   }
 
-  /** @inheritdoc */
   async updatePurchaseFields(id, data) {
     await Purchase.update(data, { where: { id } });
   }
 
-  /** @inheritdoc */
   async findProductById(id, transaction) {
     return Product.findByPk(id, { transaction });
   }
 
-  /** @inheritdoc */
   async findPurchaseItems(purchaseId, transaction) {
     return PurchaseItem.findAll({ where: { purchase_id: purchaseId }, transaction });
   }
 
-  /** @inheritdoc */
+  async findPurchaseItemsForUpdate(purchaseId, transaction) {
+    return PurchaseItem.findAll({
+      where: { purchase_id: purchaseId },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+  }
+
   async updatePurchaseItem(id, data, transaction) {
     await PurchaseItem.update(data, { where: { id }, transaction });
   }
 
-  /** @inheritdoc */
   async findAccountPayableByPurchaseId(purchaseId, transaction) {
     return AccountPayable.findOne({ where: { purchase_id: purchaseId }, transaction });
   }
 
-  /** @inheritdoc */
   async createAccountPayable(data, transaction) {
     return AccountPayable.create(data, { transaction });
   }
 }
 
 module.exports = SequelizePurchaseRepository;
-
-
-
-

@@ -12,12 +12,12 @@ const financialController = require('../controllers/financialController');
 
 // Contas a Receber
 router.get('/receivable', authenticate, financialController.listReceivable);
-router.put('/receivable/:id/pay', authenticate, financialController.receivePayment);
+router.put('/receivable/:id/pay', authenticate, authorize('admin', 'financial'), financialController.receivePayment);
 
 // Contas a Pagar
 router.get('/payable', authenticate, financialController.listPayable);
 router.post('/payable', authenticate, authorize('admin', 'financial'), financialController.createPayable);
-router.put('/payable/:id/pay', authenticate, financialController.payPayable);
+router.put('/payable/:id/pay', authenticate, authorize('admin', 'financial'), financialController.payPayable);
 
 // Fluxo de Caixa
 router.get('/cash-flow', authenticate, financialController.cashFlow);

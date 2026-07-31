@@ -3,7 +3,7 @@
 ## Tecnologia
 - **ORM:** Sequelize 6.x
 - **Banco:** PostgreSQL 8.0+
-- **Migrações:** `sequelize.sync({ alter: true })` (desenvolvimento) / Migrations (produção recomendado)
+- **Migrações:** `sequelize-cli` com migrations versionadas em todos os ambientes
 
 ---
 
@@ -494,9 +494,10 @@ O arquivo `server/database/postgresql/01_schema.sql` é um artefato histórico q
 
 ### Solução
 
-1. **Models são a fonte de verdade**: Todas as alterações de schema vão nos models TypeScript
-2. **Migrations formais**: Use `sequelize-cli` para criar migrations versionadas
-3. **Verificação pós-deploy**: Confirmar que colunas críticas (DECIMAL, constraints) estão corretas
+1. **Models descrevem o estado esperado pelo app**, mas a aplicação do schema acontece por migrations.
+2. **Migrations formais**: Use `sequelize-cli` com baseline versionada e `SequelizeMeta`.
+3. **Sem DDL no boot**: `DB_FORCE_SYNC`, `DB_AUTO_ALTER` e `DB_ALLOW_UNSAFE_ALTER` não são caminho operacional.
+4. **Verificação pós-deploy**: Confirmar que colunas críticas (DECIMAL, constraints) estão corretas.
 
 ### Colunas Críticas (DECIMAL)
 
@@ -511,13 +512,13 @@ Estas devem estar em `DECIMAL(18,6)` em PRODUÇÃO:
 
 ```bash
 # 1. Criar migration
-npx sequelize-cli migration:generate --name <date>-<description>
+npm run migration:generate -- --name <date>-<description>
 
 # 2. Implementar up/down
-# server/migrations/20260730-*.js
+# server/migrations/20260731-*.cjs
 
 # 3. Testar em staging
-DB_ENV=staging npx sequelize-cli db:migrate
+npm run migration:up
 
 # 4. Verificar schema
 psql postgres://user:pass@host/db \
@@ -527,7 +528,7 @@ psql postgres://user:pass@host/db \
 # Esperado: DECIMAL com precision=18, scale=6
 
 # 5. Deploy em produção
-npx sequelize-cli db:migrate
+npm run migration:up
 ```
 
 ### Verificação Pós-Deploy

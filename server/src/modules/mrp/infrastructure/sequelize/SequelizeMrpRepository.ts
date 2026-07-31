@@ -1,16 +1,15 @@
 import MrpRepository from '../../domain/repositories/MrpRepository';
 const { ItemEstrutura, MrpOrdemPlanejada, Item } = require('../../../../models/index');
 
-/**
- * Implementacao Sequelize da persistencia MRP.
- */
 class SequelizeMrpRepository extends MrpRepository {
-  /** @inheritdoc */
   public async listActiveEdges(): Promise<any[]> {
-    return ItemEstrutura.findAll({ where: { ativo: true } });
+    return ItemEstrutura.findAll({
+      where: { ativo: true },
+      attributes: ['item_pai_id', 'item_componente_id', 'quantidade', 'perda_percentual', 'ativo'],
+      raw: true,
+    });
   }
 
-  /** @inheritdoc */
   public async upsertPlannedOrders(orders: Record<string, unknown>[], transaction?: any): Promise<any[]> {
     const persisted: any[] = [];
 
@@ -36,7 +35,6 @@ class SequelizeMrpRepository extends MrpRepository {
     return persisted;
   }
 
-  /** @inheritdoc */
   public async listPlannedOrders(): Promise<any[]> {
     return MrpOrdemPlanejada.findAll({
       include: [{ model: Item, as: 'item' }],

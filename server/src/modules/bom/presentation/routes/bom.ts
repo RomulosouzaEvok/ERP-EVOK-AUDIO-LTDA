@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../../../../middlewares/auth');
+const { authenticate, authorize } = require('../../../../middlewares/auth');
 const bomController = require('../controllers/bomController');
 
 /**
@@ -16,9 +16,9 @@ router.get('/', authenticate, bomController.list);
 router.get('/product/:productId/versions', authenticate, bomController.listVersions); // NOVO - aditivo
 router.get('/product/:productId', authenticate, bomController.getByProduct);
 router.get('/:id', authenticate, bomController.getById);
-router.post('/', authenticate, bomController.create);
-router.put('/:id', authenticate, bomController.update);
-router.delete('/:id', authenticate, bomController.remove);
+router.post('/', authenticate, authorize('admin', 'operator'), bomController.create);
+router.put('/:id', authenticate, authorize('admin', 'operator'), bomController.update);
+router.delete('/:id', authenticate, authorize('admin', 'operator'), bomController.remove);
 
 // Operações de engenharia
 router.get('/:id/explode', authenticate, bomController.explode);

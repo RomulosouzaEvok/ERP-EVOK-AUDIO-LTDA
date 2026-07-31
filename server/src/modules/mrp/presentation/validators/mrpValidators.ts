@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+const legacyUuidLike = z.string().regex(
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+  'UUID invalido.',
+);
+
 /**
  * Schema para validar quantidades industriais com ate 6 casas decimais.
  * Usa comparacao de string para evitar falsos positivos por arredondamento
@@ -18,11 +23,11 @@ const decimalLike = z.coerce.number().positive().refine((value) => {
 /** Schema para gerar plano manual de MRP. */
 export const createMrpPlanSchema = z.object({
   demands: z.array(z.object({
-    item_id: z.string().uuid(),
+    item_id: legacyUuidLike,
     quantidade: decimalLike,
     data_necessidade: z.string().date(),
     origem: z.enum(['PEDIDO_VENDA', 'PREVISAO', 'ORDEM_PRODUCAO', 'MANUAL']),
-    origem_id: z.string().uuid().nullable().optional(),
+    origem_id: legacyUuidLike.nullable().optional(),
   }).strict()).min(1),
 }).strict();
 

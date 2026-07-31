@@ -9,6 +9,8 @@
  * @module config/seeds
  */
 
+import { loadRuntimeEnv } from './runtimeEnv';
+
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { User, Department, Category } = require('../models/index');
 
@@ -73,6 +75,7 @@ const CATEGORIES: CategoryData[] = [
  */
 async function seedDatabase(): Promise<void> {
   try {
+    const runtimeEnv = loadRuntimeEnv();
     const userCount = await User.count();
     if (userCount > 0) {
       console.log('📊 Banco já possui dados, seeds ignorados.');
@@ -84,9 +87,9 @@ async function seedDatabase(): Promise<void> {
     // Criar admin padrão
     // Em produção a senha é obrigatória: sem ela o seed abortaria criando um
     // admin com credencial previsível. Em dev, cai num valor local de conveniência.
-    const adminPassword: string | undefined = process.env.ADMIN_SEED_PASSWORD;
+    const adminPassword = runtimeEnv.adminSeedPassword;
     if (!adminPassword) {
-      if (process.env.NODE_ENV === 'production') {
+      if (runtimeEnv.nodeEnv === 'production') {
         throw new Error(
           'ADMIN_SEED_PASSWORD é obrigatória em produção. ' +
           'Defina a variável de ambiente antes de inicializar o servidor.'

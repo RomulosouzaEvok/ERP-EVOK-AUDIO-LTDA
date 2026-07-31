@@ -1,32 +1,18 @@
-/**
- * 🔐 Middleware de autenticação e autorização.
- *
- * Verifica JWT no header `Authorization: Bearer <token>`, carrega o
- * usuário do banco e anexa a `req.user`. O middleware `authorize()`
- * restringe acesso por papel (RBAC).
- *
- * @module middlewares/auth
- */
-
-import { Request, Response, NextFunction } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
-// Models are CommonJS - dynamic require is safest for hybrid setup
+import { getJwtRuntimeConfig } from '../config/runtimeEnv';
+
+// Models are CommonJS - dynamic require is safest for the current hybrid setup.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { User } = require('../models/index');
 
-/**
- * Interface do payload decodificado do JWT.
- */
 interface JwtPayload {
   id: number;
   iat?: number;
   exp?: number;
 }
 
-/**
- * Interface do usuário anexado ao request.
- */
 interface RequestUser {
   id: number;
   name: string;
@@ -37,49 +23,33 @@ interface RequestUser {
   updatedAt?: Date;
 }
 
-/**
- * Middleware de autenticação obrigatória.
- *
- * Extrai o token JWT do header `Authorization`, verifica a assinatura,
- * carrega o usuário do banco e anexa a `req.user`.
- *
- * @param req - Requisição Express.
- * @param res - Resposta Express.
- * @param next - Próximo middleware.
- */
 export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret || jwtSecret.length < 32) {
-      console.error('❌ JWT_SECRET não configurado ou muito curto. Configure no .env com no mínimo 32 caracteres.');
-      res.status(500).json({ success: false, error: 'Erro de configuração do servidor. Contate o administrador.' });
-      return;
-    }
-
+    const { secret } = getJwtRuntimeConfig();
     const authHeader = req.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ success: false, error: 'Token não fornecido' });
+      res.status(401).json({ success: false, error: 'Token nao fornecido' });
       return;
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
+    const decoded = jwt.verify(token, secret) as JwtPayload;
 
     const user = await User.findByPk(decoded.id, {
-      attributes: { exclude: ['password'] }
+      attributes: { exclude: ['password'] },
     });
 
     if (!user) {
-      res.status(401).json({ success: false, error: 'Usuário não encontrado' });
+      res.status(401).json({ success: false, error: 'Usuario nao encontrado' });
       return;
     }
 
     if (!user.active) {
-      res.status(401).json({ success: false, error: 'Usuário inativo' });
+      res.status(401).json({ success: false, error: 'Usuario inativo' });
       return;
     }
 
-    // Attach typed user to request
     const requestUser: RequestUser = {
       id: user.id,
       name: user.name,
@@ -87,42 +57,41 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       role: user.role,
       active: user.active,
       createdAt: user.createdAt,
-      updatedAt: user.updatedAt
+      updatedAt: user.updatedAt,
     };
 
-    req.user = requestUser;
+    (req as any).user = requestUser;
     next();
   } catch (error: unknown) {
     if (error instanceof jwt.TokenExpiredError) {
       res.status(401).json({ success: false, error: 'Token expirado' });
       return;
     }
+
     if (error instanceof jwt.JsonWebTokenError) {
-      res.status(401).json({ success: false, error: 'Token inválido' });
+      res.status(401).json({ success: false, error: 'Token invalido' });
       return;
     }
+
+    if (error instanceof Error && error.message.includes('JWT_SECRET')) {
+      console.error('JWT runtime config error:', error.message);
+      res.status(500).json({ success: false, error: 'Erro de configuracao do servidor. Contate o administrador.' });
+      return;
+    }
+
     next(error);
   }
 }
 
-/**
- * Middleware de autorização por papel (RBAC).
- *
- * Deve ser usado APÓS o middleware `authenticate`. Verifica se o papel
- * do usuário (`req.user.role`) está entre os papéis permitidos.
- *
- * @param roles - Papéis permitidos (ex.: 'admin', 'financial').
- * @returns Middleware Express.
- */
 export function authorize(...roles: string[]): (req: Request, res: Response, next: NextFunction) => void {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      res.status(401).json({ success: false, error: 'Não autenticado' });
+    if (!(req as any).user) {
+      res.status(401).json({ success: false, error: 'Nao autenticado' });
       return;
     }
 
-    if (!roles.includes(req.user.role)) {
-      res.status(403).json({ success: false, error: 'Sem permissão para esta ação' });
+    if (!roles.includes((req as any).user.role)) {
+      res.status(403).json({ success: false, error: 'Sem permissao para esta acao' });
       return;
     }
 
@@ -130,7 +99,6 @@ export function authorize(...roles: string[]): (req: Request, res: Response, nex
   };
 }
 
-// Preserve CommonJS compatibility for previous JS routes
 module.exports = authenticate;
 module.exports.authenticate = authenticate;
 module.exports.authorize = authorize;

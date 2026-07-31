@@ -26,6 +26,12 @@ const {
  */
 const purchaseRepository = new SequelizePurchaseRepository();
 
+async function rollbackIfPending(transaction) {
+  if (transaction && !transaction.finished) {
+    await transaction.rollback();
+  }
+}
+
 /**
  * `GET /api/purchases` — lista pedidos de compra com filtros e paginação.
  *
@@ -97,7 +103,7 @@ exports.create = async (req, res, next) => {
     const fullPurchase = await purchaseRepository.findPurchaseById(purchase.id);
     res.status(201).json({ success: true, data: fullPurchase });
   } catch (error) {
-    await t.rollback();
+    await rollbackIfPending(t);
     next(error);
   }
 };
@@ -166,7 +172,7 @@ exports.updateStatus = async (req, res, next) => {
 
     res.json({ success: true, data: purchase });
   } catch (error) {
-    await t.rollback();
+    await rollbackIfPending(t);
     next(error);
   }
 };
@@ -206,7 +212,7 @@ exports.receiveItems = async (req, res, next) => {
     const fullPurchase = await purchaseRepository.findPurchaseById(purchase.id);
     res.json({ success: true, data: fullPurchase });
   } catch (error) {
-    await t.rollback();
+    await rollbackIfPending(t);
     next(error);
   }
 };

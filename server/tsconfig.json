@@ -24,6 +24,6 @@
     "strictPropertyInitialization": false,
     "useUnknownInCatchVariables": false
   },
-  "include": ["index.ts", "config/**/*.ts", "src/**/*.ts"],
+  "include": ["app.ts", "index.ts", "config/**/*.ts", "src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

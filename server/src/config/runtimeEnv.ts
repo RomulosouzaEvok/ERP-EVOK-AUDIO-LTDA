@@ -1,0 +1,210 @@
+import fs from 'fs';
+import dotenv from 'dotenv';
+import { z } from 'zod';
+
+dotenv.config();
+
+const ENV_PLACEHOLDER_PATTERN = /^(CHANGE_ME|dev-only-change-me)/i;
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+
+    if (normalized === 'true') {
+      return true;
+    }
+
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+
+  return value;
+}, z.boolean());
+
+const runtimeEnvSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().positive().default(5000),
+  DB_HOST: z.string().min(1).default('localhost'),
+  DB_PORT: z.coerce.number().int().positive().default(5432),
+  DB_NAME: z.string().min(1).default('erp_evok_audio'),
+  DB_USER: z.string().min(1).default('evok_admin'),
+  DB_PASSWORD: z.string().default(''),
+  DB_SSL: booleanFromEnv.default(false),
+  DB_SSL_CA_PATH: z.string().optional(),
+  DB_SSL_CA_BASE64: z.string().optional(),
+  DB_LOGGING: booleanFromEnv.default(false),
+  DB_FORCE_SYNC: booleanFromEnv.default(false),
+  DB_AUTO_ALTER: booleanFromEnv.default(false),
+  DB_ALLOW_UNSAFE_ALTER: booleanFromEnv.default(false),
+  JWT_SECRET: z.string().optional(),
+  JWT_EXPIRE: z.string().default('7d'),
+  CORS_ORIGIN: z.string().optional(),
+  ADMIN_SEED_PASSWORD: z.string().optional(),
+}).superRefine((env, ctx) => {
+  if (env.NODE_ENV !== 'production') {
+    return;
+  }
+
+  if (!env.JWT_SECRET || env.JWT_SECRET.length < 32 || ENV_PLACEHOLDER_PATTERN.test(env.JWT_SECRET)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['JWT_SECRET'],
+      message: 'JWT_SECRET deve ter ao menos 32 caracteres e nao pode usar placeholder em producao.',
+    });
+  }
+
+  if (!env.CORS_ORIGIN || env.CORS_ORIGIN.includes('localhost')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['CORS_ORIGIN'],
+      message: 'CORS_ORIGIN deve ser definido com origem real em producao.',
+    });
+  }
+
+  if (!env.DB_PASSWORD || ENV_PLACEHOLDER_PATTERN.test(env.DB_PASSWORD)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['DB_PASSWORD'],
+      message: 'DB_PASSWORD deve ser definido com valor real em producao.',
+    });
+  }
+
+  if (!env.ADMIN_SEED_PASSWORD || env.ADMIN_SEED_PASSWORD.length < 8 || ENV_PLACEHOLDER_PATTERN.test(env.ADMIN_SEED_PASSWORD)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ADMIN_SEED_PASSWORD'],
+      message: 'ADMIN_SEED_PASSWORD deve ser definido com valor forte em producao.',
+    });
+  }
+
+  if (!env.DB_SSL) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['DB_SSL'],
+      message: 'DB_SSL=true e obrigatorio em producao.',
+    });
+  }
+
+  if (env.DB_FORCE_SYNC) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['DB_FORCE_SYNC'],
+      message: 'DB_FORCE_SYNC=true e proibido em producao.',
+    });
+  }
+
+  if (env.DB_AUTO_ALTER) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['DB_AUTO_ALTER'],
+      message: 'DB_AUTO_ALTER=true e proibido em producao.',
+    });
+  }
+
+  if (env.DB_ALLOW_UNSAFE_ALTER) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['DB_ALLOW_UNSAFE_ALTER'],
+      message: 'DB_ALLOW_UNSAFE_ALTER=true e proibido em producao.',
+    });
+  }
+});
+
+export type RuntimeEnv = {
+  nodeEnv: 'development' | 'test' | 'production';
+  port: number;
+  dbHost: string;
+  dbPort: number;
+  dbName: string;
+  dbUser: string;
+  dbPassword: string;
+  dbSsl: boolean;
+  dbSslCaPath?: string;
+  dbSslCaBase64?: string;
+  dbLogging: boolean;
+  dbForceSync: boolean;
+  dbAutoAlter: boolean;
+  dbAllowUnsafeAlter: boolean;
+  jwtSecret?: string;
+  jwtExpire: string;
+  corsOrigin: string;
+  adminSeedPassword?: string;
+};
+
+let cachedRuntimeEnv: RuntimeEnv | null = null;
+
+function normalizeRuntimeEnv(parsedEnv: z.infer<typeof runtimeEnvSchema>): RuntimeEnv {
+  return {
+    nodeEnv: parsedEnv.NODE_ENV,
+    port: parsedEnv.PORT,
+    dbHost: parsedEnv.DB_HOST,
+    dbPort: parsedEnv.DB_PORT,
+    dbName: parsedEnv.DB_NAME,
+    dbUser: parsedEnv.DB_USER,
+    dbPassword: parsedEnv.DB_PASSWORD,
+    dbSsl: parsedEnv.DB_SSL,
+    dbSslCaPath: parsedEnv.DB_SSL_CA_PATH,
+    dbSslCaBase64: parsedEnv.DB_SSL_CA_BASE64,
+    dbLogging: parsedEnv.DB_LOGGING,
+    dbForceSync: parsedEnv.DB_FORCE_SYNC,
+    dbAutoAlter: parsedEnv.DB_AUTO_ALTER,
+    dbAllowUnsafeAlter: parsedEnv.DB_ALLOW_UNSAFE_ALTER,
+    jwtSecret: parsedEnv.JWT_SECRET,
+    jwtExpire: parsedEnv.JWT_EXPIRE,
+    corsOrigin: parsedEnv.CORS_ORIGIN || 'http://localhost:5173',
+    adminSeedPassword: parsedEnv.ADMIN_SEED_PASSWORD,
+  };
+}
+
+export function loadRuntimeEnv(): RuntimeEnv {
+  if (cachedRuntimeEnv) {
+    return cachedRuntimeEnv;
+  }
+
+  const parsed = runtimeEnvSchema.safeParse(process.env);
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+      .join(' | ');
+    throw new Error(`Configuracao de ambiente invalida: ${message}`);
+  }
+
+  cachedRuntimeEnv = normalizeRuntimeEnv(parsed.data);
+  return cachedRuntimeEnv;
+}
+
+export function getJwtRuntimeConfig(): { secret: string; expiresIn: string } {
+  const runtimeEnv = loadRuntimeEnv();
+
+  if (!runtimeEnv.jwtSecret || runtimeEnv.jwtSecret.length < 32) {
+    throw new Error('JWT_SECRET nao configurado ou muito curto. Configure ao menos 32 caracteres.');
+  }
+
+  return {
+    secret: runtimeEnv.jwtSecret,
+    expiresIn: runtimeEnv.jwtExpire,
+  };
+}
+
+export function clearRuntimeEnvCache(): void {
+  cachedRuntimeEnv = null;
+}
+
+export function readPostgresSslOptions(runtimeEnv: RuntimeEnv): { require: true; rejectUnauthorized: true; ca?: string } {
+  const sslOptions: { require: true; rejectUnauthorized: true; ca?: string } = {
+    require: true,
+    rejectUnauthorized: true,
+  };
+
+  if (runtimeEnv.dbSslCaPath) {
+    sslOptions.ca = fs.readFileSync(runtimeEnv.dbSslCaPath, 'utf8');
+  } else if (runtimeEnv.dbSslCaBase64) {
+    sslOptions.ca = Buffer.from(runtimeEnv.dbSslCaBase64, 'base64').toString('utf8');
+  }
+
+  return sslOptions;
+}
