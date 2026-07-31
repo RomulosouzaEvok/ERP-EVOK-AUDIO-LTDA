@@ -56,11 +56,12 @@ describeIntegration('Concorrencia de recebimento de compra', () => {
     const token = authToken();
     const { purchaseId, itemId } = await createSentPurchaseOrder();
 
-    const payload = { items: [{ item_id: itemId, quantity: 5 }] };
-
+    // NFs diferentes: o objetivo deste teste e a concorrencia na baixa de
+    // estoque/quantidade recebida do item, nao a deduplicacao de NF (essa
+    // e coberta em purchase-receipt-duplicate-invoice.test.ts).
     const [first, second] = await Promise.allSettled([
-      api().post(`/api/purchases/${purchaseId}/receive`).set('Authorization', `Bearer ${token}`).send(payload),
-      api().post(`/api/purchases/${purchaseId}/receive`).set('Authorization', `Bearer ${token}`).send(payload),
+      api().post(`/api/purchases/${purchaseId}/receive`).set('Authorization', `Bearer ${token}`).send({ items: [{ item_id: itemId, quantity: 5 }], invoice_number: `NF-CONC-A-${Date.now()}` }),
+      api().post(`/api/purchases/${purchaseId}/receive`).set('Authorization', `Bearer ${token}`).send({ items: [{ item_id: itemId, quantity: 5 }], invoice_number: `NF-CONC-B-${Date.now()}` }),
     ]);
 
     const responses = [first, second]

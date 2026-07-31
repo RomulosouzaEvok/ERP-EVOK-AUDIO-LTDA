@@ -30,14 +30,18 @@ jest.mock('../../src/models/index', () => ({
     findOne: jest.fn(async () => null),
     create: jest.fn(async () => ({ id: 1 })),
   },
+  PurchaseReceipt: {
+    create: jest.fn(async () => ({ id: 1 })),
+  },
 }));
 
 import ChangeSaleStatusUseCase = require('../../src/modules/sales/application/use-cases/ChangeSaleStatusUseCase');
 import ReceivePaymentUseCase = require('../../src/modules/financial/application/use-cases/ReceivePaymentUseCase');
 import PayPayableUseCase = require('../../src/modules/financial/application/use-cases/PayPayableUseCase');
 import ChangePurchaseStatusUseCase = require('../../src/modules/purchases/application/use-cases/ChangePurchaseStatusUseCase');
+import UpdatePurchaseUseCase = require('../../src/modules/purchases/application/use-cases/UpdatePurchaseUseCase');
 import ReceivePurchaseItemsUseCase = require('../../src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase');
-import { ValidationError } from '../../src/errors';
+import { ValidationError, BusinessRuleError } from '../../src/errors';
 
 const { sequelize } = require('../../src/config/database');
 const InventoryService = require('../../src/services/inventoryService');
@@ -246,6 +250,7 @@ describe('Integrity transaction guards', () => {
     const result = await useCase.execute({
       id: 8,
       items: [{ item_id: 81, quantity: 2 }],
+      invoiceNumber: 'NF-UNIT-001',
       userId: 4,
       transaction,
     });
@@ -257,5 +262,39 @@ describe('Integrity transaction guards', () => {
     expect(CostingService.registerWeightedAverageCost).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith({ transaction });
     expect(result.purchase.status).toBe('partial');
+  });
+
+  it('atualiza pedido de compra usando lock pessimista (achado de auditoria: race condition)', async () => {
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const purchase = { id: 6, status: 'pending', expected_date: '2026-01-01', notes: 'old' };
+
+    const purchaseRepository = {
+      findPurchaseByIdRawForUpdate: jest.fn(async () => purchase),
+      updatePurchaseFields: jest.fn(async () => {}),
+      findPurchaseById: jest.fn(async () => ({ id: 6, status: 'pending', notes: 'new' })),
+    };
+
+    const useCase = new UpdatePurchaseUseCase(purchaseRepository);
+
+    await useCase.execute({ id: 6, body: { notes: 'new' }, transaction });
+
+    expect(purchaseRepository.findPurchaseByIdRawForUpdate).toHaveBeenCalledWith(6, transaction);
+    expect(purchaseRepository.updatePurchaseFields).toHaveBeenCalledWith(6, { notes: 'new' }, transaction);
+  });
+
+  it('bloqueia edicao de pedido de compra que nao esta pending/approved', async () => {
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const purchaseRepository = {
+      findPurchaseByIdRawForUpdate: jest.fn(async () => ({ id: 6, status: 'received' })),
+      updatePurchaseFields: jest.fn(),
+    };
+
+    const useCase = new UpdatePurchaseUseCase(purchaseRepository);
+
+    await expect(
+      useCase.execute({ id: 6, body: { notes: 'new' }, transaction })
+    ).rejects.toBeInstanceOf(BusinessRuleError);
+
+    expect(purchaseRepository.updatePurchaseFields).not.toHaveBeenCalled();
   });
 });

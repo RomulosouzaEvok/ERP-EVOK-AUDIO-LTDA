@@ -253,6 +253,8 @@ describe('Production Order Lifecycle (F.10)', () => {
       LotControl.findOne.mockResolvedValue({
         id: 1,
         lot_number: 'LOT-2026-001',
+        status: 'available',
+        expires_at: null,
         quantity_available: 10,
         update: jest.fn(async () => ({})),
       });
@@ -305,6 +307,8 @@ describe('Production Order Lifecycle (F.10)', () => {
       LotControl.findOne.mockResolvedValue({
         id: 1,
         lot_number: 'LOT-2026-001',
+        status: 'available',
+        expires_at: null,
         quantity_available: 10,
         update: jest.fn(async () => ({})),
       });
@@ -358,6 +362,102 @@ describe('Production Order Lifecycle (F.10)', () => {
           user_id: 1,
         })
       ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(productionOrderRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejeita consumo manual de lote vencido (achado de auditoria: FEFO/expires_at)', async () => {
+      jest.clearAllMocks();
+
+      const productionOrderRepository = {
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'in_progress',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(),
+        findProductById: jest.fn(async () => ({ id: 101, reserved_quantity: 5 })),
+      };
+
+      BomService.explodeBOM.mockResolvedValue({
+        components: [{ component_id: 101, quantity: 5 }],
+        total_cost: 100,
+      });
+
+      LotControl.findOne.mockResolvedValue({
+        id: 1,
+        lot_number: 'LOT-VENCIDO-001',
+        status: 'available',
+        expires_at: '2020-01-01', // vencido
+        quantity_available: 10,
+        update: jest.fn(async () => ({})),
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({
+          id: 1,
+          status: 'completed',
+          quantity_produced: 10,
+          user_id: 1,
+          lot_consumptions: [{ product_id: 101, lot_control_id: 1, quantity: 5 }],
+          finished_lot_number: 'LOT-FINISHED-001',
+        })
+      ).rejects.toBeInstanceOf(BusinessRuleError);
+
+      expect(productionOrderRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejeita consumo manual de lote bloqueado/nao disponivel', async () => {
+      jest.clearAllMocks();
+
+      const productionOrderRepository = {
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'in_progress',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(),
+        findProductById: jest.fn(async () => ({ id: 101, reserved_quantity: 5 })),
+      };
+
+      BomService.explodeBOM.mockResolvedValue({
+        components: [{ component_id: 101, quantity: 5 }],
+        total_cost: 100,
+      });
+
+      LotControl.findOne.mockResolvedValue({
+        id: 1,
+        lot_number: 'LOT-BLOQUEADO-001',
+        status: 'blocked',
+        expires_at: null,
+        quantity_available: 10,
+        update: jest.fn(async () => ({})),
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({
+          id: 1,
+          status: 'completed',
+          quantity_produced: 10,
+          user_id: 1,
+          lot_consumptions: [{ product_id: 101, lot_control_id: 1, quantity: 5 }],
+          finished_lot_number: 'LOT-FINISHED-001',
+        })
+      ).rejects.toBeInstanceOf(BusinessRuleError);
 
       expect(productionOrderRepository.update).not.toHaveBeenCalled();
     });

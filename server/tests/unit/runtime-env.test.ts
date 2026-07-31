@@ -84,4 +84,22 @@ describe('runtimeEnv', () => {
       expiresIn: '12h',
     });
   });
+
+  it('TRUST_PROXY default e 0 (nao confia em proxy nenhum) quando nao configurado', () => {
+    delete process.env.TRUST_PROXY;
+
+    const runtimeEnv = require('../../src/config/runtimeEnv');
+    runtimeEnv.clearRuntimeEnvCache();
+
+    expect(runtimeEnv.loadRuntimeEnv().trustProxy).toBe(0);
+  });
+
+  it('TRUST_PROXY respeita o valor configurado (numero de saltos de proxy)', () => {
+    process.env.TRUST_PROXY = '2';
+
+    const runtimeEnv = require('../../src/config/runtimeEnv');
+    runtimeEnv.clearRuntimeEnvCache();
+
+    expect(runtimeEnv.loadRuntimeEnv().trustProxy).toBe(2);
+  });
 });

@@ -109,9 +109,10 @@ class PurchaseRepository {
    * @abstract
    * @param {number} id
    * @param {Object} data
+   * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<void>}
    */
-  async updatePurchaseFields(id, data) { // eslint-disable-line no-unused-vars
+  async updatePurchaseFields(id, data, transaction) { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.updatePurchaseFields nÃ£o implementado.');
   }
 

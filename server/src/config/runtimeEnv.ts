@@ -44,6 +44,13 @@ const runtimeEnvSchema = z.object({
   JWT_EXPIRE: z.string().default('7d'),
   CORS_ORIGIN: z.string().optional(),
   ADMIN_SEED_PASSWORD: z.string().optional(),
+  // Numero de saltos de proxy reverso confiaveis na frente do Node (ex.: 1
+  // para nginx/load balancer direto na frente da API). Controla
+  // `app.set('trust proxy', N)` — sem isso, express-rate-limit usa sempre
+  // o IP do socket TCP imediato (o proxy), contando TODAS as requisicoes
+  // de TODOS os usuarios como um unico IP e esgotando o rate limit de
+  // login para todo mundo assim que houver qualquer proxy em producao.
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
 }).superRefine((env, ctx) => {
   if (env.NODE_ENV !== 'production') {
     return;
@@ -133,6 +140,7 @@ export type RuntimeEnv = {
   jwtExpire: string;
   corsOrigin: string;
   adminSeedPassword?: string;
+  trustProxy: number;
 };
 
 let cachedRuntimeEnv: RuntimeEnv | null = null;
@@ -157,6 +165,7 @@ function normalizeRuntimeEnv(parsedEnv: z.infer<typeof runtimeEnvSchema>): Runti
     jwtExpire: parsedEnv.JWT_EXPIRE,
     corsOrigin: parsedEnv.CORS_ORIGIN || 'http://localhost:5173',
     adminSeedPassword: parsedEnv.ADMIN_SEED_PASSWORD,
+    trustProxy: parsedEnv.TRUST_PROXY,
   };
 }
 

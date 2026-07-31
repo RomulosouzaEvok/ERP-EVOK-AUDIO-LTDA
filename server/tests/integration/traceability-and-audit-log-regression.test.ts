@@ -48,7 +48,7 @@ describeIntegration('Regressao: rastreabilidade e audit-log com dados reais de l
     const received = await api()
       .post(`/api/purchases/${purchaseId}/receive`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ items: [{ item_id: purchase.body.data.items[0].id, quantity: 3 }] });
+      .send({ items: [{ item_id: purchase.body.data.items[0].id, quantity: 3 }], invoice_number: `NF-TRACE-${Date.now()}` });
     expect(received.status).toBe(200);
 
     const traceability = await api()

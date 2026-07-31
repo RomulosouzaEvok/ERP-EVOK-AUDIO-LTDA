@@ -43,6 +43,10 @@ export const updatePurchaseStatusSchema = z.object({
 
 export const receivePurchaseItemsSchema = z.object({
   items: z.array(receivePurchaseItemSchema).min(1),
+  // Numero da NF do fornecedor deste recebimento — chave de deduplicacao
+  // (constraint unica purchase_id+invoice_number no banco) para impedir
+  // que a mesma NF seja lancada duas vezes contra o mesmo pedido.
+  invoice_number: z.string().trim().min(1, 'Numero da NF é obrigatório.').max(50),
 }).strict();
 
 const schemas = {

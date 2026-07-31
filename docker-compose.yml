@@ -51,6 +51,7 @@ services:
       DB_LOGGING: ${DB_LOGGING:-false}
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-please-change-me-123456789}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
       ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-dev-only-change-me-please}
       N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
     ports:

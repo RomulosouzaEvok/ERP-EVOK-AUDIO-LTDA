@@ -1,8 +1,10 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const InventoryService = require('../../../../services/inventoryService');
 const CostingService = require('../../../../services/costingService');
-const { LotControl } = require('../../../../models/index');
-const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
+const { LotControl, PurchaseReceipt } = require('../../../../models/index');
+const { NotFoundError, ValidationError, BusinessRuleError, ConflictError } = require('../../../../errors');
+
+const UNIQUE_VIOLATION = 'SequelizeUniqueConstraintError';
 
 function buildGeneratedLotNumber({ orderNumber, purchaseItemId, sequence }) {
   return `${orderNumber}-ITEM${purchaseItemId}-R${String(sequence).padStart(3, '0')}`;
@@ -21,11 +23,13 @@ class ReceivePurchaseItemsUseCase extends UseCase {
    * @param {Object} input
    * @param {number} input.id
    * @param {Array<{item_id:number, quantity:number}>} input.items
+   * @param {string} input.invoiceNumber - Numero da NF do fornecedor deste recebimento (chave de deduplicacao).
    * @param {number} input.userId
    * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
+   * @throws {ConflictError} Se esta NF (invoiceNumber) ja tiver sido registrada para este pedido.
    */
-  async execute({ id, items, userId, transaction }) {
+  async execute({ id, items, invoiceNumber, userId, transaction }) {
     const purchase = await this.purchaseRepository.findPurchaseWithItemsForUpdate(id, transaction);
     if (!purchase) {
       throw new NotFoundError('Pedido nao encontrado');
@@ -35,6 +39,27 @@ class ReceivePurchaseItemsUseCase extends UseCase {
     }
     if (!items || items.length === 0) {
       throw new ValidationError('Lista de itens e obrigatoria');
+    }
+    if (!invoiceNumber || !String(invoiceNumber).trim()) {
+      throw new ValidationError('Numero da NF (invoice_number) e obrigatorio para registrar o recebimento.');
+    }
+
+    // Constraint unica (purchase_id, invoice_number) no banco: garante,
+    // mesmo sob concorrencia real, que a mesma NF nao seja lancada duas
+    // vezes contra o mesmo pedido (cada lancamento de recebimento exige
+    // uma NF diferente).
+    try {
+      await PurchaseReceipt.create({
+        purchase_id: purchase.id,
+        invoice_number: String(invoiceNumber).trim(),
+        received_by: userId,
+        received_at: new Date(),
+      }, { transaction });
+    } catch (error) {
+      if (error?.name === UNIQUE_VIOLATION) {
+        throw new ConflictError(`NF ${invoiceNumber} ja foi registrada para o pedido ${purchase.order_number}.`);
+      }
+      throw error;
     }
 
     const previousStatus = purchase.status;

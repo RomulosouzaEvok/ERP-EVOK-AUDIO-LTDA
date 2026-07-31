@@ -117,12 +117,16 @@ exports.create = async (req, res, next) => {
  * @returns {Promise<void>}
  */
 exports.update = async (req, res, next) => {
+  const t = await sequelize.transaction();
   try {
     const parsed = updatePurchaseSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
     const useCase = new UpdatePurchaseUseCase(purchaseRepository);
-    const { updated, oldValues, updateData } = await useCase.execute({ id: req.params.id, body: parsed.data });
+    const { updated, oldValues, updateData } = await useCase.execute({ id: req.params.id, body: parsed.data, transaction: t });
 
+    await t.commit();
+
+    // Log de auditoria feito após o commit para não segurar locks de banco.
     logAction(req, {
       action: 'update',
       entityType: 'Purchase',
@@ -134,7 +138,10 @@ exports.update = async (req, res, next) => {
     });
 
     res.json({ success: true, data: updated });
-  } catch (error) { next(error); }
+  } catch (error) {
+    await rollbackIfPending(t);
+    next(error);
+  }
 };
 
 /**
@@ -192,9 +199,9 @@ exports.receiveItems = async (req, res, next) => {
   try {
     const parsed = receivePurchaseItemsSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { items } = parsed.data;
+    const { items, invoice_number } = parsed.data;
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
-    const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, items, userId: req.user.id, transaction: t });
+    const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, items, invoiceNumber: invoice_number, userId: req.user.id, transaction: t });
 
     await t.commit();
 

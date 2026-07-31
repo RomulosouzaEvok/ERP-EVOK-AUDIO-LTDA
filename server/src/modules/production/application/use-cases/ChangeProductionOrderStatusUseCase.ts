@@ -6,12 +6,13 @@
 
 import UseCase from '../../../../shared/application/UseCase';
 import ProductionOrderEntity from '../../domain/entities/ProductionOrderEntity';
-import { NotFoundError, ValidationError, ConflictError, BusinessRuleError } from '../../../../errors';
+import { NotFoundError, ValidationError, ConflictError, BusinessRuleError, AppError } from '../../../../errors';
 const InventoryService: any = require('../../../../services/inventoryService');
 const CostingService: any = require('../../../../services/costingService');
 const BomService: any = require('../../../../services/bomService');
 const { LotControl, ProductionLotConsumption, SerialNumber }: any = require('../../../../models/index');
 import { sequelize } from '../../../../config/database';
+import { Op } from 'sequelize';
 
 interface ChangeProductionOrderStatusInput {
   id: number;
@@ -170,6 +171,11 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
         notes: `Custo real de producao - ${order.order_number}`
       }, transaction);
     } catch (stockError: any) {
+      // Erros ja tipados (BusinessRuleError, NotFoundError, ValidationError
+      // lancados por validacoes explicitas desta classe, ex.: lote
+      // vencido/bloqueado) devem propagar com seu proprio status/codigo,
+      // nao serem mascarados como um generico 409 de "falha de estoque".
+      if (stockError instanceof AppError) throw stockError;
       throw new ConflictError(stockError.message);
     }
   }
@@ -373,6 +379,12 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
         if (!lot) {
           throw new NotFoundError(`Lote ${entry.lot_control_id} do produto ${params.productId} nao encontrado.`);
         }
+        if (lot.status !== 'available') {
+          throw new BusinessRuleError(`Lote ${lot.lot_number} do produto ${params.productId} nao esta disponivel para consumo (status atual: '${lot.status}').`);
+        }
+        if (lot.expires_at && new Date(lot.expires_at) < new Date()) {
+          throw new BusinessRuleError(`Lote ${lot.lot_number} do produto ${params.productId} esta vencido (validade ${lot.expires_at}) e nao pode ser consumido em producao.`);
+        }
         await this.applyLotConsumption({
           lot,
           quantity: entry.quantity,
@@ -386,11 +398,25 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       return;
     }
 
+    const today = new Date().toISOString().slice(0, 10);
     const candidateLots = await LotControl.findAll({
-      where: { product_id: params.productId, status: 'available' },
+      where: {
+        product_id: params.productId,
+        status: 'available',
+        // FEFO real (First-Expired-First-Out): exclui lotes vencidos do
+        // consumo automatico. Sem expires_at (null) e tratado como "sem
+        // validade definida" e ordenado por ultimo.
+        [Op.or]: [{ expires_at: null }, { expires_at: { [Op.gte]: today } }]
+      },
       transaction: params.transaction,
       lock: params.transaction.LOCK.UPDATE,
-      order: [['received_at', 'ASC'], ['manufactured_at', 'ASC'], ['createdAt', 'ASC']]
+      order: [
+        [sequelize.literal('expires_at IS NULL'), 'ASC'],
+        ['expires_at', 'ASC'],
+        ['received_at', 'ASC'],
+        ['manufactured_at', 'ASC'],
+        ['createdAt', 'ASC']
+      ]
     });
 
     for (const lot of candidateLots) {

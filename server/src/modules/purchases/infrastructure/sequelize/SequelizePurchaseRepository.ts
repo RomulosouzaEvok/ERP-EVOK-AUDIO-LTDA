@@ -110,8 +110,8 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     return PurchaseItem.create(data, { transaction });
   }
 
-  async updatePurchaseFields(id, data) {
-    await Purchase.update(data, { where: { id } });
+  async updatePurchaseFields(id, data, transaction) {
+    await Purchase.update(data, { where: { id }, transaction });
   }
 
   async findProductById(id, transaction) {

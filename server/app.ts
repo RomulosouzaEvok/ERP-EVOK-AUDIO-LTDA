@@ -17,6 +17,13 @@ const requestContext = require('./src/middlewares/requestContext');
 const runtimeEnv = loadRuntimeEnv();
 const app = express();
 
+// TRUST_PROXY=0 por padrao (nao confia em nenhum proxy — correto para
+// desenvolvimento local sem proxy na frente). Em producao atras de um
+// proxy reverso (nginx, load balancer), configurar TRUST_PROXY=1 (ou o
+// numero exato de saltos confiaveis) para que express-rate-limit use o
+// IP real do cliente (X-Forwarded-For), nao o IP do proxy.
+app.set('trust proxy', runtimeEnv.trustProxy);
+
 const corsOptions = {
   origin: runtimeEnv.corsOrigin.split(',').map((origin) => origin.trim()),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
@@ -41,7 +48,13 @@ const registerLimiter = rateLimit({
 });
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  // Em NODE_ENV=test, a suite de integracao/edge legitimamente dispara
+  // centenas de requisicoes reais em poucos segundos contra o mesmo IP
+  // (127.0.0.1) — nao e o cenario de abuso que este limiter existe para
+  // conter. Sem esta excecao, adicionar novos testes de integracao
+  // eventualmente esbarra no limite e derruba suites nao relacionadas com
+  // 429, mascarando falhas reais.
+  max: runtimeEnv.nodeEnv === 'test' ? 100000 : 100,
   message: { success: false, error: 'Muitas requisicoes. Tente novamente em 15 minutos.' },
 });
 // Limiter proprio (nao compartilhado com login) para recuperacao de senha
