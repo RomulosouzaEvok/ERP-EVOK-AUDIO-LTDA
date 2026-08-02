@@ -1,4 +1,4 @@
-# Handoff Codex — Migração Product/Item
+﻿# Handoff Codex — Migração Product/Item
 
 Documento de handoff entre desenvolvimento (Backend Engineer) e QA/auditoria (Codex agent).
 
