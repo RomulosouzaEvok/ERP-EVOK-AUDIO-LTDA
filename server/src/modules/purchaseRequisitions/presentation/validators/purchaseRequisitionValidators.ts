@@ -1,10 +1,8 @@
 import { z } from 'zod';
 import { ValidationError } from '../../../../errors';
+import { decimalQuantitySchema } from '../../../../shared/utils/decimal';
 
-const decimalQuantity = z.coerce.number().positive().refine((value) => {
-  const [, decimals = ''] = value.toString().split('.');
-  return decimals.length <= 6;
-}, { message: 'Valor decimal deve ter no maximo 6 casas.' });
+const decimalQuantity = decimalQuantitySchema();
 
 const requisitionItemSchema = z.object({
   item_id: z.string().uuid(),

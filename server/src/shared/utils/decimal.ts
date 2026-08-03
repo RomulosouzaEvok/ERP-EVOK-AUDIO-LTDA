@@ -10,6 +10,22 @@
  * @module shared/utils/decimal
  */
 
+import { z } from 'zod';
+
+/**
+ * Schema zod para validar quantidades industriais com ate 6 casas decimais.
+ * Usa comparacao de string (nao de ponto flutuante) para evitar falsos
+ * positivos por arredondamento (ex: 0.1 + 0.2 !== 0.3).
+ *
+ * @param message - Mensagem de erro customizada (padrao: pt-BR generico).
+ */
+export function decimalQuantitySchema(message = 'Valor decimal deve ter no maximo 6 casas.') {
+  return z.coerce.number().positive().refine((value) => {
+    const [, decimals = ''] = value.toString().split('.');
+    return decimals.length <= 6;
+  }, { message });
+}
+
 /**
  * Arredonda quantidade industrial para escala consistente.
  *
