@@ -182,6 +182,8 @@ tela funciona.
 ### Qualidade (item 8 do backlog de telas)
 
 - [x] Tela `/quality` com duas abas: inspeção de recebimento (lotes em quarentena/bloqueados/liberados, `GET /api/inventory/lots`, ações de liberar `POST .../lots/:id/release` e bloquear `POST .../lots/:id/block` com motivo obrigatório e opção de abrir RNC pré-preenchida) e não-conformidades (RNC) (`GET/POST /api/quality/non-conformities`, badges de severidade/status, dialog de nova RNC com aviso de bloqueio automático de lote).
+- [x] Tela `/laboratory` com duas abas: registro de teste acústico/Thiele-Small (`POST /api/laboratory/tests`, veredito destacado aprovado/reprovado com link para RNC quando aberta automaticamente) e histórico (`GET /api/laboratory/tests` com filtros de produto/tipo/veredito/série + tiles de resumo `GET /api/laboratory/tests/summary`).
+- [x] Tela `/engineering` com três abas: Projetos P&D (`GET/POST/PUT /api/engineering/projects`, badges de fase do PDP e prioridade), Desenhos Técnicos (`GET/POST/PUT /api/engineering/drawings` + liberar `POST .../release` e tornar obsoleto `POST .../obsolete`, restritos a `admin`) e Ficha Técnica Thiele-Small por item (`GET/PUT /api/engineering/items/:itemId/technical-spec`, 13 parâmetros T-S via `ItemSearchSelect`).
 
 ## 10. FE5 - Financeiro
 

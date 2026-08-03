@@ -2048,4 +2048,141 @@ Logística) e navegação/breadcrumbs correspondentes.
    limpos.
 
 **Desenvolvedor**: Claude Code (Senior Frontend Engineer)
+
+---
+
+## Frontend — Laboratório (`/laboratory`) e Engenharia (`/engineering`) (2026-08-03)
+
+**Escopo**: duas telas novas em `client/`, sem alteração no backend. Rotas
+consumidas conforme contratos já existentes em
+`server/src/modules/laboratory/presentation` e
+`server/src/modules/engineering/presentation` (routes/validators/controllers
+lidos antes de codar, nenhum payload/rota foi adivinhado).
+
+### Arquivos criados
+
+#### Serviços de API (client/src/api/)
+- `laboratory.ts` — tipos `AcousticTestType` (9 valores), `AcousticTestResult`,
+  `AcousticTestInput`, `AcousticTestSummaryRow`; funções `listAcousticTests`
+  (`GET /api/laboratory/tests`), `createAcousticTest`
+  (`POST /api/laboratory/tests`), `getAcousticTestsSummary`
+  (`GET /api/laboratory/tests/summary`).
+- `engineering.ts` — tipos `EngineeringProject*` (stage/status/priority/type),
+  `ProductDrawing*` (type/status), `ThieleSmallParams` (13 parâmetros:
+  `fs_hz`, `qms`, `qes`, `qts`, `vas_l`, `sd_cm2`, `xmax_mm`, `re_ohms`,
+  `le_mh`, `bl_tm`, `mms_g`, `cms_mm_n`, `spl_db` — nomes conferidos em
+  `engineeringValidators.ts::thieleSmallParamsSchema`); funções para
+  projetos (`list/get/create/updateEngineeringProject`), desenhos
+  (`list/create/updateProductDrawing`, `release/obsoleteProductDrawing`) e
+  ficha técnica (`get/upsertItemTechnicalSpec`).
+
+#### Páginas — Laboratório (client/src/pages/laboratory/)
+- `LaboratoryPage.tsx` — container com 2 abas (padrão idêntico a
+  `QualityPage.tsx`: `TabButton` local, sem lib de tabs externa).
+- `RegisterTestTab.tsx` — formulário (react-hook-form + zod): produto
+  (`SelectNative` via `GET /api/products`), série/lote opcionais, tipo de
+  teste (9 valores com labels pt-BR), resultado + unidade, faixa de
+  especificação opcional, observações, checkbox
+  "Abrir RNC automaticamente se reprovar" (`create_rnc_on_fail`,
+  default `true`). Após `POST /api/laboratory/tests`, exibe um banner de
+  veredito (verde "APROVADO" / vermelho "REPROVADO", calculado pelo
+  backend em `test.passed`) com link para `/quality` quando
+  `test.non_conformity_id` vier preenchido (RNC aberta automaticamente).
+- `TestHistoryTab.tsx` — filtros (produto, tipo de teste, veredito, série)
+  sobre `GET /api/laboratory/tests` (paginado) + tiles de resumo agregados
+  client-side a partir de `GET /api/laboratory/tests/summary` (total,
+  aprovados, reprovados, pass rate geral) e uma tabela de pass rate por
+  tipo de teste. Colunas da tabela principal: data, produto, série/lote,
+  tipo, medido+unidade, faixa, veredito (badge), RNC (link se houver).
+
+#### Páginas — Engenharia (client/src/pages/engineering/)
+- `EngineeringPage.tsx` — container com 3 abas + link de atalho para
+  `/production/bom` (não existe tela de roteiros hoje, então só o link de
+  BOM foi incluído, conforme instrução).
+- `ProjectsTab.tsx` — CRUD de `EngineeringProject`
+  (`GET/POST/PUT /api/engineering/projects`): tabela com código, nome,
+  tipo, produto, fase (badge das 6 fases do PDP `concept → production`),
+  prazo e prioridade (cor por nível). Dialog único serve criação (sem
+  campos de fase/status, que só existem em edição) e edição (com
+  fase/status/prioridade editáveis — avanço de fase é feito editando o
+  projeto). Campo `project_manager_id` **omitido do formulário**: não há
+  endpoint de listagem de usuários exposto para uso genérico em combos on
+  the client (só `admin`/`users` restrito), então o campo foi deixado de
+  fora para não expor uma UX quebrada; o schema do backend já o aceita
+  como opcional, então isso não bloqueia nada.
+- `DrawingsTab.tsx` — CRUD de `ProductDrawing`
+  (`GET/POST/PUT /api/engineering/drawings`), com filtro por produto e
+  status, badges de status (draft cinza/secondary, released
+  verde/success, obsolete âmbar/warning, canceled vermelho/destructive).
+  Ações "Liberar" (`POST /:id/release`) e "Tornar obsoleto"
+  (`POST /:id/obsolete`) restritas a `admin` (`hasRole('admin')`) com
+  dialog de confirmação antes de disparar a mutação (ambas ações são
+  irreversíveis/têm efeito de negócio). Edição só é oferecida enquanto o
+  desenho está em `draft`.
+- `TechnicalSpecTab.tsx` — seletor de item via `ItemSearchSelect` (já
+  existente, reaproveitado sem alteração) + `GET/PUT
+  /api/engineering/items/:itemId/technical-spec`. Formulário com os 13
+  parâmetros Thiele-Small em grid responsivo (2/3/4 colunas) com label +
+  unidade (ex.: "Fs (Hz)", "Vas (L)", "Sd (cm²)") e campo de família
+  técnica (`familia_tecnica`, texto livre — o modelo não expõe um enum
+  fechado de famílias). Campos numéricos são mantidos como string no
+  formulário (evita coerção/arredondamento prematuro do JS) e só
+  convertidos para `Number` no envio do payload, meta de precisão
+  numérica do projeto.
+
+### Navegação (edições mínimas, sem tocar nas rotas de Logística)
+- `client/src/App.tsx` — 2 lazy imports (`LaboratoryPage`,
+  `EngineeringPage`) + 2 rotas `<Suspense>` (`/laboratory`,
+  `/engineering`), inseridas entre `/quality` e `/reports`.
+- `client/src/layouts/AppLayout.tsx` — 2 itens de sidebar na seção
+  "Operações" (`Laboratório` com ícone `FlaskConical`, `Engenharia` com
+  ícone `DraftingCompass`, ambos de `lucide-react`) logo após
+  "Qualidade"; 2 entradas novas em `BREADCRUMBS`
+  (`'/laboratory': ['Laboratório']`, `'/engineering': ['Engenharia']`).
+  Nenhuma rota/nav de Logística foi tocada.
+
+### Decisões de UX/RBAC
+- Registro de teste e upsert de ficha técnica: liberados para
+  `admin`/`operator` (mesma matriz do backend,
+  `authorize('admin', 'operator')`).
+- Liberar/tornar obsoleto desenho: só `admin` na UI (mesma matriz do
+  backend, `authorize('admin')`), com `hasRole('admin')` controlando a
+  visibilidade dos botões — a validação real continua sendo feita pela
+  API.
+- Todos os formulários usam `react-hook-form` + `zod`, com loading state
+  em todos os botões de submit/ação assíncrona e mensagens de erro via
+  `extractApiErrorMessage` (nunca stack trace cru).
+
+### Resultados de qualidade
+- `node ./node_modules/typescript/bin/tsc -b --noEmit` → limpo (0 erros).
+- `node ./node_modules/vitest/vitest.mjs run` → 13 testes (4 arquivos)
+  continuam passando, nenhuma regressão.
+- Nenhuma dependência nova instalada; nenhum commit criado.
+
+### O que o Agente QA (ou humano) deve testar
+1. **Registrar teste**: abrir `/laboratory`, preencher um teste com
+   resultado dentro da faixa (deve aprovar) e outro fora da faixa com o
+   checkbox de RNC marcado (deve reprovar E mostrar o link "RNC #N — Ver
+   em Qualidade"); confirmar que a RNC realmente aparece em `/quality`.
+2. **Histórico**: aplicar cada filtro (produto, tipo, veredito, série)
+   isoladamente e em combinação; conferir que os tiles de resumo batem
+   com a soma da tabela de pass rate por tipo.
+3. **Projetos P&D**: criar um projeto (código duplicado deve mostrar o
+   409 da API de forma amigável), editar avançando a fase
+   `concept → design → ... → production` e trocar o status para
+   `completed`/`canceled`, conferir badges e cor de prioridade.
+4. **Desenhos técnicos**: criar um desenho em `draft`, editar, liberar
+   (confirma dialog, vira `released`, perde botão Editar/Liberar) e então
+   tornar obsoleto (confirma dialog, vira `obsolete`). Testar com usuário
+   `operator` que os botões Liberar/Tornar obsoleto não aparecem.
+5. **Ficha técnica T-S**: buscar um item via `ItemSearchSelect`, salvar
+   parcialmente alguns dos 13 campos, recarregar e confirmar que só os
+   campos preenchidos vêm de volta; testar com item que não tenha ficha
+   ainda (deve permitir criar/upsert) e item já com ficha (deve
+   pré-carregar os valores).
+6. Regressão: `node ./node_modules/typescript/bin/tsc -b --noEmit` e
+   `node ./node_modules/vitest/vitest.mjs run` (13 testes) devem continuar
+   limpos.
+
+**Desenvolvedor**: Claude Code (Senior Frontend Engineer)
 **Data**: 2026-08-03

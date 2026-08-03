@@ -19,6 +19,8 @@ import {
   ShieldAlert,
   Warehouse,
   PackageCheck,
+  FlaskConical,
+  DraftingCompass,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -59,6 +61,8 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Centros de Trabalho', to: '/production/work-centers', icon: Factory },
       { label: 'MRP', to: '/production/mrp', icon: ListTree },
       { label: 'Qualidade', to: '/quality', icon: ShieldAlert },
+      { label: 'Laboratório', to: '/laboratory', icon: FlaskConical },
+      { label: 'Engenharia', to: '/engineering', icon: DraftingCompass },
       { label: 'Relatórios', to: '/reports', icon: BarChart3 },
       { label: 'Patrimônio', to: '/patrimonio', icon: Boxes },
     ],
@@ -96,6 +100,8 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/production/work-centers': ['Produção', 'Centros de Trabalho'],
   '/production/mrp': ['Produção', 'MRP'],
   '/quality': ['Qualidade'],
+  '/laboratory': ['Laboratório'],
+  '/engineering': ['Engenharia'],
   '/reports': ['Relatórios'],
   '/patrimonio': ['Patrimônio'],
   '/financial': ['Financeiro'],

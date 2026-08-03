@@ -26,6 +26,8 @@ const MrpPage = lazy(() => import('@/pages/production/MrpPage'));
 const ShopFloorPage = lazy(() => import('@/pages/production/ShopFloorPage'));
 const WorkCentersPage = lazy(() => import('@/pages/production/WorkCentersPage'));
 const QualityPage = lazy(() => import('@/pages/quality/QualityPage'));
+const LaboratoryPage = lazy(() => import('@/pages/laboratory/LaboratoryPage'));
+const EngineeringPage = lazy(() => import('@/pages/engineering/EngineeringPage'));
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'));
 const AssetsPage = lazy(() => import('@/pages/patrimonio/AssetsPage'));
 const FinancialPage = lazy(() => import('@/pages/financial/FinancialPage'));
@@ -179,6 +181,24 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <QualityPage />
+              </Suspense>
+            }
+          />
+
+          <Route
+            path="/laboratory"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <LaboratoryPage />
+              </Suspense>
+            }
+          />
+
+          <Route
+            path="/engineering"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <EngineeringPage />
               </Suspense>
             }
           />
