@@ -55,6 +55,9 @@ import MrpOrdemPlanejada = require('./MrpOrdemPlanejada');
 import ItemSupplier = require('./ItemSupplier');
 import WorkCenter = require('./WorkCenter');
 import WorkCenterShift = require('./WorkCenterShift');
+import EngineeringProject = require('./EngineeringProject');
+import ProductDrawing = require('./ProductDrawing');
+import AcousticTestResult = require('./AcousticTestResult');
 
 // ============================================
 // RELACIONAMENTOS
@@ -442,6 +445,37 @@ BillOfMaterialItem.hasMany(BillOfMaterialItem, { foreignKey: 'parent_item_id', a
 // Alternative product in BOM
 BillOfMaterialItem.belongsTo(Product, { foreignKey: 'alternative_product_id', as: 'alternativeProduct' });
 
+// ============================================
+// RELACIONAMENTOS - ENGENHARIA & TESTES ACÚSTICOS
+// ============================================
+
+// EngineeringProject associations
+Product.hasMany(EngineeringProject, { foreignKey: 'product_id', as: 'engineering_projects' });
+EngineeringProject.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+User.hasMany(EngineeringProject, { foreignKey: 'project_manager_id', as: 'managed_engineering_projects' });
+EngineeringProject.belongsTo(User, { foreignKey: 'project_manager_id', as: 'projectManager' });
+
+// ProductDrawing associations
+Product.hasMany(ProductDrawing, { foreignKey: 'product_id', as: 'drawings' });
+ProductDrawing.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+User.hasMany(ProductDrawing, { foreignKey: 'approved_by', as: 'approved_product_drawings' });
+ProductDrawing.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
+
+// AcousticTestResult associations
+Product.hasMany(AcousticTestResult, { foreignKey: 'product_id', as: 'acoustic_test_results' });
+AcousticTestResult.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+ProductionOrder.hasMany(AcousticTestResult, { foreignKey: 'production_order_id', as: 'acoustic_test_results' });
+AcousticTestResult.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+User.hasMany(AcousticTestResult, { foreignKey: 'tester_id', as: 'acoustic_tests_performed' });
+AcousticTestResult.belongsTo(User, { foreignKey: 'tester_id', as: 'tester' });
+
+NonConformity.hasMany(AcousticTestResult, { foreignKey: 'non_conformity_id', as: 'acoustic_test_results' });
+AcousticTestResult.belongsTo(NonConformity, { foreignKey: 'non_conformity_id', as: 'nonConformity' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -456,5 +490,6 @@ export {
   BillOfMaterial, BillOfMaterialItem,
   Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada,
   ItemSupplier,
-  WorkCenter, WorkCenterShift
+  WorkCenter, WorkCenterShift,
+  EngineeringProject, ProductDrawing, AcousticTestResult
 };

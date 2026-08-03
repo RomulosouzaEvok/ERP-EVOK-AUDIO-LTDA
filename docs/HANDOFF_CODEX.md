@@ -1686,4 +1686,366 @@ nenhum arquivo de `server/`.
   adicionar paginação real na tabela.
 
 **Desenvolvedor**: Claude Code (Senior Frontend Engineer & UI Architect)
+
+---
+
+## Fase — Schema: Engenharia (P&D, Desenhos) + Testes Acústicos (Concluída)
+
+**Data**: 2026-08-03
+**Escopo**: Criar migrations Sequelize e models TypeScript para 3 novas tabelas
+de suporte a engenharia de produto e qualidade acústica, sem tocar em
+`server/src/modules/`. Nenhuma migration foi aplicada nesta entrega
+(apenas gerada e validada via `tsc --noEmit`).
+**Status**: ✅ Concluído (schema + models); migrations **NÃO aplicadas** ainda.
+
+### Novas tabelas
+
+1. **`engineering_projects`** — projetos de P&D/NPI (novo produto, melhoria,
+   customização, pesquisa), com estágio do PDP (`concept → design → prototype
+   → testing → homologation → production`), status, prioridade, orçamento
+   (`NUMERIC(15,2)`) e custo real acumulado. FK opcional para `products.id`
+   (`ON DELETE SET NULL`) e para `users.id` (`project_manager_id`,
+   `ON DELETE SET NULL`).
+2. **`product_drawings`** — desenhos técnicos (CAD) vinculados a um produto
+   (`product_id` FK `ON DELETE CASCADE`), com `UNIQUE(drawing_number, revision)`,
+   tipo de desenho (`assembly/detail/exploded/schematic/bom`), status de ciclo
+   de vida (`draft/released/obsolete/canceled`) e aprovador (`approved_by`
+   FK `users.id`, `ON DELETE SET NULL`).
+3. **`acoustic_test_results`** — resultados de teste de laboratório acústico
+   (impedância, resposta em frequência, THD, potência RMS/pico, vida útil,
+   polaridade, ruído, Thiele-Small), com `parameters`/`curve_data` em `JSONB`,
+   `result`/`specification_min`/`specification_max` em `NUMERIC(12,4)`,
+   `passed` booleano obrigatório, FK obrigatórias para `products.id`
+   (`ON DELETE RESTRICT`) e `users.id` (`tester_id`, `ON DELETE RESTRICT`),
+   e FKs opcionais para `production_orders.id` e `non_conformities.id`
+   (ambas `ON DELETE SET NULL` — permite ligar um teste reprovado a uma NC
+   já existente).
+
+### Arquivos criados
+
+- `server/migrations/20260803-000005-create-engineering-tables.cjs` — cria
+  `engineering_projects` e `product_drawings` (com `up`/`down` completos e
+  `DROP TYPE` dos ENUMs no rollback).
+- `server/migrations/20260803-000006-create-acoustic-tests.cjs` — cria
+  `acoustic_test_results` (com `up`/`down` completos e `DROP TYPE` do ENUM
+  `test_type` no rollback).
+- `server/src/models/EngineeringProject.ts`
+- `server/src/models/ProductDrawing.ts`
+- `server/src/models/AcousticTestResult.ts`
+
+### Arquivos modificados
+
+- `server/src/models/index.ts` — imports dos 3 novos models; associações:
+  - `Product.hasMany(EngineeringProject, { as: 'engineering_projects' })` /
+    `EngineeringProject.belongsTo(Product)`
+  - `User.hasMany(EngineeringProject, { foreignKey: 'project_manager_id', as: 'managed_engineering_projects' })`
+  - `Product.hasMany(ProductDrawing, { as: 'drawings' })` / `ProductDrawing.belongsTo(Product)`
+  - `User.hasMany(ProductDrawing, { foreignKey: 'approved_by', as: 'approved_product_drawings' })`
+  - `Product.hasMany(AcousticTestResult, { as: 'acoustic_test_results' })` / `AcousticTestResult.belongsTo(Product)`
+  - `ProductionOrder.hasMany(AcousticTestResult, { as: 'acoustic_test_results' })` / `belongsTo(ProductionOrder)`
+  - `User.hasMany(AcousticTestResult, { foreignKey: 'tester_id', as: 'acoustic_tests_performed' })`
+  - `NonConformity.hasMany(AcousticTestResult, { as: 'acoustic_test_results' })` / `belongsTo(NonConformity)`
+  - Exports atualizados: `EngineeringProject, ProductDrawing, AcousticTestResult`.
+- `docs/DATABASE.md` — 3 novas seções no Dicionário de Dados
+  (`engineering_projects`, `product_drawings`, `acoustic_test_results`) e
+  8 novas linhas na tabela de Relacionamentos.
+
+### Convenções respeitadas
+
+- `underscored: true` em todos os models → migrations com `created_at`/`updated_at`
+  (nunca `createdAt`).
+- `products.id`, `users.id`, `production_orders.id`, `non_conformities.id` são
+  todos `INTEGER` (não UUID) — FKs tipadas corretamente como `INTEGER`.
+- Campos monetários/quantitativos usam `NUMERIC`/`DECIMAL` (nunca `FLOAT`):
+  `budget`/`actual_cost` em `NUMERIC(15,2)`; `result`/`specification_min`/
+  `specification_max` em `NUMERIC(12,4)` (camada de migration usa
+  `Sequelize.NUMERIC`, camada de model Sequelize usa `DataTypes.DECIMAL` —
+  ambos mapeiam para `NUMERIC` no PostgreSQL, conforme padrão já usado em
+  `WorkCenter`/`ProductionOrder`).
+- Nomenclatura de migration segue o padrão `20260803-000004-create-work-centers.cjs`.
+
+### Pendências para o próximo agente (Codex/QA ou Backend Engineer)
+
+1. **Aplicar as migrations** (não foi feito nesta entrega):
+   ```bash
+   cd server
+   npm run migration:up
+   npm run migration:status   # confirmar 000005 e 000006 aplicadas
+   ```
+2. **Testar rollback** (`down()`) de ambas as migrations em ambiente de
+   desenvolvimento antes de ir para produção, validando que os `DROP TYPE`
+   dos ENUMs não quebram se houver alguma dependência residual.
+3. Nenhum controller/rota/use-case foi criado — os 3 models existem apenas
+   na camada de dados. Módulos de aplicação (`server/src/modules/engineering/`,
+   `server/src/modules/quality/acousticTests/` ou equivalente) ficam para uma
+   entrega futura, incluindo RBAC e validação de payload.
+4. Avaliar se `acoustic_test_results.parameters` deve ter uma validação de
+   schema JSONB (ex.: os 13 parâmetros Thiele-Small) na camada de aplicação,
+   já que o banco apenas garante `JSONB` válido, não a forma do conteúdo.
+
+**Desenvolvedor**: Claude Code (Senior PostgreSQL DBA & Data Architect)
+**Data**: 2026-08-03
+
+---
+
+## Fase Seguinte — Módulos de Aplicação `engineering` e `laboratory` (Concluída)
+
+**Data**: 2026-08-03
+**Escopo**: Atender a pendência nº 3 da fase anterior — criar os módulos de
+aplicação (Clean Architecture) para os 3 models já existentes na camada de
+dados (`EngineeringProject`, `ProductDrawing`, `AcousticTestResult` via
+`ItemEspecificacaoTecnica`).
+**Status**: ✅ Concluído (sem tocar em `client/`, models ou migrations —
+apenas `server/src/modules/`, `server/app.ts` e documentação)
+
+### Módulos criados
+
+#### `server/src/modules/engineering/` — rotas sob `/api/engineering`
+- **Projetos de Engenharia (P&D)**: `GET/POST /projects`, `GET/PUT /projects/:id`
+- **Desenhos Técnicos**: `GET/POST /drawings`, `PUT /drawings/:id`,
+  `POST /drawings/:id/release` (draft→released, seta `approved_by`/`approval_date`),
+  `POST /drawings/:id/obsolete` (released→obsolete)
+- **Ficha Técnica Thiele-Small**: `GET/PUT /items/:itemId/technical-spec`
+  (upsert em `ItemEspecificacaoTecnica`, 13 parâmetros T-S validados como
+  números opcionais dentro do JSONB `atributos`)
+
+#### `server/src/modules/laboratory/` — rotas sob `/api/laboratory`
+- `POST /tests` — registra `AcousticTestResult`; `passed` calculado
+  automaticamente (result vs. faixa de especificação); `tester_id` sempre do
+  JWT; cria RNC via `CreateNonConformityUseCase` (reaproveitado, sem
+  duplicar lógica) quando `passed=false` e `create_rnc_on_fail=true`
+- `GET /tests` — listagem paginada com filtros e includes `product`/`tester`
+- `GET /tests/summary` — agregado por `test_type` (total/passed/failed/pass_rate),
+  SQL raw parametrizado
+
+### Arquitetura (padrão Clean Architecture, replicado de `modules/workCenters`)
+Cada módulo segue: `domain/repositories` (contrato abstrato) →
+`infrastructure/sequelize` (implementação concreta) → `application/use-cases`
+(regras de negócio, uma classe por caso de uso, recebe o repositório por
+injeção no construtor) → `presentation/{validators,controllers,routes}`
+(Zod `strict()`, controllers finos delegando aos use cases, `logAction` em
+todos os writes).
+
+### Montagem de rotas em `server/app.ts`
+```ts
+app.use('/api/engineering/bom', require('./src/modules/bom/presentation/routes/bom'));
+// IMPORTANTE: registrado APOS '/api/engineering/bom' para nao capturar suas rotas.
+app.use('/api/engineering', require('./src/modules/engineering/presentation/routes/engineering'));
+app.use('/api/laboratory', require('./src/modules/laboratory/presentation/routes/laboratory'));
+```
+O router de `bom` continua montado **antes** do novo router de `engineering`
+— o Express resolve `app.use` na ordem declarada, então
+`/api/engineering/bom/*` cai no router de BOM, e `/api/engineering/projects`,
+`/api/engineering/drawings`, `/api/engineering/items/:itemId/technical-spec`
+caem no novo router. Nenhuma rota pré-existente foi alterada ou quebrada.
+
+### Reaproveitamento de lógica (sem duplicação)
+`CreateAcousticTestUseCase` (laboratory) instancia diretamente
+`CreateNonConformityUseCase` + `SequelizeNonConformitiesRepository` do módulo
+`nonConformities` já existente, para criar a RNC no fail — herdando de graça
+o bloqueio automático de lote (`LotControl`) quando `lot_number`+`product_id`
+casam com um lote em status bloqueável. Nenhuma regra de RNC foi duplicada.
+
+### Arquivos criados
+```
+server/src/modules/engineering/domain/repositories/EngineeringRepository.ts
+server/src/modules/engineering/infrastructure/sequelize/SequelizeEngineeringRepository.ts
+server/src/modules/engineering/application/use-cases/ListProjectsUseCase.ts
+server/src/modules/engineering/application/use-cases/GetProjectByIdUseCase.ts
+server/src/modules/engineering/application/use-cases/CreateProjectUseCase.ts
+server/src/modules/engineering/application/use-cases/UpdateProjectUseCase.ts
+server/src/modules/engineering/application/use-cases/ListDrawingsUseCase.ts
+server/src/modules/engineering/application/use-cases/CreateDrawingUseCase.ts
+server/src/modules/engineering/application/use-cases/UpdateDrawingUseCase.ts
+server/src/modules/engineering/application/use-cases/ReleaseDrawingUseCase.ts
+server/src/modules/engineering/application/use-cases/ObsoleteDrawingUseCase.ts
+server/src/modules/engineering/application/use-cases/GetTechnicalSpecUseCase.ts
+server/src/modules/engineering/application/use-cases/UpsertTechnicalSpecUseCase.ts
+server/src/modules/engineering/presentation/validators/engineeringValidators.ts
+server/src/modules/engineering/presentation/controllers/engineeringController.ts
+server/src/modules/engineering/presentation/routes/engineering.ts
+
+server/src/modules/laboratory/domain/repositories/LaboratoryRepository.ts
+server/src/modules/laboratory/infrastructure/sequelize/SequelizeLaboratoryRepository.ts
+server/src/modules/laboratory/application/use-cases/CreateAcousticTestUseCase.ts
+server/src/modules/laboratory/application/use-cases/ListAcousticTestsUseCase.ts
+server/src/modules/laboratory/application/use-cases/GetAcousticTestsSummaryUseCase.ts
+server/src/modules/laboratory/presentation/validators/laboratoryValidators.ts
+server/src/modules/laboratory/presentation/controllers/laboratoryController.ts
+server/src/modules/laboratory/presentation/routes/laboratory.ts
+
+server/tests/unit/engineering-module.test.ts
+server/tests/unit/laboratory-tests.test.ts
+```
+
+### Arquivos modificados
+- `server/app.ts` — registro dos 2 novos routers (`/api/engineering` e
+  `/api/laboratory`), preservando `/api/engineering/bom` já montado
+- `docs/projeto/04-USE_CASES.md` — adicionados UC-ENG-01 a UC-ENG-03 e
+  UC-LAB-01/UC-LAB-02
+
+### Testes e validação
+- `npm run typecheck` (server): **limpo**, 0 erros
+- `npx jest tests/unit`: **51 suítes, 271 testes, 100% verde** (sem
+  regressões nas suítes pré-existentes)
+- Novos testes cobrem: 409 em `project_code`/`drawing_number+revision`
+  duplicados; transições válidas/inválidas de `release`/`obsolete` (422
+  `BusinessRuleError`); 404 (`NotFoundError`) em item/desenho/projeto
+  inexistente; cálculo automático de `passed` (dentro/fora da faixa, faixa
+  parcial); 422 (`ValidationError`) quando não há `result` nem faixa; criação
+  de RNC no fail com `create_rnc_on_fail=true` (e não-criação nos demais
+  casos); `tester_id` sempre do JWT
+
+### Pendências / riscos residuais para o próximo agente
+1. **Migrations não aplicadas neste turno** (fora de escopo — instrução
+   explícita de não rodar docker/migrations). Confirmar com
+   `npm run migration:status` antes de exercitar os endpoints via HTTP real.
+2. Nenhum teste de integração HTTP (supertest) foi criado para os novos
+   endpoints — apenas unitários com mocks de repositório. Recomenda-se
+   suíte de integração antes do Go-Live, cobrindo RBAC (`admin`/`operator`)
+   e os contratos JSON reais.
+3. `ItemEspecificacaoTecnica.atributos` continua sem validação de schema
+   JSONB no banco (apenas `JSONB` válido); a validação dos 13 parâmetros
+   Thiele-Small agora existe na camada de aplicação (Zod), mas campos extras
+   são aceitos via `.catchall()` — decisão consciente para não travar itens
+   de outras famílias técnicas (CABO, AMPLIFICADOR) que usam o mesmo upsert.
+4. `IDOR`/`company_id` (bloqueador P0 já mapeado no CLAUDE.md) não foi
+   endereçado nestes módulos — os novos endpoints seguem o mesmo padrão de
+   autenticação/autorização (`authenticate` + `authorize`) do restante do
+   sistema, sem isolamento multi-tenant (fora do escopo desta tarefa).
+
+**Desenvolvedor**: Claude Code (Senior Backend Engineer)
+**Data**: 2026-08-03
+
+---
+
+## Frontend — Onda 1 da proposta de departamentos: Logística (Estoque + Recebimento) + separação Produto×Estoque
+
+**Data**: 2026-08-03
+**Escopo**: `client/` apenas (nenhuma alteração em `server/`). Nova página
+`/logistics/estoque` (4 abas), nova página `/logistics/recebimento`,
+remoção da movimentação de estoque de `ProductsPage` (agora exclusiva de
+Logística) e navegação/breadcrumbs correspondentes.
+**Status**: ✅ Concluído — `tsc -b --noEmit` limpo, suíte de testes 13/13 verde.
+
+### Componentes criados
+
+- `src/pages/logistics/InventoryPage.tsx` — página com 4 abas (`Saldos`,
+  `Extrato`, `Lotes`, `Contagens`), mesmo padrão de abas por botão usado em
+  `QualityPage.tsx`.
+- `src/pages/logistics/BalancesTab.tsx` — tiles de indicadores (abaixo do
+  mínimo via `GET /api/inventory/low-stock`; lotes em quarentena/bloqueados
+  via `GET /api/inventory/lots?status=quarantine|blocked`, usando apenas
+  `pagination.total`, `limit: 1`; valor em estoque via
+  `GET /api/inventory/stock-report`, campo `summary.total_value`) + tabela de
+  produtos (`GET /api/products`, busca + paginação) com colunas
+  código/nome/saldo/reservado/mínimo/situação (pill `OK`/`Abaixo do mínimo`)
+  + ação "Movimentar" que abre `StockMovementDialog` — **este dialog foi
+  reaproveitado integralmente de `ProductsPage.tsx`** (mesmo endpoint
+  `POST /api/products/movements`, mesmo payload `{ product_id, type, quantity,
+  description }`), apenas com as `queryKey`s de invalidação atualizadas para
+  os novos caches de Logística. A coluna "Reservado" está fixa em `-`: o
+  backend atual não expõe reserva por produto (só agregada/global), documentado
+  inline no componente.
+- `src/pages/logistics/ExtractTab.tsx` — `GET /api/inventory/movements`
+  paginado (`type` é `in|out|adjustment` no backend, badge de cor por tipo),
+  colunas data/produto/tipo/quantidade/motivo/referência
+  (`reference_type`/`reference_id`, quando presentes).
+- `src/pages/logistics/LotsTab.tsx` — somente leitura, filtro por `status`
+  (`GET /api/inventory/lots?status=`), badges coloridos (`available` verde,
+  `quarantine` âmbar, `blocked` vermelho, `consumed` cinza, `expired`
+  laranja) — reutiliza o mapeamento de `InspectionTab.tsx` de `/quality`, mas
+  **sem** os botões de liberar/bloquear (aviso explícito no comentário do
+  arquivo: ações continuam exclusivas da Qualidade).
+- `src/pages/logistics/CountsTab.tsx` — card simples com botão/link para
+  `/products/inventory-counts` (página não movida nesta onda).
+- `src/pages/logistics/ReceivingPage.tsx` — fila de recebimento: como
+  `GET /api/purchases` só aceita um único `status` por requisição (sem OR,
+  confirmado em `ListPurchasesUseCase`/`SequelizePurchaseRepository`), a fila
+  faz **duas** queries (`status=sent` e `status=partial`) e combina/ordena
+  client-side por `expected_date` (destaque vermelho quando vencida).
+- `src/pages/logistics/ReceivingConferenceDialog.tsx` — dialog de
+  conferência: `useFieldArray` com pedida/já recebida (somente leitura) +
+  campo "receber agora" + `lot_number`/`expires_at` opcionais por item, e
+  `invoice_number` obrigatório no nível do formulário. Submit em
+  `POST /api/purchases/:id/receive` com o payload exato de
+  `receivePurchaseItemsSchema` do backend
+  (`{ invoice_number, items: [{ item_id, quantity, lot_number?, expires_at? }] }`
+  — `item_id` é o id do `PurchaseItem`, não do produto). Após sucesso, exibe
+  aviso "Lotes recebidos entram em quarentena para inspeção (Qualidade)" com
+  link para `/quality` e invalida `purchases`/`lots`/`products`/`movements`.
+
+### API client (`src/api/`)
+
+- `inventory.ts`: adicionado `getStockReport()` (`GET /api/inventory/stock-report`,
+  shape `{ summary: { total_products, total_items, total_value,
+  low_stock_count }, products }` confirmado em `GetStockReportUseCase.ts` —
+  **não paginado**, retorna todos os produtos ativos); `InventoryMovement`
+  ganhou `reference_id`/`reference_type`; `type` virou o union
+  `'in' | 'out' | 'adjustment'` (confirmado em
+  `SequelizeInventoryRepository.listMovements`); `listMovements` aceita
+  `type`/`start_date`/`end_date` além de `product_id`.
+- `purchases.ts`: **correção de contrato** — `receivePurchaseItems` estava
+  divergente do backend (faltava `invoice_number`, obrigatório, e usava
+  `product_id` implícito em vez de deixar claro que `item_id` é o id do
+  `PurchaseItem`). Assinatura nova:
+  `receivePurchaseItems(id, { invoice_number, items })`. Adicionado
+  `getPurchase(id)` (`GET /api/purchases/:id`, usado pelo dialog de
+  conferência). **Efeito colateral**: `PurchasesPage.tsx` (`ReceiveItemsDialog`)
+  também foi ajustado para o novo contrato (campo de NF adicionado ao
+  formulário existente) — sem essa correção o recebimento nessa tela já
+  legada quebraria em runtime com 400 (`invoice_number` ausente).
+
+### `ProductsPage.tsx` — separação Produto×Estoque
+
+- Removidos: `StockMovementDialog` (movido, não perdido — agora vive em
+  `BalancesTab.tsx`), estado `movementProduct`, botão "Movimentar" na linha
+  da tabela, coluna "Estoque" (substituída por "Unidade", já disponível no
+  payload de `Product`).
+- Mantido: cadastro, foto, QR Code, Fornecedores (dialog/sheet existente),
+  inativação.
+- Adicionado aviso `text-sm text-muted-foreground` no topo da página, com
+  link para `/logistics/estoque`.
+- Docstring do componente atualizada para refletir o novo escopo (cadastro,
+  não operação de estoque).
+
+### Navegação (`App.tsx` / `AppLayout.tsx`)
+
+- Rotas lazy `/logistics/estoque` → `InventoryPage` e `/logistics/recebimento`
+  → `ReceivingPage`, dentro do `AppLayout` protegido (mesmo padrão de
+  `Suspense`/`PageFallback` das demais rotas).
+- Nova seção "Logística" na sidebar, posicionada antes de "Operações", com
+  ícones `Warehouse` (Estoque) e `PackageCheck` (Recebimento) do
+  `lucide-react` (confirmados existentes na versão instalada).
+- Breadcrumbs `'/logistics/estoque': ['Logística', 'Estoque']` e
+  `'/logistics/recebimento': ['Logística', 'Recebimento']`.
+
+### O que o Agente QA (ou humano) deve testar
+
+1. **Saldos**: abrir `/logistics/estoque`, conferir se os 4 tiles carregam
+   (abaixo do mínimo, quarentena, bloqueados, valor em estoque) e se a busca
+   de produtos filtra corretamente; testar "Movimentar" (entrada e saída) e
+   confirmar que o saldo na tabela atualiza sem F5 (invalidação de cache).
+2. **Extrato**: confirmar paginação e que o badge de tipo bate com a
+   movimentação real (entrada verde, saída vermelha, ajuste cinza).
+3. **Lotes**: trocar o filtro de situação e confirmar que não há botões de
+   ação nesta aba (ações continuam só em `/quality`).
+4. **Contagens**: clicar no botão e confirmar que navega para
+   `/products/inventory-counts` (rota inalterada).
+5. **Recebimento**: criar/usar um pedido de compra em status `sent`, abrir
+   `/logistics/recebimento`, clicar "Conferir", preencher NF + quantidade
+   (com e sem lote/validade) e confirmar. Validar: (a) erro amigável se NF
+   ficar vazia; (b) erro amigável se nenhuma quantidade for informada; (c)
+   após sucesso, o pedido some da fila (ou migra para "Recebido parcial" se
+   restou saldo) e o lote aparece em `quarantine` na aba Lotes de
+   `/logistics/estoque` e em `/quality`.
+6. **ProductsPage**: confirmar que não há mais ação de movimentação nem
+   coluna "Estoque"; validar que o aviso/link para Logística funciona.
+7. **PurchasesPage legada**: o dialog de recebimento antigo (dentro de
+   `/purchases`) agora também exige NF — validar que não regrediu.
+8. Regressão: `node ./node_modules/typescript/bin/tsc -b --noEmit` e
+   `node ./node_modules/vitest/vitest.mjs run` (13 testes) devem continuar
+   limpos.
+
+**Desenvolvedor**: Claude Code (Senior Frontend Engineer)
 **Data**: 2026-08-03

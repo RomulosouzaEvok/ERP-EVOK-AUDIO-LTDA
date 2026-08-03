@@ -49,6 +49,12 @@ export async function createPurchase(input: CreatePurchaseInput) {
   return data.data;
 }
 
+/** `GET /api/purchases/:id` — inclui `items` (com `product`) e `supplier`. */
+export async function getPurchase(id: number) {
+  const { data } = await httpClient.get<ItemResponse<Purchase>>(`/api/purchases/${id}`);
+  return data.data;
+}
+
 /** `PUT /api/purchases/:id/status`. */
 export async function updatePurchaseStatus(id: number, status: PurchaseStatus) {
   const { data } = await httpClient.put<ItemResponse<Purchase>>(`/api/purchases/${id}/status`, { status });
@@ -56,13 +62,18 @@ export async function updatePurchaseStatus(id: number, status: PurchaseStatus) {
 }
 
 export interface ReceivePurchaseItemInput {
+  /** Id do `PurchaseItem` (item do pedido), não do produto. */
   item_id: number;
   quantity: number;
   lot_number?: string;
+  received_at?: string;
+  manufactured_at?: string;
+  expires_at?: string;
+  lot_notes?: string;
 }
 
-/** `POST /api/purchases/:id/receive`. */
-export async function receivePurchaseItems(id: number, items: ReceivePurchaseItemInput[]) {
-  const { data } = await httpClient.post<ItemResponse<Purchase>>(`/api/purchases/${id}/receive`, { items });
+/** `POST /api/purchases/:id/receive` — `invoice_number` é obrigatório (chave de deduplicação da NF). */
+export async function receivePurchaseItems(id: number, input: { invoice_number: string; items: ReceivePurchaseItemInput[] }) {
+  const { data } = await httpClient.post<ItemResponse<Purchase>>(`/api/purchases/${id}/receive`, input);
   return data.data;
 }

@@ -112,6 +112,9 @@ app.use('/api/quality/non-conformities', require('./src/modules/nonConformities/
 app.use('/api/maintenance', require('./src/modules/maintenance/presentation/routes/maintenance'));
 app.use('/api/audit-logs', require('./src/modules/auditLogs/presentation/routes/auditLogs'));
 app.use('/api/engineering/bom', require('./src/modules/bom/presentation/routes/bom'));
+// IMPORTANTE: registrado APOS '/api/engineering/bom' para nao capturar suas rotas.
+app.use('/api/engineering', require('./src/modules/engineering/presentation/routes/engineering'));
+app.use('/api/laboratory', require('./src/modules/laboratory/presentation/routes/laboratory'));
 app.use('/api/items', require('./src/modules/items/presentation/routes/items'));
 app.use('/api/mrp', require('./src/modules/mrp/presentation/routes/mrp'));
 app.use('/api/traceability', require('./src/modules/traceability/presentation/routes/traceability'));

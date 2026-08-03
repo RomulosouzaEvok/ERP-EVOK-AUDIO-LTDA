@@ -416,6 +416,81 @@ por valor distinto não vazio de `production_route_steps.work_center`
 `ON CONFLICT (code) DO NOTHING`) e depois associa `work_center_id` via match
 de código.
 
+### Tabela: `engineering_projects` (Projetos de Engenharia / P&D)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| project_code | VARCHAR(20) | UNIQUE, NOT NULL | Código único do projeto |
+| name | VARCHAR(200) | NOT NULL | Nome do projeto |
+| description | TEXT | - | Descrição livre |
+| project_type | ENUM('new_product','improvement','customization','research') | DEFAULT 'new_product', NOT NULL | Tipo do projeto |
+| product_id | INT | FK → products.id, ON DELETE SET NULL | Produto resultante (opcional) |
+| project_manager_id | INT | FK → users.id, ON DELETE SET NULL | Gerente do projeto |
+| start_date | DATE | - | Início planejado |
+| target_date | DATE | - | Prazo alvo |
+| completion_date | DATE | - | Data de conclusão real |
+| budget | NUMERIC(15,2) | - | Orçamento planejado |
+| actual_cost | NUMERIC(15,2) | DEFAULT 0, NOT NULL | Custo real acumulado |
+| stage | ENUM('concept','design','prototype','testing','homologation','production') | DEFAULT 'concept', NOT NULL | Fase do PDP |
+| status | ENUM('active','paused','completed','canceled') | DEFAULT 'active', NOT NULL | Status do projeto |
+| priority | ENUM('low','normal','high','critical') | DEFAULT 'normal', NOT NULL | Prioridade |
+| notes | TEXT | - | Observações |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
+
+**Índices:** `product_id`, `status`, `stage`.
+
+### Tabela: `product_drawings` (Desenhos Técnicos de Produto)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| product_id | INT | FK → products.id, ON DELETE CASCADE, NOT NULL | Produto do desenho |
+| drawing_number | VARCHAR(50) | NOT NULL | Número do desenho técnico |
+| revision | VARCHAR(10) | DEFAULT '00', NOT NULL | Revisão do desenho |
+| title | VARCHAR(200) | NOT NULL | Título |
+| drawing_type | ENUM('assembly','detail','exploded','schematic','bom') | DEFAULT 'detail', NOT NULL | Tipo de desenho |
+| file_path | VARCHAR(255) | - | Caminho do arquivo CAD/PDF |
+| material_spec | TEXT | - | Especificação de material |
+| dimensions | TEXT | - | Dimensões |
+| tolerances | TEXT | - | Tolerâncias |
+| approved_by | INT | FK → users.id, ON DELETE SET NULL | Aprovador |
+| approval_date | DATE | - | Data de aprovação |
+| status | ENUM('draft','released','obsolete','canceled') | DEFAULT 'draft', NOT NULL | Status do ciclo de vida |
+| notes | TEXT | - | Observações |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
+
+**Constraints:** `UNIQUE(drawing_number, revision)`.
+**Índices:** `product_id`, `status`.
+
+**Migration:** `server/migrations/20260803-000005-create-engineering-tables.cjs`
+— cria `engineering_projects` e `product_drawings` (schema estático, sem backfill).
+
+### Tabela: `acoustic_test_results` (Resultados de Teste Acústico)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| product_id | INT | FK → products.id, ON DELETE RESTRICT, NOT NULL | Produto testado |
+| serial_number | VARCHAR(50) | - | Número de série testado |
+| lot_number | VARCHAR(80) | - | Lote testado |
+| production_order_id | INT | FK → production_orders.id, ON DELETE SET NULL | OP de origem |
+| test_type | ENUM('impedance','frequency_response','thd','power_rms','power_peak','life','polarity','noise','thiele_small') | NOT NULL | Tipo de teste |
+| test_date | TIMESTAMPTZ | DEFAULT NOW(), NOT NULL | Data/hora do teste |
+| tester_id | INT | FK → users.id, ON DELETE RESTRICT, NOT NULL | Técnico responsável |
+| parameters | JSONB | - | Parâmetros do teste (ex.: 13 parâmetros Thiele-Small) |
+| result | NUMERIC(12,4) | - | Resultado numérico |
+| unit | VARCHAR(20) | - | Unidade do resultado |
+| specification_min | NUMERIC(12,4) | - | Limite mínimo de especificação |
+| specification_max | NUMERIC(12,4) | - | Limite máximo de especificação |
+| passed | BOOLEAN | NOT NULL | Aprovado/reprovado |
+| curve_data | JSONB | - | Dados de curva (ex.: frequência x SPL) |
+| notes | TEXT | - | Observações |
+| non_conformity_id | INT | FK → non_conformities.id, ON DELETE SET NULL | NC gerada quando reprovado |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
+
+**Índices:** `product_id`, `test_type`, `test_date`, `passed`, `serial_number`.
+
+**Migration:** `server/migrations/20260803-000006-create-acoustic-tests.cjs`
+— cria `acoustic_test_results` (schema estático, sem backfill).
+
 ### Tabela: `sales` (Vendas)
 | Coluna | Tipo | Restrições | Descrição |
 |--------|------|------------|-----------|
@@ -512,6 +587,14 @@ de código.
 | Department | Asset | 1:N | department_id FK |
 | Employee | Asset | 1:N | responsible_id FK |
 | Product | Asset | 1:N | product_id FK |
+| Product | EngineeringProject | 1:N | product_id FK (SET NULL) |
+| User | EngineeringProject (manager) | 1:N | project_manager_id FK (SET NULL) |
+| Product | ProductDrawing | 1:N | product_id FK (CASCADE) |
+| User | ProductDrawing (approver) | 1:N | approved_by FK (SET NULL) |
+| Product | AcousticTestResult | 1:N | product_id FK (RESTRICT) |
+| ProductionOrder | AcousticTestResult | 1:N | production_order_id FK (SET NULL) |
+| User | AcousticTestResult (tester) | 1:N | tester_id FK (RESTRICT) |
+| NonConformity | AcousticTestResult | 1:N | non_conformity_id FK (SET NULL) |
 
 ---
 

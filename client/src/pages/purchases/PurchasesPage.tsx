@@ -331,10 +331,14 @@ function PurchaseDetailSheet({ purchase, onClose }: { purchase: purchasesApi.Pur
 function ReceiveItemsDialog({ purchase, onClose }: { purchase: purchasesApi.Purchase | null; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [quantities, setQuantities] = React.useState<Record<number, string>>({});
+  const [invoiceNumber, setInvoiceNumber] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (purchase) setQuantities({});
+    if (purchase) {
+      setQuantities({});
+      setInvoiceNumber('');
+    }
   }, [purchase]);
 
   const mutation = useMutation({
@@ -344,7 +348,8 @@ function ReceiveItemsDialog({ purchase, onClose }: { purchase: purchasesApi.Purc
         .filter(([, value]) => Number(value) > 0)
         .map(([itemId, value]) => ({ item_id: Number(itemId), quantity: Number(value) }));
       if (items.length === 0) throw new Error('Informe a quantidade recebida de ao menos um item.');
-      await purchasesApi.receivePurchaseItems(purchase.id, items);
+      if (!invoiceNumber.trim()) throw new Error('Informe o número da nota fiscal.');
+      await purchasesApi.receivePurchaseItems(purchase.id, { invoice_number: invoiceNumber.trim(), items });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
@@ -362,6 +367,15 @@ function ReceiveItemsDialog({ purchase, onClose }: { purchase: purchasesApi.Purc
           <DialogTitle>Receber itens — {purchase?.order_number ?? purchase?.id}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="receive-invoice-number">Número da NF *</Label>
+            <Input
+              id="receive-invoice-number"
+              value={invoiceNumber}
+              onChange={(event) => setInvoiceNumber(event.target.value)}
+              placeholder="Ex.: 123456"
+            />
+          </div>
           {purchase?.items?.map((item) => {
             const pending = Number(item.quantity) - Number(item.received_quantity);
             return (

@@ -167,6 +167,7 @@ Dentro de uma sessao Claude Code, tambem e possivel mencionar
 | `docker` | Infraestrutura conteinerizada e PostgreSQL local |
 | `auditor` / `auditor-seguranca` | Auditoria profunda de codigo/banco e varredura de seguranca |
 | `documentador` | Governanca documental e SSOT |
+| `AnalistaNegocios` | Descoberta e refinamento de requisitos: casos de uso BDD, regras de negocio e criterios de aceite em docs/business/ |
 | `cleanliness-review` | Passe iterativo de limpeza: comentarios redundantes/narrativos, duplicacao, best-practice — protege comentarios de "why" |
 | `iterative-review` | Revisao iterativa do branch em rodadas multi-perspectiva (cega, informada, focada) ate nao restar problema genuino |
 

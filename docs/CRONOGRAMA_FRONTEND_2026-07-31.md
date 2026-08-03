@@ -108,18 +108,28 @@ tela funciona.
 
 ### Checklist
 
-- [ ] Listagem de produtos com busca, filtro por categoria/status e paginação (`GET /api/products`).
-- [ ] Criar/editar produto (`POST`/`PUT /api/products`), com validação espelhando o schema Zod do backend.
-- [ ] Inativar produto (`DELETE /api/products/:id`), tratando o `409` de item vinculado a BOM/movimento com mensagem clara (não um erro genérico).
-- [ ] Tela de movimentação manual de estoque (entrada/saída) (`POST /api/products/movements`).
-- [ ] Alerta visual de estoque baixo (`min_quantity`).
-- [ ] Tela de contagem de inventário cíclico (`/api/inventory-counts`): criar, iniciar, contar item, submeter, aprovar/rejeitar.
+- [x] Listagem de produtos com busca, filtro por categoria/status e paginação (`GET /api/products`).
+- [x] Criar/editar produto (`POST`/`PUT /api/products`), com validação espelhando o schema Zod do backend.
+- [x] Inativar produto (`DELETE /api/products/:id`), tratando o `409` de item vinculado a BOM/movimento com mensagem clara (não um erro genérico).
+- [x] Tela de movimentação manual de estoque (entrada/saída) (`POST /api/products/movements`) — **movida para `/logistics/estoque` (aba Saldos)** na Onda 1 da separação Produto×Estoque; `ProductsPage` mantém apenas cadastro/foto/QR/fornecedores/inativação, com aviso apontando para Logística.
+- [x] Alerta visual de estoque baixo (`min_quantity`) — tile "Abaixo do mínimo" em `/logistics/estoque` (`GET /api/inventory/low-stock`) + pill "Abaixo do mínimo"/"OK" na tabela de saldos.
+- [ ] Tela de contagem de inventário cíclico (`/api/inventory-counts`): criar, iniciar, contar item, submeter, aprovar/rejeitar. (Página existente em `/products/inventory-counts`; aba "Contagens" de `/logistics/estoque` aponta para ela via link, não foi movida nesta onda.)
 - [ ] Cadastro de Itens/BOM canônico se aplicável à operação real (`/api/items`) — confirmar com o negócio se `products` (legado) ou `items` (canônico) é a fonte de verdade operacional antes de decidir a tela.
 
 ### Critério de aceite
 
-- [ ] Criar produto, editar, dar baixa manual de estoque e ver o saldo atualizado na listagem sem recarregar a página manualmente (invalidação de cache do TanStack Query).
+- [x] Criar produto, editar, dar baixa manual de estoque e ver o saldo atualizado na listagem sem recarregar a página manualmente (invalidação de cache do TanStack Query).
 - [ ] Tentar inativar produto vinculado a BOM ativa mostra o erro 409 de forma compreensível para o usuário.
+
+### Onda 1 — Departamento Logística (Estoque + Recebimento)
+
+- [x] Nova página `/logistics/estoque` (`src/pages/logistics/InventoryPage.tsx`) com 4 abas:
+  - [x] **Saldos**: tiles (abaixo do mínimo, lotes em quarentena/bloqueados, valor em estoque via `GET /api/inventory/stock-report`) + tabela de produtos com busca/paginação (`GET /api/products`) + ação "Movimentar" (dialog entrada/saída, mesmo endpoint `POST /api/products/movements` reaproveitado de `ProductsPage`).
+  - [x] **Extrato**: `GET /api/inventory/movements` paginado, com badge de tipo (entrada/saída/ajuste), motivo e referência.
+  - [x] **Lotes**: somente leitura, filtro por situação (`GET /api/inventory/lots?status=`), badges coloridos por status; ações de liberar/bloquear permanecem exclusivamente em `/quality`.
+  - [x] **Contagens**: card com link para `/products/inventory-counts` (página não movida nesta onda).
+- [x] Nova página `/logistics/recebimento` (`src/pages/logistics/ReceivingPage.tsx`): fila de pedidos `sent`/`partial` (`GET /api/purchases`, duas buscas client-side combinadas — backend não suporta status múltiplo), destaque de data prevista vencida, dialog de conferência (`ReceivingConferenceDialog.tsx`) com itens pedida/recebida/a receber + lote/validade opcionais + NF obrigatória, submit em `POST /api/purchases/:id/receive`, aviso pós-recebimento de quarentena com link para `/quality`.
+- [x] Navegação: grupo "Logística" na sidebar (`AppLayout.tsx`) com ícones `Warehouse`/`PackageCheck`, rotas lazy em `App.tsx`, breadcrumbs dedicados.
 
 ## 7. FE2 - Vendas (PDV/pedidos)
 

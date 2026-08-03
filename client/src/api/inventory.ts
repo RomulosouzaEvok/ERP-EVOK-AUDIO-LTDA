@@ -2,18 +2,31 @@ import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
 import type { Product } from './products';
 
+export type InventoryMovementType = 'in' | 'out' | 'adjustment';
+
 export interface InventoryMovement {
   id: number;
   product_id: number;
-  type: 'in' | 'out';
+  type: InventoryMovementType;
   quantity: string;
   description?: string;
+  reference_id?: number | string | null;
+  reference_type?: string | null;
   createdAt: string;
   product?: { id: number; name: string; code: string };
 }
 
+export interface InventoryMovementListParams {
+  page?: number;
+  limit?: number;
+  product_id?: number;
+  type?: InventoryMovementType;
+  start_date?: string;
+  end_date?: string;
+}
+
 /** `GET /api/inventory/movements`. */
-export async function listMovements(params: { page?: number; limit?: number; product_id?: number } = {}) {
+export async function listMovements(params: InventoryMovementListParams = {}) {
   const { data } = await httpClient.get<ListResponse<InventoryMovement>>('/api/inventory/movements', { params });
   return data;
 }
@@ -21,6 +34,21 @@ export async function listMovements(params: { page?: number; limit?: number; pro
 /** `GET /api/inventory/low-stock`. */
 export async function listLowStock() {
   const { data } = await httpClient.get<ItemResponse<Product[]>>('/api/inventory/low-stock');
+  return data.data;
+}
+
+export interface StockReportSummary {
+  total_products: number;
+  total_items: number;
+  total_value: number;
+  low_stock_count: number;
+}
+
+/** `GET /api/inventory/stock-report` — resumo consolidado + produtos ativos (não paginado). */
+export async function getStockReport() {
+  const { data } = await httpClient.get<ItemResponse<{ summary: StockReportSummary; products: Product[] }>>(
+    '/api/inventory/stock-report',
+  );
   return data.data;
 }
 

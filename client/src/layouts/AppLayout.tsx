@@ -17,6 +17,8 @@ import {
   ClipboardList,
   ListTree,
   ShieldAlert,
+  Warehouse,
+  PackageCheck,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -38,6 +40,13 @@ interface NavSection {
 
 const NAV_SECTIONS: NavSection[] = [
   { label: '', items: [{ label: 'Início', to: '/', icon: LayoutDashboard }] },
+  {
+    label: 'Logística',
+    items: [
+      { label: 'Estoque', to: '/logistics/estoque', icon: Warehouse },
+      { label: 'Recebimento', to: '/logistics/recebimento', icon: PackageCheck },
+    ],
+  },
   {
     label: 'Operações',
     items: [
@@ -74,6 +83,8 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/change-password': ['Início', 'Trocar senha'],
   '/products': ['Produtos e estoque'],
   '/products/inventory-counts': ['Produtos e estoque', 'Contagem de inventário'],
+  '/logistics/estoque': ['Logística', 'Estoque'],
+  '/logistics/recebimento': ['Logística', 'Recebimento'],
   '/sales': ['Vendas'],
   '/sales/clients': ['Vendas', 'Clientes'],
   '/purchases': ['Compras'],

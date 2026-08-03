@@ -681,4 +681,143 @@ pedidos de compra no período consultado
 | **Analista de Comex** | Gerencia processos de importacao |
 | **Diretor Industrial** | Aprova custos padrao e investimentos |
 
+---
+
+## UC-ENG-01: Gerenciar Projeto de Engenharia (P&D)
+
+**Ator:** Engenheiro de Produto, Administrador
+**Pré-condições:** Usuário autenticado com papel `admin` ou `operator`
+**Endpoints:** `GET/POST /api/engineering/projects`, `GET/PUT /api/engineering/projects/:id`
+
+**Fluxo Principal:**
+1. Usuário informa `project_code` (único, 1-20 caracteres), `name`, `project_type`
+   (`new_product`, `improvement`, `customization`, `research`), e opcionalmente
+   `product_id`, `project_manager_id`, datas, `budget` e `priority`
+   (`low`/`normal`/`high`/`critical`)
+2. Sistema valida unicidade de `project_code`
+3. Sistema cria o projeto com `stage = 'concept'` e `status = 'active'` (defaults)
+4. Em atualizações (`PUT`), o usuário pode avançar `stage` (`concept → design →
+   prototype → testing → homologation → production`), alterar `status`
+   (`active/paused/completed/canceled`) e registrar `actual_cost` e
+   `completion_date`
+
+**Fluxo Alternativo (código duplicado):**
+- Sistema retorna 409 (`ConflictError`) informando o `project_code` já existente
+
+**Pós-condição:** Projeto de P&D criado/atualizado, rastreável até o produto
+resultante (`product_id`) quando aplicável
+
+---
+
+## UC-ENG-02: Gerenciar Desenho Técnico (CAD)
+
+**Ator:** Engenheiro de Produto, Administrador
+**Pré-condições:** Usuário autenticado
+**Endpoints:** `GET/POST /api/engineering/drawings`, `PUT /api/engineering/drawings/:id`,
+`POST /api/engineering/drawings/:id/release`, `POST /api/engineering/drawings/:id/obsolete`
+
+**Fluxo Principal:**
+1. Usuário informa `product_id`, `drawing_number`, `title`, `drawing_type`
+   (`assembly`/`detail`/`exploded`/`schematic`/`bom`) e opcionalmente `revision`
+   (default `'00'`), `file_path`, `material_spec`, `dimensions`, `tolerances`
+2. Sistema valida unicidade da combinação `drawing_number` + `revision`
+3. Sistema cria o desenho com `status = 'draft'`
+4. Administrador libera o desenho (`POST /:id/release`): transição
+   `draft → released`, gravando `approved_by` (usuário autenticado) e
+   `approval_date` (data corrente)
+5. Administrador torna o desenho obsoleto (`POST /:id/obsolete`) quando uma
+   nova revisão substitui a anterior: transição `released → obsolete`
+
+**Fluxo Alternativo (transição de status inválida):**
+- Sistema retorna 422 (`BusinessRuleError`) se tentar liberar um desenho que
+  não está em `draft`, ou tornar obsoleto um desenho que não está em `released`
+
+**Fluxo Alternativo (número+revisão duplicados):**
+- Sistema retorna 409 (`ConflictError`)
+
+**Pós-condição:** Desenho técnico com ciclo de vida controlado
+(`draft → released → obsolete/canceled`), rastreável ao produto e ao aprovador
+
+---
+
+## UC-ENG-03: Consultar/Atualizar Ficha Técnica Thiele-Small do Item
+
+**Ator:** Engenheiro de Produto, Administrador
+**Pré-condições:** Usuário autenticado; item (`Item`, UUID) previamente cadastrado
+**Endpoints:** `GET/PUT /api/engineering/items/:itemId/technical-spec`
+
+**Fluxo Principal:**
+1. Usuário consulta a ficha técnica de um item (`GET`); sistema retorna `data:
+   null` se o item existe mas ainda não possui especificação cadastrada
+2. Usuário realiza upsert da ficha técnica (`PUT`) informando os parâmetros
+   Thiele-Small opcionais (`fs_hz`, `qms`, `qes`, `qts`, `vas_l`, `sd_cm2`,
+   `xmax_mm`, `re_ohms`, `le_mh`, `bl_tm`, `mms_g`, `cms_mm_n`, `spl_db`) dentro
+   de `atributos` (JSONB), e opcionalmente `familia_tecnica`
+3. Sistema cria a especificação se não existir, ou atualiza a existente
+   (preservando `familia_tecnica` anterior se não informada no payload)
+
+**Fluxo Alternativo (item inexistente):**
+- Sistema retorna 404 (`NotFoundError`) em ambos os endpoints
+
+**Pós-condição:** `ItemEspecificacaoTecnica` (1:1 opcional com `Item`) criada
+ou atualizada, usada por engenharia/qualidade para validar testes acústicos
+
+---
+
+## UC-LAB-01: Registrar Teste de Laboratório (Acústico / Thiele-Small)
+
+**Ator:** Inspetor de Qualidade, Engenheiro de Produto, Administrador
+**Pré-condições:** Usuário autenticado com papel `admin` ou `operator`
+**Endpoint:** `POST /api/laboratory/tests`
+
+**Fluxo Principal:**
+1. Usuário informa `product_id`, `test_type` (`impedance`, `frequency_response`,
+   `thd`, `power_rms`, `power_peak`, `life`, `polarity`, `noise`,
+   `thiele_small`), e opcionalmente `serial_number`, `lot_number`,
+   `production_order_id`, `parameters`, `result`, `unit`, `specification_min`,
+   `specification_max`, `curve_data`, `notes`, `create_rnc_on_fail`
+2. Sistema calcula `passed` automaticamente: `true` quando `result` foi
+   informado e está dentro de `[specification_min, specification_max]`
+   (comparação parcial se apenas um dos limites for informado)
+3. Sistema grava `tester_id` como o usuário autenticado (nunca aceito do
+   corpo da requisição)
+4. Se `passed = false` e `create_rnc_on_fail = true`, sistema cria uma
+   Não-Conformidade (reaproveitando `CreateNonConformityUseCase` do módulo de
+   qualidade: `origin = 'final'`, `defect_type = 'acoustic'`,
+   `severity = 'major'`, descrição automática com teste/medido/faixa,
+   `product_id`, `lot_number`) e grava `non_conformity_id` no teste. Quando o
+   `lot_number` informado corresponde a um lote existente (`LotControl`), a
+   RNC bloqueia automaticamente esse lote (regra já existente no módulo de
+   qualidade, sem duplicação de lógica)
+
+**Fluxo Alternativo (sem dado suficiente para aprovação):**
+- Sistema retorna 422 (`ValidationError`) se `result` não foi informado e
+  nenhum limite de especificação (`specification_min`/`specification_max`)
+  foi informado — não há como determinar `passed`
+
+**Pós-condição:** Resultado de teste registrado (`AcousticTestResult`),
+com bloqueio de lote acionado quando aplicável
+
+---
+
+## UC-LAB-02: Consultar Testes de Laboratório
+
+**Ator:** Inspetor de Qualidade, Engenheiro de Produto, Administrador,
+Controller
+**Pré-condições:** Usuário autenticado
+**Endpoints:** `GET /api/laboratory/tests`, `GET /api/laboratory/tests/summary`
+
+**Fluxo Principal (listagem):**
+1. Usuário filtra por `product_id`, `test_type`, `passed`, `serial_number`,
+   `start_date`/`end_date`, com paginação (`page`/`limit`)
+2. Sistema retorna testes com `product` (`id`, `name`, `code`) e `tester`
+   (`id`, `name`) incluídos
+
+**Fluxo Principal (resumo agregado):**
+1. Usuário informa `days` (default 30) e opcionalmente `product_id`
+2. Sistema agrega, por `test_type`, o total de testes, aprovados, reprovados
+   e taxa de aprovação (`pass_rate`) no período, via SQL parametrizado
+
+**Pós-condição:** Nenhuma (operações somente leitura)
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus, Camera, QrCode, Truck } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 import * as productsApi from '@/api/products';
 import * as itemsApi from '@/api/items';
@@ -44,7 +45,14 @@ const productSchema = z.object({
 
 type ProductFormData = z.infer<typeof productSchema>;
 
-/** `FE1`: listagem, cadastro e inativação de produtos, com movimentação manual de estoque. */
+/**
+ * `FE1`: cadastro, foto, QR Code, fornecedores e inativação de produtos.
+ *
+ * Saldos e movimentação manual de estoque foram movidos para
+ * `/logistics/estoque` (`src/pages/logistics/InventoryPage.tsx`, aba
+ * "Saldos") — nesta página mantém-se apenas o cadastro/engenharia do
+ * produto, não a operação de estoque.
+ */
 export default function ProductsPage() {
   const { hasRole } = useAuth();
   const canWrite = hasRole('admin', 'operator');
@@ -52,7 +60,6 @@ export default function ProductsPage() {
   const [search, setSearch] = React.useState('');
   const [page, setPage] = React.useState(1);
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [movementProduct, setMovementProduct] = React.useState<productsApi.Product | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [photoProductId, setPhotoProductId] = React.useState<number | null>(null);
   const [qrCodeProduct, setQrCodeProduct] = React.useState<productsApi.Product | null>(null);
@@ -204,6 +211,13 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      <p className="text-sm text-muted-foreground">
+        Saldos e movimentações agora ficam em{' '}
+        <Link to="/logistics/estoque" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+          Logística → Estoque <ArrowRight className="size-3" />
+        </Link>
+      </p>
+
       <Input
         aria-label="Buscar produtos por nome ou código"
         placeholder="Buscar por nome ou código..."
@@ -224,7 +238,7 @@ export default function ProductsPage() {
             <TableHead>Foto</TableHead>
             <TableHead>Código</TableHead>
             <TableHead>Nome</TableHead>
-            <TableHead>Estoque</TableHead>
+            <TableHead>Unidade</TableHead>
             <TableHead>Preço</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Ações</TableHead>
@@ -240,9 +254,6 @@ export default function ProductsPage() {
             </TableRow>
           )}
           {data?.data.map((product) => {
-            const quantity = Number(product.quantity);
-            const minQuantity = Number(product.min_quantity);
-            const isLow = quantity <= minQuantity;
             return (
               <TableRow key={product.id}>
                 <TableCell>
@@ -257,10 +268,7 @@ export default function ProductsPage() {
                 </TableCell>
                 <TableCell>{product.code}</TableCell>
                 <TableCell>{product.name}</TableCell>
-                <TableCell>
-                  <span className={isLow ? 'font-medium text-destructive' : ''}>{quantity}</span>{' '}
-                  <span className="text-xs text-muted-foreground">/ mín. {minQuantity}</span>
-                </TableCell>
+                <TableCell>{product.unit}</TableCell>
                 <TableCell>R$ {Number(product.price).toFixed(2)}</TableCell>
                 <TableCell>
                   <Badge variant={product.status === 'active' ? 'success' : 'secondary'}>
@@ -279,11 +287,6 @@ export default function ProductsPage() {
                   <Button size="sm" variant="outline" onClick={() => setSuppliersProduct(product)}>
                     <Truck className="size-4" /> Fornecedores
                   </Button>
-                  {canWrite && (
-                    <Button size="sm" variant="outline" onClick={() => setMovementProduct(product)}>
-                      Movimentar
-                    </Button>
-                  )}
                   {canWrite && product.status === 'active' && (
                     <Button
                       size="sm"
@@ -313,8 +316,6 @@ export default function ProductsPage() {
 
       <Pagination pagination={data?.pagination} onPageChange={setPage} />
 
-      <StockMovementDialog product={movementProduct} onClose={() => setMovementProduct(null)} />
-
       {qrCodeProduct && (
         <QrCodeDialog
           open={Boolean(qrCodeProduct)}
@@ -327,72 +328,6 @@ export default function ProductsPage() {
 
       <ProductSuppliersDialog product={suppliersProduct} onClose={() => setSuppliersProduct(null)} />
     </div>
-  );
-}
-
-const movementSchema = z.object({
-  type: z.enum(['in', 'out']),
-  quantity: z.coerce.number().positive('Informe uma quantidade maior que zero.'),
-  description: z.string().max(500).optional(),
-});
-
-type MovementFormData = z.infer<typeof movementSchema>;
-
-function StockMovementDialog({ product, onClose }: { product: productsApi.Product | null; onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const [formError, setFormError] = React.useState<string | null>(null);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<MovementFormData>({ resolver: zodResolver(movementSchema), defaultValues: { type: 'in' } });
-
-  const mutation = useMutation({
-    mutationFn: (values: MovementFormData) =>
-      productsApi.createStockMovement({ product_id: product!.id, ...values }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      reset();
-      setFormError(null);
-      onClose();
-    },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
-  });
-
-  return (
-    <Dialog open={Boolean(product)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Movimentar estoque — {product?.name}</DialogTitle>
-        </DialogHeader>
-        <form className="flex flex-col gap-3" onSubmit={handleSubmit((values) => mutation.mutate(values))} noValidate>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="type">Tipo</Label>
-            <SelectNative id="type" {...register('type')}>
-              <option value="in">Entrada</option>
-              <option value="out">Saída</option>
-            </SelectNative>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="quantity">Quantidade</Label>
-            <Input id="quantity" type="number" step="any" {...register('quantity')} />
-            {errors.quantity && <p className="text-sm text-destructive">{errors.quantity.message}</p>}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="description">Motivo (opcional)</Label>
-            <Input id="description" {...register('description')} />
-          </div>
-          {formError && <p className="text-sm text-destructive">{formError}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={isSubmitting || !product || mutation.isPending}>
-              {isSubmitting ? 'Salvando...' : 'Confirmar movimentação'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 
