@@ -259,6 +259,15 @@ describe('Integrity transaction guards', () => {
     expect(purchaseRepository.findPurchaseItemsForUpdate).toHaveBeenCalledWith(8, transaction);
     expect(InventoryService.receive).toHaveBeenCalledTimes(1);
     expect(LotControl.create).toHaveBeenCalledTimes(1);
+    // Item 8 do levantamento (qualidade fecha o loop): lotes de recebimento
+    // de compra nascem em 'quarantine' (nao mais 'available'), bloqueando o
+    // CONSUMO por lote ate a inspecao liberar via POST /lots/:id/release. O
+    // estoque fisico (products.quantity) continua entrando normalmente via
+    // InventoryService.receive, ja verificado acima.
+    expect(LotControl.create).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'quarantine' }),
+      expect.anything()
+    );
     expect(CostingService.registerWeightedAverageCost).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith({ transaction });
     expect(result.purchase.status).toBe('partial');

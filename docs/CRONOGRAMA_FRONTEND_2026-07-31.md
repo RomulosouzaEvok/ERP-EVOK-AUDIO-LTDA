@@ -158,7 +158,8 @@ tela funciona.
 - [ ] Cadastro/visualização de estrutura de produto (BOM): componente pai, subcomponentes, quantidades.
 - [ ] Explosão de BOM (visualizar árvore de materiais necessários) (`GET /.../estrutura/explode`).
 - [ ] Criar ordem de produção, com bloqueio visual se não houver disponibilidade de material (a API já valida, o frontend deve mostrar o motivo).
-- [ ] Fluxo de status da OP: liberar (reserva material), iniciar/concluir apontamento, concluir com consumo de lote.
+- [ ] Fluxo de status da OP: liberar (reserva material), concluir com consumo de lote.
+- [x] Tela de apontamento de chão de fábrica (`/production/shop-floor`): lista de OPs liberadas/em produção com busca, painel de etapas (`GET /api/production-orders/:id/tracking`) ordenadas por sequência, ações de iniciar (`POST .../tracking/:id/start`, seleção de operador), concluir (`POST .../tracking/:id/complete`, quantidade boa/refugo/observações) e adicionar etapa manual (`POST /api/production-orders/:id/tracking`), com total bom acumulado vs quantidade planejada.
 - [x] Tela de geração de plano MRP (`POST /api/mrp/plan`) e visualização de ordens planejadas (`GET /api/mrp/planned-orders`).
 - [x] Conversão de ordens planejadas em Requisição de Compra (`POST /api/mrp/planned-orders/convert`), com seleção múltipla, dialog de confirmação e badges de status.
 
@@ -166,6 +167,10 @@ tela funciona.
 
 - [ ] Tentar criar OP sem material suficiente mostra a mensagem de bloqueio de disponibilidade da API, não um erro genérico de rede.
 - [ ] Concluir uma OP exige informar o(s) lote(s) consumido(s), replicando a obrigatoriedade que já existe na API.
+
+### Qualidade (item 8 do backlog de telas)
+
+- [x] Tela `/quality` com duas abas: inspeção de recebimento (lotes em quarentena/bloqueados/liberados, `GET /api/inventory/lots`, ações de liberar `POST .../lots/:id/release` e bloquear `POST .../lots/:id/block` com motivo obrigatório e opção de abrir RNC pré-preenchida) e não-conformidades (RNC) (`GET/POST /api/quality/non-conformities`, badges de severidade/status, dialog de nova RNC com aviso de bloqueio automático de lote).
 
 ## 10. FE5 - Financeiro
 

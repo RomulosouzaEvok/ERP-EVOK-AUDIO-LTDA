@@ -11,7 +11,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type LotControlStatus = 'available' | 'reserved' | 'consumed' | 'blocked' | 'expired';
+export type LotControlStatus = 'available' | 'reserved' | 'consumed' | 'blocked' | 'expired' | 'quarantine';
 
 export interface LotControlAttributes {
   id: number;
@@ -42,9 +42,10 @@ const LotControl = sequelize.define('LotControl', {
   production_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> production_orders.id quando o lote foi produzido internamente' },
   lot_number: { type: DataTypes.STRING(80), allowNull: false, comment: 'Codigo unico do lote por produto' },
   status: {
-    type: DataTypes.ENUM('available', 'reserved', 'consumed', 'blocked', 'expired'),
+    type: DataTypes.ENUM('available', 'reserved', 'consumed', 'blocked', 'expired', 'quarantine'),
     defaultValue: 'available',
-    allowNull: false
+    allowNull: false,
+    comment: "Lotes de compra nascem 'quarantine' (bloqueados p/ consumo ate inspecao de recebimento liberar via POST /lots/:id/release); produto acabado da producao nasce 'available'."
   },
   quantity_initial: {
     type: DataTypes.DECIMAL(12, 4),

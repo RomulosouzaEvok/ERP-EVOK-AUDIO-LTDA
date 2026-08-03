@@ -23,8 +23,14 @@ class NonConformitiesRepository {
     throw new Error('NonConformitiesRepository.findById não implementado.');
   }
 
-  /** @param data - Dados da não conformidade. @returns Registro criado. @throws {Error} Se nao implementado. */
-  public async create(data: Record<string, unknown>): Promise<any> { // eslint-disable-line @typescript-eslint/no-unused-vars
+  /**
+   * @param data - Dados da não conformidade.
+   * @param transaction - Transação Sequelize opcional (usada quando a criação
+   *   precisa ficar atômica com efeitos colaterais, ex.: bloqueio de lote).
+   * @returns Registro criado.
+   * @throws {Error} Se nao implementado.
+   */
+  public async create(data: Record<string, unknown>, transaction?: unknown): Promise<any> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('NonConformitiesRepository.create não implementado.');
   }
 

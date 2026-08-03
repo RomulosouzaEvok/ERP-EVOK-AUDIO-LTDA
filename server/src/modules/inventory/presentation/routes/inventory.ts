@@ -16,7 +16,9 @@ router.get('/movements/:id', authenticate, inventoryController.getById);
 router.post('/movements', authenticate, authorize('admin', 'operator'), inventoryController.create);
 router.get('/stock-report', authenticate, inventoryController.getStockReport);
 router.get('/low-stock', authenticate, inventoryController.listLowStock);
-router.get('/lots', authenticate, inventoryController.listAvailableLots);
+router.get('/lots', authenticate, inventoryController.listLots);
+router.post('/lots/:id/release', authenticate, authorize('admin', 'operator'), inventoryController.releaseLot);
+router.post('/lots/:id/block', authenticate, authorize('admin', 'operator'), inventoryController.blockLot);
 
 module.exports = router;
 

@@ -570,3 +570,79 @@ console.log('✓ Schema verified:', result[0][0]);
 // Expected: { numeric_precision: 18, numeric_scale: 6 }
 ```
 
+---
+
+## Tabela `lot_controls` (Rastreabilidade de Lotes + Quarentena de Qualidade)
+
+**Model:** `server/src/models/LotControl.ts`
+**Migration do enum:** `server/migrations/20260803-000002-add-quarantine-lot-status.cjs`
+
+Registra lotes de matéria-prima/subconjunto (origem: recebimento de compra) e
+de produto acabado (origem: conclusão de Ordem de Produção).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `product_id` | INTEGER FK → `products.id` | |
+| `item_id` | UUID FK → `items.id` | Fase 4.6 expand-contract |
+| `supplier_id` | INTEGER FK → `suppliers.id` | Preenchido quando o lote vem de compra |
+| `purchase_id` | INTEGER FK → `purchase_orders.id` | Preenchido quando o lote vem de recebimento |
+| `production_order_id` | INTEGER FK → `production_orders.id` | Preenchido quando o lote é produto acabado |
+| `lot_number` | STRING(80) | Único por `product_id` |
+| `status` | ENUM | Ver lifecycle abaixo |
+| `quantity_initial` / `quantity_available` | DECIMAL(12,4) | Saldo rastreável do lote |
+| `manufactured_at` / `expires_at` / `received_at` | DATEONLY | |
+| `created_by` | INTEGER FK → `users.id` | |
+| `notes` | TEXT | Acumula histórico textual de bloqueios/liberações |
+
+### Enum `status` (lifecycle)
+
+`available` | `reserved` | `consumed` | `blocked` | `expired` | **`quarantine`** (novo)
+
+```
+                    ┌───────────────────────────────────────────┐
+                    │                                             │
+  Recebimento   ┌───▼────────┐   POST /lots/:id/release   ┌──────┴─────┐
+  de compra ───►│ quarantine │ ──────────────────────────► │ available  │◄── Produção conclui OP
+  (novo lote)    └───┬────────┘                             └──────┬─────┘    (createFinishedLot)
+                     │                                              │
+                     │ POST /lots/:id/block (reason obrigatório)    │ POST /lots/:id/block
+                     │ ou RNC referenciando o lote                  │ ou RNC referenciando o lote
+                     ▼                                              ▼
+                ┌─────────┐   POST /lots/:id/release (manual, pós-tratativa)
+                │ blocked │◄──────────────────────────────────────────────────┘
+                └─────────┘
+```
+
+- **Recebimento de compra** (`ReceivePurchaseItemsUseCase`): todo lote novo
+  (ou incremento de lote existente) nasce/permanece em **`quarantine`**. O
+  estoque físico (`products.quantity`) entra normalmente via
+  `InventoryService.receive` — a quarentena bloqueia apenas o **consumo por
+  lote**, nunca a entrada física.
+- **FEFO da produção** (`ChangeProductionOrderStatusUseCase.consumeLotsForComponent`):
+  seleciona candidatos apenas com `status = 'available'`. Lotes em
+  `quarantine` ficam automaticamente fora do consumo automático, sem
+  necessidade de filtro adicional.
+- **Produto acabado** (`createFinishedLot`, gerado pela conclusão de OP):
+  continua nascendo em `available` (não passa por quarentena).
+- **Inspeção de recebimento** (`GET/POST /api/inventory/lots*`): libera
+  (`quarantine|blocked` → `available`) ou bloqueia
+  (`quarantine|available` → `blocked`, com `reason` obrigatório) manualmente.
+- **RNC (Não Conformidade)** (`CreateNonConformityUseCase`): quando o payload
+  contém `lot_number` + `product_id`, localiza o `LotControl` correspondente
+  e, se estiver em `available`, `quarantine` ou `reserved`, move para
+  `blocked` **na mesma transação** da criação da RNC, registrando
+  `"Bloqueado pela RNC #<id>"` em `notes`. Se o lote não for encontrado, a
+  RNC é criada normalmente (pode referenciar lote de sistema externo).
+- **Fechamento de RNC** (`UpdateNonConformityUseCase`): fechar como
+  `effective` **não** desbloqueia o lote automaticamente — a liberação
+  pós-tratativa é sempre manual via `POST /api/inventory/lots/:id/release`.
+
+### Endpoints (módulo `inventory`)
+
+| Método | Rota | RBAC | Descrição |
+|---|---|---|---|
+| `GET` | `/api/inventory/lots?status=&product_id=&page=&limit=` | `authenticate` | Lista lotes com `product` e `supplier` incluídos. Sem `status` + com `product_id` mantém o comportamento legado (`available` + saldo > 0). |
+| `POST` | `/api/inventory/lots/:id/release` | `admin`, `operator` | `quarantine\|blocked` → `available`. Body opcional `{ notes }`. 422 se status atual não for liberável. |
+| `POST` | `/api/inventory/lots/:id/block` | `admin`, `operator` | `quarantine\|available` → `blocked`. Body `{ reason }` obrigatório (mín. 3 chars). 422 se status atual não for bloqueável. |
+

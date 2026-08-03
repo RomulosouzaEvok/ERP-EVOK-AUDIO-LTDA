@@ -42,8 +42,8 @@ class SequelizeNonConformitiesRepository extends NonConformitiesRepository {
   }
 
   /** @inheritdoc */
-  public async create(data: Record<string, unknown>): Promise<any> {
-    return NonConformity.create(data);
+  public async create(data: Record<string, unknown>, transaction?: any): Promise<any> {
+    return NonConformity.create(data, transaction ? { transaction } : undefined);
   }
 
   /** @inheritdoc */

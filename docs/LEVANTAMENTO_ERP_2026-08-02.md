@@ -32,9 +32,9 @@
 | reports / dashboard | sales, inventory, customers, cash-flow | **Zero relatórios de produção, compras e fornecedores**; sem OEE/refugo/WIP |
 
 ### Frontend (client/, React 19 + Vite, porta 5173)
-- **9 módulos com UI completa:** login/senha, usuários, produtos (foto/QR/movimentação), contagem cíclica, vendas + NF-e, clientes, compras, fornecedores, OP + BOM, patrimônio, financeiro AP/AR, rastreabilidade, audit logs.
+- **10 módulos com UI completa:** login/senha, usuários, produtos (foto/QR/movimentação), contagem cíclica, vendas + NF-e, clientes, compras, fornecedores, OP + BOM, patrimônio, financeiro AP/AR, rastreabilidade, audit logs, **qualidade** (`/quality`: inspeção de recebimento de lotes + RNC).
 - Qualidade alta e consistente: loading skeleton, tratamento de erro, paginação, react-hook-form + zod em 12/14 formulários, RBAC na UI.
-- **12 módulos do backend SEM NENHUMA TELA:** items (item mestre!), **MRP**, **requisição de compra**, qualidade/RNC, manutenção, ordens de serviço, RH (funcionários/departamentos), relatórios, fiscal (monitor NF-e), mobileInventory, intelligentAuditor, categorias (gestão).
+- **11 módulos do backend SEM NENHUMA TELA:** items (item mestre!), **MRP**, **requisição de compra**, manutenção, ordens de serviço, RH (funcionários/departamentos), relatórios, fiscal (monitor NF-e), mobileInventory, intelligentAuditor, categorias (gestão).
 
 ---
 
@@ -72,9 +72,9 @@ O que NÃO existe (e uma fábrica em escala precisa):
 | 3 | **Fechar o ciclo MRP** — plano → requisição/OP automático | 🔧 **UI pronta (2026-08-03)**: conversão manual de ordens planejadas (RASCUNHO/APROVADA) em requisição via seleção múltipla + dialog em `/production/mrp`, aguardando endpoint `POST /api/mrp/planned-orders/convert` no backend. Falta trigger automático (sem intervenção do planejador) | 3-4d |
 | 4 | ~~**Conversão requisição → pedido de compra**~~ | ✅ **RESOLVIDO em 2026-08-03 (commit 33b0243)**: POST /:id/convert agrupa por fornecedor, preço do catálogo, requisition_id no pedido; botão "Gerar Pedido" na tela. Cadeia MRP→requisição→aprovação→pedido 100% conectada | feito |
 | 5 | **Centros de trabalho + capacidade + calendário de turnos** (hoje work_center é texto livre) | Sem carga-máquina não há promessa de prazo confiável | 5d+ |
-| 6 | **Tela de apontamento de chão de fábrica** (operação/tempo/refugo por operador) + rastreabilidade por código de lote/QR (hoje só por ID numérico) | Chão de fábrica sem tela de execução | 3-4d |
+| 6 | ~~**Tela de apontamento de chão de fábrica**~~ | ✅ **UI pronta (2026-08-03)**: `/production/shop-floor` — lista de OPs liberadas/em produção, painel de etapas por sequência, iniciar (seleção de operador), concluir (quantidade boa/refugo/observações) e adicionar etapa manual. Falta: rastreabilidade por código de lote/QR (hoje só por ID numérico) | feito (parcial) |
 | 7 | **Custo real vs padrão** (variância de preço/quantidade/refugo) + mão-de-obra no custeio | Sem gestão de margem em volume | 3-4d |
-| 8 | **Qualidade fecha o loop**: inspeção de recebimento (quarentena), RNC bloqueia lote, realimenta rating | Recebimento entra direto como `available` | 2-3d |
+| 8 | ~~**Qualidade fecha o loop**: inspeção de recebimento (quarentena), RNC bloqueia lote~~ | ✅ **RESOLVIDO em 2026-08-03**: recebimento de compra cria lotes em `quarantine` (não mais `available`); `GET/POST /api/inventory/lots` (listar por status, liberar, bloquear); RNC bloqueia lote referenciado na mesma transação da criação. FEFO da produção já filtra `status='available'`, ficando automaticamente imune a lotes em quarentena/bloqueados. Pendente: realimentação de rating de fornecedor (não coberta nesta entrega) | feito (parcial) |
 | 9 | **Relatórios de manufatura** (OEE, refugo por etapa, WIP, aderência ao plano, compras por fornecedor) | Gestão sem indicadores | 3d |
 | 10 | **Unificar schema legado/novo** (`products`×`items`, `suppliers`×`fornecedores`) — concluir fase "contract" | Causa-raiz de bugs (2 corrigidos hoje eram disso); risco de divergência de saldo/custo | contínuo |
 

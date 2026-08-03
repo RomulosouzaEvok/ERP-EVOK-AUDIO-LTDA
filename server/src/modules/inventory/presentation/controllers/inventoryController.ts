@@ -6,6 +6,9 @@ const GetInventoryMovementByIdUseCase = require('../../application/use-cases/Get
 const CreateInventoryMovementUseCase = require('../../application/use-cases/CreateInventoryMovementUseCase');
 const GetStockReportUseCase = require('../../application/use-cases/GetStockReportUseCase');
 const ListLowStockUseCase = require('../../application/use-cases/ListLowStockUseCase');
+const ListLotsUseCase = require('../../application/use-cases/ListLotsUseCase');
+const ReleaseLotUseCase = require('../../application/use-cases/ReleaseLotUseCase');
+const BlockLotUseCase = require('../../application/use-cases/BlockLotUseCase');
 const { createInventoryMovementSchema, handleZodError } = require('../validators/inventoryValidators');
 
 /**
@@ -156,38 +159,87 @@ exports.listLowStock = async (req, res, next) => {
 };
 
 /**
- * `GET /api/inventory/lots?product_id=X` — lista lotes com saldo disponível
- * (`status='available'`, `quantity_available > 0`) de um produto. Endpoint
- * novo (aditivo), usado para escolher lotes na conclusão de OP
- * (`lot_consumptions` exigido por `ChangeProductionOrderStatusUseCase`).
+ * `GET /api/inventory/lots?product_id=&status=&page=&limit=` — lista lotes
+ * (`LotControl`) com filtros e paginação, incluindo `product` e `supplier`.
+ *
+ * DUAL-USO:
+ * - Sem `status` e com `product_id` (uso legado/produção): mantém o
+ *   comportamento anterior — apenas lotes `status='available'` com
+ *   `quantity_available > 0`, usado para escolher lotes na conclusão de OP
+ *   (`lot_consumptions` exigido por `ChangeProductionOrderStatusUseCase`).
+ * - Com `status` explícito (ex.: `status=quarantine`): usado pela inspeção
+ *   de recebimento de qualidade para listar lotes pendentes de liberação.
  *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listAvailableLots = async (req, res, next) => {
+exports.listLots = async (req, res, next) => {
   try {
-    const { product_id } = req.query;
-    if (!product_id || Number.isNaN(Number(product_id))) {
-      res.status(400).json({ success: false, error: 'product_id é obrigatório e deve ser numérico.' });
-      return;
-    }
+    const { product_id, status, page, limit } = req.query;
+    const useCase = new ListLotsUseCase();
+    const { rows, total, page: p, limit: l, totalPages } = await useCase.execute({ product_id, status, page, limit });
+    res.json({ success: true, data: rows, pagination: { total, page: p, limit: l, totalPages } });
+  } catch (error) { next(error); }
+};
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { LotControl } = require('../../../../models/index');
-    const { Op } = require('sequelize');
+/**
+ * `POST /api/inventory/lots/:id/release` — libera um lote para consumo
+ * (`quarantine|blocked` -> `available`). Usado pela inspeção de recebimento
+ * (pós-quarentena) e pela qualidade (pós-tratativa de RNC). `body.notes` é
+ * opcional.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.releaseLot = async (req, res, next) => {
+  try {
+    const useCase = new ReleaseLotUseCase();
+    const lot = await useCase.execute({ id: req.params.id, notes: req.body?.notes });
 
-    const lots = await LotControl.findAll({
-      where: {
-        product_id: Number(product_id),
-        status: 'available',
-        quantity_available: { [Op.gt]: 0 }
-      },
-      order: [['createdAt', 'ASC']]
+    logAction(req, {
+      action: 'update',
+      entityType: 'LotControl',
+      entityId: lot.id,
+      entityDescription: `Lote ${lot.lot_number}`,
+      newValues: { status: 'available' },
+      description: `Lote ${lot.lot_number} liberado para consumo`
     });
 
-    res.json({ success: true, data: lots });
+    res.json({ success: true, data: lot });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `POST /api/inventory/lots/:id/block` — bloqueia um lote
+ * (`quarantine|available` -> `blocked`), com `body.reason` obrigatório
+ * (mínimo 3 caracteres). Usado pela inspeção de recebimento e,
+ * internamente, por `CreateNonConformityUseCase` ao registrar uma RNC
+ * vinculada a um lote.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.blockLot = async (req, res, next) => {
+  try {
+    const useCase = new BlockLotUseCase();
+    const lot = await useCase.execute({ id: req.params.id, reason: req.body?.reason });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'LotControl',
+      entityId: lot.id,
+      entityDescription: `Lote ${lot.lot_number}`,
+      newValues: { status: 'blocked', reason: req.body?.reason },
+      description: `Lote ${lot.lot_number} bloqueado: ${req.body?.reason}`
+    });
+
+    res.json({ success: true, data: lot });
   } catch (error) { next(error); }
 };
 

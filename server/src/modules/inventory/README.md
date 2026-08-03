@@ -61,6 +61,9 @@ server/src/modules/inventory/
       CreateInventoryMovementUseCase.ts        Wrapper fino sobre InventoryService.adjust
       GetStockReportUseCase.ts
       ListLowStockUseCase.ts
+      ListLotsUseCase.ts                       Novo (item 8 — qualidade fecha o loop): lista LotControl com filtros/paginação
+      ReleaseLotUseCase.ts                     Novo (item 8): libera lote (quarantine|blocked -> available)
+      BlockLotUseCase.ts                       Novo (item 8): bloqueia lote (quarantine|available -> blocked)
       CreateInventoryCountUseCase.ts           Novo (F09)
       StartInventoryCountUseCase.ts            Novo (F09)
       CountInventoryItemUseCase.ts             Novo (F09)
@@ -110,6 +113,9 @@ Base URL: `/api/inventory` (autenticação obrigatória via middleware `authenti
 | POST | `/api/inventory/movements` | Registra movimentação (entrada/saída/ajuste) — transacional, lock pessimista via `InventoryService` |
 | GET | `/api/inventory/stock-report` | Relatório consolidado de estoque (resumo + produtos ativos) |
 | GET | `/api/inventory/low-stock` | Lista produtos ativos com `quantity <= min_quantity` |
+| GET | `/api/inventory/lots?status=&product_id=&page=&limit=` | Lista lotes (`LotControl`) com `product`/`supplier` incluídos. Sem `status` + com `product_id`: mantém o comportamento legado (`available` + saldo > 0), usado na conclusão de OP. Com `status` explícito (ex. `quarantine`): usado pela inspeção de recebimento de qualidade. |
+| POST | `/api/inventory/lots/:id/release` | **RBAC:** `admin`, `operator`. Libera lote (`quarantine\|blocked` → `available`). Body opcional `{ notes }`. 422 se status atual não permitir a transição. |
+| POST | `/api/inventory/lots/:id/block` | **RBAC:** `admin`, `operator`. Bloqueia lote (`quarantine\|available` → `blocked`). Body `{ reason }` obrigatório (mín. 3 chars). 422 se status atual não permitir a transição. |
 
 Ver `docs/API.md` para exemplos completos de request/response. Os endpoints de
 **Inventário Cíclico (F09)**, sob o prefixo `/api/inventory-counts`, estão
@@ -132,8 +138,27 @@ comportamento do controller anterior:
 - `create` (type `in`/`adjustment`) ou `update` (type `out`) → entidade
   `InventoryMovement`, com `oldValues`/`newValues` de quantidade movimentada.
 
-Os demais endpoints (`list`, `getById`, `getStockReport`, `listLowStock`)
-são somente leitura e não geram auditoria, mesmo comportamento do anterior.
+Os demais endpoints de leitura (`list`, `getById`, `getStockReport`,
+`listLowStock`, `listLots`) não geram auditoria.
+
+`POST /api/inventory/lots/:id/release` e `POST /api/inventory/lots/:id/block`
+(item 8 — qualidade fecha o loop) também chamam `logAction` (`update` em
+`LotControl`) registrando o novo `status` e, no bloqueio, o `reason`
+informado.
+
+### Quarentena de lotes de recebimento (item 8 — qualidade fecha o loop)
+
+Lotes criados por `ReceivePurchaseItemsUseCase` (módulo `purchases`) nascem
+em `status = 'quarantine'` — o estoque físico (`Product.quantity`) entra
+normalmente, mas o **consumo por lote** fica bloqueado até a inspeção de
+recebimento liberar via `POST /api/inventory/lots/:id/release`. O FEFO da
+produção (`ChangeProductionOrderStatusUseCase`) já filtra apenas
+`status = 'available'`, então lotes em quarentena ficam automaticamente
+fora do consumo automático sem nenhuma mudança no motor de produção. Lotes
+de produto acabado (`createFinishedLot`) continuam nascendo em `available`.
+Ver detalhamento completo do enum `status` e do fluxo de RNC em
+`docs/DATABASE.md` (seção "Tabela `lot_controls`") e
+`docs/projeto/04-USE_CASES.md` (UC-16, UC-17, UC-17B).
 
 ## Testes existentes
 

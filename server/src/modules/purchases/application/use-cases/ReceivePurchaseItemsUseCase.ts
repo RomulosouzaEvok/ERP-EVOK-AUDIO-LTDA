@@ -114,12 +114,20 @@ class ReceivePurchaseItemsUseCase extends UseCase {
         lock: transaction.LOCK.UPDATE
       });
 
+      // Lotes de recebimento de compra nascem/permanecem em quarentena
+      // ('quarantine'): o estoque fisico (products.quantity) e incrementado
+      // normalmente acima via InventoryService.receive, mas o CONSUMO por
+      // lote fica bloqueado ate a inspecao de recebimento liberar o lote
+      // (POST /api/inventory/lots/:id/release). O FEFO da producao
+      // (ChangeProductionOrderStatusUseCase) so seleciona lotes com
+      // status='available', logo lotes 'quarantine' ja ficam automaticamente
+      // fora do consumo automatico sem nenhuma mudanca adicional la.
       if (existingLot) {
         const nextInitial = parseFloat(existingLot.quantity_initial || 0) + qty;
         const nextAvailable = parseFloat(existingLot.quantity_available || 0) + qty;
         await existingLot.update({
           supplier_id: purchase.supplier_id,
-          status: 'available',
+          status: 'quarantine',
           quantity_initial: nextInitial,
           quantity_available: nextAvailable,
           received_at: received.received_at || purchase.delivery_date || purchase.invoice_date || new Date(),
@@ -134,7 +142,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
           supplier_id: purchase.supplier_id,
           purchase_id: purchase.id,
           lot_number: lotNumber,
-          status: 'available',
+          status: 'quarantine',
           quantity_initial: qty,
           quantity_available: qty,
           received_at: received.received_at || purchase.delivery_date || purchase.invoice_date || new Date(),

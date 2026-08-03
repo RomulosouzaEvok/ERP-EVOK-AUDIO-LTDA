@@ -282,17 +282,24 @@
 2. Localiza pedido por numero
 3. Confere nota fiscal do fornecedor
 4. Confere quantidade recebida fisicamente
-5. Sistema da entrada no estoque
-6. Sistema atualiza status do pedido para "received"
-7. Sistema gera conta a pagar para o fornecedor
+5. Sistema da entrada no estoque (`products.quantity` incrementado normalmente)
+6. Sistema cria/atualiza o lote (`LotControl`) do item recebido em status
+   **`quarantine`** (nao `available`) — o lote fica bloqueado para CONSUMO
+   ate a inspecao de recebimento liberar (ver UC-17B). O estoque fisico
+   entra normalmente; apenas o consumo rastreavel por lote fica retido.
+7. Sistema atualiza status do pedido para "received"
+8. Sistema gera conta a pagar para o fornecedor
 
 **Fluxo Alternativo (divergencia):**
 - Se quantidade recebida < quantidade pedida: recebimento parcial
-- Se produto com defeito: aciona qualidade (incoming inspection)
+- Se produto com defeito: aciona qualidade (incoming inspection, UC-17B) —
+  o inspetor pode bloquear o lote diretamente (`quarantine` → `blocked`) ou
+  abrir uma RNC referenciando o `lot_number` (UC-17), que bloqueia o lote
+  automaticamente.
 
 ---
 
-## UC-17: Realizar Inspecao de Qualidade
+## UC-17: Realizar Inspecao de Qualidade (Registro de Nao Conformidade)
 
 **Ator:** Inspetor de Qualidade
 **Pre-condicoes:** Producao apontada ou material recebido
@@ -301,8 +308,61 @@
 2. Seleciona tipo (incoming, processo, final)
 3. Realiza medicoes conforme plano de inspecao
 4. Registra resultados (aprovado, rejeitado, retrabalho)
-5. Se rejeitado, sistema gera NC (Nao Conformidade)
-6. Sistema atualiza lote com status da inspecao
+5. Se rejeitado, sistema gera NC (Nao Conformidade) via
+   `POST /api/quality/non-conformities`
+6. **Se a NC informar `lot_number` + `product_id`:** o sistema localiza o
+   `LotControl` correspondente e, na MESMA transacao da criacao da NC, move
+   o lote para `blocked` (a partir de `available`, `quarantine` ou
+   `reserved`), registrando `"Bloqueado pela RNC #<id>"` em `notes`. Se o
+   lote nao for encontrado, a NC e criada normalmente (pode referenciar
+   lote de sistema externo).
+7. **Fechamento da NC:** ao mudar `status` para `closed` com
+   `effectiveness_result = 'effective'`, o sistema **nao desbloqueia** o
+   lote automaticamente — a liberacao pos-tratativa e sempre uma decisao
+   manual e explicita de qualidade (ver UC-17B).
+
+**Validacoes/Gatilhos:**
+- Bloqueio de lote e best-effort e nao bloqueante: NC sempre e criada mesmo
+  que o lote nao exista ou ja esteja em status terminal (ex.: `consumed`).
+- Nenhum outro campo do lote (quantidades, custo) e alterado pelo bloqueio.
+
+---
+
+## UC-17B: Liberar/Bloquear Lote (Inspecao de Recebimento e Pos-Tratativa de RNC)
+
+**Ator:** Inspetor de Qualidade / Almoxarife (perfis `admin`, `operator`)
+**Pre-condicoes:** Lote existente (`LotControl`) em `quarantine`, `available` ou `blocked`
+**Fluxo Principal (liberacao):**
+1. Usuario acessa "Qualidade > Lotes em Quarentena"
+   (`GET /api/inventory/lots?status=quarantine`)
+2. Sistema lista lotes com `product` (id, name, code) e `supplier` (id,
+   company_name) incluidos, paginados
+3. Apos inspecao aprovar o material (ou apos tratativa de RNC concluida),
+   usuario aciona `POST /api/inventory/lots/:id/release` (body opcional
+   `{ notes }`)
+4. Sistema move o lote para `available` — a partir de `quarantine`
+   (liberacao pos-inspecao de recebimento) OU `blocked` (liberacao manual
+   pos-tratativa de RNC)
+5. Sistema registra log de auditoria (`logAction`)
+
+**Fluxo Alternativo (bloqueio manual):**
+1. Usuario aciona `POST /api/inventory/lots/:id/block` com
+   `{ reason: string (min. 3 chars, obrigatorio) }`
+2. Sistema move o lote para `blocked` — a partir de `quarantine` ou
+   `available`
+3. Sistema registra log de auditoria (`logAction`)
+
+**Validacoes/Gatilhos:**
+- 422 (`BusinessRuleError`) se a transicao solicitada nao for permitida a
+  partir do status atual do lote (ex.: liberar lote ja `available`,
+  bloquear lote `consumed`).
+- 400 (`ValidationError`) se `reason` do bloqueio estiver ausente ou tiver
+  menos de 3 caracteres.
+- 404 (`NotFoundError`) se o lote nao existir.
+- O FEFO da producao (`ChangeProductionOrderStatusUseCase`) so seleciona
+  lotes `status = 'available'` — lotes em `quarantine` ou `blocked` ficam
+  automaticamente fora do consumo automatico, sem necessidade de filtro
+  adicional no motor de producao.
 
 ---
 

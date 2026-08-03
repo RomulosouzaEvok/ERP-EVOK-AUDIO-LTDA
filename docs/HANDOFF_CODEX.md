@@ -1065,3 +1065,223 @@ Pedido → Recebimento → Estoque. Contrato confirmado 100% compatível com o a
 **Desenvolvedor**: Claude Code (Backend Engineer)
 **Data**: 2026-08-03
 **Escopo**: `client/` apenas — nenhum arquivo em `server/` foi tocado.
+
+---
+
+## Frontend — Apontamento de Chão de Fábrica (`/production/shop-floor`)
+
+**Data**: 2026-08-03
+**Escopo**: nova tela `client/src/pages/production/ShopFloorPage.tsx`, pensada para uso em
+bancada/tablet, consumindo as rotas de tracking já existentes em
+`server/src/modules/production/presentation/routes/productionOrders.ts` (contrato verificado por
+leitura do controller e do repositório Sequelize antes da implementação, nenhuma rota adivinhada).
+**Status**: ✅ Concluído (UI); rotas de tracking já existiam no backend, nenhuma alteração em `server/`.
+
+### Contrato consumido (verificado no backend)
+```
+GET  /api/production-orders?status=released|in_progress&limit=  → { data: ProductionOrder[] }
+GET  /api/production-orders/:id/tracking                        → { data: ProductionOrderTracking[] }
+                                                                    (inclui routeStep {id,sequence,step_code,name,work_center}
+                                                                     e operator {id,name}, ordenado por sequence ASC)
+POST /api/production-orders/:id/tracking            { sequence, production_route_step_id?, notes? }
+POST /api/production-orders/tracking/:trackingId/start    { operator_id? }  (employees.id)
+POST /api/production-orders/tracking/:trackingId/complete { quantity_good, quantity_scrapped, notes? }
+GET  /api/employees?limit=200 → { data: Employee[] }
+```
+
+### Arquivos criados
+- `client/src/api/productionTracking.ts` — tipos (`ProductionOrderTracking`, `ProductionTrackingStatus`,
+  `ProductionRouteStepSummary`, `ProductionTrackingOperator`) e funções `listProductionTracking`,
+  `createProductionTracking`, `startProductionTracking`, `completeProductionTracking`
+- `client/src/api/employees.ts` — `listEmployees` (`GET /api/employees`) e tipo `Employee`
+  (não existia serviço de employees no client ainda)
+- `client/src/pages/production/ShopFloorPage.tsx`:
+  - Coluna esquerda: lista de OPs com `status in (released, in_progress)` (duas queries combinadas),
+    com busca client-side por número da ordem/produto/código
+  - Ao selecionar uma OP: painel com card de resumo (produto, total bom acumulado vs quantidade
+    planejada) e lista de etapas (`ProductionOrderTracking`) ordenadas por `sequence`, cada uma como
+    card com badge de status, nome da etapa/centro de trabalho (`routeStep`), operador, horários de
+    início/fim e, se concluída, quantidade boa/refugada e observações
+  - `StartTrackingDialog`: select de operador (`employeesApi.listEmployees`, opcional — pode iniciar
+    sem atribuir), botão grande "Iniciar etapa"
+  - `CompleteTrackingDialog`: campos de quantidade boa, quantidade refugada (validação client-side
+    `>= 0` antes de chamar a API) e observações
+  - `AddStepDialog`: formulário `react-hook-form` + `zod` (sequência inteira positiva obrigatória,
+    observações opcionais) para `POST .../tracking` (etapa manual criada como `pending`)
+  - Todos os botões de ação com `min-h-12` e tipografia `text-base`/`text-lg`, pensados para toque em
+    tablet de bancada
+
+### Arquivos modificados (mínimos, cirúrgicos)
+- `client/src/App.tsx` — import lazy de `ShopFloorPage` + rota `/production/shop-floor`
+- `client/src/layouts/AppLayout.tsx` — item de menu "Chão de Fábrica" no grupo Produção (ícone
+  `ClipboardList`, já importado) + entrada no mapa de breadcrumbs
+
+### Invariantes mantidas
+- ✅ TypeScript strict, sem `any`
+- ✅ Loading states em toda query/mutation (`isLoading`, `mutation.isPending`)
+- ✅ Erros tratados via `extractApiErrorMessage`, nunca stack trace cru
+- ✅ Invalidação de `['production-tracking', productionOrderId]` após start/complete/create tracking
+- ✅ Nenhum arquivo em `server/` tocado; nenhuma dependência nova instalada; nenhum commit criado
+
+### Testes executados
+- `node ./node_modules/typescript/bin/tsc -b --noEmit` — limpo, sem erros
+- `node ./node_modules/vitest/vitest.mjs run` — 4 arquivos de teste, 13/13 testes verdes (sem regressão)
+
+### Instruções de teste para o próximo agente/humano (QA)
+1. Confirmar que `/production/shop-floor` aparece no menu "Produção" e que a rota carrega sem erro
+   para usuários `admin`/`operator`.
+2. Com uma OP em `released` ou `in_progress`: selecioná-la na lista e conferir que o painel de etapas
+   carrega (`GET .../tracking`); se não houver etapas, deve aparecer o estado vazio com instrução para
+   usar "Adicionar etapa".
+3. Testar "Adicionar etapa": sequência inválida (0, negativa, vazia) deve bloquear o submit no client
+   antes de chamar a API; sequência válida deve criar a etapa como `pending` e atualizar a lista sem
+   reload manual.
+4. Testar "Iniciar": com e sem selecionar operador — confirmar que o card da etapa muda para
+   `in_progress`, exibe o operador (quando selecionado) e o horário de início.
+5. Testar "Concluir": tentar submeter com quantidade boa/refugada vazia ou negativa (deve bloquear no
+   client); com valores válidos, confirmar que o card muda para `completed`, mostra as quantidades e
+   que o "Total bom acumulado" no topo do painel soma corretamente as etapas concluídas da OP.
+6. Confirmar que erros de API (ex.: tentar concluir uma etapa que já foi concluída por outra
+   sessão/aba, retornando 400 do `BusinessRuleError`) aparecem como mensagem amigável dentro do
+   dialog, sem fechar e sem mostrar stack trace.
+7. Testar responsividade em viewport de tablet (largura ~768-1024px): lista de OPs e painel de etapas
+   devem empilhar verticalmente (`lg:flex-row` só ativa em telas largas) e os botões permanecerem
+   grandes o suficiente para toque.
+
+**Desenvolvedor**: Claude Code (Frontend Engineer)
+**Data**: 2026-08-03
+
+---
+
+## Item 8 do levantamento — "Qualidade fecha o loop" (quarentena de recebimento + RNC bloqueia lote)
+
+**Data**: 2026-08-03
+**Escopo**: `server/` apenas (client/ não tocado).
+**Status**: ✅ Concluído (parcial — realimentação de rating de fornecedor NÃO coberta nesta entrega)
+
+### Resumo da feature
+
+Recebimento de compra deixa de criar lotes (`LotControl`) diretamente
+`available`; agora nascem em `quarantine`. O estoque físico
+(`products.quantity`) continua entrando normalmente — apenas o **consumo
+por lote** fica bloqueado até a inspeção de recebimento liberar. Foram
+adicionados os endpoints de inspeção
+(`GET /api/inventory/lots`, `POST /api/inventory/lots/:id/release`,
+`POST /api/inventory/lots/:id/block`) e a criação de RNC
+(`CreateNonConformityUseCase`) passou a bloquear automaticamente, na mesma
+transação, o lote referenciado por `lot_number` + `product_id`, quando
+encontrado.
+
+Novo valor de enum: `lot_controls.status` ganhou `'quarantine'` (além de
+`available`, `reserved`, `consumed`, `blocked`, `expired`).
+
+### Arquivos modificados
+
+#### Criados
+- `server/migrations/20260803-000002-add-quarantine-lot-status.cjs` — `ALTER TYPE ... ADD VALUE IF NOT EXISTS 'quarantine'` (fora de transação, mesma técnica de `20260731-000013`). `down()` é no-op documentado (remover valor de enum no PG exige recriar o tipo).
+- `server/src/modules/inventory/application/use-cases/ListLotsUseCase.ts` — lista `LotControl` com filtros (`status`, `product_id`) e paginação; inclui `product`/`supplier`.
+- `server/src/modules/inventory/application/use-cases/ReleaseLotUseCase.ts` — `quarantine|blocked -> available`.
+- `server/src/modules/inventory/application/use-cases/BlockLotUseCase.ts` — `quarantine|available -> blocked`, `reason` obrigatório (mín. 3 chars).
+- `server/tests/unit/quality-lot-lifecycle.test.ts` — testes unitários novos (release/block válidos e inválidos; RNC bloqueia lote na transação; RNC não encontra lote e segue sem erro).
+
+#### Modificados
+- `server/src/models/LotControl.ts` — `LotControlStatus` e `DataTypes.ENUM` do campo `status` ganharam `'quarantine'`; comment explicando o ciclo de vida.
+- `server/src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase.ts` — lotes criados/atualizados no recebimento passam a usar `status: 'quarantine'` (era `'available'`) tanto no `create` quanto no `update` de lote existente.
+- `server/src/modules/inventory/presentation/controllers/inventoryController.ts` — `listAvailableLots` renomeado/reescrito para `listLots` (usa `ListLotsUseCase`, mantendo compatibilidade retroativa: sem `status` + com `product_id` continua filtrando `available` + saldo > 0); adicionados `releaseLot` e `blockLot` (com `logAction`).
+- `server/src/modules/inventory/presentation/routes/inventory.ts` — `GET /lots` agora aponta para `listLots`; adicionadas `POST /lots/:id/release` e `POST /lots/:id/block` (RBAC `admin`, `operator`).
+- `server/src/modules/nonConformities/domain/repositories/NonConformitiesRepository.ts` — `create(data, transaction?)` ganhou parâmetro opcional de transação.
+- `server/src/modules/nonConformities/infrastructure/sequelize/SequelizeNonConformitiesRepository.ts` — `create` repassa a transação ao `NonConformity.create`.
+- `server/src/modules/nonConformities/application/use-cases/CreateNonConformityUseCase.ts` — agora abre uma transação Sequelize própria; cria a RNC e, se `lot_number` + `product_id` forem informados, localiza (com lock `FOR UPDATE`) e bloqueia o `LotControl` correspondente (quando em `available`, `quarantine` ou `reserved`) na mesma transação, registrando `"Bloqueado pela RNC #<id>"` em `notes`. Lote não encontrado não gera erro.
+- `server/src/modules/nonConformities/application/use-cases/UpdateNonConformityUseCase.ts` — apenas documentação (`@remarks`): fechar RNC como `effective` **não** desbloqueia lote automaticamente; liberação é sempre manual via `POST /lots/:id/release`.
+- `server/tests/unit/integrity-transaction-guards.test.ts` — assert adicional confirmando que `ReceivePurchaseItemsUseCase` cria o lote com `status: 'quarantine'` (antes não havia asserção sobre o status).
+
+### Documentações atualizadas
+
+- `docs/DATABASE.md` — nova seção "Tabela `lot_controls` (Rastreabilidade de Lotes + Quarentena de Qualidade)", com diagrama ASCII do lifecycle do enum `status` e tabela de endpoints.
+- `docs/projeto/04-USE_CASES.md` — UC-16 (Receber Pedido de Compra) e UC-17 (Realizar Inspeção de Qualidade) atualizados para refletir quarentena e bloqueio de lote pela RNC; novo UC-17B (Liberar/Bloquear Lote).
+- `server/src/modules/inventory/README.md` — tabela de endpoints, estrutura de use cases e seção de auditoria atualizadas; nova subseção "Quarentena de lotes de recebimento (item 8)".
+- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — item 8 da tabela de prioridades marcado como resolvido (parcial — rating de fornecedor pendente).
+- JSDoc completo em todos os arquivos novos/modificados (classes, métodos, parâmetros e retornos).
+
+### Instruções de teste
+
+1. **Migration** (não aplicada por este agente, conforme instrução — orquestrador aplica):
+   ```bash
+   cd server && npm run migration:up
+   psql -c "SELECT enum_range(NULL::enum_lot_controls_status);"
+   # Esperado: incluir 'quarantine'
+   ```
+2. **Recebimento de compra**: `POST /api/purchases/:id/receive` com um item novo → verificar que o `LotControl` criado tem `status = 'quarantine'` (não `available`) e que `products.quantity` foi incrementado normalmente.
+3. **Listagem de quarentena**: `GET /api/inventory/lots?status=quarantine` → deve retornar os lotes recém-recebidos, com `product` e `supplier` populados.
+4. **Liberação**: `POST /api/inventory/lots/:id/release` (perfil `admin`/`operator`) sobre um lote `quarantine` → `200`, `status = available`. Repetir sobre o mesmo lote já `available` → `422`.
+5. **Bloqueio**: `POST /api/inventory/lots/:id/block` sem `reason` → `400`. Com `reason` válido sobre lote `quarantine` ou `available` → `200`, `status = blocked`. Sobre lote `consumed` → `422`.
+6. **RNC bloqueia lote**: `POST /api/quality/non-conformities` com `product_id` + `lot_number` de um lote existente (`available`/`quarantine`/`reserved`) → lote deve mudar para `blocked` e `notes` deve conter `"Bloqueado pela RNC #<id>"`. Com `lot_number` inexistente → RNC criada normalmente, sem erro.
+7. **FEFO da produção não regrediu**: concluir uma OP cujo componente só tem lotes em `quarantine`/`blocked` disponíveis → deve continuar falhando com `BusinessRuleError` ("não há lotes suficientes"), confirmando que o FEFO não seleciona esses status (comportamento pré-existente, apenas re-validado).
+8. **Regressão geral**: `npm run typecheck` (limpo) e `npx jest tests/unit` (226/226 verdes, incluindo os 2 arquivos tocados/criados nesta entrega).
+
+### Riscos residuais
+
+- **Rating de fornecedor não realimentado**: o item 8 do levantamento também previa "realimenta rating" (do fornecedor a partir de RNCs de recebimento) — **não implementado** nesta entrega; ficou fora de escopo desta tarefa.
+- **`down()` da migration é no-op**: remover o valor `'quarantine'` do enum no PostgreSQL exige recriar o tipo inteiro; se algum lote já estiver nesse status, um rollback destrutivo exigiria migrar essas linhas primeiro. Documentado no próprio arquivo de migration.
+- **Testes de integração HTTP não foram criados** para os novos endpoints (`GET/POST /api/inventory/lots*`) — apenas unitários com mocks. Recomenda-se cobertura de integração (`server/tests/integration/`) em sprint futura.
+- **RBAC do módulo `inventory`**: os novos endpoints `release`/`block` já exigem `admin`/`operator` (mais restritivo que o restante do módulo, que é apenas `authenticate`), conforme especificado na tarefa.
+
+**Desenvolvedor**: Claude Code (Backend Engineer)
+
+---
+
+## Fase Frontend — Tela de Qualidade (`/quality`) — Item 8 do backlog de telas
+
+**Data**: 2026-08-03
+**Escopo**: Construir a tela `/quality` no `client/`, com duas abas: (A) Inspeção de recebimento (lotes em quarentena/bloqueados/liberados) e (B) Não-conformidades (RNC). Consumir exclusivamente os endpoints reais já existentes no backend (`/api/inventory/lots*` e `/api/quality/non-conformities`), verificados por leitura direta do código-fonte antes de implementar.
+**Status**: ✅ Concluído (frontend apenas; nenhuma alteração em `server/`)
+
+### Arquivos criados
+
+- `client/src/api/lots.ts` — cliente HTTP para `GET /api/inventory/lots` (filtros `status`, `product_id`, paginação), `POST /api/inventory/lots/:id/release` (`notes` opcional) e `POST /api/inventory/lots/:id/block` (`reason` obrigatório). Tipos `Lot`, `LotStatus`, `LotListParams`.
+- `client/src/api/nonConformities.ts` — cliente HTTP para `GET /api/quality/non-conformities` (filtros `status`, `severity`, paginação) e `POST /api/quality/non-conformities`. Tipos `NonConformity`, `NonConformityInput` e os enums reais do model (`origin`, `defect_type`, `severity`, `immediate_action`, `status`).
+- `client/src/pages/quality/QualityPage.tsx` — página com duas abas (toggle local, sem sub-rotas), roteando o prefill de RNC vindo da aba de inspeção.
+- `client/src/pages/quality/InspectionTab.tsx` — tabela de lotes com filtro por status (`quarantine` default, `blocked`, `available`), badges coloridos (`quarantine` âmbar, `blocked` vermelho, `available` verde, `expired` laranja via classe custom pois o componente `Badge` não tem variante laranja nativa, `consumed`/`reserved` cinza), dialog "Aprovar (liberar)" com campo de observações opcional e dialog "Reprovar (bloquear)" com motivo obrigatório (mínimo 3 caracteres, validado no client) e checkbox "Abrir RNC" que, ao confirmar, aciona `onOpenNonConformity` com os dados do lote pré-preenchidos.
+- `client/src/pages/quality/NonConformitiesTab.tsx` — listagem paginada de RNCs com badges de severidade (`critical` vermelho, `major` âmbar, `minor` cinza) e status, dialog "Nova RNC" com todos os campos do `CreateNonConformityUseCase`/model real (`nc_number`, `origin`, `defect_type`, `severity`, `description`, `immediate_action`, `immediate_action_desc`, `product_id` via select de produtos, `supplier_id` via select de fornecedores, `lot_number`, `quantity_affected`), texto auxiliar avisando que RNC com `product_id` + `lot_number` bloqueia o lote automaticamente, e efeito que consome o prefill vindo da aba de inspeção (abre o dialog já preenchido).
+
+### Decisão importante: `nc_number`
+
+O model `NonConformity` (`server/src/models/NonConformity.ts`) define `nc_number` como `allowNull: false, unique: true`, e nem o `CreateNonConformityUseCase` nem o repositório Sequelize geram esse valor automaticamente (não há hook `beforeCreate`/default, nem sequência no schema SQL — a tabela `non_conformities` não aparece em nenhum arquivo de schema versionado, sugerindo criação via `sequelize.sync()`). Diante dessa ambiguidade e para não adivinhar um contrato não documentado, o formulário do frontend **gera um `nc_number` sugerido e editável** (`RNC-AAAAMMDD-XXXX`) e o envia explicitamente no payload de criação. **Ação para QA/backend**: confirmar se deve haver geração server-side (ex.: sequência dedicada) — se sim, o campo do frontend deve virar somente leitura ou ser removido do payload.
+
+### Rotas e navegação
+
+- `client/src/App.tsx` — adicionada `const QualityPage = lazy(() => import('@/pages/quality/QualityPage'))` e rota `/quality` (autenticada, sem restrição de role adicional — mesma política do restante do módulo Operações). Edição mínima, sem tocar na rota `/production/shop-floor` adicionada por outro agente.
+- `client/src/layouts/AppLayout.tsx` — item de menu "Qualidade" (ícone `ShieldAlert` do `lucide-react`) no grupo "Operações", entre "MRP" e "Patrimônio"; entrada de breadcrumb `'/quality': ['Qualidade']`.
+
+### Documentação atualizada
+
+- `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` — nova subseção "Qualidade (item 8 do backlog de telas)" sob FE4, item marcado `[x]`.
+- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — seção "Frontend" atualizada: contagem de "9 módulos com UI completa" → "10 módulos" (incluindo qualidade/RNC) e "12 módulos sem tela" → "11 módulos" (removido qualidade/RNC da lista de lacunas).
+
+### O que o Agente QA (ou humano) deve testar na interface
+
+1. **Navegação**: item "Qualidade" visível no menu lateral (grupo Operações) para todos os perfis autenticados; clicar leva a `/quality`; breadcrumb mostra "Qualidade".
+2. **Aba Inspeção de recebimento**:
+   - Filtro de status inicia em `quarantine`; trocar para `blocked`/`available` recarrega a tabela.
+   - Badges de status com as cores especificadas (âmbar/vermelho/verde/laranja/cinza).
+   - Botão "Aprovar" visível apenas para lotes `quarantine`/`blocked`, abre dialog de confirmação com campo de observações opcional; ao confirmar, chama `POST /lots/:id/release` e a tabela é invalidada/recarregada.
+   - Botão "Reprovar" visível apenas para lotes `quarantine`/`available`, abre dialog exigindo motivo (tentar submeter vazio ou com menos de 3 caracteres deve bloquear no client com mensagem de erro, sem chamar a API).
+   - Marcar o checkbox "Abrir RNC" antes de confirmar o bloqueio deve, após o bloqueio ter sucesso, trocar automaticamente para a aba de RNC com o dialog "Nova RNC" já aberto e os campos `origin=incoming`, `product_id`, `supplier_id`, `lot_number` e `description` pré-preenchidos.
+   - Botões restritos a perfis `admin`/`operator` (verificar que um usuário `financial`, se existir no ambiente de teste, não vê as colunas de ação).
+3. **Aba Não-conformidades (RNC)**:
+   - Filtros de status e severidade funcionam e resetam a página.
+   - Badges de severidade/status com as cores especificadas.
+   - Dialog "Nova RNC": todos os campos obrigatórios (`nc_number`, `origin`, `defect_type`, `severity`, `description`, `immediate_action`) validados via zod antes do submit; `product_id`/`supplier_id` carregam as listas reais de `/api/products` e `/api/suppliers`; texto auxiliar abaixo do campo "Nº do lote" avisa sobre o bloqueio automático do lote.
+   - Criar uma RNC com `product_id` + `lot_number` de um lote existente (`available`/`quarantine`/`reserved`) e confirmar, na aba de Inspeção, que o lote mudou para `blocked` (efeito colateral do backend, já validado na Fase de Quarentena acima — aqui é só a confirmação end-to-end pela UI).
+   - Criar uma RNC sem `product_id`/`lot_number` deve funcionar normalmente (campos opcionais).
+4. **Estados de loading/erro**: desligar a API (ou simular 500) e verificar que ambas as abas mostram mensagem amigável (sem stack trace) nas tabelas, e que os dialogs de ação exibem a mensagem de erro extraída via `extractApiErrorMessage`.
+5. **Regressão**: `node ./node_modules/typescript/bin/tsc -b --noEmit` limpo e os 13 testes existentes (`node ./node_modules/vitest/vitest.mjs run`) continuam verdes — validado nesta entrega, nenhuma dependência nova foi instalada.
+
+### Riscos residuais / fora de escopo
+
+- Nenhum teste automatizado (vitest) foi criado especificamente para `QualityPage`/`InspectionTab`/`NonConformitiesTab` nesta entrega — apenas os 13 testes pré-existentes foram validados como não quebrados. Recomenda-se cobertura dedicada em sprint futura.
+- A ambiguidade do `nc_number` (ver seção acima) deve ser resolvida com o time de backend antes do Go-Live definitivo da tela de qualidade.
+- Não há tela de edição/fechamento de RNC (`PUT /api/quality/non-conformities/:id`, `DELETE .../:id`) — está fora do escopo desta tarefa (item 8 pediu apenas listagem + criação).
+
+**Desenvolvedor**: Claude Code (Frontend Engineer)
+**Data**: 2026-08-03

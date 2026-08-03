@@ -8,6 +8,7 @@ export interface ProductionOrder {
   order_number?: string;
   product_id: number;
   quantity: string;
+  quantity_produced?: string | number;
   status: ProductionStatus;
   priority?: string;
   due_date: string;
