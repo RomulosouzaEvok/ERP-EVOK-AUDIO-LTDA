@@ -14,5 +14,7 @@ router.get('/sales', authenticate, reportController.sales);
 router.get('/inventory', authenticate, reportController.inventory);
 router.get('/customers', authenticate, reportController.customers);
 router.get('/cash-flow', authenticate, reportController.cashFlow);
+router.get('/production', authenticate, reportController.production);
+router.get('/purchasing', authenticate, reportController.purchasing);
 
 module.exports = router;

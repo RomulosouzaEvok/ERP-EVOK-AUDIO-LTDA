@@ -38,6 +38,36 @@ class ReportsRepository {
   async sumCashFlow(start, end) { // eslint-disable-line no-unused-vars
     throw new Error('ReportsRepository.sumCashFlow não implementado.');
   }
+
+  /** @returns {Promise<Object[]>} WIP por status de OP. */
+  async findProductionWip(start, end) { // eslint-disable-line no-unused-vars
+    throw new Error('ReportsRepository.findProductionWip não implementado.');
+  }
+
+  /** @returns {Promise<Object>} Agregados de OPs concluídas no período. */
+  async findProductionCompletedAggregates(start, end) { // eslint-disable-line no-unused-vars
+    throw new Error('ReportsRepository.findProductionCompletedAggregates não implementado.');
+  }
+
+  /** @returns {Promise<Object[]>} Refugo por etapa de roteiro no período. */
+  async findScrapByStep(start, end) { // eslint-disable-line no-unused-vars
+    throw new Error('ReportsRepository.findScrapByStep não implementado.');
+  }
+
+  /** @returns {Promise<Object[]>} Compras agregadas por fornecedor no período. */
+  async findPurchasingBySupplier(start, end) { // eslint-disable-line no-unused-vars
+    throw new Error('ReportsRepository.findPurchasingBySupplier não implementado.');
+  }
+
+  /** @returns {Promise<Object[]>} Contagem de RNCs por fornecedor no período. */
+  async findRncCountBySupplier(start, end) { // eslint-disable-line no-unused-vars
+    throw new Error('ReportsRepository.findRncCountBySupplier não implementado.');
+  }
+
+  /** @returns {Promise<Object>} Totais de compras do período. */
+  async findPurchasingTotals(start, end) { // eslint-disable-line no-unused-vars
+    throw new Error('ReportsRepository.findPurchasingTotals não implementado.');
+  }
 }
 
 module.exports = ReportsRepository;
