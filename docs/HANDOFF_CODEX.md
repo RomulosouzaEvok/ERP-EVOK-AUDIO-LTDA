@@ -2387,14 +2387,14 @@ lidos antes de codar, nenhum payload/rota foi adivinhado).
 
 ---
 
-## Requisitos de Negócio Prontos — Controle de Acesso por Área + 4 Fluxos Complementares (Fase de Descoberta, Concluída)
+## Requisitos de Negócio Prontos — Controle de Acesso por Área + 5 Fluxos Complementares (Fase de Descoberta, Concluída)
 
 **Data**: 2026-08-03
 **Papel**: Business Analyst / Requirements Engineer (fase de descoberta —
 nenhum código foi tocado nesta entrega, apenas documentação em `docs/`)
-**Status**: ✅ Requisitos especificados e prontos para implementação —
-**aguardando confirmação do dono em 6 decisões propostas antes de iniciar
-código de schema** (listadas ao final desta seção)
+**Status**: ✅ Requisitos especificados, **com as 6 decisões de negócio já
+confirmadas pelo dono** — pronto para implementação, sem bloqueio de
+schema (ver seção "Decisões do dono" abaixo)
 
 ### Escopo desta entrega
 
@@ -2418,7 +2418,8 @@ Especificação completa de:
    "status do lote/quarentena" (se pode ser consumido).
 5. **Emissão de NF-e pelo Vendas** — formalização do caso de uso já
    implementado tecnicamente (`server/src/modules/fiscal`), com a nova
-   camada de permissão por perfil (proposta: restrito a gestor).
+   camada de permissão por perfil (**decidido: restrito a gestor**, emissão
+   e cancelamento).
 6. **Alertas Didáticos de Pré-Requisitos (UC-43, transversal)** — padrão
    de UX obrigatório para toda tela do sistema: checklist preventivo
    (✓/✗ com motivo visível) antes de tentar uma ação, e tradução de
@@ -2430,10 +2431,12 @@ Especificação completa de:
 
 ### Onde estão os documentos (ler nesta ordem antes de codar)
 
-1. **`docs/business/01-USE_CASES.md`** — UC-30 a UC-42, formato
+1. **`docs/business/01-USE_CASES.md`** — UC-30 a UC-43, formato
    atores/pré-condições/fluxo principal/alternativos/exceções + critérios
-   de aceite em BDD (Given/When/Then) para cada um. Contém o índice de
-   todos os UCs no final, com a lista de decisões propostas pendentes.
+   de aceite em BDD (Given/When/Then) para cada um. O topo do arquivo
+   consolida as 6 decisões de negócio já confirmadas pelo dono em
+   2026-08-03 (não reabrir); o índice no final lista o único ponto ainda
+   em aberto (UC-40, não bloqueante).
 2. **`docs/business/BUSINESS_RULES.md`** — regras estáticas: matriz
    módulo × permissão (§1, ponto de partida editável pelo admin), regra
    do perfil único (§2), regra do admin global (§3), regra dos dois
@@ -2451,28 +2454,47 @@ Especificação completa de:
    cada bloco dividido em AdmDBA (schema/migrations) → Backend →
    Frontend → QA, com ordem de execução recomendada ao final.
 
-### Decisões propostas que precisam de confirmação do dono ANTES de codar schema
+### Decisões do dono — CONFIRMADAS em 2026-08-03 (não bloqueiam mais o início de código)
 
-1. **UC-32** — desativar um perfil de acesso que ainda tem usuários
-   ativos vinculados: bloquear (proposto) ou permitir e tratar como
-   "sem perfil"?
-2. **UC-35-Exceção** — usuário sem perfil atribuído: bloqueio total com
-   aviso, mostrando apenas "Meu Perfil" (proposto), ou acesso mínimo
-   universal (Dashboard + Relatórios)?
-3. **UC-36** — troca de perfil de usuário logado: invalidar sessão
-   imediatamente via `permission_version` (reaproveitando o padrão de
-   `password_version` já existente, proposto) ou deixar o efeito valer
-   apenas na próxima requisição, sem forçar novo login?
-4. **UC-41** — emissão/cancelamento de NF-e: restrito a nível `aprovar`/
-   `gestor` de Vendas (proposto, por ser ação fiscal de risco) ou
-   liberado a `operar`/operador comum?
+As 6 decisões antes propostas foram levadas ao dono e confirmadas.
+Nenhuma delas está mais em aberto — a implementação pode iniciar sem
+esperar por elas:
+
+1. **UC-32** — desativar um perfil de acesso com usuários ativos
+   vinculados: **BLOQUEAR** (422) até o admin realocar todos os usuários
+   para outro perfil. A alternativa mais permissiva foi descartada.
+2. **UC-35-Exceção** — usuário sem perfil atribuído: **BLOQUEIO TOTAL**
+   com aviso didático, mostrando apenas "Meu Perfil". Texto oficial
+   aprovado: *"Seu acesso ainda não foi configurado — procure o
+   administrador."*
+3. **UC-36** — troca de perfil de usuário logado: **VALE NO PRÓXIMO
+   LOGIN** — a sessão ativa **não** é derrubada (`permission_version`
+   **não será implementado** nesta entrega, fica registrado apenas como
+   melhoria futura opcional). Consequência aceita, registrada por
+   instrução explícita do dono: o usuário com sessão ativa no momento da
+   troca continua com o conjunto de permissões antigo até logout/
+   expiração natural do token. Mitigação recomendada para revogação
+   urgente: o admin pode **desativar o usuário** (`active=false`),
+   mecanismo já existente em `server/src/middlewares/auth.ts` que já
+   força logout imediato (`401 — Usuário inativo`).
+4. **UC-41** — emissão **e** cancelamento de NF-e: restritos ao nível
+   `aprovar`/**gestor** do perfil de Vendas, sem distinção entre as duas
+   operações.
 5. **UC-42 (item E)** — consumo do Depósito de Laboratório em testes
-   destrutivos: manual (lançamento avulso) ou vinculado automaticamente
-   ao registro do teste (`AcousticTestResult`, proposto)?
+   destrutivos: **VINCULADO AO TESTE** — o registro do teste destrutivo
+   (`AcousticTestResult`) debita o depósito automaticamente, na mesma
+   transação (padrão recomendado pelo orquestrador, confirmado pelo
+   dono).
 6. **`BUSINESS_RULES.md` §12 item 11** — permissão por depósito dentro do
-   perfil: campo lista simples (`warehouses_visible`) ou tabela própria
-   perfil×depósito? (decisão técnica, não bloqueia negócio, mas
-   recomenda-se decidir antes do schema do Bloco 4)
+   perfil: **LISTA SIMPLES** de depósitos permitidos
+   (`warehouses_visible`) dentro da própria linha de permissão do módulo,
+   sem tabela própria de associação perfil×depósito (decisão do
+   orquestrador, confirmada pelo dono).
+
+**Único ponto ainda em aberto** (não fazia parte deste lote de 6, não
+bloqueia início de desenvolvimento): UC-40 — se o campo `handoff_signal`
+aditivo nas listagens já existentes é suficiente, ou se o dono também
+espera um contador/badge de notificação por módulo no menu lateral.
 
 ### Riscos levantados (documentados nos arquivos, resumo aqui)
 
@@ -2518,16 +2540,22 @@ Especificação completa de:
 
 ### Instrução para o próximo agente (Programador/AdmDBA)
 
-1. Levar as 6 decisões propostas acima ao dono/orquestrador antes de
-   criar qualquer migration.
+1. As 6 decisões de negócio já estão confirmadas (ver seção acima) — pode
+   iniciar diretamente a criação de migrations/schema sem nova rodada de
+   validação com o dono para esses 6 pontos específicos. Resta apenas o
+   ponto técnico de backfill de depósitos por tipo de produto (ver
+   "Riscos levantados" abaixo), que é uma decisão operacional a validar
+   com o dono/PCP no momento do backfill real, não uma decisão de
+   arquitetura.
 2. Seguir a ordem de execução recomendada em `docs/governance/TODO.md`
-   (Bloco 1 → Bloco 4 → Bloco 2 → Bloco 3 → Bloco 5).
+   (Bloco 1 → Bloco 4 → Bloco 2 → Bloco 3 → Bloco 5, com o Bloco 6 podendo
+   rodar em paralelo a qualquer um dos anteriores).
 3. Ao concluir cada bloco, consolidar os UCs efetivamente implementados
    (com o contrato real de endpoint, que pode divergir ligeiramente do
-   proposto) em `docs/projeto/04-USE_CASES.md`, continuando a numeração a
-   partir de UC-30 (ou do próximo UC livre no momento), e registrar a
-   entrega nesta mesma seção de `docs/HANDOFF_CODEX.md`, no padrão já
-   usado pelas entregas anteriores deste arquivo.
+   especificado) em `docs/projeto/04-USE_CASES.md`, continuando a
+   numeração a partir de UC-30 (ou do próximo UC livre no momento), e
+   registrar a entrega nesta mesma seção de `docs/HANDOFF_CODEX.md`, no
+   padrão já usado pelas entregas anteriores deste arquivo.
 
 **Desenvolvedor**: Claude Code (Business Analyst / Requirements Engineer)
 **Data**: 2026-08-03

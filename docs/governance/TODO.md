@@ -1,6 +1,6 @@
 # TODO de Governança — Controle de Acesso por Área + Fluxos Complementares
 
-Origem: `docs/business/01-USE_CASES.md` (UC-30 a UC-42) e
+Origem: `docs/business/01-USE_CASES.md` (UC-30 a UC-43) e
 `docs/business/BUSINESS_RULES.md`. Este documento **não implementa nada**
 — apenas quebra os requisitos em tarefas técnicas que os agentes
 programadores/DBA/QA devem puxar, na ordem sugerida (dependências
@@ -8,10 +8,11 @@ indicadas). Ao concluir cada bloco, o programador deve atualizar
 `docs/HANDOFF_CODEX.md` e consolidar os casos de uso implementados em
 `docs/projeto/04-USE_CASES.md`.
 
-**Pré-requisito de todo o bloco:** confirmar com o dono as decisões
-propostas listadas no rodapé de `01-USE_CASES.md` antes de iniciar
-implementação — mudanças posteriores de decisão custam retrabalho de
-schema.
+**Status das decisões de negócio:** as 6 decisões antes propostas foram
+**confirmadas pelo dono em 2026-08-03** (ver seção "Decisões do Dono —
+Todas Confirmadas" ao final deste documento e o topo de
+`01-USE_CASES.md`) — implementação pode iniciar sem bloqueio de negócio.
+Único ponto ainda em aberto (não bloqueante) é UC-40 (ver rodapé).
 
 ---
 
@@ -27,19 +28,25 @@ schema.
   unique `(access_profile_id, module)`)
 - [ ] Adicionar `access_profile_id` (FK nullable) e `access_level`
   (enum `operador|gestor`, nullable) em `users`
-- [ ] Adicionar `permission_version` (integer, default 1) em `users` —
-  reaproveitar o padrão de `password_version` já existente em
-  `server/src/middlewares/auth.ts`, incrementado a cada troca de perfil
-  (UC-36; decisão a confirmar com o dono antes de codar)
+- [ ] **NÃO obrigatório nesta entrega** — `permission_version` (campo
+  análogo a `password_version`, que invalidaria a sessão na troca de
+  perfil): **decisão do dono foi "vale no próximo login, sem derrubar a
+  sessão ativa"** (UC-36) — este campo **não deve ser criado** neste
+  bloco. Fica registrado apenas como **melhoria futura opcional**, a ser
+  avaliada em sprint separada caso o negócio queira, no futuro, forçar
+  consistência imediata de sessão/menu. Não bloqueia nem faz parte do
+  escopo atual do Bloco 1.
 - [ ] Seed inicial com a matriz proposta em `BUSINESS_RULES.md` §1 (11
   perfis de departamento — RH pendente de módulo próprio, ver nota no
   §1)
 - [ ] Script de validação pós-migration (padrão já usado no projeto em
   `server/src/scripts/backfill/*_validation.sql`): nenhum usuário
   `role != admin` deve ficar com `access_profile_id` obrigatoriamente
-  preenchido de forma automática — confirmar com o dono se o backfill
-  inicial atribui um perfil "provisório" a usuários existentes ou os
-  deixa `null` (cai no fluxo UC-35-Exceção)
+  preenchido de forma automática — decisão do dono (UC-35-Exceção) é
+  **bloqueio total com aviso**: o backfill inicial deve deixar
+  `access_profile_id = null` para usuários existentes sem perfil
+  definido (eles caem no fluxo UC-35-Exceção até o admin atribuir um
+  perfil), não atribuir um perfil "provisório" arbitrário
 
 ### 1.2 Backend — Middleware e Endpoints
 
@@ -53,22 +60,27 @@ schema.
   - [ ] Para ações que exigem `approve`: checar também
     `req.user.access_level === 'gestor'` (fórmula completa em
     `BUSINESS_RULES.md` §4)
-  - [ ] Usuário sem `access_profile_id`: aplicar a política definida em
-    UC-35-Exceção (decisão proposta — bloqueio total com aviso)
+  - [ ] Usuário sem `access_profile_id`: aplicar a política **decidida**
+    em UC-35-Exceção — bloqueio total, com aviso didático ("Seu acesso
+    ainda não foi configurado — procure o administrador"), apenas "Meu
+    Perfil" acessível
   - [ ] Registrar tentativa negada em log de auditoria (`access_denied`)
 - [ ] CRUD de perfis: `POST/GET/PUT /api/access-profiles`,
   `PATCH /api/access-profiles/:id/status` (UC-30, UC-31, UC-32)
   - [ ] Validação: nome único (409), ao menos um módulo ≠ `none` (422)
   - [ ] Auditoria completa com `oldValues`/`newValues` (§5) — copiar
     padrão já usado em `ChangePurchaseRequisitionStatusUseCase`/`logAction`
-  - [ ] UC-32: implementar a regra escolhida pelo dono (bloquear
-    desativação com usuários ativos vinculados, ou permitir e cair em
-    UC-35-Exceção)
+  - [ ] UC-32: implementar a regra **decidida** pelo dono — **bloquear**
+    a desativação (422) enquanto houver usuário ativo vinculado ao
+    perfil, listando os usuários afetados na resposta; a desativação só
+    é permitida depois que o admin realocar (UC-33) todos os usuários
+    vinculados para outro perfil
 - [ ] Atribuição de perfil a usuário: `PATCH /api/users/:id/access-profile`
   (UC-33)
   - [ ] Validar perfil ativo
-  - [ ] Se a decisão de `permission_version` for confirmada: incrementar
-    na mesma transação (UC-36)
+  - [ ] **Não** incrementar nenhuma versão de sessão/token ao trocar o
+    perfil (decisão do dono, UC-36: "vale no próximo login" — a troca é
+    apenas persistida no banco, sem efeito de invalidação de sessão)
 - [ ] Endpoint de menu resolvido: incluir no payload de login (ou
   `GET /api/auth/me/menu` dedicado) a lista de módulos visíveis + nível,
   já filtrada pelo perfil (UC-34)
@@ -104,10 +116,15 @@ schema.
   (matriz de módulo × nível em formato de checklist/tabela), desativação
 - [ ] Tela de edição de usuário: seletor de perfil + nível
   (operador/gestor)
-- [ ] Tratamento de 401 "Sessão invalidada" (se `permission_version` for
-  confirmado) — já existe tratamento análogo para `password_version`,
-  reaproveitar
-- [ ] Estado "sem perfil atribuído": tela reduzida com aviso (UC-35-Exceção)
+- [ ] **Não é necessário** tratamento de "Sessão invalidada" para troca
+  de perfil nesta entrega — decisão do dono (UC-36) é que a troca vale no
+  próximo login, sem forçar logout. O tratamento de 401 já existente para
+  `password_version`/usuário inativo permanece intacto e **é** o
+  mecanismo a orientar o admin a usar quando precisar de revogação
+  imediata (desativar o usuário, ver UC-36 "mitigação")
+- [ ] Estado "sem perfil atribuído": tela reduzida mostrando apenas "Meu
+  Perfil" com o aviso didático "Seu acesso ainda não foi configurado —
+  procure o administrador" (UC-35-Exceção, texto oficial do dono)
 
 ### 1.5 QA — Casos de Teste dos 403
 
@@ -286,10 +303,12 @@ priorizar este bloco antes de finalizar o Bloco 2.
   `GET /api/products/:id/stock-by-warehouse` (ou equivalente em `items`)
 - [ ] Ajustar `GET /api/inventory/movements` para aceitar filtro
   `?warehouse_id=`
-- [ ] Decisão a implementar (após confirmação do dono, UC-42-E): débito
-  de estoque de teste destrutivo — manual (endpoint avulso) ou vinculado
-  a `AcousticTestResult` (débito automático na mesma transação do
-  registro de teste)
+- [ ] Débito automático de estoque em teste destrutivo (**decidido**,
+  UC-42-E: vinculado ao teste, não manual) — adicionar campos opcionais
+  `is_destructive`/`consumed_quantity` (e `consumed_item_id`, se o
+  consumo puder ser de um item diferente do produto testado) ao registro
+  de `AcousticTestResult` (UC-LAB-01) e debitar automaticamente do
+  Depósito de Laboratório, na mesma transação do `INSERT` do teste
 - [ ] Teste automatizado obrigatório de invariante: soma dos saldos por
   depósito de um produto nunca diverge do que seria o saldo "legado"
   consolidado, em qualquer sequência de entrada/saída/transferência
@@ -319,6 +338,10 @@ priorizar este bloco antes de finalizar o Bloco 2.
 - [ ] Teste: quarentena/bloqueio de lote não move o lote de depósito —
   apenas muda `LotControl.status` (§12 item 9)
 - [ ] Teste: contagem cíclica escopada a um único depósito por vez
+- [ ] Teste: registrar um teste destrutivo com `consumed_quantity`
+  informado debita automaticamente o Depósito de Laboratório, na mesma
+  transação do registro do teste, sem exigir lançamento manual separado
+  (UC-42-E)
 
 ---
 
@@ -488,23 +511,40 @@ construir tela nova fora do padrão para depois ter que retrofitar).
    padrão de frontend (6.2) cedo, para que os Blocos 1–5 já os consumam
    em suas telas novas em vez de precisar de retrofit depois)
 
-## Confirmações Pendentes do Dono (bloqueiam início de código, não a
-especificação)
+## Decisões do Dono — Todas Confirmadas em 2026-08-03 (Não Bloqueiam Mais o Início de Código)
 
-Ver rodapé de `docs/business/01-USE_CASES.md` para a lista completa.
-Resumo dos itens que mudam desenho de schema (portanto mais caros de
-corrigir depois):
-- UC-32: bloquear ou permitir desativar perfil em uso
-- UC-35-Exceção: bloqueio total vs acesso mínimo sem perfil
-- UC-36: usar `permission_version` (invalida sessão) ou não
-- UC-41: nível exigido para emitir/cancelar NF-e (`aprovar`/gestor
-  proposto)
-- UC-42-E: consumo de laboratório manual vs vinculado ao teste destrutivo
-- UC-42 §12 item 11: permissão por depósito como lista simples no perfil
-  vs tabela própria perfil×depósito
+As 6 decisões antes listadas como pendentes foram confirmadas pelo dono.
+Resumo (detalhamento completo em `docs/business/01-USE_CASES.md`, seção
+"Decisões do dono sobre pontos antes em aberto", e em
+`docs/business/BUSINESS_RULES.md` §§ 4/9/11/12):
 
-O Bloco 6 (UC-43, alertas didáticos) **não tem decisão de negócio
+- **UC-32:** bloquear a desativação de perfil com usuários ativos
+  vinculados, até o admin realocar todos para outro perfil. Refletido em
+  §1.2 (CRUD de perfis).
+- **UC-35-Exceção:** bloqueio total com aviso didático ("Seu acesso ainda
+  não foi configurado — procure o administrador"). Refletido em §1.2/§1.4.
+- **UC-36:** troca de perfil vale no próximo login, **sem** invalidar a
+  sessão ativa (`permission_version` **não será implementado** nesta
+  entrega — fica marcado como melhoria futura opcional, ver §1.1).
+  Mitigação para revogação urgente: desativar o usuário (`active=false`,
+  mecanismo já existente).
+- **UC-41:** emissão **e** cancelamento de NF-e restritos ao nível
+  **gestor** do perfil de Vendas, sem distinção entre as duas operações.
+  Refletido no Bloco 5.
+- **UC-42-E:** consumo do Depósito de Laboratório em teste destrutivo é
+  **vinculado ao teste** (débito automático na mesma transação do
+  registro do `AcousticTestResult`), não manual. Refletido em §4.2/§4.4.
+- **UC-42 §12 item 11:** permissão por depósito como **lista simples**
+  (`warehouses_visible`) dentro da própria linha de permissão do módulo,
+  sem tabela própria de associação perfil×depósito.
+
+O Bloco 6 (UC-43, alertas didáticos) continua **sem decisão de negócio
 pendente** — é puramente uma decisão de sequenciamento técnico (quais
 endpoints priorizar para ganhar `details` estruturado primeiro, já
 sugerido em §6.1) e pode iniciar imediatamente, em paralelo aos demais
 blocos.
+
+**Único ponto ainda em aberto (não fazia parte deste lote de 6, não
+bloqueia início de desenvolvimento):** UC-40 — se o campo
+`handoff_signal` aditivo é suficiente ou se o dono também quer um
+contador/badge de notificação por módulo no menu (ver Bloco 3, §3.1).

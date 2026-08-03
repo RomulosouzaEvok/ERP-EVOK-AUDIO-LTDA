@@ -2,9 +2,11 @@
 
 **Módulo:** Controle de Acesso por Área/Departamento (Perfis de Acesso Configuráveis)
 **Numeração:** continuação de `docs/projeto/04-USE_CASES.md` (último UC formal: UC-29).
-**Status:** 🟡 Requisito em especificação — NÃO implementado. Programador deve
-ler este arquivo + `docs/business/BUSINESS_RULES.md` antes de codar, e ao
-concluir, consolidar os casos de uso implementados em `docs/projeto/04-USE_CASES.md`.
+**Status:** 🟢 Requisito especificado, com todas as decisões de negócio
+confirmadas pelo dono em 2026-08-03 — NÃO implementado ainda. Programador
+deve ler este arquivo + `docs/business/BUSINESS_RULES.md` antes de codar,
+e ao concluir, consolidar os casos de uso implementados em
+`docs/projeto/04-USE_CASES.md`.
 
 ---
 
@@ -20,6 +22,32 @@ concluir, consolidar os casos de uso implementados em `docs/projeto/04-USE_CASES
    (tudo do operador + aprovações/gestão da área).
 5. O perfil `admin` global (papel JWT existente) continua **acima** de
    qualquer perfil de área — nunca é bloqueado por este sistema.
+
+## Decisões do dono sobre pontos antes em aberto (DECIDIDO em 2026-08-03,
+não reabrir — detalhamento completo em cada UC/seção referenciada)
+
+6. **UC-32** (desativar perfil com usuários ativos vinculados):
+   **bloquear** a desativação até o admin realocar todos os usuários para
+   outro perfil.
+7. **UC-35-Exceção** (usuário sem perfil atribuído): **bloqueio total**
+   com aviso didático — texto oficial: "Seu acesso ainda não foi
+   configurado — procure o administrador."
+8. **UC-36** (troca de perfil de usuário logado): **vale no próximo
+   login** — não derruba a sessão ativa. Consequência aceita: o usuário
+   segue com o conjunto de permissões antigo até logout/expiração natural
+   do token. Mitigação para revogação urgente: desativar o usuário
+   (`active = false`), mecanismo já existente que força logout imediato.
+9. **UC-41** (permissão de NF-e): emissão **e** cancelamento restritos ao
+   nível **gestor** do perfil de Vendas, sem distinção entre as duas
+   operações.
+10. **UC-42 item E** (consumo do Depósito de Laboratório em teste
+    destrutivo): **vinculado ao teste** — o registro do teste destrutivo
+    (`AcousticTestResult`) debita o depósito automaticamente na mesma
+    transação, sem lançamento manual separado.
+11. **`BUSINESS_RULES.md` §12 item 11** (permissão por depósito dentro do
+    perfil): **lista simples** de depósitos permitidos dentro da própria
+    linha de permissão do módulo (`warehouses_visible: [...]`), sem
+    tabela de associação perfil×depósito separada.
 
 ## Atores (novos, adicionais aos já listados em `docs/projeto/04-USE_CASES.md`)
 
@@ -104,9 +132,11 @@ permissão) e §3 (regra do admin global).
 4. Sistema atualiza o perfil e registra `atualizado_por`/`atualizado_em`
 5. **Efeito imediato:** todos os usuários atualmente atribuídos a este
    perfil passam a refletir a nova matriz de permissões na **próxima
-   requisição** (o middleware de autorização consulta a permissão em
-   tempo real, não há cache de sessão) — ver DECISÃO PROPOSTA no UC-34
-   sobre invalidação de sessão em troca de perfil do usuário
+   requisição de API** (o middleware de autorização consulta a permissão
+   em tempo real, não há cache de sessão no payload do JWT); o menu
+   renderizado no frontend segue a mesma regra decidida em UC-36 (vale de
+   fato no próximo login para fins de exibição, embora a autorização real
+   de API já seja imediata)
 
 **Fluxo Alternativo (perfil não existe):**
 - Sistema retorna 404 NOT_FOUND
@@ -140,28 +170,33 @@ quem/quando/valor anterior (ver `BUSINESS_RULES.md` §5).
 **Fluxo Principal:**
 1. Administrador solicita a desativação de um perfil
 2. Sistema verifica se há usuários ativos atribuídos a este perfil (ver
-   Fluxo Alternativo — DECISÃO PROPOSTA)
+   Fluxo Alternativo — DECIDIDO)
 3. Sistema marca o perfil como `active = false` (soft delete — nunca
    remove o registro, por auditoria/histórico, seguindo o padrão do
    projeto para entidades de configuração)
 4. Sistema registra log de auditoria (quem/quando/motivo, se informado)
 
-**Fluxo Alternativo — DECISÃO PROPOSTA (perfil em uso):**
-> **Proponho:** bloquear a desativação com 422 BUSINESS_RULE_VIOLATION
+**Fluxo Alternativo — DECIDIDO (2026-08-03) (perfil em uso):**
+> **Decisão do dono:** bloquear a desativação com 422 BUSINESS_RULE_VIOLATION
 > enquanto houver usuário ativo com este perfil atribuído, listando os
-> usuários afetados — força o admin a reatribuir antes de desativar,
-> evitando usuários "órfãos" (ver UC-33-Exceção). Alternativa seria
-> permitir a desativação e tratar o usuário como "sem perfil" (UC-33
-> fluxo de exceção) — mais permissiva, mas gera usuários bloqueados sem
-> aviso prévio ao admin. **Aguardando confirmação do dono.**
+> usuários afetados — o admin deve realocar (reatribuir) **todos** os
+> usuários vinculados para outro perfil antes de conseguir desativar este.
+> Evita usuários "órfãos" (ver UC-35-Exceção). A alternativa mais
+> permissiva (desativar e tratar como "sem perfil") foi descartada.
 
 **Critérios de Aceite (BDD):**
 ```gherkin
-Cenário: Tentar desativar perfil com usuários ativos (regra proposta)
+Cenário: Tentar desativar perfil com usuários ativos (regra decidida)
   Dado que o perfil "Comprador" tem 2 usuários ativos vinculados
   Quando o admin tenta desativar o perfil "Comprador"
   Então o sistema responde 422
   E a mensagem lista os 2 usuários afetados
+
+Cenário: Desativar perfil após realocar todos os usuários vinculados
+  Dado que o perfil "Comprador" tinha 2 usuários ativos vinculados
+  E o admin reatribuiu (UC-33) os 2 usuários para outro perfil
+  Quando o admin tenta desativar o perfil "Comprador" novamente
+  Então o sistema responde 200 e o perfil fica com active = false
 
 Cenário: Desativar perfil sem usuários vinculados
   Dado que o perfil "Analista de Comex" não tem usuários vinculados
@@ -242,9 +277,10 @@ resolvido)
    botão "Aprovar Requisição" só aparece se nível = `aprovar`)
 4. Frontend renderiza o menu lateral apenas com os itens retornados
 
-**Fluxo Alternativo — usuário sem perfil atribuído (ver DECISÃO PROPOSTA
-no UC-35-Exceção):**
-- Sistema aplica a política definida no UC-35 (acesso mínimo proposto)
+**Fluxo Alternativo — usuário sem perfil atribuído (ver DECIDIDO
+(2026-08-03) no UC-35-Exceção):**
+- Sistema aplica a política definida no UC-35-Exceção: bloqueio total,
+  com aviso didático orientando o usuário a procurar o administrador
 
 **Critérios de Aceite (BDD):**
 ```gherkin
@@ -288,12 +324,11 @@ o módulo solicitado
    módulo do endpoint acessado e consulta a permissão do
    `access_profile_id` do usuário para aquele módulo
 4. Se a permissão for `nenhum` (ou o usuário não tiver perfil — ver
-   UC-35-Exceção-2), sistema retorna 403 **sem revelar dados** (mesmo
+   UC-35-Exceção), sistema retorna 403 **sem revelar dados** (mesmo
    comportamento para GET e para métodos de escrita — POST/PUT/PATCH/DELETE)
 5. Sistema registra tentativa em log de auditoria/segurança (ação
    `access_denied`, com `userId`, módulo solicitado, método HTTP,
-   timestamp) — ver DECISÃO PROPOSTA em `BUSINESS_RULES.md` §7 sobre nível
-   de detalhamento deste log
+   timestamp)
 
 **Fluxo Alternativo — Ação de escrita vs leitura dentro do módulo
 permitido, mas sem nível suficiente:**
@@ -332,24 +367,28 @@ Cenário: Frontend bloqueia navegação direta por URL
 ainda não teve um `access_profile_id` atribuído (ex.: recém-criado, ou
 perfil anterior foi desativado).
 
-> **DECISÃO PROPOSTA:** bloqueio total com aviso, e não acesso mínimo.
-> Justificativa: o modelo de negócio já fechado é "bloqueio total fora da
-> área" — um usuário sem área definida não tem uma área, logo não deve
-> enxergar nada além do próprio perfil de usuário (tela de "meus dados") e
-> uma mensagem clara orientando a contatar o administrador. Dar "acesso
-> mínimo" a um conjunto arbitrário de módulos contradiria a regra #2 já
-> fechada com o dono e criaria uma zona cinzenta de permissão implícita.
-> **Aguardando confirmação do dono** — alternativa seria liberar
-> Dashboard + Relatórios como "acesso mínimo universal", mas isso só deve
-> ser adotado se for uma decisão explícita, não um fallback silencioso.
+> **DECIDIDO (2026-08-03):** bloqueio total com aviso didático, e não
+> acesso mínimo. Justificativa: o modelo de negócio já fechado é
+> "bloqueio total fora da área" — um usuário sem área definida não tem
+> uma área, logo não deve enxergar nada além do próprio perfil de usuário
+> (tela de "meus dados") e uma mensagem clara orientando a contatar o
+> administrador. Dar "acesso mínimo" a um conjunto arbitrário de módulos
+> contradiria a regra #2 já fechada com o dono e criaria uma zona
+> cinzenta de permissão implícita. A alternativa de liberar
+> Dashboard + Relatórios como "acesso mínimo universal" foi descartada.
+> **Texto oficial do aviso (copy aprovado pelo dono):** "Seu acesso ainda
+> não foi configurado — procure o administrador."
 
-**Fluxo Principal (com a decisão proposta acima):**
+**Fluxo Principal (com a decisão confirmada acima):**
 1. Usuário sem `access_profile_id` faz login com sucesso (autenticação
    continua funcionando — a restrição é de autorização, não de
    autenticação)
 2. Sistema monta o menu contendo **apenas** um item: "Meu Perfil" (dados
-   pessoais, troca de senha) e uma mensagem no topo: "Você ainda não tem
-   uma área atribuída. Contate o administrador do sistema."
+   pessoais, troca de senha) e uma mensagem no topo, em destaque:
+   **"Seu acesso ainda não foi configurado — procure o administrador."**
+   (este texto segue o Padrão de Alerta Didático de UC-43/
+   `BUSINESS_RULES.md` §13 — é direto, sem jargão técnico, e já indica o
+   próximo passo)
 3. Qualquer chamada de API a módulos de negócio retorna 403 (mesmo
    comportamento do UC-35)
 
@@ -366,49 +405,71 @@ Cenário: Usuário novo sem perfil atribuído faz login
 
 ---
 
-## UC-36: Troca de Perfil de Usuário Logado (Efeito Imediato e Sessão)
+## UC-36: Troca de Perfil de Usuário Logado (Vale no Próximo Login)
 
 **Ator:** Administrador Global (ação), Usuário afetado (impacto)
-**Pré-condições:** Usuário-alvo está com sessão ativa (token JWT válido)
-no momento em que o admin altera seu perfil
+**Pré-condições:** Usuário-alvo pode ou não estar com sessão ativa (token
+JWT válido) no momento em que o admin altera seu perfil
 
-> **DECISÃO PROPOSTA:** reaproveitar o mecanismo já existente de
-> `passwordVersion` (visto em `server/src/middlewares/auth.ts`, que já
-> invalida sessões na troca de senha). Proponho um campo análogo
-> `permissionVersion` (ou reaproveitar `passwordVersion` incrementando-o
-> também na troca de perfil) no usuário: toda troca de
-> `access_profile_id`/`nivel` incrementa essa versão; o middleware de
-> autenticação já compara a versão do token com a versão atual do usuário
-> e invalida a sessão (`401 — Sessão invalidada, faça login novamente`)
-> caso divirjam. Isso força o usuário a logar novamente e receber um token
-> (e menu) já refletindo o novo perfil, evitando uma janela onde o token
-> antigo "lembra" de acessos que já não deveriam existir (ex.: token
-> emitido ainda com o perfil antigo, usado para acessar um módulo que o
-> novo perfil não cobre — como o middleware valida a permissão em tempo
-> real a cada request, e não grava o perfil dentro do payload do JWT, o
-> risco real é baixo, mas a invalidação de sessão reforça auditabilidade e
-> consistência imediata). **Aguardando confirmação do dono** — alternativa
-> mais simples seria não invalidar sessão (já que a checagem de módulo é
-> sempre em tempo real contra o banco, nunca contra o payload do JWT), mas
-> perderíamos o alinhamento com o padrão já usado para troca de senha.
+> **DECIDIDO (2026-08-03):** a troca de perfil **não derruba a sessão
+> ativa**. O novo perfil/nível vale a partir do **próximo login** do
+> usuário — não é forçada invalidação de token nem exigido novo login
+> imediato (mecanismo `permissionVersion`/reaproveitamento de
+> `passwordVersion`, cogitado na proposta original, **não será
+> implementado como obrigatório** — ver nota de escopo abaixo).
+>
+> **Consequência aceita (registrada explicitamente, por instrução do
+> dono):** um usuário com sessão ativa no momento da troca de perfil
+> continua operando, durante o tempo restante daquela sessão (até
+> logout manual ou expiração natural do token, hoje 7 dias TTL), com o
+> **conjunto de permissões antigo** — mesmo que o admin já tenha
+> revogado/alterado o acesso dele no banco. Isso é uma janela de acesso
+> "desatualizado" aceita conscientemente pelo negócio, em troca de
+> simplicidade (não força logout inesperado de um usuário no meio de uma
+> operação, ex.: no meio de um apontamento de produção).
+>
+> **Mitigação recomendada para o caso urgente (ex.: desligamento ou
+> suspeita de uso indevido):** se o admin precisar revogar o acesso de um
+> usuário **imediatamente**, deve usar o mecanismo já existente de
+> **desativar o usuário** (`active = false`) — o middleware de
+> autenticação já bloqueia usuários inativos em toda requisição
+> (`server/src/middlewares/auth.ts`, checagem `if (!user.active)`,
+> `401 — Usuário inativo`), efetivamente forçando logout imediato. Trocar
+> apenas o perfil (mantendo o usuário ativo) é para o caso comum de
+> realocação de função, não para revogação de emergência.
 
-**Fluxo Principal (com a decisão proposta):**
+**Fluxo Principal (decisão final):**
 1. Administrador troca o perfil (ou nível) de um usuário (UC-33)
-2. Sistema incrementa `permissionVersion` do usuário na mesma transação
-   que grava o novo `access_profile_id`/`nivel`
-3. Na próxima requisição do usuário afetado, `authenticate` middleware
-   compara a versão do token com `user.permissionVersion` e, se
-   divergente, retorna 401 "Sessão invalidada, faça login novamente"
-4. Usuário faz login novamente e recebe token + menu já refletindo o novo
+2. Sistema grava o novo `access_profile_id`/`nivel` imediatamente no
+   banco — mas **não** invalida o token/sessão já emitidos
+3. Enquanto o usuário não fizer logout/novo login, seu token continua
+   válido e o middleware de autorização por módulo consulta o perfil
+   **atual** do usuário no banco a cada requisição (não há cache de
+   permissão no payload do JWT) — na prática, a maior parte das checagens
+   já reflete o novo perfil quase imediatamente, **exceto** onde o
+   frontend cacheia o menu/nível localmente durante a sessão (ver Nota de
+   Escopo)
+4. No próximo login (voluntário, ou forçado por expiração/logout), o
+   usuário recebe o menu e as permissões já 100% consistentes com o novo
    perfil
 
-**Fluxo Alternativo (efeito imediato sem invalidação — caso a decisão
-proposta não seja confirmada):**
-- Como a checagem de permissão por módulo é sempre feita em tempo real
-  contra `access_profile_id` do usuário no banco (nunca embutida no JWT),
-  o novo perfil já vale a partir da próxima requisição, mesmo sem forçar
-  novo login — a única diferença prática é que o usuário não é
-  "surpreendido" com um logout forçado
+**Nota de escopo (esclarecimento técnico registrado para não gerar
+ambiguidade na implementação):** como o middleware de autorização por
+módulo (Bloco 1) consulta o `access_profile_id` do usuário no banco a
+cada requisição — e não embute o perfil no payload do JWT — a troca de
+perfil já tem efeito quase imediato nas chamadas de **API** subsequentes,
+mesmo sem novo login. O que **só** atualiza no próximo login é o **menu
+renderizado no frontend** (que pode ter sido montado/cacheado no momento
+do login anterior). Ou seja: um usuário rebaixado de gestor para operador
+pode, tecnicamente, ainda ver um botão de "Aprovar" no menu antigo
+cacheado até relogar — mas ao clicar, a API já vai negar com 403,
+consistente com o novo perfil. Isso é aceitável dentro da decisão do
+dono (não é a "janela de acesso antigo total" mencionada acima — é
+apenas uma inconsistência visual até o próximo login, não uma brecha de
+segurança real, pois a decisão de autorização de fato sempre roda no
+backend). O mecanismo `permissionVersion` fica registrado como **melhoria
+futura opcional** (ver `TODO.md`) caso o negócio queira, no futuro, forçar
+consistência imediata de menu também.
 
 **Critérios de Aceite (BDD):**
 ```gherkin
@@ -416,10 +477,19 @@ Cenário: Admin rebaixa usuário de Gestor para Operador durante sessão ativa
   Dado que o usuário está logado com perfil "Compras" nível "gestor"
   E ele tem um token JWT válido em uso
   Quando o admin altera o nível dele para "operador"
-  Então (decisão proposta) a próxima requisição do usuário com o token
-    antigo retorna 401 "Sessão invalidada, faça login novamente"
-  E, após novo login, tentativas de aprovar requisição retornam 403
-    (nível "operador" não aprova)
+  Então a sessão do usuário NÃO é invalidada (token antigo continua
+    autenticando)
+  E qualquer nova requisição de API do usuário já é avaliada contra o
+    nível "operador" atual (tentativa de aprovar requisição retorna 403)
+  E o menu do frontend só reflete 100% o novo perfil após o próximo login
+
+Cenário: Admin precisa revogar acesso imediatamente (mitigação)
+  Dado que o admin identificou uso indevido de um usuário com sessão ativa
+  Quando o admin desativa o usuário (active = false), em vez de apenas
+    trocar o perfil
+  Então a próxima requisição desse usuário, com o token antigo, retorna
+    401 "Usuário inativo" — acesso revogado de fato, sem esperar logout
+    voluntário ou expiração do token
 ```
 
 ---
@@ -613,8 +683,9 @@ Pedido → Recebimento (`purchase_requisitions`, ver UC-25 de
    aparece sinalizado visualmente (badge "Amostra — Engenharia") na tela
    de conferência, para que o Almoxarife saiba que o destino não é o
    estoque produtivo comum
-5. Ao dar entrada, o Almoxarife/Recebimento direciona o material conforme
-   a Regra de Negócio (DECISÃO PROPOSTA) abaixo
+5. Ao dar entrada, o Almoxarife/Recebimento direciona o material
+   automaticamente para o Depósito do Laboratório (regra resolvida por
+   UC-42, ver abaixo)
 
 **Regra de Negócio — vínculo a projeto:**
 - `project_id` é **opcional**: nem toda amostra nasce de um projeto formal
@@ -840,20 +911,16 @@ SEFAZ):**
 - Sistema retorna 409 CONFLICT se já houver NF-e `processing` ou
   `authorized` para a venda
 
-**DECISÃO PROPOSTA — nível de permissão para emitir NF-e:**
-> Emitir NF-e é uma ação fiscal com consequência tributária real (SEFAZ),
-> não uma operação comum de "dia a dia" de vendas. **Proponho** que a
-> emissão de NF-e exija módulo `vendas` (ou um módulo dedicado
-> `faturamento`) com nível **`aprovar`**, restrito portanto a
-> **Gestor de Vendas** — coerente com o padrão dos demais dois níveis
-> (operador executa o dia a dia: criar orçamento, confirmar venda; gestor
-> aprova/executa ações de maior risco: emitir/cancelar NF-e). Alternativa
-> mais permissiva seria deixar `operar` já habilitar a emissão (operador
-> comum emite), o que agiliza o fluxo mas reduz o controle sobre um
-> documento fiscal. **Aguardando confirmação do dono.** Cancelamento de
-> NF-e, por ser ainda mais sensível (exige justificativa SEFAZ), deveria
-> seguir a mesma restrição de `aprovar`/gestor, independentemente da
-> decisão sobre emissão.
+**DECIDIDO (2026-08-03) — nível de permissão para emitir NF-e:**
+> Emissão **e** cancelamento de NF-e exigem módulo `vendas` (ou um módulo
+> dedicado `faturamento`, se desmembrado futuramente) com nível
+> **`aprovar`**, restritos ao **nível de usuário `gestor` do Vendas** —
+> coerente com o padrão dos demais dois níveis (operador executa o dia a
+> dia: criar orçamento, confirmar venda; gestor aprova/executa ações de
+> maior risco fiscal). A alternativa mais permissiva (liberar emissão a
+> `operar`/operador comum) foi descartada — emitir/cancelar NF-e é ação
+> fiscal com consequência tributária real (SEFAZ) e fica reservada ao
+> gestor em ambas as operações, sem distinção entre emitir e cancelar.
 
 **Critérios de Aceite (BDD):**
 ```gherkin
@@ -874,13 +941,19 @@ Cenário: Expedição não pode embarcar sem NF-e autorizada
   Quando alguém tenta PUT /api/sales/:id/status com {"status":"shipped"}
   Então o sistema responde 422 (transição inválida — só invoiced -> shipped)
 
-Cenário (decisão proposta): Operador de Vendas tenta emitir NF-e
+Cenário: Operador de Vendas tenta emitir NF-e (regra decidida)
   Dado que o usuário tem perfil "Vendas" nível "operador"
   E o módulo "vendas" no perfil está marcado como "aprovar" (nível de
     módulo necessário para emitir NF-e, ainda que o usuário seja operador)
   Quando ele chama POST /api/sales/:id/nfe
   Então o sistema responde 403 "Ação de aprovação restrita a gestores da área"
     (mesma regra de UC-37: nível de usuário "operador" nunca aprova)
+
+Cenário: Operador de Vendas tenta cancelar NF-e (mesma restrição da emissão)
+  Dado que o usuário tem perfil "Vendas" nível "operador"
+  Quando ele chama POST /api/sales/:id/nfe/cancel
+  Então o sistema responde 403 — cancelamento segue a mesma restrição de
+    gestor aplicada à emissão, sem distinção entre as duas operações
 
 Cenário: Cancelamento de NF-e de venda já expedida não reverte status
   Dado que a venda está "shipped" com NF-e "authorized"
@@ -981,18 +1054,16 @@ Laboratório)
 
 ### Fluxo Principal (E) — Laboratório Consome do Seu Próprio Depósito
 
-> **DECISÃO PROPOSTA:** consumo do Depósito de Laboratório em testes
-> destrutivos pode ser (a) **manual** — o analista registra uma baixa de
-> estoque avulsa antes/depois do teste, sem vínculo direto ao registro do
-> teste — ou (b) **vinculado ao teste** — ao registrar um
+> **DECIDIDO (2026-08-03):** consumo do Depósito de Laboratório em testes
+> destrutivos é **vinculado ao teste** — ao registrar um
 > `AcousticTestResult` (UC-LAB-01 já existente) marcado como destrutivo,
 > o sistema debita automaticamente a quantidade informada do Depósito de
-> Laboratório, na mesma transação. **Proponho a opção (b)** por
-> rastreabilidade superior (o consumo fica automaticamente ligado ao teste
-> que o gerou, sem depender de disciplina manual do analista, e evita
-> duplo lançamento/esquecimento) — custo é adicionar um campo opcional
-> `consumed_quantity`/`is_destructive` ao teste e um débito condicional no
-> mesmo use case. **Aguardando confirmação do dono.**
+> Laboratório, na mesma transação do registro do teste. Padrão adotado
+> por rastreabilidade superior: o consumo fica automaticamente ligado ao
+> teste que o gerou, sem depender de disciplina manual do analista, e
+> evita duplo lançamento/esquecimento. Implementação exige um campo
+> opcional `consumed_quantity`/`is_destructive` no teste e um débito
+> condicional no mesmo use case de registro (ver `TODO.md` Bloco 4).
 
 ### Fluxo Principal (F) — Transferência Entre Depósitos (Com Aprovação de Gestor)
 
@@ -1077,6 +1148,15 @@ Cenário: Quarentena não é depósito
   Então o lote permanece fisicamente no Depósito de Insumos — a liberação
     não move o material entre depósitos, apenas muda seu status de
     consumo
+
+Cenário: Teste destrutivo debita automaticamente o Depósito de Laboratório
+  Dado que o Depósito de Laboratório tem saldo 5 unidades do componente Y
+  Quando o analista registra um AcousticTestResult marcado como
+    destrutivo, informando consumed_quantity = 2 do componente Y
+  Então o sistema debita 2 unidades do Depósito de Laboratório na mesma
+    transação do registro do teste
+  E o saldo do Depósito de Laboratório passa a ser 3, sem exigir um
+    lançamento manual separado de baixa de estoque
 ```
 
 **Regras de Negócio:** ver `BUSINESS_RULES.md` §12.
@@ -1236,21 +1316,27 @@ Cenário: Backend sem details estruturado ainda assim segue o padrão visual
 | UC-38 | Endpoints Compartilhados Entre Áreas | Todos os usuários |
 | UC-39 | Requisição de Amostra da Engenharia | Engenheiro de Produto |
 | UC-40 | Handoff Entre Departamentos com Status Visual (Semáforo) | Todos os perfis operacionais |
-| UC-41 | Emissão de Nota Fiscal pelo Vendas (Faturamento) | Vendas (Gestor — proposto) |
+| UC-41 | Emissão de Nota Fiscal pelo Vendas (Faturamento) | Vendas (Gestor) |
 | UC-42 | Múltiplos Depósitos (Insumos, Acabados, Laboratório) | Almoxarife/Recebimento/Expedição/Laboratório |
 | UC-43 | Alertas Didáticos de Pré-Requisitos (Transversal) | Todos os perfis operacionais |
 
-**Decisões propostas pendentes de confirmação do dono:** UC-32 (bloquear
-ou permitir desativação de perfil em uso), UC-35-Exceção (bloqueio total
-vs acesso mínimo para usuário sem perfil), UC-36 (invalidar sessão via
-`permissionVersion` ou deixar efeito imediato sem forçar novo login),
-UC-39/UC-42 (destino da amostra **resolvido** pelo Depósito do
-Laboratório — não é mais decisão em aberto quanto ao "se"; UC-42-E ainda
-tem decisão aberta sobre consumo manual vs vinculado ao teste
-destrutivo), UC-40 (campo `handoff_signal` aditivo nas listagens
-existentes vs endpoint de notificações dedicado, e se é necessário
-contador/badge no menu), UC-41 (emissão/cancelamento de NF-e restrito a
-nível `aprovar`/gestor de Vendas vs liberado a `operar`/operador).
+**Decisões de negócio — todas confirmadas pelo dono em 2026-08-03** (ver
+lista consolidada no topo deste documento, item "Decisões do dono sobre
+pontos antes em aberto"): UC-32 (bloquear desativação de perfil em uso
+até realocar usuários), UC-35-Exceção (bloqueio total com aviso
+didático), UC-36 (troca de perfil vale no próximo login, sem invalidar
+sessão ativa; mitigação de emergência via desativação de usuário), UC-41
+(emissão e cancelamento de NF-e restritos a gestor de Vendas), UC-42 item
+E (consumo do Depósito de Laboratório vinculado ao teste destrutivo),
+`BUSINESS_RULES.md` §12 item 11 (permissão por depósito como lista
+simples no perfil).
+
+**Ainda em aberto (não fazia parte deste lote de 6 decisões, não
+bloqueia o início do desenvolvimento — decisão de UX/escopo técnico, não
+de regra de negócio):** UC-40 — se o campo `handoff_signal` aditivo nas
+listagens já existentes é suficiente, ou se o dono também espera um
+contador/badge de notificação no menu lateral por módulo (ver
+`BUSINESS_RULES.md` §10 e `TODO.md` Bloco 3).
 
 > Quando este requisito for implementado, os UCs acima devem ser revisados
 > e consolidados (com qualquer ajuste de contrato real de endpoint) em

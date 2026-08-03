@@ -2,8 +2,9 @@
 
 Documento complementar a `docs/business/01-USE_CASES.md`. Aqui ficam as
 regras estáticas (matriz de permissões, invariantes, fórmulas) que os
-casos de uso referenciam. Status: 🟡 requisito em especificação, NÃO
-implementado.
+casos de uso referenciam. Status: 🟢 requisito especificado, com as 6
+decisões antes propostas já confirmadas pelo dono em 2026-08-03 — NÃO
+implementado ainda.
 
 ---
 
@@ -296,12 +297,14 @@ Ver `01-USE_CASES.md` UC-38 para o fluxo completo. Resumo normativo:
 - `shipped` é terminal: cancelamento de NF-e após embarque não reverte
   `sale.status` — é tratado como situação excepcional que exige ação
   logística manual fora do sistema.
-- **DECISÃO PROPOSTA:** emissão e cancelamento de NF-e exigem módulo
-  `vendas` (ou `faturamento`, se for desmembrado como módulo próprio) com
-  nível `A` (aprovar) no perfil **e** `nivel = gestor` do usuário — mesma
-  fórmula de §4. Um operador de vendas comum (nível `operador`) não emite
-  nem cancela NF-e, mesmo que o módulo do perfil permita `A` — a segunda
-  trava de nível de usuário sempre se aplica (consistente com UC-37).
+- **DECIDIDO (2026-08-03):** emissão **e** cancelamento de NF-e exigem
+  módulo `vendas` (ou `faturamento`, se for desmembrado como módulo
+  próprio) com nível `A` (aprovar) no perfil **e** `nivel = gestor` do
+  usuário — mesma fórmula de §4, aplicada igualmente às duas operações
+  (emitir e cancelar), sem distinção entre elas. Um operador de vendas
+  comum (nível `operador`) não emite nem cancela NF-e, mesmo que o módulo
+  do perfil permita `A` — a segunda trava de nível de usuário sempre se
+  aplica (consistente com UC-37).
 
 ---
 
@@ -359,7 +362,7 @@ implementação seguem sendo tarefa técnica, ver `TODO.md`):
    | Consumo de componentes em OP | Sai de `INSUMOS` |
    | Conclusão de OP (produto acabado) | Entra em `ACABADOS` |
    | Expedição de venda | Sai **exclusivamente** de `ACABADOS` — nunca lê saldo de outro depósito, mesmo que o produto exista lá |
-   | Consumo em teste destrutivo de laboratório | Sai de `LABORATORIO` (ver decisão proposta em UC-42-E: manual vs vinculado ao teste) |
+   | Consumo em teste destrutivo de laboratório | Sai de `LABORATORIO`, debitado automaticamente pelo registro do teste destrutivo (decidido em UC-42-E: vinculado ao teste, não manual) |
    | Transferência manual (ex.: retrabalho, cessão a laboratório) | Conforme solicitado pelo usuário, sempre com aprovação de gestor (item 8 abaixo) |
 
 8. **Transferência exige aprovação de gestor.** Toda transferência entre
@@ -402,13 +405,14 @@ implementação seguem sendo tarefa técnica, ver `TODO.md`):
     - PCP/Operador de Produção → consome de `INSUMOS`, credita `ACABADOS`
       (via apontamento de OP, não como operação livre de estoque)
     Este refinamento por depósito dentro do módulo é uma extensão da
-    matriz do §1 — **pendência técnica**: definir se o campo de permissão
-    por depósito é uma lista simples (`warehouses_visible: ['INSUMOS']`)
-    dentro da mesma linha de permissão do módulo `estoque`, ou uma tabela
-    própria de associação perfil×depósito. Ambas são viáveis; a segunda é
-    mais flexível para crescimento (novos depósitos futuros sem alterar
-    schema de permissão). **Decisão de desenho técnico a validar com o
-    AdmDBA/programador, não bloqueia a especificação de negócio.**
+    matriz do §1. **DECIDIDO (2026-08-03):** o campo de permissão por
+    depósito é uma **lista simples** (`warehouses_visible: ['INSUMOS']`)
+    dentro da mesma linha de permissão do módulo `estoque` (ou dos
+    módulos `recebimento`/`expedicao`/`laboratorio`, conforme o caso) —
+    sem tabela própria de associação perfil×depósito. Se no futuro o
+    crescimento do número de depósitos exigir uma modelagem mais rica, a
+    migração de uma lista simples para uma tabela de associação é uma
+    evolução incremental possível, mas não é o desenho inicial.
 
 ---
 
@@ -543,3 +547,4 @@ populam, e trabalho de frontend.
 | 2026-08-03 | Adição §9 (amostra de engenharia), §10 (semáforo de handoff), §11 (NF-e do Vendas) |
 | 2026-08-03 | Adição §12 (múltiplos depósitos); §9 atualizado — destino da amostra resolvido pelo Depósito do Laboratório |
 | 2026-08-03 | Adição §13 (padrão de alerta didático de pré-requisitos, transversal, UC-43) |
+| 2026-08-03 | Confirmação do dono nas 6 decisões antes propostas: §11 (NF-e restrito a gestor, emissão e cancelamento), §12 item 11 (permissão por depósito como lista simples), §12 item 7 (consumo de laboratório vinculado ao teste destrutivo); demais decisões (UC-32, UC-35-Exceção, UC-36) refletidas em `01-USE_CASES.md` |
