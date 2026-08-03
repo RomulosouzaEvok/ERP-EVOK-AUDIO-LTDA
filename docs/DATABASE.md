@@ -2,7 +2,7 @@
 
 ## Tecnologia
 - **ORM:** Sequelize 6.x
-- **Banco:** PostgreSQL 8.0+
+- **Banco:** PostgreSQL 16 (único suportado; 24+ migrations versionadas, 133 FKs)
 - **Migrações:** `sequelize-cli` com migrations versionadas em todos os ambientes
 
 ---

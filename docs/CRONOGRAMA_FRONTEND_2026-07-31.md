@@ -1,8 +1,8 @@
-# Cronograma e Checklist - Frontend Web do ERP EVOK ÁUDIO
+﻿# Cronograma e Checklist - Frontend Web do ERP EVOK ÁUDIO
 
 **Versão:** 1.0
 **Data-base:** 2026-07-31
-**Status:** Planejamento - nenhum código de frontend criado ainda
+**Status:** ⚠️ HISTÓRICO — o frontend FOI implementado em `client/` (React 19 + Vite, React Router v7.18.2, porta 5173). FE0 está concluído; FE1–FE7 parcialmente. Cobertura real de telas: ver docs/LEVANTAMENTO_ERP_2026-08-02.md
 **Depende de:** API já existente em `server/` (Gates G0-G5 aprovados, ver
 `docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md`)
 

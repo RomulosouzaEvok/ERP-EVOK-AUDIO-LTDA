@@ -1,8 +1,8 @@
 # CLAUDE.md — ERP Evok Áudio LTDA
 **Single Source of Truth (SSOT) para o projeto ERP**
 
-**Status:** 🔴 Pré-Go-Live G6 (Crítico) | **Data:** 2 de agosto de 2026  
-**Próximas 30h:** Resolver 4 bloqueadores P0 → UAT → Go-Live Autorizado
+**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02) | **Data:** 2 de agosto de 2026  
+**Próximo passo:** UAT completo → aprovação formal G6 → Go-Live
 
 ---
 
@@ -22,10 +22,10 @@
 - **Relatórios & Dashboard:** KPIs, análise de estoque, eficiência de produção, auditor inteligente
 
 ### Status Atual
-- ✅ Backend: Node.js + Express + Sequelize (18 modelos, 19 rotas, 22 controllers)
-- ✅ Database: PostgreSQL 16 (schema versionado, migrations CLI)
-- 🔧 Frontend: React (planejado, ainda não integrado)
-- 🔴 **Go-Live Bloqueado por 4 críticos** — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
+- ✅ Backend: Node.js + Express + Sequelize (30+ módulos, 32 rotas montadas)
+- ✅ Database: PostgreSQL 16 (24 migrations versionadas, 133 foreign keys)
+- ✅ Frontend: React 19 + Vite em `client/` (porta 5173) — 9 módulos com UI completa, 8 parciais, 12 sem tela
+- ✅ **4 bloqueadores P0 + 2 P1 remediados em 2026-08-02** (commit `d1d3aff`) — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
 
 ---
 
@@ -42,7 +42,7 @@
 | **Validação** | express-validator | 7.0 | XSS protection, sanitização |
 | **Segurança** | Helmet + rate-limit | - | Headers, CORS configurável |
 | **Testes** | Jest + Supertest | - | Unit, integration, edge cases |
-| **Frontend** | React (planejado) | - | React Router v6, pendente integração |
+| **Frontend** | React + TypeScript + Vite | 19 / 8 | React Router v7.18.2, TanStack Query, Tailwind 4/shadcn, Vitest |
 
 ### Variáveis de Ambiente Críticas
 ```bash
@@ -85,7 +85,7 @@ erp-evok-audio/
 │   │       ├── 04a_inventory_movements_expand.sql  # Dual-read Phase 4.1
 │   │       └── ...
 │   └── __tests__/                   # Unit, integration, edge tests
-├── packages/web/                    # Frontend React (futuro)
+├── client/                          # Frontend React 19 + Vite (páginas, rotas, api client)
 ├── docs/
 │   ├── projeto/                     # Plano arquitetura, use-cases
 │   │   ├── 00-README.md
@@ -110,7 +110,7 @@ erp-evok-audio/
 ### Autenticação & Autorização
 - **Login JWT:** rate-limited, 10 tentativas/15min, 7 dias TTL
 - **Perfis:** admin (acesso total), operator (leitura/escrita operacional), financial (leitura financeira)
-- **Proteção:** IDOR validação em todos os endpoints (TODO: implementar company_id)
+- **Proteção:** RBAC em 100% das rotas; anti-spoofing de identidade (requester/approved_by/operator vêm do JWT ou são validados por FK) — remediação 3.1 de 2026-08-02
 
 ### Produtos & Engenharia (Handoff em Execução)
 - **Núcleo (Item):** Código, descrição, tipo, estoque, custo padrão — **NUNCA MUDA** (MRP hot path)
@@ -157,23 +157,23 @@ erp-evok-audio/
 
 ## 5. Go-Live Readiness (Crítico)
 
-### 🔴 4 Bloqueadores P0 (30h — Semana 1)
-Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) para detalhes.
+### ✅ Bloqueadores remediados em 2026-08-02 (commit `d1d3aff`)
+Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) e [LEVANTAMENTO_ERP_2026-08-02.md](docs/LEVANTAMENTO_ERP_2026-08-02.md).
 
-| ID | Bloqueador | Status | ETA |
-|----|-----------|--------|-----|
-| 1.1 | Requisição de Compra inexistente | 🔴 BLOQUEADO | 8h |
-| 1.2 | MRP congelado (estoque não real) | 🔴 BLOQUEADO | 6h |
-| 2.1 | 37 tabelas SEM foreign keys | 🔴 BLOQUEADO | 4h |
-| 3.1 | IDOR — sem validação company_id | 🔴 BLOQUEADO | 3h |
-
-**Fase 2 (Pós-Go-Live):** 15 altos (P1 backlog): TypeScript strict, BOM transação, payable proporcional, etc.
+| ID | Bloqueador | Status |
+|----|-----------|--------|
+| 1.1 | Requisição de Compra | ✅ RESOLVIDO — módulo `/api/purchase-requisitions` testado end-to-end |
+| 1.2 | MRP congelado | ✅ RESOLVIDO — MRP contra estoque real (dual-read), validado |
+| 2.1 | Foreign keys ausentes | ✅ RESOLVIDO — 133 FKs via migration versionada |
+| 3.1 | IDOR / spoofing de identidade | ✅ RESOLVIDO — RBAC 100% + identidade do JWT |
+| 3.2 | react-router CVE-2025-68470 | ✅ RESOLVIDO — v7.18.2 |
+| 1.3 | Apontamento × OP desconectados | ✅ RESOLVIDO — reconciliação na conclusão da OP |
 
 ### Roadmap
-1. **Fase 1 (P0):** Bloqueadores → Testes UAT → Go-Live G6 ✅
-2. **Fase 2 (P1):** Backlog alto pós-Go-Live (2-3 sprints)
-3. **Fase 3 (P2):** Backlog médio (refactor, performance)
-4. **Fase 4 (P3):** Backlog baixo (frontend, CI/CD, opcional)
+1. **Fase 1 (P0):** ✅ Concluída em 2026-08-02 → **próximo: UAT → Go-Live G6**
+2. **Fase 2 (P1):** Catálogo item×fornecedor (N:N), conversão requisição→pedido, MRP fecha ciclo (plano→OP/requisição), telas de MRP/requisição/qualidade — ver LEVANTAMENTO
+3. **Fase 3 (P2):** Capacidade finita/centros de trabalho, custo real vs padrão, TypeScript strict
+4. **Fase 4 (P3):** Relatórios de manufatura (OEE, refugo), CI/CD, unificação schema legado/novo
 
 ---
 
@@ -221,7 +221,7 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 ### Monitoramento Pós-Go-Live
 - **Logs:** Console (TODO: Winston structured logging em P1)
 - **Alertas:** Estoque zerado/negativo, OP atrasadas, contas vencidas
-- **Health Check:** `GET /api/health` (a implementar)
+- **Health Check:** `GET /health/live` (processo) e `GET /health/ready` (processo + PostgreSQL) — implementados
 - **Backup:** PostgreSQL dump diário via cron
 
 ---
@@ -258,7 +258,7 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 **Tradeoff:** Menos previsível (não há "MRP run" com hora específica), mas mais preciso.
 
 ### Foreign Keys Obrigatórias
-**Decisão:** Todas as 37 tabelas têm FKs com `ON DELETE RESTRICT` (por padrão) ou `CASCADE` (quando apropriado).
+**Decisão:** Integridade referencial obrigatória — 133 FKs aplicadas via migrations versionadas, com `ON DELETE RESTRICT` (padrão) ou `CASCADE`/`SET NULL` (quando apropriado).
 
 **Por quê:** Integridade referencial, sem órfãos, auditoria
 **Tradeoff:** Mais rígido (ex: não pode deletar fornecedor com compras abertas), mas banco garante consistência
@@ -299,7 +299,7 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 ## 9. Perguntas Frequentes
 
 **P: Por que Go-Live está bloqueado?**  
-R: 4 críticos: Requisição de Compra, MRP estoque real, Foreign Keys, IDOR. Veja AUDITORIA_PRE_PRODUCAO_2026-08-02.md.
+R: Não está mais bloqueado pelos 4 críticos — todos remediados em 2026-08-02 (commit d1d3aff). O gate remanescente é UAT + aprovação formal G6.
 
 **P: Como codar um novo módulo?**  
 R: Siga `modules/{modulo}/{use-cases,repositories,controllers}/` padrão Clean Architecture. Modelos em `src/models/`, rotas em `src/routes/`.
@@ -308,7 +308,7 @@ R: Siga `modules/{modulo}/{use-cases,repositories,controllers}/` padrão Clean A
 R: CTO/Tech Lead (plano 30h), CFO (riscos), Gerente Produção (rastreabilidade), Compliance (LGPD/ISO).
 
 **P: Frontend está pronto?**  
-R: Não. Planejado para Fase 2. Atualmente backend + PostgreSQL + testes.
+R: Parcialmente. Existe em `client/` (React 19 + Vite, porta 5173) com login, dashboard, produtos, vendas, compras, produção/BOM, financeiro, patrimônio, usuários e rastreabilidade. Faltam telas para 12 módulos do backend (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, etc.) — ver docs/LEVANTAMENTO_ERP_2026-08-02.md.
 
 **P: Posso rodar em MySQL/SQLite?**  
 R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de arquitetura").

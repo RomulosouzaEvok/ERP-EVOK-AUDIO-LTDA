@@ -3,8 +3,9 @@
 ERP interno da EVOK ÁUDIO, cobrindo as áreas administrativa, comercial, financeira,
 de produção, suprimentos, logística, qualidade, RH e tributária da fábrica.
 
-Backend em **Node.js + TypeScript** com **PostgreSQL** (Sequelize), organizado em
-módulos por domínio seguindo MVC e Clean Architecture.
+Monorepo com backend em **Node.js + TypeScript** + **PostgreSQL** (Sequelize) em
+`server/`, organizado em módulos por domínio seguindo Clean Architecture, e
+frontend **React 19 + Vite** em `client/`.
 
 ## Diretriz de arquitetura
 
@@ -21,10 +22,11 @@ suportado.
 | Camada   | Tecnologia                     |
 | -------- | ------------------------------ |
 | Runtime  | Node.js + TypeScript (`tsx`)   |
-| Banco    | PostgreSQL 16 (Sequelize)      |
+| Banco    | PostgreSQL 16 (Sequelize, 24+ migrations versionadas) |
 | Auth     | JWT                            |
-| Testes   | Jest (unit / integration / edge) |
-| Infra    | Docker Compose (Postgres local) |
+| Frontend | React 19 + TypeScript + Vite 8, React Router 7, TanStack Query, Tailwind 4/shadcn |
+| Testes   | Jest (backend) / Vitest + Testing Library (frontend) |
+| Infra    | Docker Compose (Postgres + API) |
 
 ## Requisitos
 
@@ -68,11 +70,16 @@ se o banco já tiver dados.
 ## Executando
 
 ```bash
-npm run install-all     # instala dependências (raiz + server)
+npm run install-all     # instala dependências (raiz + client + server)
 
-npm run server           # backend em watch mode
+npm run server           # backend em watch mode (porta 5000)
+npm run client           # frontend Vite em dev (porta 5173)
+npm run dev              # backend + frontend juntos (concurrently)
 npm start                # backend em modo produção
 ```
+
+Health check do backend: `GET /health/live` (processo) e `GET /health/ready`
+(processo + PostgreSQL).
 
 Scripts do backend (dentro de `server/`):
 
@@ -90,13 +97,14 @@ npm run test:edge        # casos de borda
 npm run test:coverage    # cobertura
 ```
 
-> **Nota:** os scripts `client` e `dev` no `package.json` da raiz apontam para uma
-> pasta `client/` que ainda não existe neste repositório — o frontend não foi
-> integrado. Use `npm run server` até que ele exista.
-
 ## Estrutura
 
 ```
+client/            # frontend React 19 + Vite (login, dashboard, produtos, ...)
+  src/
+    pages/         # páginas por domínio
+    routes/        # ProtectedRoute e roteamento
+    api/           # httpClient Axios (VITE_API_URL, default http://localhost:5000)
 server/
   src/
     config/        # conexão com o banco, seeds
@@ -119,8 +127,9 @@ docs/              # documentação por área da empresa
 | [docs/DATABASE.md](docs/DATABASE.md)                                   | Modelo de dados                |
 | [docs/DEPLOY.md](docs/DEPLOY.md)                                       | Processo de deploy             |
 | [docs/00-ESTRUTURA_ORGANIZACIONAL.md](docs/00-ESTRUTURA_ORGANIZACIONAL.md) | Estrutura organizacional    |
-| [docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md](docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md) | Cronograma e checklist |
-| [docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md](docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md) | Correcao de riscos, gates e go-live |
+| [CLAUDE.md](CLAUDE.md)                                                  | SSOT do projeto (status, arquitetura, runbook) |
+| [docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) | Auditoria pré-produção e status da remediação |
+| [docs/GO_LIVE_G6_CHECKLIST.md](docs/GO_LIVE_G6_CHECKLIST.md)            | Checklist de Go-Live G6        |
 
 ## Agente Claude Code
 
@@ -144,7 +153,11 @@ produção, qualidade, RH, entre outras).
   `ADMIN_SEED_PASSWORD` interrompe a inicialização em vez de criar um admin com
   senha previsível.
 - O bootstrap da aplicação não executa mais DDL automático; evolução de schema
-  ocorre por migrations versionadas com `sequelize-cli`.
+  ocorre por migrations versionadas com `sequelize-cli` (133 FKs de integridade
+  referencial aplicadas).
+- Remediação da auditoria pré-produção de 2026-08-02 aplicada: Requisição de
+  Compra, MRP contra estoque real, foreign keys, anti-spoofing de identidade
+  (IDOR), react-router v7 (CVE-2025-68470) e reconciliação apontamento × OP.
 - Repositório privado.
 
 ---
