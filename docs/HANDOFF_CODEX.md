@@ -2384,3 +2384,150 @@ lidos antes de codar, nenhum payload/rota foi adivinhado).
 
 **Desenvolvedor**: Claude Code (Senior Frontend Engineer)
 **Data**: 2026-08-03
+
+---
+
+## Requisitos de Negócio Prontos — Controle de Acesso por Área + 4 Fluxos Complementares (Fase de Descoberta, Concluída)
+
+**Data**: 2026-08-03
+**Papel**: Business Analyst / Requirements Engineer (fase de descoberta —
+nenhum código foi tocado nesta entrega, apenas documentação em `docs/`)
+**Status**: ✅ Requisitos especificados e prontos para implementação —
+**aguardando confirmação do dono em 6 decisões propostas antes de iniciar
+código de schema** (listadas ao final desta seção)
+
+### Escopo desta entrega
+
+Especificação completa de:
+1. **Controle de Acesso por Área/Departamento** — perfis de acesso
+   configuráveis (módulo × nível ver/operar/aprovar), dois níveis por
+   usuário (operador/gestor), bloqueio total (menu + API 403) fora do
+   perfil, tratamento de módulos agregadores (Dashboard/Relatórios/
+   Rastreabilidade).
+2. **Requisição de Amostra da Engenharia** — variante de origem na
+   Requisição de Compra já existente (`engineering_sample`), vínculo
+   opcional a projeto de P&D, destino físico resolvido pelo item 4.
+3. **Handoff Entre Departamentos com Semáforo** — padronização de um
+   indicador de status (verde/amarelo/vermelho) calculado no backend,
+   aditivo às listagens já existentes (Recebimento, Qualidade, Expedição,
+   RNC), sem criar motor de notificação novo.
+4. **Múltiplos Depósitos (Insumos, Acabados, Laboratório)** — saldo por
+   depósito, novo tipo de movimentação `transfer` com aprovação de
+   gestor, roteamento automático por evento (recebimento, conclusão de
+   OP, expedição), separação explícita entre "depósito" (onde) e
+   "status do lote/quarentena" (se pode ser consumido).
+5. **Emissão de NF-e pelo Vendas** — formalização do caso de uso já
+   implementado tecnicamente (`server/src/modules/fiscal`), com a nova
+   camada de permissão por perfil (proposta: restrito a gestor).
+6. **Alertas Didáticos de Pré-Requisitos (UC-43, transversal)** — padrão
+   de UX obrigatório para toda tela do sistema: checklist preventivo
+   (✓/✗ com motivo visível) antes de tentar uma ação, e tradução de
+   qualquer erro `4xx` em alerta de 3 partes (O QUE / POR QUE / O QUE
+   FAZER), sempre listando **todas** as pendências de uma vez — nunca um
+   erro genérico ou código de erro cru exposto ao usuário. Único bloco
+   desta entrega que **não exige migration de schema** (é sobre
+   apresentação de regras já existentes, não regra nova).
+
+### Onde estão os documentos (ler nesta ordem antes de codar)
+
+1. **`docs/business/01-USE_CASES.md`** — UC-30 a UC-42, formato
+   atores/pré-condições/fluxo principal/alternativos/exceções + critérios
+   de aceite em BDD (Given/When/Then) para cada um. Contém o índice de
+   todos os UCs no final, com a lista de decisões propostas pendentes.
+2. **`docs/business/BUSINESS_RULES.md`** — regras estáticas: matriz
+   módulo × permissão (§1, ponto de partida editável pelo admin), regra
+   do perfil único (§2), regra do admin global (§3), regra dos dois
+   níveis com as fórmulas de autorização (§4), regra de auditoria (§5),
+   módulos agregadores (§6), invariantes de precisão/isolamento/
+   rastreabilidade (§7), risco de convivência com checagens de `role`
+   legadas (§8), regras da amostra de engenharia (§9), regras do
+   semáforo (§10), regras de NF-e (§11), regras de múltiplos depósitos
+   incluindo a invariante `soma(saldos por depósito) = saldo total` (§12).
+3. **`docs/governance/TODO.md`** — 6 blocos de tarefas técnicas ordenadas
+   (Bloco 1: Perfis/autorização; Bloco 2: Amostra de Engenharia; Bloco 3:
+   Semáforo de handoff; Bloco 4: Múltiplos Depósitos; Bloco 5: Permissão
+   de NF-e; Bloco 6: Alertas Didáticos de Pré-Requisitos — sem
+   dependência de schema, pode iniciar em paralelo a qualquer outro),
+   cada bloco dividido em AdmDBA (schema/migrations) → Backend →
+   Frontend → QA, com ordem de execução recomendada ao final.
+
+### Decisões propostas que precisam de confirmação do dono ANTES de codar schema
+
+1. **UC-32** — desativar um perfil de acesso que ainda tem usuários
+   ativos vinculados: bloquear (proposto) ou permitir e tratar como
+   "sem perfil"?
+2. **UC-35-Exceção** — usuário sem perfil atribuído: bloqueio total com
+   aviso, mostrando apenas "Meu Perfil" (proposto), ou acesso mínimo
+   universal (Dashboard + Relatórios)?
+3. **UC-36** — troca de perfil de usuário logado: invalidar sessão
+   imediatamente via `permission_version` (reaproveitando o padrão de
+   `password_version` já existente, proposto) ou deixar o efeito valer
+   apenas na próxima requisição, sem forçar novo login?
+4. **UC-41** — emissão/cancelamento de NF-e: restrito a nível `aprovar`/
+   `gestor` de Vendas (proposto, por ser ação fiscal de risco) ou
+   liberado a `operar`/operador comum?
+5. **UC-42 (item E)** — consumo do Depósito de Laboratório em testes
+   destrutivos: manual (lançamento avulso) ou vinculado automaticamente
+   ao registro do teste (`AcousticTestResult`, proposto)?
+6. **`BUSINESS_RULES.md` §12 item 11** — permissão por depósito dentro do
+   perfil: campo lista simples (`warehouses_visible`) ou tabela própria
+   perfil×depósito? (decisão técnica, não bloqueia negócio, mas
+   recomenda-se decidir antes do schema do Bloco 4)
+
+### Riscos levantados (documentados nos arquivos, resumo aqui)
+
+- **Convivência de autorizações** (`BUSINESS_RULES.md` §8): o sistema já
+  tem checagens de `role` global hard-coded em alguns controllers (ex.:
+  aprovação de requisição exige `role=admin` hoje, ver UC-23 em
+  `docs/projeto/04-USE_CASES.md`). O novo middleware de módulo/nível de
+  área não substitui essas checagens automaticamente — se não forem
+  conciliadas explicitamente, um usuário "gestor" no novo modelo pode
+  continuar levando 403 em endpoints que só entendem `role=admin`.
+  Recomendação registrada: o novo modelo deve **substituir** as checagens
+  pontuais legadas em endpoints de aprovação, não conviver com elas.
+- **Backfill de depósitos** (`TODO.md` Bloco 4.1): não há hoje segregação
+  de saldo por tipo de produto — migrar todo `products.quantity` atual
+  para o depósito `INSUMOS` é o caminho mais simples, mas produtos já
+  acabados prontos para expedição ficariam no depósito errado até ajuste
+  manual pós-migração. Alternativa (migrar por `product_type`) e ambas as
+  opções foram registradas para decisão do dono/PCP antes do backfill real.
+- **Módulo de RH ausente da matriz** (`BUSINESS_RULES.md` §1): o
+  inventário de módulos fornecido nesta tarefa não incluía um módulo de
+  RH nas rotas de API — a matriz sugerida deixou a coluna RH sem
+  preenchimento contra os módulos de manufatura/vendas. Pendência
+  registrada como item de TODO técnico antes da implementação do Bloco 1.
+- **Cobertura de rotas existentes** (`TODO.md` 1.2): aplicar o novo
+  middleware de autorização por módulo em todas as rotas já existentes é
+  um trabalho extenso (múltiplos módulos), sugerido como sub-tarefas
+  paralelas por módulo para não virar um único PR gigante e arriscado.
+- **Frontend descarta `details` de erro hoje** (`BUSINESS_RULES.md` §13.4):
+  `extractApiErrorMessage` em `client/src/api/httpClient.ts` usa apenas
+  `error.message`, descartando `error.details` já retornado por alguns
+  endpoints (ex.: `ConvertRequisitionToPurchaseOrdersUseCase` já lista os
+  itens sem fornecedor em `details`, mas a tela hoje não exibe isso
+  estruturado). O Bloco 6 do TODO propõe um novo utilitário
+  (`translateApiError`) para parar de descartar essa informação — é
+  aditivo, não quebra nenhum fluxo existente que hoje só usa a `message`.
+- **Endpoints que validam e falham na primeira condição** (`BUSINESS_RULES.md`
+  §13.3): alguns use cases hoje lançam erro na primeira regra violada, em
+  vez de coletar todas as pendências — isso conflita com a exigência do
+  dono de "lista completa, não o primeiro erro". Nem todo endpoint
+  precisará ser reescrito imediatamente (pode ser evolução incremental,
+  priorizada pela lista de `BUSINESS_RULES.md` §13.5), mas é um retrabalho
+  de backend real, não apenas de frontend.
+
+### Instrução para o próximo agente (Programador/AdmDBA)
+
+1. Levar as 6 decisões propostas acima ao dono/orquestrador antes de
+   criar qualquer migration.
+2. Seguir a ordem de execução recomendada em `docs/governance/TODO.md`
+   (Bloco 1 → Bloco 4 → Bloco 2 → Bloco 3 → Bloco 5).
+3. Ao concluir cada bloco, consolidar os UCs efetivamente implementados
+   (com o contrato real de endpoint, que pode divergir ligeiramente do
+   proposto) em `docs/projeto/04-USE_CASES.md`, continuando a numeração a
+   partir de UC-30 (ou do próximo UC livre no momento), e registrar a
+   entrega nesta mesma seção de `docs/HANDOFF_CODEX.md`, no padrão já
+   usado pelas entregas anteriores deste arquivo.
+
+**Desenvolvedor**: Claude Code (Business Analyst / Requirements Engineer)
+**Data**: 2026-08-03
