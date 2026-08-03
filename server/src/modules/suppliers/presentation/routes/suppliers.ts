@@ -11,6 +11,7 @@ const supplierController = require('../controllers/supplierController');
 
 router.get('/', authenticate, supplierController.list);
 router.get('/:id', authenticate, supplierController.getById);
+router.get('/:id/items', authenticate, supplierController.listItems);
 router.post('/', authenticate, authorize('admin', 'operator'), supplierController.create);
 router.put('/:id', authenticate, authorize('admin', 'operator'), supplierController.update);
 router.delete('/:id', authenticate, authorize('admin'), supplierController.remove);

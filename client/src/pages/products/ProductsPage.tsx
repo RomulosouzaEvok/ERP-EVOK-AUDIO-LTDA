@@ -4,9 +4,12 @@ import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Camera, QrCode } from 'lucide-react';
+import { Plus, Camera, QrCode, Truck } from 'lucide-react';
 
 import * as productsApi from '@/api/products';
+import * as itemsApi from '@/api/items';
+import * as itemSuppliersApi from '@/api/itemSuppliers';
+import * as suppliersApi from '@/api/suppliers';
 import { extractApiErrorMessage, getUploadUrl } from '@/api/httpClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +25,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { QrCodeDialog } from '@/components/QrCodeDialog';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
@@ -52,6 +56,7 @@ export default function ProductsPage() {
   const [formError, setFormError] = React.useState<string | null>(null);
   const [photoProductId, setPhotoProductId] = React.useState<number | null>(null);
   const [qrCodeProduct, setQrCodeProduct] = React.useState<productsApi.Product | null>(null);
+  const [suppliersProduct, setSuppliersProduct] = React.useState<productsApi.Product | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { data, isLoading, isError } = useQuery({
@@ -271,6 +276,9 @@ export default function ProductsPage() {
                   <Button size="sm" variant="outline" onClick={() => setQrCodeProduct(product)}>
                     <QrCode className="size-4" /> QR Code
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => setSuppliersProduct(product)}>
+                    <Truck className="size-4" /> Fornecedores
+                  </Button>
                   {canWrite && (
                     <Button size="sm" variant="outline" onClick={() => setMovementProduct(product)}>
                       Movimentar
@@ -316,6 +324,8 @@ export default function ProductsPage() {
           fetchQrCode={() => productsApi.getProductQrCode(qrCodeProduct.id)}
         />
       )}
+
+      <ProductSuppliersDialog product={suppliersProduct} onClose={() => setSuppliersProduct(null)} />
     </div>
   );
 }
@@ -383,5 +393,355 @@ function StockMovementDialog({ product, onClose }: { product: productsApi.Produc
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Campos numéricos opcionais chegam do formulário como string (input HTML) —
+// mantidos como string no schema e convertidos para number/undefined no
+// submit (`toOptionalNumber`), evitando problemas de inferência de tipo do
+// `z.preprocess` com `.optional()` encadeado.
+const itemSupplierSchema = z.object({
+  supplier_id: z.coerce.number().int().positive('Selecione um fornecedor.'),
+  unit_price: z.string().optional(),
+  currency: z.string().optional(),
+  lead_time_days: z.string().optional(),
+  moq: z.string().optional(),
+  supplier_item_code: z.string().optional(),
+  preferred: z.boolean().optional(),
+  notes: z.string().optional(),
+});
+
+/** Converte um valor de campo numérico opcional do formulário (string) para `number | undefined`. */
+function toOptionalNumber(value: string | number | undefined): number | undefined {
+  if (value === '' || value === undefined || value === null) return undefined;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+type ItemSupplierFormData = z.infer<typeof itemSupplierSchema>;
+
+/**
+ * Dialog de fornecedores do produto: resolve o `Item` mestre correspondente
+ * ao código do produto (`GET /api/items?search=`, match exato de `codigo`),
+ * lista/gerencia vínculos com fornecedores e exibe o histórico de compras.
+ */
+function ProductSuppliersDialog({ product, onClose }: { product: productsApi.Product | null; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [editingLink, setEditingLink] = React.useState<itemSuppliersApi.ItemSupplierLink | null>(null);
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [showForm, setShowForm] = React.useState(false);
+
+  const { data: matchedItems, isLoading: isResolvingItem } = useQuery({
+    queryKey: ['item-by-code', product?.code],
+    queryFn: () => itemsApi.listItems({ search: product!.code, limit: 20 }),
+    enabled: Boolean(product),
+  });
+
+  const item = matchedItems?.data.find((candidate) => candidate.codigo === product?.code) ?? null;
+  const itemNotFound = Boolean(product) && !isResolvingItem && !item;
+
+  const { data: links, isLoading: isLoadingLinks } = useQuery({
+    queryKey: ['item-suppliers', item?.id],
+    queryFn: () => itemSuppliersApi.listItemSuppliers(item!.id),
+    enabled: Boolean(item),
+  });
+
+  const { data: history } = useQuery({
+    queryKey: ['item-purchase-history', item?.id],
+    queryFn: () => itemSuppliersApi.getItemPurchaseHistory(item!.id),
+    enabled: Boolean(item),
+  });
+
+  const { data: suppliers } = useQuery({
+    queryKey: ['suppliers-all'],
+    queryFn: () => suppliersApi.listSuppliers({ limit: 200 }),
+    enabled: showForm,
+  });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ItemSupplierFormData>({ resolver: zodResolver(itemSupplierSchema) });
+
+  React.useEffect(() => {
+    if (!product) {
+      setShowForm(false);
+      setEditingLink(null);
+      setFormError(null);
+    }
+  }, [product]);
+
+  React.useEffect(() => {
+    if (editingLink) {
+      reset({
+        supplier_id: editingLink.supplier_id,
+        unit_price: editingLink.unit_price != null ? String(editingLink.unit_price) : '',
+        currency: editingLink.currency ?? '',
+        lead_time_days: editingLink.lead_time_days != null ? String(editingLink.lead_time_days) : '',
+        moq: editingLink.moq != null ? String(editingLink.moq) : '',
+        supplier_item_code: editingLink.supplier_item_code ?? '',
+        preferred: editingLink.preferred,
+        notes: editingLink.notes ?? '',
+      });
+      setShowForm(true);
+    } else {
+      reset({ supplier_id: undefined, unit_price: '', currency: '', lead_time_days: '', moq: '', supplier_item_code: '', preferred: false, notes: '' } as never);
+    }
+  }, [editingLink, reset]);
+
+  const invalidateLinks = () => queryClient.invalidateQueries({ queryKey: ['item-suppliers', item?.id] });
+
+  const toLinkInput = (values: ItemSupplierFormData): itemSuppliersApi.ItemSupplierInput => ({
+    supplier_id: values.supplier_id,
+    unit_price: toOptionalNumber(values.unit_price),
+    currency: values.currency || undefined,
+    lead_time_days: toOptionalNumber(values.lead_time_days),
+    moq: toOptionalNumber(values.moq),
+    supplier_item_code: values.supplier_item_code || undefined,
+    preferred: values.preferred,
+    notes: values.notes || undefined,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (values: ItemSupplierFormData) => itemSuppliersApi.createItemSupplier(item!.id, toLinkInput(values)),
+    onSuccess: () => {
+      invalidateLinks();
+      setShowForm(false);
+      setFormError(null);
+      reset();
+    },
+    onError: (error) => setFormError(extractApiErrorMessage(error)),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (values: ItemSupplierFormData) =>
+      itemSuppliersApi.updateItemSupplier(item!.id, editingLink!.id, toLinkInput(values)),
+    onSuccess: () => {
+      invalidateLinks();
+      setShowForm(false);
+      setEditingLink(null);
+      setFormError(null);
+      reset();
+    },
+    onError: (error) => setFormError(extractApiErrorMessage(error)),
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: (linkId: number) => itemSuppliersApi.deactivateItemSupplier(item!.id, linkId),
+    onSuccess: invalidateLinks,
+    onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível desativar o vínculo.')),
+  });
+
+  return (
+    <Sheet open={Boolean(product)} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="max-w-2xl">
+        {product && (
+          <>
+            <SheetHeader>
+              <SheetTitle>Fornecedores — {product.code} · {product.name}</SheetTitle>
+              <SheetDescription>Vínculos de fornecimento e histórico de compras do item.</SheetDescription>
+            </SheetHeader>
+
+            {isResolvingItem && <p className="text-sm text-muted-foreground">Localizando item mestre...</p>}
+            {itemNotFound && (
+              <p className="text-sm text-destructive">
+                Item mestre não encontrado para este código.
+              </p>
+            )}
+
+            {item && (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">Vínculos de fornecimento</p>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setEditingLink(null);
+                      setShowForm((prev) => !prev);
+                    }}
+                  >
+                    <Plus className="size-3" /> Novo vínculo
+                  </Button>
+                </div>
+
+                {showForm && (
+                  <form
+                    className="flex flex-col gap-3 rounded-lg border p-3"
+                    onSubmit={handleSubmit((values) =>
+                      editingLink ? updateMutation.mutate(values) : createMutation.mutate(values),
+                    )}
+                    noValidate
+                  >
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="supplier_id">Fornecedor</Label>
+                        <SelectNative id="supplier_id" {...register('supplier_id')} defaultValue="">
+                          <option value="" disabled>
+                            Selecione...
+                          </option>
+                          {suppliers?.data.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>
+                              {supplier.company_name}
+                            </option>
+                          ))}
+                        </SelectNative>
+                        {errors.supplier_id && <p className="text-sm text-destructive">{errors.supplier_id.message}</p>}
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="supplier_item_code">Código do item no fornecedor</Label>
+                        <Input id="supplier_item_code" {...register('supplier_item_code')} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="unit_price">Preço unitário</Label>
+                        <Input id="unit_price" type="number" step="any" {...register('unit_price')} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="currency">Moeda</Label>
+                        <Input id="currency" placeholder="BRL" {...register('currency')} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="lead_time_days">Lead time (dias)</Label>
+                        <Input id="lead_time_days" type="number" {...register('lead_time_days')} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="moq">MOQ</Label>
+                        <Input id="moq" type="number" step="any" {...register('moq')} />
+                      </div>
+                      <div className="flex items-center gap-2 pt-6">
+                        <input id="preferred" type="checkbox" className="size-4" {...register('preferred')} />
+                        <Label htmlFor="preferred">Fornecedor preferencial</Label>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="notes">Observações</Label>
+                      <Input id="notes" {...register('notes')} />
+                    </div>
+                    {formError && <p className="text-sm text-destructive">{formError}</p>}
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setShowForm(false);
+                          setEditingLink(null);
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting || createMutation.isPending || updateMutation.isPending}>
+                        {isSubmitting ? 'Salvando...' : editingLink ? 'Salvar alterações' : 'Adicionar vínculo'}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fornecedor</TableHead>
+                      <TableHead>Preço</TableHead>
+                      <TableHead>Lead time</TableHead>
+                      <TableHead>MOQ</TableHead>
+                      <TableHead>Preferencial</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingLinks && <TableSkeletonRows columns={7} />}
+                    {links?.data.map((link) => (
+                      <TableRow key={link.id}>
+                        <TableCell>{link.supplier?.company_name ?? link.supplier_id}</TableCell>
+                        <TableCell>
+                          {link.unit_price != null ? `${link.currency ?? 'BRL'} ${Number(link.unit_price).toFixed(2)}` : '-'}
+                        </TableCell>
+                        <TableCell>{link.lead_time_days != null ? `${link.lead_time_days}d` : '-'}</TableCell>
+                        <TableCell>{link.moq != null ? Number(link.moq) : '-'}</TableCell>
+                        <TableCell>
+                          {link.preferred && <Badge variant="success">Preferencial</Badge>}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={link.active ? 'success' : 'secondary'}>{link.active ? 'Ativo' : 'Inativo'}</Badge>
+                        </TableCell>
+                        <TableCell className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setEditingLink(link)}>
+                            Editar
+                          </Button>
+                          {link.active && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                if (window.confirm(`Desativar o vínculo com "${link.supplier?.company_name}"?`)) {
+                                  deactivateMutation.mutate(link.id);
+                                }
+                              }}
+                            >
+                              Desativar
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!isLoadingLinks && links?.data.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">
+                          Nenhum fornecedor vinculado a este item.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-semibold">Histórico de compras</p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fornecedor</TableHead>
+                        <TableHead>Pedidos</TableHead>
+                        <TableHead>Qtd. total</TableHead>
+                        <TableHead>Preço mín.</TableHead>
+                        <TableHead>Preço médio</TableHead>
+                        <TableHead>Preço máx.</TableHead>
+                        <TableHead>Última compra</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {history?.map((entry) => (
+                        <TableRow key={entry.supplier_id}>
+                          <TableCell>{entry.company_name}</TableCell>
+                          <TableCell>{entry.orders_count}</TableCell>
+                          <TableCell>{Number(entry.total_quantity)}</TableCell>
+                          <TableCell>R$ {Number(entry.min_price).toFixed(2)}</TableCell>
+                          <TableCell>R$ {Number(entry.avg_price).toFixed(2)}</TableCell>
+                          <TableCell>R$ {Number(entry.max_price).toFixed(2)}</TableCell>
+                          <TableCell>
+                            {entry.last_order_date ? new Date(entry.last_order_date).toLocaleDateString('pt-BR') : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {(!history || history.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-muted-foreground">
+                            Nenhuma compra registrada para este item.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

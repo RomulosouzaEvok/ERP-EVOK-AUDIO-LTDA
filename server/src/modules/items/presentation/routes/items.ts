@@ -13,4 +13,10 @@ router.get('/:id/estrutura/explode', authenticate, itemController.explode);
 router.patch('/:id/inactivate', authenticate, authorize('admin', 'operator'), itemController.inactivate);
 router.delete('/:id', authenticate, authorize('admin', 'operator'), itemController.inactivate);
 
+router.get('/:id/suppliers', authenticate, itemController.listSuppliers);
+router.post('/:id/suppliers', authenticate, authorize('admin', 'operator'), itemController.createSupplier);
+router.put('/:id/suppliers/:linkId', authenticate, authorize('admin', 'operator'), itemController.updateSupplier);
+router.delete('/:id/suppliers/:linkId', authenticate, authorize('admin', 'operator'), itemController.removeSupplier);
+router.get('/:id/purchase-history', authenticate, itemController.getPurchaseHistory);
+
 module.exports = router;

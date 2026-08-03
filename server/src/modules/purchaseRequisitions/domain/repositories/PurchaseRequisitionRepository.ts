@@ -14,6 +14,10 @@ class PurchaseRequisitionRepository {
   async createRequisitionItem(_data: Record<string, any>, _transaction?: any): Promise<any> {
     throw new Error('PurchaseRequisitionRepository.createRequisitionItem nao implementado.');
   }
+
+  async updateRequisition(_id: number, _data: Record<string, any>, _transaction?: any): Promise<any> {
+    throw new Error('PurchaseRequisitionRepository.updateRequisition nao implementado.');
+  }
 }
 
 export = PurchaseRequisitionRepository;

@@ -1,15 +1,29 @@
 const SequelizeItemRepository = require('../../infrastructure/sequelize/SequelizeItemRepository');
 const SequelizeItemEstruturaRepository = require('../../infrastructure/sequelize/SequelizeItemEstruturaRepository');
+const SequelizeItemSupplierRepository = require('../../infrastructure/sequelize/SequelizeItemSupplierRepository');
 const CreateItemUseCase = require('../../application/use-cases/CreateItemUseCase');
 const CreateItemStructureUseCase = require('../../application/use-cases/CreateItemStructureUseCase');
 const ExplodeItemStructureUseCase = require('../../application/use-cases/ExplodeItemStructureUseCase');
 const DeactivateItemUseCase = require('../../application/use-cases/DeactivateItemUseCase');
-const { createItemSchema, createItemStructureSchema, listItemsQuerySchema, explodeItemStructureQuerySchema } = require('../validators/itemValidators');
+const ListItemSuppliersUseCase = require('../../application/use-cases/ListItemSuppliersUseCase');
+const CreateItemSupplierUseCase = require('../../application/use-cases/CreateItemSupplierUseCase');
+const UpdateItemSupplierUseCase = require('../../application/use-cases/UpdateItemSupplierUseCase');
+const DeactivateItemSupplierUseCase = require('../../application/use-cases/DeactivateItemSupplierUseCase');
+const GetItemPurchaseHistoryUseCase = require('../../application/use-cases/GetItemPurchaseHistoryUseCase');
+const {
+  createItemSchema,
+  createItemStructureSchema,
+  listItemsQuerySchema,
+  explodeItemStructureQuerySchema,
+  createItemSupplierSchema,
+  updateItemSupplierSchema,
+} = require('../validators/itemValidators');
 const { ValidationError } = require('../../../../errors');
 const Validators = require('../../../../utils/validators');
 
 const itemRepository = new SequelizeItemRepository();
 const itemEstruturaRepository = new SequelizeItemEstruturaRepository();
+const itemSupplierRepository = new SequelizeItemSupplierRepository();
 
 /**
  * Controller do modulo de itens industriais.
@@ -104,6 +118,85 @@ exports.inactivate = async (req, res, next) => {
     if (error?.issues) {
       return next(new ValidationError('Payload invalido.', error.issues));
     }
+    next(error);
+  }
+};
+
+/**
+ * GET /api/items/:id/suppliers
+ * Lista os fornecedores vinculados a um item (catalogo N:N).
+ */
+exports.listSuppliers = async (req, res, next) => {
+  try {
+    const useCase = new ListItemSuppliersUseCase(itemRepository, itemSupplierRepository);
+    const data = await useCase.execute({ itemId: req.params.id });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/items/:id/suppliers
+ * Cria um vinculo item x fornecedor. Se `preferred=true`, zera o preferencial
+ * dos demais vinculos do item (transacao).
+ */
+exports.createSupplier = async (req, res, next) => {
+  try {
+    const body = createItemSupplierSchema.parse(req.body);
+    const useCase = new CreateItemSupplierUseCase(itemRepository, itemSupplierRepository);
+    const data = await useCase.execute({ itemId: req.params.id, ...body });
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    if (error?.issues) {
+      return next(new ValidationError('Payload invalido.', error.issues));
+    }
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/items/:id/suppliers/:linkId
+ * Atualiza campos comerciais do vinculo item x fornecedor.
+ */
+exports.updateSupplier = async (req, res, next) => {
+  try {
+    const body = updateItemSupplierSchema.parse(req.body);
+    const useCase = new UpdateItemSupplierUseCase(itemSupplierRepository);
+    const data = await useCase.execute({ itemId: req.params.id, linkId: Number(req.params.linkId), ...body });
+    res.json({ success: true, data });
+  } catch (error) {
+    if (error?.issues) {
+      return next(new ValidationError('Payload invalido.', error.issues));
+    }
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/items/:id/suppliers/:linkId
+ * Desativa (soft delete) um vinculo item x fornecedor.
+ */
+exports.removeSupplier = async (req, res, next) => {
+  try {
+    const useCase = new DeactivateItemSupplierUseCase(itemSupplierRepository);
+    const data = await useCase.execute({ itemId: req.params.id, linkId: Number(req.params.linkId) });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/items/:id/purchase-history
+ * Retorna o historico de compras do item agregado por fornecedor.
+ */
+exports.getPurchaseHistory = async (req, res, next) => {
+  try {
+    const useCase = new GetItemPurchaseHistoryUseCase(itemRepository, itemSupplierRepository);
+    const data = await useCase.execute({ itemId: req.params.id });
+    res.json({ success: true, data });
+  } catch (error) {
     next(error);
   }
 };

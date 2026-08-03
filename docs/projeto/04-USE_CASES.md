@@ -366,6 +366,76 @@
 
 ---
 
+## UC-22: Gerenciar Catálogo Item × Fornecedor
+
+**Ator:** Comprador, Administrador
+**Pré-condições:** Item e fornecedor cadastrados
+**Fluxo Principal:**
+1. Usuário acessa "Item > Fornecedores" (`GET /api/items/:id/suppliers`)
+2. Adiciona um vínculo informando fornecedor, preço de referência, prazo de
+   entrega, MOQ e código do item no catálogo do fornecedor
+   (`POST /api/items/:id/suppliers`)
+3. Sistema valida que item e fornecedor existem
+4. Sistema valida que o vínculo item-fornecedor ainda não existe
+5. Se o vínculo for marcado como `preferred`, sistema zera o `preferred`
+   dos demais vínculos ativos do mesmo item (transação)
+6. Sistema salva o vínculo
+7. Usuário pode atualizar (`PUT .../suppliers/:linkId`) ou desativar
+   (`DELETE .../suppliers/:linkId`, soft delete via `active=false`)
+8. Usuário consulta o histórico agregado de compras do item por fornecedor
+   (`GET /api/items/:id/purchase-history`)
+9. Usuário consulta os itens vinculados a um fornecedor
+   (`GET /api/suppliers/:id/items`)
+
+**Fluxo Alternativo (vínculo duplicado):**
+- Sistema retorna 409 CONFLICT se já existir vínculo para o mesmo par
+  item/fornecedor
+
+**Fluxo Alternativo (item ou fornecedor inexistente):**
+- Sistema retorna 404 NOT_FOUND
+
+**Regras de Negócio:**
+- No máximo um fornecedor `preferred=true` por item
+- Vínculo é único por par `(item_id, supplier_id)`
+- Desativação é soft delete (`active=false`); não remove o registro
+  histórico
+
+---
+
+## UC-23: Workflow de Aprovação da Requisição de Compra
+
+**Ator:** Solicitante, Administrador (aprovação)
+**Pré-condições:** Requisição de compra criada (`draft` ou `pending`)
+**Fluxo Principal:**
+1. Usuário altera o status da requisição
+   (`PATCH /api/purchase-requisitions/:id/status`)
+2. Sistema valida a transição solicitada contra a máquina de estados:
+   - `draft` → `pending` ou `canceled`
+   - `pending` → `approved` ou `canceled`
+3. Se a transição for para `approved`, sistema exige perfil `admin` e
+   registra `approved_by` (usuário logado) e `approval_date` (data atual)
+4. Sistema salva a requisição com o novo status
+5. Sistema registra log de auditoria (`logAction`)
+
+**Fluxo Alternativo (transição inválida):**
+- Sistema retorna 422 BUSINESS_RULE_VIOLATION (ex.: `draft` → `approved`
+  diretamente, ou `approved` → `pending`)
+
+**Fluxo Alternativo (aprovação sem permissão):**
+- Sistema retorna 403 FORBIDDEN se o usuário não for `admin` e tentar
+  aprovar (`status=approved`)
+
+**Fluxo Alternativo (requisição inexistente):**
+- Sistema retorna 404 NOT_FOUND
+
+**Regras de Negócio:**
+- Aprovação (`approved`) só pode ser realizada por usuário com perfil
+  `admin`
+- `approved_by` e `approval_date` nunca são informados pelo cliente da API
+  (sempre derivados do usuário autenticado e da data do servidor)
+
+---
+
 ## Atores Industriais (Adicionais)
 
 | Ator | Descricao |

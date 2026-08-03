@@ -421,6 +421,239 @@ Só após todas as 15 tabelas expandidas (Fase 4 "expand" finalizada) é que mó
 
 ---
 
-**Desenvolvedor**: Claude Code (Backend Engineer)  
-**Data**: 2026-07-30  
-**Próximo checkpoint**: Fase 4.2 (próxima tabela) ou Fase 5 (módulos de aplicação)
+## Catálogo Item × Fornecedor + Workflow de Aprovação de Requisição (Concluída)
+
+**Data**: 2026-08-03
+**Escopo**: (1) Catálogo N:N `item_suppliers` com endpoints de gestão de
+fornecedores por item, histórico agregado de compras e itens por
+fornecedor. (2) Workflow de transição de status da Requisição de Compra
+(`PATCH /status`) com aprovação restrita a `admin`.
+**Status**: ✅ Concluído (typecheck limpo, 202 testes unitários verdes)
+
+### Resumo da feature
+
+**Tarefa 1 — Catálogo item × fornecedor:**
+- Nova tabela `item_suppliers` (N:N entre `items` e `suppliers`), com preço
+  de referência, moeda, prazo de entrega, MOQ, código do item no catálogo
+  do fornecedor, flag `preferred` (no máximo um por item) e soft delete
+  (`active`).
+- Migration com backfill automático a partir do histórico de
+  `purchase_order_items` × `purchase_orders` (preço mais recente por par
+  item/fornecedor).
+- Endpoints REST completos (list, create, update, deactivate) sob
+  `/api/items/:id/suppliers`, mais `/api/items/:id/purchase-history`
+  (agregado por fornecedor via `sequelize.query` com replacements) e
+  `/api/suppliers/:id/items`.
+- Regra de negócio: ao definir `preferred=true`, os demais vínculos ativos
+  do mesmo item são zerados na mesma transação Sequelize (commit/rollback).
+
+**Tarefa 2 — Workflow de requisição de compra:**
+- `PATCH /api/purchase-requisitions/:id/status`, com máquina de estados
+  `draft → pending|canceled` e `pending → approved|canceled`.
+- Aprovação (`status=approved`) exige perfil `admin` (validado no
+  controller, pois a rota é compartilhada com transições não privilegiadas)
+  e registra `approved_by` (usuário logado) + `approval_date` (data atual).
+- Transições inválidas retornam 422 (`BusinessRuleError`); requisição
+  inexistente retorna 404.
+
+### Arquivos criados
+
+**Migration & Model:**
+- `server/migrations/20260803-000001-create-item-suppliers.cjs`
+- `server/src/models/ItemSupplier.ts`
+
+**Módulo `items` (catálogo item × fornecedor):**
+- `server/src/modules/items/domain/repositories/ItemSupplierRepository.ts`
+- `server/src/modules/items/infrastructure/sequelize/SequelizeItemSupplierRepository.ts`
+- `server/src/modules/items/application/use-cases/ListItemSuppliersUseCase.ts`
+- `server/src/modules/items/application/use-cases/CreateItemSupplierUseCase.ts`
+- `server/src/modules/items/application/use-cases/UpdateItemSupplierUseCase.ts`
+- `server/src/modules/items/application/use-cases/DeactivateItemSupplierUseCase.ts`
+- `server/src/modules/items/application/use-cases/GetItemPurchaseHistoryUseCase.ts`
+
+**Módulo `suppliers` (itens por fornecedor):**
+- `server/src/modules/suppliers/application/use-cases/ListSupplierItemsUseCase.ts`
+
+**Módulo `purchaseRequisitions` (workflow de status):**
+- `server/src/modules/purchaseRequisitions/application/use-cases/ChangePurchaseRequisitionStatusUseCase.ts`
+
+**Testes:**
+- `server/tests/unit/item-suppliers.test.ts`
+- `server/tests/unit/purchase-requisition-status.test.ts`
+
+### Arquivos modificados
+
+- `server/src/models/index.ts` — import de `ItemSupplier`, associações
+  `Item.hasMany(ItemSupplier, as: 'fornecedores')`,
+  `Supplier.hasMany(ItemSupplier, as: 'itens_fornecidos')` e `belongsTo`
+  inversos; export de `ItemSupplier`.
+- `server/src/modules/items/presentation/validators/itemValidators.ts` —
+  `createItemSupplierSchema`, `updateItemSupplierSchema`.
+- `server/src/modules/items/presentation/controllers/itemController.ts` —
+  `listSuppliers`, `createSupplier`, `updateSupplier`, `removeSupplier`,
+  `getPurchaseHistory`.
+- `server/src/modules/items/presentation/routes/items.ts` — rotas
+  `GET/POST /:id/suppliers`, `PUT/DELETE /:id/suppliers/:linkId`,
+  `GET /:id/purchase-history`.
+- `server/src/modules/suppliers/presentation/controllers/supplierController.ts`
+  — `listItems`.
+- `server/src/modules/suppliers/presentation/routes/suppliers.ts` — rota
+  `GET /:id/items`.
+- `server/src/modules/purchaseRequisitions/domain/repositories/PurchaseRequisitionRepository.ts`
+  e `infrastructure/sequelize/SequelizePurchaseRequisitionRepository.ts` —
+  novo método `updateRequisition(id, data, transaction?)`.
+- `server/src/modules/purchaseRequisitions/presentation/validators/purchaseRequisitionValidators.ts`
+  — `changePurchaseRequisitionStatusSchema`.
+- `server/src/modules/purchaseRequisitions/presentation/controllers/purchaseRequisitionController.ts`
+  — `changeStatus` (valida `admin` para aprovação, chama o use case, loga
+  auditoria).
+- `server/src/modules/purchaseRequisitions/presentation/routes/purchaseRequisitions.ts`
+  — rota `PATCH /:id/status`.
+
+### Documentações atualizadas
+
+- `docs/DATABASE.md` — nova seção `### Tabela: item_suppliers` (colunas,
+  constraints, regra do `preferred`, referência à migration).
+- `docs/projeto/04-USE_CASES.md` — `UC-22: Gerenciar Catálogo Item ×
+  Fornecedor` e `UC-23: Workflow de Aprovação da Requisição de Compra`.
+- `docs/HANDOFF_CODEX.md` — esta seção.
+- JSDoc em todos os arquivos novos (models, repositories, use-cases,
+  controllers) descrevendo parâmetros, retornos e exceções lançadas.
+
+### Contratos dos endpoints
+
+**`GET /api/items/:id/suppliers`** (authenticate)
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "item_id": "5f2c...uuid",
+      "supplier_id": 10,
+      "unit_price": "12.500000",
+      "currency": "BRL",
+      "lead_time_days": 15,
+      "moq": "100.000000",
+      "supplier_item_code": "SUP-ABC-123",
+      "preferred": true,
+      "active": true,
+      "notes": null,
+      "supplier": { "id": 10, "company_name": "Acme Componentes" }
+    }
+  ]
+}
+```
+
+**`POST /api/items/:id/suppliers`** (authenticate + authorize admin/operator) — 201
+```json
+// Request
+{ "supplier_id": 10, "unit_price": 12.5, "lead_time_days": 15, "preferred": true }
+// Response
+{ "success": true, "data": { "id": 1, "item_id": "...", "supplier_id": 10, "preferred": true, "supplier": { "id": 10, "company_name": "Acme Componentes" } } }
+```
+Erros: 404 (item ou fornecedor inexistente), 409 (vínculo já existe).
+
+**`PUT /api/items/:id/suppliers/:linkId`** (authenticate + authorize admin/operator)
+```json
+// Request
+{ "unit_price": 13.0, "preferred": true }
+// Response
+{ "success": true, "data": { "id": 1, "unit_price": "13.000000", "preferred": true, "...": "..." } }
+```
+
+**`DELETE /api/items/:id/suppliers/:linkId`** (authenticate + authorize admin/operator) — soft delete
+```json
+{ "success": true, "data": { "id": 1, "active": false, "preferred": false } }
+```
+
+**`GET /api/items/:id/purchase-history`** (authenticate)
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "supplier_id": 10,
+      "company_name": "Acme Componentes",
+      "orders_count": "3",
+      "total_quantity": "450.00",
+      "min_price": "11.90",
+      "max_price": "13.20",
+      "avg_price": "12.40",
+      "last_order_date": "2026-07-28"
+    }
+  ]
+}
+```
+
+**`GET /api/suppliers/:id/items`** (authenticate)
+```json
+{
+  "success": true,
+  "data": [
+    { "id": 1, "supplier_id": 10, "item_id": "...", "preferred": true, "item": { "id": "...", "codigo": "TW-25", "descricao": "Tweeter 25mm" } }
+  ]
+}
+```
+
+**`PATCH /api/purchase-requisitions/:id/status`** (authenticate; `status=approved` exige `admin`)
+```json
+// Request
+{ "status": "approved" }
+// Response
+{ "success": true, "data": { "id": 7, "status": "approved", "approved_by": 3, "approval_date": "2026-08-03", "...": "..." } }
+```
+Erros: 404 (requisição inexistente), 422 (transição inválida, ex.:
+`draft` → `approved`), 403 (não-admin tentando aprovar).
+
+### Instruções de teste
+
+1. **Migrations** (não executado pelo agente, conforme instrução):
+   ```bash
+   cd server
+   npm run migration:up --name 20260803-000001-create-item-suppliers.cjs
+   ```
+   Validar: `\d+ item_suppliers` (colunas, unique `item_id+supplier_id`,
+   FKs corretas) e conferir se o backfill populou linhas a partir de
+   `purchase_order_items`/`purchase_orders` existentes.
+
+2. **Regressão automatizada**:
+   ```bash
+   npm run typecheck        # limpo
+   npx jest tests/unit       # 43 suites / 202 testes, 100% verde
+   ```
+
+3. **Manual (após subir a API com o banco migrado)**:
+   - Criar vínculo item-fornecedor com `preferred=true`, criar um segundo
+     vínculo do mesmo item com `preferred=true` e confirmar que o primeiro
+     foi desmarcado.
+   - Tentar criar vínculo duplicado (mesmo item + fornecedor) → esperar 409.
+   - Consultar `GET /:id/purchase-history` para um item com histórico de
+     compras e conferir agregação (orders_count, min/max/avg price).
+   - Criar requisição em `draft`, tentar `PATCH status=approved`
+     diretamente → esperar 422; mover para `pending` e então `approved`
+     com usuário `admin` → esperar sucesso com `approved_by`/`approval_date`
+     preenchidos; repetir aprovação com usuário não-admin → esperar 403.
+
+### Riscos residuais
+
+- Migration e backfill **não foram executados** neste ambiente (conforme
+  instrução do orquestrador); validar manualmente contra um banco com dados
+  reais de `purchase_order_items`/`purchase_orders` antes do deploy.
+- `GetItemPurchaseHistoryUseCase` usa `sequelize.query` com SQL bruto
+  (replacements parametrizados, sem risco de injection) — não passou por
+  teste de integração contra Postgres real neste ciclo; testes unitários
+  cobrem apenas a camada de use case com repositório mockado.
+- `authorize('admin')` não foi aplicado na rota `PATCH /status` (pois a
+  rota atende múltiplas transições com regras de permissão diferentes); a
+  checagem de `admin` para aprovação está no controller — reforçar com
+  teste de integração HTTP em ciclo futuro.
+
+---
+
+**Desenvolvedor**: Claude Code (Backend Engineer)
+**Data**: 2026-08-03
+**Próximo checkpoint**: Migrar/validar `item_suppliers` em ambiente com
+Postgres real; considerar teste de integração HTTP para
+`PATCH /purchase-requisitions/:id/status` e para os novos endpoints de
+catálogo item × fornecedor.

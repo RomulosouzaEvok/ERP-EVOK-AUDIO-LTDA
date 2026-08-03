@@ -5,12 +5,14 @@ const SequelizeItemRepository = require('../../../items/infrastructure/sequelize
 const CreatePurchaseRequisitionUseCase = require('../../application/use-cases/CreatePurchaseRequisitionUseCase');
 const ListPurchaseRequisitionsUseCase = require('../../application/use-cases/ListPurchaseRequisitionsUseCase');
 const GetPurchaseRequisitionByIdUseCase = require('../../application/use-cases/GetPurchaseRequisitionByIdUseCase');
+const ChangePurchaseRequisitionStatusUseCase = require('../../application/use-cases/ChangePurchaseRequisitionStatusUseCase');
 const {
   createPurchaseRequisitionSchema,
   listPurchaseRequisitionQuerySchema,
+  changePurchaseRequisitionStatusSchema,
   handleZodError,
 } = require('../validators/purchaseRequisitionValidators');
-const { ValidationError } = require('../../../../errors');
+const { ValidationError, ForbiddenError } = require('../../../../errors');
 
 const requisitionRepository = new SequelizePurchaseRequisitionRepository();
 const itemRepository = new SequelizeItemRepository();
@@ -76,6 +78,42 @@ exports.create = async (req, res, next) => {
     res.status(201).json({ success: true, data: requisition });
   } catch (error) {
     await rollbackIfPending(t);
+    next(error);
+  }
+};
+
+/**
+ * `PATCH /api/purchase-requisitions/:id/status` — transiciona o status da
+ * requisicao (draft->pending|canceled, pending->approved|canceled). Aprovar
+ * exige perfil `admin` e registra `approved_by`/`approval_date`.
+ */
+exports.changeStatus = async (req, res, next) => {
+  try {
+    const parsed = changePurchaseRequisitionStatusSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
+    if (parsed.data.status === 'approved' && req.user?.role !== 'admin') {
+      throw new ForbiddenError('Apenas administradores podem aprovar requisicoes de compra.');
+    }
+
+    const useCase = new ChangePurchaseRequisitionStatusUseCase(requisitionRepository);
+    const requisition = await useCase.execute({
+      id: Number(req.params.id),
+      status: parsed.data.status,
+      userId: req.user.id,
+    });
+
+    logAction(req, {
+      action: 'update_status',
+      entityType: 'PurchaseRequisition',
+      entityId: requisition?.id,
+      entityDescription: requisition?.requisition_number,
+      newValues: { status: requisition?.status },
+      description: `Requisicao de compra ${requisition?.requisition_number} alterada para ${requisition?.status}`,
+    });
+
+    res.json({ success: true, data: requisition });
+  } catch (error) {
     next(error);
   }
 };

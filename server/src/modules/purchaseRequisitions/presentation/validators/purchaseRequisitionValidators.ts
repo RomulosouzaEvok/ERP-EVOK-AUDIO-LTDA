@@ -40,9 +40,15 @@ export const listPurchaseRequisitionQuerySchema = z.object({
   end_date: z.string().date().optional(),
 }).strict();
 
+/** Schema do body de `PATCH /api/purchase-requisitions/:id/status`. */
+export const changePurchaseRequisitionStatusSchema = z.object({
+  status: z.enum(['approved', 'canceled', 'pending']),
+}).strict();
+
 module.exports = {
   createPurchaseRequisitionSchema,
   listPurchaseRequisitionQuerySchema,
+  changePurchaseRequisitionStatusSchema,
   handleZodError(error: any) {
     if (error?.issues) {
       throw new ValidationError('Payload invalido.', error.issues);

@@ -13,6 +13,8 @@ import {
   LogOut,
   Boxes,
   ChevronRight,
+  ClipboardList,
+  ListTree,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -40,7 +42,9 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Produtos e estoque', to: '/products', icon: Package },
       { label: 'Vendas', to: '/sales', icon: ShoppingCart },
       { label: 'Compras', to: '/purchases', icon: Truck },
+      { label: 'Requisições', to: '/purchases/requisitions', icon: ClipboardList },
       { label: 'Produção', to: '/production', icon: Factory },
+      { label: 'MRP', to: '/production/mrp', icon: ListTree },
       { label: 'Patrimônio', to: '/patrimonio', icon: Boxes },
     ],
   },
@@ -68,8 +72,10 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/sales/clients': ['Vendas', 'Clientes'],
   '/purchases': ['Compras'],
   '/purchases/suppliers': ['Compras', 'Fornecedores'],
+  '/purchases/requisitions': ['Compras', 'Requisições'],
   '/production': ['Produção'],
   '/production/bom': ['Produção', 'Estrutura de produto (BOM)'],
+  '/production/mrp': ['Produção', 'MRP'],
   '/patrimonio': ['Patrimônio'],
   '/financial': ['Financeiro'],
   '/traceability': ['Rastreabilidade'],

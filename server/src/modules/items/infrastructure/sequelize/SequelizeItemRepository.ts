@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
 import ItemRepository from '../../domain/repositories/ItemRepository';
-const { Item } = require('../../../../models/index');
+const { Item, Product } = require('../../../../models/index');
 const Validators = require('../../../../utils/validators');
 type ItemListOptions = { limit: number; offset: number; search?: string; tipo?: string; status?: string };
 
@@ -54,7 +54,36 @@ class SequelizeItemRepository extends ItemRepository {
   /** @inheritdoc */
   public async listMrpInventoryPositions(itemIds?: string[]): Promise<any[]> {
     const where = itemIds?.length ? { id: { [Op.in]: itemIds } } : undefined;
-    return Item.findAll({ where });
+    const items = await Item.findAll({ where });
+
+    if (!items.length) {
+      return [];
+    }
+
+    const codes = [...new Set(items.map((item: any) => String(item.codigo)).filter(Boolean))];
+    const products = codes.length
+      ? await Product.findAll({
+        where: { code: { [Op.in]: codes } },
+        attributes: ['code', 'quantity', 'reserved_quantity', 'min_quantity', 'lead_time'],
+      })
+      : [];
+
+    const productByCode = new Map<string, any>(products.map((product: any) => [String(product.code), product]));
+
+    return items.map((item: any) => {
+      const liveProduct = productByCode.get(String(item.codigo));
+
+      return {
+        id: item.id,
+        codigo: item.codigo,
+        descricao: item.descricao,
+        estoque_atual: liveProduct?.quantity ?? item.estoque_atual,
+        estoque_reservado: liveProduct?.reserved_quantity ?? item.estoque_reservado,
+        estoque_seguranca: liveProduct?.min_quantity ?? item.estoque_seguranca,
+        lote_minimo: liveProduct?.min_quantity ?? item.lote_minimo,
+        lead_time_dias: liveProduct?.lead_time ?? item.lead_time_dias,
+      };
+    });
   }
 }
 

@@ -346,6 +346,33 @@
 | received_quantity | DECIMAL(10,2) | DEFAULT 0 | Qtd recebida |
 | status | ENUM('pending','partial','received','canceled') | DEFAULT 'pending' | Status item |
 
+### Tabela: `item_suppliers` (Catálogo Item × Fornecedor)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| item_id | UUID | FK → items.id, ON DELETE CASCADE, NOT NULL | Item industrial |
+| supplier_id | INT | FK → suppliers.id, ON DELETE RESTRICT, NOT NULL | Fornecedor |
+| unit_price | DECIMAL(18,6) | - | Preço unitário de referência |
+| currency | VARCHAR(3) | DEFAULT 'BRL', NOT NULL | Moeda |
+| lead_time_days | INT | - | Prazo de entrega (dias) |
+| moq | DECIMAL(18,6) | - | Quantidade mínima de compra |
+| supplier_item_code | VARCHAR(80) | - | Código do item no catálogo do fornecedor |
+| preferred | BOOLEAN | DEFAULT false, NOT NULL | Fornecedor preferencial deste item (único `true` por item) |
+| active | BOOLEAN | DEFAULT true, NOT NULL | Soft delete |
+| notes | TEXT | - | Observações |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
+
+**Constraints:** `UNIQUE(item_id, supplier_id)`; índices em `item_id` e `supplier_id`.
+
+**Regra de negócio:** ao marcar `preferred = true` em um vínculo, todos os
+demais vínculos ativos do mesmo item têm `preferred` zerado na mesma
+transação (garante no máximo um fornecedor preferencial por item).
+
+**Migration:** `server/migrations/20260803-000001-create-item-suppliers.cjs`
+— inclui backfill que deriva vínculos a partir do histórico de
+`purchase_order_items` × `purchase_orders` (preço mais recente por par
+item/fornecedor).
+
 ### Tabela: `sales` (Vendas)
 | Coluna | Tipo | Restrições | Descrição |
 |--------|------|------------|-----------|

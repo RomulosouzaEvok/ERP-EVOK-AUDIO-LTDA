@@ -17,6 +17,8 @@ import Product = require('./Product');
 import Supplier = require('./Supplier');
 import Purchase = require('./Purchase');
 import PurchaseItem = require('./PurchaseItem');
+import PurchaseRequisition = require('./PurchaseRequisition');
+import PurchaseRequisitionItem = require('./PurchaseRequisitionItem');
 import Sale = require('./Sale');
 import SaleItem = require('./SaleItem');
 import AccountReceivable = require('./AccountReceivable');
@@ -50,6 +52,7 @@ import ItemCategoria = require('./ItemCategoria');
 import ItemDetalheComercial = require('./ItemDetalheComercial');
 import ItemEspecificacaoTecnica = require('./ItemEspecificacaoTecnica');
 import MrpOrdemPlanejada = require('./MrpOrdemPlanejada');
+import ItemSupplier = require('./ItemSupplier');
 
 // ============================================
 // RELACIONAMENTOS
@@ -82,6 +85,28 @@ Purchase.belongsTo(User, { foreignKey: 'requester_id', as: 'requester' });
 // Purchase ↔ PurchaseItem
 Purchase.hasMany(PurchaseItem, { foreignKey: 'purchase_id', as: 'items' });
 PurchaseItem.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
+
+// Purchase requisitions
+User.hasMany(PurchaseRequisition, { foreignKey: 'requester_id', as: 'purchase_requisitions' });
+PurchaseRequisition.belongsTo(User, { foreignKey: 'requester_id', as: 'requester' });
+
+User.hasMany(PurchaseRequisition, { foreignKey: 'approved_by', as: 'approved_purchase_requisitions' });
+PurchaseRequisition.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
+
+Department.hasMany(PurchaseRequisition, { foreignKey: 'department_id', as: 'purchase_requisitions' });
+PurchaseRequisition.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+
+ProductionOrder.hasMany(PurchaseRequisition, { foreignKey: 'production_order_id', as: 'purchase_requisitions' });
+PurchaseRequisition.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+PurchaseRequisition.hasMany(PurchaseRequisitionItem, { foreignKey: 'requisition_id', as: 'items' });
+PurchaseRequisitionItem.belongsTo(PurchaseRequisition, { foreignKey: 'requisition_id', as: 'requisition' });
+
+Item.hasMany(PurchaseRequisitionItem, { foreignKey: 'item_id', as: 'purchase_requisition_items' });
+PurchaseRequisitionItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
+Supplier.hasMany(PurchaseRequisitionItem, { foreignKey: 'suggested_supplier_id', as: 'purchase_requisition_items' });
+PurchaseRequisitionItem.belongsTo(Supplier, { foreignKey: 'suggested_supplier_id', as: 'suggestedSupplier' });
 
 // Product ↔ PurchaseItem
 Product.hasMany(PurchaseItem, { foreignKey: 'product_id', as: 'purchase_items' });
@@ -307,6 +332,12 @@ ItemDetalheComercial.belongsTo(Item, { foreignKey: 'item_id', as: 'item', onDele
 Item.hasOne(ItemEspecificacaoTecnica, { foreignKey: 'item_id', as: 'especificacaoTecnica', onDelete: 'CASCADE' });
 ItemEspecificacaoTecnica.belongsTo(Item, { foreignKey: 'item_id', as: 'item', onDelete: 'CASCADE' });
 
+// Item ↔ Supplier (catálogo N:N via ItemSupplier)
+ItemSupplier.belongsTo(Item, { foreignKey: 'item_id', as: 'item', onDelete: 'CASCADE' });
+ItemSupplier.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier', onDelete: 'RESTRICT' });
+Item.hasMany(ItemSupplier, { foreignKey: 'item_id', as: 'fornecedores' });
+Supplier.hasMany(ItemSupplier, { foreignKey: 'supplier_id', as: 'itens_fornecidos' });
+
 // Client ↔ ServiceOrder
 Client.hasMany(ServiceOrder, { foreignKey: 'client_id', as: 'service_orders' });
 ServiceOrder.belongsTo(Client, { foreignKey: 'client_id', as: 'client' });
@@ -406,6 +437,7 @@ export {
   sequelize,
   User, Client, Category, Product, Supplier,
   Purchase, PurchaseItem, Sale, SaleItem,
+  PurchaseRequisition, PurchaseRequisitionItem,
   AccountReceivable, AccountPayable,
   InventoryMovement, InventoryCount, InventoryCountItem, ProductCostLedger, Department, Employee,
   ProductionOrder, ProductionRoute, ProductionRouteStep, ProductionOrderTracking,
@@ -413,5 +445,6 @@ export {
   ServiceOrder, Asset,
   NonConformity, MaintenanceOrder, AuditLog, WebhookEvent, CompanyFiscalConfig, PurchaseReceipt,
   BillOfMaterial, BillOfMaterialItem,
-  Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada
+  Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada,
+  ItemSupplier
 };

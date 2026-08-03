@@ -61,11 +61,36 @@ export const explodeItemStructureQuerySchema = z.object({
   due_date: z.string().date().optional(),
 });
 
+/** Schema para criar vinculo item x fornecedor (catalogo N:N). */
+export const createItemSupplierSchema = z.object({
+  supplier_id: z.coerce.number().int().positive(),
+  unit_price: z.coerce.number().min(0).optional(),
+  currency: z.string().trim().length(3).optional(),
+  lead_time_days: z.coerce.number().int().min(0).optional(),
+  moq: z.coerce.number().min(0).optional(),
+  supplier_item_code: z.string().trim().max(80).optional(),
+  preferred: z.boolean().optional(),
+  notes: z.string().trim().max(1000).optional(),
+}).strict();
+
+/** Schema para atualizar vinculo item x fornecedor (catalogo N:N). */
+export const updateItemSupplierSchema = z.object({
+  unit_price: z.coerce.number().min(0).optional(),
+  currency: z.string().trim().length(3).optional(),
+  lead_time_days: z.coerce.number().int().min(0).optional(),
+  moq: z.coerce.number().min(0).optional(),
+  supplier_item_code: z.string().trim().max(80).optional(),
+  preferred: z.boolean().optional(),
+  notes: z.string().trim().max(1000).optional(),
+}).strict();
+
 const schemas = {
   createItemSchema,
   createItemStructureSchema,
   listItemsQuerySchema,
   explodeItemStructureQuerySchema,
+  createItemSupplierSchema,
+  updateItemSupplierSchema,
 };
 
 module.exports = schemas;

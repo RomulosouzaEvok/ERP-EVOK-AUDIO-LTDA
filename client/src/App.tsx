@@ -17,8 +17,10 @@ const ClientsPage = lazy(() => import('@/pages/sales/ClientsPage'));
 const SalesPage = lazy(() => import('@/pages/sales/SalesPage'));
 const SuppliersPage = lazy(() => import('@/pages/purchases/SuppliersPage'));
 const PurchasesPage = lazy(() => import('@/pages/purchases/PurchasesPage'));
+const RequisitionsPage = lazy(() => import('@/pages/purchases/RequisitionsPage'));
 const BomPage = lazy(() => import('@/pages/production/BomPage'));
 const ProductionOrdersPage = lazy(() => import('@/pages/production/ProductionOrdersPage'));
+const MrpPage = lazy(() => import('@/pages/production/MrpPage'));
 const AssetsPage = lazy(() => import('@/pages/patrimonio/AssetsPage'));
 const FinancialPage = lazy(() => import('@/pages/financial/FinancialPage'));
 const TraceabilityPage = lazy(() => import('@/pages/traceability/TraceabilityPage'));
@@ -99,6 +101,14 @@ export default function App() {
               </Suspense>
             }
           />
+          <Route
+            path="/purchases/requisitions"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <RequisitionsPage />
+              </Suspense>
+            }
+          />
 
           <Route
             path="/production"
@@ -113,6 +123,14 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <BomPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/production/mrp"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <MrpPage />
               </Suspense>
             }
           />

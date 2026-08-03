@@ -1,9 +1,11 @@
 const SequelizeSuppliersRepository = require('../../infrastructure/sequelize/SequelizeSuppliersRepository');
+const SequelizeItemSupplierRepository = require('../../../items/infrastructure/sequelize/SequelizeItemSupplierRepository');
 const ListSuppliersUseCase = require('../../application/use-cases/ListSuppliersUseCase');
 const GetSupplierByIdUseCase = require('../../application/use-cases/GetSupplierByIdUseCase');
 const CreateSupplierUseCase = require('../../application/use-cases/CreateSupplierUseCase');
 const UpdateSupplierUseCase = require('../../application/use-cases/UpdateSupplierUseCase');
 const DeactivateSupplierUseCase = require('../../application/use-cases/DeactivateSupplierUseCase');
+const ListSupplierItemsUseCase = require('../../application/use-cases/ListSupplierItemsUseCase');
 const { createSupplierSchema, updateSupplierSchema, handleZodError } = require('../validators/supplierValidators');
 
 /**
@@ -16,6 +18,7 @@ const { createSupplierSchema, updateSupplierSchema, handleZodError } = require('
  * em nenhuma rota ativa (ver `server/src/modules/suppliers/README.md`).
  */
 const suppliersRepository = new SequelizeSuppliersRepository();
+const itemSupplierRepository = new SequelizeItemSupplierRepository();
 
 /**
  * `GET /api/suppliers` — lista fornecedores com busca/filtro e paginação.
@@ -117,6 +120,25 @@ exports.remove = async (req, res, next) => {
     const useCase = new DeactivateSupplierUseCase(suppliersRepository);
     const result = await useCase.execute({ id: req.params.id });
     res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * `GET /api/suppliers/:id/items` — lista os vinculos ativos de itens
+ * (catalogo N:N) de um fornecedor.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.listItems = async (req, res, next) => {
+  try {
+    const useCase = new ListSupplierItemsUseCase(suppliersRepository, itemSupplierRepository);
+    const data = await useCase.execute({ supplierId: Number(req.params.id) });
+    res.json({ success: true, data });
   } catch (error) {
     next(error);
   }

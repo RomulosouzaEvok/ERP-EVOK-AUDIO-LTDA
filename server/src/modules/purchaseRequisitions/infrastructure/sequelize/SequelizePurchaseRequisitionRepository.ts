@@ -65,6 +65,13 @@ class SequelizePurchaseRequisitionRepository extends PurchaseRequisitionReposito
   async createRequisitionItem(data: Record<string, unknown>, transaction?: any) {
     return PurchaseRequisitionItem.create(data, transaction ? { transaction } : undefined);
   }
+
+  async updateRequisition(id: number, data: Record<string, unknown>, transaction?: any) {
+    const requisition = await PurchaseRequisition.findByPk(id, transaction ? { transaction } : undefined);
+    if (!requisition) return null;
+    await requisition.update(data, transaction ? { transaction } : undefined);
+    return this.findRequisitionById(id, transaction);
+  }
 }
 
 export = SequelizePurchaseRequisitionRepository;
