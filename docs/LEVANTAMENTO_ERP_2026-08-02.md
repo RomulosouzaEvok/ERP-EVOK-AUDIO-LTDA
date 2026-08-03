@@ -70,7 +70,7 @@ O que NÃO existe (e uma fábrica em escala precisa):
 | 1 | ~~**Catálogo item×fornecedor N:N**~~ | ✅ **RESOLVIDO em 2026-08-03 (commit 490d512)**: tabela `item_suppliers` + endpoints + dialog Fornecedores no produto + histórico de compras + workflow de aprovação da requisição | feito |
 | 2 | ~~**Telas de MRP e Requisição de Compra**~~ | ✅ **RESOLVIDO em 2026-08-03 (commit 490d512)**: /purchases/requisitions e /production/mrp no ar | feito |
 | 3 | **Fechar o ciclo MRP** — plano → requisição/OP automático | 🔧 **UI pronta (2026-08-03)**: conversão manual de ordens planejadas (RASCUNHO/APROVADA) em requisição via seleção múltipla + dialog em `/production/mrp`, aguardando endpoint `POST /api/mrp/planned-orders/convert` no backend. Falta trigger automático (sem intervenção do planejador) | 3-4d |
-| 4 | **Conversão requisição → pedido de compra** | Elo quebrado na cadeia de suprimentos | 1-2d |
+| 4 | ~~**Conversão requisição → pedido de compra**~~ | ✅ **RESOLVIDO em 2026-08-03 (commit 33b0243)**: POST /:id/convert agrupa por fornecedor, preço do catálogo, requisition_id no pedido; botão "Gerar Pedido" na tela. Cadeia MRP→requisição→aprovação→pedido 100% conectada | feito |
 | 5 | **Centros de trabalho + capacidade + calendário de turnos** (hoje work_center é texto livre) | Sem carga-máquina não há promessa de prazo confiável | 5d+ |
 | 6 | **Tela de apontamento de chão de fábrica** (operação/tempo/refugo por operador) + rastreabilidade por código de lote/QR (hoje só por ID numérico) | Chão de fábrica sem tela de execução | 3-4d |
 | 7 | **Custo real vs padrão** (variância de preço/quantidade/refugo) + mão-de-obra no custeio | Sem gestão de margem em volume | 3-4d |
