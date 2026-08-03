@@ -36,6 +36,14 @@ class SequelizeItemSupplierRepository extends ItemSupplierRepository {
   }
 
   /** @inheritdoc */
+  public async findPreferredByItem(itemId: string): Promise<any | null> {
+    return ItemSupplier.findOne({
+      where: { item_id: itemId, preferred: true, active: true },
+      include: [{ model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] }],
+    });
+  }
+
+  /** @inheritdoc */
   public async create(data: Record<string, unknown>, transaction?: any): Promise<any> {
     return ItemSupplier.create(data, transaction ? { transaction } : undefined);
   }

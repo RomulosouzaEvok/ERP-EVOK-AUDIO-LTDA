@@ -436,6 +436,60 @@
 
 ---
 
+## UC-24: Conversão de Ordens Planejadas do MRP em Requisição de Compra
+
+**Ator:** Planejador de PCP (`admin`, `operator`)
+**Pré-condições:** Ordens planejadas existentes com status `RASCUNHO` ou
+`APROVADA` (geradas via `POST /api/mrp/plan`)
+**Fluxo Principal:**
+1. Usuário seleciona um lote de ordens planejadas (1 a 100) e envia
+   `POST /api/mrp/planned-orders/convert` com `planned_order_ids` (array de
+   UUID) e `notes` opcional
+2. Sistema abre uma transação e carrega as ordens planejadas por id com
+   lock pessimista (`SELECT ... FOR UPDATE`), para evitar conversão
+   concorrente da mesma ordem
+3. Sistema valida que todas as ordens existem e estão em status `RASCUNHO`
+   ou `APROVADA`
+4. Sistema cria **uma única** Requisição de Compra (`origin='mrp'`,
+   `status='pending'`, `priority='normal'`, `requester_id` = usuário
+   logado, `notes` = texto informado ou `"Gerada automaticamente do plano
+   MRP"`)
+5. Para cada ordem planejada, sistema cria um item de requisição
+   (`item_id`, `quantity` = `quantidade_planejada`, `required_date` =
+   `data_necessidade`) e busca o fornecedor preferencial ativo do item em
+   `item_suppliers` (`preferred=true`, `active=true`); se existir, sugere
+   `suggested_supplier_id` e `unit_price_estimated` (preço de referência do
+   vínculo)
+6. Sistema atualiza o status de todas as ordens planejadas convertidas para
+   `EM_EXECUCAO`
+7. Sistema confirma a transação (`commit`) e retorna a requisição completa
+   (com itens) e a lista de ids convertidos
+8. Sistema registra log de auditoria (`logAction`, ação
+   `convert_to_requisition`)
+
+**Fluxo Alternativo (ordem inexistente):**
+- Sistema faz `rollback` e retorna 404 NOT_FOUND citando os ids não
+  encontrados
+
+**Fluxo Alternativo (status inválido):**
+- Sistema faz `rollback` e retorna 422 BUSINESS_RULE_VIOLATION citando os
+  ids em status diferente de `RASCUNHO`/`APROVADA` (ex.: já `EM_EXECUCAO`,
+  `CONCLUIDA` ou `CANCELADA`)
+
+**Regras de Negócio:**
+- Toda a operação (lock das ordens, criação da requisição e itens,
+  atualização de status) ocorre em uma única transação Sequelize
+  (`commit`/`rollback`)
+- Sugestão de fornecedor é best-effort: ordem sem fornecedor preferencial
+  cadastrado gera item de requisição com `suggested_supplier_id=null` e
+  `unit_price_estimated=null` (comprador decide manualmente)
+- `requester_id` nunca é informado pelo cliente da API (sempre derivado do
+  usuário autenticado via JWT)
+- Fecha o ciclo de rastreabilidade: MRP (ordem planejada) → Requisição de
+  Compra → Pedido de Compra → Recebimento → Estoque
+
+---
+
 ## Atores Industriais (Adicionais)
 
 | Ator | Descricao |

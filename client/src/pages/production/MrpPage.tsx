@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, Trash2, ShoppingCart } from 'lucide-react';
 
 import * as mrpApi from '@/api/mrp';
 import { extractApiErrorMessage } from '@/api/httpClient';
@@ -13,6 +14,13 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ItemSearchSelect } from '@/components/ItemSearchSelect';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 
@@ -22,6 +30,26 @@ const ORIGIN_LABEL: Record<mrpApi.MrpDemandOrigin, string> = {
   PREVISAO: 'Previsão',
   ORDEM_PRODUCAO: 'Ordem de produção',
 };
+
+/** Cores por status de ordem planejada do MRP. */
+const PLANNED_ORDER_STATUS_STYLE: Record<string, string> = {
+  RASCUNHO: 'border-transparent bg-muted text-muted-foreground',
+  APROVADA: 'border-transparent bg-blue-600 text-white',
+  EM_EXECUCAO: 'border-transparent bg-amber-500 text-white',
+  CONCLUIDA: 'border-transparent bg-emerald-600 text-white',
+  CANCELADA: 'border-transparent bg-destructive text-destructive-foreground',
+};
+
+/** Badge de status da ordem planejada, com fallback neutro para status desconhecidos. */
+function PlannedOrderStatusBadge({ status }: { status: string }) {
+  const className = PLANNED_ORDER_STATUS_STYLE[status];
+  return <Badge className={className} variant={className ? undefined : 'secondary'}>{status}</Badge>;
+}
+
+/** Ordens planejadas podem virar requisição apenas quando ainda não avançaram no fluxo de compra. */
+function isConvertible(status: string): boolean {
+  return (mrpApi.CONVERTIBLE_PLANNED_ORDER_STATUSES as readonly string[]).includes(status);
+}
 
 const demandSchema = z.object({
   item_id: z.string().min(1, 'Selecione um item.'),
@@ -40,11 +68,33 @@ type PlanFormData = z.infer<typeof planSchema>;
 export default function MrpPage() {
   const queryClient = useQueryClient();
   const [formError, setFormError] = React.useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [convertDialogOpen, setConvertDialogOpen] = React.useState(false);
+  const [convertNotes, setConvertNotes] = React.useState('');
+  const [convertError, setConvertError] = React.useState<string | null>(null);
+  const [convertedRequisition, setConvertedRequisition] = React.useState<mrpApi.ConvertPlannedOrdersResult | null>(
+    null,
+  );
 
   const { data: plannedOrders, isLoading, isError } = useQuery({
     queryKey: ['mrp-planned-orders'],
     queryFn: () => mrpApi.listPlannedOrders(),
   });
+
+  const convertibleOrders = React.useMemo(
+    () => (plannedOrders ?? []).filter((order) => isConvertible(order.status)),
+    [plannedOrders],
+  );
+  const convertibleIds = React.useMemo(() => convertibleOrders.map((order) => String(order.id)), [convertibleOrders]);
+  const allConvertibleSelected = convertibleIds.length > 0 && convertibleIds.every((id) => selectedIds.includes(id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(allConvertibleSelected ? [] : convertibleIds);
+  }
 
   const {
     control,
@@ -66,6 +116,30 @@ export default function MrpPage() {
     },
     onError: (error) => setFormError(extractApiErrorMessage(error)),
   });
+
+  const convertMutation = useMutation({
+    mutationFn: () =>
+      mrpApi.convertPlannedOrders({
+        planned_order_ids: selectedIds,
+        notes: convertNotes.trim() || undefined,
+      }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['mrp-planned-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
+      setSelectedIds([]);
+      setConvertNotes('');
+      setConvertError(null);
+      setConvertDialogOpen(false);
+      setConvertedRequisition(result);
+    },
+    onError: (error) => setConvertError(extractApiErrorMessage(error)),
+  });
+
+  function closeConvertDialog() {
+    setConvertDialogOpen(false);
+    setConvertError(null);
+    setConvertNotes('');
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -150,10 +224,32 @@ export default function MrpPage() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <h2 className="text-lg font-medium">Ordens planejadas</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-medium">Ordens planejadas</h2>
+          <Button
+            type="button"
+            size="sm"
+            disabled={selectedIds.length === 0}
+            onClick={() => {
+              setConvertError(null);
+              setConvertDialogOpen(true);
+            }}
+          >
+            <ShoppingCart className="size-4" /> Converter em Requisição ({selectedIds.length})
+          </Button>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  aria-label="Selecionar todas as ordens convertíveis"
+                  checked={allConvertibleSelected}
+                  disabled={convertibleIds.length === 0}
+                  onChange={toggleSelectAll}
+                />
+              </TableHead>
               <TableHead>Item</TableHead>
               <TableHead>Bruta</TableHead>
               <TableHead>Disponível</TableHead>
@@ -165,31 +261,44 @@ export default function MrpPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading && <TableSkeletonRows columns={8} />}
+            {isLoading && <TableSkeletonRows columns={9} />}
             {isError && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-destructive">
+                <TableCell colSpan={9} className="text-center text-destructive">
                   Não foi possível carregar as ordens planejadas. Tente novamente.
                 </TableCell>
               </TableRow>
             )}
-            {plannedOrders?.map((order) => (
-              <TableRow key={order.id}>
-                <TableCell>{order.item ? `${order.item.codigo} — ${order.item.descricao}` : '-'}</TableCell>
-                <TableCell>{Number(order.necessidade_bruta)}</TableCell>
-                <TableCell>{Number(order.estoque_disponivel)}</TableCell>
-                <TableCell>{Number(order.necessidade_liquida)}</TableCell>
-                <TableCell>{Number(order.quantidade_planejada)}</TableCell>
-                <TableCell>{new Date(order.data_necessidade).toLocaleDateString('pt-BR')}</TableCell>
-                <TableCell>{new Date(order.data_liberacao).toLocaleDateString('pt-BR')}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{order.status}</Badge>
-                </TableCell>
-              </TableRow>
-            ))}
+            {plannedOrders?.map((order) => {
+              const id = String(order.id);
+              const convertible = isConvertible(order.status);
+              return (
+                <TableRow key={order.id}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      aria-label={`Selecionar ordem planejada ${id}`}
+                      checked={selectedIds.includes(id)}
+                      disabled={!convertible}
+                      onChange={() => toggleSelected(id)}
+                    />
+                  </TableCell>
+                  <TableCell>{order.item ? `${order.item.codigo} — ${order.item.descricao}` : '-'}</TableCell>
+                  <TableCell>{Number(order.necessidade_bruta)}</TableCell>
+                  <TableCell>{Number(order.estoque_disponivel)}</TableCell>
+                  <TableCell>{Number(order.necessidade_liquida)}</TableCell>
+                  <TableCell>{Number(order.quantidade_planejada)}</TableCell>
+                  <TableCell>{new Date(order.data_necessidade).toLocaleDateString('pt-BR')}</TableCell>
+                  <TableCell>{new Date(order.data_liberacao).toLocaleDateString('pt-BR')}</TableCell>
+                  <TableCell>
+                    <PlannedOrderStatusBadge status={order.status} />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {!isLoading && !isError && (plannedOrders?.length ?? 0) === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                <TableCell colSpan={9} className="text-center text-muted-foreground">
                   Nenhuma ordem planejada gerada.
                 </TableCell>
               </TableRow>
@@ -197,6 +306,73 @@ export default function MrpPage() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog
+        open={convertDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setConvertDialogOpen(nextOpen);
+          if (!nextOpen) closeConvertDialog();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Converter em requisição de compra</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {selectedIds.length} ordem(ns) planejada(s) selecionada(s) será(ão) convertida(s) em uma nova Requisição
+            de Compra.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="convert-notes">Observações (opcional)</Label>
+            <Input
+              id="convert-notes"
+              value={convertNotes}
+              onChange={(event) => setConvertNotes(event.target.value)}
+              placeholder="Ex.: Conversão via MRP, reposição urgente..."
+            />
+          </div>
+          {convertError && <p className="text-sm text-destructive">{convertError}</p>}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeConvertDialog} disabled={convertMutation.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={convertMutation.isPending || selectedIds.length === 0}
+              onClick={() => convertMutation.mutate()}
+            >
+              {convertMutation.isPending ? 'Convertendo...' : 'Confirmar conversão'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(convertedRequisition)} onOpenChange={(open) => !open && setConvertedRequisition(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Requisição criada com sucesso</DialogTitle>
+          </DialogHeader>
+          {convertedRequisition && (
+            <p className="text-sm">
+              A requisição{' '}
+              <span className="font-semibold">
+                {convertedRequisition.requisition.requisition_number ?? convertedRequisition.requisition.id}
+              </span>{' '}
+              foi criada a partir de {convertedRequisition.converted_ids.length} ordem(ns) planejada(s).
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConvertedRequisition(null)}>
+              Fechar
+            </Button>
+            <Button type="button" asChild>
+              <Link to="/purchases/requisitions" onClick={() => setConvertedRequisition(null)}>
+                Ver requisição
+              </Link>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

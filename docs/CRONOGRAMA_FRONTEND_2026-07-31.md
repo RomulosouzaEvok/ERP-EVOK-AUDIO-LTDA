@@ -158,7 +158,8 @@ tela funciona.
 - [ ] Explosão de BOM (visualizar árvore de materiais necessários) (`GET /.../estrutura/explode`).
 - [ ] Criar ordem de produção, com bloqueio visual se não houver disponibilidade de material (a API já valida, o frontend deve mostrar o motivo).
 - [ ] Fluxo de status da OP: liberar (reserva material), iniciar/concluir apontamento, concluir com consumo de lote.
-- [ ] Tela de geração de plano MRP (`POST /api/mrp/plan`) e visualização de ordens planejadas (`GET /api/mrp/planned-orders`).
+- [x] Tela de geração de plano MRP (`POST /api/mrp/plan`) e visualização de ordens planejadas (`GET /api/mrp/planned-orders`).
+- [x] Conversão de ordens planejadas em Requisição de Compra (`POST /api/mrp/planned-orders/convert`), com seleção múltipla, dialog de confirmação e badges de status.
 
 ### Critério de aceite
 

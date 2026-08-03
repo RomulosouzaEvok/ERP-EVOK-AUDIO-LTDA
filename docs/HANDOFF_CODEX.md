@@ -657,3 +657,245 @@ Erros: 404 (requisição inexistente), 422 (transição inválida, ex.:
 Postgres real; considerar teste de integração HTTP para
 `PATCH /purchase-requisitions/:id/status` e para os novos endpoints de
 catálogo item × fornecedor.
+
+---
+
+## MRP — Conversão de Ordens Planejadas em Requisição de Compra (Frontend, endpoint backend entregue — ver seção seguinte)
+
+### Resumo da feature
+
+Adicionada na tela `/production/mrp` a capacidade de selecionar ordens
+planejadas (geradas pelo MRP) e convertê-las em uma Requisição de Compra,
+com seleção múltipla via checkbox, dialog de confirmação com campo de
+observações opcional, e feedback com o número da requisição criada e
+navegação para `/purchases/requisitions`.
+
+**Importante**: o endpoint `POST /api/mrp/planned-orders/convert` está
+sendo desenvolvido em paralelo no backend (fora do escopo desta sessão,
+que tocou **apenas `client/`**). O contrato usado no frontend foi definido
+pelo orquestrador e implementado como especificação — **não foi verificado
+contra o código real do backend**. Validar o contrato assim que o endpoint
+estiver disponível.
+
+### Contrato assumido (a validar contra o backend real)
+
+```
+POST /api/mrp/planned-orders/convert
+Body: { planned_order_ids: string[] (UUIDs, min 1), notes?: string }
+
+Resposta 201:
+{
+  "success": true,
+  "data": {
+    "requisition": { "id", "requisition_number", "status", "items": [...] },
+    "converted_ids": string[]
+  }
+}
+
+Erros:
+- 404: ordem planejada inexistente
+- 422: status inválido para conversão (só RASCUNHO/APROVADA convertem), formato
+  { "success": false, "error": { ... } }
+```
+
+O tipo `PurchaseRequisition` retornado em `requisition` reaproveita a
+interface já existente em `client/src/api/purchaseRequisitions.ts`.
+
+### Arquivos criados/modificados (client/)
+
+- `client/src/api/mrp.ts` — adicionada função `convertPlannedOrders(input)`,
+  tipos `ConvertPlannedOrdersInput`/`ConvertPlannedOrdersResult`, e a
+  constante `CONVERTIBLE_PLANNED_ORDER_STATUSES = ['RASCUNHO', 'APROVADA']`
+  (única fonte de verdade para quais status habilitam conversão — se o
+  backend usar valores diferentes, ajustar aqui).
+- `client/src/pages/production/MrpPage.tsx`:
+  - `PlannedOrderStatusBadge` — badge colorido por status (RASCUNHO cinza,
+    APROVADA azul, EM_EXECUCAO âmbar, CONCLUIDA verde, CANCELADA vermelho),
+    com fallback `secondary` para status desconhecidos.
+  - Coluna de checkbox por linha da tabela de ordens planejadas, habilitada
+    apenas quando `isConvertible(order.status)` é verdadeiro; checkbox de
+    "selecionar todas" no header considera apenas as linhas convertíveis.
+  - Botão "Converter em Requisição (N)" (desabilitado quando `N === 0`)
+    abre um `Dialog` de confirmação com campo de observações opcional.
+  - `useMutation` chama `convertPlannedOrders`; em sucesso invalida
+    `['mrp-planned-orders']` e `['purchase-requisitions']`, limpa seleção,
+    fecha o dialog de confirmação e abre um segundo dialog mostrando o
+    número da requisição criada com botão "Ver requisição" (`Link` para
+    `/purchases/requisitions`, rota já existente em `App.tsx`).
+  - Erros tratados com `extractApiErrorMessage` e exibidos no dialog de
+    confirmação (não trava a UI, permite tentar novamente).
+
+### O que o Agente QA (ou humano) deve testar
+
+1. **Assim que o endpoint backend estiver no ar**, confirmar que o
+   contrato real bate com o assumido acima (especialmente o formato de
+   `requisition.items` e o payload de erro 422). Se divergir, ajustar
+   `ConvertPlannedOrdersResult` em `client/src/api/mrp.ts`.
+2. Gerar um plano MRP, confirmar que ordens com status `RASCUNHO`/`APROVADA`
+   mostram checkbox habilitado e as demais (`EM_EXECUCAO`, `CONCLUIDA`,
+   `CANCELADA`) mostram checkbox desabilitado.
+3. Selecionar 2+ ordens convertíveis, clicar em "Converter em Requisição",
+   confirmar no dialog (com e sem observações) e validar que:
+   - o botão fica desabilitado/mostra "Convertendo..." durante a mutation;
+   - em sucesso, a lista de ordens planejadas é recarregada e a seleção é
+     limpa;
+   - o dialog de sucesso mostra o `requisition_number` correto e o link
+     "Ver requisição" navega para `/purchases/requisitions`.
+4. Testar erro 422 (ex.: selecionar ordem que mudou de status entre a
+   carga da tela e o clique) e 404 — mensagem amigável deve aparecer no
+   dialog via `extractApiErrorMessage`, sem stack trace.
+5. Confirmar que `npm run typecheck` (`node ./node_modules/typescript/bin/tsc -b --noEmit`)
+   e `npm test` continuam verdes após a integração real com o backend.
+
+**Desenvolvedor**: Claude Code (Frontend Engineer)
+**Data**: 2026-08-03
+
+---
+
+## MRP — Conversão de Ordens Planejadas em Requisição de Compra (Backend, Concluído)
+
+**Data**: 2026-08-03
+**Escopo**: Endpoint `POST /api/mrp/planned-orders/convert` — fecha o ciclo
+MRP → Requisição de Compra. Trabalho realizado **apenas em `server/`**
+(sem tocar `client/`).
+**Status**: ✅ Concluído — contrato validado contra a especificação assumida
+pela sessão de frontend anterior (`converted_ids`, `requisition.items`,
+404/422), sem divergências.
+
+### Resumo da feature
+
+Novo caso de uso `ConvertPlannedOrdersToRequisitionUseCase` que:
+1. Abre uma transação Sequelize e carrega as ordens planejadas informadas
+   com lock pessimista (`SELECT ... FOR UPDATE`), via novo método
+   `MrpRepository.findPlannedOrdersByIdsForUpdate(ids, transaction)`.
+2. Valida que todas existem (404 `NotFoundError` citando ids ausentes) e
+   que estão em status `RASCUNHO` ou `APROVADA` (422 `BusinessRuleError`
+   citando ids inválidos).
+3. Cria **uma única** Requisição de Compra (`origin='mrp'`,
+   `status='pending'`, `priority='normal'`, `requester_id` do usuário
+   logado, `notes` = texto informado ou `"Gerada automaticamente do plano
+   MRP"`), reaproveitando `PurchaseRequisitionRepository.createRequisition`
+   / `createRequisitionItem` do módulo `purchaseRequisitions`.
+4. Para cada ordem planejada, busca o fornecedor preferencial ativo do
+   item via novo método `ItemSupplierRepository.findPreferredByItem(itemId)`
+   (`item_suppliers` com `preferred=true AND active=true`) e sugere
+   `suggested_supplier_id`/`unit_price_estimated` quando existir (senão
+   `null`, decisão manual do comprador).
+5. Atualiza todas as ordens planejadas convertidas para `EM_EXECUCAO` via
+   novo método `MrpRepository.updatePlannedOrdersStatus(ids, status, tx)`.
+6. Faz commit/rollback automático (padrão `sequelize.transaction(async tx
+   => ...)`) e retorna a requisição completa (com itens) + ids convertidos.
+
+### Contrato do endpoint (confirmado)
+
+```
+POST /api/mrp/planned-orders/convert
+Auth: Bearer JWT — authenticate + authorize('admin', 'operator')
+
+Body (zod .strict()):
+{
+  "planned_order_ids": ["<uuid>", ...],   // min 1, max 100
+  "notes": "string opcional, max 1000"
+}
+
+Resposta 201:
+{
+  "success": true,
+  "data": {
+    "requisition": {
+      "id": 42,
+      "requisition_number": "RQ-1735900000000",
+      "status": "pending",
+      "origin": "mrp",
+      "priority": "normal",
+      "requester_id": 5,
+      "notes": "Gerada automaticamente do plano MRP",
+      "items": [
+        {
+          "id": 101,
+          "item_id": "5b1c...-uuid",
+          "quantity": "10.000000",
+          "required_date": "2026-08-20",
+          "suggested_supplier_id": 7,
+          "unit_price_estimated": "12.500000",
+          "status": "pending"
+        }
+      ]
+    },
+    "converted_ids": ["order-uuid-1", "order-uuid-2"]
+  }
+}
+
+Erros:
+- 400 VALIDATION_ERROR — payload fora do schema zod (ids não-UUID, array
+  vazio ou > 100, notes > 1000 chars, campos extras)
+- 404 NOT_FOUND — alguma ordem planejada não existe (mensagem cita os ids)
+- 422 BUSINESS_RULE_VIOLATION — alguma ordem não está em
+  RASCUNHO/APROVADA (mensagem + `details.invalid_ids` cita os ids)
+```
+
+### Arquivos criados/modificados (server/)
+
+#### Criados
+- `server/src/modules/mrp/application/use-cases/ConvertPlannedOrdersToRequisitionUseCase.ts`
+- `server/tests/unit/mrp-convert-to-requisition.test.ts` — 4 casos: conversão
+  com fornecedor preferencial + fallback null, notas customizadas, bloqueio
+  de status inválido (422), ordem inexistente (404)
+
+#### Modificados
+- `server/src/modules/mrp/domain/repositories/MrpRepository.ts` — contrato
+  `findPlannedOrdersByIdsForUpdate(ids, transaction)` e
+  `updatePlannedOrdersStatus(ids, status, transaction)`
+- `server/src/modules/mrp/infrastructure/sequelize/SequelizeMrpRepository.ts`
+  — implementação com `lock: transaction.LOCK.UPDATE` e `Op.in`
+- `server/src/modules/mrp/presentation/validators/mrpValidators.ts` —
+  `convertPlannedOrdersSchema` (zod `.strict()`)
+- `server/src/modules/mrp/presentation/controllers/mrpController.ts` —
+  handler `convertPlannedOrders` com `logAction` (ação
+  `convert_to_requisition`, entidade `PurchaseRequisition`)
+- `server/src/modules/mrp/presentation/routes/mrp.ts` — nova rota
+  `POST /planned-orders/convert` (authenticate + authorize admin/operator)
+- `server/src/modules/items/domain/repositories/ItemSupplierRepository.ts`
+  e `server/src/modules/items/infrastructure/sequelize/SequelizeItemSupplierRepository.ts`
+  — novo método `findPreferredByItem(itemId)`
+
+### Invariantes mantidas
+- ✅ Sem nova tabela/migration — reaproveita `mrp_ordens_planejadas`,
+  `purchase_requisitions`, `purchase_requisition_items`, `item_suppliers`
+  já existentes
+- ✅ Toda a operação multi-tabela em uma única transação Sequelize
+  (`commit`/`rollback` automático via `sequelize.transaction`)
+- ✅ `requester_id` sempre derivado de `req.user.id` (JWT), nunca do body
+- ✅ Nenhuma conexão/abstração com o ERP legado (isolamento de banco mantido)
+
+### Documentações atualizadas
+- `docs/projeto/04-USE_CASES.md` — novo `UC-24: Conversão de Ordens
+  Planejadas do MRP em Requisição de Compra`
+- `docs/HANDOFF_CODEX.md` — esta seção
+
+### Testes executados
+- `npm run typecheck` — limpo, sem erros
+- `npx jest tests/unit/mrp-convert-to-requisition.test.ts` — 4/4 verde
+- `npx jest tests/unit` — 44 suites / 206 testes, 100% verde (nenhuma
+  regressão)
+
+### Instruções de teste para o próximo agente/humano
+1. Subir Postgres local (`docker compose up -d`) e rodar migrations.
+2. Gerar um plano MRP (`POST /api/mrp/plan`) para obter ordens `RASCUNHO`.
+3. Cadastrar um `item_suppliers` com `preferred=true, active=true` para
+   pelo menos um dos itens das ordens planejadas e confirmar que o
+   `suggested_supplier_id`/`unit_price_estimated` aparecem na requisição
+   gerada; para um item sem vínculo preferencial, confirmar `null`.
+4. Chamar `POST /api/mrp/planned-orders/convert` com 2+ `planned_order_ids`
+   válidos e conferir: requisição única criada com N itens, ordens
+   atualizadas para `EM_EXECUCAO` em `mrp_ordens_planejadas`.
+5. Repetir a chamada com os mesmos ids (já `EM_EXECUCAO`) e confirmar 422
+   `BUSINESS_RULE_VIOLATION`.
+6. Chamar com um id inexistente e confirmar 404 `NOT_FOUND`.
+7. Validar fim a fim com o frontend já implementado em
+   `client/src/pages/production/MrpPage.tsx` (ver seção anterior deste
+   handoff) — o contrato foi conferido e não requer ajustes no client.
+
+**Desenvolvedor**: Claude Code (Backend Engineer)
+**Data**: 2026-08-03
+**Escopo**: `client/` apenas — nenhum arquivo em `server/` foi tocado.

@@ -21,7 +21,7 @@
 | Módulo | O que funciona | O que falta |
 |---|---|---|
 | production | OP com ciclo de vida completo, reserva de material no release, apontamento por etapa, consumo FEFO por lote, série, custo médio real, **reconciliação apontamento×OP (novo)** | Capacidade finita, centro de trabalho real (hoje é texto livre), custo de mão-de-obra/overhead, sequenciamento |
-| mrp | Plano por demanda contra estoque real, explosão BOM com perda % | **Não fecha o ciclo**: plano não vira OP nem requisição automaticamente; sem MPS/pegging/capacidade |
+| mrp | Plano por demanda contra estoque real, explosão BOM com perda %. UI já tem conversão manual de ordem planejada→requisição (`POST /api/mrp/planned-orders/convert`, endpoint em desenvolvimento no backend) | **Não fecha o ciclo automaticamente**: conversão ainda é manual (seleção na tela), sem trigger automático plano→requisição/OP; sem MPS/pegging/capacidade |
 | purchaseRequisitions | Criar, listar, aprovar (novo, remediação P0) | Rejeitar/cancelar, editar itens, **conversão requisição→pedido de compra** |
 | purchases | Pedido, recebimento parcial com NF e lote, dedup | Cotação/RFQ multi-fornecedor, devolução, histórico de preços exposto |
 | suppliers | CRUD + trava de desativação | Homologação, qualificação por item, catálogo de preços, rating calculado |
@@ -69,7 +69,7 @@ O que NÃO existe (e uma fábrica em escala precisa):
 |---|---|---|---|
 | 1 | ~~**Catálogo item×fornecedor N:N**~~ | ✅ **RESOLVIDO em 2026-08-03 (commit 490d512)**: tabela `item_suppliers` + endpoints + dialog Fornecedores no produto + histórico de compras + workflow de aprovação da requisição | feito |
 | 2 | ~~**Telas de MRP e Requisição de Compra**~~ | ✅ **RESOLVIDO em 2026-08-03 (commit 490d512)**: /purchases/requisitions e /production/mrp no ar | feito |
-| 3 | **Fechar o ciclo MRP** — plano → requisição/OP automático | Planejamento manual não escala | 3-4d |
+| 3 | **Fechar o ciclo MRP** — plano → requisição/OP automático | 🔧 **UI pronta (2026-08-03)**: conversão manual de ordens planejadas (RASCUNHO/APROVADA) em requisição via seleção múltipla + dialog em `/production/mrp`, aguardando endpoint `POST /api/mrp/planned-orders/convert` no backend. Falta trigger automático (sem intervenção do planejador) | 3-4d |
 | 4 | **Conversão requisição → pedido de compra** | Elo quebrado na cadeia de suprimentos | 1-2d |
 | 5 | **Centros de trabalho + capacidade + calendário de turnos** (hoje work_center é texto livre) | Sem carga-máquina não há promessa de prazo confiável | 5d+ |
 | 6 | **Tela de apontamento de chão de fábrica** (operação/tempo/refugo por operador) + rastreabilidade por código de lote/QR (hoje só por ID numérico) | Chão de fábrica sem tela de execução | 3-4d |

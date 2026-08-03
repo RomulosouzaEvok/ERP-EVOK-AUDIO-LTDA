@@ -25,6 +25,11 @@ class ItemSupplierRepository {
     throw new Error('ItemSupplierRepository.findByItemAndSupplier nao implementado.');
   }
 
+  /** Busca o vinculo de fornecedor preferencial ativo de um item (ou null). */
+  public async findPreferredByItem(_itemId: string): Promise<any | null> {
+    throw new Error('ItemSupplierRepository.findPreferredByItem nao implementado.');
+  }
+
   /** Cria um novo vinculo item x fornecedor. */
   public async create(_data: Record<string, unknown>, _transaction?: any): Promise<any> {
     throw new Error('ItemSupplierRepository.create nao implementado.');

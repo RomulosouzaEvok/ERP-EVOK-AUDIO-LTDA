@@ -1,12 +1,18 @@
 const SequelizeMrpRepository = require('../../infrastructure/sequelize/SequelizeMrpRepository');
 const SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
+const SequelizeItemSupplierRepository = require('../../../items/infrastructure/sequelize/SequelizeItemSupplierRepository');
+const SequelizePurchaseRequisitionRepository = require('../../../purchaseRequisitions/infrastructure/sequelize/SequelizePurchaseRequisitionRepository');
 const GenerateMrpPlanUseCase = require('../../application/use-cases/GenerateMrpPlanUseCase');
 const ListPlannedOrdersUseCase = require('../../application/use-cases/ListPlannedOrdersUseCase');
-const { createMrpPlanSchema } = require('../validators/mrpValidators');
+const ConvertPlannedOrdersToRequisitionUseCase = require('../../application/use-cases/ConvertPlannedOrdersToRequisitionUseCase');
+const { createMrpPlanSchema, convertPlannedOrdersSchema } = require('../validators/mrpValidators');
 const { ValidationError } = require('../../../../errors');
+const { logAction } = require('../../../../services/auditLogService');
 
 const mrpRepository = new SequelizeMrpRepository();
 const itemRepository = new SequelizeItemRepository();
+const itemSupplierRepository = new SequelizeItemSupplierRepository();
+const requisitionRepository = new SequelizePurchaseRequisitionRepository();
 
 /**
  * Controller do modulo de MRP persistente.
@@ -31,6 +37,43 @@ exports.listPlannedOrders = async (_req, res, next) => {
     const data = await useCase.execute();
     res.json({ success: true, data });
   } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * `POST /api/mrp/planned-orders/convert` — converte um lote de ordens
+ * planejadas do MRP em uma unica Requisicao de Compra, fechando o ciclo
+ * planejamento -> suprimentos.
+ */
+exports.convertPlannedOrders = async (req, res, next) => {
+  try {
+    const body = convertPlannedOrdersSchema.parse(req.body);
+    const useCase = new ConvertPlannedOrdersToRequisitionUseCase(
+      mrpRepository,
+      requisitionRepository,
+      itemSupplierRepository,
+    );
+    const data = await useCase.execute({
+      planned_order_ids: body.planned_order_ids,
+      notes: body.notes,
+      requester_id: req.user.id,
+    });
+
+    logAction(req, {
+      action: 'convert_to_requisition',
+      entityType: 'PurchaseRequisition',
+      entityId: data.requisition?.id,
+      entityDescription: data.requisition?.requisition_number,
+      newValues: { status: data.requisition?.status, origin: data.requisition?.origin, converted_ids: data.converted_ids },
+      description: `Requisicao de compra ${data.requisition?.requisition_number} gerada a partir de ${data.converted_ids.length} ordem(ns) planejada(s) do MRP`,
+    });
+
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    if (error?.issues) {
+      return next(new ValidationError('Payload invalido.', error.issues));
+    }
     next(error);
   }
 };

@@ -31,6 +31,13 @@ export const createMrpPlanSchema = z.object({
   }).strict()).min(1),
 }).strict();
 
+/** Schema do body de `POST /api/mrp/planned-orders/convert`. */
+export const convertPlannedOrdersSchema = z.object({
+  planned_order_ids: z.array(legacyUuidLike).min(1).max(100),
+  notes: z.string().trim().max(1000).optional(),
+}).strict();
+
 module.exports = {
   createMrpPlanSchema,
+  convertPlannedOrdersSchema,
 };

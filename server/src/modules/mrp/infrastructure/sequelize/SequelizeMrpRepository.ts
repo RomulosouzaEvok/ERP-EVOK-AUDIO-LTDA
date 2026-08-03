@@ -1,5 +1,6 @@
 import MrpRepository from '../../domain/repositories/MrpRepository';
 const { ItemEstrutura, MrpOrdemPlanejada, Item } = require('../../../../models/index');
+const { Op } = require('sequelize');
 
 class SequelizeMrpRepository extends MrpRepository {
   public async listActiveEdges(): Promise<any[]> {
@@ -40,6 +41,36 @@ class SequelizeMrpRepository extends MrpRepository {
       include: [{ model: Item, as: 'item' }],
       order: [['data_liberacao', 'ASC'], ['data_necessidade', 'ASC']],
     });
+  }
+
+  /**
+   * Busca ordens planejadas por ids com lock pessimista (`SELECT ... FOR UPDATE`)
+   * para evitar condicoes de corrida ao converter em requisicao de compra.
+   *
+   * @param ids - Ids (UUID) das ordens planejadas.
+   * @param transaction - Transacao Sequelize ativa (obrigatoria para o lock).
+   * @returns Ordens planejadas encontradas.
+   */
+  public async findPlannedOrdersByIdsForUpdate(ids: string[], transaction: any): Promise<any[]> {
+    return MrpOrdemPlanejada.findAll({
+      where: { id: { [Op.in]: ids } },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+  }
+
+  /**
+   * Atualiza o status de um lote de ordens planejadas.
+   *
+   * @param ids - Ids (UUID) das ordens planejadas.
+   * @param status - Novo status (enum `OrdemStatus`).
+   * @param transaction - Transacao Sequelize ativa.
+   */
+  public async updatePlannedOrdersStatus(ids: string[], status: string, transaction: any): Promise<void> {
+    await MrpOrdemPlanejada.update(
+      { status },
+      { where: { id: { [Op.in]: ids } }, transaction },
+    );
   }
 }
 

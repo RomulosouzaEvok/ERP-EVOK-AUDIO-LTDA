@@ -1,5 +1,6 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
+import type { PurchaseRequisition } from './purchaseRequisitions';
 
 export type MrpDemandOrigin = 'MANUAL' | 'PEDIDO_VENDA' | 'PREVISAO' | 'ORDEM_PRODUCAO';
 
@@ -40,6 +41,31 @@ export async function planMrp(input: PlanMrpInput) {
 export async function listPlannedOrders() {
   const { data } = await httpClient.get<ListResponse<PlannedOrder> | ItemResponse<PlannedOrder[]>>(
     '/api/mrp/planned-orders',
+  );
+  return data.data;
+}
+
+/** Status de ordem planejada que permite conversão em requisição de compra. */
+export const CONVERTIBLE_PLANNED_ORDER_STATUSES = ['RASCUNHO', 'APROVADA'] as const;
+
+export interface ConvertPlannedOrdersInput {
+  planned_order_ids: string[];
+  notes?: string;
+}
+
+export interface ConvertPlannedOrdersResult {
+  requisition: PurchaseRequisition;
+  converted_ids: string[];
+}
+
+/**
+ * `POST /api/mrp/planned-orders/convert` — converte ordens planejadas (RASCUNHO/APROVADA)
+ * em uma Requisição de Compra, origem obrigatória da cadeia de suprimentos.
+ */
+export async function convertPlannedOrders(input: ConvertPlannedOrdersInput) {
+  const { data } = await httpClient.post<ItemResponse<ConvertPlannedOrdersResult>>(
+    '/api/mrp/planned-orders/convert',
+    input,
   );
   return data.data;
 }
