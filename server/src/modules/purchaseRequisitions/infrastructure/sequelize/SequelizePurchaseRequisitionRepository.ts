@@ -58,6 +58,43 @@ class SequelizePurchaseRequisitionRepository extends PurchaseRequisitionReposito
     });
   }
 
+  async findRequisitionByIdForUpdate(id: number, transaction: any) {
+    // Sem `include` (LEFT OUTER JOIN) junto de `lock`: o Postgres rejeita
+    // "FOR UPDATE" no lado nullable de um outer join. Trava requisicao e
+    // itens em duas queries de tabela unica, sem join (mesmo padrao usado
+    // em `SequelizePurchaseRepository.findPurchaseWithItemsForUpdate`).
+    const requisition = await PurchaseRequisition.findByPk(id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!requisition) return null;
+
+    const items = await PurchaseRequisitionItem.findAll({
+      where: { requisition_id: id },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    // Dados do item mestre carregados sem lock (tabela items nao precisa de
+    // trava aqui; apenas leitura de codigo/descricao para a conversao).
+    const itemIds = [...new Set(items.map((row: any) => String(row.item_id)))];
+    const masterItems = itemIds.length
+      ? await Item.findAll({
+        where: { id: itemIds },
+        attributes: ['id', 'codigo', 'descricao'],
+        transaction,
+      })
+      : [];
+    const masterById = new Map<string, any>(masterItems.map((item: any) => [String(item.id), item]));
+    for (const row of items) {
+      (row as any).item = masterById.get(String(row.item_id)) ?? null;
+      (row as any).dataValues.item = (row as any).item;
+    }
+
+    requisition.items = items;
+    return requisition;
+  }
+
   async createRequisition(data: Record<string, unknown>, transaction?: any) {
     return PurchaseRequisition.create(data, transaction ? { transaction } : undefined);
   }
@@ -71,6 +108,10 @@ class SequelizePurchaseRequisitionRepository extends PurchaseRequisitionReposito
     if (!requisition) return null;
     await requisition.update(data, transaction ? { transaction } : undefined);
     return this.findRequisitionById(id, transaction);
+  }
+
+  async updateRequisitionItem(id: number, data: Record<string, unknown>, transaction?: any) {
+    await PurchaseRequisitionItem.update(data, { where: { id }, ...(transaction ? { transaction } : {}) });
   }
 }
 

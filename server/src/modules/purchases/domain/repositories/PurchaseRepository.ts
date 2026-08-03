@@ -1,14 +1,14 @@
-/**
- * Interface (contrato) de repositÃ³rio de Pedidos de Compra (Purchase Orders).
+﻿/**
+ * Interface (contrato) de repositório de Pedidos de Compra (Purchase Orders).
  *
- * Define os mÃ©todos que qualquer implementaÃ§Ã£o de persistÃªncia deve
- * fornecer. A camada de aplicaÃ§Ã£o (use cases) depende apenas desta
- * interface, nunca de uma implementaÃ§Ã£o concreta â€” isso mantÃ©m a regra de
- * negÃ³cio independente do Sequelize/PostgreSQL.
+ * Define os métodos que qualquer implementação de persistência deve
+ * fornecer. A camada de aplicação (use cases) depende apenas desta
+ * interface, nunca de uma implementação concreta — isso mantém a regra de
+ * negócio independente do Sequelize/PostgreSQL.
  */
 class PurchaseRepository {
   /**
-   * Lista pedidos de compra com filtros e paginaÃ§Ã£o.
+   * Lista pedidos de compra com filtros e paginação.
    *
    * @abstract
    * @param {Object} [filters] - `{ status, supplier_id, start_date, end_date }`.
@@ -16,22 +16,22 @@ class PurchaseRepository {
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
   async listPurchases(filters, pagination) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.listPurchases nÃ£o implementado.');
+    throw new Error('PurchaseRepository.listPurchases não implementado.');
   }
 
   /**
-   * Busca um pedido de compra pelo id, com fornecedor e itens (+ produto) incluÃ­dos.
+   * Busca um pedido de compra pelo id, com fornecedor e itens (+ produto) incluídos.
    *
    * @abstract
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
   async findPurchaseById(id) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.findPurchaseById nÃ£o implementado.');
+    throw new Error('PurchaseRepository.findPurchaseById não implementado.');
   }
 
   /**
-   * Busca um pedido de compra "cru" (sem includes), opcionalmente dentro de uma transaÃ§Ã£o.
+   * Busca um pedido de compra "cru" (sem includes), opcionalmente dentro de uma transação.
    *
    * @abstract
    * @param {number} id
@@ -39,11 +39,11 @@ class PurchaseRepository {
    * @returns {Promise<Object|null>}
    */
   async findPurchaseByIdRaw(id, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.findPurchaseByIdRaw nÃ£o implementado.');
+    throw new Error('PurchaseRepository.findPurchaseByIdRaw não implementado.');
   }
 
   /**
-   * Busca um pedido de compra "cru" com lock pessimista na mesma transaÃ§Ã£o.
+   * Busca um pedido de compra "cru" com lock pessimista na mesma transação.
    *
    * @abstract
    * @param {number} id
@@ -51,7 +51,7 @@ class PurchaseRepository {
    * @returns {Promise<Object|null>}
    */
   async findPurchaseByIdRawForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.findPurchaseByIdRawForUpdate nÃ£o implementado.');
+    throw new Error('PurchaseRepository.findPurchaseByIdRawForUpdate não implementado.');
   }
 
   /**
@@ -63,7 +63,7 @@ class PurchaseRepository {
    * @returns {Promise<Object|null>}
    */
   async findPurchaseWithItems(id, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.findPurchaseWithItems nÃ£o implementado.');
+    throw new Error('PurchaseRepository.findPurchaseWithItems não implementado.');
   }
 
   /**
@@ -76,7 +76,7 @@ class PurchaseRepository {
    * @returns {Promise<Object|null>}
    */
   async findPurchaseWithItemsForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.findPurchaseWithItemsForUpdate nÃ£o implementado.');
+    throw new Error('PurchaseRepository.findPurchaseWithItemsForUpdate não implementado.');
   }
 
   /**
@@ -88,7 +88,7 @@ class PurchaseRepository {
    * @returns {Promise<Object>}
    */
   async createPurchase(data, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.createPurchase nÃ£o implementado.');
+    throw new Error('PurchaseRepository.createPurchase não implementado.');
   }
 
   /**
@@ -100,7 +100,7 @@ class PurchaseRepository {
    * @returns {Promise<Object>}
    */
   async createPurchaseItem(data, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.createPurchaseItem nÃ£o implementado.');
+    throw new Error('PurchaseRepository.createPurchaseItem não implementado.');
   }
 
   /**
@@ -113,11 +113,11 @@ class PurchaseRepository {
    * @returns {Promise<void>}
    */
   async updatePurchaseFields(id, data, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.updatePurchaseFields nÃ£o implementado.');
+    throw new Error('PurchaseRepository.updatePurchaseFields não implementado.');
   }
 
   /**
-   * Busca um produto pelo id (usado na validaÃ§Ã£o de itens do pedido).
+   * Busca um produto pelo id (usado na validação de itens do pedido).
    *
    * @abstract
    * @param {number} id
@@ -125,7 +125,22 @@ class PurchaseRepository {
    * @returns {Promise<Object|null>}
    */
   async findProductById(id, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.findProductById nÃ£o implementado.');
+    throw new Error('PurchaseRepository.findProductById não implementado.');
+  }
+
+  /**
+   * Busca um produto legado (`products`) pelo código (`products.code`).
+   * Usado na conversão de requisição de compra em pedido, para resolver o
+   * `product_id` legado exigido por `purchase_order_items` a partir do
+   * `codigo` do `Item` (modelo canônico) referenciado na requisição.
+   *
+   * @abstract
+   * @param {string} code
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object|null>}
+   */
+  async findProductByCode(code, transaction) { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findProductByCode não implementado.');
   }
 
   /**
@@ -137,7 +152,7 @@ class PurchaseRepository {
    * @returns {Promise<Object[]>}
    */
   async findPurchaseItems(purchaseId, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.findPurchaseItems nÃ£o implementado.');
+    throw new Error('PurchaseRepository.findPurchaseItems não implementado.');
   }
 
   /**
@@ -149,7 +164,7 @@ class PurchaseRepository {
    * @returns {Promise<Object[]>}
    */
   async findPurchaseItemsForUpdate(purchaseId, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.findPurchaseItemsForUpdate nÃ£o implementado.');
+    throw new Error('PurchaseRepository.findPurchaseItemsForUpdate não implementado.');
   }
 
   /**
@@ -162,11 +177,11 @@ class PurchaseRepository {
    * @returns {Promise<void>}
    */
   async updatePurchaseItem(id, data, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.updatePurchaseItem nÃ£o implementado.');
+    throw new Error('PurchaseRepository.updatePurchaseItem não implementado.');
   }
 
   /**
-   * Busca uma conta a pagar jÃ¡ existente vinculada ao pedido de compra (idempotÃªncia).
+   * Busca uma conta a pagar já existente vinculada ao pedido de compra (idempotência).
    *
    * @abstract
    * @param {number} purchaseId
@@ -174,7 +189,7 @@ class PurchaseRepository {
    * @returns {Promise<Object|null>}
    */
   async findAccountPayableByPurchaseId(purchaseId, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.findAccountPayableByPurchaseId nÃ£o implementado.');
+    throw new Error('PurchaseRepository.findAccountPayableByPurchaseId não implementado.');
   }
 
   /**
@@ -186,8 +201,9 @@ class PurchaseRepository {
    * @returns {Promise<Object>}
    */
   async createAccountPayable(data, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('PurchaseRepository.createAccountPayable nÃ£o implementado.');
+    throw new Error('PurchaseRepository.createAccountPayable não implementado.');
   }
 }
 
 module.exports = PurchaseRepository;
+

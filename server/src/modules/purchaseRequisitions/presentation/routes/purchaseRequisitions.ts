@@ -7,6 +7,7 @@ router.get('/', authenticate, purchaseRequisitionController.list);
 router.get('/:id', authenticate, purchaseRequisitionController.getById);
 router.post('/', authenticate, authorize('admin', 'operator'), purchaseRequisitionController.create);
 router.patch('/:id/status', authenticate, purchaseRequisitionController.changeStatus);
+router.post('/:id/convert', authenticate, authorize('admin', 'operator'), purchaseRequisitionController.convert);
 
 module.exports = router;
 

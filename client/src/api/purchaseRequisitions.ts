@@ -68,3 +68,36 @@ export async function updateRequisitionStatus(id: number, status: 'approved' | '
   );
   return data.data;
 }
+
+export interface ConvertRequisitionInput {
+  fallback_supplier_id?: number;
+  notes?: string;
+}
+
+/** Pedido de compra gerado a partir da conversão de uma requisição aprovada. */
+export interface ConvertedPurchaseOrder {
+  id: number;
+  order_number: string;
+  supplier_id: number;
+  status: string;
+  items: unknown[];
+}
+
+export interface ConvertRequisitionResult {
+  purchase_orders: ConvertedPurchaseOrder[];
+  requisition_id: number;
+  requisition_status: RequisitionStatus;
+}
+
+/**
+ * `POST /api/purchase-requisitions/:id/convert` — converte requisição aprovada em um ou mais
+ * pedidos de compra (agrupados por fornecedor). Erro 422 quando a requisição não está aprovada
+ * ou quando há itens sem fornecedor resolvível (a mensagem lista os itens pendentes).
+ */
+export async function convertRequisitionToPurchaseOrders(id: number, input: ConvertRequisitionInput = {}) {
+  const { data } = await httpClient.post<ItemResponse<ConvertRequisitionResult>>(
+    `/api/purchase-requisitions/${id}/convert`,
+    input,
+  );
+  return data.data;
+}

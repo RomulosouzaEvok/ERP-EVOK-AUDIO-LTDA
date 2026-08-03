@@ -898,4 +898,170 @@ Erros:
 
 **Desenvolvedor**: Claude Code (Backend Engineer)
 **Data**: 2026-08-03
+
+---
+
+## Frontend — Conversão de Requisição Aprovada em Pedido(s) de Compra
+
+**Data**: 2026-08-03
+**Escopo**: `client/src/pages/purchases/RequisitionsPage.tsx` — botão "Gerar Pedido de Compra" para
+requisições `approved`, consumindo o novo endpoint `POST /api/purchase-requisitions/:id/convert`
+(desenvolvido em paralelo pelo Backend Engineer; contrato assumido conforme especificação recebida,
+**NÃO verificado contra o código real do backend** — validar assim que o endpoint estiver disponível).
+**Status**: 🔧 Aguardando validação do endpoint real (contrato assumido)
+
+### Contrato assumido do endpoint (a confirmar)
+```
+POST /api/purchase-requisitions/:id/convert
+Body: { fallback_supplier_id?: number, notes?: string }
+201: { success: true, data: { purchase_orders: [{ id, order_number, supplier_id, status, items: [...] }], requisition_id, requisition_status: 'ordered' } }
+404: requisição não encontrada
+422: { success: false, error: { message, ... } } — quando status != 'approved' OU há itens sem fornecedor resolvível (mensagem lista os itens)
+```
+
+### Arquivos modificados
+- `client/src/api/purchaseRequisitions.ts` — nova função `convertRequisitionToPurchaseOrders(id, input)`
+  e tipos `ConvertRequisitionInput`, `ConvertedPurchaseOrder`, `ConvertRequisitionResult`
+- `client/src/pages/purchases/RequisitionsPage.tsx`:
+  - Botão "Gerar Pedido de Compra" na listagem, visível apenas para requisições com
+    `status === 'approved'` e usuário com role `admin`/`operator` (`canWrite`)
+  - Novo componente `ConvertRequisitionDialog`: mostra resumo dos itens da requisição, select
+    opcional "Fornecedor padrão (fallback)" (carregado via `suppliersApi.listSuppliers({ limit: 200 })`)
+    e campo de observações
+  - Ao confirmar: `useMutation` chamando `convertRequisitionToPurchaseOrders`; em sucesso mostra a
+    lista de `order_number` de cada pedido gerado, avisando quando mais de um pedido foi criado
+    (agrupamento por fornecedor) e um link `Link to="/purchases"`; invalida as queries
+    `['purchase-requisitions']` e `['purchases']`
+  - Em erro 422: mensagem da API (`extractApiErrorMessage`) exibida dentro do próprio dialog, sem
+    fechá-lo, permitindo escolher/alterar o fornecedor fallback e tentar novamente
+  - Badge de status `ordered` já existia (`STATUS_VARIANT.ordered = 'secondary'`), distinto de
+    `approved` (`success`) — nenhuma alteração de cores necessária
+
+### Invariantes mantidas
+- ✅ TypeScript strict, sem `any`
+- ✅ Loading state (`convertMutation.isPending`) desabilita os botões durante a requisição
+- ✅ Erros tratados via `extractApiErrorMessage`, nunca stack trace cru
+- ✅ Nenhum arquivo em `server/` tocado
+
+### Testes executados
+- `node ./node_modules/typescript/bin/tsc -b --noEmit` — limpo, sem erros
+- `node ./node_modules/vitest/vitest.mjs run` — 4 arquivos de teste, 13/13 testes verdes (sem regressão)
+- Nenhuma dependência nova instalada; nenhum commit criado
+
+### Instruções de teste para o próximo agente/humano (QA)
+1. Assim que `POST /api/purchase-requisitions/:id/convert` estiver implementado no backend,
+   confirmar que o payload de sucesso/erro bate exatamente com o contrato acima; ajustar os tipos em
+   `purchaseRequisitions.ts` se houver divergência (ex.: nomes de campos, formato do erro 422).
+2. Aprovar uma requisição (`PATCH /api/purchase-requisitions/:id/status` com `approved`) e confirmar
+   que o botão "Gerar Pedido de Compra" aparece apenas nesse status, para `admin`/`operator`.
+3. Testar o caminho feliz: converter uma requisição com todos os itens tendo fornecedor resolvível —
+   confirmar que os `order_number` aparecem no dialog e que a requisição muda para `ordered` na
+   listagem após fechar o dialog.
+4. Testar o caminho de erro 422 (item sem fornecedor): confirmar que a mensagem da API aparece dentro
+   do dialog (não fecha), selecionar um fornecedor no campo fallback e tentar novamente com sucesso.
+5. Testar 404 (id inexistente) — deve mostrar mensagem amigável, não stack trace.
+6. Conferir que `/purchases` lista os pedidos recém-criados e que as queries de requisições
+   (`['purchase-requisitions']`) refletem o novo status sem precisar recarregar a página.
+
+**Desenvolvedor**: Claude Code (Frontend Engineer)
+**Data**: 2026-08-03
+
+---
+
+## Backend — Conversão de Requisição Aprovada em Pedido(s) de Compra
+
+**Data**: 2026-08-03
+**Escopo**: `POST /api/purchase-requisitions/:id/convert` — converte uma requisição de compra
+`approved` em um ou mais pedidos de compra (`purchase_orders`), fechando o ciclo Requisição →
+Pedido → Recebimento → Estoque. Contrato confirmado 100% compatível com o assumido pela seção
+"Frontend" anterior deste handoff (nenhum ajuste necessário no client).
+**Status**: ✅ Concluído
+
+### Regra de negócio implementada
+1. Requisição carregada com lock pessimista (`SELECT ... FOR UPDATE`, requisição + itens, sem
+   `include` do lado nullable — mesmo padrão de `findPurchaseWithItemsForUpdate`); 404 se não
+   existir, 422 `BusinessRuleError` se `status !== 'approved'`.
+2. Fornecedor de cada item resolvido em cascata: `suggested_supplier_id` do item da requisição →
+   fornecedor preferencial ativo em `item_suppliers` (`findPreferredByItem`) → `fallback_supplier_id`
+   do body. Sem resolução → 422 listando os `item_id` (da requisição) sem fornecedor.
+3. `product_id` legado (`purchase_order_items` exige INTEGER) resolvido casando
+   `products.code = items.codigo`. Sem produto correspondente → 422 listando os `codigo` ausentes,
+   orientando a cadastrar o produto.
+4. Itens agrupados por fornecedor resolvido; **um `Purchase` por fornecedor**, com `requisition_id`,
+   `requester_id = req.user.id`, `status='pending'`, `order_number` gerado pelo mesmo
+   `generatePurchaseOrderNumber()` usado em `CreatePurchaseUseCase` (sufixo `-N` quando mais de um
+   pedido é criado na mesma conversão, para evitar colisão de `order_number` no mesmo milissegundo).
+   `unit_price` de cada item: preço do vínculo `item_suppliers` para aquele fornecedor →
+   `unit_price_estimated` do item da requisição → `0`.
+5. Requisição atualizada para `status='ordered'`; todos os seus itens também para `status='ordered'`.
+6. Toda a operação em uma única transação Sequelize (`commit`/`rollback` no controller).
+
+### Arquivos modificados/criados
+- **Criado**: `server/src/modules/purchaseRequisitions/application/use-cases/ConvertRequisitionToPurchaseOrdersUseCase.ts`
+  — use case principal (JSDoc completo).
+- **Criado**: `server/tests/unit/requisition-convert-to-purchase.test.ts` — 6 testes unitários
+  (agrupamento em 2 pedidos, 404, 422 status inválido, 422 sem fornecedor, 422 produto ausente,
+  fallback_supplier_id).
+- `server/src/modules/purchaseRequisitions/domain/repositories/PurchaseRequisitionRepository.ts` —
+  novos métodos abstratos `findRequisitionByIdForUpdate` e `updateRequisitionItem`.
+- `server/src/modules/purchaseRequisitions/infrastructure/sequelize/SequelizePurchaseRequisitionRepository.ts`
+  — implementação dos dois métodos acima (lock em duas queries sem join, mesmo padrão de
+  `SequelizePurchaseRepository`).
+- `server/src/modules/purchases/domain/repositories/PurchaseRepository.ts` — novo método abstrato
+  `findProductByCode`.
+- `server/src/modules/purchases/infrastructure/sequelize/SequelizePurchaseRepository.ts` —
+  implementação de `findProductByCode` (`Product.findOne({ where: { code } })`).
+- `server/src/modules/purchaseRequisitions/presentation/validators/purchaseRequisitionValidators.ts`
+  — novo `convertPurchaseRequisitionSchema` (`.strict()`: `fallback_supplier_id` opcional
+  `int().positive()`, `notes` opcional `max(1000)`).
+- `server/src/modules/purchaseRequisitions/presentation/controllers/purchaseRequisitionController.ts`
+  — novo `exports.convert`, com `logAction` (`action: 'convert'`) após o commit.
+- `server/src/modules/purchaseRequisitions/presentation/routes/purchaseRequisitions.ts` — nova rota
+  `POST /:id/convert` (`authenticate` + `authorize('admin', 'operator')`).
+
+### Invariantes mantidas
+- ✅ Sem nova tabela/migration — reaproveita `purchase_orders`, `purchase_order_items`,
+  `purchase_requisitions`, `purchase_requisition_items`, `item_suppliers`, `products`, `items` já
+  existentes (inclusive `purchase_orders.requisition_id`, coluna que já existia sem uso ativo)
+- ✅ Toda a operação multi-tabela em uma única transação Sequelize com lock pessimista na requisição
+- ✅ `requester_id` dos pedidos sempre derivado de `req.user.id` (JWT), nunca do body
+- ✅ `order_number` reutiliza o gerador/formato já usado em `CreatePurchaseUseCase`, sem inventar novo
+  formato
+- ✅ Nenhuma conexão/abstração com o ERP legado (isolamento de banco mantido)
+- ✅ `npm run typecheck` limpo antes e depois da mudança
+
+### Documentações atualizadas
+- `docs/projeto/04-USE_CASES.md` — novo `UC-25: Conversão de Requisição de Compra Aprovada em
+  Pedido(s) de Compra`
+- `docs/HANDOFF_CODEX.md` — esta seção
+
+### Testes executados
+- `npm run typecheck` — limpo, sem erros (antes e depois da mudança)
+- `npx jest tests/unit/requisition-convert-to-purchase.test.ts` — 6/6 verde
+- `npx jest tests/unit` — 45 suites / 212 testes, 100% verde (nenhuma regressão)
+
+### Instruções de teste para o próximo agente/humano
+1. Subir Postgres local (`docker compose up -d`) e rodar migrations.
+2. Criar uma requisição de compra (`POST /api/purchase-requisitions`) com 2+ itens referenciando
+   `items` cujo `codigo` tenha um `products.code` correspondente cadastrado.
+3. Aprovar a requisição (`PATCH /api/purchase-requisitions/:id/status` com `{"status":"approved"}`,
+   perfil `admin`).
+4. Cadastrar `item_suppliers` (`preferred=true, active=true`, com `unit_price`) para pelo menos um
+   dos itens, deixando outro sem vínculo, para validar os 3 níveis de resolução de fornecedor.
+5. Chamar `POST /api/purchase-requisitions/:id/convert` com `fallback_supplier_id` cobrindo o item
+   sem vínculo; conferir 201 com `purchase_orders` (1 por fornecedor distinto), `requisition_id` e
+   `requisition_status: 'ordered'`.
+6. Conferir no banco: `purchase_orders.requisition_id` aponta para a requisição, `purchase_order_items`
+   com `product_id`/`item_id`/`unit_price` corretos, `purchase_requisitions.status='ordered'` e todos
+   os `purchase_requisition_items.status='ordered'`.
+7. Repetir a chamada sobre a mesma requisição (já `ordered`) e confirmar 422 `BUSINESS_RULE_VIOLATION`.
+8. Chamar com `id` inexistente e confirmar 404 `NOT_FOUND`.
+9. Chamar sobre uma requisição com item cujo `Item.codigo` não tenha `Product` correspondente e
+   confirmar 422 listando o(s) código(s) ausente(s).
+10. Validar fim a fim com o frontend já implementado em `client/src/pages/purchases/RequisitionsPage.tsx`
+    (ver seção "Frontend" anterior deste handoff) — o contrato foi conferido e não requer ajustes no
+    client.
+
+**Desenvolvedor**: Claude Code (Backend Engineer)
+**Data**: 2026-08-03
 **Escopo**: `client/` apenas — nenhum arquivo em `server/` foi tocado.

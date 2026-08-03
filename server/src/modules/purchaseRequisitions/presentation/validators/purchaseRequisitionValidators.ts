@@ -45,10 +45,21 @@ export const changePurchaseRequisitionStatusSchema = z.object({
   status: z.enum(['approved', 'canceled', 'pending']),
 }).strict();
 
+/**
+ * Schema do body de `POST /api/purchase-requisitions/:id/convert`.
+ * `fallback_supplier_id` e usado apenas para itens sem `suggested_supplier_id`
+ * e sem fornecedor preferencial ativo em `item_suppliers`.
+ */
+export const convertPurchaseRequisitionSchema = z.object({
+  fallback_supplier_id: z.coerce.number().int().positive().optional(),
+  notes: z.string().trim().max(1000).optional(),
+}).strict();
+
 module.exports = {
   createPurchaseRequisitionSchema,
   listPurchaseRequisitionQuerySchema,
   changePurchaseRequisitionStatusSchema,
+  convertPurchaseRequisitionSchema,
   handleZodError(error: any) {
     if (error?.issues) {
       throw new ValidationError('Payload invalido.', error.issues);

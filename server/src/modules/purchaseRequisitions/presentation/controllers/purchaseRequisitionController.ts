@@ -2,20 +2,26 @@ const { sequelize } = require('../../../../config/database');
 const { logAction } = require('../../../../services/auditLogService');
 const SequelizePurchaseRequisitionRepository = require('../../infrastructure/sequelize/SequelizePurchaseRequisitionRepository');
 const SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
+const SequelizePurchaseRepository = require('../../../purchases/infrastructure/sequelize/SequelizePurchaseRepository');
+const SequelizeItemSupplierRepository = require('../../../items/infrastructure/sequelize/SequelizeItemSupplierRepository');
 const CreatePurchaseRequisitionUseCase = require('../../application/use-cases/CreatePurchaseRequisitionUseCase');
 const ListPurchaseRequisitionsUseCase = require('../../application/use-cases/ListPurchaseRequisitionsUseCase');
 const GetPurchaseRequisitionByIdUseCase = require('../../application/use-cases/GetPurchaseRequisitionByIdUseCase');
 const ChangePurchaseRequisitionStatusUseCase = require('../../application/use-cases/ChangePurchaseRequisitionStatusUseCase');
+const ConvertRequisitionToPurchaseOrdersUseCase = require('../../application/use-cases/ConvertRequisitionToPurchaseOrdersUseCase');
 const {
   createPurchaseRequisitionSchema,
   listPurchaseRequisitionQuerySchema,
   changePurchaseRequisitionStatusSchema,
+  convertPurchaseRequisitionSchema,
   handleZodError,
 } = require('../validators/purchaseRequisitionValidators');
 const { ValidationError, ForbiddenError } = require('../../../../errors');
 
 const requisitionRepository = new SequelizePurchaseRequisitionRepository();
 const itemRepository = new SequelizeItemRepository();
+const purchaseRepository = new SequelizePurchaseRepository();
+const itemSupplierRepository = new SequelizeItemSupplierRepository();
 
 async function rollbackIfPending(transaction) {
   if (transaction && !transaction.finished) {
@@ -114,6 +120,47 @@ exports.changeStatus = async (req, res, next) => {
 
     res.json({ success: true, data: requisition });
   } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * `POST /api/purchase-requisitions/:id/convert` — converte uma requisicao
+ * de compra APROVADA em um ou mais pedidos de compra (um por fornecedor
+ * resolvido), transacional com lock pessimista na requisicao.
+ */
+exports.convert = async (req, res, next) => {
+  const t = await sequelize.transaction();
+  try {
+    const parsed = convertPurchaseRequisitionSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
+    const useCase = new ConvertRequisitionToPurchaseOrdersUseCase(
+      requisitionRepository,
+      purchaseRepository,
+      itemSupplierRepository,
+    );
+    const result = await useCase.execute({
+      id: Number(req.params.id),
+      fallback_supplier_id: parsed.data.fallback_supplier_id,
+      notes: parsed.data.notes,
+      userId: req.user.id,
+      transaction: t,
+    });
+
+    await t.commit();
+
+    logAction(req, {
+      action: 'convert',
+      entityType: 'PurchaseRequisition',
+      entityId: result.requisition_id,
+      newValues: { status: result.requisition_status, purchase_orders: result.purchase_orders.map((p) => p.order_number) },
+      description: `Requisicao de compra ${result.requisition_id} convertida em ${result.purchase_orders.length} pedido(s) de compra`,
+    });
+
+    res.status(201).json({ success: true, data: result });
+  } catch (error) {
+    await rollbackIfPending(t);
     next(error);
   }
 };

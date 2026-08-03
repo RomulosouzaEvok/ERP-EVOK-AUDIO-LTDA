@@ -145,6 +145,7 @@ tela funciona.
 - [ ] Fluxo de status do pedido (pending → approved → sent → partial/received → canceled), com transições visíveis conforme a máquina de estados real do backend.
 - [ ] Tela de recebimento de itens (parcial ou total), atualizando estoque e gerando lote (`LotControl`) quando aplicável.
 - [ ] Listagem de pedidos com filtro por status/fornecedor/período.
+- [x] Conversão de requisição aprovada em pedido(s) de compra (`POST /api/purchase-requisitions/:id/convert`), com dialog de confirmação, fornecedor fallback opcional, agrupamento por fornecedor no resultado e tratamento de erro 422 (itens sem fornecedor resolvível) sem fechar o dialog.
 
 ### Critério de aceite
 

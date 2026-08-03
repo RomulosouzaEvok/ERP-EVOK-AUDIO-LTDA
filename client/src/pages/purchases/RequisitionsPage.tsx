@@ -1,11 +1,13 @@
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2, Eye } from 'lucide-react';
+import { Plus, Trash2, Eye, ShoppingCart } from 'lucide-react';
 
 import * as requisitionsApi from '@/api/purchaseRequisitions';
+import * as suppliersApi from '@/api/suppliers';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -72,6 +74,7 @@ export default function RequisitionsPage() {
   const [formError, setFormError] = React.useState<string | null>(null);
   const [statusFilter, setStatusFilter] = React.useState<requisitionsApi.RequisitionStatus | ''>('');
   const [detailsRequisition, setDetailsRequisition] = React.useState<requisitionsApi.PurchaseRequisition | null>(null);
+  const [convertingRequisition, setConvertingRequisition] = React.useState<requisitionsApi.PurchaseRequisition | null>(null);
   const [page, setPage] = React.useState(1);
 
   const { data, isLoading, isError } = useQuery({
@@ -277,6 +280,11 @@ export default function RequisitionsPage() {
                       Aprovar
                     </Button>
                   )}
+                  {requisition.status === 'approved' && (
+                    <Button size="sm" variant="default" onClick={() => setConvertingRequisition(requisition)}>
+                      <ShoppingCart className="size-4" /> Gerar Pedido de Compra
+                    </Button>
+                  )}
                   {requisition.status !== 'canceled' && requisition.status !== 'received' && (
                     <Button
                       size="sm"
@@ -307,6 +315,7 @@ export default function RequisitionsPage() {
       <Pagination pagination={data?.pagination} onPageChange={setPage} />
 
       <RequisitionDetailSheet requisition={detailsRequisition} onClose={() => setDetailsRequisition(null)} />
+      <ConvertRequisitionDialog requisition={convertingRequisition} onClose={() => setConvertingRequisition(null)} />
     </div>
   );
 }
@@ -360,7 +369,7 @@ function RequisitionDetailSheet({
                       <TableCell>{item.unit ?? '-'}</TableCell>
                     </TableRow>
                   ))}
-                  {items.length === 0 && (
+    {items.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={3} className="text-center text-muted-foreground">
                         Itens não disponíveis.
@@ -374,5 +383,172 @@ function RequisitionDetailSheet({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** Conversão de requisição aprovada em um ou mais pedidos de compra (agrupados por fornecedor). */
+function ConvertRequisitionDialog({
+  requisition,
+  onClose,
+}: {
+  requisition: requisitionsApi.PurchaseRequisition | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [fallbackSupplierId, setFallbackSupplierId] = React.useState<string>('');
+  const [notes, setNotes] = React.useState('');
+  const [error, setError] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<requisitionsApi.ConvertRequisitionResult | null>(null);
+
+  React.useEffect(() => {
+    if (requisition) {
+      setFallbackSupplierId('');
+      setNotes('');
+      setError(null);
+      setResult(null);
+    }
+  }, [requisition]);
+
+  const { data: suppliers, isLoading: isLoadingSuppliers } = useQuery({
+    queryKey: ['suppliers-all'],
+    queryFn: () => suppliersApi.listSuppliers({ limit: 200 }),
+    enabled: Boolean(requisition),
+  });
+
+  const convertMutation = useMutation({
+    mutationFn: () => {
+      if (!requisition) return Promise.reject(new Error('Requisição não selecionada.'));
+      return requisitionsApi.convertRequisitionToPurchaseOrders(requisition.id, {
+        fallback_supplier_id: fallbackSupplierId ? Number(fallbackSupplierId) : undefined,
+        notes: notes || undefined,
+      });
+    },
+    onSuccess: (data) => {
+      setError(null);
+      setResult(data);
+      queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
+      queryClient.invalidateQueries({ queryKey: ['purchases'] });
+    },
+    onError: (err) => {
+      setResult(null);
+      setError(extractApiErrorMessage(err, 'Não foi possível gerar o(s) pedido(s) de compra.'));
+    },
+  });
+
+  const handleClose = (nextOpen: boolean) => {
+    if (!nextOpen) onClose();
+  };
+
+  const items = requisition?.items ?? [];
+
+  return (
+    <Dialog open={Boolean(requisition)} onOpenChange={handleClose}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>
+            Gerar pedido de compra — {requisition?.requisition_number ?? `#${requisition?.id}`}
+          </DialogTitle>
+        </DialogHeader>
+
+        {result ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm">
+              {result.purchase_orders.length === 1
+                ? '1 pedido de compra foi gerado com sucesso:'
+                : `${result.purchase_orders.length} pedidos de compra foram gerados (agrupados por fornecedor):`}
+            </p>
+            <ul className="list-disc pl-5 text-sm">
+              {result.purchase_orders.map((order) => (
+                <li key={order.id} className="font-medium">
+                  {order.order_number}
+                </li>
+              ))}
+            </ul>
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>
+                Fechar
+              </Button>
+              <Button asChild>
+                <Link to="/purchases" onClick={onClose}>
+                  Ver pedidos de compra
+                </Link>
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-semibold">Itens da requisição</p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead>Qtd.</TableHead>
+                    <TableHead>Unid.</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.item ? `${item.item.codigo} — ${item.item.descricao}` : item.item_id}</TableCell>
+                      <TableCell>{Number(item.quantity)}</TableCell>
+                      <TableCell>{item.unit ?? '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                  {items.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        Itens não disponíveis.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="fallback-supplier">Fornecedor padrão (fallback)</Label>
+              <SelectNative
+                id="fallback-supplier"
+                value={fallbackSupplierId}
+                onChange={(event) => setFallbackSupplierId(event.target.value)}
+                disabled={isLoadingSuppliers}
+              >
+                <option value="">Nenhum (usar fornecedor de cada item)</option>
+                {suppliers?.data.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.trade_name || supplier.company_name}
+                  </option>
+                ))}
+              </SelectNative>
+              <p className="text-xs text-muted-foreground">
+                Usado apenas para itens sem fornecedor resolvível automaticamente.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="convert-notes">Observações</Label>
+              <Input
+                id="convert-notes"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Opcional"
+              />
+            </div>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose} disabled={convertMutation.isPending}>
+                Cancelar
+              </Button>
+              <Button onClick={() => convertMutation.mutate()} disabled={convertMutation.isPending}>
+                {convertMutation.isPending ? 'Gerando...' : 'Confirmar e gerar pedido(s)'}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

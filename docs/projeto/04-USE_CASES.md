@@ -490,6 +490,73 @@
 
 ---
 
+## UC-25: Conversão de Requisição de Compra Aprovada em Pedido(s) de Compra
+
+**Ator:** Comprador (`admin`, `operator`)
+**Pré-condições:** Requisição de compra existente com `status='approved'`
+(ver UC-23)
+**Fluxo Principal:**
+1. Usuário envia `POST /api/purchase-requisitions/:id/convert` com
+   `fallback_supplier_id` opcional (fornecedor a usar quando um item não
+   tiver fornecedor resolvível) e `notes` opcional
+2. Sistema abre uma transação e carrega a requisição com seus itens com
+   lock pessimista (`SELECT ... FOR UPDATE`), para evitar conversão
+   concorrente da mesma requisição
+3. Sistema valida que a requisição existe e está em `status='approved'`
+4. Para cada item da requisição, sistema resolve o fornecedor nesta ordem
+   de prioridade: (1) `suggested_supplier_id` do item; (2) fornecedor
+   preferencial ativo em `item_suppliers` (`preferred=true`,
+   `active=true`); (3) `fallback_supplier_id` do body
+5. Para cada item, sistema resolve o `product_id` legado (tabela
+   `products`) correspondente ao `Item` (modelo canônico) da requisição,
+   casando `products.code = items.codigo`
+6. Sistema agrupa os itens por fornecedor resolvido e cria **um Pedido de
+   Compra (`purchase_orders`) por fornecedor**, com `requisition_id`
+   apontando para a requisição de origem, `requester_id` = usuário logado,
+   `status='pending'`, `order_number` gerado pelo mesmo helper usado na
+   criação manual de pedidos (`generatePurchaseOrderNumber`)
+7. Para cada item do pedido, `unit_price` é resolvido nesta ordem: preço do
+   vínculo `item_suppliers` para o fornecedor daquele pedido → 
+   `unit_price_estimated` do item da requisição → `0`
+8. Sistema atualiza a requisição para `status='ordered'` e todos os seus
+   itens para `status='ordered'`
+9. Sistema confirma a transação (`commit`) e retorna os pedidos de compra
+   criados (com itens), o `requisition_id` e o novo `requisition_status`
+10. Sistema registra log de auditoria (`logAction`, ação `convert`)
+
+**Fluxo Alternativo (requisição inexistente):**
+- Sistema faz `rollback` e retorna 404 NOT_FOUND
+
+**Fluxo Alternativo (requisição não aprovada):**
+- Sistema faz `rollback` e retorna 422 BUSINESS_RULE_VIOLATION citando o
+  `status` atual (ex.: `draft`, `pending`, `ordered`, `canceled`)
+
+**Fluxo Alternativo (item sem fornecedor resolvível):**
+- Sistema faz `rollback` e retorna 422 BUSINESS_RULE_VIOLATION listando os
+  `item_id` (dos itens de requisição) sem fornecedor sugerido, preferencial
+  ou fallback
+
+**Fluxo Alternativo (item sem produto legado correspondente):**
+- Sistema faz `rollback` e retorna 422 BUSINESS_RULE_VIOLATION listando os
+  `codigo` de `Item` sem `Product` correspondente em `products.code`,
+  orientando a cadastrar o produto correspondente
+
+**Regras de Negócio:**
+- Toda a operação (lock da requisição e itens, resolução de fornecedor e
+  produto, criação dos pedidos e itens, atualização de status) ocorre em
+  uma única transação Sequelize (`commit`/`rollback`)
+- `order_number` reutiliza exatamente o mesmo formato/gerador do use case
+  de criação manual de pedidos (`CreatePurchaseUseCase` /
+  `generatePurchaseOrderNumber`); quando mais de um pedido é criado na
+  mesma conversão, um sufixo sequencial (`-1`, `-2`, ...) evita colisão de
+  `order_number` únicos gerados no mesmo instante
+- `requester_id` dos pedidos criados nunca é informado pelo cliente da API
+  (sempre derivado do usuário autenticado via JWT)
+- Fecha o ciclo de rastreabilidade: Requisição de Compra (aprovada) →
+  Pedido(s) de Compra → Recebimento → Estoque
+
+---
+
 ## Atores Industriais (Adicionais)
 
 | Ator | Descricao |

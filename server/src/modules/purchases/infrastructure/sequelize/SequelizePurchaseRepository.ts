@@ -118,6 +118,10 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     return Product.findByPk(id, { transaction });
   }
 
+  async findProductByCode(code, transaction) {
+    return Product.findOne({ where: { code }, transaction });
+  }
+
   async findPurchaseItems(purchaseId, transaction) {
     return PurchaseItem.findAll({ where: { purchase_id: purchaseId }, transaction });
   }
