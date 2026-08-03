@@ -131,7 +131,9 @@ docs/              # documentação por área da empresa
 | [docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) | Auditoria pré-produção e status da remediação |
 | [docs/GO_LIVE_G6_CHECKLIST.md](docs/GO_LIVE_G6_CHECKLIST.md)            | Checklist de Go-Live G6        |
 
-## Agente Claude Code
+## Agentes Claude Code
+
+### `evok-production-remediation`
 
 O agente de remediacao de producao segue o cronograma G0-G6 e carrega a skill
 `evok-production-readiness` automaticamente:
@@ -142,6 +144,67 @@ claude --agent evok-production-remediation
 
 Dentro de uma sessao Claude Code, tambem e possivel mencionar
 `@evok-production-remediation` para delegar uma tarefa ao agente.
+
+### `PromadorFonteEnd`
+
+Agente de frontend responsavel por desenvolver, refatorar e integrar telas do
+ERP com a API existente, sempre validando contratos no backend antes de
+implementar servicos ou componentes visuais:
+
+```bash
+claude --agent PromadorFonteEnd
+```
+
+Dentro de uma sessao Claude Code, tambem e possivel mencionar
+`@PromadorFonteEnd` para delegar tarefas de frontend ao agente.
+
+### Demais agentes do projeto (`.claude/agents/`)
+
+| Agente | Uso |
+|---|---|
+| `programador` | Implementacao backend com documentacao, testes e handoff |
+| `AdmDBA` | PostgreSQL, migrations e integridade de schema (ciente das armadilhas: timestamps snake_case, schema dual UUID x INTEGER) |
+| `docker` | Infraestrutura conteinerizada e PostgreSQL local |
+| `auditor` / `auditor-seguranca` | Auditoria profunda de codigo/banco e varredura de seguranca |
+| `documentador` | Governanca documental e SSOT |
+| `cleanliness-review` | Passe iterativo de limpeza: comentarios redundantes/narrativos, duplicacao, best-practice — protege comentarios de "why" |
+| `iterative-review` | Revisao iterativa do branch em rodadas multi-perspectiva (cega, informada, focada) ate nao restar problema genuino |
+
+### `AdmDBA`
+
+Agente de banco de dados e modelagem focado em PostgreSQL, migrations e
+integridade do schema do ERP:
+
+```bash
+claude --agent AdmDBA
+```
+
+Dentro de uma sessao Claude Code, tambem e possivel mencionar `@AdmDBA` para
+delegar tarefas de schema e banco ao agente.
+
+### `iterative-review`
+
+Agente de revisao iterativa multi-agente para hardening de branch, com
+revisores cegos e informados, ate nao restar achado genuino:
+
+```bash
+claude --agent iterative-review
+```
+
+Dentro de uma sessao Claude Code, tambem e possivel mencionar `@iterative-review`
+para rodar revisoes profundas do branch.
+
+### `cleanliness-review`
+
+Agente de limpeza iterativa focado em comentarios cruft, duplicacao de codigo
+e nits de best-practice antes de merge:
+
+```bash
+claude --agent cleanliness-review
+```
+
+Dentro de uma sessao Claude Code, tambem e possivel mencionar
+`@cleanliness-review` para fazer polimento e remover cruft.
 
 As pastas em `docs/` seguem as áreas da empresa (comercial, financeiro,
 produção, qualidade, RH, entre outras).
