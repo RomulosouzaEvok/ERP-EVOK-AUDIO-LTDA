@@ -67,8 +67,8 @@ O que NÃO existe (e uma fábrica em escala precisa):
 
 | # | Lacuna | Impacto em escala | Esforço |
 |---|---|---|---|
-| 1 | **Catálogo item×fornecedor N:N** (seção 2) | Sem sourcing/cotação; compra às cegas | 2-3d |
-| 2 | **Telas de MRP e Requisição de Compra** (motores prontos no backend, invisíveis para o PCP) | PCP opera via Postman hoje | 2-3d |
+| 1 | ~~**Catálogo item×fornecedor N:N**~~ | ✅ **RESOLVIDO em 2026-08-03 (commit 490d512)**: tabela `item_suppliers` + endpoints + dialog Fornecedores no produto + histórico de compras + workflow de aprovação da requisição | feito |
+| 2 | ~~**Telas de MRP e Requisição de Compra**~~ | ✅ **RESOLVIDO em 2026-08-03 (commit 490d512)**: /purchases/requisitions e /production/mrp no ar | feito |
 | 3 | **Fechar o ciclo MRP** — plano → requisição/OP automático | Planejamento manual não escala | 3-4d |
 | 4 | **Conversão requisição → pedido de compra** | Elo quebrado na cadeia de suprimentos | 1-2d |
 | 5 | **Centros de trabalho + capacidade + calendário de turnos** (hoje work_center é texto livre) | Sem carga-máquina não há promessa de prazo confiável | 5d+ |
