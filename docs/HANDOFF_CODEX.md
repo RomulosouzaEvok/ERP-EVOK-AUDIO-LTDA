@@ -2186,3 +2186,201 @@ lidos antes de codar, nenhum payload/rota foi adivinhado).
 
 **Desenvolvedor**: Claude Code (Senior Frontend Engineer)
 **Data**: 2026-08-03
+
+---
+
+## Onda 3 — Expedição, Cockpit de Compras e Projeção de Fluxo de Caixa (Concluída)
+
+**Data**: 2026-08-03
+**Escopo**: `server/` apenas (client/ não tocado).
+**Status**: ✅ Concluído — `npm run typecheck` limpo, `npx jest tests/unit` 100% verde (278/278, 52 suítes), sem regressões.
+
+### Resumo da feature
+
+1. **Expedição de venda (status `shipped`)**: novo valor de enum
+   `sales.status` via `ALTER TYPE ... ADD VALUE`. Máquina de estados
+   (`ChangeSaleStatusUseCase.VALID_TRANSITIONS`) passou a permitir
+   `invoiced → shipped`; `shipped` é terminal (nenhuma transição sai dele,
+   inclusive cancelamento é bloqueado com 422 e mensagem dedicada).
+2. **Cockpit de Compras**: `GET /api/purchases/cockpit` (rota registrada
+   antes de `/:id`) retorna 4 métricas agregadas via SQL raw
+   parametrizado: requisições pendentes, pedidos em aberto
+   (contagem + valor), chegadas da semana e pedidos em atraso.
+3. **Projeção de Fluxo de Caixa**: `GET
+   /api/finance/cash-flow-projection?days=7..90` (default 30, `authorize
+   ('admin', 'financial')`) agrupa os títulos em aberto
+   (`accounts_receivable`/`accounts_payable` com `payment_date IS NULL` e
+   `status != 'canceled'`) por semana (segunda a domingo), com saldo
+   líquido e acumulado por semana, mais um bucket separado de vencidos
+   não pagos.
+
+### Arquivos alterados/criados
+
+**Migração:**
+- `server/migrations/20260803-000007-add-shipped-sale-status.cjs` (novo) — `ALTER TYPE "enum_sales_status" ADD VALUE IF NOT EXISTS 'shipped'` fora de transação (padrão de `20260803-000002-add-quarantine-lot-status.cjs`); `down()` no-op documentado.
+
+**Modelo/tipos:**
+- `server/src/models/Sale.ts` — enum de `status` inclui `'shipped'`; cabeçalho JSDoc atualizado com o fluxo completo.
+- `server/src/types/erp.d.ts`, `server/src/types/models.d.ts` — `SaleStatus`/`SaleAttributes.status` incluem `'shipped'`.
+
+**Módulo `sales`:**
+- `server/src/modules/sales/application/use-cases/ChangeSaleStatusUseCase.ts` — `VALID_TRANSITIONS.invoiced` ganhou `'shipped'`; `VALID_TRANSITIONS.shipped = []`; bloqueio explícito de `shipped → canceled` com `BusinessRuleError` (422) e mensagem dedicada, antes do erro genérico de transição inválida.
+- `server/src/modules/sales/presentation/validators/saleValidators.ts` — `updateSaleStatusSchema` e `listSalesQuerySchema` aceitam `'shipped'`.
+
+**Módulo `purchases`:**
+- `server/src/modules/purchases/domain/repositories/PurchaseRepository.ts` — novo método abstrato `getCockpitMetrics()`.
+- `server/src/modules/purchases/infrastructure/sequelize/SequelizePurchaseRepository.ts` — implementação com 4 queries SQL raw parametrizadas (`sequelize.query` + `QueryTypes.SELECT`, sem interpolação de input externo).
+- `server/src/modules/purchases/application/use-cases/GetPurchaseCockpitUseCase.ts` (novo) — wrapper fino sobre o repositório.
+- `server/src/modules/purchases/presentation/controllers/purchaseController.ts` — novo handler `cockpit`.
+- `server/src/modules/purchases/presentation/routes/purchases.ts` — `GET /cockpit` registrada ANTES de `GET /:id`.
+
+**Módulo `financial`:**
+- `server/src/modules/financial/presentation/validators/financialValidators.ts` — novo `cashFlowProjectionQuerySchema` (`days` 7–90, default 30).
+- `server/src/modules/financial/domain/repositories/FinancialRepository.ts` — novo método abstrato `getOpenTitlesForProjection(days)`.
+- `server/src/modules/financial/infrastructure/sequelize/SequelizeFinancialRepository.ts` — implementação com 4 queries SQL raw parametrizadas (títulos em aberto no horizonte + agregados de vencidos).
+- `server/src/modules/financial/application/use-cases/GetCashFlowProjectionUseCase.ts` (novo) — bucketiza por semana (segunda-feira), calcula `net`/`cumulative_net`, `due_next_7_days` e `totals.overdue_*`.
+- `server/src/modules/financial/presentation/controllers/financialController.ts` — novo handler `cashFlowProjection`.
+- `server/src/modules/financial/presentation/routes/finance.ts` — `GET /cash-flow-projection` com `authorize('admin', 'financial')`.
+
+**Testes:**
+- `server/tests/unit/onda3-shipping-cockpit-cashflow.test.ts` (novo, 7 testes) — cobre as 3 features (transições de status, cockpit, projeção).
+
+### Documentações atualizadas
+
+- `docs/projeto/04-USE_CASES.md` — 3 novos casos de uso: `UC-27` (Expedir Venda Faturada), `UC-28` (Consultar Cockpit de Compras), `UC-29` (Consultar Projeção de Fluxo de Caixa).
+- `docs/DATABASE.md` — enum de `sales.status` documentado com `'shipped'` e referência à migration.
+- `docs/API.md` — `GET /api/sales` (query `status`), `PUT /api/sales/:id/status` (regras de `shipped`), `GET /api/purchases/cockpit` (novo, com contrato JSON completo) e `GET /api/finance/cash-flow-projection` (novo, com contrato JSON completo).
+- `server/src/modules/sales/README.md` — máquina de estados, endpoint `PUT /:id/status` e lista de testes atualizados.
+- `server/src/modules/purchases/README.md` — endpoint `GET /cockpit` documentado (tabela de endpoints + seção dedicada "Cockpit de Compras (Onda 3)") e lista de testes atualizada.
+- `server/src/modules/financial/README.md` — endpoint `GET /cash-flow-projection` documentado (tabela de endpoints + regra de negócio dedicada) e lista de testes atualizada.
+- JSDoc: todos os arquivos novos/alterados (use cases, controllers, repositórios, validators, migration) têm cabeçalho/comentários JSDoc explicando parâmetros e retorno.
+
+### Contratos JSON (resumo)
+
+**`PUT /api/sales/:id/status`** com `{ "status": "shipped" }`:
+- Sucesso (200): `{ success: true, data: <Sale com status: "shipped"> }` — apenas a partir de `invoiced`.
+- Erro (422): `confirmed → shipped` ou qualquer origem != `invoiced` → `BusinessRuleError` genérico de transição inválida.
+- Erro (422): `shipped → canceled` → `BusinessRuleError` com mensagem "Venda já foi expedida (status shipped) e não pode ser cancelada."
+
+**`GET /api/purchases/cockpit`**:
+```json
+{
+  "success": true,
+  "data": {
+    "pending_requisitions": 3,
+    "open_orders": { "count": 5, "total_amount": 45230.50 },
+    "arriving_this_week": 2,
+    "overdue": 1
+  }
+}
+```
+
+**`GET /api/finance/cash-flow-projection?days=30`**:
+```json
+{
+  "success": true,
+  "data": {
+    "horizon_days": 30,
+    "totals": {
+      "receivable": 25000.00,
+      "payable": 18000.00,
+      "net": 7000.00,
+      "overdue_receivable": 1200.00,
+      "overdue_payable": 300.00
+    },
+    "due_next_7_days": { "receivable": 4000.00, "payable": 2500.00 },
+    "weeks": [
+      { "week_start": "2026-08-03", "week_end": "2026-08-09", "receivable": 4000.00, "payable": 2500.00, "net": 1500.00, "cumulative_net": 1500.00 }
+    ]
+  }
+}
+```
+
+### Instruções de teste
+
+1. **Migration** (não rodada nesta sessão, por instrução explícita — precisa ser aplicada antes de testar em ambiente real):
+   ```bash
+   cd server
+   npm run migration:up --name 20260803-000007-add-shipped-sale-status.cjs
+   ```
+2. **Expedição**: criar venda `confirmed`, emitir NF-e (`POST /:id/nfe`, vira `invoiced`), então `PUT /:id/status` com `{"status":"shipped"}` → 200. Tentar `PUT /:id/status` com `{"status":"canceled"}` na mesma venda → 422 com a mensagem dedicada. Tentar `shipped` a partir de uma venda `confirmed` → 422 genérico.
+3. **Cockpit de compras**: com dados reais de `purchase_requisitions`/`purchase_orders`, chamar `GET /api/purchases/cockpit` autenticado e conferir que os 4 números batem com queries manuais equivalentes (`SELECT COUNT(*) ...`).
+4. **Projeção de fluxo de caixa**: chamar `GET /api/finance/cash-flow-projection?days=30` com usuário `admin`/`financial` (outro papel deve receber 403); variar `days` fora de 7–90 (deve dar 400); conferir que a soma de `weeks[].net` mais os vencidos bate com `totals.net` e que `cumulative_net` da última semana é igual à soma de todos os `net` do horizonte.
+5. Regressão: `cd server && npm run typecheck && npx jest tests/unit` (devem continuar limpos: 0 erros TS, 278 testes verdes).
+
+### Riscos residuais
+
+- A migration `20260803-000007-add-shipped-sale-status.cjs` **não foi executada** nesta sessão (instrução explícita de não rodar migrations/docker) — precisa ser aplicada em cada ambiente antes de qualquer venda ser marcada como `shipped`, senão o `ALTER TYPE` do Postgres rejeitará o valor.
+- Nenhum teste de integração (Postgres real) foi criado para as 3 features desta onda — apenas unitários com repositório mockado. Recomenda-se cobertura de integração em sprint futura (mesmo padrão de `server/tests/integration/sale-quote-confirm.test.ts`).
+- RBAC do cockpit de compras segue o padrão já existente do módulo (`authenticate` apenas, sem `authorize` por papel) — mesma pendência já documentada no README do módulo `purchases`.
+- A projeção de fluxo de caixa não desconta juros/multa/desconto (`interest`/`fine`/`discount` de `AccountReceivable`) do valor projetado — usa apenas o campo `amount` (valor total do título), mesmo critério dos demais relatórios financeiros existentes (`GetCashFlowUseCase`).
+
+**Desenvolvedor**: Claude Code (Senior Backend Engineer)
+**Data**: 2026-08-03
+
+---
+
+## Frontend — Onda 3: Expedição, Cockpit de Compras e Fluxo de Caixa (Concluída)
+
+**Data**: 2026-08-03
+**Escopo**: `client/` apenas (backend consumido tal como entregue na Onda 3 de backend acima; nenhuma rota de Logística/Laboratório/Engenharia existente foi alterada).
+**Status**: ✅ `node ./node_modules/typescript/bin/tsc -b --noEmit` limpo; `node ./node_modules/vitest/vitest.mjs run` 13/13 testes verdes (4 arquivos), sem regressões.
+
+### Resumo da feature
+
+1. **Expedição (`/logistics/expedicao`)**: nova página `ShippingPage.tsx` com fila de vendas `confirmed`/`invoiced` (duas chamadas `GET /api/sales?status=` combinadas no cliente — a API só filtra um status por vez, mesmo padrão já usado em `ReceivingPage.tsx`), colunas nº venda/cliente/itens/total/status NF-e/status da venda, dialog "Ver itens" com picking list (produto + quantidade) via `GET /api/sales/:id` (novo `getSale` em `src/api/sales.ts`), botão "Marcar como embarcada" (`PUT /api/sales/:id/status` com `{status:'shipped'}`, reaproveitando `updateSaleStatus` já existente) habilitado apenas quando `status === 'invoiced' && nfe_status === 'authorized'`, com `window.confirm` antes de disparar. Quando `invoiced` sem NF-e autorizada, mostra aviso inline "Emita a NF-e na tela de Vendas antes de embarcar" com link para `/sales`. Toggle "Fila de embarque" / "Embarcadas" (esta última consulta `status=shipped` e badge verde "Embarcada").
+2. **Cockpit de Compras (`/purchases`)**: 4 tiles clicáveis acima da tabela existente, usando `Card`/`CardContent` — "Requisições pendentes" (navega para `/purchases/requisitions`), "Pedidos em aberto" (N · R$ total; alterna um filtro client-side na tabela local pelos status `pending/approved/sent/partial`, mesmo critério do backend), "Chegando em 7 dias" (verde) e "Atrasados" (vermelho, navega para `/logistics/recebimento`). Nova função `getPurchaseCockpit` + tipo `PurchaseCockpit` em `src/api/purchases.ts`.
+3. **Fluxo de Caixa (projeção) em `/financial`**: nova seção `CashFlowProjectionSection` (mesmo arquivo `FinancialPage.tsx`, componente interno) com `SelectNative` para horizonte 30/60/90 dias, 5 tiles (Entradas previstas verde, Saídas previstas vermelho, Saldo projetado com cor conforme sinal, Vencendo em 7d âmbar, Em atraso vermelho somando `overdue_receivable + overdue_payable`) e tabela semanal (semana formatada `dd/mm–dd/mm`, a receber, a pagar, saldo da semana, acumulado em negrito/vermelho se negativo). Página já é `RoleRoute roles={['admin','financial']}` — nenhuma mudança de permissão. Nova função `getCashFlowProjection` + tipos `CashFlowProjection`/`CashFlowProjectionWeek` em `src/api/financial.ts`.
+4. **Navegação**: item "Expedição" (ícone `Send`) no grupo Logística da sidebar, rota lazy `/logistics/expedicao` em `App.tsx`, breadcrumb `['Logística', 'Expedição']` em `AppLayout.tsx`.
+
+### Arquivos alterados/criados
+
+**Novo:**
+- `client/src/pages/logistics/ShippingPage.tsx` (novo) — página de expedição completa (fila + dialog de picking list `ShippingItemsDialog`).
+
+**API client:**
+- `client/src/api/sales.ts` — `SaleStatus` ganhou `'shipped'`; nova função `getSale(id)` (`GET /api/sales/:id`).
+- `client/src/api/purchases.ts` — novo tipo `PurchaseCockpit` e função `getPurchaseCockpit()` (`GET /api/purchases/cockpit`).
+- `client/src/api/financial.ts` — novos tipos `CashFlowProjection`/`CashFlowProjectionWeek` e função `getCashFlowProjection(days)` (`GET /api/finance/cash-flow-projection`).
+
+**Páginas alteradas:**
+- `client/src/pages/sales/SalesPage.tsx` — `STATUS_VARIANT`/`STATUS_LABEL` (records exaustivos por `SaleStatus`) ganharam a chave `shipped` (badge `success`, label "Embarcada"); sem outras mudanças de comportamento.
+- `client/src/pages/purchases/PurchasesPage.tsx` — import de `useNavigate`, `Card`/`CardContent`, ícones `ClipboardList`/`PackageOpen`/`CalendarClock`/`AlertOctagon`; novo estado `openOrdersOnly` + `visiblePurchases` (memo) filtrando a tabela local; novo componente `PurchaseCockpitTiles` renderizado acima da tabela; paginação escondida quando o filtro local de "pedidos em aberto" está ativo (a paginação do servidor não bate mais com a lista filtrada no cliente).
+- `client/src/pages/financial/FinancialPage.tsx` — import de `SelectNative` e ícones `TrendingUp`/`TrendingDown`/`Scale`/`AlarmClock`/`AlertTriangle`; parágrafo antigo sobre limitação da API de fluxo de caixa substituído pela nova seção `CashFlowProjectionSection`.
+
+**Navegação:**
+- `client/src/App.tsx` — `const ShippingPage = lazy(...)` + rota `/logistics/expedicao`.
+- `client/src/layouts/AppLayout.tsx` — ícone `Send` importado; item "Expedição" no grupo Logística; entrada em `BREADCRUMBS`.
+
+**Documentação:**
+- `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` — checklist FE1 (Onda 3 — Expedição), FE3 (cockpit de compras) e FE5 (fluxo de caixa projetado) marcados `[x]` com descrição da entrega.
+- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — seção "Frontend" com 3 novos itens (Expedição, Cockpit de Compras, Fluxo de caixa projetado).
+
+### Decisões de UX/RBAC
+
+- **Sem endpoint de listagem por múltiplos status**: seguido o mesmo padrão de `ReceivingPage.tsx` — duas (ou três, incluindo `shipped`) chamadas `useQueries` combinadas no cliente, em vez de propor mudança de contrato no backend.
+- **Botão de embarque com dupla condição** (`status === 'invoiced' && nfe_status === 'authorized'`): evita embarcar venda faturada sem nota fiscal válida, mesmo que o backend permita a transição de status isoladamente (a validação de NF-e é só de UI/UX, não substitui regra de negócio no servidor).
+- **Filtro de "pedidos em aberto" é local, não uma nova query paginada**: como pedido pela tarefa ("aplica filtro local da tabela se houver, senão só navega/scrolla"), evitando uma segunda fonte de paginação para o mesmo recurso.
+- **RBAC do fluxo de caixa**: nenhuma mudança — a rota `/financial` já está sob `<RoleRoute roles={['admin', 'financial']}>` em `App.tsx`; o backend também exige `authorize('admin', 'financial')` no `GET /cash-flow-projection`, então um `operator` autenticado recebe 403 do servidor mesmo se acessasse a URL diretamente.
+
+### Resultados de qualidade
+
+- `node ./node_modules/typescript/bin/tsc -b --noEmit` → sem erros.
+- `node ./node_modules/vitest/vitest.mjs run` → 4 arquivos de teste, 13/13 passando (nenhum teste novo foi adicionado nesta onda; suíte existente permaneceu intacta).
+- Nenhuma dependência nova instalada; nenhum commit criado (por instrução).
+
+### O que o Agente QA (ou humano) deve testar
+
+1. **Expedição**: criar venda `confirmed` → confirmar (`invoiced`, se aplicável) → verificar que aparece na fila de `/logistics/expedicao` com aviso de NF-e pendente e botão de embarque desabilitado/ausente. Emitir NF-e na tela de Vendas, voltar para Expedição e confirmar que o botão "Marcar como embarcada" aparece; clicar, confirmar no dialog, e verificar que a venda migra para a aba "Embarcadas" com badge verde. Testar "Ver itens" para conferir que a picking list bate com os itens da venda.
+2. **Cockpit de Compras**: em `/purchases`, verificar que os 4 tiles carregam os números corretos (comparar com `GET /api/purchases/cockpit` chamado direto); clicar em "Requisições pendentes" e "Atrasados" e confirmar a navegação; clicar em "Pedidos em aberto" e confirmar que a tabela abaixo filtra para `pending/approved/sent/partial` (clicar de novo remove o filtro).
+3. **Fluxo de Caixa**: em `/financial` (logado como `admin` ou `financial`), trocar o seletor de horizonte entre 30/60/90 dias e confirmar que os tiles e a tabela semanal atualizam; testar com um usuário `operator` que a rota `/financial` continua bloqueada (comportamento pré-existente, não alterado nesta onda).
+4. Regressão: `cd client && node ./node_modules/typescript/bin/tsc -b --noEmit && node ./node_modules/vitest/vitest.mjs run` (devem continuar limpos).
+
+### Riscos residuais
+
+- A migration de backend que adiciona `'shipped'` ao enum `sales.status` (`20260803-000007-add-shipped-sale-status.cjs`) precisa estar aplicada no ambiente antes de testar o fluxo de embarque — sem ela, a API rejeitará a transição com erro do Postgres, não um 422 amigável.
+- Nenhum teste automatizado (Vitest) foi criado especificamente para `ShippingPage`, o cockpit de compras ou a seção de fluxo de caixa — a suíte atual (13 testes) cobre outras áreas do client. Recomenda-se cobertura dedicada em sprint futura.
+- O filtro local de "pedidos em aberto" em `/purchases` opera apenas sobre a página corrente da tabela (20 registros); pedidos em aberto em outras páginas não aparecem até o usuário navegar até elas — comportamento aceito pela tarefa ("aplica filtro local da tabela se houver"), mas vale considerar um filtro server-side (`status IN (...)`) em iteração futura.
+
+**Desenvolvedor**: Claude Code (Senior Frontend Engineer)
+**Data**: 2026-08-03

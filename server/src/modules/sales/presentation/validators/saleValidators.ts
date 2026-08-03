@@ -35,13 +35,13 @@ export const createSaleSchema = z.object({
 }).strict();
 
 export const updateSaleStatusSchema = z.object({
-  status: z.enum(['quote', 'confirmed', 'invoiced', 'canceled']),
+  status: z.enum(['quote', 'confirmed', 'invoiced', 'shipped', 'canceled']),
 }).strict();
 
 export const listSalesQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().optional(),
-  status: z.enum(['quote', 'confirmed', 'invoiced', 'canceled']).optional(),
+  status: z.enum(['quote', 'confirmed', 'invoiced', 'shipped', 'canceled']).optional(),
   customer_id: z.coerce.number().int().positive().optional(),
   start_date: z.string().date().optional(),
   end_date: z.string().date().optional(),

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Adapter para a API da Focus NFe (https://focusnfe.com.br).
  *
  * ⚠️ IMPORTANTE ANTES DE USAR EM PRODUÇÃO: o formato exato do payload JSON

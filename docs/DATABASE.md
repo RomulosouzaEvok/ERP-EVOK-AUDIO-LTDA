@@ -499,7 +499,7 @@ de código.
 | user_id | INT | FK → users.id | Vendedor |
 | total_amount | DECIMAL(10,2) | NOT NULL | Valor total |
 | discount | DECIMAL(10,2) | DEFAULT 0 | Desconto |
-| status | ENUM('quote','confirmed','invoiced','canceled') | DEFAULT 'quote' | Status |
+| status | ENUM('quote','confirmed','invoiced','shipped','canceled') | DEFAULT 'quote' | Status (fluxo: quote→confirmed→invoiced→shipped; canceled a partir de quote/confirmed/invoiced; shipped é terminal, não pode ser cancelada — ver `migrations/20260803-000007-add-shipped-sale-status.cjs`) |
 | payment_method | ENUM('cash','credit_card','debit_card','pix','boleto','transfer') | - | Pagamento |
 | installments | INT | DEFAULT 1 | Parcelas |
 | nfe_number | VARCHAR(50) | - | Nº NF-e |

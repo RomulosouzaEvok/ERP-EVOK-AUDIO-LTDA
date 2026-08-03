@@ -118,7 +118,7 @@ export interface SaleAttributes extends BaseAttributes {
   user_id: number;
   total_amount: number;
   discount?: number;
-  status: 'quote' | 'confirmed' | 'invoiced' | 'canceled';
+  status: 'quote' | 'confirmed' | 'invoiced' | 'shipped' | 'canceled';
   payment_method?: string;
   installments?: number;
   notes?: string;

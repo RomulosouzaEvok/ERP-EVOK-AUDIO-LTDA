@@ -7,6 +7,7 @@ const CreatePurchaseUseCase = require('../../application/use-cases/CreatePurchas
 const UpdatePurchaseUseCase = require('../../application/use-cases/UpdatePurchaseUseCase');
 const ChangePurchaseStatusUseCase = require('../../application/use-cases/ChangePurchaseStatusUseCase');
 const ReceivePurchaseItemsUseCase = require('../../application/use-cases/ReceivePurchaseItemsUseCase');
+const GetPurchaseCockpitUseCase = require('../../application/use-cases/GetPurchaseCockpitUseCase');
 const {
   createPurchaseSchema,
   updatePurchaseSchema,
@@ -49,6 +50,24 @@ exports.list = async (req, res, next) => {
       page: parseInt(String(page), 10), limit: parseInt(String(limit), 10), offset: (parseInt(String(page), 10) - 1) * parseInt(String(limit), 10)
     });
     res.json({ success: true, data: rows, pagination: { total: count, page: p, limit: l, totalPages } });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/purchases/cockpit` — retorna as métricas agregadas do cockpit
+ * de compras (requisições pendentes, pedidos em aberto, chegadas da semana
+ * e pedidos em atraso). Somente leitura, sem paginação.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.cockpit = async (req, res, next) => {
+  try {
+    const useCase = new GetPurchaseCockpitUseCase(purchaseRepository);
+    const data = await useCase.execute();
+    res.json({ success: true, data });
   } catch (error) { next(error); }
 };
 

@@ -6,7 +6,8 @@ const ListPayablesUseCase = require('../../application/use-cases/ListPayablesUse
 const CreatePayableUseCase = require('../../application/use-cases/CreatePayableUseCase');
 const PayPayableUseCase = require('../../application/use-cases/PayPayableUseCase');
 const GetCashFlowUseCase = require('../../application/use-cases/GetCashFlowUseCase');
-const { createPayableSchema, payAccountSchema, handleZodError } = require('../validators/financialValidators');
+const GetCashFlowProjectionUseCase = require('../../application/use-cases/GetCashFlowProjectionUseCase');
+const { createPayableSchema, payAccountSchema, cashFlowProjectionQuerySchema, handleZodError } = require('../validators/financialValidators');
 
 /**
  * Controller enxuto do módulo `financial`. Interpreta `req`, delega toda a
@@ -161,6 +162,27 @@ exports.cashFlow = async (req, res, next) => {
     const { start_date, end_date } = req.query;
     const useCase = new GetCashFlowUseCase(financialRepository);
     const data = await useCase.execute({ start_date, end_date });
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/finance/cash-flow-projection` — projeta o fluxo de caixa dos
+ * títulos em aberto (contas a receber/pagar) por semana, com saldo
+ * acumulado e bucket separado de títulos vencidos e não pagos.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.cashFlowProjection = async (req, res, next) => {
+  try {
+    const parsed = cashFlowProjectionQuerySchema.safeParse(req.query);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { days } = parsed.data;
+    const useCase = new GetCashFlowProjectionUseCase(financialRepository);
+    const data = await useCase.execute({ days });
     res.json({ success: true, data });
   } catch (error) { next(error); }
 };

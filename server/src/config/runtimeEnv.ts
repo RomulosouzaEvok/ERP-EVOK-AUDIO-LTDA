@@ -40,6 +40,7 @@ const runtimeEnvSchema = z.object({
   DB_FORCE_SYNC: booleanFromEnv.default(false),
   DB_AUTO_ALTER: booleanFromEnv.default(false),
   DB_ALLOW_UNSAFE_ALTER: booleanFromEnv.default(false),
+  ALLOW_LOCAL_DB_NO_SSL: booleanFromEnv.default(false),
   JWT_SECRET: z.string().optional(),
   JWT_EXPIRE: z.string().default('7d'),
   CORS_ORIGIN: z.string().optional(),
@@ -88,7 +89,7 @@ const runtimeEnvSchema = z.object({
     });
   }
 
-  if (!env.DB_SSL) {
+  if (!env.DB_SSL && !env.ALLOW_LOCAL_DB_NO_SSL) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['DB_SSL'],
@@ -136,6 +137,7 @@ export type RuntimeEnv = {
   dbForceSync: boolean;
   dbAutoAlter: boolean;
   dbAllowUnsafeAlter: boolean;
+  allowLocalDbNoSsl: boolean;
   jwtSecret?: string;
   jwtExpire: string;
   corsOrigin: string;
@@ -161,6 +163,7 @@ function normalizeRuntimeEnv(parsedEnv: z.infer<typeof runtimeEnvSchema>): Runti
     dbForceSync: parsedEnv.DB_FORCE_SYNC,
     dbAutoAlter: parsedEnv.DB_AUTO_ALTER,
     dbAllowUnsafeAlter: parsedEnv.DB_ALLOW_UNSAFE_ALTER,
+    allowLocalDbNoSsl: parsedEnv.ALLOW_LOCAL_DB_NO_SSL,
     jwtSecret: parsedEnv.JWT_SECRET,
     jwtExpire: parsedEnv.JWT_EXPIRE,
     corsOrigin: parsedEnv.CORS_ORIGIN || 'http://localhost:5173',

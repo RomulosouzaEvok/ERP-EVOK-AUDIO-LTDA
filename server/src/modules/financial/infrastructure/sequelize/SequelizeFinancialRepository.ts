@@ -1,4 +1,4 @@
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 const FinancialRepository = require('../../domain/repositories/FinancialRepository');
 const { sequelize } = require('../../../../config/database');
 const { AccountReceivable, AccountPayable, Client, Sale } = require('../../../../models/index');
@@ -106,6 +106,59 @@ class SequelizeFinancialRepository extends FinancialRepository {
       group: ['status'],
       raw: true
     });
+  }
+
+  /** @inheritdoc */
+  async getOpenTitlesForProjection(days: any) {
+    // SQL raw parametrizado — `days` e sempre um inteiro ja validado pelo
+    // Zod (7..90) antes de chegar aqui, nunca concatenado na query.
+    // "Em aberto" = payment_date IS NULL e status != 'canceled' (mesmos
+    // enums de AccountReceivable/AccountPayable: pending, partial, paid,
+    // overdue, canceled — 'paid' nunca tem payment_date nulo na pratica,
+    // mas o filtro por payment_date cobre o caso de forma robusta mesmo
+    // assim).
+    const receivableRows = await sequelize.query(
+      `SELECT due_date, amount
+       FROM accounts_receivable
+       WHERE payment_date IS NULL
+         AND status != 'canceled'
+         AND due_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + (:days || ' days')::interval)`,
+      { replacements: { days }, type: QueryTypes.SELECT }
+    );
+
+    const payableRows = await sequelize.query(
+      `SELECT due_date, amount
+       FROM accounts_payable
+       WHERE payment_date IS NULL
+         AND status != 'canceled'
+         AND due_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + (:days || ' days')::interval)`,
+      { replacements: { days }, type: QueryTypes.SELECT }
+    );
+
+    const [overdueReceivableRow] = await sequelize.query(
+      `SELECT COALESCE(SUM(amount), 0)::numeric AS total
+       FROM accounts_receivable
+       WHERE payment_date IS NULL
+         AND status != 'canceled'
+         AND due_date < CURRENT_DATE`,
+      { type: QueryTypes.SELECT }
+    );
+
+    const [overduePayableRow] = await sequelize.query(
+      `SELECT COALESCE(SUM(amount), 0)::numeric AS total
+       FROM accounts_payable
+       WHERE payment_date IS NULL
+         AND status != 'canceled'
+         AND due_date < CURRENT_DATE`,
+      { type: QueryTypes.SELECT }
+    );
+
+    return {
+      receivableRows,
+      payableRows,
+      overdueReceivable: parseFloat(overdueReceivableRow?.total ?? 0),
+      overduePayable: parseFloat(overduePayableRow?.total ?? 0)
+    };
   }
 }
 

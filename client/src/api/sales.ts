@@ -1,7 +1,7 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
 
-export type SaleStatus = 'quote' | 'confirmed' | 'invoiced' | 'canceled';
+export type SaleStatus = 'quote' | 'confirmed' | 'invoiced' | 'shipped' | 'canceled';
 
 export interface SaleItem {
   id: number;
@@ -62,5 +62,11 @@ export async function createSale(input: CreateSaleInput) {
 /** `PUT /api/sales/:id/status`. */
 export async function updateSaleStatus(id: number, status: SaleStatus) {
   const { data } = await httpClient.put<ItemResponse<Sale>>(`/api/sales/${id}/status`, { status });
+  return data.data;
+}
+
+/** `GET /api/sales/:id` — inclui `items` (com `product`) e `customer`. */
+export async function getSale(id: number) {
+  const { data } = await httpClient.get<ItemResponse<Sale>>(`/api/sales/${id}`);
   return data.data;
 }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🛡️ Validators - Utilitários de Validação ERP EVOK ÁUDIO
  *
  * Funções de validação para documentos brasileiros (CPF, CNPJ),

@@ -77,3 +77,16 @@ export async function receivePurchaseItems(id: number, input: { invoice_number: 
   const { data } = await httpClient.post<ItemResponse<Purchase>>(`/api/purchases/${id}/receive`, input);
   return data.data;
 }
+
+export interface PurchaseCockpit {
+  pending_requisitions: number;
+  open_orders: { count: number; total_amount: number };
+  arriving_this_week: number;
+  overdue: number;
+}
+
+/** `GET /api/purchases/cockpit` — métricas agregadas para o painel de suprimentos. */
+export async function getPurchaseCockpit() {
+  const { data } = await httpClient.get<ItemResponse<PurchaseCockpit>>('/api/purchases/cockpit');
+  return data.data;
+}

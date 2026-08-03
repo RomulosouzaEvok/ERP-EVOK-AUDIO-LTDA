@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Adapter para a API da eNotas (https://enotasgw.com.br).
  *
  * ⚠️ IMPORTANTE ANTES DE USAR EM PRODUÇÃO: assim como o adapter da Focus

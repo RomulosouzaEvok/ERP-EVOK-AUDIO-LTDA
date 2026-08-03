@@ -4,7 +4,12 @@
  * @module models/Sale
  *
  * Gerencia vendas com suporte a orçamento (quote), confirmação,
- * faturamento (NF-e) e cancelamento. Gera contas a receber.
+ * faturamento (NF-e), expedição (shipped) e cancelamento. Gera contas a
+ * receber.
+ *
+ * Fluxo de status: quote -> confirmed -> invoiced -> shipped -> (terminal).
+ * `canceled` é possível a partir de quote/confirmed/invoiced, mas NÃO a
+ * partir de shipped (venda já embarcada — ver `ChangeSaleStatusUseCase`).
  */
 
 import { DataTypes } from 'sequelize';
@@ -16,7 +21,7 @@ export interface SaleAttributes {
   user_id: number;
   total_amount: number;
   discount: number;
-  status: 'quote' | 'confirmed' | 'invoiced' | 'canceled';
+  status: 'quote' | 'confirmed' | 'invoiced' | 'shipped' | 'canceled';
   payment_method: 'cash' | 'credit_card' | 'debit_card' | 'pix' | 'boleto' | 'transfer';
   installments: number;
   notes: string;
@@ -41,7 +46,7 @@ const Sale = sequelize.define('Sale', {
   user_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → users.id (vendedor)' },
   total_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Valor total da venda' },
   discount: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, comment: 'Desconto concedido' },
-  status: { type: DataTypes.ENUM('quote', 'confirmed', 'invoiced', 'canceled'), defaultValue: 'quote' },
+  status: { type: DataTypes.ENUM('quote', 'confirmed', 'invoiced', 'shipped', 'canceled'), defaultValue: 'quote' },
   payment_method: { type: DataTypes.ENUM('cash', 'credit_card', 'debit_card', 'pix', 'boleto', 'transfer'), defaultValue: 'pix' },
   installments: { type: DataTypes.INTEGER, defaultValue: 1, comment: 'Número de parcelas' },
   notes: { type: DataTypes.TEXT, defaultValue: '' },

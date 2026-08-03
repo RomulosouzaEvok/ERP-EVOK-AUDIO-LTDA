@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 🏭 ERP EVOK ÁUDIO — Core Type Definitions
  *
  * Compartilhado entre todos os módulos TypeScript do sistema.
@@ -28,7 +28,7 @@ export type ProductType =
 export type ProductStatus = 'active' | 'inactive';
 
 /** Status de uma venda. */
-export type SaleStatus = 'quote' | 'confirmed' | 'invoiced' | 'canceled';
+export type SaleStatus = 'quote' | 'confirmed' | 'invoiced' | 'shipped' | 'canceled';
 
 /** Status de um pedido de compra. */
 export type PurchaseStatus = 'pending' | 'approved' | 'sent' | 'partial' | 'received' | 'canceled';

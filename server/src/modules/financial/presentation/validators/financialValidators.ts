@@ -24,7 +24,11 @@ export const cashFlowQuerySchema = z.object({
   end_date: z.string().optional(),
 }).strict();
 
-const schemas = { createPayableSchema, payAccountSchema, cashFlowQuerySchema };
+export const cashFlowProjectionQuerySchema = z.object({
+  days: z.coerce.number().int().min(7).max(90).optional().default(30),
+}).strict();
+
+const schemas = { createPayableSchema, payAccountSchema, cashFlowQuerySchema, cashFlowProjectionQuerySchema };
 
 module.exports = schemas;
 module.exports.handleZodError = (error: any) => {

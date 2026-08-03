@@ -4,8 +4,10 @@
 
 Gerenciar o financeiro básico da fábrica: contas a receber (geradas a
 partir de vendas), contas a pagar (avulsas ou geradas na aprovação de
-pedidos de compra pelo módulo `purchases`) e um relatório simples de fluxo
-de caixa agregado por status em um período. Migrado para a arquitetura em
+pedidos de compra pelo módulo `purchases`), um relatório simples de fluxo
+de caixa agregado por status em um período e (Onda 3) uma projeção
+semanal de fluxo de caixa por vencimento dos títulos em aberto. Migrado
+para a arquitetura em
 camadas (`domain` / `application` / `infrastructure` / `presentation`)
 descrita na Fase 5/6 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão dos módulos
 `purchases`, `sales` e `production`.
@@ -81,6 +83,7 @@ server/src/modules/financial/
       CreatePayableUseCase.ts
       PayPayableUseCase.ts
       GetCashFlowUseCase.ts
+      GetCashFlowProjectionUseCase.ts
   infrastructure/
     sequelize/SequelizeFinancialRepository.ts  Implementação usando os models existentes
   presentation/
@@ -102,6 +105,7 @@ server/src/modules/financial/
 - **Recebimento/Pagamento** (`receivePayment`/`payPayable`): a conta não pode estar `paid` nem `canceled`; se `amount` for informado, deve ser maior que zero e não pode exceder o valor atual da conta (permite baixa parcial, reduzindo o `amount` armazenado); `payment_date` default é a data atual; ao final, `status` vira `paid`.
 - **Criação de conta a pagar** (`createPayable`): `description`, `amount` (> 0) e `due_date` são obrigatórios; sempre criada com `status: 'pending'`; `category`, `supplier_id`, `purchase_id` e `notes` são opcionais.
 - **Fluxo de caixa** (`cashFlow`): agrega `AccountReceivable`/`AccountPayable` por `status` (`SUM(amount) GROUP BY status`) no intervalo informado (padrão: mês corrente); calcula `pending_receivable`, `pending_payable`, `total_receivable`, `total_payable`, `projected_balance` (pendentes) e `actual_balance` (totais).
+- **Projeção de fluxo de caixa** (`cashFlowProjection`, Onda 3): considera apenas títulos EM ABERTO (`payment_date IS NULL` e `status != 'canceled'`) de `accounts_receivable`/`accounts_payable`, via SQL raw parametrizado (`GetOpenTitlesForProjection`). `days` (7 a 90, default 30, validado via Zod) define o horizonte. Agrupa por semana (segunda a domingo), com `receivable`, `payable`, `net` e `cumulative_net` (acumulado semana a semana) por bucket; soma à parte, em `totals.overdue_receivable`/`totals.overdue_payable`, os títulos vencidos e não pagos (`due_date < hoje`), que não entram em nenhuma semana do horizonte futuro. Exige papel `admin` ou `financial`.
 
 ## Endpoints
 
@@ -115,6 +119,7 @@ Base URL: `/api/finance` (autenticação obrigatória via middleware `authentica
 | POST | `/api/finance/payable` | Cria conta a pagar avulsa | `authorize('admin', 'financial')` |
 | PUT | `/api/finance/payable/:id/pay` | Registra pagamento (total/parcial) de conta a pagar | — |
 | GET | `/api/finance/cash-flow` | Fluxo de caixa agregado por status, em um período | — |
+| GET | `/api/finance/cash-flow-projection` | Projeção de fluxo de caixa por semana (títulos em aberto), `?days=7..90` (default 30) | `authorize('admin', 'financial')` |
 
 Ver `docs/API.md` (seção 6 — Financeiro) para exemplos completos de request/response.
 
@@ -138,8 +143,9 @@ controller anterior:
 - `create` → `AccountPayable` criada.
 - `status_change` → conta a receber ou a pagar marcada como `paid`.
 
-`GET /receivable`, `GET /payable` e `GET /cash-flow` são somente leitura e
-não geram auditoria, mesmo comportamento do anterior.
+`GET /receivable`, `GET /payable`, `GET /cash-flow` e `GET
+/cash-flow-projection` são somente leitura e não geram auditoria, mesmo
+comportamento do anterior.
 
 ## Fluxo simplificado (Mermaid)
 
@@ -157,10 +163,11 @@ flowchart TD
 
 ## Testes existentes
 
-Nenhum teste automatizado existe hoje para este módulo (nem para o
-restante do projeto — `server/tests/` ainda não existe). Cobertura de
-testes unitários de `AccountPayableEntity`/use cases e testes de
-integração dos endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
+- `server/tests/unit/onda3-shipping-cockpit-cashflow.test.ts` — `GetCashFlowProjectionUseCase`: agrupamento por semana, `cumulative_net` monotonicamente acumulado, bucket `overdue` separado, default `days = 30` (mock do repositório).
+
+Cobertura adicional de `AccountPayableEntity`/demais use cases e testes de
+integração dos endpoints está prevista na Fase 9 do
+`docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Pendências conhecidas
 

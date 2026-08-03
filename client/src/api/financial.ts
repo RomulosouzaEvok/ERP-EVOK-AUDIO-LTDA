@@ -71,3 +71,36 @@ export async function getCashFlow(params: { start_date: string; end_date: string
   const { data } = await httpClient.get<ItemResponse<CashFlowSummary>>('/api/finance/cash-flow', { params });
   return data.data;
 }
+
+export interface CashFlowProjectionWeek {
+  week_start: string;
+  week_end: string;
+  receivable: number;
+  payable: number;
+  net: number;
+  cumulative_net: number;
+}
+
+export interface CashFlowProjection {
+  horizon_days: number;
+  totals: {
+    receivable: number;
+    payable: number;
+    net: number;
+    overdue_receivable: number;
+    overdue_payable: number;
+  };
+  due_next_7_days: {
+    receivable: number;
+    payable: number;
+  };
+  weeks: CashFlowProjectionWeek[];
+}
+
+/** `GET /api/finance/cash-flow-projection` — projeção semanal a partir dos títulos em aberto. */
+export async function getCashFlowProjection(days: 30 | 60 | 90 = 30) {
+  const { data } = await httpClient.get<ItemResponse<CashFlowProjection>>('/api/finance/cash-flow-projection', {
+    params: { days },
+  });
+  return data.data;
+}

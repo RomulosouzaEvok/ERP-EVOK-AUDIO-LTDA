@@ -9,16 +9,16 @@
  * @module services/emailService
  */
 
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 
-let cachedTransporter: nodemailer.Transporter | null | undefined;
+let cachedTransporter: Transporter | null | undefined;
 
 /**
  * Monta (e cacheia) o transporter SMTP a partir das variaveis de ambiente.
  *
  * @returns Transporter configurado, ou `null` se SMTP nao estiver configurado.
  */
-function getTransporter(): nodemailer.Transporter | null {
+function getTransporter(): Transporter | null {
   if (cachedTransporter !== undefined) {
     return cachedTransporter;
   }

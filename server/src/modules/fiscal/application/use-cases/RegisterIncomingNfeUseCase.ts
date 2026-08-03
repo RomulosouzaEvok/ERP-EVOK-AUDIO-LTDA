@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Registra manualmente a NF-e de entrada (nota do fornecedor) contra um
  * pedido de compra já recebido.
  *

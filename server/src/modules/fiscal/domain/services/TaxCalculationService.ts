@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Motor de cálculo tributário simplificado (ICMS/IPI/PIS/COFINS + CFOP)
  * usado para montar o payload de emissão de NF-e de venda.
  *

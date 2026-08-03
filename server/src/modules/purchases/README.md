@@ -66,6 +66,28 @@ criação idempotente da `AccountPayable` — roda dentro dela, com
 ao objetivo de estabilidade transacional das Fases 4/5, sem alterar o
 contrato HTTP.
 
+## Cockpit de Compras (Onda 3)
+
+`GET /api/purchases/cockpit` retorna, em uma única chamada, quatro
+indicadores agregados usados pelo painel de suprimentos —
+`GetPurchaseCockpitUseCase` delega diretamente a
+`SequelizePurchaseRepository.getCockpitMetrics()`, que roda 4 queries SQL
+raw parametrizadas (sem interpolação de input externo; os únicos
+parâmetros são listas fixas de status e `CURRENT_DATE` do servidor):
+
+- `pending_requisitions`: `COUNT(*)` de `purchase_requisitions` com
+  `status = 'pending'`.
+- `open_orders`: `COUNT(*)` e `SUM(total_amount)` de `purchase_orders` com
+  `status IN ('pending', 'approved', 'sent', 'partial')`.
+- `arriving_this_week`: `COUNT(*)` de pedidos com `status IN ('sent',
+  'approved', 'partial')` e `expected_date` entre hoje e hoje+7 dias.
+- `overdue`: `COUNT(*)` de pedidos com `status NOT IN ('received',
+  'canceled')`, `expected_date < CURRENT_DATE` e `delivery_date IS NULL`.
+
+Rota registrada em `presentation/routes/purchases.ts` **antes** de
+`/api/purchases/:id`, para que o Express não trate `cockpit` como um valor
+de `:id`.
+
 ## Notas sobre dívidas técnicas conhecidas (docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md)
 
 - **F21 — `AccountPayable` gerado no recebimento**: já estava **correto**
@@ -131,6 +153,7 @@ Base URL: `/api/purchases` (autenticação obrigatória via middleware `authenti
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/api/purchases` | Lista pedidos (filtros: `status`, `supplier_id`, `start_date`, `end_date`; paginação: `page`, `limit`) |
+| GET | `/api/purchases/cockpit` | Métricas agregadas do cockpit de compras (requisições pendentes, pedidos em aberto, chegadas da semana, atrasos) — somente leitura; registrada ANTES de `/:id` |
 | GET | `/api/purchases/:id` | Busca pedido por id (com fornecedor e itens + produto) |
 | POST | `/api/purchases` | Cria pedido de compra com itens — transacional |
 | PUT | `/api/purchases/:id` | Atualiza campos permitidos do pedido |
@@ -183,10 +206,11 @@ flowchart TD
 
 ## Testes existentes
 
-Nenhum teste automatizado existe hoje para este módulo (nem para o
-restante do projeto — `server/tests/` ainda não existe). Cobertura de
-testes unitários de `PurchaseEntity`/use cases e testes de integração dos
-endpoints está prevista na Fase 9 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
+- `server/tests/unit/onda3-shipping-cockpit-cashflow.test.ts` — `GetPurchaseCockpitUseCase` delegando ao repositório e retornando o envelope de métricas esperado (mock de `getCockpitMetrics`).
+
+Cobertura adicional de `PurchaseEntity`/demais use cases e testes de
+integração dos endpoints está prevista na Fase 9 do
+`docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`.
 
 ## Pendências conhecidas
 

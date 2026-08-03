@@ -1,9 +1,10 @@
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2, Eye } from 'lucide-react';
+import { Plus, Trash2, Eye, ClipboardList, PackageOpen, CalendarClock, AlertOctagon } from 'lucide-react';
 
 import * as purchasesApi from '@/api/purchases';
 import * as suppliersApi from '@/api/suppliers';
@@ -18,6 +19,7 @@ import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Card, CardContent } from '@/components/ui/card';
 import { DetailField } from '@/components/DetailField';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
@@ -49,16 +51,20 @@ const purchaseSchema = z.object({
 
 type PurchaseFormData = z.infer<typeof purchaseSchema>;
 
+const OPEN_ORDER_STATUSES: purchasesApi.PurchaseStatus[] = ['pending', 'approved', 'sent', 'partial'];
+
 /** `FE3`: pedidos de compra — criar, avançar status, receber itens. */
 export default function PurchasesPage() {
   const { hasRole } = useAuth();
   const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [receivingPurchase, setReceivingPurchase] = React.useState<purchasesApi.Purchase | null>(null);
   const [detailsPurchase, setDetailsPurchase] = React.useState<purchasesApi.Purchase | null>(null);
   const [page, setPage] = React.useState(1);
+  const [openOrdersOnly, setOpenOrdersOnly] = React.useState(false);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['purchases', page],
@@ -66,6 +72,15 @@ export default function PurchasesPage() {
   });
   const { data: suppliers } = useQuery({ queryKey: ['suppliers-all'], queryFn: () => suppliersApi.listSuppliers({ limit: 200 }) });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
+  const { data: cockpit, isLoading: cockpitLoading } = useQuery({
+    queryKey: ['purchases-cockpit'],
+    queryFn: purchasesApi.getPurchaseCockpit,
+  });
+
+  const visiblePurchases = React.useMemo(() => {
+    if (!data?.data) return [];
+    return openOrdersOnly ? data.data.filter((purchase) => OPEN_ORDER_STATUSES.includes(purchase.status)) : data.data;
+  }, [data, openOrdersOnly]);
 
   const {
     register,
@@ -100,6 +115,15 @@ export default function PurchasesPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <PurchaseCockpitTiles
+        cockpit={cockpit}
+        isLoading={cockpitLoading}
+        openOrdersOnly={openOrdersOnly}
+        onToggleOpenOrders={() => setOpenOrdersOnly((prev) => !prev)}
+        onNavigateRequisitions={() => navigate('/purchases/requisitions')}
+        onNavigateOverdue={() => navigate('/logistics/recebimento')}
+      />
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Compras</h1>
         {canWrite && (
@@ -189,7 +213,7 @@ export default function PurchasesPage() {
               </TableCell>
             </TableRow>
           )}
-          {data?.data.map((purchase) => {
+          {visiblePurchases.map((purchase) => {
             const next = NEXT_STATUS[purchase.status];
             return (
               <TableRow
@@ -236,17 +260,17 @@ export default function PurchasesPage() {
               </TableRow>
             );
           })}
-          {!isLoading && !isError && data?.data.length === 0 && (
+          {!isLoading && !isError && visiblePurchases.length === 0 && (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-muted-foreground">
-                Nenhum pedido registrado.
+                {openOrdersOnly ? 'Nenhum pedido em aberto nesta página.' : 'Nenhum pedido registrado.'}
               </TableCell>
             </TableRow>
           )}
         </TableBody>
       </Table>
 
-      <Pagination pagination={data?.pagination} onPageChange={setPage} />
+      {!openOrdersOnly && <Pagination pagination={data?.pagination} onPageChange={setPage} />}
 
       <ReceiveItemsDialog purchase={receivingPurchase} onClose={() => setReceivingPurchase(null)} />
       <PurchaseDetailSheet purchase={detailsPurchase} onClose={() => setDetailsPurchase(null)} />
@@ -404,5 +428,82 @@ function ReceiveItemsDialog({ purchase, onClose }: { purchase: purchasesApi.Purc
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PurchaseCockpitTiles({
+  cockpit,
+  isLoading,
+  openOrdersOnly,
+  onToggleOpenOrders,
+  onNavigateRequisitions,
+  onNavigateOverdue,
+}: {
+  cockpit: purchasesApi.PurchaseCockpit | undefined;
+  isLoading: boolean;
+  openOrdersOnly: boolean;
+  onToggleOpenOrders: () => void;
+  onNavigateRequisitions: () => void;
+  onNavigateOverdue: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <Card
+        className="cursor-pointer transition-colors hover:bg-accent/50"
+        onClick={onNavigateRequisitions}
+        role="button"
+        tabIndex={0}
+      >
+        <CardContent className="flex items-center gap-3 p-4">
+          <ClipboardList className="size-8 text-muted-foreground" />
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Requisições pendentes</p>
+            <p className="text-2xl font-semibold">{isLoading ? '—' : (cockpit?.pending_requisitions ?? 0)}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card
+        className={`cursor-pointer transition-colors hover:bg-accent/50 ${openOrdersOnly ? 'ring-2 ring-primary' : ''}`}
+        onClick={onToggleOpenOrders}
+        role="button"
+        tabIndex={0}
+      >
+        <CardContent className="flex items-center gap-3 p-4">
+          <PackageOpen className="size-8 text-muted-foreground" />
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pedidos em aberto</p>
+            <p className="text-2xl font-semibold">
+              {isLoading ? '—' : `${cockpit?.open_orders.count ?? 0} · R$ ${Number(cockpit?.open_orders.total_amount ?? 0).toFixed(2)}`}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex items-center gap-3 p-4">
+          <CalendarClock className="size-8 text-emerald-600" />
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Chegando em 7 dias</p>
+            <p className="text-2xl font-semibold text-emerald-700">{isLoading ? '—' : (cockpit?.arriving_this_week ?? 0)}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card
+        className="cursor-pointer transition-colors hover:bg-accent/50"
+        onClick={onNavigateOverdue}
+        role="button"
+        tabIndex={0}
+      >
+        <CardContent className="flex items-center gap-3 p-4">
+          <AlertOctagon className="size-8 text-destructive" />
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Atrasados</p>
+            <p className="text-2xl font-semibold text-destructive">{isLoading ? '—' : (cockpit?.overdue ?? 0)}</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

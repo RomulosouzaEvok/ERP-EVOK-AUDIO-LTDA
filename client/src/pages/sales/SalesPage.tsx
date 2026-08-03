@@ -27,6 +27,7 @@ const STATUS_VARIANT: Record<salesApi.SaleStatus, 'default' | 'success' | 'destr
   quote: 'secondary',
   confirmed: 'default',
   invoiced: 'success',
+  shipped: 'success',
   canceled: 'destructive',
 };
 
@@ -34,6 +35,7 @@ const STATUS_LABEL: Record<salesApi.SaleStatus, string> = {
   quote: 'Orçamento',
   confirmed: 'Confirmada',
   invoiced: 'Faturada',
+  shipped: 'Embarcada',
   canceled: 'Cancelada',
 };
 

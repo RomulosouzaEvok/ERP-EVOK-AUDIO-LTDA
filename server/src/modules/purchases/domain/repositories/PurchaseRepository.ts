@@ -203,6 +203,24 @@ class PurchaseRepository {
   async createAccountPayable(data, transaction) { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.createAccountPayable não implementado.');
   }
+
+  /**
+   * Calcula as métricas agregadas do cockpit de compras (SQL raw
+   * parametrizado): requisições pendentes, pedidos em aberto (contagem e
+   * valor total), pedidos chegando nos próximos 7 dias e pedidos em atraso
+   * (data prevista vencida sem recebimento).
+   *
+   * @abstract
+   * @returns {Promise<{
+   *   pending_requisitions: number,
+   *   open_orders: { count: number, total_amount: number },
+   *   arriving_this_week: number,
+   *   overdue: number
+   * }>}
+   */
+  async getCockpitMetrics() {
+    throw new Error('PurchaseRepository.getCockpitMetrics não implementado.');
+  }
 }
 
 module.exports = PurchaseRepository;

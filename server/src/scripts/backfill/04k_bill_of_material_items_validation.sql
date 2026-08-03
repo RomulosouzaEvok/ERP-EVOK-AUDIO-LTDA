@@ -1,4 +1,4 @@
--- Fase 4.9c: Validação de Backfill bill_of_material_items.item_id
+﻿-- Fase 4.9c: Valida��o de Backfill bill_of_material_items.item_id
 
 BEGIN;
 
@@ -15,7 +15,7 @@ SELECT
   END as resultado
 FROM bill_of_material_items;
 
-\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id → items.id) ==='
+\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id ? items.id) ==='
 SELECT
   COUNT(*) as linhas_com_item_id,
   COUNT(CASE WHEN items.id IS NOT NULL THEN 1 END) as items_encontrados,
@@ -29,7 +29,7 @@ FROM bill_of_material_items bomi
 LEFT JOIN items ON bomi.item_id = items.id
 WHERE bomi.item_id IS NOT NULL;
 
-\echo '=== BLOCO 3: DUAL CONSISTENCY (component_product_id ↔ item_id) ==='
+\echo '=== BLOCO 3: DUAL CONSISTENCY (component_product_id ? item_id) ==='
 WITH verificacao AS (
   SELECT
     bomi.id,
@@ -52,7 +52,7 @@ SELECT
   END as resultado
 FROM verificacao;
 
-\echo '=== BLOCO 4: VERIFICAÇÃO DE ÍNDICES ==='
+\echo '=== BLOCO 4: VERIFICA��O DE �NDICES ==='
 SELECT
   'idx_bill_of_material_items_item_id' as indice,
   CASE WHEN indexname = 'idx_bill_of_material_items_item_id' THEN 'EXISTS' ELSE 'MISSING' END as status,
@@ -74,7 +74,7 @@ SELECT
 FROM pg_indexes
 WHERE tablename = 'bill_of_material_items' AND indexname = 'idx_bill_of_material_items_level_item_id';
 
-\echo '=== BLOCO 5: DISTRIBUIÇÃO POR BOM_LEVEL ==='
+\echo '=== BLOCO 5: DISTRIBUI��O POR BOM_LEVEL ==='
 SELECT
   'sample_stats' as categoria,
   COUNT(DISTINCT item_id) as items_unicos,
@@ -86,5 +86,6 @@ SELECT
 FROM bill_of_material_items
 WHERE item_id IS NOT NULL;
 
-\echo '=== FIM DA VALIDAÇÃO ==='
+\echo '=== FIM DA VALIDA��O ==='
 COMMIT;
+

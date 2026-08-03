@@ -1,4 +1,4 @@
--- Fase 2D: Validação Pós-Backfill
+﻿-- Fase 2D: Validação Pós-Backfill
 -- Queries SQL de validação para verificar integridade da migração Product/BOM → Item/ItemEstrutura
 -- Status: read-only (sem alterações de dados)
 

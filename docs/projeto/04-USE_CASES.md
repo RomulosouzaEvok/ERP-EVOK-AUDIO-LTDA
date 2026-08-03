@@ -820,4 +820,110 @@ Controller
 
 **Pós-condição:** Nenhuma (operações somente leitura)
 
+---
+
+## UC-27: Expedir Venda Faturada (Status `shipped`)
+
+**Ator:** Operador, Administrador
+**Pré-condições:** Venda existente com status `invoiced` (NF-e emitida)
+**Endpoint:** `PUT /api/sales/:id/status` (`{ "status": "shipped" }`)
+
+**Fluxo Principal:**
+1. Usuário aciona a expedição de uma venda já faturada
+2. Sistema valida a transição de status através de
+   `ChangeSaleStatusUseCase.VALID_TRANSITIONS` (single source of truth)
+3. Sistema confirma que a venda está em `invoiced` (única origem permitida
+   para `shipped`)
+4. Sistema atualiza `sales.status` para `shipped`, dentro de transação
+5. Sistema registra auditoria (`logAction`) com `oldValues`/`newValues` de
+   status
+
+**Fluxo Alternativo (origem inválida):**
+- Se a venda não estiver em `invoiced` (ex.: `quote`, `confirmed`), sistema
+  retorna 422 (`BusinessRuleError`) informando as transições permitidas a
+  partir do status atual
+
+**Fluxo Alternativo (cancelamento de venda já expedida):**
+- `PUT /api/sales/:id/status` com `{ "status": "canceled" }` em uma venda
+  `shipped` retorna 422 (`BusinessRuleError`) com mensagem dedicada: "Venda
+  já foi expedida (status shipped) e não pode ser cancelada."
+
+**Regras de Negócio:**
+- `shipped` é terminal: nenhuma transição sai dele (nem para `canceled`,
+  nem para qualquer outro status) — mercadoria já saiu para o cliente
+- Única transição de entrada permitida: `invoiced -> shipped`
+- Não debita estoque nem gera/altera `AccountReceivable` (isso já ocorreu
+  em `quote -> confirmed` e na emissão da NF-e)
+
+**Pós-condição:** Venda com `status = 'shipped'`, imutável a partir daí
+
+---
+
+## UC-28: Consultar Cockpit de Compras
+
+**Ator:** Comprador, Administrador, Gerente de Suprimentos
+**Pré-condições:** Usuário autenticado
+**Endpoint:** `GET /api/purchases/cockpit`
+
+**Fluxo Principal:**
+1. Usuário acessa o painel de suprimentos
+2. Sistema calcula, via SQL raw parametrizado:
+   - `pending_requisitions`: quantidade de `purchase_requisitions` com
+     `status = 'pending'`
+   - `open_orders`: quantidade e valor total (`total_amount`) de
+     `purchase_orders` com `status` em
+     `pending`/`approved`/`sent`/`partial`
+   - `arriving_this_week`: quantidade de pedidos com `expected_date` entre
+     hoje e hoje+7 dias e `status` em `sent`/`approved`/`partial`
+   - `overdue`: quantidade de pedidos com `expected_date` vencida (`<`
+     hoje), sem `delivery_date` registrada, e `status` fora de
+     `received`/`canceled`
+3. Sistema retorna `{ success: true, data: { pending_requisitions,
+   open_orders: { count, total_amount }, arriving_this_week, overdue } }`
+
+**Regras de Negócio:**
+- Rota somente leitura, sem paginação
+- Registrada em `/api/purchases/cockpit`, antes de `/api/purchases/:id`
+  para não ser capturada pela rota parametrizada
+
+**Pós-condição:** Nenhuma (operação somente leitura)
+
+---
+
+## UC-29: Consultar Projeção de Fluxo de Caixa
+
+**Ator:** Financeiro, Administrador
+**Pré-condições:** Usuário autenticado com papel `admin` ou `financial`
+**Endpoint:** `GET /api/finance/cash-flow-projection?days=30`
+
+**Fluxo Principal:**
+1. Usuário informa `days` (opcional, 7 a 90, default 30)
+2. Sistema busca os títulos EM ABERTO (`accounts_receivable` e
+   `accounts_payable` com `payment_date IS NULL` e `status != 'canceled'`)
+   com vencimento entre hoje e hoje+`days`, via SQL raw parametrizado
+3. Sistema agrupa os valores por semana (segunda a domingo), calculando
+   `receivable`, `payable`, `net` e `cumulative_net` (saldo acumulado
+   semana a semana) por bucket
+4. Sistema soma, à parte, os títulos vencidos e não pagos
+   (`due_date < hoje`) nos campos `totals.overdue_receivable` /
+   `totals.overdue_payable`
+5. Sistema retorna `{ success: true, data: { horizon_days, totals:
+   { receivable, payable, net, overdue_receivable, overdue_payable },
+   due_next_7_days: { receivable, payable }, weeks: [{ week_start,
+   week_end, receivable, payable, net, cumulative_net }] } }`
+
+**Fluxo Alternativo (parâmetro inválido):**
+- `days` fora do intervalo 7–90 retorna 400 (`ValidationError`, Zod
+  `.strict()`)
+
+**Regras de Negócio:**
+- Apenas `admin`/`financial` podem acessar (`authorize('admin',
+  'financial')`)
+- Vencidos não pagos entram apenas no bucket `overdue` de `totals`, nunca
+  nas semanas do horizonte futuro
+- `cumulative_net` é estritamente acumulativo (soma do `net` de todas as
+  semanas anteriores + a atual)
+
+**Pós-condição:** Nenhuma (operação somente leitura)
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

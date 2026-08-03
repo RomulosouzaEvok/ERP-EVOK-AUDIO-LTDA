@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Provedor de NF-e "mock" — não fala com nenhum SEFAZ nem serviço externo.
  * Simula autorização imediata com uma chave de acesso sinteticamente
  * gerada (44 dígitos, formato válido mas NÃO uma chave real), usada como

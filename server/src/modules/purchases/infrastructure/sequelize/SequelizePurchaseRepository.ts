@@ -1,5 +1,6 @@
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 const PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
+const { sequelize } = require('../../../../config/database');
 const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item } = require('../../../../models/index');
 
 class SequelizePurchaseRepository extends PurchaseRepository {
@@ -144,6 +145,55 @@ class SequelizePurchaseRepository extends PurchaseRepository {
 
   async createAccountPayable(data, transaction) {
     return AccountPayable.create(data, { transaction });
+  }
+
+  /** @inheritdoc */
+  async getCockpitMetrics() {
+    // SQL raw parametrizado (sem interpolacao de strings de usuario — os
+    // unicos parametros dinamicos sao listas fixas de status e a data atual
+    // do servidor de banco via `CURRENT_DATE`, nunca input externo).
+    const [pendingRequisitionsRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count
+       FROM purchase_requisitions
+       WHERE status = :pendingStatus`,
+      { replacements: { pendingStatus: 'pending' }, type: QueryTypes.SELECT }
+    );
+
+    const [openOrdersRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count, COALESCE(SUM(total_amount), 0)::numeric AS total_amount
+       FROM purchase_orders
+       WHERE status IN (:openStatuses)`,
+      { replacements: { openStatuses: ['pending', 'approved', 'sent', 'partial'] }, type: QueryTypes.SELECT }
+    );
+
+    const [arrivingRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count
+       FROM purchase_orders
+       WHERE status IN (:arrivingStatuses)
+         AND expected_date IS NOT NULL
+         AND expected_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '7 days')`,
+      { replacements: { arrivingStatuses: ['sent', 'approved', 'partial'] }, type: QueryTypes.SELECT }
+    );
+
+    const [overdueRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count
+       FROM purchase_orders
+       WHERE status NOT IN (:excludedStatuses)
+         AND expected_date IS NOT NULL
+         AND expected_date < CURRENT_DATE
+         AND delivery_date IS NULL`,
+      { replacements: { excludedStatuses: ['received', 'canceled'] }, type: QueryTypes.SELECT }
+    );
+
+    return {
+      pending_requisitions: pendingRequisitionsRow?.count ?? 0,
+      open_orders: {
+        count: openOrdersRow?.count ?? 0,
+        total_amount: parseFloat(openOrdersRow?.total_amount ?? 0)
+      },
+      arriving_this_week: arrivingRow?.count ?? 0,
+      overdue: overdueRow?.count ?? 0
+    };
   }
 }
 

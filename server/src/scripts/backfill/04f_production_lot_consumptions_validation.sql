@@ -1,4 +1,4 @@
--- Fase 4.5c: Validação de Backfill production_lot_consumptions.item_id
+﻿-- Fase 4.5c: Valida��o de Backfill production_lot_consumptions.item_id
 
 BEGIN;
 
@@ -15,7 +15,7 @@ SELECT
   END as resultado
 FROM production_lot_consumptions;
 
-\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id → items.id) ==='
+\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id ? items.id) ==='
 SELECT
   COUNT(*) as linhas_com_item_id,
   COUNT(CASE WHEN items.id IS NOT NULL THEN 1 END) as items_encontrados,
@@ -29,7 +29,7 @@ FROM production_lot_consumptions plc
 LEFT JOIN items ON plc.item_id = items.id
 WHERE plc.item_id IS NOT NULL;
 
-\echo '=== BLOCO 3: DUAL CONSISTENCY (product_id ↔ item_id) ==='
+\echo '=== BLOCO 3: DUAL CONSISTENCY (product_id ? item_id) ==='
 WITH verificacao AS (
   SELECT
     plc.id,
@@ -52,7 +52,7 @@ SELECT
   END as resultado
 FROM verificacao;
 
-\echo '=== BLOCO 4: VERIFICAÇÃO DE ÍNDICES ==='
+\echo '=== BLOCO 4: VERIFICA��O DE �NDICES ==='
 SELECT
   'idx_production_lot_consumptions_item_id' as indice,
   CASE WHEN indexname = 'idx_production_lot_consumptions_item_id' THEN 'EXISTS' ELSE 'MISSING' END as status,
@@ -74,7 +74,7 @@ SELECT
 FROM pg_indexes
 WHERE tablename = 'production_lot_consumptions' AND indexname = 'idx_production_lot_consumptions_item_id_created_at';
 
-\echo '=== BLOCO 5: DISTRIBUIÇÃO POR PRODUCTION_ORDER ==='
+\echo '=== BLOCO 5: DISTRIBUI��O POR PRODUCTION_ORDER ==='
 SELECT
   'sample_stats' as categoria,
   COUNT(DISTINCT item_id) as items_unicos,
@@ -86,5 +86,6 @@ SELECT
 FROM production_lot_consumptions
 WHERE item_id IS NOT NULL;
 
-\echo '=== FIM DA VALIDAÇÃO ==='
+\echo '=== FIM DA VALIDA��O ==='
 COMMIT;
+

@@ -1,4 +1,4 @@
--- Fase 4.3c: Validação de Backfill sale_items.item_id
+﻿-- Fase 4.3c: Valida��o de Backfill sale_items.item_id
 
 BEGIN;
 
@@ -15,7 +15,7 @@ SELECT
   END as resultado
 FROM sale_items;
 
-\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id → items.id) ==='
+\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id ? items.id) ==='
 SELECT
   COUNT(*) as linhas_com_item_id,
   COUNT(CASE WHEN items.id IS NOT NULL THEN 1 END) as items_encontrados,
@@ -29,7 +29,7 @@ FROM sale_items si
 LEFT JOIN items ON si.item_id = items.id
 WHERE si.item_id IS NOT NULL;
 
-\echo '=== BLOCO 3: DUAL CONSISTENCY (product_id ↔ item_id) ==='
+\echo '=== BLOCO 3: DUAL CONSISTENCY (product_id ? item_id) ==='
 WITH verificacao AS (
   SELECT
     si.id,
@@ -52,7 +52,7 @@ SELECT
   END as resultado
 FROM verificacao;
 
-\echo '=== BLOCO 4: VERIFICAÇÃO DE SOMAS POR ITEM_ID ==='
+\echo '=== BLOCO 4: VERIFICA��O DE SOMAS POR ITEM_ID ==='
 SELECT
   'sample_stats' as categoria,
   COUNT(DISTINCT item_id) as items_unicos,
@@ -64,7 +64,7 @@ SELECT
 FROM sale_items
 WHERE item_id IS NOT NULL;
 
-\echo '=== BLOCO 5: DISTRIBUIÇÃO POR STATUS ==='
+\echo '=== BLOCO 5: DISTRIBUI��O POR STATUS ==='
 SELECT
   status,
   COUNT(*) as total,
@@ -82,5 +82,6 @@ FROM sale_items
 GROUP BY status
 ORDER BY pct_backfilled DESC;
 
-\echo '=== FIM DA VALIDAÇÃO ==='
+\echo '=== FIM DA VALIDA��O ==='
 COMMIT;
+

@@ -1,6 +1,6 @@
--- Fase 4.8c: Validação de Backfill production_routes.item_id
--- Executar após backfill 04h com sucesso
--- Retorna 5 blocos de testes (PASS/FAIL para cada validação)
+﻿-- Fase 4.8c: Valida��o de Backfill production_routes.item_id
+-- Executar ap�s backfill 04h com sucesso
+-- Retorna 5 blocos de testes (PASS/FAIL para cada valida��o)
 
 BEGIN;
 
@@ -21,9 +21,9 @@ SELECT
 FROM production_routes;
 
 -- ============================================================================
--- BLOCO 2: INTEGRIDADE REFERENCIAL (item_id → items.id)
+-- BLOCO 2: INTEGRIDADE REFERENCIAL (item_id ? items.id)
 -- ============================================================================
-\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id → items.id) ==='
+\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id ? items.id) ==='
 SELECT
   COUNT(*) as linhas_com_item_id,
   COUNT(CASE WHEN items.id IS NOT NULL THEN 1 END) as items_encontrados,
@@ -38,9 +38,9 @@ LEFT JOIN items ON pr.item_id = items.id
 WHERE pr.item_id IS NOT NULL;
 
 -- ============================================================================
--- BLOCO 3: DUAL CONSISTENCY (product_id ↔ item_id via crosswalk)
+-- BLOCO 3: DUAL CONSISTENCY (product_id ? item_id via crosswalk)
 -- ============================================================================
-\echo '=== BLOCO 3: DUAL CONSISTENCY (product_id ↔ item_id) ==='
+\echo '=== BLOCO 3: DUAL CONSISTENCY (product_id ? item_id) ==='
 WITH verificacao AS (
   SELECT
     pr.id,
@@ -64,9 +64,9 @@ SELECT
 FROM verificacao;
 
 -- ============================================================================
--- BLOCO 4: VERIFICAÇÃO DE REVISÕES POR ITEM_ID
+-- BLOCO 4: VERIFICA��O DE REVIS�ES POR ITEM_ID
 -- ============================================================================
-\echo '=== BLOCO 4: VERIFICAÇÃO DE REVISÕES POR ITEM_ID ==='
+\echo '=== BLOCO 4: VERIFICA��O DE REVIS�ES POR ITEM_ID ==='
 SELECT
   'revision_stats' as categoria,
   COUNT(DISTINCT item_id) as items_unicos,
@@ -79,9 +79,9 @@ FROM production_routes
 WHERE item_id IS NOT NULL;
 
 -- ============================================================================
--- BLOCO 5: DISTRIBUIÇÃO POR STATUS DE ROTEIRO
+-- BLOCO 5: DISTRIBUI��O POR STATUS DE ROTEIRO
 -- ============================================================================
-\echo '=== BLOCO 5: DISTRIBUIÇÃO POR STATUS DE ROTEIRO ==='
+\echo '=== BLOCO 5: DISTRIBUI��O POR STATUS DE ROTEIRO ==='
 SELECT
   status,
   COUNT(*) as total,
@@ -99,5 +99,6 @@ FROM production_routes
 GROUP BY status
 ORDER BY pct_backfilled DESC;
 
-\echo '=== FIM DA VALIDAÇÃO ==='
+\echo '=== FIM DA VALIDA��O ==='
 COMMIT;
+

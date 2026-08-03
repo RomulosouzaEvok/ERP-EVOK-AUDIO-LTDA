@@ -15,6 +15,7 @@ const ProductsPage = lazy(() => import('@/pages/products/ProductsPage'));
 const InventoryCountsPage = lazy(() => import('@/pages/products/InventoryCountsPage'));
 const InventoryPage = lazy(() => import('@/pages/logistics/InventoryPage'));
 const ReceivingPage = lazy(() => import('@/pages/logistics/ReceivingPage'));
+const ShippingPage = lazy(() => import('@/pages/logistics/ShippingPage'));
 const ClientsPage = lazy(() => import('@/pages/sales/ClientsPage'));
 const SalesPage = lazy(() => import('@/pages/sales/SalesPage'));
 const SuppliersPage = lazy(() => import('@/pages/purchases/SuppliersPage'));
@@ -89,6 +90,14 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <ReceivingPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/logistics/expedicao"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ShippingPage />
               </Suspense>
             }
           />

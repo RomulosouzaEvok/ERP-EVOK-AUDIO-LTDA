@@ -485,7 +485,7 @@ Lista vendas com paginação.
 |-----------|------|-----------|
 | page | int | Nº da página |
 | limit | int | Itens por página |
-| status | string | quote, confirmed, invoiced, canceled |
+| status | string | quote, confirmed, invoiced, shipped, canceled |
 | start_date | date | Início do período |
 | end_date | date | Fim do período |
 | customer_id | int | Filtrar por cliente |
@@ -583,7 +583,10 @@ Registra uma nova venda.
 Detalhes completos de uma venda.
 
 ### PUT /api/sales/:id/status
-Atualiza status da venda.
+Atualiza status da venda (máquina de estados: `quote` → `confirmed` →
+`invoiced` → `shipped`; `canceled` disponível a partir de
+`quote`/`confirmed`/`invoiced`). `shipped` é terminal: não pode ser
+cancelada (422) nem transicionar para nenhum outro status.
 
 **Request:**
 ```json
@@ -591,6 +594,17 @@ Atualiza status da venda.
   "status": "canceled"
 }
 ```
+
+**Request (expedição, Onda 3):**
+```json
+{
+  "status": "shipped"
+}
+```
+Só é aceito a partir de `invoiced`. Qualquer outra origem retorna 422
+(`BusinessRuleError`). Cancelar uma venda já `shipped` também retorna 422,
+com a mensagem "Venda já foi expedida (status shipped) e não pode ser
+cancelada."
 
 ---
 
@@ -666,6 +680,46 @@ Fluxo de caixa agregado por status, no período informado (padrão: mês corrent
   }
 }
 ```
+
+### GET /api/finance/cash-flow-projection
+**(Onda 3)** Projeção semanal de fluxo de caixa dos títulos EM ABERTO
+(`accounts_receivable`/`accounts_payable` com `payment_date IS NULL` e
+`status != 'canceled'`), com saldo acumulado por semana. Exige
+`authorize('admin', 'financial')`.
+
+**Query Params:** `days` (int, 7 a 90, default 30)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "horizon_days": 30,
+    "totals": {
+      "receivable": 25000.00,
+      "payable": 18000.00,
+      "net": 7000.00,
+      "overdue_receivable": 1200.00,
+      "overdue_payable": 300.00
+    },
+    "due_next_7_days": { "receivable": 4000.00, "payable": 2500.00 },
+    "weeks": [
+      {
+        "week_start": "2026-08-03",
+        "week_end": "2026-08-09",
+        "receivable": 4000.00,
+        "payable": 2500.00,
+        "net": 1500.00,
+        "cumulative_net": 1500.00
+      }
+    ]
+  }
+}
+```
+Títulos vencidos e não pagos (`due_date < hoje`) entram apenas em
+`totals.overdue_receivable`/`totals.overdue_payable`, nunca em nenhuma
+semana do horizonte futuro. `cumulative_net` acumula o `net` de todas as
+semanas anteriores.
 
 ---
 
@@ -895,6 +949,25 @@ Lista pedidos de compra. Filtros: `status`, `supplier_id`, `start_date`, `end_da
   "pagination": { "total": 1, "page": 1, "limit": 10, "totalPages": 1 }
 }
 ```
+
+### GET /api/purchases/cockpit
+**(Onda 3)** Métricas agregadas do cockpit de compras, somente leitura,
+sem paginação. Rota registrada ANTES de `/api/purchases/:id`.
+```json
+{
+  "success": true,
+  "data": {
+    "pending_requisitions": 3,
+    "open_orders": { "count": 5, "total_amount": 45230.50 },
+    "arriving_this_week": 2,
+    "overdue": 1
+  }
+}
+```
+- `pending_requisitions`: `purchase_requisitions` com `status = 'pending'`.
+- `open_orders`: `purchase_orders` com `status` em `pending`/`approved`/`sent`/`partial`.
+- `arriving_this_week`: pedidos com `status` em `sent`/`approved`/`partial` e `expected_date` entre hoje e hoje+7 dias.
+- `overdue`: pedidos com `status` fora de `received`/`canceled`, `expected_date` vencida e sem `delivery_date`.
 
 ### GET /api/purchases/:id
 Detalhes do pedido, com fornecedor e itens (+ produto).

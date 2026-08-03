@@ -21,6 +21,7 @@ import {
   PackageCheck,
   FlaskConical,
   DraftingCompass,
+  Send,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -47,6 +48,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Estoque', to: '/logistics/estoque', icon: Warehouse },
       { label: 'Recebimento', to: '/logistics/recebimento', icon: PackageCheck },
+      { label: 'Expedição', to: '/logistics/expedicao', icon: Send },
     ],
   },
   {
@@ -89,6 +91,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/products/inventory-counts': ['Produtos e estoque', 'Contagem de inventário'],
   '/logistics/estoque': ['Logística', 'Estoque'],
   '/logistics/recebimento': ['Logística', 'Recebimento'],
+  '/logistics/expedicao': ['Logística', 'Expedição'],
   '/sales': ['Vendas'],
   '/sales/clients': ['Vendas', 'Clientes'],
   '/purchases': ['Compras'],

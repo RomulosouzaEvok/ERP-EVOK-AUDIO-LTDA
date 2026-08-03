@@ -1,14 +1,14 @@
-/**
- * Interface (contrato) de repositÃ³rio de Vendas.
+﻿/**
+ * Interface (contrato) de repositório de Vendas.
  *
- * Define os mÃ©todos que qualquer implementaÃ§Ã£o de persistÃªncia deve
- * fornecer. A camada de aplicaÃ§Ã£o (use cases) depende apenas desta
- * interface, nunca de uma implementaÃ§Ã£o concreta â€” isso mantÃ©m a regra de
- * negÃ³cio independente do Sequelize/PostgreSQL.
+ * Define os métodos que qualquer implementação de persistência deve
+ * fornecer. A camada de aplicação (use cases) depende apenas desta
+ * interface, nunca de uma implementação concreta — isso mantém a regra de
+ * negócio independente do Sequelize/PostgreSQL.
  */
 class SaleRepository {
   /**
-   * Lista vendas com filtros e paginaÃ§Ã£o.
+   * Lista vendas com filtros e paginação.
    *
    * @abstract
    * @param {Object} [filters] - `{ status, customer_id, start_date, end_date }`.
@@ -16,18 +16,18 @@ class SaleRepository {
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
   async listSales(filters, pagination) { // eslint-disable-line no-unused-vars
-    throw new Error('SaleRepository.listSales nÃ£o implementado.');
+    throw new Error('SaleRepository.listSales não implementado.');
   }
 
   /**
-   * Busca uma venda pelo id, com cliente e itens (+ produto) incluÃ­dos.
+   * Busca uma venda pelo id, com cliente e itens (+ produto) incluídos.
    *
    * @abstract
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
   async findSaleById(id) { // eslint-disable-line no-unused-vars
-    throw new Error('SaleRepository.findSaleById nÃ£o implementado.');
+    throw new Error('SaleRepository.findSaleById não implementado.');
   }
 
   /**
@@ -39,12 +39,12 @@ class SaleRepository {
    * @returns {Promise<Object|null>}
    */
   async findSaleWithItems(id, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('SaleRepository.findSaleWithItems nÃ£o implementado.');
+    throw new Error('SaleRepository.findSaleWithItems não implementado.');
   }
 
   /**
    * Busca uma venda com seus itens e lock pessimista para evitar dupla
-   * restauraÃ§Ã£o de estoque em cancelamentos concorrentes.
+   * restauração de estoque em cancelamentos concorrentes.
    *
    * @abstract
    * @param {number} id
@@ -52,11 +52,11 @@ class SaleRepository {
    * @returns {Promise<Object|null>}
    */
   async findSaleWithItemsForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('SaleRepository.findSaleWithItemsForUpdate nÃ£o implementado.');
+    throw new Error('SaleRepository.findSaleWithItemsForUpdate não implementado.');
   }
 
   /**
-   * Busca um produto pelo id (usado na validaÃ§Ã£o de itens/estoque da venda).
+   * Busca um produto pelo id (usado na validação de itens/estoque da venda).
    *
    * @abstract
    * @param {number} id
@@ -64,7 +64,7 @@ class SaleRepository {
    * @returns {Promise<Object|null>}
    */
   async findProductById(id, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('SaleRepository.findProductById nÃ£o implementado.');
+    throw new Error('SaleRepository.findProductById não implementado.');
   }
 
   /**
@@ -76,7 +76,7 @@ class SaleRepository {
    * @returns {Promise<Object>}
    */
   async createSale(data, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('SaleRepository.createSale nÃ£o implementado.');
+    throw new Error('SaleRepository.createSale não implementado.');
   }
 
   /**
@@ -88,7 +88,7 @@ class SaleRepository {
    * @returns {Promise<Object>}
    */
   async createSaleItem(data, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('SaleRepository.createSaleItem nÃ£o implementado.');
+    throw new Error('SaleRepository.createSaleItem não implementado.');
   }
 
   /**
@@ -100,11 +100,11 @@ class SaleRepository {
    * @returns {Promise<Object>}
    */
   async createAccountReceivable(data, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('SaleRepository.createAccountReceivable nÃ£o implementado.');
+    throw new Error('SaleRepository.createAccountReceivable não implementado.');
   }
 
   /**
-   * Cancela todas as parcelas (`AccountReceivable`) pendentes/nÃ£o pagas de
+   * Cancela todas as parcelas (`AccountReceivable`) pendentes/não pagas de
    * uma venda (usado ao cancelar a venda).
    *
    * @abstract
@@ -113,8 +113,9 @@ class SaleRepository {
    * @returns {Promise<void>}
    */
   async cancelPendingReceivables(saleId, transaction) { // eslint-disable-line no-unused-vars
-    throw new Error('SaleRepository.cancelPendingReceivables nÃ£o implementado.');
+    throw new Error('SaleRepository.cancelPendingReceivables não implementado.');
   }
 }
 
 module.exports = SaleRepository;
+

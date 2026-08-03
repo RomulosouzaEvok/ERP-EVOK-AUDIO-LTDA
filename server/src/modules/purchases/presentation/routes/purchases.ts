@@ -12,6 +12,9 @@ const fiscalController = require('../../../fiscal/presentation/controllers/fisca
  */
 
 router.get('/', authenticate, purchaseController.list);
+// Rota especifica ANTES de '/:id' para nao ser capturada pela rota
+// parametrizada (Express casaria '/cockpit' com ':id' = 'cockpit' senao).
+router.get('/cockpit', authenticate, purchaseController.cockpit);
 router.get('/:id', authenticate, purchaseController.getById);
 router.post('/', authenticate, authorize('admin', 'operator'), purchaseController.create);
 router.put('/:id', authenticate, authorize('admin', 'operator'), purchaseController.update);

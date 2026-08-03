@@ -9,7 +9,14 @@ const { toCents, fromCents } = require('../../../../shared/utils/money');
 const VALID_TRANSITIONS = {
   quote: ['confirmed', 'canceled'],
   confirmed: ['invoiced', 'canceled'],
-  invoiced: ['canceled'],
+  // 'shipped' (expedicao) so pode ser atingido a partir de 'invoiced' (venda
+  // ja faturada/NF-e emitida). Cancelamento a partir de 'invoiced' ainda e
+  // permitido (nota pode ser cancelada antes de embarcar).
+  invoiced: ['shipped', 'canceled'],
+  // 'shipped' e terminal: a mercadoria ja saiu para o cliente, nao pode
+  // retornar a nenhum outro status neste fluxo, nem ser cancelada aqui
+  // (ver bloqueio explicito abaixo com mensagem 422 dedicada).
+  shipped: [],
   canceled: []
 };
 
@@ -65,6 +72,15 @@ class ChangeSaleStatusUseCase extends UseCase {
 
     if (sale.status === status) {
       throw new ValidationError(`Venda ja esta com status ${status}`);
+    }
+
+    if (sale.status === 'shipped' && status === 'canceled') {
+      // Mensagem 422 dedicada (mais clara que o erro generico de transicao
+      // invalida abaixo): a mercadoria ja foi expedida ao cliente, entao a
+      // venda nao pode mais ser cancelada por este endpoint.
+      throw new BusinessRuleError(
+        'Venda ja foi expedida (status shipped) e nao pode ser cancelada.'
+      );
     }
 
     const allowed = VALID_TRANSITIONS[sale.status] || [];

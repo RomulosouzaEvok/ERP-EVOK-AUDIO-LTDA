@@ -131,6 +131,11 @@ tela funciona.
 - [x] Nova página `/logistics/recebimento` (`src/pages/logistics/ReceivingPage.tsx`): fila de pedidos `sent`/`partial` (`GET /api/purchases`, duas buscas client-side combinadas — backend não suporta status múltiplo), destaque de data prevista vencida, dialog de conferência (`ReceivingConferenceDialog.tsx`) com itens pedida/recebida/a receber + lote/validade opcionais + NF obrigatória, submit em `POST /api/purchases/:id/receive`, aviso pós-recebimento de quarentena com link para `/quality`.
 - [x] Navegação: grupo "Logística" na sidebar (`AppLayout.tsx`) com ícones `Warehouse`/`PackageCheck`, rotas lazy em `App.tsx`, breadcrumbs dedicados.
 
+### Onda 3 — Expedição
+
+- [x] Nova página `/logistics/expedicao` (`src/pages/logistics/ShippingPage.tsx`): fila de vendas `confirmed`/`invoiced` (`GET /api/sales?status=`, duas buscas client-side combinadas — mesma limitação de status único do backend usada em Recebimento), dialog "Ver itens" (picking list via `GET /api/sales/:id`), ação "Marcar como embarcada" (`PUT /api/sales/:id/status` com `{ status: 'shipped' }`, novo valor de enum) restrita a vendas `invoiced` com NF-e `authorized`, aviso "Emita a NF-e na tela de Vendas antes de embarcar" com link para `/sales` quando faltar NF-e autorizada, filtro para ver embarcadas (badge verde "Embarcada").
+- [x] Navegação: item "Expedição" no grupo Logística (ícone `Send`), rota lazy em `App.tsx`, breadcrumb `['Logística', 'Expedição']`.
+
 ## 7. FE2 - Vendas (PDV/pedidos)
 
 ### Checklist
@@ -156,6 +161,7 @@ tela funciona.
 - [ ] Tela de recebimento de itens (parcial ou total), atualizando estoque e gerando lote (`LotControl`) quando aplicável.
 - [ ] Listagem de pedidos com filtro por status/fornecedor/período.
 - [x] Conversão de requisição aprovada em pedido(s) de compra (`POST /api/purchase-requisitions/:id/convert`), com dialog de confirmação, fornecedor fallback opcional, agrupamento por fornecedor no resultado e tratamento de erro 422 (itens sem fornecedor resolvível) sem fechar o dialog.
+- [x] Cockpit de compras no topo de `/purchases` (`GET /api/purchases/cockpit`): 4 tiles clicáveis — "Requisições pendentes" (→ `/purchases/requisitions`), "Pedidos em aberto" (N · R$ total; aplica filtro local na tabela pelos status `pending/approved/sent/partial`), "Chegando em 7 dias" (verde), "Atrasados" (vermelho; → `/logistics/recebimento`). Função `getPurchaseCockpit` em `src/api/purchases.ts`.
 
 ### Critério de aceite
 
@@ -193,6 +199,7 @@ tela funciona.
 - [ ] Criar conta a pagar manual.
 - [ ] Registrar pagamento/recebimento (total ou parcial).
 - [ ] Tela de fluxo de caixa agregado (`GET /api/finance/cash-flow`) — **nota:** hoje a API só agrega totais por status no período, não gera série diária; a tela deve refletir isso (não prometer um gráfico diário que a API não sustenta ainda).
+- [x] Seção "Fluxo de caixa (projeção)" em `/financial` (`GET /api/finance/cash-flow-projection?days=`, restrita a `admin`/`financial` via `RoleRoute` já existente): seletor de horizonte 30/60/90 dias, tiles (Entradas previstas, Saídas previstas, Saldo projetado com cor conforme sinal, Vencendo em 7d, Em atraso) e tabela semanal (semana dd/mm–dd/mm, a receber, a pagar, saldo da semana, acumulado em negrito/vermelho se negativo). Função `getCashFlowProjection` em `src/api/financial.ts`.
 
 ### Critério de aceite
 

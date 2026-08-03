@@ -4,7 +4,8 @@
 
 Gerenciar o ciclo de vida de Vendas ao cliente final: criação (com itens,
 baixa de estoque e geração de parcelas em contas a receber) e transições de
-status (`quote` → `confirmed` → `invoiced`/`canceled`). Migrado para a
+status (`quote` → `confirmed` → `invoiced` → `shipped`, com `canceled`
+disponível a partir de `quote`/`confirmed`/`invoiced`). Migrado para a
 arquitetura em camadas (`domain` / `application` / `infrastructure` /
 `presentation`) descrita na Fase 5 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão
 dos módulos `products`, `inventory`, `bom`, `production` e `purchases`.
@@ -145,9 +146,11 @@ server/src/modules/sales/
 - Máquina de estados (`ChangeSaleStatusUseCase.VALID_TRANSITIONS`, single source of truth):
   - `quote` → `confirmed` | `canceled`
   - `confirmed` → `invoiced` | `canceled`
-  - `invoiced` → `canceled`
+  - `invoiced` → `shipped` | `canceled`
+  - `shipped` → (terminal, sem transições — inclusive não pode ser cancelada; ver bloqueio dedicado abaixo)
   - `canceled` → (terminal, sem transições)
 - Cancelamento (`status: 'canceled'`): restaura o estoque de cada item da venda via `InventoryService.receive` (mesma transação) e cancela (`status: 'canceled'`) todas as `AccountReceivable` da venda que ainda não estejam `paid`/`canceled`.
+- Expedição (`status: 'shipped'`, Onda 3): única origem permitida é `invoiced`. Não debita estoque nem altera `AccountReceivable` (isso já ocorreu antes). Uma venda `shipped` **não pode mais ser cancelada** — `ChangeSaleStatusUseCase` lança 422 (`BusinessRuleError`) com mensagem dedicada ("Venda já foi expedida...") antes mesmo de consultar a tabela genérica de transições, para dar uma mensagem mais clara que o erro genérico de transição inválida.
 
 ## Endpoints
 
@@ -158,7 +161,7 @@ Base URL: `/api/sales` (autenticação obrigatória via middleware `authenticate
 | GET | `/api/sales` | Lista vendas (filtros: `status`, `customer_id`, `start_date`, `end_date`; paginação: `page`, `limit`) |
 | GET | `/api/sales/:id` | Busca venda por id (com cliente e itens + produto) |
 | POST | `/api/sales` | Cria venda com itens — transacional; com `status: 'confirmed'` (default) debita estoque e gera parcelas na hora; com `status: 'quote'` não debita estoque nem gera parcelas (F22) |
-| PUT | `/api/sales/:id/status` | Altera status (máquina de estados) — transacional; ao confirmar um orçamento (`quote → confirmed`) debita estoque e gera parcelas; ao cancelar, restaura estoque e cancela parcelas pendentes |
+| PUT | `/api/sales/:id/status` | Altera status (máquina de estados) — transacional; ao confirmar um orçamento (`quote → confirmed`) debita estoque e gera parcelas; ao cancelar, restaura estoque e cancela parcelas pendentes; `invoiced → shipped` marca a expedição (sem efeito colateral em estoque/parcelas); cancelamento de venda `shipped` é bloqueado (422) |
 
 Ver `docs/API.md` para exemplos completos de request/response.
 
@@ -213,6 +216,7 @@ flowchart TD
 - `server/tests/integration/sale-cancel-concurrency.test.ts` — concorrência de cancelamento (Postgres real).
 - `server/tests/integration/sale-invalid-payload-no-crash.test.ts` — payload inválido não derruba a API.
 - `server/tests/integration/sale-quote-confirm.test.ts` — cria venda `quote` (estoque não muda), confirma via `PUT /status` e valida que o débito só acontece na confirmação (Postgres real, F22).
+- `server/tests/unit/onda3-shipping-cockpit-cashflow.test.ts` — `invoiced → shipped` permitido; `confirmed → shipped` rejeitado (422); cancelamento de venda `shipped` bloqueado (422, mensagem dedicada); `shipped` confirmado como terminal.
 
 ## Pendências conhecidas
 

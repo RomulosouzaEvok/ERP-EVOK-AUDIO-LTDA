@@ -21,6 +21,7 @@ router.put('/payable/:id/pay', authenticate, authorize('admin', 'financial'), fi
 
 // Fluxo de Caixa
 router.get('/cash-flow', authenticate, financialController.cashFlow);
+router.get('/cash-flow-projection', authenticate, authorize('admin', 'financial'), financialController.cashFlowProjection);
 
 module.exports = router;
 

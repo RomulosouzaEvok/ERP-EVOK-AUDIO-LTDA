@@ -1,6 +1,6 @@
--- Fase 4.1c: Validação de Backfill inventory_movements.item_id
--- Executar após backfill 04a com sucesso
--- Retorna 5 blocos de testes (PASS/FAIL para cada validação)
+﻿-- Fase 4.1c: Valida��o de Backfill inventory_movements.item_id
+-- Executar ap�s backfill 04a com sucesso
+-- Retorna 5 blocos de testes (PASS/FAIL para cada valida��o)
 
 BEGIN;
 
@@ -21,9 +21,9 @@ SELECT
 FROM inventory_movements;
 
 -- ============================================================================
--- BLOCO 2: INTEGRIDADE REFERENCIAL (item_id → items.id)
+-- BLOCO 2: INTEGRIDADE REFERENCIAL (item_id ? items.id)
 -- ============================================================================
-\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id → items.id) ==='
+\echo '=== BLOCO 2: INTEGRIDADE REFERENCIAL (item_id ? items.id) ==='
 SELECT
   COUNT(*) as linhas_com_item_id,
   COUNT(CASE WHEN items.id IS NOT NULL THEN 1 END) as items_encontrados,
@@ -38,9 +38,9 @@ LEFT JOIN items ON im.item_id = items.id
 WHERE im.item_id IS NOT NULL;
 
 -- ============================================================================
--- BLOCO 3: DUAL CONSISTENCY (product_id ↔ item_id via crosswalk)
+-- BLOCO 3: DUAL CONSISTENCY (product_id ? item_id via crosswalk)
 -- ============================================================================
-\echo '=== BLOCO 3: DUAL CONSISTENCY (product_id ↔ item_id) ==='
+\echo '=== BLOCO 3: DUAL CONSISTENCY (product_id ? item_id) ==='
 WITH verificacao AS (
   SELECT
     im.id,
@@ -64,9 +64,9 @@ SELECT
 FROM verificacao;
 
 -- ============================================================================
--- BLOCO 4: VERIFICAÇÃO DE SOMAS POR ITEM_ID
+-- BLOCO 4: VERIFICA��O DE SOMAS POR ITEM_ID
 -- ============================================================================
-\echo '=== BLOCO 4: VERIFICAÇÃO DE SOMAS POR ITEM_ID ==='
+\echo '=== BLOCO 4: VERIFICA��O DE SOMAS POR ITEM_ID ==='
 SELECT
   'sample_stats' as categoria,
   COUNT(DISTINCT item_id) as items_unicos,
@@ -79,9 +79,9 @@ FROM inventory_movements
 WHERE item_id IS NOT NULL;
 
 -- ============================================================================
--- BLOCO 5: DISTRIBUIÇÃO POR TIPO DE MOVIMENTO
+-- BLOCO 5: DISTRIBUI��O POR TIPO DE MOVIMENTO
 -- ============================================================================
-\echo '=== BLOCO 5: DISTRIBUIÇÃO POR TIPO DE MOVIMENTO ==='
+\echo '=== BLOCO 5: DISTRIBUI��O POR TIPO DE MOVIMENTO ==='
 SELECT
   type,
   COUNT(*) as total,
@@ -99,5 +99,6 @@ FROM inventory_movements
 GROUP BY type
 ORDER BY pct_backfilled DESC;
 
-\echo '=== FIM DA VALIDAÇÃO ==='
+\echo '=== FIM DA VALIDA��O ==='
 COMMIT;
+
