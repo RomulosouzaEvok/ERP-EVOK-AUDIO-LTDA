@@ -113,6 +113,7 @@ describe('Production Order Lifecycle (F.10)', () => {
   describe('ChangeProductionOrderStatusUseCase', () => {
     it('bloqueia liberacao quando checkAvailability retorna indisponibilidade', async () => {
       const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'planned',
@@ -143,6 +144,7 @@ describe('Production Order Lifecycle (F.10)', () => {
 
     it('reserva materiais ao liberar com disponibilidade confirmada', async () => {
       const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'planned',
@@ -172,6 +174,7 @@ describe('Production Order Lifecycle (F.10)', () => {
 
     it('libera reservas ao cancelar OP em status released/in_progress/paused', async () => {
       const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'released',
@@ -198,6 +201,7 @@ describe('Production Order Lifecycle (F.10)', () => {
 
     it('exige lot_consumptions explicitos ao concluir OP com componentes', async () => {
       const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -231,6 +235,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       jest.clearAllMocks(); // Clear mocks from previous tests
 
       const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -279,6 +284,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       jest.clearAllMocks();
 
       const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -338,6 +344,7 @@ describe('Production Order Lifecycle (F.10)', () => {
 
     it('bloqueia conclusao quando quantity_produced + quantity_scrapped excede o planejado sem allow_overproduction', async () => {
       const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -366,10 +373,67 @@ describe('Production Order Lifecycle (F.10)', () => {
       expect(productionOrderRepository.update).not.toHaveBeenCalled();
     });
 
+    it('bloqueia conclusao quando ha etapa de apontamento em aberto (reconciliacao 1.3)', async () => {
+      const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => [
+          { id: 1, sequence: 1, status: 'completed', quantity_good: 10 },
+          { id: 2, sequence: 2, status: 'in_progress', quantity_good: 0 },
+        ]),
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'in_progress',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(),
+      };
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
+      ).rejects.toBeInstanceOf(BusinessRuleError);
+
+      expect(productionOrderRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('bloqueia conclusao quando quantity_produced excede o apontado na ultima etapa (reconciliacao 1.3)', async () => {
+      const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => [
+          { id: 1, sequence: 1, status: 'completed', quantity_good: 10 },
+          { id: 2, sequence: 2, status: 'completed', quantity_good: 8 },
+        ]),
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'in_progress',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(),
+      };
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      await expect(
+        useCase.execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
+      ).rejects.toBeInstanceOf(BusinessRuleError);
+
+      expect(productionOrderRepository.update).not.toHaveBeenCalled();
+    });
+
     it('rejeita consumo manual de lote vencido (achado de auditoria: FEFO/expires_at)', async () => {
       jest.clearAllMocks();
 
       const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -418,6 +482,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       jest.clearAllMocks();
 
       const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',

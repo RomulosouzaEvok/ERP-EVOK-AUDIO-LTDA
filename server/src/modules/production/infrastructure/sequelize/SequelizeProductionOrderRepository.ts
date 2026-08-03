@@ -135,6 +135,16 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
     });
   }
 
+  /** @param productionOrderId - ID da OP. @param transaction - Transacao ativa. @returns Etapas travadas (sem includes) para reconciliacao. */
+  public async listTrackingByOrderForUpdate(productionOrderId: number, transaction: any): Promise<any[]> {
+    return ProductionOrderTracking.findAll({
+      where: { production_order_id: productionOrderId },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+      order: [['sequence', 'ASC']]
+    });
+  }
+
   /** @param data - Dados da etapa. @param transaction - Transacao opcional. @returns Apontamento criado. */
   public async createTracking(data: Record<string, unknown>, transaction?: any): Promise<any> {
     return ProductionOrderTracking.create(data, { transaction });

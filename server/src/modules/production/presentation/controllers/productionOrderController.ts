@@ -202,7 +202,17 @@ export async function createTracking(req: Request, res: Response, next: NextFunc
 export async function startTracking(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const useCase = new StartProductionTrackingUseCase(productionOrderRepository);
-    const tracking = await useCase.execute({ tracking_id: Number(req.params.trackingId), operator_id: req.body.operator_id });
+    // operator_id e o funcionario (employees.id) que executa a etapa; a FK
+    // fk_production_order_tracking_operator_id garante existencia e o autor
+    // real da acao fica no audit log via req.user. Aqui apenas normaliza.
+    const operatorId = req.body.operator_id !== undefined && req.body.operator_id !== null
+      ? Number(req.body.operator_id)
+      : undefined;
+    if (operatorId !== undefined && (!Number.isInteger(operatorId) || operatorId <= 0)) {
+      res.status(400).json({ success: false, error: 'operator_id deve ser um inteiro positivo (employees.id)' });
+      return;
+    }
+    const tracking = await useCase.execute({ tracking_id: Number(req.params.trackingId), operator_id: operatorId });
     logAction(req, {
       action: 'status_change',
       entityType: 'ProductionOrderTracking',

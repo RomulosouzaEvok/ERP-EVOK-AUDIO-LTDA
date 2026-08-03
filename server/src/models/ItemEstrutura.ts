@@ -21,9 +21,9 @@ export interface ItemEstruturaAttributes {
   ativo: boolean;
   revisao: string;
   observacoes: string | null;
-  criado_por: string | null;
+  criado_por: number | null;
   status: ItemEstruturaStatus;
-  approved_by: string | null;
+  approved_by: number | null;
   approval_date: Date | null;
   unit_cost: string;
   total_cost: string;
@@ -107,8 +107,9 @@ const ItemEstrutura: ModelDefined<ItemEstruturaAttributes, ItemEstruturaCreation
     allowNull: true,
   },
   criado_por: {
-    type: DataTypes.UUID,
+    type: DataTypes.INTEGER,
     allowNull: true,
+    references: { model: 'users', key: 'id' },
   },
   status: {
     type: DataTypes.ENUM('draft', 'active', 'inactive', 'superseded'),
@@ -117,8 +118,9 @@ const ItemEstrutura: ModelDefined<ItemEstruturaAttributes, ItemEstruturaCreation
     comment: 'Workflow status de versão de BOM (draft→active→inactive/superseded)',
   },
   approved_by: {
-    type: DataTypes.UUID,
+    type: DataTypes.INTEGER,
     allowNull: true,
+    references: { model: 'users', key: 'id' },
     comment: 'FK para usuario que aprovou esta estrutura',
   },
   approval_date: {

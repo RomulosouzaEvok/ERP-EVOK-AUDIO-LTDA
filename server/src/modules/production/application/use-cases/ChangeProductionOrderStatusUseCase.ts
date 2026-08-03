@@ -73,6 +73,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       }
 
       if (input.status === 'completed') {
+        await this.reconcileTrackingOnCompletion(order, updateData.quantity_produced || 0, t);
         await this.completeOrder(order, previousStatus, updateData.quantity_produced || 0, input, t);
       }
 
@@ -88,6 +89,49 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
     } catch (error) {
       await t.rollback();
       throw error;
+    }
+  }
+
+  /**
+   * Reconcilia apontamentos de etapa com a conclusao da OP.
+   *
+   * Regras (aplicadas apenas quando a OP possui apontamentos):
+   * - Nenhuma etapa pode estar aberta (pending/in_progress/paused);
+   * - quantity_produced nao pode exceder o quantity_good da ultima etapa
+   *   concluida, pois a saida boa do processo e limitada pela etapa final.
+   *
+   * @param order - OP travada.
+   * @param producedQty - Quantidade produzida declarada na conclusao.
+   * @param transaction - Transacao ativa.
+   * @returns void
+   * @throws {BusinessRuleError} Se houver etapa aberta ou quantidade divergente.
+   */
+  private async reconcileTrackingOnCompletion(order: any, producedQty: number, transaction: any): Promise<void> {
+    const trackings = await this.productionOrderRepository.listTrackingByOrderForUpdate(order.id, transaction);
+    if (!trackings || trackings.length === 0) {
+      return; // OP sem apontamento por etapa: fluxo simples permanece valido.
+    }
+
+    const openSteps = trackings.filter((step: any) => !['completed', 'skipped'].includes(step.status));
+    if (openSteps.length > 0) {
+      throw new BusinessRuleError(
+        `OP ${order.order_number} nao pode ser concluida com ${openSteps.length} etapa(s) de apontamento em aberto.`,
+        { open_steps: openSteps.map((step: any) => ({ id: step.id, sequence: step.sequence, status: step.status })) }
+      );
+    }
+
+    const completedSteps = trackings.filter((step: any) => step.status === 'completed');
+    if (completedSteps.length === 0) {
+      return; // Todas puladas: sem quantidade apontada para reconciliar.
+    }
+
+    const lastStep = completedSteps[completedSteps.length - 1];
+    const lastGood = parseFloat(String(lastStep.quantity_good || 0));
+    if (producedQty > lastGood + 0.0001) {
+      throw new BusinessRuleError(
+        `quantity_produced (${producedQty}) excede a quantidade boa apontada na ultima etapa (${lastGood}) da OP ${order.order_number}.`,
+        { last_step_sequence: lastStep.sequence, last_step_quantity_good: lastGood, quantity_produced: producedQty }
+      );
     }
   }
 

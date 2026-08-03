@@ -14,5 +14,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: true,
+    // Workers paralelos do Vitest 4 quebram no Windows deste ambiente
+    // ("Vitest failed to find the current suite"); execucao serial e estavel
+    // e a suite e pequena o suficiente para nao haver impacto relevante.
+    fileParallelism: false,
   },
 })

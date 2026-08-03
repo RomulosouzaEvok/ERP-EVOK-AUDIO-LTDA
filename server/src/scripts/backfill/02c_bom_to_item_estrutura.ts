@@ -181,13 +181,8 @@ async function processBom(
         bomItem.scrap_percentage.toString()
       );
 
-      // Buscar approved_by se houver (mapeando de INT → UUID via user)
-      let approvedById: string | null = null;
-      if (bom.approved_by !== null) {
-        // TODO: Implementar user mapping (INT → UUID) se tabela existir
-        // Por enquanto, deixar NULL
-        approvedById = null;
-      }
+      // approved_by agora e INTEGER com FK para users(id): copia direta.
+      const approvedById: number | null = bom.approved_by ?? null;
 
       // Criar ItemEstrutura
       await ItemEstrutura.create(
