@@ -53,6 +53,8 @@ import ItemDetalheComercial = require('./ItemDetalheComercial');
 import ItemEspecificacaoTecnica = require('./ItemEspecificacaoTecnica');
 import MrpOrdemPlanejada = require('./MrpOrdemPlanejada');
 import ItemSupplier = require('./ItemSupplier');
+import WorkCenter = require('./WorkCenter');
+import WorkCenterShift = require('./WorkCenterShift');
 
 // ============================================
 // RELACIONAMENTOS
@@ -215,6 +217,13 @@ ProductionRoute.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
 
 ProductionRoute.hasMany(ProductionRouteStep, { foreignKey: 'production_route_id', as: 'steps' });
 ProductionRouteStep.belongsTo(ProductionRoute, { foreignKey: 'production_route_id', as: 'route' });
+
+// WorkCenter (fundacao de capacidade finita) — expand-contract sobre production_route_steps.work_center
+WorkCenter.hasMany(WorkCenterShift, { foreignKey: 'work_center_id', as: 'shifts', onDelete: 'CASCADE' });
+WorkCenterShift.belongsTo(WorkCenter, { foreignKey: 'work_center_id', as: 'workCenter', onDelete: 'CASCADE' });
+
+WorkCenter.hasMany(ProductionRouteStep, { foreignKey: 'work_center_id', as: 'route_steps' });
+ProductionRouteStep.belongsTo(WorkCenter, { foreignKey: 'work_center_id', as: 'workCenter' });
 
 ProductionOrder.hasMany(ProductionOrderTracking, { foreignKey: 'production_order_id', as: 'tracking' });
 ProductionOrderTracking.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
@@ -446,5 +455,6 @@ export {
   NonConformity, MaintenanceOrder, AuditLog, WebhookEvent, CompanyFiscalConfig, PurchaseReceipt,
   BillOfMaterial, BillOfMaterialItem,
   Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada,
-  ItemSupplier
+  ItemSupplier,
+  WorkCenter, WorkCenterShift
 };

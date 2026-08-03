@@ -90,6 +90,7 @@ app.use('/api/clients', require('./src/modules/clients/presentation/routes/clien
 app.use('/api/suppliers', require('./src/modules/suppliers/presentation/routes/suppliers'));
 app.use('/api/sales', require('./src/modules/sales/presentation/routes/sales'));
 app.use('/api/purchases', require('./src/modules/purchases/presentation/routes/purchases'));
+app.use('/api/purchase-requisitions', require('./src/modules/purchaseRequisitions/presentation/routes/purchaseRequisitions'));
 app.use('/api/finance', require('./src/modules/financial/presentation/routes/finance'));
 app.use('/api/fiscal', require('./src/modules/fiscal/presentation/routes/fiscal'));
 
@@ -99,6 +100,7 @@ app.use('/api/reports', require('./src/modules/reports/presentation/routes/repor
 app.use('/api/employees', require('./src/modules/employees/presentation/routes/employees'));
 app.use('/api/departments', require('./src/modules/departments/presentation/routes/departments'));
 app.use('/api/production-orders', require('./src/modules/production/presentation/routes/productionOrders'));
+app.use('/api/work-centers', require('./src/modules/workCenters/presentation/routes/workCenters'));
 app.use('/api/inventory', require('./src/modules/inventory/presentation/routes/inventory'));
 app.use('/api/inventory-counts', require('./src/modules/inventory/presentation/routes/inventoryCounts'));
 

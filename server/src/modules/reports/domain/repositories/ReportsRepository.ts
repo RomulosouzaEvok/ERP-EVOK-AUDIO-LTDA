@@ -68,6 +68,26 @@ class ReportsRepository {
   async findPurchasingTotals(start, end) { // eslint-disable-line no-unused-vars
     throw new Error('ReportsRepository.findPurchasingTotals não implementado.');
   }
+
+  /**
+   * Custo real por produto no período (lançamentos de `product_cost_ledgers`),
+   * com custo padrão via `items.custo_padrao` (fallback `products.cost_price`).
+   *
+   * @returns {Promise<Object[]>} `[{ product_id, code, name, standard_cost, avg_real_cost, entries_count, total_quantity }]`.
+   */
+  async findCostVarianceByProduct(start, end) { // eslint-disable-line no-unused-vars
+    throw new Error('ReportsRepository.findCostVarianceByProduct não implementado.');
+  }
+
+  /**
+   * Variação entre preço de catálogo (`item_suppliers.unit_price`) e preço
+   * médio pago em pedidos de compra não cancelados do período.
+   *
+   * @returns {Promise<Object[]>} `[{ product_id, code, name, supplier_id, company_name, catalog_price, avg_paid_price, total_quantity }]`.
+   */
+  async findPurchasePriceVarianceByProductSupplier(start, end) { // eslint-disable-line no-unused-vars
+    throw new Error('ReportsRepository.findPurchasePriceVarianceByProductSupplier não implementado.');
+  }
 }
 
 module.exports = ReportsRepository;

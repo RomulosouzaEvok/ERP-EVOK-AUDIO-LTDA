@@ -5,6 +5,7 @@ const GetCustomersReportUseCase = require('../../application/use-cases/GetCustom
 const GetCashFlowReportUseCase = require('../../application/use-cases/GetCashFlowReportUseCase');
 const GetProductionReportUseCase = require('../../application/use-cases/GetProductionReportUseCase');
 const GetPurchasingReportUseCase = require('../../application/use-cases/GetPurchasingReportUseCase');
+const GetCostVarianceReportUseCase = require('../../application/use-cases/GetCostVarianceReportUseCase');
 const { toCsv } = require('../../infrastructure/export/csvExporter');
 const { toPdf } = require('../../infrastructure/export/pdfExporter');
 
@@ -149,6 +150,16 @@ exports.purchasing = async (req, res, next) => {
   try {
     const { start_date, end_date } = req.query;
     const useCase = new GetPurchasingReportUseCase(reportsRepository);
+    const report = await useCase.execute({ start_date, end_date });
+    res.json({ success: true, data: report });
+  } catch (error) { next(error); }
+};
+
+/** `GET /api/reports/cost-variance?start_date&end_date` — variação de custo padrão x real (json). */
+exports.costVariance = async (req, res, next) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const useCase = new GetCostVarianceReportUseCase(reportsRepository);
     const report = await useCase.execute({ start_date, end_date });
     res.json({ success: true, data: report });
   } catch (error) { next(error); }

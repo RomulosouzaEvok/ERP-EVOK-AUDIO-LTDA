@@ -22,6 +22,7 @@ const BomPage = lazy(() => import('@/pages/production/BomPage'));
 const ProductionOrdersPage = lazy(() => import('@/pages/production/ProductionOrdersPage'));
 const MrpPage = lazy(() => import('@/pages/production/MrpPage'));
 const ShopFloorPage = lazy(() => import('@/pages/production/ShopFloorPage'));
+const WorkCentersPage = lazy(() => import('@/pages/production/WorkCentersPage'));
 const QualityPage = lazy(() => import('@/pages/quality/QualityPage'));
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'));
 const AssetsPage = lazy(() => import('@/pages/patrimonio/AssetsPage'));
@@ -142,6 +143,14 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <ShopFloorPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/production/work-centers"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <WorkCentersPage />
               </Suspense>
             }
           />

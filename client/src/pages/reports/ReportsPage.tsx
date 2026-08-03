@@ -72,7 +72,7 @@ function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
 
 /** Relatórios de manufatura e compras (item 9 do levantamento). */
 export default function ReportsPage() {
-  const [tab, setTab] = React.useState<'production' | 'purchasing'>('production');
+  const [tab, setTab] = React.useState<'production' | 'purchasing' | 'costs'>('production');
   const [startInput, setStartInput] = React.useState(isoDaysAgo(30));
   const [endInput, setEndInput] = React.useState(isoDaysAgo(0));
   const [period, setPeriod] = React.useState({ start_date: isoDaysAgo(30), end_date: isoDaysAgo(0) });
@@ -89,8 +89,15 @@ export default function ReportsPage() {
     enabled: tab === 'purchasing',
   });
 
+  const costVarianceQuery = useQuery({
+    queryKey: ['reports-cost-variance', period],
+    queryFn: () => reportsApi.getCostVarianceReport(period),
+    enabled: tab === 'costs',
+  });
+
   const production = productionQuery.data;
   const purchasing = purchasingQuery.data;
+  const costVariance = costVarianceQuery.data;
 
   return (
     <div className="flex flex-col gap-4">
@@ -101,6 +108,9 @@ export default function ReportsPage() {
           </Button>
           <Button variant={tab === 'purchasing' ? 'default' : 'outline'} onClick={() => setTab('purchasing')}>
             Compras
+          </Button>
+          <Button variant={tab === 'costs' ? 'default' : 'outline'} onClick={() => setTab('costs')}>
+            Custos
           </Button>
         </div>
         <form
@@ -265,6 +275,103 @@ export default function ReportsPage() {
                               : <span className="text-muted-foreground">0</span>}
                           </TableCell>
                           <TableCell>{row.last_order_date ? new Date(`${row.last_order_date}T00:00:00`).toLocaleDateString('pt-BR') : '—'}</TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'costs' && (
+        <div className="flex flex-col gap-4">
+          {costVarianceQuery.isError && (
+            <SectionError message={extractApiErrorMessage(costVarianceQuery.error, 'Falha ao carregar o relatório de custos.')} />
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <StatTile
+              label="Produtos com variância > 5%"
+              value={String(toNumber(costVariance?.totals.products_with_variance))}
+              tone={toNumber(costVariance?.totals.products_with_variance) > 0 ? 'bad' : 'good'}
+            />
+            <StatTile label="Variância média ponderada" value={formatRate(costVariance?.totals.avg_variance_rate)} />
+          </div>
+
+          <Card>
+            <CardHeader><CardTitle>Custo real vs padrão</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead className="text-right">Padrão</TableHead>
+                    <TableHead className="text-right">Real médio</TableHead>
+                    <TableHead className="text-right">Variância</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {costVarianceQuery.isLoading ? (
+                    <TableSkeletonRows rows={4} columns={5} />
+                  ) : !costVariance || costVariance.by_product.length === 0 ? (
+                    <EmptyRow colSpan={5} text="Nenhum custo real registrado no período." />
+                  ) : (
+                    costVariance.by_product.map((row) => {
+                      const rate = toNumber(row.variance_rate);
+                      const tone = rate > 0.05 ? 'text-destructive' : rate <= 0 ? 'text-emerald-600' : '';
+                      return (
+                        <TableRow key={String(row.product_id)}>
+                          <TableCell className="font-medium">{row.code}</TableCell>
+                          <TableCell>{row.name}</TableCell>
+                          <TableCell className="text-right">{BRL.format(toNumber(row.standard_cost))}</TableCell>
+                          <TableCell className="text-right">{BRL.format(toNumber(row.avg_real_cost))}</TableCell>
+                          <TableCell className={`text-right font-medium ${tone}`}>{formatRate(rate)}</TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Preço de compra vs catálogo</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Fornecedor</TableHead>
+                    <TableHead className="text-right">Catálogo</TableHead>
+                    <TableHead className="text-right">Pago médio</TableHead>
+                    <TableHead className="text-right">Variância</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {costVarianceQuery.isLoading ? (
+                    <TableSkeletonRows rows={4} columns={5} />
+                  ) : !costVariance || costVariance.purchase_price_variance.length === 0 ? (
+                    <EmptyRow colSpan={5} text="Nenhuma compra com preço de catálogo no período." />
+                  ) : (
+                    costVariance.purchase_price_variance.map((row, index) => {
+                      const hasCatalog = row.catalog_price !== null && row.catalog_price !== undefined;
+                      const rate = hasCatalog ? toNumber(row.variance_rate) : null;
+                      const tone = rate === null ? '' : rate > 0.05 ? 'text-destructive' : rate <= 0 ? 'text-emerald-600' : '';
+                      return (
+                        <TableRow key={`${row.product_id}-${row.supplier_id}-${index}`}>
+                          <TableCell className="font-medium">{row.code} — {row.name}</TableCell>
+                          <TableCell>{row.company_name}</TableCell>
+                          <TableCell className="text-right">
+                            {hasCatalog ? BRL.format(toNumber(row.catalog_price)) : '—'}
+                          </TableCell>
+                          <TableCell className="text-right">{BRL.format(toNumber(row.avg_paid_price))}</TableCell>
+                          <TableCell className={`text-right font-medium ${tone}`}>
+                            {rate === null ? '—' : formatRate(rate)}
+                          </TableCell>
                         </TableRow>
                       );
                     })

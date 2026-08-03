@@ -195,6 +195,77 @@ class SequelizeReportsRepository extends ReportsRepository {
     );
     return row;
   }
+
+  /**
+   * Custo real por produto no período: agrega `product_cost_ledgers` (média
+   * ponderada por quantidade) e resolve o custo padrão via
+   * `items.custo_padrao` (join dual-schema por `products.code = items.codigo`,
+   * LEFT JOIN pois nem todo produto tem item correspondente), com fallback
+   * para `products.cost_price` quando não há item.
+   *
+   * @param {Date} start
+   * @param {Date} end
+   * @returns {Promise<Object[]>}
+   */
+  async findCostVarianceByProduct(start, end) {
+    return sequelize.query(
+      `SELECT p.id                                              AS product_id,
+              p.code,
+              p.name,
+              COALESCE(i.custo_padrao, p.cost_price, 0)::float   AS standard_cost,
+              COUNT(pcl.id)::int                                 AS entries_count,
+              COALESCE(SUM(pcl.quantity), 0)::float              AS total_quantity,
+              CASE WHEN COALESCE(SUM(pcl.quantity), 0) > 0
+                   THEN (SUM(pcl.quantity * pcl.unit_cost) / SUM(pcl.quantity))::float
+                   ELSE 0
+              END                                                 AS avg_real_cost
+         FROM product_cost_ledgers pcl
+         JOIN products p ON p.id = pcl.product_id
+         LEFT JOIN items i ON i.codigo = p.code
+        WHERE pcl.created_at BETWEEN :start AND :end
+        GROUP BY p.id, p.code, p.name, i.custo_padrao, p.cost_price
+        ORDER BY p.id`,
+      { replacements: { start, end }, type: QueryTypes.SELECT }
+    );
+  }
+
+  /**
+   * Variação de preço de compra por produto x fornecedor no período: preço
+   * médio pago (`purchase_order_items.unit_price`, ponderado por quantidade,
+   * em pedidos não cancelados) versus preço de catálogo
+   * (`item_suppliers.unit_price`). O join com `item_suppliers` é dual-schema
+   * (`purchase_order_items.item_id` -> `items.id`, quando presente) e LEFT
+   * JOIN pois nem todo item tem catálogo de fornecedor cadastrado.
+   *
+   * @param {Date} start
+   * @param {Date} end
+   * @returns {Promise<Object[]>}
+   */
+  async findPurchasePriceVarianceByProductSupplier(start, end) {
+    return sequelize.query(
+      `SELECT p.id                                    AS product_id,
+              p.code,
+              p.name,
+              po.supplier_id                           AS supplier_id,
+              s.company_name,
+              MAX(isup.unit_price)::float              AS catalog_price,
+              COALESCE(SUM(poi.quantity), 0)::float    AS total_quantity,
+              CASE WHEN COALESCE(SUM(poi.quantity), 0) > 0
+                   THEN (SUM(poi.quantity * poi.unit_price) / SUM(poi.quantity))::float
+                   ELSE 0
+              END                                       AS avg_paid_price
+         FROM purchase_order_items poi
+         JOIN purchase_orders po ON po.id = poi.purchase_id
+         JOIN products p ON p.id = poi.product_id
+         JOIN suppliers s ON s.id = po.supplier_id
+         LEFT JOIN item_suppliers isup ON isup.item_id = poi.item_id AND isup.supplier_id = po.supplier_id
+        WHERE po.order_date BETWEEN :start AND :end
+          AND po.status <> 'canceled'
+        GROUP BY p.id, p.code, p.name, po.supplier_id, s.company_name
+        ORDER BY p.id, po.supplier_id`,
+      { replacements: { start, end }, type: QueryTypes.SELECT }
+    );
+  }
 }
 
 module.exports = SequelizeReportsRepository;

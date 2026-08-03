@@ -44,7 +44,7 @@ function formatDateTime(value: string | null): string {
 }
 
 /**
- * `FE6`: apontamento de chão de fábrica — bancada/tablet.
+ * Apontamento de chão de fábrica para bancada/tablet.
  *
  * Lista OPs liberadas/em produção; ao selecionar uma OP, exibe as etapas de
  * rastreamento (`ProductionOrderTracking`) ordenadas por sequência, com

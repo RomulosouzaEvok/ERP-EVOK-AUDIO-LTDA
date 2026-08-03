@@ -373,6 +373,49 @@ transação (garante no máximo um fornecedor preferencial por item).
 `purchase_order_items` × `purchase_orders` (preço mais recente por par
 item/fornecedor).
 
+### Tabela: `work_centers` (Centros de Trabalho — Capacidade Finita)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| code | VARCHAR(30) | UNIQUE, NOT NULL | Código único do centro de trabalho |
+| name | VARCHAR(100) | NOT NULL | Nome do centro de trabalho |
+| description | TEXT | - | Observações livres |
+| machines_count | INT | DEFAULT 1, NOT NULL | Quantidade de máquinas/recursos idênticos no centro |
+| capacity_hours_per_day | NUMERIC(6,2) | DEFAULT 8, NOT NULL | Horas produtivas por dia, por máquina |
+| efficiency_factor | NUMERIC(5,4) | DEFAULT 1, NOT NULL | Fator de eficiência histórica (0 a 1) |
+| active | BOOLEAN | DEFAULT true, NOT NULL | Soft delete |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
+
+**Constraints:** `UNIQUE(code)`.
+
+### Tabela: `work_center_shifts` (Turnos por Centro de Trabalho)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| work_center_id | INT | FK → work_centers.id, ON DELETE CASCADE, NOT NULL | Centro de trabalho |
+| weekday | SMALLINT | CHECK (0-6), NOT NULL | Dia da semana (0 = domingo ... 6 = sábado) |
+| start_time | TIME | NOT NULL | Início do turno |
+| end_time | TIME | CHECK (end_time > start_time), NOT NULL | Fim do turno |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
+
+**Constraints:** `CHECK (weekday BETWEEN 0 AND 6)`; `CHECK (end_time > start_time)`;
+`UNIQUE(work_center_id, weekday, start_time)`; índice em `work_center_id`.
+
+**Alteração em `production_route_steps`:** nova coluna `work_center_id` INT
+NULL, FK → `work_centers.id` (`ON DELETE SET NULL`), com índice
+`idx_production_route_steps_work_center_id`. A coluna legada `work_center`
+(STRING(100), texto livre) é mantida nesta fase (expand); a remoção
+(contract) fica para uma migration futura, após a camada de aplicação migrar
+para `work_center_id`.
+
+**Migration:** `server/migrations/20260803-000004-create-work-centers.cjs`
+— cria `work_centers` e `work_center_shifts`, adiciona `work_center_id` em
+`production_route_steps`, e faz backfill idempotente: gera um `work_center`
+por valor distinto não vazio de `production_route_steps.work_center`
+(`code = UPPER(TRIM(work_center))` truncado a 30 chars, `name = TRIM(work_center)`,
+`ON CONFLICT (code) DO NOTHING`) e depois associa `work_center_id` via match
+de código.
+
 ### Tabela: `sales` (Vendas)
 | Coluna | Tipo | Restrições | Descrição |
 |--------|------|------------|-----------|

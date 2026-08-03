@@ -16,5 +16,6 @@ router.get('/customers', authenticate, reportController.customers);
 router.get('/cash-flow', authenticate, reportController.cashFlow);
 router.get('/production', authenticate, reportController.production);
 router.get('/purchasing', authenticate, reportController.purchasing);
+router.get('/cost-variance', authenticate, reportController.costVariance);
 
 module.exports = router;

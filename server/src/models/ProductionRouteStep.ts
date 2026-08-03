@@ -16,6 +16,7 @@ export interface ProductionRouteStepAttributes {
   step_code: string;
   name: string;
   work_center: string | null;
+  work_center_id: number | null;
   standard_time_minutes: number;
   setup_time_minutes: number;
   instructions: string | null;
@@ -31,7 +32,8 @@ const ProductionRouteStep = sequelize.define('ProductionRouteStep', {
   sequence: { type: DataTypes.INTEGER, allowNull: false, comment: 'Ordem sequencial da etapa' },
   step_code: { type: DataTypes.STRING(50), allowNull: false, comment: 'Codigo da etapa' },
   name: { type: DataTypes.STRING(120), allowNull: false, comment: 'Nome da etapa' },
-  work_center: { type: DataTypes.STRING(100), allowNull: true, comment: 'Posto/centro de trabalho' },
+  work_center: { type: DataTypes.STRING(100), allowNull: true, comment: 'Posto/centro de trabalho (legado, texto livre)' },
+  work_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> work_centers.id (centro de trabalho estruturado)' },
   standard_time_minutes: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   setup_time_minutes: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   instructions: { type: DataTypes.TEXT, allowNull: true },
@@ -43,7 +45,8 @@ const ProductionRouteStep = sequelize.define('ProductionRouteStep', {
   timestamps: true,
   indexes: [
     { fields: ['production_route_id'] },
-    { fields: ['production_route_id', 'sequence'], unique: true }
+    { fields: ['production_route_id', 'sequence'], unique: true },
+    { fields: ['work_center_id'], name: 'idx_production_route_steps_work_center_id' }
   ]
 });
 

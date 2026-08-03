@@ -86,3 +86,47 @@ export async function getPurchasingReport(period: ReportsPeriodInput) {
   });
   return data.data;
 }
+
+export interface CostVarianceByProduct {
+  product_id: number | string;
+  code: string;
+  name: string;
+  standard_cost: number | string;
+  avg_real_cost: number | string;
+  entries_count: number | string;
+  total_quantity: number | string;
+  variance_abs: number | string;
+  variance_rate: number | string;
+}
+
+export interface PurchasePriceVarianceByProductSupplier {
+  product_id: number | string;
+  code: string;
+  name: string;
+  supplier_id: number | string;
+  company_name: string;
+  catalog_price: number | string | null;
+  avg_paid_price: number | string;
+  total_quantity: number | string;
+  variance_abs: number | string | null;
+  variance_rate: number | string | null;
+}
+
+export interface CostVarianceTotals {
+  products_with_variance: number | string;
+  avg_variance_rate: number | string;
+}
+
+export interface CostVarianceReport {
+  period: ReportsPeriod;
+  by_product: CostVarianceByProduct[];
+  purchase_price_variance: PurchasePriceVarianceByProductSupplier[];
+  totals: CostVarianceTotals;
+}
+
+export async function getCostVarianceReport(period: ReportsPeriodInput) {
+  const { data } = await httpClient.get<ItemResponse<CostVarianceReport>>('/api/reports/cost-variance', {
+    params: period,
+  });
+  return data.data;
+}

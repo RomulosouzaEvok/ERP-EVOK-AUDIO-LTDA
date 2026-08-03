@@ -1285,3 +1285,405 @@ O model `NonConformity` (`server/src/models/NonConformity.ts`) define `nc_number
 
 **Desenvolvedor**: Claude Code (Frontend Engineer)
 **Data**: 2026-08-03
+
+---
+
+## Relatório de Variação de Custo (`GET /api/reports/cost-variance`) — Item 7 do levantamento
+
+**Data**: 2026-08-03
+**Escopo**: `server/` apenas (módulo `reports`). Nenhuma alteração em `client/`, `migrations/` ou `src/models/`.
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+Novo endpoint `GET /api/reports/cost-variance?start_date&end_date` (autenticado,
+período default 30 dias via `resolveReportPeriod`), seguindo 1:1 o padrão dos
+relatórios de manufatura já existentes (`production`, `purchasing`):
+
+- **`by_product`**: para cada produto com lançamento em `product_cost_ledgers`
+  no período, compara `standard_cost` (`items.custo_padrao` via join
+  `products.code = items.codigo`, `LEFT JOIN` com fallback `products.cost_price`
+  quando não há item correspondente) contra `avg_real_cost` (média ponderada
+  por quantidade dos lançamentos do ledger no período). Retorna
+  `variance_abs`/`variance_rate` (protegido por `safeRate`) e é ordenado por
+  `|variance_rate|` decrescente.
+- **`purchase_price_variance`**: para cada par produto × fornecedor com
+  compras não canceladas no período, compara `catalog_price`
+  (`item_suppliers.unit_price` do vínculo item×fornecedor, `null` quando não
+  há catálogo) contra `avg_paid_price` (média ponderada por quantidade de
+  `purchase_order_items.unit_price`). `variance_abs`/`variance_rate` são
+  `null` quando `catalog_price` é `null`.
+- **`totals`**: `products_with_variance` (produtos com `|variance_rate| > 0.05`)
+  e `avg_variance_rate` (variação média ponderada por quantidade, entre os
+  produtos de `by_product`).
+
+### Arquivos criados/modificados
+
+- `server/src/modules/reports/domain/repositories/ReportsRepository.ts` —
+  adicionados os stubs `findCostVarianceByProduct` e
+  `findPurchasePriceVarianceByProductSupplier` (contrato).
+- `server/src/modules/reports/infrastructure/sequelize/SequelizeReportsRepository.ts` —
+  implementação SQL parametrizada (raw `sequelize.query`) dos dois métodos
+  acima. Join dual-schema documentado inline (produto pode não ter item;
+  item pode não ter catálogo de fornecedor).
+- `server/src/modules/reports/application/use-cases/GetCostVarianceReportUseCase.ts`
+  (novo) — orquestra `resolveReportPeriod`/`safeRate`, monta o contrato de
+  resposta, ordena `by_product` e calcula os totais.
+- `server/src/modules/reports/presentation/controllers/reportController.ts` —
+  novo handler `exports.costVariance`.
+- `server/src/modules/reports/presentation/routes/reports.ts` — nova rota
+  `router.get('/cost-variance', authenticate, reportController.costVariance)`.
+- `server/tests/unit/cost-variance-report.test.ts` (novo) — 5 testes:
+  variância calculada e ordenada por `|variance_rate|`, `standard_cost = 0`
+  protegido (sem NaN/Infinity), período sem lançamentos (`[]`/zeros),
+  `purchase_price_variance` com `catalog_price` presente e com
+  `catalog_price = null` (`variance_abs`/`variance_rate` devem ser `null`).
+
+### Documentações atualizadas
+
+- `docs/projeto/04-USE_CASES.md` — novo **UC-26: Relatório de Variação de
+  Custo**, descrevendo endpoint, fluxo de cálculo, regras de negócio e
+  proteção contra divisão por zero.
+- `docs/HANDOFF_CODEX.md` — esta seção.
+
+### Contrato JSON (resposta)
+
+```jsonc
+{
+  "success": true,
+  "data": {
+    "report_type": "cost_variance",
+    "generated_at": "2026-08-03T12:00:00.000Z",
+    "period": { "start_date": "2026-07-04", "end_date": "2026-08-03" },
+    "by_product": [
+      {
+        "product_id": 12,
+        "code": "ALTO-FALANTE-10",
+        "name": "Alto-falante 10\"",
+        "standard_cost": 100,
+        "avg_real_cost": 105,
+        "entries_count": 3,
+        "total_quantity": 40,
+        "variance_abs": 5,
+        "variance_rate": 0.05
+      }
+    ],
+    "purchase_price_variance": [
+      {
+        "product_id": 12,
+        "code": "ALTO-FALANTE-10",
+        "name": "Alto-falante 10\"",
+        "supplier_id": 7,
+        "company_name": "Fornecedor CI EVOK",
+        "catalog_price": 90,
+        "avg_paid_price": 99,
+        "total_quantity": 50,
+        "variance_abs": 9,
+        "variance_rate": 0.1
+      }
+    ],
+    "totals": { "products_with_variance": 1, "avg_variance_rate": 0.05 }
+  }
+}
+```
+
+### Instruções de teste
+
+1. **Automatizado**: `cd server && npx jest tests/unit` — validado nesta
+   entrega, 48 suites / 237 testes 100% verdes (incluindo os 5 novos de
+   `cost-variance-report.test.ts`).
+2. **Typecheck**: `cd server && npm run typecheck` — limpo (sem erros TS).
+3. **Manual (requer banco com dados)**:
+   - `GET /api/reports/cost-variance` sem parâmetros → período default 30
+     dias, `200 OK`, contrato acima.
+   - `GET /api/reports/cost-variance?start_date=2026-01-01&end_date=2026-01-31`
+     → período customizado.
+   - `start_date` maior que `end_date` → `422`/`ValidationError` (mesmo
+     comportamento de `/production` e `/purchasing`).
+   - Sem token → `401`.
+   - Produto com `custo_padrao` do item cadastrado (0 e não-zero) para
+     confirmar fallback e proteção `variance_rate = 0` quando padrão é 0.
+   - Par item×fornecedor sem `item_suppliers` cadastrado → confirmar
+     `catalog_price: null` e `variance_abs`/`variance_rate: null` em
+     `purchase_price_variance`.
+
+### Riscos residuais
+
+- Não há teste de integração HTTP (supertest) dedicado a esta rota — apenas
+  unitário do use case (mesma cobertura dos relatórios `production`/
+  `purchasing` já existentes, que também não têm teste de integração
+  próprio). Considerar cobertura E2E em sprint futura se o relatório virar
+  crítico para decisão de precificação.
+- `avg_variance_rate` em `totals` pondera apenas por `total_quantity` de
+  `by_product` (não inclui `purchase_price_variance`); se o negócio quiser
+  uma métrica combinada, é necessário alinhar a fórmula antes de expor em
+  dashboard.
+
+**Desenvolvedor**: Claude Code (Backend Engineer)
+**Data**: 2026-08-03
+
+---
+
+## Camada de aplicação de Centros de Trabalho e Carga-Máquina (Concluída)
+
+**Data**: 2026-08-03
+**Escopo**: Novo módulo `server/src/modules/workCenters` (Clean Architecture) com
+CRUD de centros de trabalho, substituição transacional de turnos e relatório
+de carga-máquina (capacidade × carga por horizonte de dias). Não alterou
+models/migrations (já existentes: `WorkCenter`, `WorkCenterShift`,
+`ProductionRouteStep.work_center_id`) nem o módulo `reports`.
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+- **CRUD** (`domain/repositories/WorkCenterRepository.ts` +
+  `infrastructure/sequelize/SequelizeWorkCenterRepository.ts` +
+  use cases `ListWorkCentersUseCase`, `GetWorkCenterByIdUseCase`,
+  `CreateWorkCenterUseCase`, `UpdateWorkCenterUseCase`):
+  - `GET /api/work-centers?active=&page=&limit=` — lista paginada com `shifts` incluídos.
+  - `GET /api/work-centers/:id` — busca por id com `shifts` incluídos.
+  - `POST /api/work-centers` — cria (zod strict); `code` é normalizado
+    (`trim().toUpperCase()`) no use case antes da checagem de unicidade;
+    `409 ConflictError` se `code` duplicado.
+  - `PUT /api/work-centers/:id` — atualiza campos parciais + `active`;
+    revalida unicidade de `code` se alterado (ignorando o próprio registro).
+- **Turnos** (`ReplaceWorkCenterShiftsUseCase`):
+  - `PUT /api/work-centers/:id/shifts` — substitui todos os turnos do
+    centro em transação Sequelize (`delete` + `insert` sequencial, commit/
+    rollback no controller). Valida `end_time > start_time` e ausência de
+    sobreposição de turnos no mesmo `weekday`; viola → `422 BusinessRuleError`.
+- **Carga-máquina** (`GetWorkCenterLoadUseCase`):
+  - `GET /api/work-centers/load?days=1..60` (default 7) — para cada centro
+    ativo:
+    - `capacity_hours`: se há turnos cadastrados, soma as horas de cada
+      turno ponderada pela ocorrência do seu `weekday` no horizonte de
+      `days` dias a partir de hoje, × `machines_count` × `efficiency_factor`.
+      **Sem turnos cadastrados**, usa fallback
+      `capacity_hours_per_day * days * machines_count * efficiency_factor`
+      — conta todos os `days` dias do horizonte, **inclusive fins de
+      semana** (documentado também no código: sem turnos não há como
+      inferir quais dias são produtivos).
+    - `load_hours`: SQL raw parametrizado
+      (`SequelizeWorkCenterRepository.aggregateLoadByWorkCenter`) que soma,
+      por `work_center_id`, `GREATEST(quantity - quantity_produced, 0) *
+      (standard_time_minutes + setup_time_minutes) / 60` das etapas de
+      `production_route_steps` (`work_center_id` não nulo, `is_active =
+      true`) cujo roteiro (`production_routes.product_id`) corresponde ao
+      `product_id` da OP, filtrando OPs em
+      `planned/released/in_progress/paused`. `setup_time_minutes` é somado
+      uma vez por etapa (não por unidade), conforme especificado.
+    - `utilization_rate = load_hours / capacity_hours`, protegido:
+      `null` quando `capacity_hours === 0`.
+    - Resposta ordenada por `utilization_rate` desc (centros com `null`
+      tratados como o menor valor, ficam ao final).
+- **Rota registrada** em `server/app.ts`:
+  `app.use('/api/work-centers', require('./src/modules/workCenters/presentation/routes/workCenters'))`,
+  logo após `production-orders`. A rota `GET /load` é declarada **antes**
+  de `GET /:id` no router para não ser capturada pelo parâmetro `:id`.
+
+### Contrato de resposta — `GET /api/work-centers/load`
+
+```json
+{
+  "success": true,
+  "data": {
+    "horizon_days": 7,
+    "centers": [
+      {
+        "id": 1,
+        "code": "CNC-01",
+        "name": "CNC 01",
+        "machines_count": 2,
+        "capacity_hours": 112,
+        "load_hours": 20,
+        "utilization_rate": 0.1786,
+        "steps_count": 3
+      }
+    ]
+  }
+}
+```
+
+### Arquivos criados
+
+- `server/src/modules/workCenters/domain/repositories/WorkCenterRepository.ts`
+- `server/src/modules/workCenters/infrastructure/sequelize/SequelizeWorkCenterRepository.ts`
+- `server/src/modules/workCenters/application/use-cases/ListWorkCentersUseCase.ts`
+- `server/src/modules/workCenters/application/use-cases/GetWorkCenterByIdUseCase.ts`
+- `server/src/modules/workCenters/application/use-cases/CreateWorkCenterUseCase.ts`
+- `server/src/modules/workCenters/application/use-cases/UpdateWorkCenterUseCase.ts`
+- `server/src/modules/workCenters/application/use-cases/ReplaceWorkCenterShiftsUseCase.ts`
+- `server/src/modules/workCenters/application/use-cases/GetWorkCenterLoadUseCase.ts`
+- `server/src/modules/workCenters/presentation/validators/workCenterValidators.ts`
+- `server/src/modules/workCenters/presentation/controllers/workCenterController.ts`
+- `server/src/modules/workCenters/presentation/routes/workCenters.ts`
+- `server/tests/unit/work-centers.test.ts` (12 testes)
+
+### Arquivos modificados
+
+- `server/app.ts` — registrada a rota `/api/work-centers`.
+- `docs/HANDOFF_CODEX.md` — esta seção.
+
+### Instruções de teste
+
+1. **Automatizado**: `cd server && npx jest tests/unit` — 49 suites / 249
+   testes 100% verdes (incluindo os 12 novos de `work-centers.test.ts`:
+   `code` duplicado → 409, turnos sobrepostos/`end_time<=start_time` → 422,
+   cálculo de capacidade com e sem turnos, `utilization_rate` protegida,
+   ordenação desc com `null` ao final).
+2. **Typecheck**: `cd server && npm run typecheck` — limpo (sem erros TS).
+3. **Manual (requer banco com dados)**:
+   - `POST /api/work-centers` com `code` já existente (mesmo em minúsculo/
+     com espaços) → `409`.
+   - `PUT /api/work-centers/:id/shifts` com dois turnos sobrepostos no
+     mesmo `weekday` → `422`; com `end_time` menor/igual a `start_time` →
+     `422`; com turnos válidos → `200` e turnos antigos substituídos
+     (conferir tabela `work_center_shifts`).
+   - `GET /api/work-centers/load?days=7` com um centro que tem
+     `WorkCenterShift` cadastrado e um sem: conferir que o cálculo de
+     `capacity_hours` segue os dois caminhos (turnos vs. fallback diário).
+   - Criar uma OP (`planned`) cujo produto tenha um `ProductionRoute`
+     ativo com etapas apontando `work_center_id` para um centro de
+     trabalho: conferir que `load_hours` e `steps_count` refletem a soma
+     esperada e que `utilization_rate` bate com `load_hours/capacity_hours`.
+   - Sem token → `401`; usuário sem perfil `admin`/`operator` tentando
+     `POST`/`PUT` → `403`.
+
+### Riscos residuais
+
+- Quando um produto tem mais de um `ProductionRoute` (ex.: revisões
+  concorrentes/históricas), a agregação de carga soma etapas de **todos**
+  os roteiros vinculados ao `product_id` da OP, pois o schema atual não
+  amarra a OP a uma revisão específica de roteiro
+  (`production_orders` não tem `production_route_id`). Se o negócio criar
+  roteiros duplicados sem inativar os antigos (`status != 'active'`), a
+  carga pode ficar superestimada. Mitigação recomendada (fora do escopo
+  desta entrega): filtrar por `production_routes.status = 'active'` na
+  agregação, ou adicionar `production_route_id` em `production_orders`.
+- Fallback de capacidade sem turnos conta literalmente todos os `days` do
+  horizonte (inclusive sábados/domingos), podendo superestimar a
+  capacidade de centros que não operam em fins de semana e ainda não
+  cadastraram `WorkCenterShift`. Documentado no código e nesta seção;
+  correção natural é o time de PCP cadastrar os turnos reais.
+- Não há teste de integração HTTP (supertest) dedicado às rotas — apenas
+  cobertura unitária dos use cases (mesmo padrão dos demais módulos
+  recentes deste handoff, ex.: `cost-variance`, `purchase-requisitions`).
+- Não foram tocados `docs/DATABASE_DICTIONARY.md`/`docs/DATABASE.md` nem
+  `docs/projeto/04-USE_CASES.md`: os models `WorkCenter`/`WorkCenterShift`
+  e a coluna `production_route_steps.work_center_id` já estavam prontos e
+  documentados por outro agente antes desta tarefa (instrução explícita
+  para não tocar em models/migrations); nenhuma regra de negócio nova foi
+  criada que exigisse novo caso de uso em `04-USE_CASES.md` além do que já
+  está descrito acima nesta seção de handoff.
+
+**Desenvolvedor**: Claude Code (Backend Engineer)
+
+---
+
+## Fase — Frontend: aba "Custos" em Relatórios + tela "Centros de Trabalho" (Concluída)
+
+**Data**: 2026-08-03
+**Escopo**: Consumir no `client/` os dois endpoints já entregues no backend
+(`GET /api/reports/cost-variance` e o módulo `work-centers`), sem alterar
+nenhum arquivo de `server/`.
+**Status**: ✅ Concluído
+
+### A) Aba "Custos" em `src/pages/reports/ReportsPage.tsx`
+
+- Terceira aba (`Produção` / `Compras` / **`Custos`**), reaproveitando o
+  mesmo filtro de período (`start_date`/`end_date`) já existente na página.
+- Tiles: "Produtos com variância > 5%" (`totals.products_with_variance`,
+  tom vermelho se > 0) e "Variância média ponderada" (`totals.avg_variance_rate`).
+- Tabela "Custo real vs padrão" (`by_product`): código, nome, padrão (BRL),
+  real médio (BRL), variância % colorida (vermelho se > +5%, verde se <= 0).
+- Tabela "Preço de compra vs catálogo" (`purchase_price_variance`): produto,
+  fornecedor, catálogo (BRL ou `—` quando `catalog_price` é `null`), pago
+  médio (BRL), variância % (`—` quando não há catálogo).
+- Nova função `getCostVarianceReport` + interfaces `CostVarianceReport`,
+  `CostVarianceByProduct`, `PurchasePriceVarianceByProductSupplier`,
+  `CostVarianceTotals` em `src/api/reports.ts` (contrato conferido em
+  `server/src/modules/reports/application/use-cases/GetCostVarianceReportUseCase.ts`).
+
+### B) Nova tela `/production/work-centers` (`src/pages/production/WorkCentersPage.tsx`)
+
+- **Carga-máquina**: seletor de horizonte (7/14/30 dias,
+  `GET /api/work-centers/load?days=`), tabela com centro, máquinas,
+  capacidade (h), carga (h) e barra de utilização proporcional
+  (`div` com largura em %, cor verde `<80%`, âmbar `80–100%`, vermelho `>100%`).
+- **Centros de trabalho**: tabela com CRUD (`GET/POST/PUT /api/work-centers`)
+  via dialog `react-hook-form` + `zod` (código, nome, descrição, máquinas,
+  capacidade h/dia, fator de eficiência, `active` no modo edição). Erro
+  `409` (código duplicado) exibido via `extractApiErrorMessage`.
+- **Dialog de turnos**: `useFieldArray` para adicionar/remover linhas
+  (dia da semana Domingo..Sábado, horário início/fim `HH:MM`), salvar
+  substitui todos os turnos (`PUT /api/work-centers/:id/shifts`); erro
+  `422` de sobreposição/`end_time<=start_time` exibido no dialog sem fechá-lo.
+- RBAC: ações de escrita (criar/editar centro, salvar turnos) visíveis
+  apenas para `admin`/`operator` (mesmo padrão de `hasRole` já usado em
+  `SuppliersPage`/`MrpPage`); leitura (carga-máquina, listagem, turnos)
+  disponível para qualquer role autenticado.
+- Nova camada `src/api/workCenters.ts` com interfaces `WorkCenter`,
+  `WorkCenterShift`, `WorkCenterLoadRow`, `WorkCenterLoadReport` e as
+  funções `listWorkCenters`, `getWorkCenterById`, `createWorkCenter`,
+  `updateWorkCenter`, `replaceWorkCenterShifts`, `getWorkCenterLoad`
+  (contrato conferido em `server/src/modules/workCenters/presentation/{routes,controllers,validators}`).
+
+### Arquivos criados
+
+- `client/src/api/workCenters.ts`
+- `client/src/pages/production/WorkCentersPage.tsx`
+
+### Arquivos modificados
+
+- `client/src/api/reports.ts` — função `getCostVarianceReport` + tipos.
+- `client/src/pages/reports/ReportsPage.tsx` — terceira aba "Custos".
+- `client/src/App.tsx` — import lazy de `WorkCentersPage` + rota
+  `/production/work-centers` dentro do layout autenticado.
+- `client/src/layouts/AppLayout.tsx` — item "Centros de Trabalho" no grupo
+  Produção da sidebar (ícone `Factory`, já importado) + entrada em
+  `BREADCRUMBS`.
+- `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` — marcado item de Centros de
+  Trabalho como concluído na seção FE4.
+- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — itens 5 e 7 da tabela de
+  prioridades marcados como entregues (Centros de Trabalho e Custo real
+  vs padrão), seção de frontend atualizada.
+
+### Instruções de teste (Codex / QA)
+
+1. **Automatizado**: `cd client && node ./node_modules/typescript/bin/tsc -b --noEmit`
+   (limpo) e `node ./node_modules/vitest/vitest.mjs run` (13 testes, todos
+   verdes — nenhum teste novo foi adicionado nesta entrega, apenas UI de
+   consumo dos endpoints já testados no backend).
+2. **Manual — aba Custos** (`/reports`, aba "Custos"):
+   - Com produtos que tenham `product_cost_ledgers` no período: conferir
+     tile de contagem `>5%` e cor da variância por linha (vermelho/verde).
+   - Sem `catalog_price` (item sem `item_suppliers.unit_price` cadastrado):
+     conferir `—` nas colunas de catálogo e variância da segunda tabela.
+   - Trocar o período (mesmo filtro das outras abas) e confirmar refetch.
+3. **Manual — Centros de Trabalho** (`/production/work-centers`):
+   - Criar centro com `code` já existente → mensagem de erro 409 legível
+     no dialog (sem fechar).
+   - Trocar horizonte 7/14/30 e conferir que a tabela de carga-máquina
+     recarrega e a barra de utilização muda de cor conforme a faixa.
+   - Abrir dialog de turnos de um centro, adicionar dois turnos
+     sobrepostos no mesmo dia da semana e salvar → erro 422 exibido no
+     dialog; corrigir e salvar novamente → sucesso, dialog fecha e a
+     tabela de carga-máquina reflete a nova capacidade.
+   - Logar como `operator`/role sem permissão de escrita e confirmar que
+     os botões de criar/editar centro não aparecem (mas a leitura de
+     carga-máquina/listagem continua visível).
+
+### Riscos residuais
+
+- Nenhum teste automatizado de frontend (Vitest) foi criado especificamente
+  para a aba Custos ou para `WorkCentersPage` nesta entrega — cobertura
+  automatizada continua restrita ao backend (use cases já testados). Se o
+  padrão do projeto passar a exigir teste de componente por tela, este é
+  um débito a considerar.
+- A tela de Centros de Trabalho não expõe paginação (usa `limit: 100`, o
+  mesmo teto de listagem simples que outras telas menores do sistema);
+  se o número de centros de trabalho crescer muito, será necessário
+  adicionar paginação real na tabela.
+
+**Desenvolvedor**: Claude Code (Senior Frontend Engineer & UI Architect)
+**Data**: 2026-08-03

@@ -617,6 +617,55 @@
 
 ---
 
+## UC-26: Relatório de Variação de Custo
+
+**Ator:** Controller / Analista de Custos
+**Endpoint:** `GET /api/reports/cost-variance?start_date&end_date` (autenticado)
+**Pré-condições:** Existem lançamentos em `product_cost_ledgers` e/ou
+pedidos de compra no período consultado
+**Fluxo Principal:**
+1. Usuário acessa "Relatórios > Variação de Custo" informando
+   `start_date`/`end_date` (formato `YYYY-MM-DD`); se omitido, sistema usa
+   período default dos últimos 30 dias (`resolveReportPeriod`)
+2. Sistema calcula, por produto com lançamento de custo real no período:
+   - `standard_cost`: `items.custo_padrao` do item cujo `codigo` casa com
+     `products.code` (join dual-schema, `LEFT JOIN` pois nem todo produto
+     tem item correspondente); fallback `products.cost_price` quando não há
+     item
+   - `avg_real_cost`: média ponderada por quantidade dos lançamentos de
+     `product_cost_ledgers` no período (`SUM(quantity * unit_cost) / SUM(quantity)`)
+   - `variance_abs` = `avg_real_cost - standard_cost`;
+     `variance_rate` = `variance_abs / standard_cost` (protegida contra
+     divisão por zero via `safeRate`; retorna `0` quando `standard_cost = 0`)
+3. Sistema ordena `by_product` por `|variance_rate|` decrescente (maiores
+   desvios primeiro)
+4. Sistema calcula, por par produto × fornecedor com compras no período
+   (`purchase_order_items`/`purchase_orders`, pedidos não cancelados):
+   - `catalog_price`: `item_suppliers.unit_price` do vínculo item×fornecedor
+     (`null` quando não há catálogo cadastrado para o par)
+   - `avg_paid_price`: média ponderada por quantidade de
+     `purchase_order_items.unit_price` no período
+   - `variance_abs`/`variance_rate` vs `catalog_price`; ambos `null` quando
+     `catalog_price` é `null` (sem base de comparação)
+5. Sistema retorna `totals.products_with_variance` (produtos com
+   `|variance_rate| > 0.05`, ou seja, desvio acima de 5%) e
+   `totals.avg_variance_rate` (variação média ponderada por quantidade)
+
+**Fluxo Alternativo (sem lançamentos no período):**
+- `by_product` e `purchase_price_variance` retornam `[]`;
+  `totals.products_with_variance = 0` e `totals.avg_variance_rate = 0`
+  (sem erro)
+
+**Regras de Negócio:**
+- Somente produtos com lançamento de custo real no período aparecem em
+  `by_product`; somente pares produto×fornecedor com compras no período
+  aparecem em `purchase_price_variance`
+- Toda divisão usa `safeRate` (nunca retorna `NaN`/`Infinity`)
+- Relatório é somente leitura (sem escrita em `product_cost_ledgers`,
+  `items` ou `products`)
+
+---
+
 ## Atores Industriais (Adicionais)
 
 | Ator | Descricao |

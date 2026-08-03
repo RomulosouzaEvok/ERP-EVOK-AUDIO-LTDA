@@ -55,7 +55,7 @@ const orderSchema = z.object({
 
 type OrderFormData = z.infer<typeof orderSchema>;
 
-/** `FE4`: ordens de produção — criar e avançar status. */
+/** Ordens de produção — criar e avançar status. */
 export default function ProductionOrdersPage() {
   const { hasRole } = useAuth();
   const canWrite = hasRole('admin', 'operator');

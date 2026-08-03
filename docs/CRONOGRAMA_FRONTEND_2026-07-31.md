@@ -162,6 +162,7 @@ tela funciona.
 - [x] Tela de apontamento de chão de fábrica (`/production/shop-floor`): lista de OPs liberadas/em produção com busca, painel de etapas (`GET /api/production-orders/:id/tracking`) ordenadas por sequência, ações de iniciar (`POST .../tracking/:id/start`, seleção de operador), concluir (`POST .../tracking/:id/complete`, quantidade boa/refugo/observações) e adicionar etapa manual (`POST /api/production-orders/:id/tracking`), com total bom acumulado vs quantidade planejada.
 - [x] Tela de geração de plano MRP (`POST /api/mrp/plan`) e visualização de ordens planejadas (`GET /api/mrp/planned-orders`).
 - [x] Conversão de ordens planejadas em Requisição de Compra (`POST /api/mrp/planned-orders/convert`), com seleção múltipla, dialog de confirmação e badges de status.
+- [x] Tela de Centros de Trabalho (`/production/work-centers`): carga-máquina por horizonte configurável (7/14/30 dias, `GET /api/work-centers/load`) com barra de utilização colorida, CRUD de centros (`GET/POST/PUT /api/work-centers`) e dialog de gestão de turnos (`PUT /api/work-centers/:id/shifts`, substituição completa, 422 de sobreposição tratado).
 
 ### Critério de aceite
 
