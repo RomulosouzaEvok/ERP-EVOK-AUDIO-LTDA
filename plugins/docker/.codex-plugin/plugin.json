@@ -1,0 +1,18 @@
+{
+  "name": "docker",
+  "version": "0.1.0",
+  "description": "Senior DevSecOps e especialista em Docker para PostgreSQL, Compose e operacao de ambiente",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Docker",
+    "shortDescription": "Configure and recover Docker and PostgreSQL environments.",
+    "longDescription": "Senior DevSecOps and Docker specialist for the ERP EVOK AUDIO repository, focused on PostgreSQL provisioning, compose flows, healthchecks, persistence, secure env handling and Ubuntu operational handoff.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Configure, provision and document the Docker and PostgreSQL environment for the ERP EVOK AUDIO repository. Start by checking compose, env files and deployment docs, then validate with docker compose config and bring the environment up safely."
+  }
+}

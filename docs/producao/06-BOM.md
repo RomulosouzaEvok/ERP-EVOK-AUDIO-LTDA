@@ -1,4 +1,4 @@
-# 📦 Módulo BOM - Bill of Materials (Estrutura do Produto)
+﻿# 📦 Módulo BOM - Bill of Materials (Estrutura do Produto)
 
 **Módulo:** Engenharia do Produto (ver também [01-ENGENHARIA.md](01-ENGENHARIA.md))
 **Versão:** 1.0.0

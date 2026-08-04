@@ -85,6 +85,7 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 app.use('/api/auth', require('./src/modules/auth/presentation/routes/auth'));
 app.use('/api/users', require('./src/modules/users/presentation/routes/users'));
+app.use('/api/access-profiles', require('./src/modules/accessProfiles/presentation/routes/accessProfiles'));
 app.use('/api/products', require('./src/modules/products/presentation/routes/products'));
 app.use('/api/clients', require('./src/modules/clients/presentation/routes/clients'));
 app.use('/api/suppliers', require('./src/modules/suppliers/presentation/routes/suppliers'));

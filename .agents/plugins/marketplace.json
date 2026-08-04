@@ -1,0 +1,92 @@
+{
+  "name": "personal",
+  "interface": {
+    "displayName": "Personal"
+  },
+  "plugins": [
+    {
+      "name": "self-observation-app",
+      "source": {
+        "source": "local",
+        "path": "./plugins/self-observation-app"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "evok-production-remediation",
+      "source": {
+        "source": "local",
+        "path": "./plugins/evok-production-remediation"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "auditor",
+      "source": {
+        "source": "local",
+        "path": "./plugins/auditor"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "auditor-seguranca",
+      "source": {
+        "source": "local",
+        "path": "./plugins/auditor-seguranca"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "documentador",
+      "source": {
+        "source": "local",
+        "path": "./plugins/documentador"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "programador",
+      "source": {
+        "source": "local",
+        "path": "./plugins/programador"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "docker",
+      "source": {
+        "source": "local",
+        "path": "./plugins/docker"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

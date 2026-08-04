@@ -1,0 +1,18 @@
+{
+  "name": "auditor-seguranca",
+  "version": "0.1.0",
+  "description": "Agente de triagem de seguranca para o ERP EVOK AUDIO",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Auditor Seguranca",
+    "shortDescription": "Security-first triage for secrets, auth, injection and config risks.",
+    "longDescription": "Focused security auditor for the ERP EVOK AUDIO repository, optimized for fast triage of auth, secrets, injection, dependency and configuration risks.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Audit the ERP EVOK AUDIO repository for security risks. Focus on secrets, authentication, authorization, SQL injection, validation, insecure config, dependency risks, and sensitive logging. Report exact location, severity, risk, fix, and supporting evidence."
+  }
+}

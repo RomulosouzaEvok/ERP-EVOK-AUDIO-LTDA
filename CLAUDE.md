@@ -321,7 +321,7 @@ R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de 
 - **CFO:** Risco contábil (custeio, payable), aprovação fiscal
 - **Gerente Produção:** Validação rastreabilidade, OP + apontamento
 - **Compliance:** LGPD conformidade, ateste ISO (se aplicável)
-- **Claude Code Agent:** `claude --agent evok-production-remediation` ou `@evok-production-remediation` em sessão
+- **Claude Code Agents:** `claude --agent evok-production-remediation` ou `@evok-production-remediation` em sessão; `claude --agent PromadorFonteEnd` ou `@PromadorFonteEnd` para tarefas de frontend; `claude --agent AdmDBA` ou `@AdmDBA` para schema e PostgreSQL; `claude --agent iterative-review` ou `@iterative-review` para revisões multi-agente; `claude --agent cleanliness-review` ou `@cleanliness-review` para limpeza e polimento de código
 
 ---
 

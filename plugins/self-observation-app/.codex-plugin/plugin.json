@@ -1,0 +1,18 @@
+{
+  "name": "self-observation-app",
+  "version": "0.1.0",
+  "description": "Self Observation App plugin",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Self Observation App",
+    "shortDescription": "Use Self Observation App in Codex.",
+    "longDescription": "Self Observation App adds a local Codex plugin scaffold.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me use Self Observation App."
+  }
+}

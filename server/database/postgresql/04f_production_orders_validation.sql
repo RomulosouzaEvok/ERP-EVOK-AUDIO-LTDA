@@ -1,4 +1,4 @@
--- Fase 4.4d: Validação pós-backfill de production_orders.item_id
+﻿-- Fase 4.4d: Validação pós-backfill de production_orders.item_id
 -- Data: 2026-07-30
 -- Objetivo: Garantir integridade expand-contract antes de dual-read ativo
 

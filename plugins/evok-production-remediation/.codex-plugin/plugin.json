@@ -1,0 +1,18 @@
+{
+  "name": "evok-production-remediation",
+  "version": "0.1.0",
+  "description": "Agente de remediacao de producao do ERP EVOK AUDIO para uso no Codex",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "EVOK Production Remediation",
+    "shortDescription": "Use the EVOK production remediation agent in Codex.",
+    "longDescription": "Agent and skill bundle for the ERP EVOK AUDIO production remediation workflow, covering audit-driven fixes, validation and release gates.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me execute the EVOK production remediation workflow for the ERP EVOK AUDIO. Start by reading the current audit and remediation docs, preserve existing work, then proceed gate by gate with validation and evidence."
+  }
+}
