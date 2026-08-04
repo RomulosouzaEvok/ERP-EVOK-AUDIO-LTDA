@@ -1,28 +1,37 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../../../../middlewares/auth');
+const { authenticate, authorizeModule } = require('../../../../middlewares/auth');
 const saleController = require('../controllers/saleController');
 const fiscalController = require('../../../fiscal/presentation/controllers/fiscalController');
 
 /**
  * Rotas do módulo `sales` (Clean Architecture). Mantém exatamente o mesmo
- * contrato dos 4 endpoints anteriors de `server/src/routes/sales.ts` (mesmos
+ * contrato dos endpoints anteriores de `server/src/routes/sales.ts` (mesmos
  * paths, métodos e formato de resposta), agora montado sob o mesmo prefixo
  * `/api/sales` em `server/index.ts`.
  *
- * O arquivo anterior importava `authorize` de `../middlewares/auth` mas nunca
- * o utilizava em nenhuma rota — apenas `authenticate` era aplicado. Esse
- * comportamento é preservado aqui (nenhuma rota exige papel específico
- * hoje; ver pendência de RBAC no README do módulo).
+ * RETROFIT `authorizeModule('vendas')` (docs/governance/TODO.md, Bloco 1.2
+ * retrofit geral — substitui `authorize(role)` legado conforme decisão de
+ * `docs/business/BUSINESS_RULES.md` §8): leituras exigem `view` implicito,
+ * escritas exigem `operate`. Cancelamento de NF-e é tratado como `approve`
+ * (equivalente ao antigo `authorize('admin')` pontual).
+ *
+ * PENDÊNCIA registrada (ver enunciado da tarefa/`docs/governance/TODO.md`):
+ * `PUT /:id/status` é usado tanto para transições operacionais comuns
+ * quanto para a transição `shipped` (que, na matriz de negócio, seria de
+ * responsabilidade do módulo `expedicao`). Não é possível diferenciar por
+ * payload na definição da rota sem inspecionar o body em tempo de
+ * middleware — a rota inteira permanece mapeada em `vendas` por ora; a
+ * segregação fina de `shipped` → `expedicao` fica para decisão futura.
  */
 
-router.get('/', authenticate, saleController.list);
-router.get('/:id', authenticate, saleController.getById);
-router.post('/', authenticate, authorize('admin', 'operator'), saleController.create);
-router.put('/:id/status', authenticate, authorize('admin', 'operator'), saleController.updateStatus);
-router.post('/:id/nfe', authenticate, authorize('admin', 'operator'), fiscalController.issueSaleNfe);
-router.get('/:id/nfe', authenticate, authorize('admin', 'operator'), fiscalController.getSaleNfeStatus);
-router.post('/:id/nfe/cancel', authenticate, authorize('admin'), fiscalController.cancelSaleNfe);
+router.get('/', authenticate, authorizeModule('vendas'), saleController.list);
+router.get('/:id', authenticate, authorizeModule('vendas'), saleController.getById);
+router.post('/', authenticate, authorizeModule('vendas', 'operate'), saleController.create);
+router.put('/:id/status', authenticate, authorizeModule('vendas', 'operate'), saleController.updateStatus);
+router.post('/:id/nfe', authenticate, authorizeModule('vendas', 'operate'), fiscalController.issueSaleNfe);
+router.get('/:id/nfe', authenticate, authorizeModule('vendas'), fiscalController.getSaleNfeStatus);
+router.post('/:id/nfe/cancel', authenticate, authorizeModule('vendas', 'approve'), fiscalController.cancelSaleNfe);
 
 module.exports = router;
 

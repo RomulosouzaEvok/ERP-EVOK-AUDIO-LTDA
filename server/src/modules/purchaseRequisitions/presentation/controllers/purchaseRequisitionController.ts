@@ -90,16 +90,23 @@ exports.create = async (req, res, next) => {
 
 /**
  * `PATCH /api/purchase-requisitions/:id/status` — transiciona o status da
- * requisicao (draft->pending|canceled, pending->approved|canceled). Aprovar
- * exige perfil `admin` e registra `approved_by`/`approval_date`.
+ * requisicao (draft->pending|canceled, pending->approved|canceled). A
+ * autorizacao de aprovacao e da ROTA, via
+ * `authorizeModule('requisicoes', 'approve')` (admin global ou gestor da
+ * area); o controller nao repete checagem por role.
  */
 exports.changeStatus = async (req, res, next) => {
   try {
     const parsed = changePurchaseRequisitionStatusSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
 
-    if (parsed.data.status === 'approved' && req.user?.role !== 'admin') {
-      throw new ForbiddenError('Apenas administradores podem aprovar requisicoes de compra.');
+    // Aprovar exige nivel gestor da area (ou admin global). As demais
+    // transicoes (draft->pending, cancelamento) ficam no nivel operate da rota.
+    const isApproval = parsed.data.status === 'approved';
+    const isAdmin = req.user?.role === 'admin';
+    const hasApproveLevel = req.user?.permissions?.requisicoes === 'approve';
+    if (isApproval && !isAdmin && !hasApproveLevel) {
+      throw new ForbiddenError('Aprovar requisicoes exige nivel gestor da area de requisicoes.');
     }
 
     const useCase = new ChangePurchaseRequisitionStatusUseCase(requisitionRepository);

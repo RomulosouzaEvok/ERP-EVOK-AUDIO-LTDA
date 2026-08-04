@@ -137,17 +137,59 @@ Todas Confirmadas" ao final deste documento e o topo de
   (`module: 'engenharia'`). Escritas exigem `operate`; `release`/`obsolete`
   de desenho técnico exigem `approve`. Os `authorize(role)` legados foram
   **mantidos** em ambos (composição em camada, não substituição — ver
-  próximo item). Aplicar aos demais módulos (vendas, compras, estoque,
-  produção, qualidade, financeiro, patrimônio, rastreabilidade,
-  relatórios) continua **pendente**, a ser dividido em sub-tarefas/PRs
-  separados.
-- [ ] Resolver o risco de convivência com checagens de `role` legadas
-  (§8) — decidir, por endpoint já existente com checagem hard-coded (ex.:
-  aprovação de requisição UC-23, cash-flow UC-29), se a checagem antiga é
-  substituída pela nova ou mantida em conjunto; documentar a decisão. Nos
-  dois módulos piloto desta entrega a decisão foi **manter ambas**
-  (`authorizeModule` roda antes de `authorize(role)`, mais restritivo
-  prevalece) — decisão a confirmar/generalizar no retrofit completo.
+  próximo item).
+- [x] **RETROFIT COMPLETO** — `authorizeModule` aplicado em TODOS os
+  módulos restantes de rota (`presentation/routes/*.ts`), **substituindo**
+  (não empilhando) o `authorize(role)` legado conforme a decisão registrada
+  em `BUSINESS_RULES.md` §8: `products`/`items` → `produtos`;
+  `inventory-counts` → `contagens` (approve em aprovar/rejeitar);
+  `sales` → `vendas`; `clients` → `clientes`; `purchases` → `compras`
+  (exceto `POST /:id/receive` → `recebimento`, módulo dono da ação
+  diferente do módulo de origem, ver §4); `purchase-requisitions` →
+  `requisicoes` (approve em `PATCH /:id/status`); `suppliers` →
+  `fornecedores`; `production-orders` → `producao` (rotas `/tracking*` →
+  `chao_de_fabrica`); `bom` → `bom`; `mrp` → `mrp`; `work-centers` →
+  `centros_de_trabalho`; `non-conformities` → `qualidade`;
+  `inventory` (movements/lots/stock-report/low-stock) → `estoque`
+  (exceto `lots/:id/release` e `lots/:id/block` → `qualidade` approve,
+  UC-37); `assets` → `patrimonio`; `traceability` → `rastreabilidade`;
+  `finance` → `financeiro`; `reports/{sales,inventory,customers,cash-flow}`
+  → `relatorios.financeiro`; `reports/production` →
+  `relatorios.producao`; `reports/purchasing` → `relatorios.compras`;
+  `reports/cost-variance` → `relatorios.custos`; `dashboard` →
+  `dashboard`; `mobile-inventory` → `estoque`; `items/:id/suppliers` →
+  `produtos`. Módulos mantidos fora do escopo (por decisão explícita do
+  enunciado): `intelligentAuditor` (`authorize('admin')` mantido),
+  `users`/`audit-logs`/`access-profiles`/`auth` (admin-only por role,
+  fora do catálogo de 26 módulos de área, §1), `webhooks` (público).
+  Ver tabela completa rota→módulo no handoff (`docs/HANDOFF_CODEX.md`).
+- [x] Teste de guarda anti-regressão criado:
+  `server/tests/unit/module-authorization-map.test.ts` — verifica que
+  todo arquivo de rota dos módulos listados usa `authorizeModule` e que
+  nenhum deles (exceto os pilotos `laboratory`/`engineering`, que
+  optaram pelo modo aditivo) ainda chama `authorize(role)` para escrita
+  comum.
+- [x] Resolvido o risco de convivência com checagens de `role` legadas
+  (§8) para o retrofit completo — decisão aplicada: **substituir**, não
+  empilhar. Única exceção mantida (fora do escopo de "trivial"): o
+  controller `purchaseRequisitionController.changeStatus` continua com a
+  checagem hard-coded `req.user.role !== 'admin'` para `status =
+  'approved'` (não removida — tarefa restrita a arquivos de rota, sem
+  tocar controllers); a rota já exige `authorizeModule('requisicoes',
+  'approve')`, então um usuário com perfil "Gestor de Compras" (`level =
+  'approve'`) ainda pode ser bloqueado pelo controller legado — **risco
+  residual documentado**, requer decisão de outro agente/humano sobre
+  remover a checagem do controller. Nos módulos piloto
+  (`laboratory`/`engineering`) a decisão de manter ambas as checagens
+  permanece inalterada (fora do escopo desta tarefa).
+- [ ] **Pendência registrada nesta entrega**: `PUT /api/sales/:id/status`
+  não diferencia a transição para `shipped` (que, na matriz de negócio,
+  seria de responsabilidade do módulo `expedicao`) das demais transições
+  operacionais de vendas — não é possível segregar por payload na
+  definição estática da rota. A rota inteira permanece mapeada em
+  `vendas`; a tela de expedição usa o mesmo endpoint. Decisão fina
+  (endpoint dedicado para expedição, ou inspeção de payload em
+  middleware) fica para tarefa futura.
 
 ### 1.3 Backend — Dashboard/Relatórios/Rastreabilidade (UC-38)
 
@@ -334,39 +376,53 @@ priorizar este bloco antes de finalizar o Bloco 2.
 
 ### 4.1 AdmDBA — Schema (maior escopo de schema desta entrega)
 
-- [ ] Criar migration `warehouses` (id, `codigo` único, `nome`, `tipo`
-  enum `insumos|acabados|laboratorio|outro`, `active` boolean default
-  true, timestamps)
-- [ ] Seed obrigatório: 3 registros (`INSUMOS`, `ACABADOS`, `LABORATORIO`)
-- [ ] Criar migration `product_warehouse_stock` (ou `item_warehouse_stock`
-  se migrado ao modelo `Item` canônico — confirmar qual dos dois modelos
-  de produto está ativo no momento da implementação, ver `CLAUDE.md`
-  seção "Produtos & Engenharia"): `product_id`/`item_id` FK,
-  `warehouse_id` FK, `quantity DECIMAL(18,6)` default 0, unique
-  `(product_id, warehouse_id)`
-- [ ] Adicionar `warehouse_id` (FK, obrigatório) em `inventory_movements`
-  (padrão expand-contract já usado no projeto para adicionar colunas —
-  ver `docs/HANDOFF_CODEX.md` Fase 4.1 como precedente de como conduzir
-  este tipo de migração com backfill seguro)
+- [x] Criar migration `warehouses` (id, `code` único, `name`,
+  `description`, `active` boolean default true, timestamps) —
+  `server/migrations/20260804-000001-create-warehouses.cjs`. **Desvio
+  deliberado desta entrega:** sem coluna `tipo` enum
+  (`insumos|acabados|laboratorio|outro`) — o `code` único já cumpre o
+  papel de identificar o depósito nesta fase; se um enum de tipo for
+  necessário para regras de roteamento automatizadas no backend (4.2),
+  avaliar então como ALTER TYPE incremental.
+- [x] Seed obrigatório: 3 registros (`INSUMOS`, `ACABADOS`, `LABORATORIO`)
+  — idempotente via `ON CONFLICT (code) DO NOTHING` na mesma migration.
+- [x] Criar migration `product_warehouse_stock`: modelo `products`
+  (INTEGER) confirmado ativo para saldo físico nesta fase — `product_id`
+  FK `products.id` (CASCADE), `warehouse_id` FK `warehouses.id`
+  (RESTRICT), `quantity DECIMAL(18,6)` default 0, `CHECK (quantity >= 0)`,
+  unique `(product_id, warehouse_id)`, índices em ambos os FKs.
+- [x] Adicionar `warehouse_id` em `inventory_movements` — **desvio
+  deliberado desta entrega:** coluna `NULL`able (não obrigatória) com
+  `ON DELETE SET NULL`, seguindo o padrão expand-contract (fase expand
+  apenas; tornar `NOT NULL` fica para uma fase contract futura, quando
+  todo código que grava `InventoryMovement` já estiver informando
+  depósito — ver `docs/HANDOFF_CODEX.md` Fase 4.1 como precedente).
 - [ ] Adicionar `type='transfer'` ao enum de tipo de `inventory_movements`,
   e `transfer_id` (UUID, nullable, usado para vincular o par
-  `out`/`in` de uma transferência)
+  `out`/`in` de uma transferência) — **fora do escopo desta migration**,
+  fica para a migration de `warehouse_transfers` (backend, 4.2).
 - [ ] Criar migration `warehouse_transfers` (id, `product_id`/`item_id`,
   `from_warehouse_id`, `to_warehouse_id`, `quantity`, `reason` text
   obrigatório, `status` enum `pending|approved|rejected`,
   `requested_by` FK users, `approved_by` FK users nullable,
-  `approval_date` nullable, timestamps)
-- [ ] Migration de backfill: todo saldo atual de `products.quantity`
-  migra para `product_warehouse_stock` no depósito `INSUMOS` (ponto de
-  partida — produto acabado que já estava pronto seria, a rigor, do
-  depósito `ACABADOS`; **decisão a validar com o dono/PCP antes do
-  backfill real**: como não há hoje segregação por tipo de produto vs
-  depósito, propor migrar tudo para `INSUMOS` e permitir ajuste manual
-  pós-migração, ou migrar por `product_type` — `finished` vai para
-  `ACABADOS`, os demais para `INSUMOS`)
-- [ ] Script de validação pós-backfill (mesmo padrão de
-  `04c_validation.sql`): soma de `product_warehouse_stock` por produto =
-  `products.quantity` anterior (invariante de §12 item 3), 0 órfãos
+  `approval_date` nullable, timestamps) — pendente, depende do use case
+  de aprovação (4.2).
+- [x] Migration de backfill: todo saldo atual de `products.quantity > 0`
+  migra para `product_warehouse_stock` no depósito `INSUMOS`
+  (`INSERT ... SELECT ... ON CONFLICT DO NOTHING`; produtos com
+  `quantity = 0` não ganham linha, decisão desta entrega para não poluir
+  a tabela com saldos zerados). `lot_controls` existentes recebem
+  `warehouse_id = INSUMOS`. **Nota:** a segregação por `product_type`
+  (`finished` → `ACABADOS`) mencionada como alternativa não foi aplicada
+  nesta entrega — todo saldo legado foi tratado como Insumos, conforme
+  instrução explícita recebida; ajuste manual pós-migração fica a
+  critério do PCP.
+- [ ] Script de validação pós-backfill dedicado (mesmo padrão de
+  `04c_validation.sql`) — pendente como arquivo separado; a invariante
+  (soma de `product_warehouse_stock` por produto = `products.quantity`
+  anterior para produtos com saldo > 0) está documentada em
+  `docs/DATABASE.md` e nos comentários da migration, mas o script `.sql`
+  de validação automatizada ainda não foi criado.
 
 ### 4.2 Backend
 

@@ -825,3 +825,87 @@ de produto acabado (origem: conclusão de Ordem de Produção).
 | `POST` | `/api/inventory/lots/:id/release` | `admin`, `operator` | `quarantine\|blocked` → `available`. Body opcional `{ notes }`. 422 se status atual não for liberável. |
 | `POST` | `/api/inventory/lots/:id/block` | `admin`, `operator` | `quarantine\|available` → `blocked`. Body `{ reason }` obrigatório (mín. 3 chars). 422 se status atual não for bloqueável. |
 
+---
+
+## Tabelas `warehouses` e `product_warehouse_stock` (Múltiplos Depósitos — Bloco 4, UC-42)
+
+**Models:** `server/src/models/Warehouse.ts`, `server/src/models/ProductWarehouseStock.ts`
+**Migration:** `server/migrations/20260804-000001-create-warehouses.cjs`
+**Regras de negócio:** `docs/business/BUSINESS_RULES.md` §12, `docs/business/01-USE_CASES.md` UC-42
+
+Introduz depósito físico cadastrável e saldo de produto **por depósito**,
+em vez de um único saldo global. Escopo desta migration: schema de saldo
+por depósito + roteamento de dados legados. `warehouse_transfers`
+(transferência com aprovação de gestor) e o tipo `transfer` em
+`inventory_movements` ficam para uma próxima migration do Bloco 4
+(backend/use cases).
+
+### Tabela `warehouses`
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `code` | VARCHAR(30) UNIQUE NOT NULL | Ex.: `INSUMOS`, `ACABADOS`, `LABORATORIO` |
+| `name` | VARCHAR(100) NOT NULL | |
+| `description` | TEXT | |
+| `active` | BOOLEAN DEFAULT true | |
+| `created_at` / `updated_at` | TIMESTAMP | snake_case |
+
+**Seed obrigatório (idempotente, `ON CONFLICT (code) DO NOTHING`):**
+
+| `code` | `name` |
+|---|---|
+| `INSUMOS` | Depósito de Insumos de Produção |
+| `ACABADOS` | Depósito de Produto Acabado |
+| `LABORATORIO` | Depósito do Laboratório |
+
+### Tabela `product_warehouse_stock`
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `product_id` | INTEGER FK → `products.id` | `ON DELETE CASCADE` |
+| `warehouse_id` | INTEGER FK → `warehouses.id` | `ON DELETE RESTRICT` |
+| `quantity` | DECIMAL(18,6) NOT NULL DEFAULT 0 | `CHECK (quantity >= 0)` |
+| `created_at` / `updated_at` | TIMESTAMP | snake_case |
+
+Constraints: `UNIQUE (product_id, warehouse_id)`; índices em `product_id`
+e `warehouse_id` separadamente.
+
+### Colunas novas (expand, nullable)
+
+| Tabela | Coluna | Notas |
+|---|---|---|
+| `inventory_movements` | `warehouse_id` INTEGER FK → `warehouses.id` (`ON DELETE SET NULL`) | `NULL` = movimento legado sem depósito atribuído. Índice `idx_inventory_movements_warehouse_id`. |
+| `lot_controls` | `warehouse_id` INTEGER FK → `warehouses.id` (`ON DELETE SET NULL`) | `NULL` = lote legado sem depósito atribuído. Índice `idx_lot_controls_warehouse_id`. Ortogonal ao `status` do lote (quarentena/bloqueio não é depósito — §12 item 9). |
+
+### Invariante obrigatória (§12 item 3)
+
+```
+saldo_total(produto) = Σ product_warehouse_stock.quantity do produto,
+                        para todo depósito ativo
+```
+
+Até a migração completa do backend para dual-write por depósito (fase
+contract), `products.quantity` continua sendo a fonte de verdade do saldo
+total e `product_warehouse_stock` é populada em paralelo (dual-write) —
+nenhuma rotina deve alterar um sem refletir no outro. Transferências entre
+depósitos nunca alteram a soma total: debitam origem e creditam destino no
+mesmo valor, na mesma transação atômica (§12 item 4).
+
+### Backfill aplicado nesta migration
+
+1. Todo produto com `products.quantity > 0` ganha uma linha em
+   `product_warehouse_stock` no depósito `INSUMOS` com
+   `quantity = products.quantity` (`INSERT ... SELECT ... ON CONFLICT DO NOTHING`).
+   Produtos com `quantity = 0` **não** ganham linha (decisão explícita,
+   evita poluir a tabela com saldos zerados).
+2. Todo `lot_controls` existente recebe `warehouse_id = INSUMOS`.
+
+### `down()`
+
+Remove, em ordem reversa: índice e coluna `warehouse_id` de
+`lot_controls`; índice e coluna `warehouse_id` de `inventory_movements`;
+índices, CHECK e UNIQUE de `product_warehouse_stock`, depois a tabela;
+por fim a tabela `warehouses`.
+

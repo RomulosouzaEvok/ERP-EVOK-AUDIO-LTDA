@@ -17,6 +17,7 @@ export interface LotControlAttributes {
   id: number;
   product_id: number;
   item_id?: string | null;
+  warehouse_id?: number | null;
   supplier_id: number | null;
   purchase_id: number | null;
   production_order_id: number | null;
@@ -37,6 +38,7 @@ const LotControl = sequelize.define('LotControl', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id (legado)' },
   item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK -> items.id (Fase 4.6 expand-contract)' },
+  warehouse_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> warehouses.id (Bloco 4, UC-42) — NULL = lote legado sem deposito; quarentena/bloqueio (status) e ortogonal ao deposito (BUSINESS_RULES.md §12 item 9)' },
   supplier_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> suppliers.id quando o lote veio de compra' },
   purchase_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> purchase_orders.id quando o lote veio de recebimento' },
   production_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> production_orders.id quando o lote foi produzido internamente' },
@@ -71,7 +73,8 @@ const LotControl = sequelize.define('LotControl', {
   indexes: [
     { unique: true, fields: ['product_id', 'lot_number'] },
     { fields: ['status'] },
-    { fields: ['expires_at'] }
+    { fields: ['expires_at'] },
+    { fields: ['warehouse_id'] }
   ]
 });
 

@@ -15,6 +15,7 @@ export interface InventoryMovementAttributes {
   product_id: number;
   item_id?: string | null;
   user_id: number;
+  warehouse_id?: number | null;
   type: 'in' | 'out' | 'adjustment';
   quantity: number;
   unit_cost: number;
@@ -30,6 +31,7 @@ const InventoryMovement = sequelize.define('InventoryMovement', {
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id (LEGADO)' },
   item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (NOVO, parallel to product_id)' },
   user_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → users.id (responsável)' },
+  warehouse_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → warehouses.id (Bloco 4, UC-42) — NULL = movimento legado sem depósito' },
   type: { type: DataTypes.ENUM('in', 'out', 'adjustment'), allowNull: false, comment: 'Tipo: in=entrada, out=saída, adjustment=ajuste' },
   quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, comment: 'Quantidade movimentada' },
   unit_cost: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, comment: 'Custo unitário no momento' },
@@ -48,7 +50,10 @@ const InventoryMovement = sequelize.define('InventoryMovement', {
     { fields: ['product_id', 'created_at'] },
     // Consulta reversa: todas as movimentacoes originadas por uma venda/
     // compra/ordem de producao especifica (auditoria/estorno).
-    { fields: ['reference_type', 'reference_id'] }
+    { fields: ['reference_type', 'reference_id'] },
+    // Filtro por deposito (Bloco 4, UC-42) — extrato de movimentacao por
+    // deposito, ver BUSINESS_RULES.md §12 item 10.
+    { fields: ['warehouse_id'] }
   ]
 });
 

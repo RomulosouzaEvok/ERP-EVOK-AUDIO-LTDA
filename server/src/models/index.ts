@@ -60,6 +60,8 @@ import ProductDrawing = require('./ProductDrawing');
 import AcousticTestResult = require('./AcousticTestResult');
 import AccessProfile = require('./AccessProfile');
 import AccessProfilePermission = require('./AccessProfilePermission');
+import Warehouse = require('./Warehouse');
+import ProductWarehouseStock = require('./ProductWarehouseStock');
 
 // ============================================
 // RELACIONAMENTOS
@@ -490,6 +492,26 @@ AccessProfilePermission.belongsTo(AccessProfile, { foreignKey: 'access_profile_i
 AccessProfile.hasMany(User, { foreignKey: 'access_profile_id', as: 'users' });
 User.belongsTo(AccessProfile, { foreignKey: 'access_profile_id', as: 'accessProfile' });
 
+// ============================================
+// RELACIONAMENTOS - MULTIPLOS DEPOSITOS (Bloco 4, UC-42)
+// ============================================
+
+// Warehouse ↔ ProductWarehouseStock
+Warehouse.hasMany(ProductWarehouseStock, { foreignKey: 'warehouse_id', as: 'stocks', onDelete: 'RESTRICT' });
+ProductWarehouseStock.belongsTo(Warehouse, { foreignKey: 'warehouse_id', as: 'warehouse', onDelete: 'RESTRICT' });
+
+// Product ↔ ProductWarehouseStock
+Product.hasMany(ProductWarehouseStock, { foreignKey: 'product_id', as: 'warehouseStocks', onDelete: 'CASCADE' });
+ProductWarehouseStock.belongsTo(Product, { foreignKey: 'product_id', as: 'product', onDelete: 'CASCADE' });
+
+// Warehouse ↔ InventoryMovement (NULL = movimento legado sem deposito)
+Warehouse.hasMany(InventoryMovement, { foreignKey: 'warehouse_id', as: 'movements' });
+InventoryMovement.belongsTo(Warehouse, { foreignKey: 'warehouse_id', as: 'warehouse' });
+
+// Warehouse ↔ LotControl (NULL = lote legado sem deposito)
+Warehouse.hasMany(LotControl, { foreignKey: 'warehouse_id', as: 'lot_controls' });
+LotControl.belongsTo(Warehouse, { foreignKey: 'warehouse_id', as: 'warehouse' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -506,5 +528,6 @@ export {
   ItemSupplier,
   WorkCenter, WorkCenterShift,
   EngineeringProject, ProductDrawing, AcousticTestResult,
-  AccessProfile, AccessProfilePermission
+  AccessProfile, AccessProfilePermission,
+  Warehouse, ProductWarehouseStock
 };

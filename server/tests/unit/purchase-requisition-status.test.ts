@@ -92,3 +92,31 @@ describe('ChangePurchaseRequisitionStatusUseCase', () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 });
+
+describe('purchaseRequisitionController.changeStatus — nivel de aprovacao', () => {
+  const controller = require('../../src/modules/purchaseRequisitions/presentation/controllers/purchaseRequisitionController');
+
+  const makeRes = () => {
+    const res: any = { statusCode: 200 };
+    res.status = (code: number) => { res.statusCode = code; return res; };
+    res.json = (body: any) => { res.body = body; return res; };
+    return res;
+  };
+
+  it('bloqueia aprovacao (403) para operador sem nivel approve no modulo requisicoes', async () => {
+    const next = jest.fn();
+    await controller.changeStatus(
+      {
+        params: { id: '10' },
+        body: { status: 'approved' },
+        user: { id: 9, role: 'operator', permissions: { requisicoes: 'operate' } },
+      } as any,
+      makeRes(),
+      next
+    );
+
+    expect(next).toHaveBeenCalled();
+    const err = next.mock.calls[0][0];
+    expect(err?.statusCode ?? err?.status).toBe(403);
+  });
+});

@@ -3113,4 +3113,149 @@ frontend permanecem pendentes, ver "Riscos residuais" abaixo)
    não configurado") — checar o console por um `console.error` de aviso.
 
 **Desenvolvedor**: Claude Code (Senior Frontend Engineer / UI Architect)
+
+---
+
+## Bloco 1.2 — Retrofit `authorizeModule` em Todos os Módulos de Rota (2026-08-04)
+
+### Resumo da feature
+
+Extensão do middleware `authorizeModule` (introduzido como piloto em
+`laboratory`/`engineering`) para **todos** os demais arquivos de rota de
+módulos de negócio em `server/src/modules/*/presentation/routes/*.ts`,
+**substituindo** (não empilhando) o `authorize(role)` legado, conforme a
+decisão registrada em `docs/business/BUSINESS_RULES.md` §8. Escopo
+estritamente limitado a arquivos de rota + testes — nenhuma
+migration/model/use-case/controller foi tocado (trabalho paralelo de
+outro agente).
+
+**Mapeamento rota → módulo aplicado:**
+
+| Rota (prefixo) | Módulo (`AccessModuleKey`) | Observação |
+|---|---|---|
+| `products`, `items` | `produtos` | item mestre mapeado ao mesmo módulo |
+| `inventory-counts` | `contagens` | `approve/reject` exigem nível `approve` |
+| `sales` | `vendas` | ver pendência de `expedicao` abaixo |
+| `clients` | `clientes` | `delete` exige `approve` |
+| `purchases` | `compras` | **exceto** `POST /:id/receive` → `recebimento` |
+| `purchase-requisitions` | `requisicoes` | `PATCH /:id/status` exige `approve` |
+| `suppliers` | `fornecedores` | `delete` exige `approve` |
+| `production-orders` | `producao` | **exceto** `/tracking/*` e `/:id/tracking` → `chao_de_fabrica` |
+| `bom` (engineering/bom) | `bom` | — |
+| `mrp` | `mrp` | — |
+| `work-centers` | `centros_de_trabalho` | — |
+| `quality/non-conformities` | `qualidade` | `delete` exige `approve` |
+| `inventory` (movements/stock-report/low-stock/lots) | `estoque` | **exceto** `lots/:id/release` e `lots/:id/block` → `qualidade` (`approve`, UC-37) |
+| `assets` | `patrimonio` | `delete` exige `approve` |
+| `traceability` | `rastreabilidade` | somente leitura |
+| `finance` | `financeiro` | escritas exigem `operate` |
+| `reports/{sales,inventory,customers,cash-flow}` | `relatorios.financeiro` | — |
+| `reports/production` | `relatorios.producao` | — |
+| `reports/purchasing` | `relatorios.compras` | — |
+| `reports/cost-variance` | `relatorios.custos` | — |
+| `dashboard` | `dashboard` | módulo agregador (§6.1) |
+| `mobile-inventory` | `estoque` | mesmo módulo de `/api/inventory/movements` |
+| `items/:id/suppliers` | `produtos` | sub-recurso do item mestre |
+
+**Mantidos fora do escopo (por decisão do enunciado):**
+- `intelligentAuditor`: `authorize('admin')` preservado (admin only).
+- `users`, `audit-logs`, `access-profiles`, `auth`: continuam
+  admin-only por `role` — fora do catálogo de 26 módulos de área (§1).
+- `webhooks`: rotas públicas de integração externa (n8n, Focus NF-e).
+- `categories`, `departments`, `employees`, `fiscal`, `maintenance`,
+  `serviceOrders`: sem módulo de permissão correspondente na matriz
+  atual de `BUSINESS_RULES.md` §1 (mesma pendência de "RH" já anotada
+  no documento) — fora do escopo desta tarefa.
+
+### Exceções e pendências anotadas
+
+1. **`PUT /api/sales/:id/status` (transição para `shipped`)** — não é
+   possível diferenciar por payload na definição estática da rota qual
+   transição de status pertence ao módulo `vendas` versus `expedicao`
+   (a tela de expedição usa o mesmo endpoint). A rota inteira permanece
+   mapeada em `vendas`; decisão fina (endpoint dedicado ou inspeção de
+   payload) registrada como pendência em `docs/governance/TODO.md`.
+2. **`purchaseRequisitionController.changeStatus`** — o controller
+   mantém a checagem hard-coded `req.user.role !== 'admin'` para
+   `status = 'approved'` (não removida: escopo desta tarefa restrito a
+   arquivos de rota, sem tocar controllers). A rota já exige
+   `authorizeModule('requisicoes', 'approve')`, mas um usuário com
+   perfil "Gestor de Compras" (`level = 'approve'`, não `role =
+   'admin'`) ainda pode ser bloqueado pelo controller legado —
+   **risco residual de UX/regra de negócio já documentado em
+   `BUSINESS_RULES.md` §8**, requer decisão de outro agente/humano sobre
+   remover a checagem do controller.
+3. Os pilotos `laboratory`/`engineering` mantêm o modo aditivo
+   (`authorizeModule` + `authorize(role)` compostos) — não foram
+   alterados nesta tarefa (decisão prévia registrada na entrega deles),
+   apenas confirmados pelo novo teste de guarda.
+
+### Documentações atualizadas
+
+- `docs/governance/TODO.md` — Bloco 1.2 marcado como retrofit completo
+  (checklist `[x]`), com o mapeamento rota→módulo, a lista de exceções e
+  a pendência de `sales`/`expedicao` registrada como item aberto.
+- `docs/HANDOFF_CODEX.md` — esta seção.
+- JSDoc de cabeçalho atualizado em cada arquivo de rota alterado (20
+  arquivos), documentando o módulo aplicado, o nível exigido por rota e,
+  quando aplicável, a exceção de módulo-dono-da-ação (`recebimento` em
+  `purchases`, `chao_de_fabrica` em `production-orders`,
+  `qualidade` em `inventory` lots, sub-tipos de relatório em `reports`).
+
+### Arquivos de rota alterados
+
+`server/src/modules/{products,items,inventory (inventory.ts +
+inventoryCounts.ts),sales,clients,purchases,purchaseRequisitions,
+suppliers,production (productionOrders.ts),bom,mrp,workCenters,
+nonConformities,assets,traceability,financial,reports,dashboard,
+mobileInventory}/presentation/routes/*.ts`
+
+### Testes
+
+- `server/tests/unit/rbac-critical-routes.test.ts` — **reescrito**
+  integralmente: mock de `authenticate`/`authorizeModule` (antes mockava
+  `authorize(role)`, que não existe mais nestas rotas) simulando a
+  fórmula de `BUSINESS_RULES.md` §4 via header de teste
+  `x-test-permissions` (mapa `{ modulo: nivel }`); cobre 401 (sem
+  token), 403 sem módulo, 403 nível insuficiente (rotas `approve`), 200
+  com nível correto e 200 para `role = admin` (curto-circuito §3). 18
+  testes, cobrindo os módulos críticos de escrita (produtos, vendas,
+  recebimento, estoque, qualidade/lotes, contagens, produção,
+  chão-de-fábrica, itens, BOM, MRP, financeiro, requisições, centros de
+  trabalho, patrimônio, fornecedores, clientes, não-conformidades).
+- `server/tests/unit/module-authorization-map.test.ts` — **novo** teste
+  de guarda anti-regressão (leitura de arquivo + regex, sem montar
+  Express): garante que todo módulo listado usa `authorizeModule` em
+  pelo menos uma chamada por arquivo de rota e que nenhum deles (exceto
+  os pilotos `laboratory`/`engineering`) ainda chama `authorize(role)`
+  para escrita comum; também garante 100% de cobertura consciente das
+  pastas de `src/modules` (exigidos + excluídos documentados).
+
+**Resultados:** `npm run typecheck` limpo (0 erros); `npx jest
+tests/unit` → 54 suites / 329 testes, 100% verde.
+
+### Instruções de teste (próximo agente/humano)
+
+1. Rodar `npm run typecheck` e `npx jest tests/unit` em
+   `server/` — devem permanecer limpos após qualquer alteração
+   subsequente nestas rotas.
+2. Validar manualmente (ou via teste de integração futuro) o cenário de
+   UC-37 (Qualidade libera lote criado pelo Recebimento): um usuário com
+   perfil "Almoxarife"/"Recebimento" sem `qualidade: approve` deve
+   receber 403 em `POST /api/inventory/lots/:id/release`; um usuário
+   com perfil "Qualidade" nível gestor (`qualidade: approve`) deve
+   conseguir liberar/bloquear o lote.
+3. Validar o cenário de requisição de compra: um usuário com perfil
+   "Gestor de Compras" (`requisicoes: approve`) tentando `PATCH
+   /api/purchase-requisitions/:id/status` para `approved` — hoje ainda
+   é bloqueado pelo controller legado (`role !== 'admin'`), reproduzindo
+   o risco documentado no item 2 de "Exceções e pendências" acima;
+   confirmar com o dono do produto se a checagem do controller deve ser
+   removida em uma próxima tarefa.
+4. Nenhuma migration/model foi tocada — não é necessário rodar
+   `npm run migration:status`/`up` para validar esta entrega.
+5. `NÃO` foi rodado Docker nem houve commit, conforme instrução da
+   tarefa — próximo agente decide se/quando commitar.
+
+**Desenvolvedor**: Claude Code (Senior Backend Engineer — retrofit RBAC)
 **Data**: 2026-08-03
