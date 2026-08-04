@@ -9,7 +9,18 @@ const ListLowStockUseCase = require('../../application/use-cases/ListLowStockUse
 const ListLotsUseCase = require('../../application/use-cases/ListLotsUseCase');
 const ReleaseLotUseCase = require('../../application/use-cases/ReleaseLotUseCase');
 const BlockLotUseCase = require('../../application/use-cases/BlockLotUseCase');
-const { createInventoryMovementSchema, handleZodError } = require('../validators/inventoryValidators');
+const CreateWarehouseTransferUseCase = require('../../application/use-cases/CreateWarehouseTransferUseCase');
+const ApproveWarehouseTransferUseCase = require('../../application/use-cases/ApproveWarehouseTransferUseCase');
+const RejectWarehouseTransferUseCase = require('../../application/use-cases/RejectWarehouseTransferUseCase');
+const ListWarehouseTransfersUseCase = require('../../application/use-cases/ListWarehouseTransfersUseCase');
+const ListWarehouseStockUseCase = require('../../application/use-cases/ListWarehouseStockUseCase');
+const ListWarehousesUseCase = require('../../application/use-cases/ListWarehousesUseCase');
+const {
+  createInventoryMovementSchema,
+  createWarehouseTransferSchema,
+  rejectWarehouseTransferSchema,
+  handleZodError
+} = require('../validators/inventoryValidators');
 
 /**
  * Controller enxuto do módulo `inventory`. Interpreta `req`, delega toda a
@@ -85,11 +96,11 @@ exports.create = async (req, res, next) => {
   try {
     const parsed = createInventoryMovementSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { product_id, item_id, type, quantity, description, reference_id, reference_type } = parsed.data;
+    const { product_id, item_id, type, quantity, description, reference_id, reference_type, warehouse_code } = parsed.data;
     const useCase = new CreateInventoryMovementUseCase();
     try {
       const { movement } = await useCase.execute({
-        product_id, item_id, type, quantity, description, reference_id, reference_type,
+        product_id, item_id, type, quantity, description, reference_id, reference_type, warehouse_code,
         userId: req.user.id,
         transaction: t
       });
@@ -243,5 +254,156 @@ exports.blockLot = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+/**
+ * `POST /api/inventory/transfers` — solicita transferência de saldo entre
+ * depósitos (Bloco 4, UC-42 Fluxo F). Cria a transferência em
+ * `status='pending'` — não altera nenhum saldo até a aprovação de um
+ * gestor do módulo `estoque`.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.createTransfer = async (req, res, next) => {
+  try {
+    const parsed = createWarehouseTransferSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { product_id, from_warehouse_code, to_warehouse_code, quantity, reason } = parsed.data;
 
+    const useCase = new CreateWarehouseTransferUseCase();
+    const transfer = await useCase.execute({
+      product_id, from_warehouse_code, to_warehouse_code, quantity, reason,
+      userId: req.user.id
+    });
 
+    logAction(req, {
+      action: 'create',
+      entityType: 'WarehouseTransfer',
+      entityId: transfer.id,
+      entityDescription: `Transferencia #${transfer.id}`,
+      newValues: { product_id, from_warehouse_code, to_warehouse_code, quantity, reason },
+      description: `Transferencia solicitada: produto #${product_id} de ${from_warehouse_code} para ${to_warehouse_code} (${quantity})`
+    });
+
+    res.status(201).json({ success: true, data: transfer });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `PUT /api/inventory/transfers/:id/approve` — aprova uma transferência
+ * pendente (`authorizeModule('estoque', 'approve')`). Executa o
+ * débito/crédito atômico entre depósitos na mesma transação e gera os
+ * dois `InventoryMovement` (`type='transfer'`) vinculados.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.approveTransfer = async (req, res, next) => {
+  const t = await sequelize.transaction();
+  try {
+    const useCase = new ApproveWarehouseTransferUseCase();
+    const transfer = await useCase.execute({ id: req.params.id, approverId: req.user.id, transaction: t });
+
+    await t.commit();
+
+    logAction(req, {
+      action: 'approve',
+      entityType: 'WarehouseTransfer',
+      entityId: transfer.id,
+      entityDescription: `Transferencia #${transfer.id}`,
+      newValues: { status: 'approved' },
+      description: `Transferencia #${transfer.id} aprovada e executada entre depositos`
+    });
+
+    res.json({ success: true, data: transfer });
+  } catch (error) {
+    if (t && !t.finished) await t.rollback();
+    next(error);
+  }
+};
+
+/**
+ * `PUT /api/inventory/transfers/:id/reject` — rejeita uma transferência
+ * pendente (`authorizeModule('estoque', 'approve')`), com `body.reason`
+ * obrigatório. Não altera nenhum saldo.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.rejectTransfer = async (req, res, next) => {
+  try {
+    const parsed = rejectWarehouseTransferSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { reason } = parsed.data;
+
+    const useCase = new RejectWarehouseTransferUseCase();
+    const transfer = await useCase.execute({ id: req.params.id, approverId: req.user.id, reason });
+
+    logAction(req, {
+      action: 'reject',
+      entityType: 'WarehouseTransfer',
+      entityId: transfer.id,
+      entityDescription: `Transferencia #${transfer.id}`,
+      newValues: { status: 'rejected', reason },
+      description: `Transferencia #${transfer.id} rejeitada: ${reason}`
+    });
+
+    res.json({ success: true, data: transfer });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/inventory/transfers?status=` — lista transferências entre
+ * depósitos com filtro opcional de status.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.listTransfers = async (req, res, next) => {
+  try {
+    const useCase = new ListWarehouseTransfersUseCase();
+    const transfers = await useCase.execute({ status: req.query.status });
+    res.json({ success: true, data: transfers });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/inventory/warehouse-stock?product_id=&warehouse_code=&page=&limit=`
+ * — lista saldos por par produto×depósito (Bloco 4, UC-42).
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.listWarehouseStock = async (req, res, next) => {
+  try {
+    const { product_id, warehouse_code, page, limit } = req.query;
+    const useCase = new ListWarehouseStockUseCase();
+    const { rows, total, page: p, limit: l, totalPages } = await useCase.execute({ product_id, warehouse_code, page, limit });
+    res.json({ success: true, data: rows, pagination: { total, page: p, limit: l, totalPages } });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/inventory/warehouses` — lista depósitos ativos.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.listWarehouses = async (req, res, next) => {
+  try {
+    const useCase = new ListWarehousesUseCase();
+    const warehouses = await useCase.execute();
+    res.json({ success: true, data: warehouses });
+  } catch (error) { next(error); }
+};

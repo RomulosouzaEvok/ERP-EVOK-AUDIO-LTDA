@@ -827,18 +827,31 @@ de produto acabado (origem: conclusão de Ordem de Produção).
 
 ---
 
-## Tabelas `warehouses` e `product_warehouse_stock` (Múltiplos Depósitos — Bloco 4, UC-42)
+## Tabelas `warehouses`, `product_warehouse_stock` e `warehouse_transfers` (Múltiplos Depósitos — Bloco 4, UC-42)
 
-**Models:** `server/src/models/Warehouse.ts`, `server/src/models/ProductWarehouseStock.ts`
-**Migration:** `server/migrations/20260804-000001-create-warehouses.cjs`
+**Models:** `server/src/models/Warehouse.ts`, `server/src/models/ProductWarehouseStock.ts`, `server/src/models/WarehouseTransfer.ts`
+**Migrations:** `server/migrations/20260804-000001-create-warehouses.cjs`, `server/migrations/20260804-000002-warehouse-transfers.cjs`
+**Service de domínio:** `server/src/services/warehouseStockService.ts` (`addToWarehouse`/`removeFromWarehouse`/`getWarehouseByCode`, dual-write transacional)
 **Regras de negócio:** `docs/business/BUSINESS_RULES.md` §12, `docs/business/01-USE_CASES.md` UC-42
 
 Introduz depósito físico cadastrável e saldo de produto **por depósito**,
-em vez de um único saldo global. Escopo desta migration: schema de saldo
-por depósito + roteamento de dados legados. `warehouse_transfers`
-(transferência com aprovação de gestor) e o tipo `transfer` em
-`inventory_movements` ficam para uma próxima migration do Bloco 4
-(backend/use cases).
+em vez de um único saldo global. A primeira migration
+(`20260804-000001`) criou o schema de saldo por depósito + roteamento de
+dados legados; a segunda (`20260804-000002`) adicionou o tipo `transfer`
+ao enum de `inventory_movements.type` e a tabela `warehouse_transfers`
+(solicitação de transferência com aprovação de gestor).
+
+**Backend integrado (dual-write) nesta entrega:**
+`ReceivePurchaseItemsUseCase` (recebimento de compra → `INSUMOS` por
+padrão, ou `LABORATORIO` se `warehouse_code` for informado no payload),
+`ChangeProductionOrderStatusUseCase` (consumo de componentes sai de
+`INSUMOS`, produto acabado concluído entra em `ACABADOS`),
+`CreateInventoryMovementUseCase` (movimentação manual, `warehouse_code`
+opcional, default `INSUMOS`) e o fluxo completo de transferência entre
+depósitos (`POST /api/inventory/transfers` → `pending` →
+`PUT .../approve|reject`). **Ainda não integrado:** expedição de venda
+(Fluxo D do UC-42) e débito automático de teste destrutivo de
+laboratório (Fluxo E/UC-42-E) — ver `docs/governance/TODO.md` Bloco 4.2.
 
 ### Tabela `warehouses`
 
@@ -902,10 +915,67 @@ mesmo valor, na mesma transação atômica (§12 item 4).
    evita poluir a tabela com saldos zerados).
 2. Todo `lot_controls` existente recebe `warehouse_id = INSUMOS`.
 
-### `down()`
+### `down()` (`20260804-000001`)
 
 Remove, em ordem reversa: índice e coluna `warehouse_id` de
 `lot_controls`; índice e coluna `warehouse_id` de `inventory_movements`;
 índices, CHECK e UNIQUE de `product_warehouse_stock`, depois a tabela;
 por fim a tabela `warehouses`.
+
+### Tabela `warehouse_transfers` (migration `20260804-000002`)
+
+Solicitação de transferência de saldo de um produto entre dois depósitos,
+com aprovação de gestor obrigatória (§12 itens 6 e 8).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `product_id` | INTEGER FK → `products.id` | `ON DELETE RESTRICT` |
+| `from_warehouse_id` | INTEGER FK → `warehouses.id` | `ON DELETE RESTRICT` |
+| `to_warehouse_id` | INTEGER FK → `warehouses.id` | `ON DELETE RESTRICT`; `CHECK (from_warehouse_id <> to_warehouse_id)` |
+| `quantity` | DECIMAL(18,6) NOT NULL | `CHECK (quantity > 0)` |
+| `reason` | TEXT NOT NULL | Motivo obrigatório da transferência |
+| `user_id` | INTEGER FK → `users.id` | `ON DELETE RESTRICT` — quem solicitou |
+| `approved_by` | INTEGER FK → `users.id` NULL | `ON DELETE SET NULL` — quem aprovou/rejeitou |
+| `status` | ENUM `pending\|approved\|rejected` | default `pending` |
+| `created_at` / `updated_at` | TIMESTAMP | snake_case |
+
+Índices em `product_id`, `from_warehouse_id`, `to_warehouse_id`, `status`.
+
+**`inventory_movements.type`:** ganhou o valor `'transfer'`
+(`ALTER TYPE ... ADD VALUE IF NOT EXISTS`, fora de transação, mesmo
+padrão de `20260803-000002-add-quarantine-lot-status.cjs`). Uma
+transferência aprovada gera **dois** registros de `InventoryMovement`
+(`type='transfer'`, um `out` no `warehouse_id` de origem e um `in` no
+`warehouse_id` de destino), ambos com
+`reference_type='transfer'`/`reference_id=warehouse_transfers.id` —
+não existe coluna `transfer_id` dedicada; o par
+`reference_type`/`reference_id` já existente cumpre o mesmo papel de
+vincular os dois lançamentos.
+
+### `down()` (`20260804-000002`)
+
+Remove índices e CHECKs de `warehouse_transfers`, dropa a tabela e o
+enum `enum_warehouse_transfers_status`. O valor `'transfer'` adicionado
+ao enum `enum_inventory_movements_type` **permanece** no rollback
+(remover um valor de ENUM no Postgres exige recriar o tipo inteiro —
+mesma justificativa de `20260803-000002-add-quarantine-lot-status.cjs`).
+
+### Endpoints (`server/src/modules/inventory/presentation/routes/inventory.ts`)
+
+| Método | Rota | Autorização | Descrição |
+|---|---|---|---|
+| `GET` | `/api/inventory/warehouses` | `authorizeModule('estoque')` | Lista depósitos ativos. |
+| `GET` | `/api/inventory/warehouse-stock?product_id=&warehouse_code=&page=&limit=` | `authorizeModule('estoque')` | Saldo por par produto×depósito, com `product`/`warehouse` incluídos. |
+| `GET` | `/api/inventory/transfers?status=` | `authorizeModule('estoque')` | Lista transferências (filtro opcional de status). |
+| `POST` | `/api/inventory/transfers` | `authorizeModule('estoque', 'operate')` | Solicita transferência (`{ product_id, from_warehouse_code, to_warehouse_code, quantity, reason }`). Cria em `status='pending'`, não altera saldo. |
+| `PUT` | `/api/inventory/transfers/:id/approve` | `authorizeModule('estoque', 'approve')` | Aprova e executa a transferência atomicamente (débito origem + crédito destino + 2 `InventoryMovement`). 422 didático se saldo de origem insuficiente no momento da aprovação. |
+| `PUT` | `/api/inventory/transfers/:id/reject` | `authorizeModule('estoque', 'approve')` | Rejeita (`body.reason` obrigatório), não altera saldo. |
+
+**Integração com endpoints existentes:**
+- `POST /api/purchases/:id/receive` — aceita `warehouse_code` opcional
+  no payload (`'INSUMOS'\|'LABORATORIO'`, default `'INSUMOS'`).
+- `POST /api/inventory/movements` — aceita `warehouse_code` opcional
+  (string livre validada contra `warehouses.code` em runtime via
+  `getWarehouseByCode`, default `'INSUMOS'`).
 

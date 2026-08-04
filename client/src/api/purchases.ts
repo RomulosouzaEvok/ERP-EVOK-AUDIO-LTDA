@@ -72,8 +72,16 @@ export interface ReceivePurchaseItemInput {
   lot_notes?: string;
 }
 
-/** `POST /api/purchases/:id/receive` — `invoice_number` é obrigatório (chave de deduplicação da NF). */
-export async function receivePurchaseItems(id: number, input: { invoice_number: string; items: ReceivePurchaseItemInput[] }) {
+/**
+ * `POST /api/purchases/:id/receive` — `invoice_number` é obrigatório (chave
+ * de deduplicação da NF). `warehouse_code` é opcional — `'INSUMOS'`
+ * (default no backend) ou `'LABORATORIO'` (Bloco 4, UC-42 §12 item 7,
+ * amostra de engenharia).
+ */
+export async function receivePurchaseItems(
+  id: number,
+  input: { invoice_number: string; items: ReceivePurchaseItemInput[]; warehouse_code?: 'INSUMOS' | 'LABORATORIO' },
+) {
   const { data } = await httpClient.post<ItemResponse<Purchase>>(`/api/purchases/${id}/receive`, input);
   return data.data;
 }

@@ -8,6 +8,7 @@ import UseCase from '../../../../shared/application/UseCase';
 import ProductionOrderEntity from '../../domain/entities/ProductionOrderEntity';
 import { NotFoundError, ValidationError, ConflictError, BusinessRuleError, AppError } from '../../../../errors';
 const InventoryService: any = require('../../../../services/inventoryService');
+const WarehouseStockService: any = require('../../../../services/warehouseStockService');
 const CostingService: any = require('../../../../services/costingService');
 const BomService: any = require('../../../../services/bomService');
 const { LotControl, ProductionLotConsumption, SerialNumber }: any = require('../../../../models/index');
@@ -150,6 +151,12 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
     if (producedQty <= 0) return;
 
     try {
+      // Roteamento de deposito (Bloco 4, BUSINESS_RULES.md §12 item 7):
+      // consumo de componentes sai sempre de INSUMOS; produto acabado
+      // concluido entra sempre em ACABADOS.
+      const insumosWarehouse = await WarehouseStockService.getWarehouseByCode('INSUMOS', transaction);
+      const acabadosWarehouse = await WarehouseStockService.getWarehouseByCode('ACABADOS', transaction);
+
       let explosion: any = null;
       try {
         explosion = await BomService.explodeBOM(order.product_id, producedQty, { includeCost: true });
@@ -167,8 +174,14 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
           await InventoryService.consume(component.component_id, component.quantity, input.user_id, transaction, {
             description: `Consumo de componente - Producao ${order.order_number}`,
             referenceId: order.id,
-            referenceType: 'production'
+            referenceType: 'production',
+            warehouseId: insumosWarehouse.id
           });
+
+          // Dual-write (BUSINESS_RULES.md §12 item 3): consumo de componentes
+          // sai do Deposito de Insumos, nunca deixando o saldo do deposito
+          // negativo (422 didatico em removeFromWarehouse).
+          await WarehouseStockService.removeFromWarehouse(component.component_id, insumosWarehouse.id, component.quantity, transaction);
 
           await this.consumeLotsForComponent({
             order,
@@ -186,15 +199,21 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       const { product } = await InventoryService.receive(order.product_id, producedQty, input.user_id, transaction, {
         description: `Producao concluida - ${order.order_number}`,
         referenceId: order.id,
-        referenceType: 'production'
+        referenceType: 'production',
+        warehouseId: acabadosWarehouse.id
       });
+
+      // Dual-write (BUSINESS_RULES.md §12 item 3): produto acabado recebido
+      // entra sempre no Deposito de Produto Acabado, nunca em Insumos.
+      await WarehouseStockService.addToWarehouse(order.product_id, acabadosWarehouse.id, producedQty, transaction);
 
       const finishedLot = await this.createFinishedLot({
         order,
         producedQty,
         userId: input.user_id,
         transaction,
-        finishedLotNumber: input.finished_lot_number
+        finishedLotNumber: input.finished_lot_number,
+        warehouseId: acabadosWarehouse.id
       });
 
       await this.createSerialNumbersIfNeeded({
@@ -534,6 +553,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
     userId: number;
     transaction: any;
     finishedLotNumber?: string;
+    warehouseId?: number | null;
   }): Promise<any> {
     const lotNumber = params.finishedLotNumber?.trim() || `${params.order.order_number}-FG`;
     return LotControl.create({
@@ -541,6 +561,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       production_order_id: params.order.id,
       lot_number: lotNumber,
       status: 'available',
+      warehouse_id: params.warehouseId ?? null,
       quantity_initial: params.producedQty,
       quantity_available: params.producedQty,
       manufactured_at: new Date(),

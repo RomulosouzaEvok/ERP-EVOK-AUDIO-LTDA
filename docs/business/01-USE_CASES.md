@@ -1139,7 +1139,10 @@ Cenário: Transferência entre depósitos exige aprovação de gestor
   Então ela fica em status "pending", aguardando um gestor
   E ao ser aprovada por um gestor, o saldo de Insumos cai 10 e o saldo do
     Laboratório sobe 10, na mesma transação, com dois registros de
-    movimentação vinculados pelo mesmo transfer_id
+    movimentação vinculados pela mesma transferência (`reference_type =
+    'transfer'` / `reference_id = warehouse_transfers.id` em
+    `InventoryMovement` — não existe coluna `transfer_id` dedicada, ver
+    nota de implementação abaixo)
 
 Cenário: Quarentena não é depósito
   Dado que um lote está com LotControl.status = "quarantine" dentro do
@@ -1160,6 +1163,20 @@ Cenário: Teste destrutivo debita automaticamente o Depósito de Laboratório
 ```
 
 **Regras de Negócio:** ver `BUSINESS_RULES.md` §12.
+
+**Nota de implementação (backend, entrega parcial):** Fluxos B (recebimento
+→ depósito) e C (consumo/conclusão de OP) implementados via dual-write em
+`server/src/services/warehouseStockService.ts`, com roteamento
+`INSUMOS`/`ACABADOS` automático e `INSUMOS`/`LABORATORIO` via parâmetro
+`warehouse_code` opcional no payload de `POST /api/purchases/:id/receive`
+(o roteamento 100% automático por `origin` da requisição depende do Bloco
+2/UC-39, ainda não implementado). Fluxo F (transferência) implementado via
+`POST/GET /api/inventory/transfers` e
+`PUT /api/inventory/transfers/:id/approve|reject`. Fluxo D (expedição
+exclusiva de `ACABADOS`) e Fluxo E (débito automático de teste destrutivo,
+UC-42-E) **ainda não implementados** — ver `docs/governance/TODO.md`
+Bloco 4.2/4.4 para o detalhamento completo de escopo entregue vs.
+pendente.
 
 ---
 

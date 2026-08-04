@@ -111,7 +111,7 @@ tela funciona.
 - [x] Listagem de produtos com busca, filtro por categoria/status e paginação (`GET /api/products`).
 - [x] Criar/editar produto (`POST`/`PUT /api/products`), com validação espelhando o schema Zod do backend.
 - [x] Inativar produto (`DELETE /api/products/:id`), tratando o `409` de item vinculado a BOM/movimento com mensagem clara (não um erro genérico).
-- [x] Tela de movimentação manual de estoque (entrada/saída) (`POST /api/products/movements`) — **movida para `/logistics/estoque` (aba Saldos)** na Onda 1 da separação Produto×Estoque; `ProductsPage` mantém apenas cadastro/foto/QR/fornecedores/inativação, com aviso apontando para Logística.
+- [x] Tela de movimentação manual de estoque (entrada/saída) — **movida para `/logistics/estoque` (aba Saldos)** na Onda 1 da separação Produto×Estoque; `ProductsPage` mantém apenas cadastro/foto/QR/fornecedores/inativação, com aviso apontando para Logística. **Onda Múltiplos Depósitos (Bloco 4, UC-42)**: o dialog de movimentação passou a usar `POST /api/inventory/movements` (não mais `POST /api/products/movements`, que não aceita `warehouse_code`) e ganhou seletor de depósito (default `INSUMOS`).
 - [x] Alerta visual de estoque baixo (`min_quantity`) — tile "Abaixo do mínimo" em `/logistics/estoque` (`GET /api/inventory/low-stock`) + pill "Abaixo do mínimo"/"OK" na tabela de saldos.
 - [ ] Tela de contagem de inventário cíclico (`/api/inventory-counts`): criar, iniciar, contar item, submeter, aprovar/rejeitar. (Página existente em `/products/inventory-counts`; aba "Contagens" de `/logistics/estoque` aponta para ela via link, não foi movida nesta onda.)
 - [ ] Cadastro de Itens/BOM canônico se aplicável à operação real (`/api/items`) — confirmar com o negócio se `products` (legado) ou `items` (canônico) é a fonte de verdade operacional antes de decidir a tela.
@@ -123,13 +123,38 @@ tela funciona.
 
 ### Onda 1 — Departamento Logística (Estoque + Recebimento)
 
-- [x] Nova página `/logistics/estoque` (`src/pages/logistics/InventoryPage.tsx`) com 4 abas:
-  - [x] **Saldos**: tiles (abaixo do mínimo, lotes em quarentena/bloqueados, valor em estoque via `GET /api/inventory/stock-report`) + tabela de produtos com busca/paginação (`GET /api/products`) + ação "Movimentar" (dialog entrada/saída, mesmo endpoint `POST /api/products/movements` reaproveitado de `ProductsPage`).
+- [x] Nova página `/logistics/estoque` (`src/pages/logistics/InventoryPage.tsx`) com 4 abas (5 após a Onda Múltiplos Depósitos, ver abaixo):
+  - [x] **Saldos**: tiles (abaixo do mínimo, lotes em quarentena/bloqueados, valor em estoque via `GET /api/inventory/stock-report`) + tabela de produtos com busca/paginação (`GET /api/products`) + ação "Movimentar" (dialog entrada/saída).
   - [x] **Extrato**: `GET /api/inventory/movements` paginado, com badge de tipo (entrada/saída/ajuste), motivo e referência.
   - [x] **Lotes**: somente leitura, filtro por situação (`GET /api/inventory/lots?status=`), badges coloridos por status; ações de liberar/bloquear permanecem exclusivamente em `/quality`.
   - [x] **Contagens**: card com link para `/products/inventory-counts` (página não movida nesta onda).
 - [x] Nova página `/logistics/recebimento` (`src/pages/logistics/ReceivingPage.tsx`): fila de pedidos `sent`/`partial` (`GET /api/purchases`, duas buscas client-side combinadas — backend não suporta status múltiplo), destaque de data prevista vencida, dialog de conferência (`ReceivingConferenceDialog.tsx`) com itens pedida/recebida/a receber + lote/validade opcionais + NF obrigatória, submit em `POST /api/purchases/:id/receive`, aviso pós-recebimento de quarentena com link para `/quality`.
 - [x] Navegação: grupo "Logística" na sidebar (`AppLayout.tsx`) com ícones `Warehouse`/`PackageCheck`, rotas lazy em `App.tsx`, breadcrumbs dedicados.
+
+### Onda — Múltiplos Depósitos (Bloco 4, UC-42, `docs/governance/TODO.md`)
+
+- [x] `client/src/api/warehouses.ts` novo: `listWarehouses`,
+  `listWarehouseStock`, `listTransfers`, `createTransfer`,
+  `approveTransfer`, `rejectTransfer` (todos sob `/api/inventory/*`,
+  confirmado por leitura direta do controller/validators do backend).
+- [x] Aba **Saldos** de `/logistics/estoque`: seletor de depósito
+  (Todos/Insumos/Acabados/Laboratório); com depósito selecionado, troca a
+  tabela para o saldo por depósito (`GET /api/inventory/warehouse-stock`).
+  Dialog de movimentação manual ganhou seletor de depósito.
+- [x] Aba **Lotes**: nova coluna "Depósito" (`lot.warehouse_id` mapeado
+  pelo nome via `listWarehouses()` — o endpoint de lotes não inclui a
+  associação `warehouse`).
+- [x] Nova aba **Transferências** (`TransfersTab.tsx`): tabela com badge de
+  status (pending âmbar/approved verde/rejected vermelho) + dialog "Nova
+  transferência" (produto/de/para/quantidade/motivo, validação
+  `from ≠ to` no client) + Aprovar/Rejeitar restritos a
+  `permissions?.estoque === 'approve'` ou `admin`, com `DidacticAlert`
+  para os 422 de saldo insuficiente.
+- [x] `/logistics/recebimento` (`ReceivingConferenceDialog`): seletor
+  "Depósito de destino" (Insumos default/Laboratório), enviado como
+  `warehouse_code` no payload de `POST /api/purchases/:id/receive`.
+- Detalhamento completo, decisões e roteiro de teste manual:
+  `docs/HANDOFF_CODEX.md` seção "Bloco 4 — Múltiplos Depósitos: Frontend".
 
 ### Onda 3 — Expedição
 

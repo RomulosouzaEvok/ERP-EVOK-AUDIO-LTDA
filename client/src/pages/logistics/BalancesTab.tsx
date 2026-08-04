@@ -8,6 +8,7 @@ import { AlertTriangle, Boxes, Lock, ShieldAlert } from 'lucide-react';
 import * as productsApi from '@/api/products';
 import * as inventoryApi from '@/api/inventory';
 import * as lotsApi from '@/api/lots';
+import * as warehousesApi from '@/api/warehouses';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -21,17 +22,36 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
 
-/** Aba "Saldos": tiles de indicadores + tabela de produtos com ação de movimentação. */
+/**
+ * Aba "Saldos": tiles de indicadores + tabela de produtos com ação de
+ * movimentação. Com "Todos os depósitos" selecionado, mantém a visão
+ * legada (saldo total de `products.quantity`, `GET /api/products`). Com um
+ * depósito específico selecionado, troca para o saldo POR DEPÓSITO
+ * (`GET /api/inventory/warehouse-stock?warehouse_code=`, Bloco 4, UC-42).
+ */
 export function BalancesTab() {
   const { hasRole } = useAuth();
   const canWrite = hasRole('admin', 'operator');
   const [search, setSearch] = React.useState('');
   const [page, setPage] = React.useState(1);
+  const [warehouseCode, setWarehouseCode] = React.useState<string>('');
   const [movementProduct, setMovementProduct] = React.useState<productsApi.Product | null>(null);
+
+  const { data: warehouses } = useQuery({
+    queryKey: ['warehouses'],
+    queryFn: warehousesApi.listWarehouses,
+  });
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['inventory-products', search, page],
     queryFn: () => productsApi.listProducts({ search: search || undefined, limit: 20, page }),
+    enabled: !warehouseCode,
+  });
+
+  const { data: warehouseStock, isLoading: isWarehouseStockLoading, isError: isWarehouseStockError } = useQuery({
+    queryKey: ['warehouse-stock', warehouseCode, page],
+    queryFn: () => warehousesApi.listWarehouseStock({ warehouse_code: warehouseCode, limit: 20, page }),
+    enabled: Boolean(warehouseCode),
   });
 
   const { data: lowStock } = useQuery({
@@ -101,74 +121,150 @@ export function BalancesTab() {
         </Card>
       </div>
 
-      <Input
-        aria-label="Buscar produtos por nome ou código"
-        placeholder="Buscar por nome ou código..."
-        value={search}
-        onChange={(event) => {
-          setSearch(event.target.value);
-          setPage(1);
-        }}
-        className="max-w-sm"
-      />
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="balances-search" className="text-sm text-muted-foreground">
+            Buscar
+          </Label>
+          <Input
+            id="balances-search"
+            aria-label="Buscar produtos por nome ou código"
+            placeholder="Buscar por nome ou código..."
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+            className="max-w-sm"
+            disabled={Boolean(warehouseCode)}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="balances-warehouse" className="text-sm text-muted-foreground">
+            Depósito
+          </Label>
+          <SelectNative
+            id="balances-warehouse"
+            className="max-w-56"
+            value={warehouseCode}
+            onChange={(event) => {
+              setWarehouseCode(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Todos</option>
+            {(warehouses ?? []).map((warehouse) => (
+              <option key={warehouse.id} value={warehouse.code}>
+                {warehouse.name}
+              </option>
+            ))}
+          </SelectNative>
+        </div>
+      </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Código</TableHead>
-            <TableHead>Nome</TableHead>
-            <TableHead>Saldo</TableHead>
-            <TableHead>Reservado</TableHead>
-            <TableHead>Mínimo</TableHead>
-            <TableHead>Situação</TableHead>
-            {canWrite && <TableHead>Ações</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading && <TableSkeletonRows columns={canWrite ? 7 : 6} />}
-          {isError && (
-            <TableRow>
-              <TableCell colSpan={canWrite ? 7 : 6} className="text-center text-destructive">
-                Não foi possível carregar os produtos. Tente novamente.
-              </TableCell>
-            </TableRow>
-          )}
-          {data?.data.map((product) => {
-            const quantity = Number(product.quantity);
-            const minQuantity = Number(product.min_quantity);
-            const isLow = quantity <= minQuantity;
-            return (
-              <TableRow key={product.id}>
-                <TableCell>{product.code}</TableCell>
-                <TableCell>{product.name}</TableCell>
-                <TableCell className={isLow ? 'font-medium text-destructive' : ''}>{quantity}</TableCell>
-                {/* Reserva não é exposta por produto no backend atual (apenas agregada); exibimos "-" até existir endpoint dedicado. */}
-                <TableCell>-</TableCell>
-                <TableCell>{minQuantity}</TableCell>
-                <TableCell>
-                  <Badge variant={isLow ? 'destructive' : 'success'}>{isLow ? 'Abaixo do mínimo' : 'OK'}</Badge>
-                </TableCell>
-                {canWrite && (
-                  <TableCell>
-                    <Button size="sm" variant="outline" onClick={() => setMovementProduct(product)}>
-                      Movimentar
-                    </Button>
-                  </TableCell>
-                )}
+      {!warehouseCode && (
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Código</TableHead>
+                <TableHead>Nome</TableHead>
+                <TableHead>Saldo</TableHead>
+                <TableHead>Reservado</TableHead>
+                <TableHead>Mínimo</TableHead>
+                <TableHead>Situação</TableHead>
+                {canWrite && <TableHead>Ações</TableHead>}
               </TableRow>
-            );
-          })}
-          {!isLoading && !isError && data?.data.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={canWrite ? 7 : 6} className="text-center text-muted-foreground">
-                Nenhum produto encontrado.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+            </TableHeader>
+            <TableBody>
+              {isLoading && <TableSkeletonRows columns={canWrite ? 7 : 6} />}
+              {isError && (
+                <TableRow>
+                  <TableCell colSpan={canWrite ? 7 : 6} className="text-center text-destructive">
+                    Não foi possível carregar os produtos. Tente novamente.
+                  </TableCell>
+                </TableRow>
+              )}
+              {data?.data.map((product) => {
+                const quantity = Number(product.quantity);
+                const minQuantity = Number(product.min_quantity);
+                const isLow = quantity <= minQuantity;
+                return (
+                  <TableRow key={product.id}>
+                    <TableCell>{product.code}</TableCell>
+                    <TableCell>{product.name}</TableCell>
+                    <TableCell className={isLow ? 'font-medium text-destructive' : ''}>{quantity}</TableCell>
+                    {/* Reserva não é exposta por produto no backend atual (apenas agregada); exibimos "-" até existir endpoint dedicado. */}
+                    <TableCell>-</TableCell>
+                    <TableCell>{minQuantity}</TableCell>
+                    <TableCell>
+                      <Badge variant={isLow ? 'destructive' : 'success'}>{isLow ? 'Abaixo do mínimo' : 'OK'}</Badge>
+                    </TableCell>
+                    {canWrite && (
+                      <TableCell>
+                        <Button size="sm" variant="outline" onClick={() => setMovementProduct(product)}>
+                          Movimentar
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })}
+              {!isLoading && !isError && data?.data.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={canWrite ? 7 : 6} className="text-center text-muted-foreground">
+                    Nenhum produto encontrado.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
 
-      <Pagination pagination={data?.pagination} onPageChange={setPage} />
+          <Pagination pagination={data?.pagination} onPageChange={setPage} />
+        </>
+      )}
+
+      {warehouseCode && (
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Código</TableHead>
+                <TableHead>Nome</TableHead>
+                <TableHead>Depósito</TableHead>
+                <TableHead>Saldo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isWarehouseStockLoading && <TableSkeletonRows columns={4} />}
+              {isWarehouseStockError && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-destructive">
+                    Não foi possível carregar o saldo por depósito. Tente novamente.
+                  </TableCell>
+                </TableRow>
+              )}
+              {warehouseStock?.data.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell>{row.product?.code ?? row.product_id}</TableCell>
+                  <TableCell>{row.product?.name ?? '-'}</TableCell>
+                  <TableCell>{row.warehouse?.name ?? '-'}</TableCell>
+                  <TableCell>{Number(row.quantity)}</TableCell>
+                </TableRow>
+              ))}
+              {!isWarehouseStockLoading && !isWarehouseStockError && warehouseStock?.data.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    Nenhum saldo encontrado para este depósito.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          <Pagination pagination={warehouseStock?.pagination} onPageChange={setPage} />
+        </>
+      )}
 
       <StockMovementDialog product={movementProduct} onClose={() => setMovementProduct(null)} />
     </div>
@@ -179,6 +275,7 @@ const movementSchema = z.object({
   type: z.enum(['in', 'out']),
   quantity: z.coerce.number().positive('Informe uma quantidade maior que zero.'),
   description: z.string().max(500).optional(),
+  warehouse_code: z.string().min(1, 'Selecione o depósito.'),
 });
 
 type MovementFormData = z.infer<typeof movementSchema>;
@@ -186,27 +283,45 @@ type MovementFormData = z.infer<typeof movementSchema>;
 /**
  * Dialog de movimentação manual de estoque (entrada/saída) — reaproveitado
  * de `ProductsPage` (onde a ação existia originalmente), agora centralizado
- * em Logística → Estoque, mesmo endpoint/payload (`POST /api/products/movements`).
+ * em Logística → Estoque. Usa `POST /api/inventory/movements` (não mais
+ * `POST /api/products/movements`), único endpoint que aceita
+ * `warehouse_code` e faz dual-write em `product_warehouse_stock`
+ * (Bloco 4, UC-42).
  */
 function StockMovementDialog({ product, onClose }: { product: productsApi.Product | null; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [formError, setFormError] = React.useState<string | null>(null);
+
+  const { data: warehouses } = useQuery({
+    queryKey: ['warehouses'],
+    queryFn: warehousesApi.listWarehouses,
+  });
 
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<MovementFormData>({ resolver: zodResolver(movementSchema), defaultValues: { type: 'in' } });
+  } = useForm<MovementFormData>({
+    resolver: zodResolver(movementSchema),
+    defaultValues: { type: 'in', warehouse_code: 'INSUMOS' },
+  });
 
   const mutation = useMutation({
     mutationFn: (values: MovementFormData) =>
-      productsApi.createStockMovement({ product_id: product!.id, ...values }),
+      inventoryApi.createMovement({
+        product_id: product!.id,
+        type: values.type,
+        quantity: values.quantity,
+        description: values.description?.trim() || `Movimentação manual (${values.type})`,
+        warehouse_code: values.warehouse_code,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory-products'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-low-stock'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-stock-report'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-stock'] });
       reset();
       setFormError(null);
       onClose();
@@ -216,7 +331,7 @@ function StockMovementDialog({ product, onClose }: { product: productsApi.Produc
 
   React.useEffect(() => {
     if (product) {
-      reset({ type: 'in', quantity: undefined, description: '' } as never);
+      reset({ type: 'in', quantity: undefined, description: '', warehouse_code: 'INSUMOS' } as never);
       setFormError(null);
     }
   }, [product, reset]);
@@ -234,6 +349,18 @@ function StockMovementDialog({ product, onClose }: { product: productsApi.Produc
               <option value="in">Entrada</option>
               <option value="out">Saída</option>
             </SelectNative>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="warehouse_code">Depósito</Label>
+            <SelectNative id="warehouse_code" {...register('warehouse_code')}>
+              {(warehouses ?? []).map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.code}>
+                  {warehouse.name}
+                </option>
+              ))}
+              {!warehouses?.length && <option value="INSUMOS">Insumos</option>}
+            </SelectNative>
+            {errors.warehouse_code && <p className="text-sm text-destructive">{errors.warehouse_code.message}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="quantity">Quantidade</Label>

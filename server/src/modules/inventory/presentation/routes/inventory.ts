@@ -29,6 +29,14 @@ router.get('/lots', authenticate, authorizeModule('estoque'), inventoryControlle
 router.post('/lots/:id/release', authenticate, authorizeModule('qualidade', 'approve'), inventoryController.releaseLot);
 router.post('/lots/:id/block', authenticate, authorizeModule('qualidade', 'approve'), inventoryController.blockLot);
 
+// Multiplos Depositos (Bloco 4, UC-42, BUSINESS_RULES.md §12).
+router.get('/warehouses', authenticate, authorizeModule('estoque'), inventoryController.listWarehouses);
+router.get('/warehouse-stock', authenticate, authorizeModule('estoque'), inventoryController.listWarehouseStock);
+router.get('/transfers', authenticate, authorizeModule('estoque'), inventoryController.listTransfers);
+router.post('/transfers', authenticate, authorizeModule('estoque', 'operate'), inventoryController.createTransfer);
+router.put('/transfers/:id/approve', authenticate, authorizeModule('estoque', 'approve'), inventoryController.approveTransfer);
+router.put('/transfers/:id/reject', authenticate, authorizeModule('estoque', 'approve'), inventoryController.rejectTransfer);
+
 module.exports = router;
 
 

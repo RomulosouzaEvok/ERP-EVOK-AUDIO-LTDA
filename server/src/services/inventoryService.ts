@@ -84,11 +84,12 @@ async function createMovement(
   data: {
     productId: number;
     userId: number;
-    type: 'in' | 'out' | 'adjustment';
+    type: 'in' | 'out' | 'adjustment' | 'transfer';
     quantity: number;
     description?: string;
     referenceId?: number;
     referenceType?: string;
+    warehouseId?: number | null;
   },
   transaction: Transaction
 ) {
@@ -100,7 +101,8 @@ async function createMovement(
       quantity: data.quantity,
       description: data.description ?? '',
       reference_id: data.referenceId ?? null,
-      reference_type: data.referenceType ?? null
+      reference_type: data.referenceType ?? null,
+      warehouse_id: data.warehouseId ?? null
     },
     { transaction }
   );
@@ -128,6 +130,7 @@ export async function consume(
     description?: string;
     referenceId?: number;
     referenceType?: string;
+    warehouseId?: number | null;
   } = {}
 ): Promise<InventoryResult> {
   const product = await validateAndLock(productId, quantity, transaction);
@@ -143,7 +146,8 @@ export async function consume(
       quantity,
       description: options.description ?? 'Consumo de estoque',
       referenceId: options.referenceId,
-      referenceType: options.referenceType
+      referenceType: options.referenceType,
+      warehouseId: options.warehouseId
     },
     transaction
   );
@@ -183,6 +187,7 @@ export async function receive(
     description?: string;
     referenceId?: number;
     referenceType?: string;
+    warehouseId?: number | null;
   } = {}
 ): Promise<InventoryResult> {
   const product = await validateAndLock(productId, undefined, transaction);
@@ -198,7 +203,8 @@ export async function receive(
       quantity,
       description: options.description ?? 'Entrada de estoque',
       referenceId: options.referenceId,
-      referenceType: options.referenceType
+      referenceType: options.referenceType,
+      warehouseId: options.warehouseId
     },
     transaction
   );
@@ -237,7 +243,8 @@ export async function adjust(
   quantity: number,
   userId: number,
   reason: string,
-  transaction: Transaction
+  transaction: Transaction,
+  warehouseId?: number | null
 ): Promise<InventoryResult> {
   if (!reason || reason.trim().length === 0) {
     throw Object.assign(new Error('Motivo do ajuste é obrigatório'), {
@@ -265,7 +272,8 @@ export async function adjust(
       type: 'adjustment',
       quantity,
       description: reason,
-      referenceType: 'adjustment'
+      referenceType: 'adjustment',
+      warehouseId
     },
     transaction
   );

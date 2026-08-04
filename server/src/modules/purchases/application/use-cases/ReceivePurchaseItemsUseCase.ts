@@ -1,5 +1,6 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const InventoryService = require('../../../../services/inventoryService');
+const WarehouseStockService = require('../../../../services/warehouseStockService');
 const CostingService = require('../../../../services/costingService');
 const { LotControl, PurchaseReceipt } = require('../../../../models/index');
 const { NotFoundError, ValidationError, BusinessRuleError, ConflictError } = require('../../../../errors');
@@ -24,12 +25,13 @@ class ReceivePurchaseItemsUseCase extends UseCase {
    * @param {number} input.id
    * @param {Array<{item_id:number, quantity:number}>} input.items
    * @param {string} input.invoiceNumber - Numero da NF do fornecedor deste recebimento (chave de deduplicacao).
+   * @param {'INSUMOS'|'LABORATORIO'} [input.warehouseCode] - Deposito de destino (Bloco 4, UC-42 §12 item 7). Default 'INSUMOS'.
    * @param {number} input.userId
    * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
    * @throws {ConflictError} Se esta NF (invoiceNumber) ja tiver sido registrada para este pedido.
    */
-  async execute({ id, items, invoiceNumber, userId, transaction }) {
+  async execute({ id, items, invoiceNumber, warehouseCode, userId, transaction }) {
     const purchase = await this.purchaseRepository.findPurchaseWithItemsForUpdate(id, transaction);
     if (!purchase) {
       throw new NotFoundError('Pedido nao encontrado');
@@ -65,6 +67,12 @@ class ReceivePurchaseItemsUseCase extends UseCase {
     const previousStatus = purchase.status;
     let generatedLotSequence = 0;
 
+    // Roteamento de deposito (Bloco 4, BUSINESS_RULES.md §12 item 7):
+    // recebimento de compra entra em INSUMOS por padrao; LABORATORIO quando
+    // o Recebimento sinaliza explicitamente que a origem e uma amostra de
+    // engenharia (UC-39). Resolvido uma unica vez para todo o recebimento.
+    const warehouse = await WarehouseStockService.getWarehouseByCode(warehouseCode || 'INSUMOS', transaction);
+
     for (const received of items) {
       if (!received.item_id || received.quantity === undefined) {
         throw new ValidationError('Cada item deve ter item_id e quantity');
@@ -93,8 +101,14 @@ class ReceivePurchaseItemsUseCase extends UseCase {
       const { product } = await InventoryService.receive(item.product_id, qty, userId, transaction, {
         description: `Recebimento PO ${purchase.order_number}`,
         referenceId: purchase.id,
-        referenceType: 'purchase'
+        referenceType: 'purchase',
+        warehouseId: warehouse.id
       });
+
+      // Dual-write (Bloco 4, BUSINESS_RULES.md §12 item 3): mantem o saldo
+      // por deposito em sincronia com products.quantity acima, na mesma
+      // transacao.
+      await WarehouseStockService.addToWarehouse(item.product_id, warehouse.id, qty, transaction);
 
       const providedLotNumber = received.lot_number ? String(received.lot_number).trim() : '';
       generatedLotSequence += 1;
@@ -128,6 +142,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
         await existingLot.update({
           supplier_id: purchase.supplier_id,
           status: 'quarantine',
+          warehouse_id: warehouse.id,
           quantity_initial: nextInitial,
           quantity_available: nextAvailable,
           received_at: received.received_at || purchase.delivery_date || purchase.invoice_date || new Date(),
@@ -143,6 +158,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
           purchase_id: purchase.id,
           lot_number: lotNumber,
           status: 'quarantine',
+          warehouse_id: warehouse.id,
           quantity_initial: qty,
           quantity_available: qty,
           received_at: received.received_at || purchase.delivery_date || purchase.invoice_date || new Date(),

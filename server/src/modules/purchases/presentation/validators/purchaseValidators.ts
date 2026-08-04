@@ -47,6 +47,11 @@ export const receivePurchaseItemsSchema = z.object({
   // (constraint unica purchase_id+invoice_number no banco) para impedir
   // que a mesma NF seja lancada duas vezes contra o mesmo pedido.
   invoice_number: z.string().trim().min(1, 'Numero da NF é obrigatório.').max(50),
+  // Deposito de destino do recebimento (Bloco 4, UC-42 §12 item 7).
+  // Opcional — default 'INSUMOS' quando ausente (compra produtiva comum).
+  // 'LABORATORIO' e usado para requisicoes de amostra de engenharia
+  // (UC-39/Bloco 2), quando o Recebimento sabe que a origem e uma amostra.
+  warehouse_code: z.enum(['INSUMOS', 'LABORATORIO']).optional(),
 }).strict();
 
 const schemas = {

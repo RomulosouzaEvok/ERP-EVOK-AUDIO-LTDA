@@ -19,6 +19,13 @@ export interface Lot {
   received_at: string | null;
   notes: string | null;
   createdAt: string;
+  /**
+   * FK bruta para `warehouses.id` (Bloco 4, UC-42) — `null` em lotes legados
+   * sem depósito. `ListLotsUseCase` não inclui a associação `warehouse`
+   * (apenas `product`/`supplier`), então o nome do depósito precisa ser
+   * resolvido no client via `listWarehouses()` (ver `LotsTab.tsx`).
+   */
+  warehouse_id: number | null;
   product?: { id: number; name: string; code: string };
   supplier?: { id: number; company_name: string };
 }

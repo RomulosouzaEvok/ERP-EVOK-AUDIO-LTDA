@@ -3259,3 +3259,373 @@ tests/unit` → 54 suites / 329 testes, 100% verde.
 
 **Desenvolvedor**: Claude Code (Senior Backend Engineer — retrofit RBAC)
 **Data**: 2026-08-03
+
+---
+
+## Bloco 4 (Backend) — Saldo por Depósito, Recebimento/Produção Dual-Write e Transferências (2026-08-04)
+
+**Data**: 2026-08-04
+**Escopo**: `docs/governance/TODO.md` Bloco 4.2 (parcial), UC-42 em
+`docs/business/01-USE_CASES.md`, `docs/business/BUSINESS_RULES.md` §12.
+**Status**: ✅ Concluído (escopo desta tarefa — expedição/venda e teste
+destrutivo de laboratório ficam para uma próxima entrega, ver "Fora de
+escopo" abaixo).
+
+### Resumo da feature
+
+Implementado o dual-write de saldo por depósito (`ProductWarehouseStock`)
+para os fluxos de **Recebimento de Compra** e **Produção (consumo de
+componentes + conclusão de OP)**, além do fluxo completo de
+**Transferência entre Depósitos** com aprovação de gestor. A invariante
+`soma(product_warehouse_stock) = products.quantity` é preservada em toda
+transação: `products.quantity` continua a única fonte de verdade lida
+por MRP/telas legadas, e `ProductWarehouseStock` é atualizada em paralelo
+na MESMA transação Sequelize.
+
+**Migration nova:** `server/migrations/20260804-000002-warehouse-transfers.cjs`
+— adiciona `'transfer'` ao enum `inventory_movements.type` e cria a
+tabela `warehouse_transfers` (`product_id`, `from_warehouse_id`,
+`to_warehouse_id` com `CHECK (from<>to)`, `quantity` com `CHECK (>0)`,
+`reason` obrigatório, `user_id`, `approved_by` nullable, `status`
+`pending|approved|rejected`).
+
+**Model novo:** `server/src/models/WarehouseTransfer.ts` + associações em
+`server/src/models/index.ts` (`Product`, `Warehouse` origem/destino,
+`User` solicitante/aprovador).
+
+**Service novo:** `server/src/services/warehouseStockService.ts` —
+`addToWarehouse`/`removeFromWarehouse` (transacionais, lock pessimista
+`LOCK.UPDATE` sobre a linha `product_id+warehouse_id`, criando a linha
+com saldo zero se ainda não existir) e `getWarehouseByCode` (resolve
+`INSUMOS`/`ACABADOS`/`LABORATORIO` por código, 404 se inexistente/
+inativo). `removeFromWarehouse` lança `BusinessRuleError` (422) didático
+citando produto, depósito e saldo atual quando o saldo do depósito é
+insuficiente — nunca deixa o saldo ficar negativo.
+
+**Integrações dual-write:**
+- `ReceivePurchaseItemsUseCase` — entrada vai para `INSUMOS` por padrão;
+  aceita `warehouse_code` opcional (`'INSUMOS'|'LABORATORIO'`) no
+  payload de `POST /api/purchases/:id/receive` para o caso de amostra de
+  engenharia (roteamento 100% automático por `origin` da requisição
+  fica para o Bloco 2, ainda não implementado). O lote (`LotControl`)
+  criado/atualizado ganha `warehouse_id`; o `InventoryMovement` também.
+- `ChangeProductionOrderStatusUseCase` — consumo de componentes debita
+  sempre `INSUMOS` (`removeFromWarehouse` antes de
+  `consumeLotsForComponent`, 422 didático se insuficiente); produto
+  acabado recebido credita sempre `ACABADOS`; o lote de produto acabado
+  (`createFinishedLot`) ganha `warehouse_id = ACABADOS`.
+- `CreateInventoryMovementUseCase` (`POST /api/inventory/movements`) —
+  aceita `warehouse_code` opcional (default `INSUMOS`); saída (`type:
+  'out'`) valida saldo do depósito ANTES de debitar `products.quantity`
+  (422 se insuficiente); entrada credita o depósito depois do
+  `InventoryService.adjust`.
+- `InventoryService.consume`/`receive`/`adjust`
+  (`server/src/services/inventoryService.ts`) — ganharam parâmetro
+  opcional `warehouseId`/`options.warehouseId` (aditivo, backward
+  compatible) para estampar `warehouse_id` no `InventoryMovement`
+  criado.
+
+**Transferências (fluxo completo):**
+- `POST /api/inventory/transfers` (`authorizeModule('estoque',
+  'operate')`) → `CreateWarehouseTransferUseCase`: valida
+  `quantity > 0`, `reason` não vazio, `from_warehouse_code !=
+  to_warehouse_code`; cria em `status='pending'`, sem alterar nenhum
+  saldo.
+- `PUT /api/inventory/transfers/:id/approve` (`authorizeModule('estoque',
+  'approve')`) → `ApproveWarehouseTransferUseCase`: transação própria no
+  controller; debita origem/credita destino via
+  `warehouseStockService` (422 didático se saldo de origem insuficiente
+  NO MOMENTO da aprovação — pode ter mudado desde a solicitação); gera
+  2 `InventoryMovement` (`type='transfer'`, `reference_type='transfer'`,
+  `reference_id=warehouse_transfers.id`); `products.quantity` NUNCA é
+  tocado (transferência não altera o total do produto, apenas onde ele
+  está).
+- `PUT /api/inventory/transfers/:id/reject` (mesma autorização) →
+  `RejectWarehouseTransferUseCase`: exige `reason`, não altera saldo.
+- `GET /api/inventory/transfers?status=` → `ListWarehouseTransfersUseCase`.
+- `GET /api/inventory/warehouse-stock?product_id=&warehouse_code=&page=&limit=`
+  → `ListWarehouseStockUseCase` (linhas produto×depósito, com `product`
+  e `warehouse` incluídos).
+- `GET /api/inventory/warehouses` → `ListWarehousesUseCase` (depósitos
+  ativos).
+
+Todas as rotas novas em
+`server/src/modules/inventory/presentation/routes/inventory.ts`, sob o
+prefixo já existente `/api/inventory` (não foi criado um módulo/prefixo
+`warehouses` dedicado — decisão desta entrega para reaproveitar
+`authorizeModule('estoque', ...)` já retrofitado no módulo `inventory`).
+
+### Desvios de contrato desta entrega (vs. desenho original do TODO)
+
+1. **Endpoints:** o desenho original do TODO.md sugeria
+   `GET/POST /api/warehouses`, `GET/POST /api/warehouse-transfers`,
+   `PATCH .../approve|reject`. Esta entrega usa
+   `/api/inventory/warehouses` (somente leitura — CRUD de depósito não
+   implementado), `/api/inventory/transfers` e `PUT` (não `PATCH`) para
+   approve/reject, para reaproveitar o módulo `inventory` já com
+   `authorizeModule` retrofitado.
+2. **`transfer_id`:** não foi criada uma coluna `transfer_id` (UUID)
+   dedicada em `inventory_movements` — o par já existente
+   `reference_type='transfer'`/`reference_id=warehouse_transfers.id`
+   cumpre o mesmo papel de vincular os dois lançamentos (`out`/`in`) de
+   uma transferência.
+3. **Roteamento automático de amostra de engenharia:** o Bloco 2
+   (UC-39, `origin='engineering_sample'` em `purchase_requisitions`)
+   ainda não existe — o parâmetro `warehouse_code` no payload de
+   `POST /api/purchases/:id/receive` é a forma manual de sinalizar o
+   destino `LABORATORIO` até o Bloco 2 automatizar a detecção.
+
+### Fora de escopo desta entrega (registrado no TODO.md)
+
+- Expedição de venda debitando exclusivamente `ACABADOS` (Fluxo D,
+  UC-42) — `ChangeSaleStatusUseCase` ainda não integrado.
+- Débito automático de teste destrutivo no Depósito de Laboratório
+  (Fluxo E, UC-42-E) — depende do módulo `laboratory`/
+  `AcousticTestResult`.
+- CRUD completo de depósito (`POST/PUT /api/warehouses`) — apenas
+  leitura (`GET`) foi implementada; cadastro segue via seed/migration.
+- Filtro `?warehouse_id=` em `GET /api/inventory/movements`.
+- Frontend (telas de depósito/transferência/saldo) — 100% fora de
+  escopo desta tarefa (backend apenas).
+
+### Arquivos alterados/criados
+
+**Criados:**
+- `server/migrations/20260804-000002-warehouse-transfers.cjs`
+- `server/src/models/WarehouseTransfer.ts`
+- `server/src/services/warehouseStockService.ts`
+- `server/src/modules/inventory/application/use-cases/CreateWarehouseTransferUseCase.ts`
+- `server/src/modules/inventory/application/use-cases/ApproveWarehouseTransferUseCase.ts`
+- `server/src/modules/inventory/application/use-cases/RejectWarehouseTransferUseCase.ts`
+- `server/src/modules/inventory/application/use-cases/ListWarehouseTransfersUseCase.ts`
+- `server/src/modules/inventory/application/use-cases/ListWarehouseStockUseCase.ts`
+- `server/src/modules/inventory/application/use-cases/ListWarehousesUseCase.ts`
+- `server/tests/unit/warehouse-stock.test.ts` (19 testes novos)
+
+**Modificados:**
+- `server/src/models/index.ts` (import + associações de `WarehouseTransfer`)
+- `server/src/services/inventoryService.ts` (`warehouseId` opcional em `consume`/`receive`/`adjust`/`createMovement`)
+- `server/src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase.ts` (dual-write, `warehouseCode` opcional)
+- `server/src/modules/purchases/presentation/validators/purchaseValidators.ts` (`warehouse_code` no schema de recebimento)
+- `server/src/modules/purchases/presentation/controllers/purchaseController.ts` (repassa `warehouse_code`)
+- `server/src/modules/production/application/use-cases/ChangeProductionOrderStatusUseCase.ts` (dual-write INSUMOS/ACABADOS)
+- `server/src/modules/inventory/application/use-cases/CreateInventoryMovementUseCase.ts` (dual-write, `warehouse_code` opcional)
+- `server/src/modules/inventory/presentation/validators/inventoryValidators.ts` (`warehouse_code` + schemas de transferência)
+- `server/src/modules/inventory/presentation/controllers/inventoryController.ts` (6 controllers novos: transfers CRUD-lite + warehouse-stock + warehouses)
+- `server/src/modules/inventory/presentation/routes/inventory.ts` (6 rotas novas)
+- `server/tests/unit/production-order-lifecycle.test.ts` (mock de `warehouseStockService`)
+- `server/tests/unit/integrity-transaction-guards.test.ts` (mock de `warehouseStockService`)
+
+### Documentações atualizadas
+
+- `docs/governance/TODO.md` — Bloco 4.1 (itens de `warehouse_transfers`
+  e enum `transfer` marcados `[x]`), Bloco 4.2 (reescrito com o que foi
+  entregue vs. desvios vs. pendente), Bloco 4.4 (QA, testes marcados
+  `[x]` com referência ao arquivo de teste).
+- `docs/business/01-USE_CASES.md` — UC-42: nota de implementação
+  adicionada ao final (o que foi/não foi entregue no backend) e ajuste
+  do cenário BDD de transferência (`transfer_id` → `reference_type`/
+  `reference_id`, refletindo a modelagem real).
+- `docs/DATABASE.md` — seção de Múltiplos Depósitos expandida: tabela
+  `warehouse_transfers` documentada, novo valor de enum
+  `inventory_movements.type`, tabela de endpoints novos, nota de
+  integração backend (o que foi/não foi conectado).
+- JSDoc: todos os arquivos novos (`WarehouseTransfer.ts`,
+  `warehouseStockService.ts`, 6 use cases novos) têm cabeçalho de
+  módulo + JSDoc de parâmetros/retorno/exceptions nos métodos públicos.
+  Métodos alterados (`ReceivePurchaseItemsUseCase.execute`,
+  `CreateInventoryMovementUseCase.execute`) tiveram o JSDoc atualizado
+  com os novos parâmetros/exceptions.
+
+### Instruções de teste (próximo agente/humano)
+
+1. Rodar `npm run typecheck` e `npx jest tests/unit` em `server/` —
+   ambos devem permanecer limpos (55 suites / 349 testes nesta entrega).
+2. Validar manualmente (ou via teste de integração futuro contra
+   Postgres real):
+   - Recebimento de compra sem `warehouse_code` → saldo de `INSUMOS`
+     sobe; com `warehouse_code='LABORATORIO'` → saldo de `LABORATORIO`
+     sobe, `INSUMOS` permanece inalterado.
+   - Conclusão de OP com componentes: saldo de `INSUMOS` cai a
+     quantidade consumida, saldo de `ACABADOS` sobe a quantidade
+     produzida; `products.quantity` de cada produto bate com a soma dos
+     dois depósitos.
+   - Transferência: criar (`pending`, saldo inalterado) → aprovar
+     (saldo migra entre depósitos, total do produto inalterado) →
+     tentar aprovar de novo (`BusinessRuleError`, já não está mais
+     `pending`) → rejeitar uma nova transferência `pending` (saldo
+     inalterado, motivo obrigatório).
+   - `POST /api/inventory/transfers` com `from_warehouse_code ===
+     to_warehouse_code` → 422 `ValidationError`.
+   - Consumo/movimentação manual de saída maior que o saldo do depósito
+     informado → 422 didático citando produto, depósito e saldo atual
+     (mesmo que `products.quantity` global tivesse saldo suficiente em
+     outro depósito — a mensagem não deve confundir os dois números).
+3. **Migration não executada nesta entrega** (instrução explícita da
+   tarefa: não rodar Docker/migrations). Antes do próximo deploy,
+   confirmar que `20260804-000002-warehouse-transfers.cjs` roda
+   corretamente em sequência após `20260804-000001-create-warehouses.cjs`
+   (`npm run migration:up` em ambiente com Postgres disponível).
+4. `NÃO` foi rodado Docker nem houve commit, conforme instrução da
+   tarefa — próximo agente decide se/quando commitar.
+
+### Riscos residuais
+
+- Sem teste de integração real contra Postgres (todos os testes desta
+  entrega usam mocks/fakes in-memory) — a migration em si
+  (`20260804-000002`) não foi validada rodando contra um banco real
+  nesta sessão.
+- Expedição de venda ainda não debita de `ACABADOS` especificamente —
+  enquanto isso não for implementado, o saldo por depósito de produtos
+  vendidos pode divergir do saldo real fisicamente esperado em
+  `ACABADOS` (o total via `products.quantity` continua correto, apenas
+  a segregação por depósito fica incompleta até essa integração).
+- Rollback de falha parcial em `ApproveWarehouseTransferUseCase` depende
+  inteiramente da transação Sequelize do controller
+  (`sequelize.transaction()` em `inventoryController.approveTransfer`)
+  — não há teste de integração cobrindo rollback real de banco nesta
+  entrega, apenas a garantia de que uma exceção lançada por
+  `removeFromWarehouse` propaga antes de qualquer `addToWarehouse`/
+  `InventoryMovement.create` (comportamento testado via mocks).
+
+**Desenvolvedor**: Claude Code (Senior Backend Engineer — Múltiplos Depósitos)
+
+---
+
+## Bloco 4 — Múltiplos Depósitos: Frontend (UC-42)
+
+**Data**: 2026-08-04
+**Escopo**: Telas de Logística consumindo os endpoints REST já entregues em
+`server/src/modules/inventory/presentation/routes/inventory.ts`
+(`GET /warehouses`, `GET /warehouse-stock`, `GET/POST /transfers`,
+`PUT /transfers/:id/approve`, `PUT /transfers/:id/reject`) e o parâmetro
+opcional `warehouse_code` em `POST /api/purchases/:id/receive` e
+`POST /api/inventory/movements`.
+**Status**: ✅ Concluído (item 4.3 do `docs/governance/TODO.md`, exceto CRUD
+de "Configurações > Depósitos", fora do escopo desta entrega — ver nota
+abaixo).
+
+### Arquivos criados
+
+- `client/src/api/warehouses.ts` — `listWarehouses`, `listWarehouseStock`,
+  `listTransfers`, `createTransfer`, `approveTransfer`, `rejectTransfer`,
+  com os tipos `Warehouse`, `WarehouseStockRow`, `WarehouseTransfer`,
+  `WarehouseTransferStatus`. Confirmado por leitura direta do controller/
+  validators do backend (não adivinhado): todos os endpoints estão sob
+  `/api/inventory/*`, não em um prefixo `/api/warehouses` próprio, e
+  approve/reject usam `PUT` (não `PATCH`).
+- `client/src/pages/logistics/TransfersTab.tsx` — nova aba "Transferências"
+  em `/logistics/estoque`: tabela (produto, de → para, quantidade, motivo,
+  solicitante, badge de status `pending` âmbar/`approved` verde/`rejected`
+  vermelho) + dialog "Nova transferência" (produto via `SelectNative`
+  alimentado por `productsApi.listProducts({limit: 200})`, mesmo padrão já
+  usado em `RegisterTestTab.tsx` — não existe combobox de busca dedicado no
+  projeto) + dialog de rejeição com motivo obrigatório. Botões
+  Aprovar/Rejeitar só renderizam quando `hasRole('admin') ||
+  permissions?.estoque === 'approve'` (shape real confirmado em
+  `client/src/context/AuthContext.tsx`: `permissions` é
+  `Partial<Record<AccessModuleKey, AccessModuleLevel>>`). Erros de mutation
+  usam `translateApiError`/`DidacticAlert` (padrão UC-43), cobrindo o 422
+  de saldo insuficiente na aprovação.
+
+### Arquivos modificados
+
+- `client/src/api/inventory.ts` — nova função `createMovement` (`POST
+  /api/inventory/movements`, aceita `warehouse_code`). **Decisão
+  importante**: `productsApi.createStockMovement` (`POST
+  /api/products/movements`) NÃO aceita `warehouse_code` (confirmado lendo
+  `productMovementSchema`/`productController.movement` — só
+  `product_id/type/quantity/description`); por isso a movimentação manual
+  de estoque em Logística passou a usar `POST /api/inventory/movements`
+  (`CreateInventoryMovementUseCase`, com dual-write real em
+  `product_warehouse_stock`), não mais o endpoint de `products`.
+- `client/src/api/purchases.ts` — `receivePurchaseItems` agora aceita
+  `warehouse_code?: 'INSUMOS' | 'LABORATORIO'` (mesmo enum do
+  `receivePurchaseItemsSchema` do backend).
+- `client/src/api/lots.ts` — `Lot.warehouse_id: number | null` adicionado.
+  **Confirmado por leitura de `ListLotsUseCase.ts`**: o endpoint `GET
+  /api/inventory/lots` NÃO inclui a associação `warehouse` (só `product`/
+  `supplier`), então o nome do depósito é resolvido no client cruzando
+  `warehouse_id` com `listWarehouses()` (mapa id→nome), não vindo populado
+  do backend.
+- `client/src/pages/logistics/LotsTab.tsx` — nova coluna "Depósito"
+  (mapeada via `warehouseNameById`, fallback `#<id>` se o depósito não
+  estiver na lista ativa, `-` se `warehouse_id` for `null`, caso de lotes
+  legados pré-Bloco-4).
+- `client/src/pages/logistics/BalancesTab.tsx` — aba "Saldos" ganhou
+  seletor de depósito (`Todos` / por `warehouse.code`). Com "Todos"
+  selecionado, mantém a visão legada (`GET /api/products`, saldo total).
+  Com um depósito específico, troca a tabela inteira para
+  `GET /api/inventory/warehouse-stock?warehouse_code=` (colunas
+  Código/Nome/Depósito/Saldo) — **decisão**: não foi feita a variante
+  "Todos + colunas por depósito" mencionada como alternativa na tarefa,
+  porque exigiria N chamadas (uma por depósito) ou um endpoint agregado que
+  não existe; a troca binária de visão evita custo de rede desnecessário e
+  já cobre o caso de uso (consultar saldo de um depósito específico). Tiles
+  de quarentena/bloqueados inalterados. `StockMovementDialog` (movimentação
+  manual) ganhou seletor de depósito (default `INSUMOS`) e passou a chamar
+  `inventoryApi.createMovement` em vez de `productsApi.createStockMovement`.
+- `client/src/pages/logistics/ReceivingConferenceDialog.tsx` — novo campo
+  "Depósito de destino" (`INSUMOS` default / `LABORATORIO`), enviado como
+  `warehouse_code` no payload de `POST /api/purchases/:id/receive`.
+  Invalida `warehouse-stock` no sucesso.
+- `client/src/pages/logistics/InventoryPage.tsx` — nova aba
+  "Transferências" registrada.
+
+### O que o QA/humano deve testar na interface
+
+1. **Saldos por depósito**: em `/logistics/estoque` → aba Saldos, trocar o
+   seletor de "Todos" para "Insumos"/"Acabados"/"Laboratório" e conferir
+   que a tabela muda de formato (colunas Depósito/Saldo) e os valores
+   batem com `product_warehouse_stock` no banco. Buscar por
+   nome/código deve ficar desabilitado (campo `disabled`) quando um
+   depósito estiver selecionado (a busca só existe na visão "Todos").
+2. **Movimentação manual com depósito**: aba Saldos → "Movimentar" em um
+   produto → selecionar um depósito diferente de Insumos → confirmar que o
+   saldo daquele depósito específico (não só `products.quantity`) reflete a
+   entrada/saída após reload. Testar saída maior que o saldo do depósito
+   selecionado → esperar 422 didático (mensagem cita depósito e saldo
+   atual, não trava a tela com erro cru).
+3. **Lotes com depósito**: aba Lotes → conferir coluna "Depósito" populada
+   corretamente para lotes recebidos após o Bloco 4 (lotes antigos devem
+   mostrar "-").
+4. **Transferências — fluxo completo**: aba Transferências → "Nova
+   transferência" → tentar selecionar o mesmo depósito em De/Para (deve
+   bloquear no client antes de enviar, mensagem no campo "Para") → criar
+   uma transferência válida → conferir que aparece como "Pendente" (âmbar)
+   e **não** altera nenhum saldo ainda. Logado como usuário com
+   `estoque:approve` (ou `admin`): botões Aprovar/Rejeitar devem aparecer;
+   logado como usuário só com `estoque:operate`: botões não devem
+   aparecer. Aprovar uma transferência com saldo de origem insuficiente
+   (alterar saldo por fora antes de aprovar) → esperar `DidacticAlert` com
+   o 422, transferência continua `pending`. Rejeitar uma transferência
+   pendente sem preencher o motivo → bloqueado pelo Zod no client antes do
+   submit.
+5. **Recebimento com depósito de destino**: em `/logistics/recebimento`,
+   abrir a conferência de um pedido, selecionar "Laboratório" como depósito
+   de destino, confirmar recebimento → saldo deve subir em
+   `LABORATORIO`, não em `INSUMOS`.
+6. **Regressão**: os 24 testes de frontend (`npm test` em `client/`)
+   continuam verdes; `npx tsc -b` limpo; `npm run lint` sem novos warnings
+   (os 4 warnings pré-existentes de `only-export-components` não são desta
+   entrega).
+
+### Fora de escopo desta entrega (registrado, não implementado)
+
+- Tela "Configurações > Depósitos" (CRUD de depósito) — o backend também
+  não expõe `POST/PUT /api/warehouses` ainda (ver Bloco 4.2 acima,
+  "não foi implementado"); depósitos continuam cadastrados apenas via
+  seed/migration.
+- Filtro de depósito na tela de Expedição e na tela de Contagem/inventário
+  mobile — a tarefa desta entrega cobriu especificamente Estoque
+  (Saldos/Lotes/Transferências), Recebimento e movimentação manual.
+- "Exibir saldo por depósito nas telas de produto/item" (fora de
+  `/logistics/estoque`) — não coberto; o saldo por depósito hoje só é
+  visível em Logística → Estoque.
+- Filtro `?warehouse_id=` em `GET /api/inventory/movements` (extrato) não
+  existe no backend ainda (confirmado no `TODO.md`), então a aba "Extrato"
+  não ganhou seletor de depósito nesta entrega.
+
+**Desenvolvedor**: Claude Code (Senior Frontend Engineer — Múltiplos
+Depósitos, telas de Logística)
+**Data**: 2026-08-04

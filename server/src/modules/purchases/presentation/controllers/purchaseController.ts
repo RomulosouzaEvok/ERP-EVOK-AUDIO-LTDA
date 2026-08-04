@@ -218,9 +218,9 @@ exports.receiveItems = async (req, res, next) => {
   try {
     const parsed = receivePurchaseItemsSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { items, invoice_number } = parsed.data;
+    const { items, invoice_number, warehouse_code } = parsed.data;
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
-    const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, items, invoiceNumber: invoice_number, userId: req.user.id, transaction: t });
+    const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, items, invoiceNumber: invoice_number, warehouseCode: warehouse_code, userId: req.user.id, transaction: t });
 
     await t.commit();
 

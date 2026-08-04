@@ -6,8 +6,9 @@ import { BalancesTab } from './BalancesTab';
 import { ExtractTab } from './ExtractTab';
 import { LotsTab } from './LotsTab';
 import { CountsTab } from './CountsTab';
+import { TransfersTab } from './TransfersTab';
 
-type InventoryTab = 'balances' | 'extract' | 'lots' | 'counts';
+type InventoryTab = 'balances' | 'extract' | 'lots' | 'counts' | 'transfers';
 
 /**
  * `/logistics/estoque` — saldos de estoque, extrato de movimentações, lotes
@@ -42,12 +43,16 @@ export default function InventoryPage() {
         <TabButton active={tab === 'counts'} onClick={() => setTab('counts')}>
           Contagens
         </TabButton>
+        <TabButton active={tab === 'transfers'} onClick={() => setTab('transfers')}>
+          Transferências
+        </TabButton>
       </div>
 
       {tab === 'balances' && <BalancesTab />}
       {tab === 'extract' && <ExtractTab />}
       {tab === 'lots' && <LotsTab />}
       {tab === 'counts' && <CountsTab />}
+      {tab === 'transfers' && <TransfersTab />}
     </div>
   );
 }

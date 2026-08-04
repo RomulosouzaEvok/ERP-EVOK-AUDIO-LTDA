@@ -21,6 +21,12 @@ jest.mock('../../src/services/inventoryService', () => ({
   receive: jest.fn(async () => ({ product: { id: 10, quantity: 15 } })),
 }));
 
+jest.mock('../../src/services/warehouseStockService', () => ({
+  getWarehouseByCode: jest.fn(async (code: string) => ({ id: code === 'LABORATORIO' ? 3 : 1, code })),
+  addToWarehouse: jest.fn(async () => ({})),
+  removeFromWarehouse: jest.fn(async () => ({})),
+}));
+
 jest.mock('../../src/services/costingService', () => ({
   registerWeightedAverageCost: jest.fn(async () => ({})),
 }));

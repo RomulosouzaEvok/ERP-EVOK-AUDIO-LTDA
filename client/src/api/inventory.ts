@@ -31,6 +31,27 @@ export async function listMovements(params: InventoryMovementListParams = {}) {
   return data;
 }
 
+export interface CreateInventoryMovementInput {
+  product_id: number;
+  type: 'in' | 'out';
+  quantity: number;
+  description: string;
+  /** Código do depósito onde a movimentação ocorre (Bloco 4, UC-42). Default `'INSUMOS'` quando ausente. */
+  warehouse_code?: string;
+}
+
+/**
+ * `POST /api/inventory/movements` — movimentação manual de estoque com
+ * dual-write em `product_warehouse_stock` (Bloco 4, UC-42). Preferível a
+ * `productsApi.createStockMovement` (`POST /api/products/movements`, que
+ * NÃO aceita `warehouse_code`) sempre que o depósito precisar ser
+ * informado.
+ */
+export async function createMovement(input: CreateInventoryMovementInput) {
+  const { data } = await httpClient.post<ItemResponse<InventoryMovement>>('/api/inventory/movements', input);
+  return data.data;
+}
+
 /** `GET /api/inventory/low-stock`. */
 export async function listLowStock() {
   const { data } = await httpClient.get<ItemResponse<Product[]>>('/api/inventory/low-stock');

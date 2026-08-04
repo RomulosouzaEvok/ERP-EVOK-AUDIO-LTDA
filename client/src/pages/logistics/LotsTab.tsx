@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import * as lotsApi from '@/api/lots';
+import * as warehousesApi from '@/api/warehouses';
 import { Label } from '@/components/ui/label';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
@@ -50,6 +51,17 @@ export function LotsTab() {
     queryFn: () => lotsApi.listLots({ status: statusFilter || undefined, page, limit: 20 }),
   });
 
+  const { data: warehouses } = useQuery({
+    queryKey: ['warehouses'],
+    queryFn: warehousesApi.listWarehouses,
+  });
+
+  const warehouseNameById = React.useMemo(() => {
+    const map = new Map<number, string>();
+    (warehouses ?? []).forEach((warehouse) => map.set(warehouse.id, warehouse.name));
+    return map;
+  }, [warehouses]);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -81,6 +93,7 @@ export function LotsTab() {
             <TableHead>Lote</TableHead>
             <TableHead>Produto</TableHead>
             <TableHead>Fornecedor</TableHead>
+            <TableHead>Depósito</TableHead>
             <TableHead>Qtd. inicial</TableHead>
             <TableHead>Qtd. disponível</TableHead>
             <TableHead>Recebido em</TableHead>
@@ -89,10 +102,10 @@ export function LotsTab() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={8} />}
+          {isLoading && <TableSkeletonRows columns={9} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-destructive">
+              <TableCell colSpan={9} className="text-center text-destructive">
                 Não foi possível carregar os lotes. Tente novamente.
               </TableCell>
             </TableRow>
@@ -102,6 +115,9 @@ export function LotsTab() {
               <TableCell className="font-medium">{lot.lot_number}</TableCell>
               <TableCell>{lot.product ? `${lot.product.code} — ${lot.product.name}` : lot.product_id}</TableCell>
               <TableCell>{lot.supplier?.company_name ?? '-'}</TableCell>
+              <TableCell>
+                {lot.warehouse_id ? warehouseNameById.get(lot.warehouse_id) ?? `#${lot.warehouse_id}` : '-'}
+              </TableCell>
               <TableCell>{Number(lot.quantity_initial)}</TableCell>
               <TableCell>{Number(lot.quantity_available)}</TableCell>
               <TableCell>{formatDate(lot.received_at)}</TableCell>
@@ -115,7 +131,7 @@ export function LotsTab() {
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-muted-foreground">
+              <TableCell colSpan={9} className="text-center text-muted-foreground">
                 Nenhum lote encontrado para este filtro.
               </TableCell>
             </TableRow>

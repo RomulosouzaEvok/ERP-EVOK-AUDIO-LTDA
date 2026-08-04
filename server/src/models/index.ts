@@ -62,6 +62,7 @@ import AccessProfile = require('./AccessProfile');
 import AccessProfilePermission = require('./AccessProfilePermission');
 import Warehouse = require('./Warehouse');
 import ProductWarehouseStock = require('./ProductWarehouseStock');
+import WarehouseTransfer = require('./WarehouseTransfer');
 
 // ============================================
 // RELACIONAMENTOS
@@ -512,6 +513,22 @@ InventoryMovement.belongsTo(Warehouse, { foreignKey: 'warehouse_id', as: 'wareho
 Warehouse.hasMany(LotControl, { foreignKey: 'warehouse_id', as: 'lot_controls' });
 LotControl.belongsTo(Warehouse, { foreignKey: 'warehouse_id', as: 'warehouse' });
 
+// WarehouseTransfer associations
+Product.hasMany(WarehouseTransfer, { foreignKey: 'product_id', as: 'warehouse_transfers' });
+WarehouseTransfer.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+Warehouse.hasMany(WarehouseTransfer, { foreignKey: 'from_warehouse_id', as: 'transfers_out' });
+WarehouseTransfer.belongsTo(Warehouse, { foreignKey: 'from_warehouse_id', as: 'fromWarehouse' });
+
+Warehouse.hasMany(WarehouseTransfer, { foreignKey: 'to_warehouse_id', as: 'transfers_in' });
+WarehouseTransfer.belongsTo(Warehouse, { foreignKey: 'to_warehouse_id', as: 'toWarehouse' });
+
+User.hasMany(WarehouseTransfer, { foreignKey: 'user_id', as: 'requested_warehouse_transfers' });
+WarehouseTransfer.belongsTo(User, { foreignKey: 'user_id', as: 'requestedBy' });
+
+User.hasMany(WarehouseTransfer, { foreignKey: 'approved_by', as: 'approved_warehouse_transfers' });
+WarehouseTransfer.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -529,5 +546,5 @@ export {
   WorkCenter, WorkCenterShift,
   EngineeringProject, ProductDrawing, AcousticTestResult,
   AccessProfile, AccessProfilePermission,
-  Warehouse, ProductWarehouseStock
+  Warehouse, ProductWarehouseStock, WarehouseTransfer
 };

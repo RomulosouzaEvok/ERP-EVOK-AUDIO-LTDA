@@ -11,6 +11,7 @@ import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SelectNative } from '@/components/ui/select-native';
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,7 @@ const conferenceItemSchema = z.object({
 
 const conferenceSchema = z.object({
   invoice_number: z.string().trim().min(1, 'Informe o número da NF.'),
+  warehouse_code: z.enum(['INSUMOS', 'LABORATORIO']),
   items: z.array(conferenceItemSchema),
 });
 
@@ -69,7 +71,7 @@ export function ReceivingConferenceDialog({
     formState: { errors, isSubmitting },
   } = useForm<ConferenceFormData>({
     resolver: zodResolver(conferenceSchema),
-    defaultValues: { invoice_number: '', items: [] },
+    defaultValues: { invoice_number: '', warehouse_code: 'INSUMOS', items: [] },
   });
 
   const { fields } = useFieldArray({ control, name: 'items' });
@@ -78,6 +80,7 @@ export function ReceivingConferenceDialog({
     if (purchase) {
       reset({
         invoice_number: '',
+        warehouse_code: 'INSUMOS',
         items: (purchase.items ?? []).map((item) => ({
           purchase_item_id: item.id,
           pending: Number(item.quantity) - Number(item.received_quantity),
@@ -104,6 +107,7 @@ export function ReceivingConferenceDialog({
       if (items.length === 0) throw new Error('Informe a quantidade a receber de ao menos um item.');
       return purchasesApi.receivePurchaseItems(purchaseId!, {
         invoice_number: values.invoice_number.trim(),
+        warehouse_code: values.warehouse_code,
         items,
       });
     },
@@ -113,6 +117,7 @@ export function ReceivingConferenceDialog({
       queryClient.invalidateQueries({ queryKey: ['quality-lots'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-products'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-stock'] });
       setFormError(null);
       setSuccessMessage('Recebimento registrado com sucesso.');
     },
@@ -151,12 +156,21 @@ export function ReceivingConferenceDialog({
             onSubmit={handleSubmit((values) => mutation.mutate(values))}
             noValidate
           >
-            <div className="flex flex-col gap-1.5 max-w-xs">
-              <Label htmlFor="invoice_number">Número da NF *</Label>
-              <Input id="invoice_number" {...register('invoice_number')} />
-              {errors.invoice_number && (
-                <p className="text-sm text-destructive">{errors.invoice_number.message}</p>
-              )}
+            <div className="flex flex-wrap gap-4">
+              <div className="flex flex-col gap-1.5 max-w-xs">
+                <Label htmlFor="invoice_number">Número da NF *</Label>
+                <Input id="invoice_number" {...register('invoice_number')} />
+                {errors.invoice_number && (
+                  <p className="text-sm text-destructive">{errors.invoice_number.message}</p>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5 max-w-xs">
+                <Label htmlFor="warehouse_code">Depósito de destino *</Label>
+                <SelectNative id="warehouse_code" {...register('warehouse_code')}>
+                  <option value="INSUMOS">Insumos</option>
+                  <option value="LABORATORIO">Laboratório</option>
+                </SelectNative>
+              </div>
             </div>
 
             <Table>
