@@ -29,6 +29,7 @@ export interface UserAttributes {
   passwordVersion: number;
   resetPasswordTokenHash: string | null;
   resetPasswordExpiresAt: Date | null;
+  accessProfileId: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -43,6 +44,7 @@ export interface UserCreationAttributes {
   department?: string;
   active?: boolean;
   passwordVersion?: number;
+  accessProfileId?: number | null;
 }
 
 const User = sequelize.define('User', {
@@ -102,6 +104,12 @@ const User = sequelize.define('User', {
     allowNull: true,
     field: 'reset_password_expires_at',
     comment: 'Expiracao do token de recuperacao de senha (SEC-12)'
+  },
+  accessProfileId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'access_profile_id',
+    comment: 'Perfil de acesso configurável (área/departamento). null = sem perfil = bloqueio total (UC-35-Exceção); nunca atribuído automaticamente em backfill.'
   }
 }, {
   tableName: 'users',

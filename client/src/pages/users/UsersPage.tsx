@@ -6,7 +6,9 @@ import { z } from 'zod';
 import { Plus } from 'lucide-react';
 
 import * as usersApi from '@/api/users';
+import * as accessProfilesApi from '@/api/accessProfiles';
 import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
 
@@ -32,17 +35,38 @@ const userSchema = z.object({
 
 type UserFormData = z.infer<typeof userSchema>;
 
-/** `FE6`: administração de usuários (admin) — listar, criar, inativar, revogar sessões (SEC-12). */
+/** `FE6`: administração de usuários (admin) — listar, criar, inativar, revogar sessões (SEC-12), atribuir perfil de acesso (UC-33). */
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [page, setPage] = React.useState(1);
+  const [assigningUser, setAssigningUser] = React.useState<usersApi.User | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = React.useState<string>('');
+  const [assignError, setAssignError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['users', page],
     queryFn: () => usersApi.listUsers({ limit: 20, page }),
   });
+
+  // Todos os perfis (não paginado) — usados para resolver o nome do perfil
+  // de cada usuário na coluna "Perfil" e para o seletor do dialog de
+  // atribuição (apenas os ativos são ofertados, UC-33).
+  const { data: accessProfiles } = useQuery({
+    queryKey: ['access-profiles'],
+    queryFn: accessProfilesApi.listAccessProfiles,
+  });
+
+  const profileNameById = React.useMemo(() => {
+    const map = new Map<number, string>();
+    for (const profile of accessProfiles ?? []) {
+      map.set(profile.id, profile.nome);
+    }
+    return map;
+  }, [accessProfiles]);
+
+  const activeProfiles = React.useMemo(() => (accessProfiles ?? []).filter((profile) => profile.active), [accessProfiles]);
 
   const {
     register,
@@ -75,6 +99,23 @@ export default function UsersPage() {
     onSuccess: (message) => window.alert(message),
     onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível revogar as sessões.')),
   });
+
+  const assignProfileMutation = useMutation({
+    mutationFn: ({ userId, accessProfileId }: { userId: number; accessProfileId: number | null }) =>
+      accessProfilesApi.assignAccessProfile(userId, accessProfileId),
+    onSuccess: () => {
+      invalidate();
+      setAssigningUser(null);
+      setAssignError(null);
+    },
+    onError: (error) => setAssignError(translateApiError(error, 'Não foi possível atribuir o perfil de acesso.')),
+  });
+
+  const openAssignDialog = (user: usersApi.User) => {
+    setAssigningUser(user);
+    setSelectedProfileId(user.accessProfileId ? String(user.accessProfileId) : '');
+    setAssignError(null);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -131,15 +172,16 @@ export default function UsersPage() {
             <TableHead>Nome</TableHead>
             <TableHead>E-mail</TableHead>
             <TableHead>Papel</TableHead>
+            <TableHead>Perfil</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={5} />}
+          {isLoading && <TableSkeletonRows columns={6} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-destructive">
+              <TableCell colSpan={6} className="text-center text-destructive">
                 Não foi possível carregar os usuários. Tente novamente.
               </TableCell>
             </TableRow>
@@ -150,9 +192,21 @@ export default function UsersPage() {
               <TableCell>{user.email}</TableCell>
               <TableCell>{ROLE_LABEL[user.role] ?? user.role}</TableCell>
               <TableCell>
+                {user.role === 'admin' ? (
+                  <span className="text-xs text-muted-foreground">Não se aplica (admin)</span>
+                ) : user.accessProfileId ? (
+                  profileNameById.get(user.accessProfileId) ?? '—'
+                ) : (
+                  <Badge variant="destructive">Sem perfil</Badge>
+                )}
+              </TableCell>
+              <TableCell>
                 <Badge variant={user.active ? 'success' : 'secondary'}>{user.active ? 'Ativo' : 'Inativo'}</Badge>
               </TableCell>
               <TableCell className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => openAssignDialog(user)}>
+                  Atribuir perfil
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => revokeMutation.mutate(user.id)}>
                   Revogar sessões
                 </Button>
@@ -174,7 +228,7 @@ export default function UsersPage() {
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 Nenhum usuário encontrado.
               </TableCell>
             </TableRow>
@@ -183,6 +237,60 @@ export default function UsersPage() {
       </Table>
 
       <Pagination pagination={data?.pagination} onPageChange={setPage} />
+
+      <Dialog
+        open={Boolean(assigningUser)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setAssigningUser(null);
+            setAssignError(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Atribuir perfil de acesso — {assigningUser?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            {assigningUser?.role === 'admin' && (
+              <p className="text-sm text-muted-foreground">
+                Usuários administradores não são afetados por perfis de área — o admin global sempre tem acesso completo,
+                independente do perfil atribuído aqui.
+              </p>
+            )}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="access-profile">Perfil de acesso</Label>
+              <SelectNative id="access-profile" value={selectedProfileId} onChange={(e) => setSelectedProfileId(e.target.value)}>
+                <option value="">Sem perfil</option>
+                {activeProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.nome}
+                  </option>
+                ))}
+              </SelectNative>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A mudança de perfil vale a partir do próximo login do usuário — a sessão ativa (se houver) não é derrubada
+              automaticamente. Para revogação imediata, use "Revogar sessões" ou inative o usuário.
+            </p>
+            {assignError && <DidacticAlert error={assignError} />}
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={assignProfileMutation.isPending}
+              onClick={() => {
+                if (!assigningUser) return;
+                assignProfileMutation.mutate({
+                  userId: assigningUser.id,
+                  accessProfileId: selectedProfileId ? Number(selectedProfileId) : null,
+                });
+              }}
+            >
+              {assignProfileMutation.isPending ? 'Salvando...' : 'Salvar atribuição'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

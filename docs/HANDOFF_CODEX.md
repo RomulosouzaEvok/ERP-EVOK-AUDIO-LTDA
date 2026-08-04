@@ -2558,4 +2558,559 @@ espera um contador/badge de notificação por módulo no menu lateral.
    padrão já usado pelas entregas anteriores deste arquivo.
 
 **Desenvolvedor**: Claude Code (Business Analyst / Requirements Engineer)
+
+---
+
+## Bloco 6 (Frontend) — Componentes Padrão + Retrofit de 4 Telas (UC-43)
+
+**Data**: 2026-08-03
+**Escopo**: `client/` apenas (não tocou `server/`). Implementação dos
+componentes padrão do Padrão de Alerta Didático de 3 Partes
+(`docs/business/BUSINESS_RULES.md` §13, UC-43) e retrofit das 4 telas de
+maior impacto operacional listadas em `docs/governance/TODO.md` Bloco 6.2.
+**Status**: ✅ Concluído (componentes + 4/9 telas priorizadas; 5 telas
+restantes do §13.5 ficam para próxima entrega — ver `TODO.md`)
+
+### Componentes/utilitários criados
+
+- `client/src/lib/translateApiError.ts` — utilitário `translateApiError(error, title, context?, fallbackReason?)`
+  que lê o contrato completo de erro do backend
+  (`{ success: false, error: { code, message, details? } }`, ver
+  `server/src/errors/AppError.ts` / `errorHandler.ts`) e retorna
+  `{ title, reasons: string[], action?: { label, to } }`. **Aditivo** —
+  não altera nem remove `extractApiErrorMessage` em
+  `client/src/api/httpClient.ts`, que continua funcionando e sendo usado
+  em pontos fora do escopo deste retrofit (ex.: leitura de detalhes de
+  venda no `ShippingItemsDialog`, criação de requisição em
+  `RequisitionsPage`). `reasons` cobre **todos** os itens de `details`
+  quando o backend retorna um array (`details: [...]`) ou um objeto cujos
+  valores são arrays (`details: { item_ids_without_supplier: [...] }`,
+  formato hoje usado por `ConvertRequisitionToPurchaseOrdersUseCase`) —
+  nunca só o primeiro (Regra 3, §13.3). Mapa de ação por `ErrorContext`
+  (união de 9 strings, uma por caso de `BUSINESS_RULES.md` §13.5) em vez
+  de por `code` de erro, porque o `code` retornado hoje é quase sempre
+  genérico (`BUSINESS_RULE_VIOLATION`/`VALIDATION_ERROR`) — o contexto de
+  tela é o discriminador real de qual link de "O QUE FAZER" mostrar.
+  Sem `context`/sem `details`, cai em uma ação de fallback genérica
+  (nunca deixa o botão de ação sem orientação, fluxo alternativo do
+  UC-43). Testado em `client/src/lib/translateApiError.test.ts` (8 casos:
+  lista completa de reasons a partir de array, a partir de objeto com
+  arrays, fallback para `message` sem `details`, resolução de ação por
+  contexto, ação de fallback sem contexto, formato de erro string legado,
+  erro não-Axios, `fallbackReason` customizado).
+- `client/src/components/DidacticAlert.tsx` — componente visual
+  `<DidacticAlert error={DidacticError} />`: título em negrito (O QUE),
+  lista `<ul>` com todos os `reasons` (POR QUE), link/texto de `action`
+  (O QUE FAZER) via `react-router` `Link` quando `action.to` está
+  preenchido. Variante única `destructive` (fundo/borda vermelho claro),
+  ícone `AlertTriangle`, `role="alert"`.
+- `client/src/components/PrerequisiteChecklist.tsx` — componente
+  `<PrerequisiteChecklist items={PrerequisiteItem[]} />` (`{ label, ok,
+  detail?, action? }`), renderiza `✓` verde/`✗` vermelho com `detail`
+  sempre visível na própria linha (nunca tooltip) e link de ação por
+  item. Exporta `hasPendingPrerequisite(items)` para uso direto no
+  `disabled` do botão de ação principal da tela consumidora. **Ainda não
+  consumido por nenhuma tela** — as 4 telas retrofitadas nesta entrega
+  cobrem o Fluxo B do UC-43 (alerta pós-erro do backend); o Fluxo A
+  (checklist preventivo antes da tentativa) depende de decisão técnica
+  por caso sobre reaproveitar `GET`s existentes vs. criar endpoint de
+  pré-checagem dedicado (`TODO.md` §6.1, item ainda `[ ]`) — próximo
+  agente deve montar esse cruzamento de dados por tela antes de consumir
+  o componente.
+
+### Telas retrofitadas (4, priorizadas por impacto operacional)
+
+1. `client/src/pages/production/CompleteProductionOrderDialog.tsx` —
+   mutation de conclusão de OP (`onError`) migrada de
+   `extractApiErrorMessage`/`<p>` cru para `translateApiError(..., 'complete-production-order')`
+   + `<DidacticAlert>`. Título dinâmico com `order_number`.
+2. `client/src/pages/logistics/ShippingPage.tsx` — `window.alert()` da
+   `shipMutation` (marcar venda como embarcada) **removido**, substituído
+   por estado `shipError: DidacticError | null` + `<DidacticAlert>`
+   renderizado acima da tabela. Mutation agora recebe `{ id, saleLabel }`
+   para compor o título com o identificador da venda. O aviso inline
+   preventivo de "NF-e não autorizada" (que já existia por linha) foi
+   reescrito no formato de 3 partes (O QUE + POR QUE com o status atual
+   da NF-e + O QUE FAZER com link para `/sales`), mantendo-se como texto
+   inline por linha (não virou `DidacticAlert` cheio, por já ser um
+   padrão compacto por-item aceito pelo UC-43 Fluxo A).
+3. `client/src/pages/purchases/RequisitionsPage.tsx` — dois pontos
+   migrados: (a) `ConvertRequisitionDialog` (gerar pedido de compra) —
+   este é o caso central do UC-43 (`BUSINESS_RULES.md` §13.5 item 4):
+   quando o backend retorna `details: { item_ids_without_supplier: [...] }`
+   com múltiplos itens sem fornecedor resolvível, `translateApiError`
+   monta a lista completa e `DidacticAlert` exibe todos de uma vez, com
+   link para o contexto `convert-requisition`; (b) `statusMutation`
+   (aprovar/cancelar requisição) — `window.alert()` **removido**,
+   substituído por `statusError: DidacticError | null` renderizado no
+   topo da página, mutation recebe `requisitionLabel` para o título.
+4. `client/src/pages/logistics/ReceivingConferenceDialog.tsx` — mutation
+   de confirmação de recebimento migrada para `translateApiError(...,
+   'receive-purchase')` + `<DidacticAlert>`, cobrindo o caso "recebimento
+   sem nota fiscal" (`BUSINESS_RULES.md` §13.5 item 5). Título usa
+   `order_number` do pedido de compra.
+
+### Telas do §13.5 ainda não retrofitadas (próxima entrega)
+
+Restam 5 dos 9 casos priorizados em `docs/governance/TODO.md` §6.2 (ver
+checklist atualizado lá): `ProductionOrdersPage.tsx` (liberar OP),
+`RegisterTestTab.tsx` (teste de laboratório sem resultado/faixa),
+`MrpPage.tsx` (conversão de ordem MRP já em execução), `InspectionTab.tsx`
+(liberar/bloquear lote em status terminal). O padrão de migração é sempre
+o mesmo: trocar `extractApiErrorMessage`/`window.alert`/`<p
+className="text-destructive">` por `translateApiError(error, title,
+context)` + `<DidacticAlert error={...} />`, adicionando o `title`
+dinâmico com o identificador do documento (a tela é quem sabe qual
+ação/documento estava em curso, não é derivável do erro).
+
+### O que o Agente QA (ou humano) deve testar na interface
+
+1. **`ConvertRequisitionDialog` (Requisições → Gerar Pedido de Compra)** —
+   cenário principal do UC-43: criar/usar uma requisição aprovada com ao
+   menos 2 itens sem fornecedor preferencial nem `suggested_supplier_id`,
+   tentar converter sem informar fornecedor de fallback. Confirmar que o
+   alerta lista **todos** os itens sem fornecedor (não apenas o
+   primeiro) e que o link de ação aponta para a rota correta.
+2. **`ShippingPage`** — tentar embarcar uma venda com NF-e não autorizada
+   (status `processing`/`denied`/`pending`) via linha da tabela: o aviso
+   inline deve mostrar o status atual da NF-e e link para `/sales`. Forçar
+   um erro `422` na chamada de embarque (ex.: venda que muda de estado
+   entre o carregamento da lista e o clique) e confirmar que aparece o
+   `DidacticAlert` no topo, não mais um `window.alert()` nativo do
+   browser.
+3. **`ReceivingConferenceDialog`** — tentar confirmar recebimento sem
+   preencher o número da NF (o campo tem validação client-side via zod,
+   mas force também um erro de backend, ex.: reenviando um recebimento já
+   processado) e confirmar o formato de 3 partes no lugar do `<p>` cru
+   anterior.
+4. **`CompleteProductionOrderDialog`** — tentar concluir uma OP com um
+   componente sem lote selecionado e confirmar a mensagem didática; testar
+   também um erro real de backend (ex.: quantidade de consumo maior que o
+   saldo do lote) para validar que `translateApiError` extrai `details`
+   corretamente quando o backend já os popula.
+5. **Regressão**: confirmar que nenhuma das 4 telas usa mais
+   `window.alert()` para erros de mutation, e que `extractApiErrorMessage`
+   continua funcionando nos pontos não migrados dessas mesmas telas
+   (criação de requisição em `RequisitionsPage`, carregamento de itens em
+   `ShippingItemsDialog`) — não deve haver regressão nesses fluxos.
+
+### Qualidade
+
+- `node ./node_modules/typescript/bin/tsc -b --noEmit` — limpo, sem erros.
+- `node ./node_modules/vitest/vitest.mjs run` — 21 testes passando (13
+  pré-existentes intactos + 8 novos de `translateApiError.test.ts`).
+- Nenhuma dependência nova instalada; nenhum commit criado (conforme
+  instrução da tarefa).
+
+**Desenvolvedor**: Claude Code (Senior Frontend Engineer / UI Architect)
+**Data**: 2026-08-03
+
+---
+
+## Bloco 1.2 — Middleware `authorizeModule` + CRUD de Perfis de Acesso + Piloto (Concluído)
+
+**Data**: 2026-08-03
+**Escopo**: `docs/governance/TODO.md` Bloco 1.2 (backend). Fonte de
+verdade: `docs/business/BUSINESS_RULES.md` §1-§8, `docs/business/01-USE_CASES.md`
+UC-30 a UC-38. Trabalho restrito a `server/` (não tocado: `client/`,
+migrations).
+**Status**: ✅ Concluído (retrofit completo dos demais módulos e telas de
+frontend permanecem pendentes, ver "Riscos residuais" abaixo)
+
+### Resumo da feature
+
+1. **Middleware `authorizeModule(moduleKey, requiredLevel = 'operate')`**
+   em `server/src/middlewares/auth.ts`, aditivo (não substitui
+   `authenticate`/`authorize`). `authenticate` foi estendido para
+   carregar `AccessProfile` + `AccessProfilePermission` do usuário em uma
+   única query (`include` aninhado), anexando `req.user.permissions`
+   (mapa `module → 'operate'|'approve'`), `req.user.accessProfileId` e
+   `req.user.accessProfileName` — sem N+1 por request.
+
+   **Decisão de arquitetura aplicada (substitui o plano original do
+   Bloco 1.1 de uma coluna `users.access_level`, que não existe no
+   schema e não foi criada por este agente):** o nível gestor/operador de
+   um usuário mora no **perfil**, não no usuário — `level = 'approve'`
+   numa `AccessProfilePermission` caracteriza gestor daquele módulo,
+   `level = 'operate'` caracteriza operador. Ver nota completa em
+   `docs/business/BUSINESS_RULES.md` §4.
+
+   Fórmulas implementadas: `role='admin'` sempre libera (curto-circuito,
+   §3); sem `access_profile_id`/perfil inativo → 403 `NO_ACCESS_PROFILE`
+   (UC-35-Exceção, aviso didático); módulo ausente da matriz → 403
+   `MODULE_ACCESS_DENIED`; `requiredLevel='approve'` com `level='operate'`
+   no perfil → 403 `APPROVAL_LEVEL_REQUIRED`. Toda negação é auditada
+   (`logAction`, `action: 'access_denied'`, lazy-required para não
+   quebrar testes que mockam apenas `models/index`).
+
+2. **Novo módulo `server/src/modules/accessProfiles`** (Clean
+   Architecture: domain/application/infrastructure/presentation), CRUD
+   completo de Perfis de Acesso (UC-30 a UC-32):
+   - `GET /api/access-profiles/modules` — lista os 26 module keys válidos
+     (fonte única `server/src/shared/domain/accessModules.ts`)
+   - `GET /api/access-profiles` — lista com permissões + `userCount`
+   - `GET /api/access-profiles/:id`
+   - `POST /api/access-profiles` — 409 nome duplicado, 422 sem permissão/
+     módulo inválido, transação perfil+permissões
+   - `PUT /api/access-profiles/:id` — substitui matriz de permissões
+     integralmente em transação, audita matriz anterior completa
+   - `DELETE /api/access-profiles/:id` — soft delete; 422 com lista de
+     usuários ativos vinculados se houver (UC-32 decidido)
+
+3. **`PUT /api/users/:id/access-profile`** (UC-33) — novo use case
+   `AssignAccessProfileUseCase` no módulo `users` existente; valida
+   perfil ativo, audita `oldValues`/`newValues`, não invalida sessão
+   (UC-36 decidido).
+
+4. **`GET /api/auth/me/permissions`** (UC-34, parcial) — novo use case
+   `GetMyPermissionsUseCase` no módulo `auth`; retorna `{ modules,
+   profile }` a partir de `req.user.permissions` já resolvido, sem query
+   extra; `admin` recebe todos os módulos em `'approve'`.
+
+5. **Aplicação piloto de `authorizeModule`** em dois módulos (validação
+   do padrão, não o retrofit completo — que é tarefa própria do TODO):
+   - `laboratory` (`module: 'laboratorio'`): leituras exigem visibilidade
+     (qualquer nível), `POST /tests` exige `operate`.
+   - `engineering` (`module: 'engenharia'`): leituras exigem
+     visibilidade; criação/edição de projetos e desenhos exigem
+     `operate`; `release`/`obsolete` de desenho técnico exigem `approve`
+     (era `authorize('admin')` isolado — agora admin global OU gestor de
+     engenharia, com o `authorize('admin')` legado mantido em camada,
+     conforme risco §8).
+
+6. Auditoria (`logAction`) em todos os writes: criação/edição/desativação
+   de perfil, atribuição de perfil a usuário, e tentativas de acesso
+   negado pelo middleware.
+
+### Arquivos criados
+
+- `server/src/shared/domain/accessModules.ts` — 26 module keys + labels
+  pt-BR (fonte única compartilhada middleware ↔ módulo)
+- `server/src/modules/accessProfiles/domain/repositories/AccessProfilesRepository.ts`
+- `server/src/modules/accessProfiles/infrastructure/sequelize/SequelizeAccessProfilesRepository.ts`
+- `server/src/modules/accessProfiles/application/use-cases/ListAccessProfilesUseCase.ts`
+- `server/src/modules/accessProfiles/application/use-cases/GetAccessProfileByIdUseCase.ts`
+- `server/src/modules/accessProfiles/application/use-cases/CreateAccessProfileUseCase.ts`
+- `server/src/modules/accessProfiles/application/use-cases/UpdateAccessProfileUseCase.ts`
+- `server/src/modules/accessProfiles/application/use-cases/DeactivateAccessProfileUseCase.ts`
+- `server/src/modules/accessProfiles/application/use-cases/validatePermissions.ts`
+- `server/src/modules/accessProfiles/presentation/controllers/accessProfilesController.ts`
+- `server/src/modules/accessProfiles/presentation/routes/accessProfiles.ts`
+- `server/src/modules/accessProfiles/README.md`
+- `server/src/modules/auth/application/use-cases/GetMyPermissionsUseCase.ts`
+- `server/src/modules/users/application/use-cases/AssignAccessProfileUseCase.ts`
+- `server/tests/unit/access-profiles.test.ts` (20 testes)
+
+### Arquivos modificados
+
+- `server/src/middlewares/auth.ts` — `authenticate` estendido (eager-load
+  de perfil+permissões), novo `authorizeModule` exportado
+- `server/app.ts` — registrada `app.use('/api/access-profiles', ...)`
+- `server/src/modules/auth/presentation/controllers/authController.ts` — `getMyPermissions`
+- `server/src/modules/auth/presentation/routes/auth.ts` — `GET /me/permissions`
+- `server/src/modules/users/presentation/controllers/userController.ts` — `assignAccessProfile`
+- `server/src/modules/users/presentation/routes/users.ts` — `PUT /:id/access-profile`
+- `server/src/modules/users/README.md` — endpoint documentado
+- `server/src/modules/laboratory/presentation/routes/laboratory.ts` — `authorizeModule` piloto
+- `server/src/modules/engineering/presentation/routes/engineering.ts` — `authorizeModule` piloto
+- `docs/governance/TODO.md` — Bloco 1.2 marcado `[x]` (exceto item de
+  convivência com `role` legado nos demais módulos, ainda `[ ]`), Bloco 1.5
+  QA marcado com os testes unitários entregues
+- `docs/business/BUSINESS_RULES.md` §4 — nota de implementação sobre a
+  decisão de onde mora o nível gestor/operador
+- `docs/projeto/04-USE_CASES.md` — UC-30 a UC-34 consolidados (versão
+  resumida, com nota apontando `01-USE_CASES.md`/`BUSINESS_RULES.md` como
+  fonte normativa completa para UC-35 a UC-43, ainda não implementados)
+- `docs/DATABASE.md` — nota de escopo de `access_profiles`/
+  `access_profile_permissions` atualizada (removida a referência a
+  `access_level` como pendência de schema)
+- `docs/API.md` — nova seção "1.2 Perfis de Acesso (Access Profiles)",
+  `GET /api/auth/me/permissions` e `PUT /api/users/:id/access-profile`
+  documentados em "1. Autenticação"/"1.1 Usuários"
+
+### Documentações atualizadas
+
+`docs/governance/TODO.md`, `docs/business/BUSINESS_RULES.md`,
+`docs/projeto/04-USE_CASES.md`, `docs/DATABASE.md`, `docs/API.md`,
+`server/src/modules/accessProfiles/README.md` (novo),
+`server/src/modules/users/README.md`, JSDoc completo em todos os arquivos
+`.ts` criados/modificados (middleware, use cases, controllers, rotas).
+
+### Testes executados
+
+- `npm run typecheck` (`tsc -p tsconfig.json --noEmit`) — limpo, sem erros.
+- `npx jest tests/unit` — **53 suites / 298 testes, 100% verde**, incluindo
+  os 20 novos de `tests/unit/access-profiles.test.ts` (middleware:
+  admin sempre passa, `NO_ACCESS_PROFILE`, `MODULE_ACCESS_DENIED`,
+  `APPROVAL_LEVEL_REQUIRED`, `operate` não aprova, `approve` aprova, 401
+  sem `req.user`; CRUD: 409 duplicado, 422 sem permissão/módulo inválido,
+  auditoria com matriz completa na edição, 422 desativação com usuários
+  vinculados listados, desativação bem-sucedida; atribuição: auditoria
+  com valor anterior/novo, 422 perfil inativo, 404 perfil inexistente,
+  remoção com `null`) — **sem regressões** nos 278 testes pré-existentes.
+- Nenhuma migration/docker executado (fora do escopo desta tarefa, schema
+  já aplicado conforme instrução).
+- Nenhum commit criado (conforme instrução da tarefa).
+
+### Instruções de teste para o próximo agente/humano
+
+1. Validar manualmente (ou via Supertest) o fluxo HTTP completo com um
+   perfil real: criar um perfil "Analista de Laboratório" com
+   `{ laboratorio: 'operate' }` via `POST /api/access-profiles`, atribuir
+   a um usuário `operator` via `PUT /api/users/:id/access-profile`, logar
+   com esse usuário e confirmar que `GET /api/laboratory/tests` responde
+   200 e `POST /api/laboratory/tests` também, mas que um endpoint de outro
+   módulo (ex.: `GET /api/financial/payable`, ainda sem `authorizeModule`
+   aplicado) segue com o comportamento anterior (não quebrou).
+2. Testar `PUT /api/engineering/drawings/:id/release` com um usuário cujo
+   perfil tem `{ engenharia: 'operate' }` (deve continuar barrado, agora
+   com 403 `APPROVAL_LEVEL_REQUIRED` do middleware, antes mesmo do
+   `authorize('admin')` legado) e depois com `{ engenharia: 'approve' }`
+   (deve passar do middleware, mas ainda cair no `authorize('admin')`
+   legado se o usuário não for admin — **este é o ponto de atenção**: a
+   convivência entre as duas checagens nos módulos piloto ainda não foi
+   resolvida, ver "Riscos residuais").
+3. Testar `DELETE /api/access-profiles/:id` de um perfil com usuários
+   ativos vinculados e confirmar `error.details.users` completo; realocar
+   os usuários e confirmar que a segunda tentativa retorna 200.
+4. Testar `GET /api/auth/me/permissions` logado como `admin` (deve trazer
+   todos os 26 módulos em `'approve'`) e como usuário sem perfil (deve
+   trazer `{ modules: {}, profile: null }`).
+5. Rodar `npx jest tests/unit` e `npm run typecheck` para confirmar que a
+   base segue estável antes de prosseguir com o retrofit dos demais
+   módulos.
+
+### Riscos residuais / pendências não resolvidas nesta entrega
+
+- **Convivência `authorizeModule` × `authorize(role)` legado nos módulos
+  piloto:** nesta entrega, ambas as checagens foram **mantidas** em
+  `laboratory`/`engineering` (compostas em camada — `authorizeModule`
+  roda antes). Isso significa que em `engineering`, um usuário com
+  perfil "Engenheiro" nível `approve` no módulo `engenharia` ainda leva
+  403 em `release`/`obsolete` de desenho se não for `role='admin'`
+  globalmente (o `authorize('admin')` legado não foi removido). O TODO
+  (§8/Bloco 1.2) já documentava esse risco como decisão de implementação
+  a validar — **não foi resolvido aqui**, apenas reafirmado; próxima
+  tarefa deve decidir se o `authorize(role)` legado é removido nesses
+  dois endpoints ou se a UX de erro deve ser ajustada.
+- **Retrofit incompleto:** `authorizeModule` só foi aplicado a
+  `laboratory`/`engineering`. Os demais 20+ módulos de rota continuam
+  usando apenas `authorize(role)`. Nenhuma rota teve seu comportamento de
+  autorização **reduzido** por esta entrega — apenas os dois módulos
+  piloto ganharam uma camada adicional (mais restritiva, nunca mais
+  permissiva).
+- **Frontend (Bloco 1.4) não iniciado:** menu dinâmico, tela "Acesso
+  Negado", telas de gestão de perfis — fora do escopo desta tarefa
+  (proibido tocar `client/`).
+- **Seed de perfis operacionais (11 perfis da matriz §1, incluindo a
+  pendência do módulo `rh`)** continua não realizado — apenas o perfil
+  "Administrador Geral" existe desde o Bloco 1.1.
+- **Testes de integração HTTP fim-a-fim** (Supertest, com app real e rota
+  montada) não foram criados nesta entrega — apenas testes unitários do
+  middleware e dos use cases com mocks. Recomendado para a próxima
+  iteração antes do retrofit completo.
+
+**Desenvolvedor**: Claude Code (Senior Backend Engineer / Tech Lead de Documentação)
+**Data**: 2026-08-03
+
+---
+
+## Bloco 1.4 — Frontend: Menu Dinâmico e Gestão de Perfis de Acesso (Concluído)
+
+**Data**: 2026-08-03
+**Escopo**: `client/` apenas (leitura de `server/` e `docs/` para confirmar contratos reais, sem alterá-los).
+**Status**: ✅ Concluído (UC-30 a UC-35 no frontend, UC-38 fica pendente — ver "Fora de escopo").
+
+### Contratos de API confirmados por leitura (antes de codar)
+
+- `server/src/shared/domain/accessModules.ts` — 26 `AccessModuleKey`, usados
+  literalmente em `client/src/api/accessProfiles.ts` (`AccessModuleKey`
+  type) e no mapeamento de itens de menu do `AppLayout`.
+- `server/src/modules/accessProfiles/presentation/routes/accessProfiles.ts`
+  — `GET/POST /api/access-profiles`, `GET /api/access-profiles/modules`,
+  `GET/PUT/DELETE /api/access-profiles/:id`, todas `admin`-only.
+- `server/src/modules/accessProfiles/domain/repositories/AccessProfilesRepository.ts`
+  — shape de `AccessProfileListItem` (`id, nome, descricao,
+  allowedWarehouses, active, permissions[], userCount`), usado 1:1 no tipo
+  `AccessProfile` do client.
+- `server/src/modules/auth/application/use-cases/GetMyPermissionsUseCase.ts`
+  + `server/src/modules/auth/presentation/routes/auth.ts` —
+  `GET /api/auth/me/permissions` retorna `{ modules: {module: nivel},
+  profile: {id, nome} | null }`; `admin` recebe todos os 26 módulos em
+  `'approve'`.
+- `server/src/modules/users/presentation/routes/users.ts` +
+  `AssignAccessProfileUseCase.ts` — `PUT /api/users/:id/access-profile`
+  (não `PATCH`, confirmado por leitura), body `{ access_profile_id: number
+  | null }`; 422 se perfil inativo, 404 se inexistente.
+- `SequelizeUsersRepository.list` **não** faz `include` de `AccessProfile`
+  — `GET /api/users` retorna apenas `accessProfileId` (número/null), sem o
+  nome do perfil. O client resolve o nome cruzando com
+  `listAccessProfiles()` (query React Query separada, `UsersPage.tsx`).
+
+### Arquivos criados
+
+- `client/src/api/accessProfiles.ts` — client de API: tipos
+  (`AccessModuleKey`, `AccessModuleLevel`, `AccessProfile`,
+  `AccessProfilePermission`, `MyPermissions`) + funções
+  `listAccessProfiles`, `listAccessModules`, `getAccessProfile`,
+  `createAccessProfile`, `updateAccessProfile`, `deactivateAccessProfile`,
+  `assignAccessProfile`, `getMyPermissions`.
+- `client/src/pages/users/AccessProfilesPage.tsx` — tela "Usuários >
+  Perfis de Acesso" (UC-30/UC-31/UC-32): listagem com nº de módulos/nº de
+  usuários/status; dialog de criar/editar com a matriz de 26 módulos ×
+  nível (radio "Sem acesso"/"Operar"/"Aprovar" por linha, rótulos pt-BR de
+  `GET /api/access-profiles/modules`); desativação com `window.confirm` +
+  `translateApiError`/`DidacticAlert` para o 422 didático de usuários
+  vinculados (UC-32).
+- `client/src/pages/AccessDeniedPage.tsx` — componente único com duas
+  variantes: `accessDenied` (navegação direta a módulo fora do perfil,
+  UC-35) e `noProfile` (usuário sem `access_profile_id`, texto oficial do
+  dono "Seu acesso ainda não foi configurado — procure o administrador",
+  UC-35-Exceção).
+- `client/src/context/AuthContext.permissions.test.tsx` — 3 testes novos
+  (mock de `@/api/accessProfiles`): mapa de permissões aplicado
+  corretamente, fallback de segurança em falha de rede, usuário sem perfil
+  recebe mapa vazio.
+
+### Arquivos modificados
+
+- `client/src/context/AuthContext.tsx` — adiciona `permissions`,
+  `accessProfile`, `isPermissionsLoading`, `permissionsFetchFailed`,
+  `hasModuleAccess(module)` ao contexto. Após `getMe()` (bootstrap) ou
+  `login()`, chama `GET /api/auth/me/permissions`
+  (`accessProfilesApi.getMyPermissions`). **Fallback de segurança
+  documentado em JSDoc**: se essa chamada falhar (erro de rede/500 — não é
+  o caso normal "sem perfil", que responde 200 com `modules: {}`),
+  `permissionsFetchFailed = true` e o erro é logado no console
+  (`console.error`), mas a sessão **não** é derrubada e `hasModuleAccess`
+  não trava ninguém — cabe ao consumidor (`AppLayout`) decidir usar a regra
+  antiga de `role` nesse caso.
+- `client/src/layouts/AppLayout.tsx` — `NavItem` ganhou campo opcional
+  `module?: AccessModuleKey`; cada item do menu existente foi mapeado para
+  sua module key (ex.: Estoque→`estoque`, MRP→`mrp`,
+  Relatórios→`relatorios.producao` como aproximação — UC-38 sub-permissões
+  de relatório por tipo não foi modelado no menu ainda, ver "Fora de
+  escopo"). `itemVisible()` decide visibilidade: `roles` (se houver) E
+  (sem `module` OU `hasModuleAccess` OU fallback de role ativo — admin ou
+  `permissionsFetchFailed`). Adicionado item "Perfis de Acesso" em
+  Administração. Quando usuário não-admin está sem perfil configurado (mapa
+  de permissões vazio, sem falha de rede), o `<main>` renderiza
+  `<AccessDeniedPage variant="noProfile" />` no lugar do `<Outlet />` — o
+  header (trocar senha/sair) continua acessível, mas nenhum módulo de
+  negócio é exibido.
+- `client/src/routes/ProtectedRoute.tsx` — novo `ModuleRoute({ module })`:
+  guard de rota que bloqueia navegação direta por URL a um módulo fora do
+  perfil, renderizando `<AccessDeniedPage variant="accessDenied" />` (não a
+  página do módulo, nunca tenta renderizar dados parciais — UC-35). Mesmo
+  critério de liberação do menu (admin sempre libera; fallback de rede
+  libera; caso contrário exige `hasModuleAccess`).
+- `client/src/App.tsx` — cada grupo de rotas de módulo (produtos, estoque,
+  recebimento, expedição, vendas, compras, requisições, produção, mrp,
+  chão de fábrica, centros de trabalho, qualidade, laboratório, engenharia,
+  relatórios, patrimônio, financeiro, rastreabilidade) foi envolvido em
+  `<Route element={<ModuleRoute module="..." />}>`. Nova rota
+  `/users/access-profiles` (dentro do `<RoleRoute roles={['admin']} />`
+  já existente, ao lado de `/users`/`/audit-logs`).
+- `client/src/api/users.ts` — `User` ganhou `accessProfileId?: number |
+  null` (campo aditivo, reflete o que `GET /api/users` já retorna hoje sem
+  mudança de backend).
+- `client/src/pages/users/UsersPage.tsx` — nova coluna "Perfil" (resolve o
+  nome cruzando com `listAccessProfiles()`; mostra "Não se aplica (admin)"
+  para `role=admin`, badge "Sem perfil" quando `accessProfileId` é `null`);
+  novo botão "Atribuir perfil" por linha, abrindo dialog com `SelectNative`
+  de perfis **ativos** (`PUT /api/users/:id/access-profile`), aviso textual
+  de que a mudança vale no próximo login (UC-36) e tratamento didático do
+  erro (`translateApiError`/`DidacticAlert`) para 404/422 (perfil
+  inexistente/inativo).
+
+### Decisões tomadas nesta entrega
+
+1. **Tela em `client/src/pages/users/AccessProfilesPage.tsx`** (não aba
+   dentro de `UsersPage.tsx`) — seguindo o padrão já usado no projeto de
+   uma página por entidade (`SuppliersPage`, `ClientsPage`, etc.), com link
+   próprio no menu ("Administração > Perfis de Acesso") e rota
+   `/users/access-profiles`, mantendo `UsersPage.tsx` focado em usuários.
+2. **Matriz de permissões como radio button por linha** (não checkbox
+   duplo `ver`/`aprovar`) — mais simples de mapear 1:1 para o `level`
+   `'operate'|'approve'` do backend (que já não modela `'none'`/`'view'`
+   como valores persistidos, apenas a ausência de linha = `none`); "Sem
+   acesso" desmarca a permissão (não envia `module` no payload).
+3. **`ModuleRoute` como guard adicional, não substituto de `RoleRoute`** —
+   onde já existia `RoleRoute` (ex.: `/financial`), o `ModuleRoute` foi
+   aninhado por dentro, preservando a checagem de role legada (mesmo padrão
+   de convivência em camadas usado no backend, `authorizeModule` +
+   `authorize(role)`).
+4. **Relatórios mapeado para `relatorios.producao`** no menu (aproximação
+   provisória) — o backend já modela `relatorios.producao/.compras/.custos/
+   .financeiro` como sub-chaves independentes (UC-38), mas a tela
+   `ReportsPage.tsx` ainda é uma página única sem segmentação por tipo de
+   relatório; um retrofit fino (checar sub-permissão por aba/relatório
+   dentro da página) fica registrado como próximo passo, não bloqueante
+   para este bloco.
+
+### Fora de escopo desta entrega (não implementado, registrado para não gerar retrabalho ambíguo)
+
+- **UC-38 (Dashboard/Relatórios/Rastreabilidade filtrados por interseção)**
+  — o backend ainda não filtra os cards do Dashboard nem valida
+  sub-permissões de relatório (`docs/governance/TODO.md` §1.3, ainda `[ ]`
+  no backend); o frontend, portanto, não tem o que consumir ainda além do
+  bloqueio total já implementado pelo `ModuleRoute` em `/reports`.
+- **Seletor de nível operador/gestor no dialog de atribuição de perfil**
+  (`docs/governance/TODO.md` linha "Tela de edição de usuário: seletor de
+  perfil + nível") — **não implementado nesta entrega** porque a coluna
+  `users.access_level` (`operador`/`gestor`) mencionada no Bloco 1.1/1.2 do
+  TODO **não existe no schema atual** (decisão de arquitetura do backend:
+  o nível já é resolvido pelo `level` da permissão do perfil —
+  `operate`/`approve` —, não por um campo separado no usuário; ver JSDoc de
+  `authorizeModule` e a nota "Desvio de arquitetura" em
+  `docs/governance/TODO.md` §1.2). Não há campo de nível de usuário para
+  selecionar; o dialog de atribuição só oferece o perfil.
+- **Contador/badge de notificação por módulo no menu** (UC-40, ainda em
+  aberto com o dono, ver rodapé de `docs/governance/TODO.md`) — não
+  implementado, fora do escopo desta entrega.
+
+### Testes
+
+- `node ./node_modules/vitest/vitest.mjs run` — **24 testes passando** (21
+  pré-existentes intactos + 3 novos em
+  `client/src/context/AuthContext.permissions.test.tsx`).
+- `npx tsc -b` (build completo) — sem erros.
+- `npm run lint` (oxlint) — sem erros novos (apenas os 4 warnings
+  `react(only-export-components)` pré-existentes em outros arquivos, não
+  relacionados a esta entrega).
+- Não foram criados testes de `AccessProfilesPage`/`UsersPage`/`AppLayout`
+  em si (render completo com Radix/Table) — os 3 testes novos cobrem a
+  lógica central (`hasModuleAccess`, fallback, mapa vazio) via
+  `AuthContext`, que é o ponto de decisão único consumido por
+  `AppLayout`/`ModuleRoute`. Recomendado para o QA/próxima iteração: teste
+  de integração leve do `AppLayout` (menu renderizado com mock de
+  `permissions`) e do `ModuleRoute` (redirecionamento para
+  `AccessDeniedPage` em URL direta).
+
+### O que o Agente QA (ou humano) deve testar na interface
+
+1. Login como `admin`: menu completo igual a hoje (retrocompatibilidade),
+   incluindo "Perfis de Acesso" em Administração.
+2. Criar um perfil "Almoxarife" com `{ estoque: operate, producao: view
+   (⇒ marcar como "Operar", já que não há "ver" nesta modelagem) }`,
+   atribuir a um usuário `operator` existente via `UsersPage > Atribuir
+   perfil`, fazer logout/login com esse usuário: menu deve mostrar apenas
+   Estoque/Produção.
+3. Com esse mesmo usuário logado, digitar a URL `/financial` diretamente:
+   deve cair na tela "Acesso negado" (não a página financeira).
+4. Criar um usuário `operator` novo, **sem** atribuir perfil, fazer login:
+   deve ver a tela "Seu acesso ainda não foi configurado — procure o
+   administrador" e nenhum item de menu de módulo (apenas trocar
+   senha/sair no header).
+5. Tentar desativar um perfil com usuário(s) ativo(s) vinculado(s): deve
+   aparecer o alerta didático de 3 partes (não um erro cru), listando os
+   usuários afetados; reatribuir os usuários para outro perfil e desativar
+   novamente deve funcionar.
+6. Simular falha de rede em `GET /api/auth/me/permissions` (ex.: interceptar
+   e forçar erro 500 via devtools) com um usuário `operator`/`financial`
+   que tinha menu funcionando antes: o menu deve continuar aparecendo pela
+   regra antiga de `role` (não deve travar em tela branca nem em "acesso
+   não configurado") — checar o console por um `console.error` de aviso.
+
+**Desenvolvedor**: Claude Code (Senior Frontend Engineer / UI Architect)
 **Data**: 2026-08-03

@@ -5,12 +5,14 @@ import { Eye, Send, AlertTriangle } from 'lucide-react';
 
 import * as salesApi from '@/api/sales';
 import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DetailField } from '@/components/DetailField';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 
 const STATUS_LABEL: Record<salesApi.SaleStatus, string> = {
@@ -54,6 +56,7 @@ export default function ShippingPage() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = React.useState<QueueFilter>('pending');
   const [detailsSale, setDetailsSale] = React.useState<salesApi.Sale | null>(null);
+  const [shipError, setShipError] = React.useState<DidacticError | null>(null);
 
   const results = useQueries({
     queries: [
@@ -80,9 +83,13 @@ export default function ShippingPage() {
   };
 
   const shipMutation = useMutation({
-    mutationFn: (id: number) => salesApi.updateSaleStatus(id, 'shipped'),
-    onSuccess: invalidateShipping,
-    onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível marcar a venda como embarcada.')),
+    mutationFn: ({ id }: { id: number; saleLabel: string }) => salesApi.updateSaleStatus(id, 'shipped'),
+    onSuccess: () => {
+      setShipError(null);
+      invalidateShipping();
+    },
+    onError: (error, variables) =>
+      setShipError(translateApiError(error, `Não é possível marcar a Venda ${variables.saleLabel} como embarcada`, 'ship-sale')),
   });
 
   return (
@@ -98,6 +105,8 @@ export default function ShippingPage() {
           </Button>
         </div>
       </div>
+
+      {shipError && <DidacticAlert error={shipError} />}
 
       <Table>
         <TableHeader>
@@ -146,12 +155,14 @@ export default function ShippingPage() {
                     </Button>
                     {needsNfe && (
                       <span className="flex items-center gap-1 text-xs text-amber-600">
-                        <AlertTriangle className="size-3.5" />
-                        Emita a NF-e na{' '}
+                        <AlertTriangle className="size-3.5 shrink-0" />
+                        Não é possível marcar a Venda #{sale.id} como embarcada: a nota fiscal está com status "
+                        {NFE_STATUS_LABEL[nfeStatus] ?? nfeStatus}" — nenhuma NF-e autorizada foi encontrada. Emita a
+                        NF-e em{' '}
                         <Link to="/sales" className="underline underline-offset-2">
-                          tela de Vendas
-                        </Link>{' '}
-                        antes de embarcar
+                          Vendas → Faturamento
+                        </Link>
+                        .
                       </span>
                     )}
                     {canWrite && canShip && (
@@ -160,7 +171,8 @@ export default function ShippingPage() {
                         disabled={shipMutation.isPending}
                         onClick={() => {
                           if (window.confirm(`Marcar a venda #${sale.id} como embarcada?`)) {
-                            shipMutation.mutate(sale.id);
+                            setShipError(null);
+                            shipMutation.mutate({ id: sale.id, saleLabel: `#${sale.id}` });
                           }
                         }}
                       >

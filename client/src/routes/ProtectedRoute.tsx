@@ -2,6 +2,8 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { useAuth } from '@/context/AuthContext';
 import type { UserRole } from '@/api/auth';
+import type { AccessModuleKey } from '@/api/accessProfiles';
+import { AccessDeniedPage } from '@/pages/AccessDeniedPage';
 
 /**
  * Bloqueia acesso a rotas filhas se não houver sessão autenticada.
@@ -34,6 +36,35 @@ export function RoleRoute({ roles }: { roles: UserRole[] }) {
 
   if (!hasRole(...roles)) {
     return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
+}
+
+/**
+ * Guard de rota por módulo de perfil de acesso (UC-34/UC-35). Bloqueia a
+ * navegação direta por URL a um módulo fora do perfil do usuário, exibindo
+ * a tela "Acesso Negado" (não a página do módulo — nunca tenta renderizar
+ * dados parciais).
+ *
+ * Regras de liberação (mesma lógica de `hasModuleAccess`, ver
+ * `AuthContext`):
+ * - `role = admin` sempre libera (nunca bloqueado por perfil de área, §3);
+ * - `permissionsFetchFailed = true` (fallback de segurança de rede/500)
+ *   também libera — nunca trava o usuário por um bug de infraestrutura,
+ *   documentado em `AuthContext`;
+ * - caso contrário, exige o módulo presente no mapa de permissões
+ *   resolvido (`GET /api/auth/me/permissions`).
+ */
+export function ModuleRoute({ module }: { module: AccessModuleKey }) {
+  const { hasModuleAccess, permissionsFetchFailed, isPermissionsLoading } = useAuth();
+
+  if (isPermissionsLoading) {
+    return <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">Carregando...</div>;
+  }
+
+  if (!hasModuleAccess(module) && !permissionsFetchFailed) {
+    return <AccessDeniedPage variant="accessDenied" />;
   }
 
   return <Outlet />;

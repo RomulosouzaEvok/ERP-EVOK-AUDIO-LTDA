@@ -926,4 +926,126 @@ Controller
 
 **Pós-condição:** Nenhuma (operação somente leitura)
 
+---
+
+## UC-30: Criar Perfil de Acesso (Área/Departamento)
+
+**Ator:** Administrador Global
+**Pré-condições:** Usuário autenticado com papel JWT `admin`
+**Endpoint:** `POST /api/access-profiles`
+
+**Fluxo Principal:**
+1. Administrador informa `nome`, `descricao` opcional, `allowed_warehouses`
+   opcional e a matriz `permissions: [{ module, level }]` (`level` ∈
+   `'operate'|'approve'`; ausência de módulo na lista = sem acesso)
+2. Sistema valida `module` contra a lista fixa de 26 módulos
+   (`server/src/shared/domain/accessModules.ts`, servida também em
+   `GET /api/access-profiles/modules`), rejeita módulo duplicado no
+   payload e exige ao menos uma permissão
+3. Sistema cria o perfil + permissões em uma única transação Sequelize
+4. Sistema audita (`logAction`, ação `create`, entidade `AccessProfile`)
+
+**Fluxo Alternativo (nome duplicado):** 409 `CONFLICT`
+**Fluxo Alternativo (nenhuma permissão informada / módulo inválido):** 422 `VALIDATION_ERROR`
+**Fluxo Alternativo (usuário não é admin):** 403 `FORBIDDEN`
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §1/§3.
+
+---
+
+## UC-31: Editar Perfil de Acesso
+
+**Ator:** Administrador Global
+**Endpoint:** `PUT /api/access-profiles/:id`
+
+**Fluxo Principal:**
+1. Administrador altera `nome`/`descricao`/`allowed_warehouses` e/ou
+   substitui integralmente a matriz de `permissions`
+2. Sistema aplica as mesmas validações do UC-30 (nome único excluindo o
+   próprio id, ao menos um módulo)
+3. Sistema audita com **valor anterior completo da matriz** (`oldValues`)
+   e o novo valor (`newValues`), em uma única transação Sequelize
+4. Efeito imediato: a próxima requisição de qualquer usuário atribuído a
+   este perfil já reflete a nova matriz (`authorizeModule` consulta o
+   banco a cada request, sem cache no JWT)
+
+**Fluxo Alternativo (perfil não existe):** 404 `NOT_FOUND`
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §5.
+
+---
+
+## UC-32: Desativar (Inativar) Perfil de Acesso
+
+**Ator:** Administrador Global
+**Endpoint:** `DELETE /api/access-profiles/:id` (soft delete, `active = false`)
+
+**Fluxo Principal:**
+1. Administrador solicita a desativação
+2. Sistema conta usuários **ativos** vinculados ao perfil
+   (`users.access_profile_id = :id AND users.active = true`)
+3. Se `count = 0`: sistema marca `active = false` e audita (`action:
+   'deactivate'`)
+
+**Fluxo Alternativo (perfil em uso — DECIDIDO):** 422
+`BUSINESS_RULE_VIOLATION`, com `error.details.users` listando `{ id, name,
+email }` de cada usuário ativo afetado e `error.details.userCount` — o
+admin deve realocar (UC-33) todos antes de tentar novamente.
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §1.2/UC-32 em `docs/business/01-USE_CASES.md`.
+
+---
+
+## UC-33: Atribuir Perfil de Acesso a Usuário
+
+**Ator:** Administrador Global
+**Endpoint:** `PUT /api/users/:id/access-profile` (`{ "access_profile_id": <id>|null }`)
+
+**Fluxo Principal:**
+1. Administrador informa o novo `access_profile_id` (ou `null` para
+   remover a atribuição) de um usuário existente
+2. Sistema valida que o perfil informado existe e está `active = true`
+3. Sistema substitui a atribuição anterior (um usuário tem no máximo um
+   perfil) e audita com `oldValues`/`newValues` de `accessProfileId`
+   (`action: 'assign'`, `entity: 'UserAccessAssignment'`)
+4. **UC-36 (decidido):** a troca não invalida a sessão/token já emitidos
+   do usuário-alvo — vale a partir do próximo login para fins de menu; a
+   API já reflete o novo perfil na próxima requisição (sem cache)
+
+**Fluxo Alternativo (perfil inexistente):** 404 `NOT_FOUND`
+**Fluxo Alternativo (perfil inativo):** 422 `BUSINESS_RULE_VIOLATION`
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §2/§5.
+
+---
+
+## UC-34 (parcial): Menu Resolvido do Usuário Autenticado
+
+**Ator:** Qualquer usuário autenticado
+**Endpoint:** `GET /api/auth/me/permissions`
+
+**Fluxo Principal:**
+1. Usuário autenticado consulta o endpoint
+2. Se `role = admin`: sistema retorna todos os 26 módulos em `'approve'`
+3. Se `role != admin`: sistema retorna `req.user.permissions` (mapa
+   `module → 'operate'|'approve'`), já resolvido por `authenticate` sem
+   query adicional, e `profile: { id, nome } | null`
+
+**Nota de escopo:** este UC cobre apenas o endpoint de dados brutos de
+permissão; a renderização do menu lateral no frontend consumindo este
+payload é tarefa do Bloco 1.4 (`docs/governance/TODO.md`), ainda pendente.
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §3, UC-34/UC-35-Exceção em `docs/business/01-USE_CASES.md`.
+
+---
+
+> **Nota de consolidação (2026-08-03):** UC-30 a UC-34 acima cobrem apenas
+> o Bloco 1.2 (middleware `authorizeModule` + CRUD de perfis + atribuição
+> + endpoint de permissões), aplicado como piloto nos módulos `laboratory`
+> e `engineering`. A especificação completa de UC-30 a UC-43 (incluindo
+> UC-35 a UC-43, ainda não implementados) permanece em
+> `docs/business/01-USE_CASES.md` e `docs/business/BUSINESS_RULES.md`,
+> que continuam a fonte de verdade normativa até serem integralmente
+> implementados e consolidados aqui.
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

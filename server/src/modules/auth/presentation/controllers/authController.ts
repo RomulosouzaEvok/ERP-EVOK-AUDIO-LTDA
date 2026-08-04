@@ -11,6 +11,7 @@ import TokenService = require('../../infrastructure/jwt/TokenService');
 import LoginUseCase = require('../../application/use-cases/LoginUseCase');
 import RegisterUserUseCase = require('../../application/use-cases/RegisterUserUseCase');
 import GetMeUseCase = require('../../application/use-cases/GetMeUseCase');
+import GetMyPermissionsUseCase = require('../../application/use-cases/GetMyPermissionsUseCase');
 import ChangePasswordUseCase = require('../../application/use-cases/ChangePasswordUseCase');
 import ForgotPasswordUseCase = require('../../application/use-cases/ForgotPasswordUseCase');
 import ResetPasswordUseCase = require('../../application/use-cases/ResetPasswordUseCase');
@@ -77,6 +78,27 @@ export async function getMe(req: Request, res: Response, next: NextFunction): Pr
     const useCase = new GetMeUseCase(authRepository);
     const user = await useCase.execute({ userId: (req as any).user.id });
     res.json({ success: true, data: user });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * `GET /api/auth/me/permissions` — retorna o mapa module→nível do usuário
+ * autenticado e o perfil de acesso atual, para o frontend montar o menu
+ * (UC-34). Não faz query adicional: reaproveita `req.user.permissions`,
+ * já resolvido por `authenticate`.
+ *
+ * @param req - Request.
+ * @param res - Response.
+ * @param next - Next.
+ * @returns Promise<void>.
+ */
+export async function getMyPermissions(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const useCase = new GetMyPermissionsUseCase();
+    const result = await useCase.execute({ user: (req as any).user });
+    res.json({ success: true, data: result });
   } catch (error) {
     next(error);
   }

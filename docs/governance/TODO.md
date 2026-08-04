@@ -20,14 +20,27 @@ Todas Confirmadas" ao final deste documento e o topo de
 
 ### 1.1 AdmDBA — Schema
 
-- [ ] Criar migration `access_profiles` (id, `nome` único, `descricao`,
-  `active` boolean default true, `criado_por` FK `users`, timestamps)
-- [ ] Criar migration `access_profile_permissions` (id, `access_profile_id`
-  FK, `module` (enum ou string validada contra lista fixa de módulos —
-  ver `BUSINESS_RULES.md` §1), `level` enum `none|view|operate|approve`,
-  unique `(access_profile_id, module)`)
-- [ ] Adicionar `access_profile_id` (FK nullable) e `access_level`
-  (enum `operador|gestor`, nullable) em `users`
+- [x] Criar migration `access_profiles` (id, `nome` único, `descricao`,
+  `active` boolean default true, timestamps). **Desvio decidido nesta
+  entrega:** `criado_por` FK `users` **não** foi criada (não estava no
+  escopo repassado pelo DBA para esta migration); `allowed_warehouses`
+  JSONB nullable foi adicionado (decisão já registrada em
+  `BUSINESS_RULES.md` §12/UC-42, lista simples de depósitos permitidos).
+  Ver `server/migrations/20260803-000008-create-access-profiles.cjs`.
+- [x] Criar migration `access_profile_permissions` (id, `access_profile_id`
+  FK CASCADE, `module` VARCHAR(50), `level`, unique
+  `(access_profile_id, module)`, índice em `access_profile_id`).
+  **Desvio decidido nesta entrega:** `level` restrito ao ENUM
+  `('operate','approve')` — não `none|view|operate|approve`. A ausência
+  de linha já representa `none`, e a presença da linha já implica `view`
+  implícito; `approve` inclui `operate`. Simplifica a modelagem sem
+  perder nenhuma regra de `BUSINESS_RULES.md` §1/§4.
+- [x] Adicionar `access_profile_id` (FK nullable, `ON DELETE SET NULL`)
+  em `users`. **Pendente/fora de escopo desta migration:**
+  `access_level` (`operador`/`gestor`) — a segunda trava de §4 para
+  ações de `approve` **não foi criada nesta entrega**; fica registrada
+  como próxima tarefa de schema antes do middleware `authorizeModule`
+  (Bloco 1.2) poder aplicar a fórmula completa de autorização.
 - [ ] **NÃO obrigatório nesta entrega** — `permission_version` (campo
   análogo a `password_version`, que invalidaria a sessão na troca de
   perfil): **decisão do dono foi "vale no próximo login, sem derrubar a
@@ -36,63 +49,105 @@ Todas Confirmadas" ao final deste documento e o topo de
   avaliada em sprint separada caso o negócio queira, no futuro, forçar
   consistência imediata de sessão/menu. Não bloqueia nem faz parte do
   escopo atual do Bloco 1.
-- [ ] Seed inicial com a matriz proposta em `BUSINESS_RULES.md` §1 (11
-  perfis de departamento — RH pendente de módulo próprio, ver nota no
-  §1)
-- [ ] Script de validação pós-migration (padrão já usado no projeto em
-  `server/src/scripts/backfill/*_validation.sql`): nenhum usuário
-  `role != admin` deve ficar com `access_profile_id` obrigatoriamente
-  preenchido de forma automática — decisão do dono (UC-35-Exceção) é
-  **bloqueio total com aviso**: o backfill inicial deve deixar
-  `access_profile_id = null` para usuários existentes sem perfil
-  definido (eles caem no fluxo UC-35-Exceção até o admin atribuir um
-  perfil), não atribuir um perfil "provisório" arbitrário
+- [x] Seed inicial. **Desvio decidido nesta entrega:** em vez dos 11
+  perfis de departamento completos da matriz de `BUSINESS_RULES.md` §1
+  (que dependem de decisão de produto/UX sobre nomes exatos e ainda tem
+  a pendência de RH em aberto), a migration semeia apenas o perfil de
+  referência **"Administrador Geral"** (todos os módulos em `approve`,
+  **não atribuído a nenhum usuário** — o admin global já opera acima do
+  sistema de perfis, §3). O seed dos 11 perfis operacionais de
+  departamento fica para uma tarefa futura (Bloco 1.2/CRUD de perfis ou
+  nova migration de seed), quando a matriz completa (incluindo RH) for
+  validada.
+- [x] Backfill: **nenhum usuário existente recebeu `access_profile_id`**
+  — a coluna nasce `NULL` por padrão (`addColumn` sem `defaultValue`) e
+  não há UPDATE de backfill na migration, cumprindo a decisão do dono
+  (UC-35-Exceção: bloqueio total, sem perfil provisório). Script de
+  validação SQL dedicado não foi criado nesta entrega (a garantia é
+  estrutural — a coluna é adicionada sem preenchimento — mas o padrão
+  `*_validation.sql` do projeto pode ser adicionado como follow-up se o
+  time de QA/DBA quiser uma checagem formal pós-deploy).
 
 ### 1.2 Backend — Middleware e Endpoints
 
-- [ ] Criar middleware `authorizeModule(module, minLevel)` em
-  `server/src/middlewares/` (não substituir `authenticate`/`authorize`
-  existentes — compor em camada, conforme risco documentado em
-  `BUSINESS_RULES.md` §8)
-  - [ ] Curto-circuito: `req.user.role === 'admin'` sempre libera (§3)
-  - [ ] Resolve o módulo dono da ação (não o módulo de origem do dado —
-    UC-37 cenário "Qualidade libera lote do Recebimento")
-  - [ ] Para ações que exigem `approve`: checar também
-    `req.user.access_level === 'gestor'` (fórmula completa em
-    `BUSINESS_RULES.md` §4)
-  - [ ] Usuário sem `access_profile_id`: aplicar a política **decidida**
-    em UC-35-Exceção — bloqueio total, com aviso didático ("Seu acesso
-    ainda não foi configurado — procure o administrador"), apenas "Meu
-    Perfil" acessível
-  - [ ] Registrar tentativa negada em log de auditoria (`access_denied`)
-- [ ] CRUD de perfis: `POST/GET/PUT /api/access-profiles`,
-  `PATCH /api/access-profiles/:id/status` (UC-30, UC-31, UC-32)
-  - [ ] Validação: nome único (409), ao menos um módulo ≠ `none` (422)
-  - [ ] Auditoria completa com `oldValues`/`newValues` (§5) — copiar
-    padrão já usado em `ChangePurchaseRequisitionStatusUseCase`/`logAction`
-  - [ ] UC-32: implementar a regra **decidida** pelo dono — **bloquear**
-    a desativação (422) enquanto houver usuário ativo vinculado ao
-    perfil, listando os usuários afetados na resposta; a desativação só
-    é permitida depois que o admin realocar (UC-33) todos os usuários
-    vinculados para outro perfil
-- [ ] Atribuição de perfil a usuário: `PATCH /api/users/:id/access-profile`
-  (UC-33)
-  - [ ] Validar perfil ativo
-  - [ ] **Não** incrementar nenhuma versão de sessão/token ao trocar o
-    perfil (decisão do dono, UC-36: "vale no próximo login" — a troca é
-    apenas persistida no banco, sem efeito de invalidação de sessão)
-- [ ] Endpoint de menu resolvido: incluir no payload de login (ou
-  `GET /api/auth/me/menu` dedicado) a lista de módulos visíveis + nível,
-  já filtrada pelo perfil (UC-34)
-- [ ] Aplicar `authorizeModule` em **todas** as rotas de módulo existentes
-  (auditoria de rota por rota — trabalho extenso, sugerir dividir por
-  módulo em sub-tarefas/PRs separados: vendas, compras, estoque, produção,
-  qualidade, laboratório, engenharia, financeiro, patrimônio,
-  rastreabilidade, relatórios)
+- [x] Criar middleware `authorizeModule(moduleKey, requiredLevel = 'operate')`
+  em `server/src/middlewares/auth.ts` (aditivo — `authenticate`/`authorize`
+  existentes preservados sem alteração de assinatura, compõe em camada,
+  conforme risco documentado em `BUSINESS_RULES.md` §8). **Desvio de
+  arquitetura decidido pelo orquestrador nesta entrega**, substituindo o
+  desenho original deste item: a coluna `users.access_level`
+  (`operador`/`gestor`) mencionada no Bloco 1.1 **não foi criada** (fora de
+  escopo — este agente não altera migrations) e **não é necessária**: o
+  nível gestor/operador de um usuário dentro de uma área passou a morar no
+  **perfil**, não no usuário — uma linha de `AccessProfilePermission` com
+  `level = 'approve'` no módulo já caracteriza "gestor daquele módulo";
+  `level = 'operate'` caracteriza "operador". `approve` inclui `operate`;
+  `operate` isolado nunca autoriza uma ação que exija `approve`. Ver JSDoc
+  de `authorizeModule` para o detalhamento completo da decisão.
+  - [x] Curto-circuito: `req.user.role === 'admin'` sempre libera (§3)
+  - [x] Resolve o módulo dono da ação (não o módulo de origem do dado —
+    UC-37 cenário "Qualidade libera lote do Recebimento") — o `moduleKey`
+    é sempre passado explicitamente pela rota que declara `authorizeModule`.
+  - [x] Para ações que exigem `approve`: checa `permissions[module] ===
+    'approve'` (fórmula adaptada de `BUSINESS_RULES.md` §4 à decisão
+    acima — não há segunda checagem de `access_level` de usuário, pois o
+    nível já é resolvido pelo `level` da permissão do perfil).
+  - [x] Usuário sem `access_profile_id` (ou perfil desativado): 403
+    `NO_ACCESS_PROFILE` com o aviso didático decidido em UC-35-Exceção
+    ("Seu acesso ainda não foi configurado — procure o administrador.").
+  - [x] Registrar tentativa negada em log de auditoria (`access_denied`,
+    fire-and-forget via `logAction`, lazy-required para não quebrar testes
+    que mockam apenas `models/index`).
+  - [x] `authenticate` agora carrega `AccessProfile` + `AccessProfilePermission`
+    junto do `User` (uma única query, `include` aninhado) e anexa
+    `req.user.permissions` (mapa `module → 'operate'|'approve'`),
+    `req.user.accessProfileId` e `req.user.accessProfileName` — sem query
+    extra por request em `authorizeModule` (UC-36: permissões resolvidas
+    do banco a cada request, sem `permission_version`, conforme decidido).
+- [x] CRUD de perfis: `POST/GET/PUT /api/access-profiles`,
+  `GET /api/access-profiles/:id`, `GET /api/access-profiles/modules`,
+  `DELETE /api/access-profiles/:id` (UC-30, UC-31, UC-32). **Desvio de
+  contrato menor**: a desativação usa `DELETE /api/access-profiles/:id`
+  (soft delete, não remove a linha) em vez de
+  `PATCH /api/access-profiles/:id/status` mencionado originalmente aqui —
+  alinhado à instrução explícita desta entrega e ao padrão já usado por
+  `DELETE /api/users/:id` (também soft delete) no restante do projeto.
+  - [x] Validação: nome único (409), ao menos um módulo ≠ `none` (422) —
+    `module` validado contra `ACCESS_MODULES`
+    (`server/src/shared/domain/accessModules.ts`, fonte única compartilhada
+    com o middleware).
+  - [x] Auditoria completa com `oldValues`/`newValues` (§5) via `logAction`.
+  - [x] UC-32: **bloqueia** a desativação (422 `BusinessRuleError`)
+    enquanto houver usuário ativo vinculado ao perfil, listando os
+    usuários afetados em `error.details.users`.
+- [x] Atribuição de perfil a usuário: `PUT /api/users/:id/access-profile`
+  (UC-33) — implementado no módulo `users` existente
+  (`AssignAccessProfileUseCase`), não em `PATCH`, conforme instrução desta
+  entrega.
+  - [x] Valida perfil ativo (422 se inativo, 404 se inexistente).
+  - [x] **Não** incrementa nenhuma versão de sessão/token ao trocar o
+    perfil (decisão do dono, UC-36).
+- [x] Endpoint de menu resolvido: `GET /api/auth/me/permissions` (UC-34) —
+  retorna `{ modules: { modulo: nivel }, profile: { id, nome } | null }`,
+  reaproveitando `req.user.permissions` já resolvido por `authenticate`
+  (sem query adicional); `admin` recebe todos os módulos em `'approve'`.
+- [x] Aplicado `authorizeModule` em **dois módulos piloto** nesta entrega
+  (validação do padrão, conforme instrução explícita — não é o retrofit
+  completo): `laboratory` (`module: 'laboratorio'`) e `engineering`
+  (`module: 'engenharia'`). Escritas exigem `operate`; `release`/`obsolete`
+  de desenho técnico exigem `approve`. Os `authorize(role)` legados foram
+  **mantidos** em ambos (composição em camada, não substituição — ver
+  próximo item). Aplicar aos demais módulos (vendas, compras, estoque,
+  produção, qualidade, financeiro, patrimônio, rastreabilidade,
+  relatórios) continua **pendente**, a ser dividido em sub-tarefas/PRs
+  separados.
 - [ ] Resolver o risco de convivência com checagens de `role` legadas
   (§8) — decidir, por endpoint já existente com checagem hard-coded (ex.:
   aprovação de requisição UC-23, cash-flow UC-29), se a checagem antiga é
-  substituída pela nova ou mantida em conjunto; documentar a decisão
+  substituída pela nova ou mantida em conjunto; documentar a decisão. Nos
+  dois módulos piloto desta entrega a decisão foi **manter ambas**
+  (`authorizeModule` roda antes de `authorize(role)`, mais restritivo
+  prevalece) — decisão a confirmar/generalizar no retrofit completo.
 
 ### 1.3 Backend — Dashboard/Relatórios/Rastreabilidade (UC-38)
 
@@ -107,41 +162,74 @@ Todas Confirmadas" ao final deste documento e o topo de
 
 ### 1.4 Frontend — Menu Dinâmico e Tela de Gestão de Perfis
 
-- [ ] Consumir o menu resolvido do backend (UC-34) em
+- [x] Consumir o menu resolvido do backend (UC-34) em
   `client/src/layouts/AppLayout.tsx` — substituir o menu estático atual
-  por renderização condicionada aos módulos retornados
-- [ ] Tela "Acesso Negado" para navegação direta por URL fora do perfil
-  (UC-35)
-- [ ] Tela "Usuários > Perfis de Acesso": listagem, criação, edição
-  (matriz de módulo × nível em formato de checklist/tabela), desativação
+  por renderização condicionada aos módulos retornados. **Implementado**:
+  `NavItem.module` mapeado para as 26 `AccessModuleKey`; `itemVisible()`
+  combina `roles` legado + `hasModuleAccess` (novo, via `AuthContext`).
+  Ver `docs/HANDOFF_CODEX.md` §"Bloco 1.4" para detalhes e decisão do
+  fallback de segurança em falha de rede.
+- [x] Tela "Acesso Negado" para navegação direta por URL fora do perfil
+  (UC-35). **Implementado**: `client/src/pages/AccessDeniedPage.tsx`
+  (`variant="accessDenied"`) + guard `ModuleRoute` em
+  `client/src/routes/ProtectedRoute.tsx`, aplicado a todos os grupos de
+  rota de módulo em `client/src/App.tsx`.
+- [x] Tela "Usuários > Perfis de Acesso": listagem, criação, edição
+  (matriz de módulo × nível em formato de checklist/tabela), desativação.
+  **Implementado**: `client/src/pages/users/AccessProfilesPage.tsx`
+  (rota `/users/access-profiles`, admin-only), matriz com radio "Sem
+  acesso"/"Operar"/"Aprovar" por módulo; desativação com 422 didático
+  (`translateApiError`/`DidacticAlert`, UC-32).
 - [ ] Tela de edição de usuário: seletor de perfil + nível
-  (operador/gestor)
-- [ ] **Não é necessário** tratamento de "Sessão invalidada" para troca
+  (operador/gestor). **Parcial**: seletor de perfil implementado em
+  `UsersPage.tsx` ("Atribuir perfil", `PUT /api/users/:id/access-profile`).
+  Seletor de **nível** não implementado — não há campo `access_level` no
+  schema atual (decisão de arquitetura do Bloco 1.2: nível já é resolvido
+  pelo `level` da permissão do perfil, não por um campo no usuário). Ver
+  nota "Fora de escopo" em `docs/HANDOFF_CODEX.md`.
+- [x] **Não é necessário** tratamento de "Sessão invalidada" para troca
   de perfil nesta entrega — decisão do dono (UC-36) é que a troca vale no
   próximo login, sem forçar logout. O tratamento de 401 já existente para
   `password_version`/usuário inativo permanece intacto e **é** o
   mecanismo a orientar o admin a usar quando precisar de revogação
-  imediata (desativar o usuário, ver UC-36 "mitigação")
-- [ ] Estado "sem perfil atribuído": tela reduzida mostrando apenas "Meu
+  imediata (desativar o usuário, ver UC-36 "mitigação"). **UI**: aviso
+  textual dessa regra adicionado ao dialog "Atribuir perfil" em
+  `UsersPage.tsx`.
+- [x] Estado "sem perfil atribuído": tela reduzida mostrando apenas "Meu
   Perfil" com o aviso didático "Seu acesso ainda não foi configurado —
-  procure o administrador" (UC-35-Exceção, texto oficial do dono)
+  procure o administrador" (UC-35-Exceção, texto oficial do dono).
+  **Implementado**: `AppLayout` renderiza `AccessDeniedPage
+  variant="noProfile"` no `<main>` quando o mapa de permissões vem vazio
+  (usuário não-admin, sem perfil, sem falha de rede) — o header (trocar
+  senha/sair) permanece acessível, mas nenhum item de módulo aparece no
+  menu.
 
 ### 1.5 QA — Casos de Teste dos 403
 
-- [ ] Teste de integração: usuário com perfil sem módulo X → GET/POST/PUT/
-  DELETE no módulo X retornam 403, corpo sem vazamento de dados
-- [ ] Teste: usuário com `view` tenta escrever → 403
-- [ ] Teste: usuário com `operate` tenta ação que exige `approve` → 403
-- [ ] Teste: usuário `gestor` com `approve` no módulo → ação permitida
-- [ ] Teste: usuário `operador` com módulo `approve` (nível de módulo),
-  mas `access_level = operador` → 403 (segunda trava, UC-37)
-- [ ] Teste: `admin` global nunca bloqueado, mesmo sem perfil (§3)
-- [ ] Teste: usuário sem `access_profile_id` → política de UC-35-Exceção
+- [x] Teste unitário (`server/tests/unit/access-profiles.test.ts`):
+  `admin` global nunca bloqueado, mesmo sem perfil (§3); usuário sem
+  `access_profile_id` → 403 `NO_ACCESS_PROFILE` (UC-35-Exceção); usuário
+  com perfil mas sem o módulo → 403 `MODULE_ACCESS_DENIED`; nível
+  `operate` não autoriza ação que exige `approve` → 403
+  `APPROVAL_LEVEL_REQUIRED` (fórmula adaptada, ver nota do Bloco 1.2);
+  nível `approve` no módulo autoriza; `authorizeModule` sem `req.user`
+  (antes de `authenticate`) → 401.
+- [x] Teste unitário: CRUD de perfis — 409 nome duplicado, 422 perfil sem
+  nenhuma permissão, 422 `module` inválido, criação/edição auditadas com
+  `oldValues`/`newValues` completos da matriz (§5), 422 desativação com
+  usuários ativos vinculados (lista `details.users`), desativação
+  bem-sucedida sem usuários vinculados.
+- [x] Teste unitário: atribuição de perfil a usuário — audita
+  `oldValues`/`newValues` (`assign`), 422 perfil inativo, 404 perfil
+  inexistente, remoção de atribuição com `access_profile_id = null`.
+- [ ] Teste de integração (HTTP, com Supertest): usuário com perfil sem
+  módulo X → GET/POST/PUT/DELETE no módulo X retornam 403, corpo sem
+  vazamento de dados — pendente (esta entrega cobriu o middleware e os
+  use cases em nível unitário; integração fim-a-fim via rotas reais fica
+  para a tarefa de retrofit módulo-a-módulo).
 - [ ] Teste: Dashboard retorna apenas cards dos módulos do perfil (UC-38)
 - [ ] Teste: Relatório cruzado exige sub-permissão própria, não herdada
   de módulos isolados (UC-38)
-- [ ] Teste: auditoria registrada em toda criação/edição/atribuição de
-  perfil, com `oldValues` correto na edição (§5)
 - [ ] Teste E2E: Qualidade libera lote criado pelo Recebimento (permissão
   avaliada pelo módulo da ação, não pela origem do dado — UC-37)
 
@@ -435,12 +523,18 @@ construir tela nova fora do padrão para depois ter que retrofitar).
 
 ### 6.2 Frontend — Componentes Padrão (Construir Uma Vez, Reusar em Tudo)
 
-- [ ] Criar componente `PrerequisiteChecklist` (ou nome equivalente) em
+- [x] Criar componente `PrerequisiteChecklist` (ou nome equivalente) em
   `client/src/components/` — lista de itens `{ label, met: boolean,
   reason?: string }`, renderiza `✓`/`✗`, desabilita children (botão de
   ação) via prop quando houver algum `met === false`, exibe `reason` na
   própria linha (nunca em tooltip)
-- [ ] Criar utilitário `translateApiError(error, context)` em
+  — implementado em `client/src/components/PrerequisiteChecklist.tsx` como
+  `PrerequisiteChecklist` (`items: PrerequisiteItem[]{ label, ok, detail?,
+  action? }`) + helper `hasPendingPrerequisite(items)` para o `disabled` do
+  botão de ação principal. Ainda não consumido em nenhuma tela (nenhuma das
+  4 telas do retrofit 6.2 tinha um endpoint de pré-checagem dedicado
+  pronto — ver 6.1 item de checklist preventivo, que segue `[ ]`).
+- [x] Criar utilitário `translateApiError(error, context)` em
   `client/src/api/` (ao lado de `extractApiErrorMessage`, ou substituindo
   seu uso nos fluxos deste padrão) — consome `error.response.data.error`
   completo (`code`, `message`, `details`), monta as 3 partes (O QUE / POR
@@ -448,10 +542,18 @@ construir tela nova fora do padrão para depois ter que retrofitar).
   tela (ex.: `BUSINESS_RULE_VIOLATION` no contexto "liberar OP" → link
   para MRP/Compras; no contexto "converter requisição" → link para Item →
   Fornecedores)
-  - [ ] Fallback: quando `details` ausente, usar `message` na parte "POR
+  — implementado em `client/src/lib/translateApiError.ts` (não em
+  `client/src/api/` — colocado em `lib/` por consumir apenas o axios
+  error, sem chamada HTTP própria; `extractApiErrorMessage` permanece
+  intocado em `client/src/api/httpClient.ts`, uso aditivo). Mapa de ação
+  por `ErrorContext` (não por `code`, já que `code` hoje é quase sempre
+  `BUSINESS_RULE_VIOLATION`/`VALIDATION_ERROR` genérico — o contexto de
+  tela é o discriminador real). Testado em
+  `client/src/lib/translateApiError.test.ts`.
+  - [x] Fallback: quando `details` ausente, usar `message` na parte "POR
     QUE" e uma orientação genérica configurável na parte "O QUE FAZER"
     (nunca regredir a um alerta sem estrutura)
-- [ ] Criar componente `DidacticAlertDialog`/`DidacticErrorBanner` (ou
+- [x] Criar componente `DidacticAlertDialog`/`DidacticErrorBanner` (ou
   reaproveitar o padrão de dialog já usado nas telas existentes, ex.:
   `ConvertRequisitionDialog`) que renderiza a saída de
   `translateApiError` no formato visual de 3 partes, com o link/CTA de
@@ -461,15 +563,23 @@ construir tela nova fora do padrão para depois ter que retrofitar).
   `client/src/pages/**`) — não é obrigatório migrar todas de uma vez;
   priorizar as 9 telas ligadas aos casos de `BUSINESS_RULES.md` §13.5:
   - [ ] `ProductionOrdersPage.tsx` (liberar/concluir OP)
-  - [ ] `ShopFloorPage.tsx` / `CompleteProductionOrderDialog.tsx`
-    (etapa de apontamento aberta)
-  - [ ] `ShippingPage.tsx` (embarque sem NF-e)
-  - [ ] `RequisitionsPage.tsx` (conversão sem fornecedor)
-  - [ ] `ReceivingConferenceDialog.tsx` (recebimento sem NF)
+  - [x] `ShopFloorPage.tsx` / `CompleteProductionOrderDialog.tsx`
+    (etapa de apontamento aberta) — mutation de conclusão migrada para
+    `translateApiError` + `DidacticAlert` em
+    `client/src/pages/production/CompleteProductionOrderDialog.tsx`
+  - [x] `ShippingPage.tsx` (embarque sem NF-e) — `window.alert` removido,
+    `shipMutation` usa `translateApiError`/`DidacticAlert`; aviso inline
+    de NF-e não autorizada reescrito nas 3 partes do padrão didático
+  - [x] `RequisitionsPage.tsx` (conversão sem fornecedor) — dialog
+    `ConvertRequisitionDialog` migrado; lista TODOS os itens sem
+    fornecedor retornados em `details` (não apenas o primeiro)
+  - [x] `ReceivingConferenceDialog.tsx` (recebimento sem NF) — mutation de
+    recebimento migrada para `translateApiError`/`DidacticAlert`
   - [ ] `RegisterTestTab.tsx` (teste sem resultado/faixa)
   - [ ] `MrpPage.tsx` (conversão de ordem já em execução)
-  - [ ] `RequisitionsPage.tsx` (aprovação fora de sequência — mesma tela
-    do item de conversão, ações diferentes)
+  - [x] `RequisitionsPage.tsx` (aprovação fora de sequência — mesma tela
+    do item de conversão, ações diferentes) — `statusMutation`
+    (aprovar/cancelar) migrada, `window.alert` removido
   - [ ] `InspectionTab.tsx` (liberar/bloquear lote em status terminal)
 - [ ] Para telas novas construídas pelos Blocos 1–5 (gestão de perfis,
   depósitos, transferências, filas com semáforo), já nascer usando

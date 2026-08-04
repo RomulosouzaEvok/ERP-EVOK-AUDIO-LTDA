@@ -83,6 +83,7 @@ server/src/modules/users/
       CreateUserUseCase.ts              Reusa RegisterUserEntity (módulo auth) + valida role + audita
       UpdateUserUseCase.ts              Atualiza campos permitidos, audita oldValues/newValues
       DeactivateUserUseCase.ts          Soft delete (active=false), bloqueia auto-inativação, audita
+      AssignAccessProfileUseCase.ts     Atribui/remove access_profile_id (UC-33), valida perfil ativo, audita
   infrastructure/
     sequelize/SequelizeUsersRepository.ts Implementação usando o model User existente
   presentation/
@@ -131,6 +132,7 @@ Base URL: `/api/users`.
 | POST | `/api/users` | `authenticate`, `authorize('admin')` | Cria um novo usuário |
 | PUT | `/api/users/:id` | `authenticate`, `authorize('admin')` | Atualiza dados cadastrais (sem senha) |
 | DELETE | `/api/users/:id` | `authenticate`, `authorize('admin')` | Inativa (soft delete) um usuário |
+| PUT | `/api/users/:id/access-profile` | `authenticate`, `authorize('admin')` | Atribui/remove o Perfil de Acesso de área do usuário (UC-33, Bloco 1.2) |
 
 Ver `docs/API.md` (seção "1.1 Usuários (Gestão)") para exemplos completos
 de request/response.

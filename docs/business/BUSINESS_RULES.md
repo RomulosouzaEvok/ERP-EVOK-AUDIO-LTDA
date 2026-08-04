@@ -139,6 +139,26 @@ implementado ainda.
   `01-USE_CASES.md` UC-37, cenário "Qualidade libera lote que o
   Recebimento criou").
 
+> **Nota de implementação (Bloco 1.2, 2026-08-03 — não reabre a regra de
+> negócio acima, apenas registra como ela foi materializada no schema):**
+> o middleware `authorizeModule` (`server/src/middlewares/auth.ts`) **não**
+> criou uma coluna `users.access_level`/`nivel` separada para o segundo
+> nível operador/gestor. Em vez disso, o `nivel` do usuário dentro da área
+> é **derivado diretamente do `level` da linha de
+> `AccessProfilePermission`** do módulo: `level = 'approve'` no perfil já
+> caracteriza qualquer usuário atribuído àquele perfil como gestor
+> daquele módulo específico; `level = 'operate'` caracteriza operador. Não
+> há hoje um conceito de "usuário operador com perfil que tem `approve`"
+> distinto de "usuário gestor com o mesmo perfil" — a fórmula completa de
+> §4 permanece válida como regra de negócio (dois níveis, segunda trava
+> para ações de aprovação), mas a "segunda trava" e o "nível do módulo"
+> colapsam na mesma linha de permissão nesta implementação, por decisão
+> arquitetural do orquestrador registrada em `docs/governance/TODO.md`
+> (Bloco 1.2). Caso o negócio precise, no futuro, de um usuário
+> "operador" mesmo em um perfil com `approve` no módulo (hoje impossível
+> nesta implementação), será necessária uma coluna dedicada — ver
+> `TODO.md` para o registro desta dívida técnica potencial.
+
 ---
 
 ## §5. Regra de Auditoria de Perfil/Atribuição

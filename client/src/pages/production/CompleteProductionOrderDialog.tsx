@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as productionApi from '@/api/production';
 import * as bomApi from '@/api/bom';
 import * as inventoryApi from '@/api/inventory';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,7 +40,7 @@ export default function CompleteProductionOrderDialog({
   const [finishedLotNumber, setFinishedLotNumber] = React.useState('');
   const [quantityProduced, setQuantityProduced] = React.useState('');
   const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [submitError, setSubmitError] = React.useState<DidacticError | null>(null);
 
   const { data: bom } = useQuery({
     queryKey: ['bom-by-product', order?.product_id],
@@ -104,7 +105,14 @@ export default function CompleteProductionOrderDialog({
       queryClient.invalidateQueries({ queryKey: ['products'] });
       onClose();
     },
-    onError: (error) => setSubmitError(extractApiErrorMessage(error)),
+    onError: (error) =>
+      setSubmitError(
+        translateApiError(
+          error,
+          `Não é possível concluir a ordem de produção ${order?.order_number ?? `#${order?.id}`}`,
+          'complete-production-order',
+        ),
+      ),
   });
 
   return (
@@ -152,7 +160,7 @@ export default function CompleteProductionOrderDialog({
               )}
             </div>
 
-            {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+            {submitError && <DidacticAlert error={submitError} />}
           </div>
         )}
 

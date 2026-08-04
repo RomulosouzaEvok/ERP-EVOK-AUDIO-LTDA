@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
 
 import * as purchasesApi from '@/api/purchases';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +20,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DidacticAlert } from '@/components/DidacticAlert';
 
 const conferenceItemSchema = z.object({
   purchase_item_id: z.number(),
@@ -51,7 +52,7 @@ export function ReceivingConferenceDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
 
   const { data: purchase, isLoading } = useQuery({
@@ -115,7 +116,14 @@ export function ReceivingConferenceDialog({
       setFormError(null);
       setSuccessMessage('Recebimento registrado com sucesso.');
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error, 'Não foi possível registrar o recebimento.')),
+    onError: (error) =>
+      setFormError(
+        translateApiError(
+          error,
+          `Não é possível confirmar o recebimento do Pedido ${purchase?.order_number ?? `#${purchaseId}`}`,
+          'receive-purchase',
+        ),
+      ),
   });
 
   const handleClose = () => {
@@ -204,7 +212,7 @@ export function ReceivingConferenceDialog({
               </TableBody>
             </Table>
 
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
+            {formError && <DidacticAlert error={formError} />}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={handleClose}>

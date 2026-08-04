@@ -9,6 +9,8 @@ export interface User {
   role: UserRole;
   active: boolean;
   createdAt: string;
+  /** Perfil de acesso de área atualmente atribuído (UC-33) — `null` se nenhum. Nome resolvido no client cruzando com `listAccessProfiles`. */
+  accessProfileId?: number | null;
 }
 
 export interface UserInput {

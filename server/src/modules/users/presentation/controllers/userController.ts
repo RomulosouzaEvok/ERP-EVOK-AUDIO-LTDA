@@ -5,6 +5,7 @@ const CreateUserUseCase = require('../../application/use-cases/CreateUserUseCase
 const UpdateUserUseCase = require('../../application/use-cases/UpdateUserUseCase');
 const DeactivateUserUseCase = require('../../application/use-cases/DeactivateUserUseCase');
 const RevokeUserSessionsUseCase = require('../../application/use-cases/RevokeUserSessionsUseCase');
+const AssignAccessProfileUseCase = require('../../application/use-cases/AssignAccessProfileUseCase');
 
 /**
  * Controller enxuto do módulo `users`. Interpreta `req`, delega toda a
@@ -134,6 +135,29 @@ exports.revokeSessions = async (req, res, next) => {
   try {
     const useCase = new RevokeUserSessionsUseCase(usersRepository);
     const result = await useCase.execute({ id: parseInt(req.params.id), req });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * `PUT /api/users/:id/access-profile` — atribui (ou remove, com `null`) o
+ * perfil de acesso de área do usuário (UC-33).
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.assignAccessProfile = async (req, res, next) => {
+  try {
+    const useCase = new AssignAccessProfileUseCase(usersRepository);
+    const result = await useCase.execute({
+      id: parseInt(req.params.id),
+      accessProfileId: req.body.access_profile_id ?? null,
+      req
+    });
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);

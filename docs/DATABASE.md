@@ -217,9 +217,10 @@
 | name | VARCHAR(200) | NOT NULL | Nome completo |
 | email | VARCHAR(100) | UNIQUE, NOT NULL | Email de acesso |
 | password | VARCHAR(255) | NOT NULL | Hash bcrypt |
-| role | ENUM('admin','operator','financial') | DEFAULT 'operator' | Perfil de acesso |
+| role | ENUM('admin','operator','financial') | DEFAULT 'operator' | Perfil de acesso (papel JWT global) |
 | department | VARCHAR(100) | DEFAULT '' | Departamento do usuário |
 | active | BOOLEAN | DEFAULT true | Status do usuário |
+| access_profile_id | INT | FK → access_profiles.id, ON DELETE SET NULL, NULL | Perfil de acesso configurável por área (Bloco 1.1). `NULL` = sem perfil atribuído = bloqueio total de módulos de área (UC-35-Exceção); nunca preenchido automaticamente em backfill. `role='admin'` continua acima deste sistema (BUSINESS_RULES.md §3), independente do valor aqui. |
 
 ### Tabela: `customers` (Clientes)
 | Coluna | Tipo | Restrições | Descrição |
@@ -490,6 +491,58 @@ de código.
 
 **Migration:** `server/migrations/20260803-000006-create-acoustic-tests.cjs`
 — cria `acoustic_test_results` (schema estático, sem backfill).
+
+### Tabela: `access_profiles` (Perfis de Acesso Configuráveis por Área)
+Origem: `docs/governance/TODO.md` Bloco 1.1, `docs/business/BUSINESS_RULES.md`
+§1-§4, `docs/business/01-USE_CASES.md` UC-30 a UC-33.
+
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador único do perfil |
+| nome | VARCHAR(100) | UNIQUE, NOT NULL | Nome do perfil (ex.: "Almoxarife", "Comprador") |
+| descricao | TEXT | - | Descrição livre do perfil |
+| allowed_warehouses | JSONB | NULL | Lista simples de depósitos permitidos ao perfil dentro dos módulos de estoque (`NULL` = sem restrição por depósito). Não referencia uma tabela `warehouses` — essa tabela é do Bloco 4, fora de escopo desta entrega. |
+| active | BOOLEAN | NOT NULL, DEFAULT true | Soft delete. Desativação é bloqueada (na camada de aplicação, UC-32) enquanto houver usuário ativo vinculado ao perfil |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
+
+**Seed:** a migration cria (idempotente, `ON CONFLICT DO NOTHING`) o perfil
+"Administrador Geral" com `level='approve'` em todos os 26 módulos da
+matriz de `BUSINESS_RULES.md` §1 — **não atribuído a nenhum usuário**. O
+admin global (`role='admin'`) já opera acima do sistema de perfis
+(BUSINESS_RULES.md §3); este perfil existe apenas como referência/futuro
+uso administrativo.
+
+### Tabela: `access_profile_permissions` (Matriz Módulo × Nível)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador único |
+| access_profile_id | INT | FK → access_profiles.id, ON DELETE CASCADE, NOT NULL | Perfil dono da permissão |
+| module | VARCHAR(50) | NOT NULL | Chave do módulo (validada em aplicação contra a lista fixa de `BUSINESS_RULES.md` §1: `dashboard`, `produtos`, `contagens`, `vendas`, `clientes`, `compras`, `requisicoes`, `fornecedores`, `producao`, `bom`, `mrp`, `chao_de_fabrica`, `centros_de_trabalho`, `qualidade`, `laboratorio`, `engenharia`, `estoque`, `recebimento`, `expedicao`, `patrimonio`, `rastreabilidade`, `financeiro`, `relatorios.producao`, `relatorios.compras`, `relatorios.custos`, `relatorios.financeiro`) |
+| level | ENUM('operate','approve') | NOT NULL | Nível de acesso ao módulo. A **presença da linha** já implica visibilidade (`view` implícito); `approve` inclui as permissões de `operate`. Ausência de linha para um módulo = `nenhum` acesso (403 + módulo oculto do menu) |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
+
+**Constraints:** `UNIQUE(access_profile_id, module)` — no máximo uma
+permissão por módulo por perfil.
+
+**Índices:** `access_profile_id` (`idx_access_profile_permissions_profile_id`).
+
+**Migration:** `server/migrations/20260803-000008-create-access-profiles.cjs`
+— cria `access_profiles`, `access_profile_permissions`, adiciona
+`users.access_profile_id` e semeia o perfil "Administrador Geral".
+
+**Nota de escopo/decisão de arquitetura (atualizada no Bloco 1.2, ver
+`docs/governance/TODO.md` e `BUSINESS_RULES.md` §4):** o campo
+`access_level` (`operador`/`gestor`) por usuário mencionado como pendência
+na entrega do schema (Bloco 1.1) **não foi criado** — decisão do
+orquestrador foi que o nível gestor/operador não mora no usuário, mora no
+**perfil**: `level = 'approve'` em `access_profile_permissions` já
+caracteriza gestor daquele módulo; `level = 'operate'` caracteriza
+operador. O middleware `authorizeModule`
+(`server/src/middlewares/auth.ts`) foi implementado com essa fórmula
+adaptada, sem necessidade de nenhuma migration adicional. O campo
+`permission_version` (invalidação de sessão na troca de perfil) continua
+explicitamente descartado (decisão do dono: troca vale no próximo login,
+sem derrubar sessão ativa — UC-36).
 
 ### Tabela: `sales` (Vendas)
 | Coluna | Tipo | Restrições | Descrição |

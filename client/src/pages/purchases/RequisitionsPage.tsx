@@ -9,6 +9,7 @@ import { Plus, Trash2, Eye, ShoppingCart } from 'lucide-react';
 import * as requisitionsApi from '@/api/purchaseRequisitions';
 import * as suppliersApi from '@/api/suppliers';
 import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { DetailField } from '@/components/DetailField';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { ItemSearchSelect } from '@/components/ItemSearchSelect';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
@@ -76,6 +78,7 @@ export default function RequisitionsPage() {
   const [detailsRequisition, setDetailsRequisition] = React.useState<requisitionsApi.PurchaseRequisition | null>(null);
   const [convertingRequisition, setConvertingRequisition] = React.useState<requisitionsApi.PurchaseRequisition | null>(null);
   const [page, setPage] = React.useState(1);
+  const [statusError, setStatusError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['purchase-requisitions', page, statusFilter],
@@ -120,10 +123,16 @@ export default function RequisitionsPage() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: 'approved' | 'canceled' | 'pending' }) =>
+    mutationFn: ({ id, status }: { id: number; status: 'approved' | 'canceled' | 'pending'; requisitionLabel: string }) =>
       requisitionsApi.updateRequisitionStatus(id, status),
-    onSuccess: invalidate,
-    onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível alterar o status da requisição.')),
+    onSuccess: () => {
+      setStatusError(null);
+      invalidate();
+    },
+    onError: (error, variables) =>
+      setStatusError(
+        translateApiError(error, `Não é possível alterar a Requisição ${variables.requisitionLabel}`, 'approve-requisition'),
+      ),
   });
 
   return (
@@ -211,6 +220,8 @@ export default function RequisitionsPage() {
         )}
       </div>
 
+      {statusError && <DidacticAlert error={statusError} />}
+
       <div className="flex items-center gap-2">
         <Label htmlFor="status-filter" className="text-sm text-muted-foreground">
           Status
@@ -275,7 +286,14 @@ export default function RequisitionsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => statusMutation.mutate({ id: requisition.id, status: 'approved' })}
+                      onClick={() => {
+                        setStatusError(null);
+                        statusMutation.mutate({
+                          id: requisition.id,
+                          status: 'approved',
+                          requisitionLabel: String(requisition.requisition_number ?? requisition.id),
+                        });
+                      }}
                     >
                       Aprovar
                     </Button>
@@ -291,7 +309,12 @@ export default function RequisitionsPage() {
                       variant="destructive"
                       onClick={() => {
                         if (window.confirm(`Cancelar a requisição ${requisition.requisition_number ?? requisition.id}?`)) {
-                          statusMutation.mutate({ id: requisition.id, status: 'canceled' });
+                          setStatusError(null);
+                          statusMutation.mutate({
+                            id: requisition.id,
+                            status: 'canceled',
+                            requisitionLabel: String(requisition.requisition_number ?? requisition.id),
+                          });
                         }
                       }}
                     >
@@ -397,7 +420,7 @@ function ConvertRequisitionDialog({
   const queryClient = useQueryClient();
   const [fallbackSupplierId, setFallbackSupplierId] = React.useState<string>('');
   const [notes, setNotes] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<DidacticError | null>(null);
   const [result, setResult] = React.useState<requisitionsApi.ConvertRequisitionResult | null>(null);
 
   React.useEffect(() => {
@@ -431,7 +454,13 @@ function ConvertRequisitionDialog({
     },
     onError: (err) => {
       setResult(null);
-      setError(extractApiErrorMessage(err, 'Não foi possível gerar o(s) pedido(s) de compra.'));
+      setError(
+        translateApiError(
+          err,
+          `Não é possível converter a Requisição ${requisition?.requisition_number ?? `#${requisition?.id}`} em pedido de compra`,
+          'convert-requisition',
+        ),
+      );
     },
   });
 
@@ -536,7 +565,7 @@ function ConvertRequisitionDialog({
               />
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <DidacticAlert error={error} />}
 
             <DialogFooter>
               <Button variant="outline" onClick={onClose} disabled={convertMutation.isPending}>

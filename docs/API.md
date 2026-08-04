@@ -154,6 +154,41 @@ Retorna os dados do usuário autenticado.
 }
 ```
 
+### GET /api/auth/me/permissions
+Retorna o mapa `módulo → nível` do usuário autenticado e o perfil de
+acesso atual, para o frontend montar o menu (UC-34). Não faz query
+adicional ao banco — reaproveita `req.user.permissions`, já resolvido por
+`authenticate` junto do `AccessProfile` do usuário.
+
+**Headers:** Authorization: Bearer \<token\>
+
+**Response (200) — usuário `admin` global (todos os módulos, sempre `approve`):**
+```json
+{
+  "success": true,
+  "data": {
+    "modules": { "dashboard": "approve", "estoque": "approve", "...": "approve" },
+    "profile": null
+  }
+}
+```
+
+**Response (200) — usuário com perfil "Almoxarife":**
+```json
+{
+  "success": true,
+  "data": {
+    "modules": { "estoque": "operate", "producao": "operate", "dashboard": "operate" },
+    "profile": { "id": 3, "nome": "Almoxarife" }
+  }
+}
+```
+
+**Response (200) — usuário sem perfil atribuído (UC-35-Exceção):**
+```json
+{ "success": true, "data": { "modules": {}, "profile": null } }
+```
+
 ---
 
 ## 1.1 Usuários (Gestão)
@@ -276,6 +311,133 @@ Inativa (soft delete via `active=false`) um usuário. Bloqueia auto-inativação
   "error": {
     "code": "BUSINESS_RULE_VIOLATION",
     "message": "Você não pode inativar seu próprio usuário"
+  }
+}
+```
+
+### PUT /api/users/:id/access-profile
+Atribui (ou remove, com `access_profile_id: null`) o perfil de acesso de
+área do usuário (UC-33). A troca **não** invalida sessão/token já
+emitidos do usuário-alvo (UC-36 — vale a partir do próximo login para o
+menu; a API já reflete o novo perfil na próxima requisição, sem cache).
+
+**Headers:** Authorization: Bearer \<token\> (role: admin)
+
+**Request:**
+```json
+{ "access_profile_id": 3 }
+```
+
+**Response (200):**
+```json
+{ "success": true, "data": { "id": 12, "accessProfileId": 3 } }
+```
+
+**Erro (404)** — usuário ou perfil informado não existem.
+**Erro (422)** — perfil informado existe mas está `active = false` (`BusinessRuleError`).
+
+---
+
+## 1.2 Perfis de Acesso (Access Profiles)
+
+Endpoints de gestão dos Perfis de Acesso Configuráveis (UC-30 a UC-32,
+`docs/business/01-USE_CASES.md`). Todos os endpoints abaixo exigem
+`authenticate` + `authorize('admin')` — CRUD de perfis é exclusivo do
+Administrador Global, nunca delegado a um perfil de área (mesmo com
+`approve`).
+
+### GET /api/access-profiles/modules
+Lista os 26 `module keys` válidos, com rótulo pt-BR — fonte única
+compartilhada com o middleware `authorizeModule`.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    { "key": "dashboard", "label": "Dashboard" },
+    { "key": "estoque", "label": "Estoque" },
+    "..."
+  ]
+}
+```
+
+### GET /api/access-profiles
+Lista todos os perfis (ativos e inativos), com a matriz de permissões e a
+contagem de usuários **ativos** vinculados a cada um.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 3,
+      "nome": "Almoxarife",
+      "descricao": null,
+      "allowedWarehouses": null,
+      "active": true,
+      "permissions": [{ "module": "estoque", "level": "operate" }],
+      "userCount": 5
+    }
+  ]
+}
+```
+
+### GET /api/access-profiles/:id
+Busca um perfil por id, mesmo formato do item da listagem acima.
+**Erro (404)** se não existir.
+
+### POST /api/access-profiles
+Cria um novo perfil de acesso (UC-30).
+
+**Request:**
+```json
+{
+  "nome": "Almoxarife",
+  "descricao": "Movimentação de estoque de insumos",
+  "allowed_warehouses": ["INSUMOS"],
+  "permissions": [
+    { "module": "estoque", "level": "approve" },
+    { "module": "producao", "level": "operate" }
+  ]
+}
+```
+
+**Response (201):** mesmo formato do item de `GET /api/access-profiles` (com `userCount: 0`).
+
+**Erro (409)** — `nome` duplicado.
+**Erro (422)** — nenhuma permissão informada, `module` inválido/duplicado, ou `level` fora de `operate|approve`.
+
+### PUT /api/access-profiles/:id
+Edita um perfil existente, **substituindo integralmente** a matriz de
+`permissions` (UC-31). Mesmo payload do `POST`. Audita `oldValues`/`newValues`
+com a matriz de permissões anterior completa.
+
+**Erro (404)** — perfil não existe.
+**Erro (409)/(422)** — mesmas regras do `POST`.
+
+### DELETE /api/access-profiles/:id
+Desativa (soft delete, `active = false`) um perfil (UC-32).
+
+**Response (200):**
+```json
+{ "success": true, "data": { "id": 3, "nome": "Almoxarife", "active": false } }
+```
+
+**Erro (422)** — há usuário(s) ativo(s) vinculado(s) ao perfil (`BusinessRuleError`):
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BUSINESS_RULE_VIOLATION",
+    "message": "Não é possível desativar o perfil \"Almoxarife\": há 2 usuário(s) ativo(s) vinculado(s) a ele. Reatribua cada usuário a outro perfil (PUT /api/users/:id/access-profile) antes de desativar.",
+    "details": {
+      "profileId": 3,
+      "profileName": "Almoxarife",
+      "userCount": 2,
+      "users": [{ "id": 1, "name": "João", "email": "joao@evokaudio.com" }]
+    }
   }
 }
 ```

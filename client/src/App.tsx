@@ -1,7 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { Route, Routes } from 'react-router-dom';
 
-import { ProtectedRoute, RoleRoute } from '@/routes/ProtectedRoute';
+import { ProtectedRoute, RoleRoute, ModuleRoute } from '@/routes/ProtectedRoute';
 import AppLayout from '@/layouts/AppLayout';
 import LoginPage from '@/pages/LoginPage';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
@@ -35,6 +35,7 @@ const FinancialPage = lazy(() => import('@/pages/financial/FinancialPage'));
 const TraceabilityPage = lazy(() => import('@/pages/traceability/TraceabilityPage'));
 const AuditLogsPage = lazy(() => import('@/pages/traceability/AuditLogsPage'));
 const UsersPage = lazy(() => import('@/pages/users/UsersPage'));
+const AccessProfilesPage = lazy(() => import('@/pages/users/AccessProfilesPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 function PageFallback() {
@@ -60,195 +61,231 @@ export default function App() {
             }
           />
 
-          <Route
-            path="/products"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <ProductsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/products/inventory-counts"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <InventoryCountsPage />
-              </Suspense>
-            }
-          />
-
-          <Route
-            path="/logistics/estoque"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <InventoryPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/logistics/recebimento"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <ReceivingPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/logistics/expedicao"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <ShippingPage />
-              </Suspense>
-            }
-          />
-
-          <Route
-            path="/sales"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <SalesPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/sales/clients"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <ClientsPage />
-              </Suspense>
-            }
-          />
-
-          <Route
-            path="/purchases"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <PurchasesPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/purchases/suppliers"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <SuppliersPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/purchases/requisitions"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <RequisitionsPage />
-              </Suspense>
-            }
-          />
-
-          <Route
-            path="/production"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <ProductionOrdersPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/production/bom"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <BomPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/production/mrp"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <MrpPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/production/shop-floor"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <ShopFloorPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/production/work-centers"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <WorkCentersPage />
-              </Suspense>
-            }
-          />
-
-          <Route
-            path="/quality"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <QualityPage />
-              </Suspense>
-            }
-          />
-
-          <Route
-            path="/laboratory"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <LaboratoryPage />
-              </Suspense>
-            }
-          />
-
-          <Route
-            path="/engineering"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <EngineeringPage />
-              </Suspense>
-            }
-          />
-
-          <Route
-            path="/reports"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <ReportsPage />
-              </Suspense>
-            }
-          />
-
-          <Route
-            path="/patrimonio"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <AssetsPage />
-              </Suspense>
-            }
-          />
-
-          <Route element={<RoleRoute roles={['admin', 'financial']} />}>
+          <Route element={<ModuleRoute module="produtos" />}>
             <Route
-              path="/financial"
+              path="/products"
               element={
                 <Suspense fallback={<PageFallback />}>
-                  <FinancialPage />
+                  <ProductsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/products/inventory-counts"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <InventoryCountsPage />
                 </Suspense>
               }
             />
           </Route>
 
-          <Route
-            path="/traceability"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <TraceabilityPage />
-              </Suspense>
-            }
-          />
+          <Route element={<ModuleRoute module="estoque" />}>
+            <Route
+              path="/logistics/estoque"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <InventoryPage />
+                </Suspense>
+              }
+            />
+          </Route>
+          <Route element={<ModuleRoute module="recebimento" />}>
+            <Route
+              path="/logistics/recebimento"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ReceivingPage />
+                </Suspense>
+              }
+            />
+          </Route>
+          <Route element={<ModuleRoute module="expedicao" />}>
+            <Route
+              path="/logistics/expedicao"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ShippingPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="vendas" />}>
+            <Route
+              path="/sales"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SalesPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/sales/clients"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ClientsPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="compras" />}>
+            <Route
+              path="/purchases"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <PurchasesPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/purchases/suppliers"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SuppliersPage />
+                </Suspense>
+              }
+            />
+          </Route>
+          <Route element={<ModuleRoute module="requisicoes" />}>
+            <Route
+              path="/purchases/requisitions"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <RequisitionsPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="producao" />}>
+            <Route
+              path="/production"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ProductionOrdersPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/production/bom"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <BomPage />
+                </Suspense>
+              }
+            />
+          </Route>
+          <Route element={<ModuleRoute module="mrp" />}>
+            <Route
+              path="/production/mrp"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <MrpPage />
+                </Suspense>
+              }
+            />
+          </Route>
+          <Route element={<ModuleRoute module="chao_de_fabrica" />}>
+            <Route
+              path="/production/shop-floor"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ShopFloorPage />
+                </Suspense>
+              }
+            />
+          </Route>
+          <Route element={<ModuleRoute module="centros_de_trabalho" />}>
+            <Route
+              path="/production/work-centers"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <WorkCentersPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="qualidade" />}>
+            <Route
+              path="/quality"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <QualityPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="laboratorio" />}>
+            <Route
+              path="/laboratory"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <LaboratoryPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="engenharia" />}>
+            <Route
+              path="/engineering"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <EngineeringPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="relatorios.producao" />}>
+            <Route
+              path="/reports"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ReportsPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="patrimonio" />}>
+            <Route
+              path="/patrimonio"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <AssetsPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<RoleRoute roles={['admin', 'financial']} />}>
+            <Route element={<ModuleRoute module="financeiro" />}>
+              <Route
+                path="/financial"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <FinancialPage />
+                  </Suspense>
+                }
+              />
+            </Route>
+          </Route>
+
+          <Route element={<ModuleRoute module="rastreabilidade" />}>
+            <Route
+              path="/traceability"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <TraceabilityPage />
+                </Suspense>
+              }
+            />
+          </Route>
 
           <Route element={<RoleRoute roles={['admin']} />}>
             <Route
@@ -264,6 +301,14 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <AuditLogsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/users/access-profiles"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <AccessProfilesPage />
                 </Suspense>
               }
             />

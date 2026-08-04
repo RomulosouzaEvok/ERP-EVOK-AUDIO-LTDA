@@ -58,6 +58,8 @@ import WorkCenterShift = require('./WorkCenterShift');
 import EngineeringProject = require('./EngineeringProject');
 import ProductDrawing = require('./ProductDrawing');
 import AcousticTestResult = require('./AcousticTestResult');
+import AccessProfile = require('./AccessProfile');
+import AccessProfilePermission = require('./AccessProfilePermission');
 
 // ============================================
 // RELACIONAMENTOS
@@ -476,6 +478,18 @@ AcousticTestResult.belongsTo(User, { foreignKey: 'tester_id', as: 'tester' });
 NonConformity.hasMany(AcousticTestResult, { foreignKey: 'non_conformity_id', as: 'acoustic_test_results' });
 AcousticTestResult.belongsTo(NonConformity, { foreignKey: 'non_conformity_id', as: 'nonConformity' });
 
+// ============================================
+// RELACIONAMENTOS - PERFIS DE ACESSO CONFIGURÁVEIS (Bloco 1.1)
+// ============================================
+
+// AccessProfile ↔ AccessProfilePermission
+AccessProfile.hasMany(AccessProfilePermission, { foreignKey: 'access_profile_id', as: 'permissions', onDelete: 'CASCADE' });
+AccessProfilePermission.belongsTo(AccessProfile, { foreignKey: 'access_profile_id', as: 'accessProfile', onDelete: 'CASCADE' });
+
+// AccessProfile ↔ User (null = sem perfil = bloqueio total, UC-35-Exceção)
+AccessProfile.hasMany(User, { foreignKey: 'access_profile_id', as: 'users' });
+User.belongsTo(AccessProfile, { foreignKey: 'access_profile_id', as: 'accessProfile' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -491,5 +505,6 @@ export {
   Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada,
   ItemSupplier,
   WorkCenter, WorkCenterShift,
-  EngineeringProject, ProductDrawing, AcousticTestResult
+  EngineeringProject, ProductDrawing, AcousticTestResult,
+  AccessProfile, AccessProfilePermission
 };
