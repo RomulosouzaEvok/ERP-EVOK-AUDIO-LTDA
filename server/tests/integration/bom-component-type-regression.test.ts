@@ -1,4 +1,5 @@
 import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
+import { ensureFixtureCategoryId } from './helpers/categoryFixtures';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
@@ -21,6 +22,7 @@ describeIntegration('Regressao: criar BOM com componente de product_type incompa
    */
   it('cria BOM com sucesso quando o componente tem product_type=finished (default) e sem component_type explicito', async () => {
     const token = authToken();
+    const categoryId = await ensureFixtureCategoryId(token);
 
     const parent = await api()
       .post('/api/products')
@@ -28,7 +30,7 @@ describeIntegration('Regressao: criar BOM com componente de product_type incompa
       .send({
         name: `BOM Parent ${Date.now()}`,
         code: `BOM-PARENT-${Date.now()}`,
-        category_id: 1,
+        category_id: categoryId,
         unit: 'UN',
         quantity: 0,
         min_quantity: 0,
@@ -43,7 +45,7 @@ describeIntegration('Regressao: criar BOM com componente de product_type incompa
       .send({
         name: `BOM Component ${Date.now()}`,
         code: `BOM-COMP-${Date.now()}`,
-        category_id: 1,
+        category_id: categoryId,
         unit: 'KG',
         quantity: 0,
         min_quantity: 0,

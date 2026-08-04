@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ServiceOrderAttributes {
+interface ServiceOrderAttributes {
   id: number;
   order_number: string;
   client_id: number;

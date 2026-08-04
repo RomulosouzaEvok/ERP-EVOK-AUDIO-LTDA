@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface EmployeeAttributes {
+interface EmployeeAttributes {
   id: number;
   user_id: number | null;
   department_id: number;

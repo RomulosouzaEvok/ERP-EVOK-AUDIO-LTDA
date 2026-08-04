@@ -5,12 +5,12 @@ import AccessProfilesRepository from '../../domain/repositories/AccessProfilesRe
 
 const { logAction } = require('../../../../services/auditLogService');
 
-export interface DeactivateAccessProfileInput {
+interface DeactivateAccessProfileInput {
   id: number;
   req: Request;
 }
 
-export interface DeactivateAccessProfileOutput {
+interface DeactivateAccessProfileOutput {
   id: number;
   nome: string;
   active: false;

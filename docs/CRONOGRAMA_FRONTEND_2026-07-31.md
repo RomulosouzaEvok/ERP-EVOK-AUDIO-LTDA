@@ -113,7 +113,7 @@ tela funciona.
 - [x] Inativar produto (`DELETE /api/products/:id`), tratando o `409` de item vinculado a BOM/movimento com mensagem clara (não um erro genérico).
 - [x] Tela de movimentação manual de estoque (entrada/saída) — **movida para `/logistics/estoque` (aba Saldos)** na Onda 1 da separação Produto×Estoque; `ProductsPage` mantém apenas cadastro/foto/QR/fornecedores/inativação, com aviso apontando para Logística. **Onda Múltiplos Depósitos (Bloco 4, UC-42)**: o dialog de movimentação passou a usar `POST /api/inventory/movements` (não mais `POST /api/products/movements`, que não aceita `warehouse_code`) e ganhou seletor de depósito (default `INSUMOS`).
 - [x] Alerta visual de estoque baixo (`min_quantity`) — tile "Abaixo do mínimo" em `/logistics/estoque` (`GET /api/inventory/low-stock`) + pill "Abaixo do mínimo"/"OK" na tabela de saldos.
-- [ ] Tela de contagem de inventário cíclico (`/api/inventory-counts`): criar, iniciar, contar item, submeter, aprovar/rejeitar. (Página existente em `/products/inventory-counts`; aba "Contagens" de `/logistics/estoque` aponta para ela via link, não foi movida nesta onda.)
+- [x] Tela de contagem de inventário cíclico (`/api/inventory-counts`): criar, iniciar, contar item, submeter, aprovar/rejeitar. (Página em `/products/inventory-counts`, `client/src/pages/products/InventoryCountsPage.tsx`; aba "Contagens" de `/logistics/estoque` aponta para ela via link, não foi movida nesta onda.) **Atualização 2026-08-04:** seletor de depósito tornado obrigatório na criação da contagem (`warehouse_id` validado via Zod, `Select` `<option>` populado por `listWarehouses()`), com rótulo `código — nome` resolvido no cliente (backend não faz eager-load de `warehouse` na listagem/detalhe); tela também recebeu o visual de marca EVOK (paleta/tipografia consistente com o restante do app).
 - [ ] Cadastro de Itens/BOM canônico se aplicável à operação real (`/api/items`) — confirmar com o negócio se `products` (legado) ou `items` (canônico) é a fonte de verdade operacional antes de decidir a tela.
 
 ### Critério de aceite
@@ -160,6 +160,18 @@ tela funciona.
 
 - [x] Nova página `/logistics/expedicao` (`src/pages/logistics/ShippingPage.tsx`): fila de vendas `confirmed`/`invoiced` (`GET /api/sales?status=`, duas buscas client-side combinadas — mesma limitação de status único do backend usada em Recebimento), dialog "Ver itens" (picking list via `GET /api/sales/:id`), ação "Marcar como embarcada" (`PUT /api/sales/:id/status` com `{ status: 'shipped' }`, novo valor de enum) restrita a vendas `invoiced` com NF-e `authorized`, aviso "Emita a NF-e na tela de Vendas antes de embarcar" com link para `/sales` quando faltar NF-e autorizada, filtro para ver embarcadas (badge verde "Embarcada").
 - [x] Navegação: item "Expedição" no grupo Logística (ícone `Send`), rota lazy em `App.tsx`, breadcrumb `['Logística', 'Expedição']`.
+
+### Onda — Identidade Visual EVOK ÁUDIO (polish, 2026-08-04)
+
+- [x] `InventoryPage.tsx`, `ReceivingPage.tsx`, `ShippingPage.tsx` e
+  `WarehousesPage.tsx` restilizadas com a marca EVOK ÁUDIO (tokens `--brand`
+  do `client/src/index.css`): cabeçalho em faixa de marca (`bg-gradient-to-r
+  from-brand/10 via-brand/5 to-transparent`) com selo de ícone
+  (`bg-brand/10 text-brand`), mesmo padrão do `KpiCard` de
+  `DashboardPage.tsx`; abas de `/logistics/estoque` com ícone e estado
+  ativo/hover em verde. Puramente visual, sem alteração de lógica/API —
+  ver `docs/HANDOFF_CODEX.md` seção "Identidade Visual EVOK ÁUDIO — Telas
+  de Logística".
 
 ## 7. FE2 - Vendas (PDV/pedidos)
 

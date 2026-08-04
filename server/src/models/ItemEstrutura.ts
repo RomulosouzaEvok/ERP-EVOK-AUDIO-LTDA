@@ -7,10 +7,10 @@
 import { DataTypes, ModelDefined } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type ItemEstruturaStatus = 'draft' | 'active' | 'inactive' | 'superseded';
-export type ItemEstruturaComponentType = 'raw_material' | 'component' | 'semi_finished' | 'packaging' | 'consumable' | 'other';
+type ItemEstruturaStatus = 'draft' | 'active' | 'inactive' | 'superseded';
+type ItemEstruturaComponentType = 'raw_material' | 'component' | 'semi_finished' | 'packaging' | 'consumable' | 'other';
 
-export interface ItemEstruturaAttributes {
+interface ItemEstruturaAttributes {
   id: string;
   item_pai_id: string;
   item_componente_id: string;

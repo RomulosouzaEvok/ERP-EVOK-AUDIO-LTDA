@@ -282,7 +282,7 @@ export function NonConformitiesTab({
                 <p className="text-sm text-muted-foreground">
                   O número da RNC é gerado automaticamente pelo sistema.
                 </p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="origin">Origem *</Label>
                     <SelectNative id="origin" {...register('origin')}>
@@ -293,9 +293,6 @@ export function NonConformitiesTab({
                       ))}
                     </SelectNative>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="defect_type">Tipo de defeito *</Label>
                     <SelectNative id="defect_type" {...register('defect_type')}>

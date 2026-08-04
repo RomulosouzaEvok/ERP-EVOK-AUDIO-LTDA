@@ -20,7 +20,7 @@ interface RequestUserLike {
   accessProfileName: string | null;
 }
 
-export interface GetMyPermissionsOutput {
+interface GetMyPermissionsOutput {
   modules: Partial<Record<AccessModuleKey, 'operate' | 'approve'>>;
   profile: { id: number; nome: string } | null;
 }

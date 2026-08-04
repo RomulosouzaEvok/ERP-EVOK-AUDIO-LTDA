@@ -10,10 +10,17 @@ const { sequelize } = require('../../../../config/database');
  * DUAL-READ: Aceita `product_ids` (legado) OU `item_ids` (novo, PREFERIDO).
  *
  * `InventoryCountEntity` valida a FORMA dos dados de entrada (`count_type`,
- * `created_by`). Este use case gera o número sequencial `CC-<ano>-XXXX` e,
- * quando uma lista de `product_ids` ou `item_ids` é informada, já cria os itens da
- * contagem "fotografando" a quantidade de sistema (`system_quantity`) de
- * cada produto/item no momento da criação — tudo dentro de uma única transação.
+ * `warehouse_id`, `created_by`). Este use case gera o número sequencial
+ * `CC-<ano>-XXXX` e, quando uma lista de `product_ids` ou `item_ids` é
+ * informada, já cria os itens da contagem "fotografando" a quantidade de
+ * sistema (`system_quantity`) de cada produto/item no momento da criação —
+ * tudo dentro de uma única transação.
+ *
+ * Bloco 4 (multiplos depositos, migration `20260804-000006`): `warehouse_id`
+ * é OBRIGATÓRIO no payload de criação (a contagem inteira é escopada a um
+ * único depósito — `inventory_count_items` herda o depósito do cabeçalho,
+ * não tem coluna própria). `InventoryCountEntity.validate()` lança
+ * `ValidationError` (400) se ausente.
  */
 class CreateInventoryCountUseCase extends UseCase {
   /** @param {import('../../domain/repositories/InventoryCountRepository')} inventoryCountRepository */
@@ -25,17 +32,18 @@ class CreateInventoryCountUseCase extends UseCase {
   /**
    * @param {Object} input
    * @param {'cycle'|'full'|'spot'} [input.count_type]
+   * @param {number} input.warehouse_id - Depósito ao qual TODA a contagem pertence (obrigatório).
    * @param {string} [input.location]
    * @param {string} [input.notes]
    * @param {number[]} [input.product_ids] - Produtos a incluir desde já na contagem (legado, opcional).
    * @param {string[]} [input.item_ids] - Itens a incluir desde já na contagem (novo, PREFERIDO, opcional).
    * @param {number} input.created_by - Id do usuário que está criando a contagem.
    * @returns {Promise<{ count: Object, items: Object[] }>}
-   * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos.
+   * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos (inclusive `warehouse_id` ausente).
    * @throws {NotFoundError} Se algum id em `product_ids` ou `item_ids` não corresponder a um item/produto existente.
    */
-  async execute({ count_type, location, notes, product_ids, item_ids, created_by }) {
-    const entity = new InventoryCountEntity({ count_type, location, notes, created_by });
+  async execute({ count_type, warehouse_id, location, notes, product_ids, item_ids, created_by }) {
+    const entity = new InventoryCountEntity({ count_type, warehouse_id, location, notes, created_by });
 
     const t = await sequelize.transaction();
     try {

@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface InventoryMovementAttributes {
+interface InventoryMovementAttributes {
   id: number;
   product_id: number;
   item_id?: string | null;

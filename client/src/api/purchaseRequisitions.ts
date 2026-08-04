@@ -52,6 +52,13 @@ export interface CreateRequisitionInput {
   priority?: RequisitionPriority;
   status?: 'draft' | 'pending';
   origin?: string;
+  /**
+   * Observações da requisição. **Quando `origin === 'engenharia_amostra'`,
+   * este campo é a justificativa da amostra e é obrigatório** — o backend
+   * rejeita com 422 (`BusinessRuleError`) se vier vazio (não há coluna
+   * dedicada `justificativa`; `notes` é reaproveitado, ver
+   * `CreatePurchaseRequisitionUseCase`).
+   */
   notes?: string;
   request_date?: string;
   /**

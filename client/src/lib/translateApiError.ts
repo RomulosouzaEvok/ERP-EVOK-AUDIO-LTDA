@@ -32,7 +32,8 @@ export type ErrorContext =
   | 'receive-purchase'
   | 'register-lab-test'
   | 'convert-mrp-order'
-  | 'release-lot';
+  | 'release-lot'
+  | 'create-engineering-sample';
 
 /** Link de ação sugerido para o usuário resolver o pré-requisito pendente. */
 export interface DidacticErrorAction {
@@ -110,6 +111,10 @@ const CONTEXT_ACTION_MAP: Record<ErrorContext, DidacticErrorAction> = {
   'release-lot': {
     label: 'Ver lotes em Qualidade',
     to: '/quality',
+  },
+  'create-engineering-sample': {
+    label: 'Informe a justificativa da amostra',
+    to: '',
   },
 };
 

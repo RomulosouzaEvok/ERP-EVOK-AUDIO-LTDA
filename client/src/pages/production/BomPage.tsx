@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, GitBranch } from 'lucide-react';
 
 import * as bomApi from '@/api/bom';
 import * as productsApi from '@/api/products';
@@ -84,8 +84,16 @@ export default function BomPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Estrutura de produto (BOM)</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <GitBranch className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Estrutura de produto (BOM)</h1>
+            <p className="text-sm text-muted-foreground">Componentes e revisões usados na fabricação de cada produto.</p>
+          </div>
+        </div>
         {canWrite && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -172,7 +180,7 @@ export default function BomPage() {
             </TableRow>
           )}
           {data?.data.map((bom) => (
-            <TableRow key={bom.id}>
+            <TableRow key={bom.id} className="hover:bg-accent/50">
               <TableCell>{bom.product?.name ?? bom.product_id}</TableCell>
               <TableCell>{bom.revision ?? '-'}</TableCell>
               <TableCell>

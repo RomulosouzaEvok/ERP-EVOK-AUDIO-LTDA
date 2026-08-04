@@ -186,11 +186,18 @@ function ComponentLotPicker({
     queryFn: () => inventoryApi.listAvailableLots(item.product_id),
   });
 
+  const hasLot = item.lot_control_id !== '';
   return (
-    <div className="flex items-center gap-2 rounded-md border p-2">
+    <div
+      className={`flex items-center gap-2 rounded-md border p-3 transition-colors ${
+        hasLot ? 'border-brand/40 bg-brand/5' : 'border-input'
+      }`}
+    >
       <div className="flex-1 text-sm">
-        <p>{item.name}</p>
-        <p className="text-xs text-muted-foreground">Necessário: {item.neededQuantity.toFixed(4)}</p>
+        <p className="font-medium">{item.name}</p>
+        <p className="text-xs text-muted-foreground">
+          Necessário: <span className="tabular-nums">{item.neededQuantity.toFixed(4)}</span>
+        </p>
       </div>
       {isLoading ? (
         <span className="text-xs text-muted-foreground">Carregando lotes...</span>
@@ -213,7 +220,7 @@ function ComponentLotPicker({
       <Input
         type="number"
         step="any"
-        className="w-24"
+        className="w-28 text-right tabular-nums"
         value={item.quantity}
         onChange={(event) => onChange({ ...item, quantity: event.target.value })}
       />

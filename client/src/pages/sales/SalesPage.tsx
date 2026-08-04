@@ -3,13 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2, Eye, FileText, RefreshCw, Ban } from 'lucide-react';
+import { Plus, Trash2, Eye, FileText, RefreshCw, Ban, ShoppingCart } from 'lucide-react';
 
 import * as salesApi from '@/api/sales';
 import * as fiscalApi from '@/api/fiscal';
 import * as clientsApi from '@/api/clients';
 import * as productsApi from '@/api/products';
 import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { DetailField } from '@/components/DetailField';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
+import { DidacticAlert } from '@/components/DidacticAlert';
 
 const STATUS_VARIANT: Record<salesApi.SaleStatus, 'default' | 'success' | 'destructive' | 'secondary'> = {
   quote: 'secondary',
@@ -127,8 +129,16 @@ export default function SalesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Vendas</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <ShoppingCart className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Vendas</h1>
+            <p className="text-sm text-muted-foreground">Pedidos, orçamentos e emissão de nota fiscal.</p>
+          </div>
+        </div>
         {canWrite && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -219,7 +229,7 @@ export default function SalesPage() {
           <TableRow>
             <TableHead>#</TableHead>
             <TableHead>Cliente</TableHead>
-            <TableHead>Total</TableHead>
+            <TableHead className="text-right">Total</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Data</TableHead>
             {canWrite && <TableHead>Ações</TableHead>}
@@ -235,10 +245,14 @@ export default function SalesPage() {
             </TableRow>
           )}
           {data?.data.map((sale) => (
-            <TableRow key={sale.id} className="cursor-pointer hover:bg-accent/50" onClick={() => setDetailsSale(sale)}>
+            <TableRow
+              key={sale.id}
+              className="cursor-pointer border-l-4 border-l-transparent transition-colors hover:border-l-brand hover:bg-brand/5"
+              onClick={() => setDetailsSale(sale)}
+            >
               <TableCell className="font-medium">{sale.id}</TableCell>
               <TableCell>{sale.customer?.name ?? sale.customer_id}</TableCell>
-              <TableCell>R$ {Number(sale.total_amount).toFixed(2)}</TableCell>
+              <TableCell className="text-right tabular-nums">R$ {Number(sale.total_amount).toFixed(2)}</TableCell>
               <TableCell>
                 <Badge variant={STATUS_VARIANT[sale.status]}>{STATUS_LABEL[sale.status]}</Badge>
               </TableCell>
@@ -283,10 +297,14 @@ export default function SalesPage() {
 }
 
 function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClose: () => void }) {
-  const { hasRole } = useAuth();
+  const { hasRole, permissions } = useAuth();
+  // UC-41/§11: emissão e cancelamento de NF-e exigem nível "gestor", resolvido
+  // como authorizeModule('vendas', 'approve') no backend (Bloco 5). Consulta de
+  // status (GET) permanece liberada para qualquer nível do módulo vendas.
+  const canApproveNfe = hasRole('admin') || permissions?.vendas === 'approve';
   const queryClient = useQueryClient();
   const [nfeOverride, setNfeOverride] = React.useState<salesApi.Sale | null>(null);
-  const [nfeError, setNfeError] = React.useState<string | null>(null);
+  const [nfeError, setNfeError] = React.useState<DidacticError | null>(null);
 
   React.useEffect(() => {
     setNfeOverride(null);
@@ -306,7 +324,15 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
       setNfeError(null);
       invalidateSales();
     },
-    onError: (error) => setNfeError(extractApiErrorMessage(error, 'Não foi possível emitir a NF-e.')),
+    onError: (error) =>
+      setNfeError(
+        translateApiError(
+          error,
+          'Não foi possível emitir a NF-e',
+          'ship-sale',
+          'Apenas usuários com nível gestor no módulo Vendas podem emitir NF-e.',
+        ),
+      ),
   });
 
   const checkStatusMutation = useMutation({
@@ -316,7 +342,7 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
       setNfeError(null);
       invalidateSales();
     },
-    onError: (error) => setNfeError(extractApiErrorMessage(error, 'Não foi possível consultar o status da NF-e.')),
+    onError: (error) => setNfeError(translateApiError(error, 'Não foi possível consultar o status da NF-e', 'ship-sale')),
   });
 
   const cancelNfeMutation = useMutation({
@@ -326,7 +352,15 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
       setNfeError(null);
       invalidateSales();
     },
-    onError: (error) => setNfeError(extractApiErrorMessage(error, 'Não foi possível cancelar a NF-e.')),
+    onError: (error) =>
+      setNfeError(
+        translateApiError(
+          error,
+          'Não foi possível cancelar a NF-e',
+          'ship-sale',
+          'Apenas usuários com nível gestor no módulo Vendas podem cancelar NF-e.',
+        ),
+      ),
   });
 
   const nfeStatus = current?.nfe_status ?? 'pending';
@@ -357,18 +391,20 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
                 <TableHeader>
                   <TableRow>
                     <TableHead>Produto</TableHead>
-                    <TableHead>Qtd.</TableHead>
-                    <TableHead>Preço unit.</TableHead>
-                    <TableHead>Subtotal</TableHead>
+                    <TableHead className="text-right">Qtd.</TableHead>
+                    <TableHead className="text-right">Preço unit.</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>{item.product ? `${item.product.code} — ${item.product.name}` : item.product_id}</TableCell>
-                      <TableCell>{Number(item.quantity)}</TableCell>
-                      <TableCell>R$ {Number(item.unit_price).toFixed(2)}</TableCell>
-                      <TableCell>R$ {Number(item.total_price ?? Number(item.quantity) * Number(item.unit_price)).toFixed(2)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{Number(item.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums">R$ {Number(item.unit_price).toFixed(2)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        R$ {Number(item.total_price ?? Number(item.quantity) * Number(item.unit_price)).toFixed(2)}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {items.length === 0 && (
@@ -382,14 +418,14 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
               </Table>
             </div>
 
-            <div className="flex flex-col gap-1 rounded-lg border bg-muted/30 p-4">
+            <div className="flex flex-col gap-1 rounded-lg border bg-brand/5 p-4">
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>Soma dos itens</span>
-                <span>R$ {itemsTotal.toFixed(2)}</span>
+                <span className="tabular-nums">R$ {itemsTotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-base font-semibold">
+              <div className="flex justify-between text-base font-semibold text-brand">
                 <span>Total da venda</span>
-                <span>R$ {Number(current.total_amount).toFixed(2)}</span>
+                <span className="tabular-nums">R$ {Number(current.total_amount).toFixed(2)}</span>
               </div>
             </div>
 
@@ -406,7 +442,7 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
                 </p>
               )}
               {current.nfe_error_message && <p className="text-sm text-destructive">{current.nfe_error_message}</p>}
-              {nfeError && <p className="text-sm text-destructive">{nfeError}</p>}
+              {nfeError && <DidacticAlert error={nfeError} />}
 
               {(current.nfe_danfe_url || current.nfe_xml_url) && (
                 <div className="flex gap-3 text-sm">
@@ -425,7 +461,10 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
 
               {hasRole('admin', 'operator') && (
                 <div className="flex flex-wrap gap-2">
-                  {current.status === 'confirmed' && (nfeStatus === 'pending' || nfeStatus === 'denied') && (
+                  {/* UC-41/§11: emissão e cancelamento de NF-e exigem nível gestor
+                      (authorizeModule('vendas', 'approve')) — botões ocultos para
+                      quem não tem esse nível, evitando um 403 didaticamente inútil. */}
+                  {current.status === 'confirmed' && (nfeStatus === 'pending' || nfeStatus === 'denied') && canApproveNfe && (
                     <Button size="sm" disabled={nfeBusy} onClick={() => issueMutation.mutate()}>
                       <FileText className="size-4" /> {issueMutation.isPending ? 'Emitindo...' : 'Emitir NF-e'}
                     </Button>
@@ -435,7 +474,7 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
                       <RefreshCw className="size-4" /> {checkStatusMutation.isPending ? 'Consultando...' : 'Consultar status'}
                     </Button>
                   )}
-                  {nfeStatus === 'authorized' && hasRole('admin') && (
+                  {nfeStatus === 'authorized' && canApproveNfe && (
                     <Button
                       size="sm"
                       variant="destructive"
@@ -448,6 +487,13 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
                       <Ban className="size-4" /> {cancelNfeMutation.isPending ? 'Cancelando...' : 'Cancelar NF-e'}
                     </Button>
                   )}
+                  {current.status === 'confirmed' &&
+                    (nfeStatus === 'pending' || nfeStatus === 'denied') &&
+                    !canApproveNfe && (
+                      <p className="text-xs text-muted-foreground">
+                        Emissão de NF-e restrita ao nível gestor do módulo Vendas.
+                      </p>
+                    )}
                 </div>
               )}
             </div>

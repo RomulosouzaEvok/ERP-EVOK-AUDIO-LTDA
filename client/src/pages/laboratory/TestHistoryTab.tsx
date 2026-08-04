@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
+import { ClipboardList, CheckCircle2, XCircle, Percent } from 'lucide-react';
 
 import * as laboratoryApi from '@/api/laboratory';
 import * as productsApi from '@/api/products';
@@ -90,18 +91,25 @@ export function TestHistoryTab() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryTile label="Total de testes (30 dias)" value={summaryLoading ? '...' : String(totals.total)} />
         <SummaryTile
+          icon={ClipboardList}
+          label="Total de testes (30 dias)"
+          value={summaryLoading ? '...' : String(totals.total)}
+        />
+        <SummaryTile
+          icon={CheckCircle2}
           label="Aprovados"
           value={summaryLoading ? '...' : String(totals.passed)}
           tone="good"
         />
         <SummaryTile
+          icon={XCircle}
           label="Reprovados"
           value={summaryLoading ? '...' : String(totals.failed)}
           tone={totals.failed > 0 ? 'bad' : undefined}
         />
         <SummaryTile
+          icon={Percent}
           label="Taxa de aprovação geral"
           value={summaryLoading ? '...' : `${totals.passRate.toFixed(2)}%`}
           tone={totals.passRate >= 90 ? 'good' : totals.passRate > 0 ? 'bad' : undefined}
@@ -281,15 +289,34 @@ export function TestHistoryTab() {
   );
 }
 
-function SummaryTile({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'bad' }) {
+function SummaryTile({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  tone?: 'good' | 'bad';
+}) {
   const toneClass = tone === 'good' ? 'text-emerald-600' : tone === 'bad' ? 'text-destructive' : '';
+  const badgeToneClass =
+    tone === 'good'
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+      : tone === 'bad'
+        ? 'bg-destructive/10 text-destructive'
+        : 'bg-brand/10 text-brand';
   return (
-    <Card>
-      <CardHeader className="pb-1">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className={`text-2xl font-semibold ${toneClass}`}>{value}</p>
+    <Card className="border-l-4 border-l-transparent transition-colors hover:border-l-brand">
+      <CardContent className="flex items-center gap-3 pt-6">
+        <div className={`flex size-11 shrink-0 items-center justify-center rounded-lg ${badgeToneClass}`}>
+          <Icon className="size-5" />
+        </div>
+        <div>
+          <p className={`text-2xl font-semibold leading-tight ${toneClass}`}>{value}</p>
+          <p className="text-xs text-muted-foreground">{label}</p>
+        </div>
       </CardContent>
     </Card>
   );

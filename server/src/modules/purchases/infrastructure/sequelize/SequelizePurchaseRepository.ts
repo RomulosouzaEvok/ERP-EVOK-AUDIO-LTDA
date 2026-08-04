@@ -1,7 +1,7 @@
 const { Op, QueryTypes } = require('sequelize');
 const PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
 const { sequelize } = require('../../../../config/database');
-const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item } = require('../../../../models/index');
+const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item, PurchaseRequisition } = require('../../../../models/index');
 
 class SequelizePurchaseRepository extends PurchaseRepository {
   async listPurchases(filters: any = {}, pagination: any = {}) {
@@ -18,6 +18,11 @@ class SequelizePurchaseRepository extends PurchaseRepository {
       where,
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] },
+        // Bloco 2 (UC-39): expõe `requisition.origin` para a fila de
+        // Recebimento exibir o badge "Amostra — Engenharia" (leitura simples,
+        // sem regra de negócio nova — o roteamento de depósito já é
+        // resolvido separadamente em `ReceivePurchaseItemsUseCase`).
+        { model: PurchaseRequisition, as: 'requisition', attributes: ['id', 'origin'] },
         {
           model: PurchaseItem,
           as: 'items',
@@ -39,6 +44,7 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     return Purchase.findByPk(id, {
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'company_name', 'cnpj'] },
+        { model: PurchaseRequisition, as: 'requisition', attributes: ['id', 'origin'] },
         {
           model: PurchaseItem,
           as: 'items',

@@ -11,7 +11,7 @@ const InventoryService: any = require('../../../../services/inventoryService');
 const WarehouseStockService: any = require('../../../../services/warehouseStockService');
 const CostingService: any = require('../../../../services/costingService');
 const BomService: any = require('../../../../services/bomService');
-const { LotControl, ProductionLotConsumption, SerialNumber }: any = require('../../../../models/index');
+const { LotControl, ProductionLotConsumption, SerialNumber, ProductionCostSettings }: any = require('../../../../models/index');
 import { sequelize } from '../../../../config/database';
 import { Op } from 'sequelize';
 
@@ -137,7 +137,9 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
   }
 
   /**
-   * Completa a OP consumindo componentes, recebendo produto acabado e registrando custo real.
+   * Completa a OP consumindo componentes, recebendo produto acabado e
+   * registrando custo real (material + mao-de-obra apontada + overhead
+   * rateado — item 7/9 do LEVANTAMENTO_ERP, ver `registerLaborAndOverheadCost`).
    *
    * @param order - OP travada.
    * @param previousStatus - Status anterior.
@@ -233,6 +235,15 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
         userId: input.user_id,
         notes: `Custo real de producao - ${order.order_number}`
       }, transaction);
+
+      await this.registerLaborAndOverheadCost({
+        order,
+        producedQty,
+        materialTotalCost: totalCost,
+        product,
+        userId: input.user_id,
+        transaction
+      });
     } catch (stockError: any) {
       // Erros ja tipados (BusinessRuleError, NotFoundError, ValidationError
       // lancados por validacoes explicitas desta classe, ex.: lote
@@ -241,6 +252,148 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       if (stockError instanceof AppError) throw stockError;
       throw new ConflictError(stockError.message);
     }
+  }
+
+  /**
+   * Calcula e registra o custo real de mao-de-obra e overhead da OP
+   * concluida (roadmap pos-Go-Live, item 7/9 do LEVANTAMENTO_ERP), em
+   * lancamentos separados no `ProductCostLedger`
+   * (`source_type: 'production_labor'` e `'production_overhead'`), somando
+   * ao custo real de material ja registrado por
+   * `CostingService.registerWeightedAverageCost` nesta mesma conclusao.
+   *
+   * Formulas aplicadas:
+   * - **Mao-de-obra:** para cada etapa de apontamento `completed` da OP,
+   *   `horas = (finished_at - started_at) em horas` x taxa do centro de
+   *   trabalho da etapa (`work_centers.cost_per_hour` quando
+   *   `production_route_steps.work_center_id` estiver preenchido; senao,
+   *   fallback `production_cost_settings.default_labor_rate_per_hour`).
+   *   Soma-se o custo de todas as etapas concluidas. OP sem nenhum
+   *   apontamento (ou sem etapas `completed`) nao gera lancamento de
+   *   mao-de-obra (decisao: nao ha base para estimar horas trabalhadas em
+   *   OPs legadas/sem rastreamento por etapa — nenhum custo e melhor que um
+   *   custo fabricado).
+   * - **Overhead:** `overhead_rate_percent / 100` aplicado sobre a base
+   *   configurada em `production_cost_settings.overhead_calculation_basis`
+   *   (`material_labor` = material + mao-de-obra desta mesma conclusao;
+   *   `labor_only` = so mao-de-obra; `material_only` = so material).
+   *
+   * Ambos os lancamentos, quando o valor calculado e zero (sem apontamento
+   * ou taxa de overhead zerada), sao omitidos do ledger — nao ha valor de
+   * auditoria em registrar entradas de custo zero.
+   *
+   * @param params - Contexto da OP concluida.
+   * @param params.order - OP travada.
+   * @param params.producedQty - Quantidade produzida (boa) na conclusao.
+   * @param params.materialTotalCost - Custo total de material ja calculado
+   *   (explosao de BOM) nesta mesma conclusao.
+   * @param params.product - Instancia do produto acabado (ja atualizada
+   *   pelo custeio de material).
+   * @param params.userId - Usuario executor.
+   * @param params.transaction - Transacao ativa.
+   * @returns void
+   */
+  private async registerLaborAndOverheadCost(params: {
+    order: any;
+    producedQty: number;
+    materialTotalCost: number;
+    product: any;
+    userId: number;
+    transaction: any;
+  }): Promise<void> {
+    const { order, producedQty, materialTotalCost, product, userId, transaction } = params;
+    if (producedQty <= 0) return;
+
+    const settings = await this.getProductionCostSettings(transaction);
+    const laborTotalCost = await this.calculateLaborCost(order, settings, transaction);
+    const laborUnitCost = laborTotalCost / producedQty;
+
+    if (laborTotalCost > 0.0001) {
+      await CostingService.registerAdditionalProductionCost({
+        product,
+        quantity: producedQty,
+        unitCost: laborUnitCost,
+        sourceType: 'production_labor',
+        sourceId: order.id,
+        userId,
+        notes: `Custo real de mao-de-obra apontada - ${order.order_number}`
+      }, transaction);
+    }
+
+    const overheadBasis = settings.overhead_calculation_basis || 'material_labor';
+    const overheadBase = overheadBasis === 'labor_only'
+      ? laborTotalCost
+      : overheadBasis === 'material_only'
+        ? materialTotalCost
+        : materialTotalCost + laborTotalCost;
+    const overheadRate = parseFloat(String(settings.overhead_rate_percent || 0)) / 100;
+    const overheadTotalCost = overheadBase * overheadRate;
+    const overheadUnitCost = overheadTotalCost / producedQty;
+
+    if (overheadTotalCost > 0.0001) {
+      await CostingService.registerAdditionalProductionCost({
+        product,
+        quantity: producedQty,
+        unitCost: overheadUnitCost,
+        sourceType: 'production_overhead',
+        sourceId: order.id,
+        userId,
+        notes: `Overhead rateado (${overheadBasis}, ${settings.overhead_rate_percent}%) - ${order.order_number}`
+      }, transaction);
+    }
+  }
+
+  /**
+   * Soma as horas apontadas (`started_at` a `finished_at`) das etapas
+   * `completed` da OP multiplicadas pela taxa de custo do centro de
+   * trabalho de cada etapa (com fallback global quando a etapa nao tem
+   * `work_center_id`).
+   *
+   * @param order - OP travada.
+   * @param settings - Configuracao de custeio (`production_cost_settings`).
+   * @param transaction - Transacao ativa.
+   * @returns Custo total de mao-de-obra apontada (BRL), 0 se sem apontamento.
+   */
+  private async calculateLaborCost(order: any, settings: any, transaction: any): Promise<number> {
+    const trackings = await this.productionOrderRepository.listTrackingWithRouteStepByOrder(order.id, transaction);
+    if (!trackings || trackings.length === 0) return 0;
+
+    const fallbackRate = parseFloat(String(settings.default_labor_rate_per_hour || 0));
+    let total = 0;
+
+    for (const step of trackings) {
+      if (step.status !== 'completed' || !step.started_at || !step.finished_at) continue;
+
+      const hours = (new Date(step.finished_at).getTime() - new Date(step.started_at).getTime()) / 3_600_000;
+      if (!Number.isFinite(hours) || hours <= 0) continue;
+
+      const workCenter = step.routeStep?.workCenter;
+      const rate = workCenter && workCenter.cost_per_hour !== null && workCenter.cost_per_hour !== undefined
+        ? parseFloat(String(workCenter.cost_per_hour))
+        : fallbackRate;
+
+      total += hours * rate;
+    }
+
+    return total;
+  }
+
+  /**
+   * Le a configuracao singleton de custeio de producao (`production_cost_settings`, `id = 1`).
+   *
+   * @param transaction - Transacao ativa.
+   * @returns Configuracao encontrada, ou valores neutros (0%) se a linha singleton nao existir.
+   */
+  private async getProductionCostSettings(transaction: any): Promise<{
+    overhead_calculation_basis: string;
+    overhead_rate_percent: number;
+    default_labor_rate_per_hour: number;
+  }> {
+    const settings = await ProductionCostSettings.findByPk(1, { transaction });
+    if (!settings) {
+      return { overhead_calculation_basis: 'material_labor', overhead_rate_percent: 0, default_labor_rate_per_hour: 0 };
+    }
+    return settings.get ? settings.get({ plain: true }) : settings;
   }
 
   /**

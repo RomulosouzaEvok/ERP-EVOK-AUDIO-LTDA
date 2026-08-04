@@ -85,6 +85,21 @@ class SequelizeItemRepository extends ItemRepository {
       };
     });
   }
+
+  /** @inheritdoc */
+  public async listAutoConvertItemIds(itemIds: string[]): Promise<Set<string>> {
+    if (!itemIds.length) {
+      return new Set();
+    }
+
+    const items = await Item.findAll({
+      where: { id: { [Op.in]: itemIds }, conversao_automatica: true },
+      attributes: ['id'],
+      raw: true,
+    });
+
+    return new Set(items.map((item: any) => String(item.id)));
+  }
 }
 
 export = SequelizeItemRepository;

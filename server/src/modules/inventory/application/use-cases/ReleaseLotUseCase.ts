@@ -29,6 +29,7 @@ class ReleaseLotUseCase extends UseCase<ReleaseLotInput, any> {
    * @returns Lote atualizado (`status = 'available'`).
    * @throws {NotFoundError} Se o lote não existir.
    * @throws {BusinessRuleError} Se o lote não estiver em `quarantine` nem `blocked`.
+   *   `details: { lot_id, current_status, allowed_statuses }`.
    */
   public async execute({ id, notes }: ReleaseLotInput): Promise<any> {
     const lot = await LotControl.findByPk(id);
@@ -37,7 +38,12 @@ class ReleaseLotUseCase extends UseCase<ReleaseLotInput, any> {
     }
     if (!RELEASABLE_STATUSES.includes(lot.status)) {
       throw new BusinessRuleError(
-        `Apenas lotes em 'quarantine' ou 'blocked' podem ser liberados. Status atual: '${lot.status}'.`
+        `Apenas lotes em 'quarantine' ou 'blocked' podem ser liberados. Status atual: '${lot.status}'.`,
+        {
+          lot_id: lot.id,
+          current_status: lot.status,
+          allowed_statuses: RELEASABLE_STATUSES
+        }
       );
     }
 

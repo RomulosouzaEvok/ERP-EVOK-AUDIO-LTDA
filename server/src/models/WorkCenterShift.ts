@@ -11,7 +11,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface WorkCenterShiftAttributes {
+interface WorkCenterShiftAttributes {
   id: number;
   work_center_id: number;
   weekday: number;

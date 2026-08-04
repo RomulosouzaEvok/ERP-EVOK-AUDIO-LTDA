@@ -24,6 +24,10 @@ router.delete('/:id', authenticate, authorizeModule('produtos', 'operate'), prod
 router.post('/movements', authenticate, authorizeModule('produtos', 'operate'), productController.movement);
 router.post('/:id/photo', authenticate, authorizeModule('produtos', 'operate'), imageUpload.single('photo'), productController.uploadPhoto);
 router.get('/:id/qrcode', authenticate, authorizeModule('produtos'), productController.getQrCode);
+// Bloco 4 (Depósitos, docs/governance/TODO.md) — saldo por depósito de UM
+// produto específico. `authorizeModule('estoque')` (leitura), mesmo padrão
+// de `GET /api/inventory/warehouse-stock`.
+router.get('/:id/stock-by-warehouse', authenticate, authorizeModule('estoque'), productController.getStockByWarehouse);
 
 module.exports = router;
 

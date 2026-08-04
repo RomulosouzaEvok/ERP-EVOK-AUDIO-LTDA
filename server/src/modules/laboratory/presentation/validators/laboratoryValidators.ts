@@ -34,6 +34,11 @@ export const createTestSchema = z.object({
   curve_data: z.union([z.record(z.string(), z.any()), z.array(z.any())]).optional(),
   notes: z.string().trim().max(4000).optional(),
   create_rnc_on_fail: z.coerce.boolean().optional(),
+  // Bloco 4/UC-42-E: quantidade consumida (destruída) do produto testado.
+  // Quando informada (> 0), o débito automático do Depósito LABORATORIO
+  // acontece na mesma transação do registro do teste (ver
+  // CreateAcousticTestUseCase). Ausente/0 => teste não destrutivo, sem débito.
+  consumed_quantity: z.coerce.number().nonnegative().optional(),
 }).strict();
 
 export const listTestsQuerySchema = z.object({

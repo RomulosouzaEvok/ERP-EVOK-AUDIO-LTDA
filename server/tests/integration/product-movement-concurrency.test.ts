@@ -1,5 +1,6 @@
 import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 import type { Response } from 'supertest';
+import { ensureFixtureCategoryId } from './helpers/categoryFixtures';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
@@ -17,6 +18,7 @@ describeIntegration('Regressao: concorrencia em POST /api/products/movements', (
    */
   it('bloqueia colisao transacional que geraria estoque negativo', async () => {
     const token = authToken();
+    const categoryId = await ensureFixtureCategoryId(token);
 
     const product = await api()
       .post('/api/products')
@@ -24,7 +26,7 @@ describeIntegration('Regressao: concorrencia em POST /api/products/movements', (
       .send({
         name: `Produto Concorrencia ${Date.now()}`,
         code: `CONC-${Date.now()}`,
-        category_id: 1,
+        category_id: categoryId,
         unit: 'UN',
         quantity: 5,
         min_quantity: 1,

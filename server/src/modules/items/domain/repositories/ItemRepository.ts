@@ -42,6 +42,17 @@ class ItemRepository {
   public async listMrpInventoryPositions(_itemIds?: string[]): Promise<any[]> {
     throw new Error('ItemRepository.listMrpInventoryPositions nao implementado.');
   }
+
+  /**
+   * Filtra, dentre os ids informados, quais itens estao marcados com o
+   * opt-in de conversao automatica do MRP (`items.conversao_automatica = true`).
+   *
+   * @param _itemIds - Ids (UUID) dos itens a verificar.
+   * @returns Conjunto dos ids que tem a flag ativa.
+   */
+  public async listAutoConvertItemIds(_itemIds: string[]): Promise<Set<string>> {
+    throw new Error('ItemRepository.listAutoConvertItemIds nao implementado.');
+  }
 }
 
 export = ItemRepository;

@@ -23,9 +23,11 @@ export interface InventoryMovementListParams {
   type?: InventoryMovementType;
   start_date?: string;
   end_date?: string;
+  /** Filtra por depósito (Bloco 4, UC-42). Aceita o `id` (INTEGER) do depósito. */
+  warehouse_id?: number;
 }
 
-/** `GET /api/inventory/movements`. */
+/** `GET /api/inventory/movements?warehouse_id=` — aceita filtro opcional por depósito (Bloco 4, UC-42). */
 export async function listMovements(params: InventoryMovementListParams = {}) {
   const { data } = await httpClient.get<ListResponse<InventoryMovement>>('/api/inventory/movements', { params });
   return data;
@@ -88,6 +90,71 @@ export async function listAvailableLots(productId: number) {
   return data.data;
 }
 
+/**
+ * Lote (`LotControl`) resolvido por código, com `product`/`supplier`/`warehouse`
+ * incluídos (ver `GetLotByCodeUseCase`). Superset de `Lot` (`@/api/lots`), que
+ * não inclui `warehouse` embutido.
+ */
+export interface LotByCode {
+  id: number;
+  product_id: number;
+  supplier_id: number | null;
+  purchase_id: number | null;
+  production_order_id: number | null;
+  lot_number: string;
+  status: 'available' | 'reserved' | 'consumed' | 'blocked' | 'expired' | 'quarantine';
+  quantity_initial: string;
+  quantity_available: string;
+  manufactured_at: string | null;
+  expires_at: string | null;
+  received_at: string | null;
+  notes: string | null;
+  warehouse_id: number | null;
+  createdAt: string;
+  product?: { id: number; name: string; code: string };
+  supplier?: { id: number; company_name: string };
+  warehouse?: { id: number; code: string; name: string };
+}
+
+/**
+ * `GET /api/inventory/lots/by-code/:lot_number?product_id=` — resolve um
+ * código de lote lido/digitado (scanner físico ou teclado) para o registro
+ * completo de `LotControl`. `product_id` é opcional, usado apenas para
+ * desambiguar quando o mesmo código existir em mais de um produto (a API
+ * responde 409 nesse caso sem `product_id`).
+ *
+ * Lança (via `httpClient`) o erro Axios original em 404 (código não
+ * encontrado) e 409 (código ambíguo) — trate com `translateApiError`/
+ * `extractApiErrorMessage` na tela chamadora.
+ */
+export async function resolveLotByCode(lotNumber: string, productId?: number) {
+  const { data } = await httpClient.get<ItemResponse<LotByCode>>(
+    `/api/inventory/lots/by-code/${encodeURIComponent(lotNumber)}`,
+    { params: productId ? { product_id: productId } : undefined },
+  );
+  return data.data;
+}
+
+export interface LotQrCodeResult {
+  format: 'png' | 'svg';
+  qrDataUrl?: string;
+  qrSvg?: string;
+  qrCodeData: string;
+}
+
+/**
+ * `GET /api/inventory/lots/:id/qrcode?format=png|svg` — gera o QR Code do
+ * lote (`id` numérico interno) para impressão de etiqueta. Mesmo formato de
+ * `getAssetQrCode`/`getProductQrCode` — consumir com o componente genérico
+ * `QrCodeDialog` (`@/components/QrCodeDialog`).
+ */
+export async function getLotQrCode(id: number, format: 'png' | 'svg' = 'png') {
+  const { data } = await httpClient.get<ItemResponse<LotQrCodeResult>>(`/api/inventory/lots/${id}/qrcode`, {
+    params: { format },
+  });
+  return data.data;
+}
+
 export type InventoryCountStatus = 'draft' | 'counting' | 'pending_approval' | 'approved' | 'rejected' | 'adjusted';
 export type InventoryCountType = 'cycle' | 'full' | 'spot';
 
@@ -106,6 +173,16 @@ export interface InventoryCount {
   count_number: string;
   status: InventoryCountStatus;
   count_type: InventoryCountType;
+  /**
+   * Depósito ao qual TODA a contagem pertence (Bloco 4, migration
+   * `20260804-000006`). Obrigatório em contagens criadas a partir de
+   * 2026-08-04; pode ser `null` apenas em 4 registros legados pré-Bloco 4
+   * (já backfilled para o depósito `INSUMOS`, ver `InventoryCountEntity.ts`).
+   * O backend não faz eager-load da associação `warehouse` em
+   * `SequelizeInventoryCountRepository` — a tela resolve código/nome via
+   * `listWarehouses()` e um mapa local por `id`.
+   */
+  warehouse_id: number | null;
   location?: string | null;
   createdAt: string;
   items?: InventoryCountItem[];
@@ -123,8 +200,23 @@ export async function getInventoryCount(id: number) {
   return data.data;
 }
 
-/** `POST /api/inventory-counts` — cria já com os produtos selecionados. */
-export async function createInventoryCount(input: { count_type?: InventoryCountType; location?: string; product_ids: number[] }) {
+/**
+ * Payload de criação de contagem de inventário (Bloco 4, migration
+ * `20260804-000006`). `warehouse_id` é OBRIGATÓRIO — validado tanto pelo
+ * schema Zod do backend (`createInventoryCountSchema`) quanto por
+ * `InventoryCountEntity` (defesa em profundidade), a contagem inteira
+ * (cabeçalho + itens) é escopada a um único depósito.
+ */
+export interface CreateInventoryCountInput {
+  count_type?: InventoryCountType;
+  /** Depósito contado — obrigatório (ver `createInventoryCountSchema` no backend). */
+  warehouse_id: number;
+  location?: string;
+  product_ids: number[];
+}
+
+/** `POST /api/inventory-counts` — cria já com os produtos selecionados, escopada a um depósito. */
+export async function createInventoryCount(input: CreateInventoryCountInput) {
   const { data } = await httpClient.post<ItemResponse<{ count: InventoryCount; items: InventoryCountItem[] }>>(
     '/api/inventory-counts',
     input,

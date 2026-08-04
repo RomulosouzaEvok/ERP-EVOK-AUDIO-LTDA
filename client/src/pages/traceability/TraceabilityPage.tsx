@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { Search } from 'lucide-react';
 
 import * as traceabilityApi from '@/api/traceability';
 import { extractApiErrorMessage } from '@/api/httpClient';
@@ -32,7 +33,15 @@ export default function TraceabilityPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Rastreabilidade</h1>
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <Search className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Rastreabilidade</h1>
+          <p className="text-sm text-muted-foreground">Consulte o histórico completo de movimentos e lotes de um item.</p>
+        </div>
+      </div>
 
       <Card>
         <CardHeader>
@@ -64,7 +73,7 @@ export default function TraceabilityPage() {
                   <TableHead>Data</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Movimento</TableHead>
-                  <TableHead>Quantidade</TableHead>
+                  <TableHead className="text-right">Quantidade</TableHead>
                   <TableHead>Lote</TableHead>
                   <TableHead>Origem</TableHead>
                 </TableRow>
@@ -75,9 +84,9 @@ export default function TraceabilityPage() {
                     <TableCell>{event.criado_em ? new Date(event.criado_em).toLocaleString('pt-BR') : '-'}</TableCell>
                     <TableCell>{event.tipo}</TableCell>
                     <TableCell>{event.movimento_tipo ?? '-'}</TableCell>
-                    <TableCell>{event.quantidade}</TableCell>
-                    <TableCell>{event.codigo_lote ?? '-'}</TableCell>
-                    <TableCell>
+                    <TableCell className="text-right tabular-nums">{event.quantidade}</TableCell>
+                    <TableCell className="font-mono text-xs">{event.codigo_lote ?? '-'}</TableCell>
+                    <TableCell className="text-muted-foreground">
                       {event.origem_tabela} {event.origem_id ? `#${event.origem_id}` : ''}
                     </TableCell>
                   </TableRow>

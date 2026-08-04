@@ -203,26 +203,60 @@ class SequelizeReportsRepository extends ReportsRepository {
    * LEFT JOIN pois nem todo produto tem item correspondente), com fallback
    * para `products.cost_price` quando não há item.
    *
+   * Normalização (item 7/9 do LEVANTAMENTO_ERP — custeio real de
+   * mão-de-obra e overhead): a conclusão de uma OP grava até **três**
+   * linhas em `product_cost_ledgers` para o mesmo evento de produção —
+   * `source_type IN ('production', 'production_labor', 'production_overhead')`,
+   * todas com `source_id = production_order_id` e a MESMA `quantity`
+   * (quantidade produzida). Uma média ponderada simples sobre todas as
+   * linhas somaria a quantidade 3x para o mesmo lote produzido, diluindo
+   * `avg_real_cost` incorretamente (a divisão por `SUM(quantity)` ficaria
+   * ~3x maior que deveria). A CTE `normalized` colapsa essas linhas
+   * "irmãs" por `(product_id, source_id)` em uma única linha por OP
+   * concluída — somando `total_cost` (material + mão-de-obra + overhead)
+   * e mantendo `quantity` uma única vez — antes da agregação final por
+   * produto. Linhas de `purchase`/`adjustment` (sem essa multiplicidade)
+   * seguem como estavam, uma linha de ledger por evento.
+   *
    * @param {Date} start
    * @param {Date} end
    * @returns {Promise<Object[]>}
    */
   async findCostVarianceByProduct(start, end) {
     return sequelize.query(
-      `SELECT p.id                                              AS product_id,
+      `WITH normalized AS (
+         SELECT product_id,
+                source_id                AS group_key,
+                MAX(quantity)::numeric   AS quantity,
+                SUM(total_cost)::numeric AS total_cost
+           FROM product_cost_ledgers
+          WHERE source_type IN ('production', 'production_labor', 'production_overhead')
+            AND created_at BETWEEN :start AND :end
+          GROUP BY product_id, source_id
+
+          UNION ALL
+
+         SELECT product_id,
+                id                AS group_key,
+                quantity,
+                total_cost
+           FROM product_cost_ledgers
+          WHERE source_type IN ('purchase', 'adjustment')
+            AND created_at BETWEEN :start AND :end
+       )
+       SELECT p.id                                              AS product_id,
               p.code,
               p.name,
               COALESCE(i.custo_padrao, p.cost_price, 0)::float   AS standard_cost,
-              COUNT(pcl.id)::int                                 AS entries_count,
-              COALESCE(SUM(pcl.quantity), 0)::float              AS total_quantity,
-              CASE WHEN COALESCE(SUM(pcl.quantity), 0) > 0
-                   THEN (SUM(pcl.quantity * pcl.unit_cost) / SUM(pcl.quantity))::float
+              COUNT(n.group_key)::int                            AS entries_count,
+              COALESCE(SUM(n.quantity), 0)::float                AS total_quantity,
+              CASE WHEN COALESCE(SUM(n.quantity), 0) > 0
+                   THEN (SUM(n.total_cost) / SUM(n.quantity))::float
                    ELSE 0
               END                                                 AS avg_real_cost
-         FROM product_cost_ledgers pcl
-         JOIN products p ON p.id = pcl.product_id
+         FROM normalized n
+         JOIN products p ON p.id = n.product_id
          LEFT JOIN items i ON i.codigo = p.code
-        WHERE pcl.created_at BETWEEN :start AND :end
         GROUP BY p.id, p.code, p.name, i.custo_padrao, p.cost_price
         ORDER BY p.id`,
       { replacements: { start, end }, type: QueryTypes.SELECT }

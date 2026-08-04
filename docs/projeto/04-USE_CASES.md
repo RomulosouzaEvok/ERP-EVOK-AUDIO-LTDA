@@ -550,6 +550,64 @@
 
 ---
 
+## UC-24b: Fechamento Automático do Ciclo MRP → Requisição (opt-in por item)
+
+**Ator:** Sistema (disparado dentro de `POST /api/mrp/plan`, sem ação extra
+do planejador)
+**Pré-condições:** Item com `items.conversao_automatica = true`
+**Decisão de design (roadmap pós-Go-Live item 3,
+`docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 3):** dado que o projeto tem
+cultura forte de rastreabilidade/auditoria, comprar automaticamente **sem
+nenhuma revisão humana para qualquer item** foi descartado por risco de
+negócio. O trigger automático é um **opt-in explícito por item**
+(`items.conversao_automatica`, migration
+`20260804-000010-add-mrp-auto-convert-to-items.cjs`, default `false`):
+apenas ordens planejadas de itens marcados são convertidas sozinhas; todos
+os demais itens continuam exigindo a conversão manual do UC-24. Não foi
+criado nenhum job/cron novo — o gatilho é o próprio fluxo síncrono já
+existente de geração/atualização do plano MRP (`GenerateMrpPlanUseCase`),
+coerente com a decisão arquitetural "MRP roda contra estoque real, a cada
+evento relevante, não em batch agendado" (`CLAUDE.md` §7).
+
+**Fluxo Principal:**
+1. Usuário (planejador ou qualquer chamador autenticado) roda `POST
+   /api/mrp/plan` normalmente (UC de geração de plano)
+2. Sistema persiste as ordens planejadas do plano (mesma transação de
+   sempre)
+3. Dentro da MESMA transação, sistema filtra as ordens recém-persistidas
+   com status `RASCUNHO`/`APROVADA` cujo `item_id` tem
+   `conversao_automatica = true`
+4. Para as ordens elegíveis, sistema cria **uma única** Requisição de
+   Compra (`origin='mrp_auto'` — distinto de `'mrp'` do UC-24 manual —,
+   `requester_id` = usuário que disparou `POST /api/mrp/plan`, mesma regra
+   de sugestão de fornecedor preferencial do UC-24) e marca as ordens
+   convertidas como `EM_EXECUCAO`
+5. Sistema confirma a transação e registra log de auditoria (`logAction`,
+   ação `mrp_auto_convert_to_requisition`)
+6. Ordens de itens sem a flag permanecem `RASCUNHO`/`APROVADA`, aguardando
+   o planejador rodar o UC-24 manualmente, como hoje
+
+**Regras de Negócio:**
+- `origin='mrp_auto'` (nunca `'mrp'`) identifica, na própria requisição,
+  que nenhuma ordem individual foi revisada por um humano antes da compra
+  — auditoria consegue distinguir os dois fluxos
+- Sem `requester_id` (ex.: chamador futuro não autenticado), a
+  auto-conversão é pulada (no-op) — nunca viola o `NOT NULL` de
+  `purchase_requisitions.requester_id` nem inventa um usuário "sistema"
+- Reaproveita a mesma lógica de sugestão de fornecedor preferencial e
+  criação de itens de requisição do UC-24 (helper compartilhado
+  `createRequisitionFromPlannedOrders`), sem duplicar regra de negócio
+- Ativação da flag por item é responsabilidade do planejador/comprador no
+  cadastro do item; **risco residual**: hoje não existe endpoint HTTP
+  público para editar `Item` (só `POST /api/items`, `.../estrutura`,
+  `.../inactivate`, `.../suppliers`) nem tela para ligar/desligar a flag —
+  a ativação só é possível hoje via banco/seed direto. Endpoint
+  `PATCH /api/items/:id` + UI de edição do item ficam como próximo passo
+  (fora do escopo desta entrega, que ficou restrita a `modules/mrp/**` e
+  `models/Item*.ts`)
+
+---
+
 ## UC-25: Conversão de Requisição de Compra Aprovada em Pedido(s) de Compra
 
 **Ator:** Comprador (`admin`, `operator`)

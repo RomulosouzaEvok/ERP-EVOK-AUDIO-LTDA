@@ -10,9 +10,9 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type SerialNumberStatus = 'available' | 'reserved' | 'sold' | 'blocked' | 'scrapped';
+type SerialNumberStatus = 'available' | 'reserved' | 'sold' | 'blocked' | 'scrapped';
 
-export interface SerialNumberAttributes {
+interface SerialNumberAttributes {
   id: number;
   product_id: number;
   item_id: string | null;

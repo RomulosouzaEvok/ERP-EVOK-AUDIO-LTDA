@@ -23,7 +23,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ProductWarehouseStockAttributes {
+interface ProductWarehouseStockAttributes {
   id: number;
   product_id: number;
   warehouse_id: number;
@@ -32,7 +32,7 @@ export interface ProductWarehouseStockAttributes {
   readonly updatedAt?: Date;
 }
 
-export interface ProductWarehouseStockCreationAttributes {
+interface ProductWarehouseStockCreationAttributes {
   id?: number;
   product_id: number;
   warehouse_id: number;

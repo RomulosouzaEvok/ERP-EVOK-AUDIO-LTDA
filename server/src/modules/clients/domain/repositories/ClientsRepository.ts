@@ -4,12 +4,7 @@
  * @module modules/clients/domain/repositories/ClientsRepository
  */
 
-export interface ClientsListOptions {
-  limit: number;
-  offset: number;
-  search?: string;
-  status?: string;
-}
+import { ClientsListOptions } from './ClientsListOptions';
 
 class ClientsRepository {
   /** @param options - Filtros e paginacao. @returns Linhas e contagem. @throws {Error} Se nao implementado. */

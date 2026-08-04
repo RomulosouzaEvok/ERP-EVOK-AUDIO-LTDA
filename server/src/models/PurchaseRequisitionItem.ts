@@ -1,7 +1,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface PurchaseRequisitionItemAttributes {
+interface PurchaseRequisitionItemAttributes {
   id: number;
   requisition_id: number;
   item_id: string;

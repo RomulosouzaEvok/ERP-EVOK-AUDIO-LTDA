@@ -19,7 +19,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type InventoryCountStatus =
+type InventoryCountStatus =
   | 'draft'
   | 'counting'
   | 'pending_approval'
@@ -27,13 +27,14 @@ export type InventoryCountStatus =
   | 'rejected'
   | 'adjusted';
 
-export type InventoryCountType = 'cycle' | 'full' | 'spot';
+type InventoryCountType = 'cycle' | 'full' | 'spot';
 
-export interface InventoryCountAttributes {
+interface InventoryCountAttributes {
   id: number;
   count_number: string;
   status: InventoryCountStatus;
   count_type: InventoryCountType;
+  warehouse_id: number | null;
   location: string | null;
   started_at: Date | null;
   completed_at: Date | null;
@@ -48,6 +49,11 @@ export interface InventoryCountAttributes {
 const InventoryCount = sequelize.define('InventoryCount', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   count_number: { type: DataTypes.STRING(30), allowNull: false, unique: true, comment: 'Nº da contagem de inventário' },
+  warehouse_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'FK → warehouses.id (depósito ao qual TODA a contagem pertence; nullable apenas por legado pré-Bloco 4 — use case de criação deve exigir o campo em contagens novas)'
+  },
   status: {
     type: DataTypes.ENUM('draft', 'counting', 'pending_approval', 'approved', 'rejected', 'adjusted'),
     allowNull: false,
@@ -74,7 +80,8 @@ const InventoryCount = sequelize.define('InventoryCount', {
   indexes: [
     { fields: ['status'] },
     { fields: ['count_type'] },
-    { fields: ['created_by'] }
+    { fields: ['created_by'] },
+    { fields: ['warehouse_id'] }
   ]
 });
 

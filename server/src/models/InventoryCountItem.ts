@@ -13,9 +13,9 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type InventoryCountItemStatus = 'pending' | 'counted' | 'adjusted';
+type InventoryCountItemStatus = 'pending' | 'counted' | 'adjusted';
 
-export interface InventoryCountItemAttributes {
+interface InventoryCountItemAttributes {
   id: number;
   inventory_count_id: number;
   product_id: number;

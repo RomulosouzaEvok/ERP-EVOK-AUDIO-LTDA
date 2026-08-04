@@ -9,9 +9,9 @@
 import { DataTypes, ModelDefined } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type FamiliaTecinicaType = 'ALTO_FALANTE' | 'CABO' | 'AMPLIFICADOR' | 'TRANSFORMADOR' | 'CAPACITOR' | string;
+type FamiliaTecinicaType = 'ALTO_FALANTE' | 'CABO' | 'AMPLIFICADOR' | 'TRANSFORMADOR' | 'CAPACITOR' | string;
 
-export interface ItemEspecificacaoTecnicaAttributes {
+interface ItemEspecificacaoTecnicaAttributes {
   item_id: string;
   familia_tecnica: string;
   atributos: Record<string, any>;

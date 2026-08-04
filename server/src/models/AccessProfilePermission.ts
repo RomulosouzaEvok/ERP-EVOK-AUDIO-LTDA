@@ -23,7 +23,7 @@ import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
 /** @interface Atributos da entidade AccessProfilePermission */
-export interface AccessProfilePermissionAttributes {
+interface AccessProfilePermissionAttributes {
   id: number;
   accessProfileId: number;
   module: string;
@@ -33,7 +33,7 @@ export interface AccessProfilePermissionAttributes {
 }
 
 /** @interface Atributos para criação (id opcional) */
-export interface AccessProfilePermissionCreationAttributes {
+interface AccessProfilePermissionCreationAttributes {
   id?: number;
   accessProfileId: number;
   module: string;

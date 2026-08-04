@@ -5,7 +5,8 @@
  */
 
 import { Op } from 'sequelize';
-import ClientsRepository, { ClientsListOptions } from '../../domain/repositories/ClientsRepository';
+import ClientsRepository from '../../domain/repositories/ClientsRepository';
+import { ClientsListOptions } from '../../domain/repositories/ClientsListOptions';
 const { Client, Sale }: any = require('../../../../models/index');
 const Validators = require('../../../../utils/validators');
 

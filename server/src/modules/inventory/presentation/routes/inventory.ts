@@ -26,11 +26,22 @@ router.post('/movements', authenticate, authorizeModule('estoque', 'operate'), i
 router.get('/stock-report', authenticate, authorizeModule('estoque'), inventoryController.getStockReport);
 router.get('/low-stock', authenticate, authorizeModule('estoque'), inventoryController.listLowStock);
 router.get('/lots', authenticate, authorizeModule('estoque'), inventoryController.listLots);
+// Rastreabilidade por lote/QR no chão de fábrica (item 6 do roadmap,
+// docs/LEVANTAMENTO_ERP_2026-08-02.md): lookup por código legível e geração
+// de QR para etiqueta física. Declaradas antes de `/lots/:id/*` para não
+// colidir com o parâmetro posicional `:id`.
+router.get('/lots/by-code/:lot_number', authenticate, authorizeModule('estoque'), inventoryController.getLotByCode);
+router.get('/lots/:id/qrcode', authenticate, authorizeModule('estoque'), inventoryController.getLotQrCode);
 router.post('/lots/:id/release', authenticate, authorizeModule('qualidade', 'approve'), inventoryController.releaseLot);
 router.post('/lots/:id/block', authenticate, authorizeModule('qualidade', 'approve'), inventoryController.blockLot);
 
 // Multiplos Depositos (Bloco 4, UC-42, BUSINESS_RULES.md §12).
 router.get('/warehouses', authenticate, authorizeModule('estoque'), inventoryController.listWarehouses);
+// CRUD de Depositos (docs/governance/TODO.md, Bloco 4.2/4.3) — criar/editar
+// depósito é operação de gestão de estoque, mesmo nível de
+// aprovar/rejeitar transferência.
+router.post('/warehouses', authenticate, authorizeModule('estoque', 'approve'), inventoryController.createWarehouse);
+router.put('/warehouses/:id', authenticate, authorizeModule('estoque', 'approve'), inventoryController.updateWarehouse);
 router.get('/warehouse-stock', authenticate, authorizeModule('estoque'), inventoryController.listWarehouseStock);
 router.get('/transfers', authenticate, authorizeModule('estoque'), inventoryController.listTransfers);
 router.post('/transfers', authenticate, authorizeModule('estoque', 'operate'), inventoryController.createTransfer);
@@ -38,5 +49,4 @@ router.put('/transfers/:id/approve', authenticate, authorizeModule('estoque', 'a
 router.put('/transfers/:id/reject', authenticate, authorizeModule('estoque', 'approve'), inventoryController.rejectTransfer);
 
 module.exports = router;
-
 

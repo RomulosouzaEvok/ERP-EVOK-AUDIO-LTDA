@@ -15,7 +15,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface SaleAttributes {
+interface SaleAttributes {
   id: number;
   customer_id: number;
   user_id: number;

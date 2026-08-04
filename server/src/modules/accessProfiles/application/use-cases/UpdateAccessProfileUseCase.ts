@@ -1,12 +1,13 @@
 import type { Request } from 'express';
 import UseCase from '../../../../shared/application/UseCase';
 import { ConflictError, NotFoundError, ValidationError } from '../../../../errors';
-import AccessProfilesRepository, { AccessProfileListItem, AccessProfilePermissionInput } from '../../domain/repositories/AccessProfilesRepository';
+import AccessProfilesRepository from '../../domain/repositories/AccessProfilesRepository';
+import { AccessProfileListItem, AccessProfilePermissionInput } from '../../domain/repositories/AccessProfilePermissionInput';
 import { validatePermissions } from './validatePermissions';
 
 const { logAction } = require('../../../../services/auditLogService');
 
-export interface UpdateAccessProfileInput {
+interface UpdateAccessProfileInput {
   id: number;
   nome?: string;
   descricao?: string | null;

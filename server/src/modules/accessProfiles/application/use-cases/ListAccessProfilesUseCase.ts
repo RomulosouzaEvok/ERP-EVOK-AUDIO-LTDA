@@ -1,5 +1,6 @@
 import UseCase from '../../../../shared/application/UseCase';
-import AccessProfilesRepository, { AccessProfileListItem } from '../../domain/repositories/AccessProfilesRepository';
+import AccessProfilesRepository from '../../domain/repositories/AccessProfilesRepository';
+import { AccessProfileListItem } from '../../domain/repositories/AccessProfilePermissionInput';
 
 /**
  * `GET /api/access-profiles` — lista todos os perfis de acesso (ativos e

@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus } from 'lucide-react';
+import { Plus, Users as UsersIcon } from 'lucide-react';
 
 import * as usersApi from '@/api/users';
 import * as accessProfilesApi from '@/api/accessProfiles';
+import type { AccessModuleLevel } from '@/api/accessProfiles';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,20 @@ const ROLE_LABEL: Record<string, string> = {
   financial: 'Financeiro',
 };
 
+/**
+ * Rótulo do nível de acesso concedido por módulo (Bloco 1.4). O usuário
+ * **não** tem um campo de nível próprio — o nível (operar/aprovar) já é
+ * resolvido pela matriz módulo × nível do perfil de acesso atribuído (ver
+ * `AssignAccessProfileUseCase`, decisão de arquitetura do Bloco 1.2). O
+ * seletor de nível "dependendo do modelo de dados" citado em
+ * `docs/governance/TODO.md` §1.4 é, portanto, a pré-visualização abaixo, e
+ * não um campo editável adicional no usuário.
+ */
+const LEVEL_LABEL: Record<AccessModuleLevel, string> = {
+  operate: 'Operar',
+  approve: 'Aprovar',
+};
+
 const userSchema = z.object({
   name: z.string().min(1, 'Informe o nome.'),
   email: z.string().email('E-mail inválido.'),
@@ -35,6 +50,12 @@ const userSchema = z.object({
 
 type UserFormData = z.infer<typeof userSchema>;
 
+const assignProfileSchema = z.object({
+  accessProfileId: z.string(),
+});
+
+type AssignProfileFormData = z.infer<typeof assignProfileSchema>;
+
 /** `FE6`: administração de usuários (admin) — listar, criar, inativar, revogar sessões (SEC-12), atribuir perfil de acesso (UC-33). */
 export default function UsersPage() {
   const queryClient = useQueryClient();
@@ -42,7 +63,6 @@ export default function UsersPage() {
   const [formError, setFormError] = React.useState<string | null>(null);
   const [page, setPage] = React.useState(1);
   const [assigningUser, setAssigningUser] = React.useState<usersApi.User | null>(null);
-  const [selectedProfileId, setSelectedProfileId] = React.useState<string>('');
   const [assignError, setAssignError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
@@ -68,12 +88,41 @@ export default function UsersPage() {
 
   const activeProfiles = React.useMemo(() => (accessProfiles ?? []).filter((profile) => profile.active), [accessProfiles]);
 
+  // Módulos com rótulo pt-BR — usados para a pré-visualização de nível por
+  // módulo do perfil selecionado no dialog "Atribuir perfil" (não há campo
+  // de nível próprio no usuário, ver `LEVEL_LABEL`).
+  const { data: modules } = useQuery({
+    queryKey: ['access-profiles', 'modules'],
+    queryFn: accessProfilesApi.listAccessModules,
+  });
+
+  const moduleLabelByKey = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const module of modules ?? []) {
+      map.set(module.key, module.label);
+    }
+    return map;
+  }, [modules]);
+
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<UserFormData>({ resolver: zodResolver(userSchema), defaultValues: { role: 'operator' } });
+
+  const {
+    register: registerAssign,
+    handleSubmit: handleAssignSubmit,
+    reset: resetAssign,
+    watch: watchAssign,
+  } = useForm<AssignProfileFormData>({ resolver: zodResolver(assignProfileSchema), defaultValues: { accessProfileId: '' } });
+
+  const selectedProfileId = watchAssign('accessProfileId');
+  const selectedProfilePreview = React.useMemo(
+    () => activeProfiles.find((profile) => String(profile.id) === selectedProfileId) ?? null,
+    [activeProfiles, selectedProfileId],
+  );
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['users'] });
 
@@ -113,14 +162,22 @@ export default function UsersPage() {
 
   const openAssignDialog = (user: usersApi.User) => {
     setAssigningUser(user);
-    setSelectedProfileId(user.accessProfileId ? String(user.accessProfileId) : '');
+    resetAssign({ accessProfileId: user.accessProfileId ? String(user.accessProfileId) : '' });
     setAssignError(null);
   };
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Usuários</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <UsersIcon className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Usuários</h1>
+            <p className="text-sm text-muted-foreground">Administração de contas, papéis e perfis de acesso do sistema.</p>
+          </div>
+        </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -251,7 +308,17 @@ export default function UsersPage() {
           <DialogHeader>
             <DialogTitle>Atribuir perfil de acesso — {assigningUser?.name}</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-3">
+          <form
+            className="flex flex-col gap-3"
+            noValidate
+            onSubmit={handleAssignSubmit((values) => {
+              if (!assigningUser) return;
+              assignProfileMutation.mutate({
+                userId: assigningUser.id,
+                accessProfileId: values.accessProfileId ? Number(values.accessProfileId) : null,
+              });
+            })}
+          >
             {assigningUser?.role === 'admin' && (
               <p className="text-sm text-muted-foreground">
                 Usuários administradores não são afetados por perfis de área — o admin global sempre tem acesso completo,
@@ -260,7 +327,7 @@ export default function UsersPage() {
             )}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="access-profile">Perfil de acesso</Label>
-              <SelectNative id="access-profile" value={selectedProfileId} onChange={(e) => setSelectedProfileId(e.target.value)}>
+              <SelectNative id="access-profile" {...registerAssign('accessProfileId')}>
                 <option value="">Sem perfil</option>
                 {activeProfiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
@@ -269,26 +336,40 @@ export default function UsersPage() {
                 ))}
               </SelectNative>
             </div>
+
+            {selectedProfilePreview && (
+              <div className="flex flex-col gap-1.5 rounded-md border bg-muted/30 p-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Nível de acesso concedido por módulo (definido no perfil, não editável por usuário):
+                </p>
+                {selectedProfilePreview.permissions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Este perfil ainda não concede acesso a nenhum módulo.</p>
+                ) : (
+                  <ul className="flex flex-col gap-0.5 text-xs">
+                    {selectedProfilePreview.permissions.map((permission) => (
+                      <li key={permission.module} className="flex items-center justify-between gap-2">
+                        <span>{moduleLabelByKey.get(permission.module) ?? permission.module}</span>
+                        <Badge variant={permission.level === 'approve' ? 'default' : 'secondary'}>
+                          {LEVEL_LABEL[permission.level]}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
             <p className="text-xs text-muted-foreground">
               A mudança de perfil vale a partir do próximo login do usuário — a sessão ativa (se houver) não é derrubada
               automaticamente. Para revogação imediata, use "Revogar sessões" ou inative o usuário.
             </p>
             {assignError && <DidacticAlert error={assignError} />}
-          </div>
-          <DialogFooter>
-            <Button
-              disabled={assignProfileMutation.isPending}
-              onClick={() => {
-                if (!assigningUser) return;
-                assignProfileMutation.mutate({
-                  userId: assigningUser.id,
-                  accessProfileId: selectedProfileId ? Number(selectedProfileId) : null,
-                });
-              }}
-            >
-              {assignProfileMutation.isPending ? 'Salvando...' : 'Salvar atribuição'}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="submit" disabled={assignProfileMutation.isPending}>
+                {assignProfileMutation.isPending ? 'Salvando...' : 'Salvar atribuição'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

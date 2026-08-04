@@ -30,6 +30,14 @@ export interface Purchase {
    * `delivery_date`; verde = dentro do prazo/estados terminais.
    */
   handoff_signal?: HandoffSignal;
+  /**
+   * Requisição de origem (Bloco 2, UC-39) — carregada em `GET /api/purchases`
+   * e `GET /api/purchases/:id` apenas com `{ id, origin }` (leitura simples).
+   * `origin === 'engenharia_amostra'` identifica pedidos originados de
+   * amostra da Engenharia, para exibir o badge "Amostra — Engenharia" no
+   * Recebimento sem depender do texto livre em `notes`.
+   */
+  requisition?: { id: number; origin: string | null } | null;
 }
 
 export interface PurchaseItemInput {

@@ -11,9 +11,9 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type ProductCostSourceType = 'purchase' | 'production' | 'adjustment';
+type ProductCostSourceType = 'purchase' | 'production' | 'adjustment' | 'production_labor' | 'production_overhead';
 
-export interface ProductCostLedgerAttributes {
+interface ProductCostLedgerAttributes {
   id: number;
   product_id: number;
   source_type: ProductCostSourceType;
@@ -32,7 +32,7 @@ export interface ProductCostLedgerAttributes {
 const ProductCostLedger = sequelize.define('ProductCostLedger', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id' },
-  source_type: { type: DataTypes.ENUM('purchase', 'production', 'adjustment'), allowNull: false },
+  source_type: { type: DataTypes.ENUM('purchase', 'production', 'adjustment', 'production_labor', 'production_overhead'), allowNull: false },
   source_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'ID da origem: compra, OP ou ajuste' },
   quantity: { type: DataTypes.DECIMAL(12, 4), allowNull: false, validate: { min: 0.0001 } },
   unit_cost: { type: DataTypes.DECIMAL(12, 4), allowNull: false, validate: { min: 0 } },

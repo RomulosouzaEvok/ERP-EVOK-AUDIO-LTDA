@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ProductionRouteAttributes {
+interface ProductionRouteAttributes {
   id: number;
   product_id: number;
   item_id?: string | null; // UUID (Fase 4.8 expand-contract)

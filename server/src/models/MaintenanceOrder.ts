@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface MaintenanceOrderAttributes {
+interface MaintenanceOrderAttributes {
   id: number;
   order_number: string;
   asset_id: number;

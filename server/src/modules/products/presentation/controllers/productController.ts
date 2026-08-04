@@ -7,6 +7,7 @@ const CreateProductUseCase = require('../../application/use-cases/CreateProductU
 const UpdateProductUseCase = require('../../application/use-cases/UpdateProductUseCase');
 const DeactivateProductUseCase = require('../../application/use-cases/DeactivateProductUseCase');
 const RegisterProductMovementUseCase = require('../../application/use-cases/RegisterProductMovementUseCase');
+const GetProductStockByWarehouseUseCase = require('../../application/use-cases/GetProductStockByWarehouseUseCase');
 const UploadEntityPhotoUseCase = require('../../../../shared/application/UploadEntityPhotoUseCase');
 const GenerateEntityQrCodeUseCase = require('../../../../shared/application/GenerateEntityQrCodeUseCase');
 const { createProductSchema, updateProductSchema, productMovementSchema, handleZodError } = require('../validators/productValidators');
@@ -55,6 +56,27 @@ exports.getById = async (req, res, next) => {
     const useCase = new GetProductByIdUseCase(productRepository);
     const product = await useCase.execute({ id: req.params.id });
     res.json({ success: true, data: product });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/products/:id/stock-by-warehouse` — saldo de um produto
+ * específico, detalhado por depósito (Bloco 4, docs/governance/TODO.md).
+ * Protegido com `authorizeModule('estoque')` (nível de leitura), mesmo
+ * padrão do endpoint de listagem `GET /api/inventory/warehouse-stock` —
+ * consulta de saldo é operação do módulo de estoque, mesmo estando
+ * aninhada sob `/api/products`.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.getStockByWarehouse = async (req, res, next) => {
+  try {
+    const useCase = new GetProductStockByWarehouseUseCase(productRepository);
+    const result = await useCase.execute({ id: req.params.id });
+    res.json({ success: true, data: result });
   } catch (error) { next(error); }
 };
 

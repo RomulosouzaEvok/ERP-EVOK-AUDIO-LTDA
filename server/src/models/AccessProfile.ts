@@ -24,7 +24,7 @@ import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
 /** @interface Atributos da entidade AccessProfile */
-export interface AccessProfileAttributes {
+interface AccessProfileAttributes {
   id: number;
   nome: string;
   descricao: string | null;
@@ -35,7 +35,7 @@ export interface AccessProfileAttributes {
 }
 
 /** @interface Atributos para criação (id opcional) */
-export interface AccessProfileCreationAttributes {
+interface AccessProfileCreationAttributes {
   id?: number;
   nome: string;
   descricao?: string | null;

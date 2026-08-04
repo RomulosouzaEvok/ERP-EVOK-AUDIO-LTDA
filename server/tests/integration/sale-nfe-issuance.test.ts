@@ -14,6 +14,10 @@ describeIntegration('Emissao de NF-e de venda (provedor mock)', () => {
     const token = authToken();
     const productId = Number(process.env.TEST_PRODUCT_ID);
 
+    // NOTA: a venda ja nasce confirmada e debita o deposito ACABADOS na
+    // criacao (dual-write, Bloco 4) - o fixture global (scripts/
+    // run-api-suite.cjs `ensureFixtures`) garante saldo generoso la para
+    // TEST_PRODUCT_ID.
     const sale = await api()
       .post('/api/sales')
       .set('Authorization', `Bearer ${token}`)
@@ -68,6 +72,10 @@ describeIntegration('Emissao de NF-e de venda (provedor mock)', () => {
     const token = authToken();
     const productId = Number(process.env.TEST_PRODUCT_ID);
 
+    // NOTA: a venda ja nasce confirmada e debita o deposito ACABADOS na
+    // criacao (dual-write, Bloco 4) - o fixture global (scripts/
+    // run-api-suite.cjs `ensureFixtures`) garante saldo generoso la para
+    // TEST_PRODUCT_ID.
     const sale = await api()
       .post('/api/sales')
       .set('Authorization', `Bearer ${token}`)

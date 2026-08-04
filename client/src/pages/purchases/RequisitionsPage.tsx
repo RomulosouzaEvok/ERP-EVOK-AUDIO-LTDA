@@ -1,10 +1,10 @@
 import * as React from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2, Eye, ShoppingCart } from 'lucide-react';
+import { Plus, Trash2, Eye, ShoppingCart, ClipboardList } from 'lucide-react';
 
 import * as requisitionsApi from '@/api/purchaseRequisitions';
 import * as suppliersApi from '@/api/suppliers';
@@ -174,8 +174,16 @@ export default function RequisitionsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Requisições de compra</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <ClipboardList className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Requisições de compra</h1>
+            <p className="text-sm text-muted-foreground">Origem da cadeia de suprimentos, com rastreabilidade completa.</p>
+          </div>
+        </div>
         {canWrite && (
           <Dialog
             open={open}
@@ -331,7 +339,7 @@ export default function RequisitionsPage() {
           {data?.data.map((requisition) => (
             <TableRow
               key={requisition.id}
-              className="cursor-pointer hover:bg-accent/50"
+              className="cursor-pointer border-l-4 border-l-transparent transition-colors hover:border-l-brand hover:bg-brand/5"
               onClick={() => setDetailsRequisition(requisition)}
             >
               <TableCell>{requisition.handoff_signal && <HandoffDot signal={requisition.handoff_signal} />}</TableCell>
@@ -477,7 +485,7 @@ function RequisitionDetailSheet({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Item</TableHead>
-                    <TableHead>Qtd.</TableHead>
+                    <TableHead className="text-right">Qtd.</TableHead>
                     <TableHead>Unid.</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -485,7 +493,7 @@ function RequisitionDetailSheet({
                   {items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>{item.item ? `${item.item.codigo} — ${item.item.descricao}` : item.item_id}</TableCell>
-                      <TableCell>{Number(item.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{Number(item.quantity)}</TableCell>
                       <TableCell>{item.unit ?? '-'}</TableCell>
                     </TableRow>
                   ))}
@@ -609,7 +617,7 @@ function ConvertRequisitionDialog({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Item</TableHead>
-                    <TableHead>Qtd.</TableHead>
+                    <TableHead className="text-right">Qtd.</TableHead>
                     <TableHead>Unid.</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -617,7 +625,7 @@ function ConvertRequisitionDialog({
                   {items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>{item.item ? `${item.item.codigo} — ${item.item.descricao}` : item.item_id}</TableCell>
-                      <TableCell>{Number(item.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{Number(item.quantity)}</TableCell>
                       <TableCell>{item.unit ?? '-'}</TableCell>
                     </TableRow>
                   ))}

@@ -12,7 +12,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface WorkCenterAttributes {
+interface WorkCenterAttributes {
   id: number;
   code: string;
   name: string;
@@ -20,6 +20,7 @@ export interface WorkCenterAttributes {
   machines_count: number;
   capacity_hours_per_day: number;
   efficiency_factor: number;
+  cost_per_hour: number;
   active: boolean;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
@@ -33,6 +34,7 @@ const WorkCenter = sequelize.define('WorkCenter', {
   machines_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1, comment: 'Quantidade de maquinas/recursos identicos no centro' },
   capacity_hours_per_day: { type: DataTypes.DECIMAL(6, 2), allowNull: false, defaultValue: 8, comment: 'Horas produtivas por dia, por maquina' },
   efficiency_factor: { type: DataTypes.DECIMAL(5, 4), allowNull: false, defaultValue: 1, comment: 'Fator de eficiencia historica (0 a 1)' },
+  cost_per_hour: { type: DataTypes.DECIMAL(18, 6), allowNull: false, defaultValue: 0, comment: 'Custo de mao-de-obra + operacao por hora produtiva deste centro (BRL/h), usado no custeio real de producao' },
   active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
 }, {
   tableName: 'work_centers',

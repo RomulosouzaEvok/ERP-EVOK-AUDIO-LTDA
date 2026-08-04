@@ -18,15 +18,19 @@ class InventoryCountEntity extends Entity {
    * @param {Object} props - Propriedades da contagem.
    * @param {number} [props.id]
    * @param {'cycle'|'full'|'spot'} [props.count_type] - Tipo de contagem (default `cycle`).
+   * @param {number} props.warehouse_id - Id do depósito ao qual TODA a contagem pertence
+   *   (obrigatório para contagens novas — Bloco 4, migration `20260804-000006`; a coluna é
+   *   nullable no banco apenas por causa de 4 linhas legadas pré-Bloco 4, já backfilled).
    * @param {string} [props.location] - Local/área física contada.
    * @param {string} [props.notes] - Observações gerais.
    * @param {number} props.created_by - Id do usuário que criou a contagem.
-   * @throws {ValidationError} Se `count_type` for inválido ou `created_by` estiver ausente.
+   * @throws {ValidationError} Se `count_type` for inválido, `warehouse_id` ou `created_by` estiverem ausentes.
    */
   constructor(props) {
     super({ id: props.id, createdAt: props.createdAt, updatedAt: props.updatedAt });
 
     this.count_type = props.count_type || 'cycle';
+    this.warehouse_id = props.warehouse_id;
     this.location = props.location ?? null;
     this.notes = props.notes ?? null;
     this.created_by = props.created_by;
@@ -47,16 +51,23 @@ class InventoryCountEntity extends Entity {
     if (!this.created_by) {
       throw new ValidationError('Usuário responsável pela criação (created_by) é obrigatório.');
     }
+    // Bloco 4 (migration 20260804-000006): warehouse_id é nullable no banco
+    // apenas para preservar o histórico de 4 contagens legadas pré-Bloco 4.
+    // Toda contagem NOVA deve obrigatoriamente informar o depósito contado.
+    if (this.warehouse_id === undefined || this.warehouse_id === null || Number.isNaN(Number(this.warehouse_id))) {
+      throw new ValidationError('Depósito (warehouse_id) é obrigatório para criar uma contagem de inventário.');
+    }
   }
 
   /**
    * Serializa a entidade para os parâmetros aceitos por `InventoryCountRepository.create`.
    *
-   * @returns {{ count_type: string, location: string|null, notes: string|null, created_by: number, status: 'draft' }}
+   * @returns {{ count_type: string, warehouse_id: number, location: string|null, notes: string|null, created_by: number, status: 'draft' }}
    */
   toRepositoryInput() {
     return {
       count_type: this.count_type,
+      warehouse_id: Number(this.warehouse_id),
       location: this.location,
       notes: this.notes,
       created_by: this.created_by,

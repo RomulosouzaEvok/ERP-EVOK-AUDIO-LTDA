@@ -1,16 +1,17 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Camera, QrCode, Truck } from 'lucide-react';
+import { Plus, Camera, QrCode, Truck, Warehouse } from 'lucide-react';
 import { ArrowRight } from 'lucide-react';
 
 import * as productsApi from '@/api/products';
 import * as itemsApi from '@/api/items';
 import * as itemSuppliersApi from '@/api/itemSuppliers';
 import * as suppliersApi from '@/api/suppliers';
+import * as warehousesApi from '@/api/warehouses';
 import { extractApiErrorMessage, getUploadUrl } from '@/api/httpClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,6 +65,7 @@ export default function ProductsPage() {
   const [photoProductId, setPhotoProductId] = React.useState<number | null>(null);
   const [qrCodeProduct, setQrCodeProduct] = React.useState<productsApi.Product | null>(null);
   const [suppliersProduct, setSuppliersProduct] = React.useState<productsApi.Product | null>(null);
+  const [stockProduct, setStockProduct] = React.useState<productsApi.Product | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { data, isLoading, isError } = useQuery({
@@ -287,6 +289,9 @@ export default function ProductsPage() {
                   <Button size="sm" variant="outline" onClick={() => setSuppliersProduct(product)}>
                     <Truck className="size-4" /> Fornecedores
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => setStockProduct(product)}>
+                    <Warehouse className="size-4" /> Saldo por depósito
+                  </Button>
                   {canWrite && product.status === 'active' && (
                     <Button
                       size="sm"
@@ -327,6 +332,7 @@ export default function ProductsPage() {
       )}
 
       <ProductSuppliersDialog product={suppliersProduct} onClose={() => setSuppliersProduct(null)} />
+      <ProductWarehouseStockDialog product={stockProduct} onClose={() => setStockProduct(null)} />
     </div>
   );
 }
@@ -678,5 +684,66 @@ function ProductSuppliersDialog({ product, onClose }: { product: productsApi.Pro
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Dialog "Saldo por depósito": consulta rápida e somente leitura do saldo do
+ * produto em cada depósito ativo (`GET /api/inventory/warehouse-stock?product_id=`,
+ * Bloco 4, UC-42). Não é elaborado por design — só uma tabela
+ * depósito × quantidade, visível ao abrir a ficha do produto.
+ */
+function ProductWarehouseStockDialog({
+  product,
+  onClose,
+}: {
+  product: productsApi.Product | null;
+  onClose: () => void;
+}) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['warehouse-stock-by-product', product?.id],
+    queryFn: () => warehousesApi.listWarehouseStock({ product_id: product!.id, limit: 200 }),
+    enabled: Boolean(product),
+  });
+
+  return (
+    <Dialog open={Boolean(product)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Saldo por depósito — {product?.code} · {product?.name}</DialogTitle>
+        </DialogHeader>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Depósito</TableHead>
+              <TableHead>Saldo</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading && <TableSkeletonRows columns={2} />}
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={2} className="text-center text-destructive">
+                  Não foi possível carregar o saldo por depósito. Tente novamente.
+                </TableCell>
+              </TableRow>
+            )}
+            {data?.data.map((row) => (
+              <TableRow key={row.id}>
+                <TableCell>{row.warehouse?.name ?? row.warehouse_id}</TableCell>
+                <TableCell>{Number(row.quantity)}</TableCell>
+              </TableRow>
+            ))}
+            {!isLoading && !isError && data?.data.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={2} className="text-center text-muted-foreground">
+                  Nenhum saldo registrado para este produto em nenhum depósito.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </DialogContent>
+    </Dialog>
   );
 }

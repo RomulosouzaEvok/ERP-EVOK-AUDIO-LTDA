@@ -11,7 +11,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ProductDrawingAttributes {
+interface ProductDrawingAttributes {
   id: number;
   product_id: number;
   drawing_number: string;

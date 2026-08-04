@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router';
 
 import { ProtectedRoute, RoleRoute, ModuleRoute } from '@/routes/ProtectedRoute';
 import AppLayout from '@/layouts/AppLayout';
@@ -16,6 +16,7 @@ const InventoryCountsPage = lazy(() => import('@/pages/products/InventoryCountsP
 const InventoryPage = lazy(() => import('@/pages/logistics/InventoryPage'));
 const ReceivingPage = lazy(() => import('@/pages/logistics/ReceivingPage'));
 const ShippingPage = lazy(() => import('@/pages/logistics/ShippingPage'));
+const WarehousesPage = lazy(() => import('@/pages/logistics/WarehousesPage'));
 const ClientsPage = lazy(() => import('@/pages/sales/ClientsPage'));
 const SalesPage = lazy(() => import('@/pages/sales/SalesPage'));
 const SuppliersPage = lazy(() => import('@/pages/purchases/SuppliersPage'));
@@ -106,6 +107,16 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <ShippingPage />
+                </Suspense>
+              }
+            />
+          </Route>
+          <Route element={<ModuleRoute module="estoque" />}>
+            <Route
+              path="/logistics/warehouses"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <WarehousesPage />
                 </Suspense>
               }
             />

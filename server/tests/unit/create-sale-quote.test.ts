@@ -15,6 +15,12 @@ jest.mock('../../src/services/inventoryService', () => ({
   receive: jest.fn(async () => ({ product: { id: 10, quantity: 10 } })),
 }));
 
+jest.mock('../../src/services/warehouseStockService', () => ({
+  getWarehouseByCode: jest.fn(async (code) => ({ id: code === 'ACABADOS' ? 2 : 1, code })),
+  addToWarehouse: jest.fn(async () => ({})),
+  removeFromWarehouse: jest.fn(async () => ({})),
+}));
+
 import CreateSaleUseCase = require('../../src/modules/sales/application/use-cases/CreateSaleUseCase');
 
 const InventoryService = require('../../src/services/inventoryService');

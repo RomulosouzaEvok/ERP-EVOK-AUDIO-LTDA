@@ -1,6 +1,7 @@
 import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError } from '../../../../errors';
-import AccessProfilesRepository, { AccessProfileListItem } from '../../domain/repositories/AccessProfilesRepository';
+import AccessProfilesRepository from '../../domain/repositories/AccessProfilesRepository';
+import { AccessProfileListItem } from '../../domain/repositories/AccessProfilePermissionInput';
 
 interface Input {
   id: number;

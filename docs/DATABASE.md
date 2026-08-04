@@ -315,9 +315,15 @@
 | contact_phone | VARCHAR(20) | - | Tel. contato |
 | payment_terms | VARCHAR(100) | - | Cond. pagamento |
 | delivery_time | INT | DEFAULT 15 | Prazo entrega |
-| rating | INT | DEFAULT 3 | Avaliação (1-5) |
+| rating | INT | DEFAULT 3 | Avaliação (1-5) digitada manualmente no cadastro do fornecedor — **não é** o campo usado pelo cálculo automático abaixo |
+| quality_score | DECIMAL(5,2) | NOT NULL, DEFAULT 100.00 | Avaliação **calculada**, 0-100, item 8 do levantamento (realimentação de rating a partir de RNCs). Nunca aceito via payload de `POST/PUT /api/suppliers` (schema Zod `.strict()` sem o campo) — só é escrito por `CreateNonConformityUseCase.recalculateSupplierQualityScore`, na mesma transação da criação de uma RNC que referencia um lote (`lot_number`+`product_id`) cujo `lot_controls.supplier_id` está preenchido. Fórmula: `MAX(0, 100 - (rncs_count / receipts_count * 100))`, onde `receipts_count = COUNT(lot_controls WHERE supplier_id = X)` e `rncs_count = COUNT(non_conformities WHERE supplier_id = X)`. Sem nenhum recebimento (`receipts_count = 0`) o valor permanece no default neutro 100.00 (nenhum `UPDATE` é emitido). RNCs sem lote referenciado, ou cujo lote não tem fornecedor (ex.: lote de produção interna), não alteram nenhum `quality_score` |
 | status | ENUM('active','inactive') | DEFAULT 'active' | Status |
 | notes | TEXT | - | Observações |
+
+**Migration:** `server/migrations/20260804-000011-add-supplier-quality-score.cjs`
+— adiciona `quality_score` (`addColumn`, default `100.00`, sem backfill
+retroativo a partir de RNCs históricas: o cálculo passa a valer só
+prospectivamente, a partir da próxima RNC criada para cada fornecedor).
 
 ### Tabela: `purchase_orders` (Pedidos de Compra)
 | Coluna | Tipo | Restrições | Descrição |
@@ -346,6 +352,25 @@
 | total_price | DECIMAL(10,2) | NOT NULL | Total |
 | received_quantity | DECIMAL(10,2) | DEFAULT 0 | Qtd recebida |
 | status | ENUM('pending','partial','received','canceled') | DEFAULT 'pending' | Status item |
+
+### Tabela: `items` (Item Mestre Canônico) — coluna `conversao_automatica`
+Novo campo do núcleo `items` (roadmap pós-Go-Live item 3, "fechar o ciclo
+MRP — plano → requisição/OP automático", ver
+`docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 3):
+
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| conversao_automatica | BOOLEAN | NOT NULL, DEFAULT false | Opt-in por item: quando `true`, ordens planejadas `RASCUNHO`/`APROVADA` deste item, geradas pelo MRP (`GenerateMrpPlanUseCase`), são convertidas automaticamente em Requisição de Compra (`origin='mrp_auto'`) na mesma transação, sem intervenção do planejador. Itens sem a flag preservam o fluxo manual (UC-24). |
+
+**Migration:** `server/migrations/20260804-000010-add-mrp-auto-convert-to-items.cjs`
+(inclui índice parcial `idx_items_conversao_automatica WHERE conversao_automatica = true`).
+
+**Decisão de design:** ver justificativa completa no cabeçalho da migration
+e em `docs/projeto/04-USE_CASES.md` (UC-24b) — comprar automaticamente sem
+nenhuma revisão humana para todo item foi descartado por risco de negócio;
+optou-se por opt-in explícito por item em vez de flag/threshold genérico
+por categoria, mantendo o mesmo nível de granularidade e rastreabilidade
+já usado em `items.fornecedor_padrao_id`.
 
 ### Tabela: `item_suppliers` (Catálogo Item × Fornecedor)
 | Coluna | Tipo | Restrições | Descrição |
@@ -384,10 +409,16 @@ item/fornecedor).
 | machines_count | INT | DEFAULT 1, NOT NULL | Quantidade de máquinas/recursos idênticos no centro |
 | capacity_hours_per_day | NUMERIC(6,2) | DEFAULT 8, NOT NULL | Horas produtivas por dia, por máquina |
 | efficiency_factor | NUMERIC(5,4) | DEFAULT 1, NOT NULL | Fator de eficiência histórica (0 a 1) |
+| cost_per_hour | NUMERIC(18,6) | DEFAULT 0, NOT NULL, CHECK (>= 0) | Custo de mão-de-obra + operação por hora produtiva do centro (BRL/h) — usado no custeio real de produção |
 | active | BOOLEAN | DEFAULT true, NOT NULL | Soft delete |
 | created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
 
-**Constraints:** `UNIQUE(code)`.
+**Constraints:** `UNIQUE(code)`; `CHECK (cost_per_hour >= 0)`.
+
+**Migration:** `server/migrations/20260804-000007-add-cost-per-hour-work-centers.cjs`
+— adiciona `cost_per_hour` (default `0`, sem impacto retroativo; fábricas
+configuram a taxa por centro depois via tela/endpoint administrativo, fora
+do escopo desta migration).
 
 ### Tabela: `work_center_shifts` (Turnos por Centro de Trabalho)
 | Coluna | Tipo | Restrições | Descrição |
@@ -504,12 +535,19 @@ ALTER TYPE — `origin` já era VARCHAR livre).
 | curve_data | JSONB | - | Dados de curva (ex.: frequência x SPL) |
 | notes | TEXT | - | Observações |
 | non_conformity_id | INT | FK → non_conformities.id, ON DELETE SET NULL | NC gerada quando reprovado |
+| consumed_quantity | NUMERIC(18,6) | NULL | Quantidade consumida (destruída) do produto testado em teste destrutivo (Bloco 4/UC-42-E). Quando `> 0`, debitada automaticamente do Depósito `LABORATORIO` na **mesma transação Sequelize** do registro do teste (`CreateAcousticTestUseCase` → `WarehouseStockService.removeFromWarehouse`). `NULL`/`0` = teste não destrutivo, sem débito. |
 | created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
 
 **Índices:** `product_id`, `test_type`, `test_date`, `passed`, `serial_number`.
 
-**Migration:** `server/migrations/20260803-000006-create-acoustic-tests.cjs`
+**Migrations:** `server/migrations/20260803-000006-create-acoustic-tests.cjs`
 — cria `acoustic_test_results` (schema estático, sem backfill).
+`server/migrations/20260804-000004-add-consumed-quantity-acoustic-tests.cjs`
+— adiciona `consumed_quantity` (criada como `NUMERIC(12,4)`, corrigida no
+dia seguinte por `20260804-000005-fix-consumed-quantity-precision.cjs`
+para `NUMERIC(18,6)` — padrão obrigatório do projeto para toda coluna de
+quantidade fracionada, achado de auditoria DBA; coluna estava vazia, sem
+dados, `changeColumn` seguro).
 
 ### Tabela: `access_profiles` (Perfis de Acesso Configuráveis por Área)
 Origem: `docs/governance/TODO.md` Bloco 1.1, `docs/business/BUSINESS_RULES.md`
@@ -866,11 +904,14 @@ padrão, ou `LABORATORIO` se `warehouse_code` for informado no payload),
 `ChangeProductionOrderStatusUseCase` (consumo de componentes sai de
 `INSUMOS`, produto acabado concluído entra em `ACABADOS`),
 `CreateInventoryMovementUseCase` (movimentação manual, `warehouse_code`
-opcional, default `INSUMOS`) e o fluxo completo de transferência entre
+opcional, default `INSUMOS`), o fluxo completo de transferência entre
 depósitos (`POST /api/inventory/transfers` → `pending` →
-`PUT .../approve|reject`). **Ainda não integrado:** expedição de venda
-(Fluxo D do UC-42) e débito automático de teste destrutivo de
-laboratório (Fluxo E/UC-42-E) — ver `docs/governance/TODO.md` Bloco 4.2.
+`PUT .../approve|reject`), CRUD de depósito (`POST`/`PUT
+/api/inventory/warehouses`, Bloco 4.3) e débito automático de teste
+destrutivo de laboratório (Fluxo E/UC-42-E, `CreateAcousticTestUseCase`
++ `acoustic_test_results.consumed_quantity`). **Ainda não integrado:**
+expedição de venda (Fluxo D do UC-42) — ver `docs/governance/TODO.md`
+Bloco 4.2.
 
 ### Tabela `warehouses`
 
@@ -934,6 +975,16 @@ mesmo valor, na mesma transação atômica (§12 item 4).
    evita poluir a tabela com saldos zerados).
 2. Todo `lot_controls` existente recebe `warehouse_id = INSUMOS`.
 
+**Script de validação pós-backfill (read-only, idempotente):**
+`server/src/scripts/backfill/04l_product_warehouse_stock_validation.ts`
+(`npx tsx server/src/scripts/backfill/04l_product_warehouse_stock_validation.ts`
+a partir de `server/`). Confere 4 blocos — cobertura (todo produto com
+`quantity > 0` tem ao menos uma linha em `product_warehouse_stock`),
+integridade referencial (nenhuma linha órfã), a invariante de soma acima
+(para todos os produtos, não apenas o snapshot do backfill) e ausência de
+saldo negativo — imprime relatório no console e encerra com exit code `1`
+se qualquer bloco falhar (`0` se tudo passar).
+
 ### `down()` (`20260804-000001`)
 
 Remove, em ordem reversa: índice e coluna `warehouse_id` de
@@ -985,11 +1036,14 @@ mesma justificativa de `20260803-000002-add-quarantine-lot-status.cjs`).
 | Método | Rota | Autorização | Descrição |
 |---|---|---|---|
 | `GET` | `/api/inventory/warehouses` | `authorizeModule('estoque')` | Lista depósitos ativos. |
-| `GET` | `/api/inventory/warehouse-stock?product_id=&warehouse_code=&page=&limit=` | `authorizeModule('estoque')` | Saldo por par produto×depósito, com `product`/`warehouse` incluídos. |
+| `POST` | `/api/inventory/warehouses` | `authorizeModule('estoque', 'approve')` | Cria depósito (`{ code, name, description?, active? }`). `code` normalizado para uppercase; unicidade garantida pela app (`findOne` prévio) **e** pela constraint `UNIQUE` de `warehouses.code` no banco (`warehouses_code_key`) — corrida concorrente vira 409 via `SequelizeUniqueConstraintError` → `errorHandler` genérico, não 500. |
+| `PUT` | `/api/inventory/warehouses/:id` | `authorizeModule('estoque', 'approve')` | Edita `name`/`description`/`active`. `code` nunca é editável por este endpoint (é a chave do dual-write, `WarehouseStockService.getWarehouseByCode`). |
+| `GET` | `/api/inventory/warehouse-stock?product_id=&warehouse_code=&page=&limit=` | `authorizeModule('estoque')` | Saldo por par produto×depósito, com `product`/`warehouse` incluídos. Consulta usa o índice `UNIQUE (product_id, warehouse_id)` de `product_warehouse_stock` (cobre o filtro composto, sem scan completo). |
 | `GET` | `/api/inventory/transfers?status=` | `authorizeModule('estoque')` | Lista transferências (filtro opcional de status). |
 | `POST` | `/api/inventory/transfers` | `authorizeModule('estoque', 'operate')` | Solicita transferência (`{ product_id, from_warehouse_code, to_warehouse_code, quantity, reason }`). Cria em `status='pending'`, não altera saldo. |
 | `PUT` | `/api/inventory/transfers/:id/approve` | `authorizeModule('estoque', 'approve')` | Aprova e executa a transferência atomicamente (débito origem + crédito destino + 2 `InventoryMovement`). 422 didático se saldo de origem insuficiente no momento da aprovação. |
 | `PUT` | `/api/inventory/transfers/:id/reject` | `authorizeModule('estoque', 'approve')` | Rejeita (`body.reason` obrigatório), não altera saldo. |
+| `GET` | `/api/products/:id/stock-by-warehouse` | `authorizeModule('estoque')` | **Novo.** Roteado em `server/src/modules/products/presentation/routes/products.ts` (não em `inventory.ts`). Saldo de UM produto específico por depósito — retorna TODOS os depósitos ativos, inclusive com `quantity: 0` quando o produto não tem linha em `product_warehouse_stock` (decisão de UI, ver `docs/API.md`). |
 
 **Integração com endpoints existentes:**
 - `POST /api/purchases/:id/receive` — aceita `warehouse_code` opcional
@@ -997,4 +1051,264 @@ mesma justificativa de `20260803-000002-add-quarantine-lot-status.cjs`).
 - `POST /api/inventory/movements` — aceita `warehouse_code` opcional
   (string livre validada contra `warehouses.code` em runtime via
   `getWarehouseByCode`, default `'INSUMOS'`).
+
+### Coluna nova: `inventory_counts.warehouse_id` (migration `20260804-000006`)
+
+**Migration:** `server/migrations/20260804-000006-add-warehouse-id-to-inventory-counts.cjs`
+
+Gap identificado após o Bloco 4: o inventário cíclico (`inventory_counts` +
+`inventory_count_items`) não tinha nenhum escopo de depósito, e a
+aprovação da contagem ajustava o saldo **global** de `Product.quantity`
+em vez do saldo por depósito (`ProductWarehouseStock`). Esta migration
+resolveu a fatia de schema; o gap de aplicação foi fechado em seguida
+(mesma sessão): `CreateInventoryCountUseCase` agora exige `warehouse_id`
+no payload (400 se ausente) e `ApproveInventoryCountUseCase` ajusta o
+saldo do depósito específico da contagem via `WarehouseStockService`,
+além de manter `Product.quantity` (dual-write legado via
+`InventoryService.adjust`) — ver "Contrato" abaixo, agora marcado como
+implementado.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `inventory_counts.warehouse_id` | INTEGER FK → `warehouses.id` (`ON DELETE RESTRICT`, `ON UPDATE CASCADE`) | **Nullable.** Depósito ao qual **toda a contagem** pertence (escopo no cabeçalho, não por item — uma contagem física não mistura depósitos). Índice `idx_inventory_counts_warehouse_id`. |
+
+**Por que nullable e não `NOT NULL`:** em desenvolvimento a tabela já
+tinha 4 linhas reais (`CC-2026-0001..0004`) criadas antes do conceito de
+depósito existir, 2 delas já com `status='adjusted'` (já impactaram
+`Product.quantity`). Não é seguro reescrever histórico auditável para
+inferir um depósito que nunca existiu. Segue-se o mesmo padrão
+expand-contract já usado em `inventory_movements.warehouse_id` e
+`lot_controls.warehouse_id` (migration `20260804-000001`): coluna
+nullable no banco + backfill das linhas legadas.
+
+## Custeio de Produção — Mão-de-Obra e Overhead (roadmap pós-Go-Live, item 7/9)
+
+Fecha o gap "custeio real vs padrão não incorpora mão-de-obra nem
+overhead" listado em `docs/LEVANTAMENTO_ERP_2026-08-02.md`. Schema/modelagem
+e cálculo (uso destes campos em `costingService.ts` /
+`ChangeProductionOrderStatusUseCase`) implementados na mesma frente — ver
+"Cálculo implementado" ao final desta seção.
+
+### Estado anterior (o que já existia)
+
+- `product_cost_ledgers` já registra custo real ponderado por produto,
+  com `source_type` ENUM `purchase|production|adjustment`. O tipo
+  `'production'` hoje cobre **apenas material** — `unitCost` é calculado
+  em `ChangeProductionOrderStatusUseCase.completeOrder()` como
+  `explosion.total_cost / producedQty` (custo de BOM explodida), sem
+  nenhuma parcela de mão-de-obra ou overhead.
+- `production_order_tracking` já tem `started_at`/`finished_at` por etapa
+  (`production_route_step_id`) e `operator_id` — dá para derivar horas
+  trabalhadas por etapa, mas não havia nenhuma taxa de custo associada.
+- `work_centers` já existia (capacidade finita: `capacity_hours_per_day`,
+  `efficiency_factor`), mas sem taxa de custo por hora.
+
+### Decisão de modelagem
+
+1. **Mão-de-obra:** `work_centers.cost_per_hour` (NUMERIC(18,6), novo,
+   default `0`) — taxa de custo (mão-de-obra + operação da máquina) por
+   hora produtiva daquele centro. É o dado mais natural para o cálculo,
+   porque `production_route_steps.work_center_id` já vincula a etapa
+   executada ao centro de trabalho, e `production_order_tracking` já tem
+   `started_at`/`finished_at` por etapa — a fórmula fica
+   `horas_apontadas × work_centers.cost_per_hour`, sem novas tabelas.
+   Como `production_route_steps.work_center_id` é nullable (coluna legada
+   `work_center` texto livre ainda em uso — fase expand, ver seção
+   `work_centers` acima), foi adicionado também
+   `production_cost_settings.default_labor_rate_per_hour` como taxa de
+   fallback para quando a etapa não tem centro estruturado vinculado.
+
+2. **Overhead (rateio de despesas indiretas de fábrica):** decidido pela
+   abordagem mais simples praticável com os dados existentes — **uma
+   taxa global percentual configurável**, não um sistema completo de
+   centros de custo (que exigiria alocar cada despesa indireta real a
+   centros/produtos, fora de escopo do roadmap atual). Nova tabela
+   singleton `production_cost_settings` (mesmo padrão de
+   `company_fiscal_config`: uma única linha, `id=1`, `CHECK (id = 1)`),
+   com:
+   - `overhead_calculation_basis` ENUM `material_labor|labor_only|material_only`
+     — sobre qual base o percentual é aplicado (default `material_labor`,
+     o mais comum na literatura de custeio industrial: overhead rateado
+     sobre custo primário = material + mão-de-obra direta).
+   - `overhead_rate_percent` NUMERIC(9,6), default `0`, `CHECK (0..1000)`
+     — percentual do rateio (ex.: `25.5` = 25,5%).
+   - `default_labor_rate_per_hour` NUMERIC(18,6), default `0` — ver item 1.
+
+   **Por que não em `company_fiscal_config`:** aquela tabela é
+   especificamente de dados fiscais do emitente (razão social, CNPJ,
+   NF-e); custeio de produção é um domínio diferente (PCP/manufatura),
+   então uma tabela nova e pequena mantém a coesão do schema sem poluir
+   a config fiscal.
+
+   **Trade-off assumido:** taxa única global, sem versionamento temporal
+   (uma mudança na taxa vale para custeios futuros e passados igualmente,
+   não há "taxa vigente em determinada data"). Aceitável para o nível de
+   maturidade atual do roadmap; se no futuro for necessário overhead por
+   período (ex.: taxa muda todo trimestre por variação de despesas fixas),
+   uma tabela `production_cost_settings_history` com `effective_from`
+   pode substituir o singleton sem quebrar o contrato de leitura (sempre
+   "pegar a config vigente").
+
+3. **Rastreabilidade no ledger:** `product_cost_ledgers.source_type`
+   ganhou dois novos valores de ENUM — `'production_labor'` e
+   `'production_overhead'` — para que o próximo agente possa registrar
+   entradas de ledger **separadas** de material (`'production'`),
+   mão-de-obra e overhead por OP concluída, preservando auditoria
+   granular do custo real (em vez de só um valor agregado).
+
+### Tabela: `production_cost_settings` (Configuração de Custeio — Singleton)
+
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT, `CHECK (id = 1)` | Singleton — sempre `1` |
+| overhead_calculation_basis | ENUM `material_labor\|labor_only\|material_only` | DEFAULT `material_labor`, NOT NULL | Base de cálculo do rateio de overhead |
+| overhead_rate_percent | NUMERIC(9,6) | DEFAULT 0, NOT NULL, `CHECK (0..1000)` | Percentual de overhead aplicado sobre a base escolhida |
+| default_labor_rate_per_hour | NUMERIC(18,6) | DEFAULT 0, NOT NULL, `CHECK (>= 0)` | Taxa de mão-de-obra/h de fallback (etapa sem `work_center_id`) |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case) |
+
+Seed automático da linha `id=1` com valores neutros (`0%`) na própria
+migration (`ON CONFLICT (id) DO NOTHING`) — a fábrica configura a taxa
+real depois via tela/endpoint administrativo (fora do escopo desta fatia
+de schema).
+
+**Migration:** `server/migrations/20260804-000008-create-production-cost-settings.cjs`
+
+### Alteração em `work_centers`
+
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| cost_per_hour | NUMERIC(18,6) | DEFAULT 0, NOT NULL, `CHECK (>= 0)` | Custo de mão-de-obra + operação por hora produtiva do centro (BRL/h) |
+
+**Migration:** `server/migrations/20260804-000007-add-cost-per-hour-work-centers.cjs`
+
+### Alteração em `product_cost_ledgers`
+
+`source_type` ganhou dois valores de ENUM via `ALTER TYPE ... ADD VALUE`
+(fora de transação, mesmo padrão de
+`20260803-000002-add-quarantine-lot-status.cjs`):
+
+| Valor novo | Descrição |
+|---|---|
+| `production_labor` | Custo real de mão-de-obra de uma OP concluída (horas apontadas × `work_centers.cost_per_hour`) |
+| `production_overhead` | Custo real de overhead rateado sobre a OP concluída, conforme `production_cost_settings` |
+
+**Migration:** `server/migrations/20260804-000009-add-labor-overhead-cost-ledger-sources.cjs`
+— rollback é no-op (remover valor de ENUM no Postgres exige recriar o
+tipo inteiro; mesma justificativa das demais migrations de ENUM deste
+projeto).
+
+### Cálculo implementado (item 7/9 — mão-de-obra e overhead)
+
+Implementado em `ChangeProductionOrderStatusUseCase.completeOrder()`
+(`server/src/modules/production/application/use-cases/ChangeProductionOrderStatusUseCase.ts`,
+métodos privados `registerLaborAndOverheadCost`/`calculateLaborCost`/
+`getProductionCostSettings`), na MESMA transação Sequelize da conclusão da
+OP (falha em qualquer etapa reverte a conclusão inteira — nenhuma OP é
+concluída sem custo, nenhum custo é lançado sem conclusão efetiva):
+
+- **Mão-de-obra:** para cada apontamento (`production_order_tracking`) com
+  `status = 'completed'` da OP, `horas = (finished_at - started_at) / 3600000ms`
+  × taxa do centro de trabalho (`production_route_steps.work_center_id` →
+  `work_centers.cost_per_hour`; fallback
+  `production_cost_settings.default_labor_rate_per_hour` quando a etapa não
+  tem centro de trabalho estruturado vinculado). Soma-se o custo de todas
+  as etapas concluídas; **OP sem nenhum apontamento (ou sem etapas
+  `completed`) não lança custo de mão-de-obra** (decisão: nenhuma base
+  horária real para estimar — nenhum custo é preferível a um custo
+  fabricado). OPs concluídas **antes** desta entrega não recebem custo de
+  mão-de-obra retroativo (o cálculo só roda na conclusão, não há
+  reprocessamento de OPs históricas).
+- **Overhead:** `overhead_rate_percent / 100` aplicado sobre a base
+  configurada em `overhead_calculation_basis` (`material_labor` = custo de
+  material + mão-de-obra desta mesma conclusão; `labor_only`;
+  `material_only`).
+- **Lançamentos no ledger:** granulares e separados —
+  `CostingService.registerWeightedAverageCost({..., sourceType: 'production'})`
+  para material (já existia) e o novo
+  `CostingService.registerAdditionalProductionCost({..., sourceType: 'production_labor'|'production_overhead'})`
+  para cada componente, omitidos quando o valor calculado é ~0 (sem
+  apontamento ou taxa de overhead zerada — sem valor de auditoria em
+  lançar uma entrada de custo zero).
+  **Por que não reusar `registerWeightedAverageCost` para os 3
+  lançamentos:** aquele método recalcula a média ponderada completa contra
+  `previousQuantity = product.quantity - quantity`; reaplicar essa fórmula
+  numa 2ª/3ª chamada para o mesmo lote físico já recebido (mão-de-obra,
+  overhead) rediluiria o custo do material já incorporado na 1ª chamada —
+  na prática, descartando parte do custo de material quando o estoque
+  anterior era pequeno ou zero. `registerAdditionalProductionCost` evita o
+  bug somando apenas a contribuição marginal do componente
+  (`quantity * unitCost / product.quantity` já atualizado) sobre o
+  `cost_price` já ajustado pela chamada anterior — o resultado final
+  converge corretamente para `(material + mão-de-obra + overhead) / producedQty`.
+- **Relatório (`GET /reports/cost-variance`):** `SequelizeReportsRepository.findCostVarianceByProduct`
+  (`server/src/modules/reports/infrastructure/sequelize/SequelizeReportsRepository.ts:210`)
+  foi ajustada (query, não schema) — como a conclusão de uma OP grava até 3
+  linhas irmãs em `product_cost_ledgers`
+  (`production`/`production_labor`/`production_overhead`, mesmo `source_id`
+  e mesma `quantity`), uma média ponderada simples somaria a quantidade 3x
+  para o mesmo lote produzido, diluindo `avg_real_cost` incorretamente. A
+  query agora usa uma CTE que colapsa essas 3 linhas por
+  `(product_id, source_id)` em uma única linha por OP concluída (soma
+  `total_cost`, mantém `quantity` uma vez) antes da agregação por produto —
+  `avg_real_cost` passa a refletir o custo real **full cost** (material +
+  mão-de-obra + overhead) corretamente ponderado.
+- **Testes:** `server/tests/unit/production-labor-overhead-cost.test.ts`
+  (matemática de custo com `costingService` real, não mockado — mão-de-obra
+  via `work_centers.cost_per_hour`, fallback global, OP sem apontamento,
+  3 bases de overhead) + suíte existente de ciclo de vida da OP
+  (`production-order-lifecycle.test.ts`, `warehouse-stock.test.ts`)
+  atualizada com os novos mocks de repositório/settings.
+- **OEE:** o cálculo de OEE completo mencionado no item 7/9 do
+  levantamento depende de disponibilidade (tempo parado/downtime) e
+  qualidade (refugo), já parcialmente cobertos por
+  `production_order_tracking.quantity_scrapped`; esta entrega cobre apenas
+  o eixo de custo (mão-de-obra + overhead), não o cálculo de OEE em si.
+
+**Backfill aplicado:** as 4 linhas legadas receberam
+`warehouse_id = INSUMOS` (mesmo depósito padrão usado no backfill do
+Bloco 4 para saldo/lote legado).
+
+**`down()`:** remove o índice e a coluna `warehouse_id` (rollback
+simples, sem efeitos colaterais em outras tabelas).
+
+**Contrato implementado (fatia de aplicação, mesma sessão da migration):**
+- `warehouse_id` é nullable no banco (por causa do legado acima), mas
+  `InventoryCountEntity.validate()` (chamada por `CreateInventoryCountUseCase`)
+  exige o campo no payload — `ValidationError` (400) se ausente. Nenhuma
+  contagem nova pode ser criada sem depósito.
+- Na **aprovação** da contagem (`ApproveInventoryCountUseCase`), cada item
+  com variância diferente de zero agora dispara, na MESMA transação:
+  1. `InventoryService.adjust(...)` — mantém o dual-write legado de
+     `Product.quantity` (hot path do MRP), passando `warehouse_id` para
+     o registro de `InventoryMovement`;
+  2. `WarehouseStockService.addToWarehouse`/`removeFromWarehouse(product_id,
+     count.warehouse_id, quantity, transaction)` — ajusta o saldo do
+     depósito específico contado em `ProductWarehouseStock`.
+  A invariante `Product.quantity` = soma dos saldos por depósito em
+  `ProductWarehouseStock` (Bloco 4) é preservada. Uma contagem
+  `pending_approval` sem `warehouse_id` (só possível em dado legado
+  inconsistente) é rejeitada com `BusinessRuleError` (422) antes de
+  qualquer ajuste.
+- `inventory_count_items` **não** ganhou `warehouse_id` próprio; todo
+  item herda o depósito do cabeçalho `inventory_counts.warehouse_id`.
+- Associação Sequelize já disponível: `InventoryCount.belongsTo(Warehouse, { foreignKey: 'warehouse_id', as: 'warehouse' })`
+  (`server/src/models/index.ts`).
+- Validação Zod da API: `createInventoryCountSchema` em
+  `server/src/modules/inventory/presentation/validators/inventoryValidators.ts`
+  (usada em `inventoryCountController.create`), com `warehouse_id`
+  obrigatório (`z.coerce.number().int().positive()`).
+- **Risco residual conhecido:** se o saldo do depósito específico da
+  contagem for insuficiente para uma baixa (`removeFromWarehouse`), a
+  aprovação falha com 422 didático e faz rollback de toda a transação
+  (nenhum ajuste parcial é persistido) — mesmo que o saldo GLOBAL do
+  produto (soma de todos os depósitos) fosse suficiente. Isso é o
+  comportamento correto/esperado (o ajuste é por depósito, não global),
+  mas pode surpreender o operador se a variância negativa registrada na
+  contagem for maior que o saldo real do depósito contado (ex.: contagem
+  física registrada incorretamente, ou saldo já alterado por outra
+  operação entre o início da contagem e a aprovação). Não há, hoje,
+  nenhum mecanismo de saldo negativo — `removeFromWarehouse` bloqueia
+  antes de deixar o depósito ficar negativo.
+- Testes de invariante: `server/tests/unit/warehouse-invariants.test.ts`,
+  describe "Invariante 3 — contagem ciclica...".
 

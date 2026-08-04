@@ -4,7 +4,7 @@
  * @module modules/production/domain/repositories/ProductionOrderRepository
  */
 
-export interface ProductionListFilters {
+interface ProductionListFilters {
   status?: string;
   product_id?: number;
   priority?: string;

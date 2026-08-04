@@ -150,6 +150,7 @@ server/src/modules/sales/
   - `shipped` → (terminal, sem transições — inclusive não pode ser cancelada; ver bloqueio dedicado abaixo)
   - `canceled` → (terminal, sem transições)
 - Cancelamento (`status: 'canceled'`): restaura o estoque de cada item da venda via `InventoryService.receive` (mesma transação) e cancela (`status: 'canceled'`) todas as `AccountReceivable` da venda que ainda não estejam `paid`/`canceled`.
+- Múltiplos depósitos (Bloco 4, `BUSINESS_RULES.md` §12 item 7): a confirmação de orçamento (`quote → confirmed`) e o cancelamento chamam `warehouseStockService.removeFromWarehouse`/`addToWarehouse` para o depósito `ACABADOS` (resolvido via `getWarehouseByCode('ACABADOS', transaction)`) na MESMA transação em que `InventoryService.consume`/`receive` altera `products.quantity`, preservando a invariante de soma por depósito. **Pendência conhecida:** `CreateSaleUseCase` (criação direta com `status: 'confirmed'`, sem passar por orçamento) ainda não replica esse dual-write — só `ChangeSaleStatusUseCase` foi coberto nesta entrega.
 - Expedição (`status: 'shipped'`, Onda 3): única origem permitida é `invoiced`. Não debita estoque nem altera `AccountReceivable` (isso já ocorreu antes). Uma venda `shipped` **não pode mais ser cancelada** — `ChangeSaleStatusUseCase` lança 422 (`BusinessRuleError`) com mensagem dedicada ("Venda já foi expedida...") antes mesmo de consultar a tabela genérica de transições, para dar uma mensagem mais clara que o erro genérico de transição inválida.
 
 ## Endpoints

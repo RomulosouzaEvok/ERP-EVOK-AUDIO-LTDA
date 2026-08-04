@@ -41,6 +41,7 @@ jest.mock('../../src/services/warehouseStockService', () => ({
 
 jest.mock('../../src/services/costingService', () => ({
   registerWeightedAverageCost: jest.fn(async () => ({ ledger: { id: 1 }, previousCost: 0, newCost: 10, totalCost: 100 })),
+  registerAdditionalProductionCost: jest.fn(async () => ({ ledger: { id: 2 }, previousCost: 10, newCost: 10, totalCost: 0 })),
 }));
 
 jest.mock('../../src/models/index', () => ({
@@ -54,6 +55,14 @@ jest.mock('../../src/models/index', () => ({
   },
   SerialNumber: {
     create: jest.fn(async () => ({ id: 1, serial_number: 'SN-001' })),
+  },
+  ProductionCostSettings: {
+    findByPk: jest.fn(async () => ({
+      overhead_calculation_basis: 'material_labor',
+      overhead_rate_percent: 0,
+      default_labor_rate_per_hour: 0,
+      get: function () { return this; },
+    })),
   },
 }));
 
@@ -143,7 +152,15 @@ describe('Production Order Lifecycle (F.10)', () => {
 
       await expect(
         useCase.execute({ id: 1, status: 'released', user_id: 1 })
-      ).rejects.toBeInstanceOf(BusinessRuleError);
+      ).rejects.toMatchObject({
+        constructor: BusinessRuleError,
+        details: {
+          production_order_id: 1,
+          requested_quantity: 10,
+          max_possible_quantity: 5,
+          missing_items: [{ item_id: 101, missing_quantity: 3 }],
+        },
+      });
 
       expect(productionOrderRepository.update).not.toHaveBeenCalled();
     });
@@ -242,6 +259,7 @@ describe('Production Order Lifecycle (F.10)', () => {
 
       const productionOrderRepository = {
         listTrackingByOrderForUpdate: jest.fn(async () => []),
+        listTrackingWithRouteStepByOrder: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -291,6 +309,7 @@ describe('Production Order Lifecycle (F.10)', () => {
 
       const productionOrderRepository = {
         listTrackingByOrderForUpdate: jest.fn(async () => []),
+        listTrackingWithRouteStepByOrder: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -402,7 +421,12 @@ describe('Production Order Lifecycle (F.10)', () => {
 
       await expect(
         useCase.execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
-      ).rejects.toBeInstanceOf(BusinessRuleError);
+      ).rejects.toMatchObject({
+        constructor: BusinessRuleError,
+        details: {
+          open_steps: [{ id: 2, sequence: 2, status: 'in_progress' }],
+        },
+      });
 
       expect(productionOrderRepository.update).not.toHaveBeenCalled();
     });
@@ -430,7 +454,14 @@ describe('Production Order Lifecycle (F.10)', () => {
 
       await expect(
         useCase.execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
-      ).rejects.toBeInstanceOf(BusinessRuleError);
+      ).rejects.toMatchObject({
+        constructor: BusinessRuleError,
+        details: {
+          last_step_sequence: 2,
+          last_step_quantity_good: 8,
+          quantity_produced: 10,
+        },
+      });
 
       expect(productionOrderRepository.update).not.toHaveBeenCalled();
     });

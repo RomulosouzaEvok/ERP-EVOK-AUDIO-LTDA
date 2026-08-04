@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface AccountPayableAttributes {
+interface AccountPayableAttributes {
   id: number;
   description: string;
   amount: number;

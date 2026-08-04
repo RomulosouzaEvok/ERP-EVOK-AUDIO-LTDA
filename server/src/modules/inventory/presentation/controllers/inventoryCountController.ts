@@ -1,4 +1,5 @@
 const { logAction } = require('../../../../services/auditLogService');
+const { createInventoryCountSchema, handleZodError } = require('../validators/inventoryValidators');
 const SequelizeInventoryCountRepository = require('../../infrastructure/sequelize/SequelizeInventoryCountRepository');
 const CreateInventoryCountUseCase = require('../../application/use-cases/CreateInventoryCountUseCase');
 const StartInventoryCountUseCase = require('../../application/use-cases/StartInventoryCountUseCase');
@@ -38,7 +39,11 @@ function handleError(error, res, next) {
 
 /**
  * `POST /api/inventory-counts` — cria uma nova contagem de inventário
- * (status `draft`), opcionalmente já com itens (`product_ids`).
+ * (status `draft`), opcionalmente já com itens (`product_ids`/`item_ids`).
+ *
+ * Bloco 4 (migration `20260804-000006`): `warehouse_id` é OBRIGATÓRIO no
+ * payload — validado aqui via Zod (400 didático) e reforçado por
+ * `InventoryCountEntity` na camada de aplicação (defesa em profundidade).
  *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -47,10 +52,13 @@ function handleError(error, res, next) {
  */
 exports.create = async (req, res, next) => {
   try {
-    const { count_type, location, notes, product_ids } = req.body;
+    const parsed = createInventoryCountSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { count_type, warehouse_id, location, notes, product_ids, item_ids } = parsed.data;
+
     const useCase = new CreateInventoryCountUseCase(inventoryCountRepository);
     const { count, items } = await useCase.execute({
-      count_type, location, notes, product_ids, created_by: req.user.id
+      count_type, warehouse_id, location, notes, product_ids, item_ids, created_by: req.user.id
     });
 
     logAction(req, {

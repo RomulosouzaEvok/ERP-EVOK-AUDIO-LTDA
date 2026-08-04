@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ClientAttributes {
+interface ClientAttributes {
   id: number;
   name: string;
   cpf_cnpj: string;

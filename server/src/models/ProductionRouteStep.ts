@@ -9,7 +9,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ProductionRouteStepAttributes {
+interface ProductionRouteStepAttributes {
   id: number;
   production_route_id: number;
   sequence: number;

@@ -4,13 +4,13 @@ const { NotFoundError, BusinessRuleError } = require('../../../../errors');
 const { logAction } = require('../../../../services/auditLogService');
 const { AccessProfile } = require('../../../../models/index');
 
-export interface AssignAccessProfileInput {
+interface AssignAccessProfileInput {
   id: number;
   accessProfileId: number | null;
   req: Request;
 }
 
-export interface AssignAccessProfileOutput {
+interface AssignAccessProfileOutput {
   id: number;
   accessProfileId: number | null;
 }

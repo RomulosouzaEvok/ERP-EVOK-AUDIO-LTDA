@@ -10,7 +10,7 @@ import NonConformitiesRepository from '../../domain/repositories/NonConformities
 import { sequelize } from '../../../../config/database';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { LotControl } = require('../../../../models/index');
+const { LotControl, Supplier, NonConformity } = require('../../../../models/index');
 
 const BLOCKABLE_STATUSES = ['available', 'quarantine', 'reserved'];
 
@@ -45,6 +45,18 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
    * assim é criada normalmente — ela pode referenciar um lote externo (ex.:
    * lote de um sistema legado ou de terceiros).
    *
+   * Realimentação de rating de fornecedor (item 8 do levantamento,
+   * pendência deixada em aberto em 2026-08-03): quando o lote referenciado
+   * tem `supplier_id` (veio de um recebimento de compra — ver
+   * `ReceivePurchaseItemsUseCase`), `suppliers.quality_score` daquele
+   * fornecedor é recalculado, na MESMA transação, pela fórmula
+   * `MAX(0, 100 - (rncs_count / receipts_count * 100))`, onde
+   * `receipts_count` = COUNT(lot_controls WHERE supplier_id = X) e
+   * `rncs_count` = COUNT(non_conformities WHERE supplier_id = X). RNCs que
+   * não referenciam lote (ou cujo lote não tem fornecedor, ex.: lote de
+   * produção interna) NÃO alteram nenhum rating — não há como atribuir a
+   * responsabilidade a um fornecedor sem essa rastreabilidade.
+   *
    * @param input - Dados da não conformidade (description obrigatória) e id do usuário autenticado.
    * @returns Não conformidade criada.
    * @throws {ValidationError} Se `description` estiver ausente.
@@ -70,12 +82,29 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
 
     const t = await sequelize.transaction();
     try {
+      // Busca o lote ANTES de criar a RNC (quando referenciado) para poder
+      // herdar o fornecedor do recebimento no campo `supplier_id` da RNC
+      // quando o payload não informar um explicitamente — sem isso,
+      // `non_conformities.supplier_id` ficaria nulo para praticamente todas
+      // as RNCs de recebimento/produção, inviabilizando o cálculo de
+      // `rncs_count` por fornecedor.
+      let lot: any = null;
+      if (lot_number && product_id) {
+        lot = await LotControl.findOne({
+          where: { product_id, lot_number: String(lot_number).trim() },
+          transaction: t,
+          lock: t.LOCK.UPDATE
+        });
+      }
+
+      const resolvedSupplierId = supplier_id ?? (lot ? lot.supplier_id : null) ?? undefined;
+
       const nonConformity = await this.nonConformitiesRepository.create({
         // nc_number segue o mesmo padrao de numeracao de RQ/PO do sistema.
         nc_number: `NC-${Date.now()}`,
         product_id,
         production_order_id,
-        supplier_id,
+        supplier_id: resolvedSupplierId,
         description,
         // Defaults validos conforme os ENUMs do modelo NonConformity.
         severity: severity || 'minor',
@@ -88,21 +117,17 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
         status: 'open'
       }, t);
 
-      if (lot_number && product_id) {
-        const lot = await LotControl.findOne({
-          where: { product_id, lot_number: String(lot_number).trim() },
-          transaction: t,
-          lock: t.LOCK.UPDATE
-        });
+      if (lot && BLOCKABLE_STATUSES.includes(lot.status)) {
+        await lot.update({
+          status: 'blocked',
+          notes: `${lot.notes ? `${lot.notes} | ` : ''}Bloqueado pela RNC #${nonConformity.id}`
+        }, { transaction: t });
+      }
+      // Lote não encontrado (ou já em status terminal, ex.: 'consumed'):
+      // segue sem erro — a RNC pode referenciar um lote externo.
 
-        if (lot && BLOCKABLE_STATUSES.includes(lot.status)) {
-          await lot.update({
-            status: 'blocked',
-            notes: `${lot.notes ? `${lot.notes} | ` : ''}Bloqueado pela RNC #${nonConformity.id}`
-          }, { transaction: t });
-        }
-        // Lote não encontrado (ou já em status terminal, ex.: 'consumed'):
-        // segue sem erro — a RNC pode referenciar um lote externo.
+      if (lot && lot.supplier_id) {
+        await this.recalculateSupplierQualityScore(lot.supplier_id, t);
       }
 
       await t.commit();
@@ -111,6 +136,36 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
       await t.rollback();
       throw error;
     }
+  }
+
+  /**
+   * Recalcula `suppliers.quality_score` de forma síncrona, na transação
+   * informada, a partir da taxa de RNCs por recebimentos do fornecedor.
+   *
+   * Fórmula: `quality_score = MAX(0, 100 - (rncs_count / receipts_count * 100))`.
+   * Sem nenhum recebimento (`receipts_count === 0`) o cálculo não é
+   * determinável — o campo é deixado no default neutro (100) e nenhum
+   * `UPDATE` é emitido.
+   *
+   * @param supplierId - Id do fornecedor (`lot_controls.supplier_id` do lote referenciado pela RNC).
+   * @param transaction - Transação Sequelize compartilhada com a criação da RNC.
+   * @returns void
+   */
+  private async recalculateSupplierQualityScore(supplierId: number, transaction: any): Promise<void> {
+    const receiptsCount = await LotControl.count({ where: { supplier_id: supplierId }, transaction });
+
+    if (receiptsCount === 0) {
+      return;
+    }
+
+    const rncsCount = await NonConformity.count({ where: { supplier_id: supplierId }, transaction });
+    const rawScore = 100 - (rncsCount / receiptsCount) * 100;
+    const qualityScore = Math.max(0, Math.round(rawScore * 100) / 100);
+
+    await Supplier.update(
+      { quality_score: qualityScore },
+      { where: { id: supplierId }, transaction }
+    );
   }
 }
 

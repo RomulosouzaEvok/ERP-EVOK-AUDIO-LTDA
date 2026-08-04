@@ -11,7 +11,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface EngineeringProjectAttributes {
+interface EngineeringProjectAttributes {
   id: number;
   project_code: string;
   name: string;

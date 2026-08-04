@@ -12,7 +12,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface WebhookEventAttributes {
+interface WebhookEventAttributes {
   id: number;
   source: string;
   event_id: string;

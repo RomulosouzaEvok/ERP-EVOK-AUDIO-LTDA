@@ -14,11 +14,63 @@ export interface Warehouse {
   name: string;
   description?: string | null;
   active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-/** `GET /api/inventory/warehouses` — lista depósitos ativos. */
+/**
+ * `GET /api/inventory/warehouses` — lista depósitos ativos (o backend hoje
+ * NÃO aceita filtro para incluir inativos — `ListWarehousesUseCase.ts`
+ * força `where: { active: true }` sem parâmetro de override). Um depósito
+ * desativado pela tela de gestão (`WarehousesPage`) some desta lista e não
+ * há, no contrato atual, forma de reativá-lo pela API — limitação
+ * conhecida, ver `docs/governance/TODO.md` Bloco 4.3.
+ */
 export async function listWarehouses() {
   const { data } = await httpClient.get<ItemResponse<Warehouse[]>>('/api/inventory/warehouses');
+  return data.data;
+}
+
+export interface CreateWarehouseInput {
+  code: string;
+  name: string;
+  description?: string | null;
+  active?: boolean;
+}
+
+/**
+ * `POST /api/inventory/warehouses` — cria um novo depósito (exige
+ * `estoque:approve`). `code` é normalizado para uppercase pelo backend.
+ *
+ * @param input - dados do novo depósito.
+ * @returns o depósito criado.
+ * @throws {AxiosError} 400 `VALIDATION_ERROR` (campo obrigatório ausente ou
+ *   campo extra não permitido pelo schema `.strict()`); 409 `CONFLICT`
+ *   (já existe depósito com este código, comparação case-insensitive).
+ */
+export async function createWarehouse(input: CreateWarehouseInput) {
+  const { data } = await httpClient.post<ItemResponse<Warehouse>>('/api/inventory/warehouses', input);
+  return data.data;
+}
+
+export interface UpdateWarehouseInput {
+  name?: string;
+  description?: string | null;
+  active?: boolean;
+}
+
+/**
+ * `PUT /api/inventory/warehouses/:id` — edita um depósito existente (exige
+ * `estoque:approve`). NUNCA envie `code` — o schema é `.strict()` e rejeita
+ * com 400 se `code` vier no corpo (é imutável após a criação).
+ *
+ * @param id - id do depósito.
+ * @param input - campos a atualizar (`name`, `description`, `active`).
+ * @returns o depósito atualizado, com `code` inalterado.
+ * @throws {AxiosError} 404 `NOT_FOUND` se o depósito não existir.
+ */
+export async function updateWarehouse(id: number, input: UpdateWarehouseInput) {
+  const { data } = await httpClient.put<ItemResponse<Warehouse>>(`/api/inventory/warehouses/${id}`, input);
   return data.data;
 }
 

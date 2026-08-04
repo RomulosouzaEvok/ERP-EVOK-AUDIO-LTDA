@@ -3939,4 +3939,961 @@ outro contrato.
 
 **Desenvolvedor**: Claude Code (Senior Frontend Engineer & UI Architect —
 Semáforo de Handoff, Contador de Menu, Amostra de Engenharia)
+
+---
+
+## Identidade Visual EVOK ÁUDIO — Telas de Logística (polish visual)
+
+**Data**: 2026-08-04
+**Escopo**: puramente visual/CSS (classes Tailwind), sem alteração de lógica
+de negócio, chamadas de API ou validações. Continuação do restyle iniciado em
+`LoginPage.tsx`, `AppLayout.tsx` (sidebar/header) e `DashboardPage.tsx` (não
+tocados nesta entrega) usando os tokens de marca definidos em
+`client/src/index.css` (`--brand`, `--brand-vivid`, `--brand-dark`,
+`--brand-foreground`, mapeados via `@theme inline` para `bg-brand`,
+`text-brand`, `border-brand`, etc).
+
+### Telas restilizadas
+
+1. **`client/src/pages/logistics/InventoryPage.tsx`** (`/logistics/estoque`):
+   cabeçalho convertido para o padrão "faixa de marca" (`rounded-xl border
+   bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5`) com selo
+   `bg-brand/10 text-brand` contendo o ícone `Boxes` (mesmo padrão do
+   `KpiCard` de `DashboardPage.tsx`). Abas (`TabButton`) ganharam ícone
+   (`Boxes`/`ScrollText`/`Layers`/`ClipboardList`/`ArrowLeftRight`) e estado
+   ativo/hover trocado de `border-primary`/cinza para `border-brand
+   text-brand` / `hover:bg-brand/5 hover:text-brand`.
+2. **`client/src/pages/logistics/ReceivingPage.tsx`** (`/logistics/recebimento`):
+   mesmo cabeçalho em faixa de marca com selo `PackageSearch`. Botão
+   "Conferir" já herdava o verde via `Button variant="default"` (token
+   `--primary`) — nenhuma mudança necessária ali.
+3. **`client/src/pages/logistics/ShippingPage.tsx`** (`/logistics/expedicao`):
+   cabeçalho convertido para faixa de marca com selo `Truck`, mantendo os
+   botões de filtro "Fila de embarque"/"Embarcadas" (`variant="default"` já
+   herda o verde quando ativo).
+4. **`client/src/pages/logistics/WarehousesPage.tsx`** (`/logistics/warehouses`,
+   Bloco 4/UC-42): mesma faixa de marca com selo `Warehouse`. Lógica de
+   criação/edição de depósito (já testada) não foi tocada.
+
+### Regressão
+
+- `cd client && npx vitest run` — 6 arquivos de teste, 24/24 testes verdes
+  (nenhuma regressão; nenhum teste novo criado nesta entrega, pois é
+  alteração puramente visual).
+- `cd client && npm run build` (`tsc -b && vite build`) — build limpo, sem
+  erros de tipagem.
+
+### O que o Agente QA/humano deve testar na interface
+
+1. Navegar por `/logistics/estoque`, `/logistics/recebimento`,
+   `/logistics/expedicao` e `/logistics/warehouses` e confirmar visualmente
+   que o cabeçalho de cada tela segue o mesmo padrão visual do Dashboard
+   (faixa verde suave com selo de ícone) e que nenhuma funcionalidade
+   (filtros, abas, dialogs de criação/edição/conferência, mutations)
+   quebrou.
+2. Em `/logistics/estoque`, confirmar que a aba ativa aparece destacada em
+   verde (borda inferior + texto) e que passar o mouse sobre as abas
+   inativas mostra um leve destaque verde antes de clicar.
+3. Confirmar que os botões de ação que já usavam `variant="default"`
+   (Conferir, Marcar como embarcada, Novo depósito, filtros de fila) mantêm
+   o comportamento e agora aparecem em verde da marca.
+
+**Desenvolvedor**: Claude Code (Senior Frontend Engineer & UI Architect —
+Identidade Visual EVOK ÁUDIO, telas de Logística)
+**Data**: 2026-08-04
+
+---
+
+## Reconciliação de Governança — `docs/governance/TODO.md` vs. Código Real (2026-08-04)
+
+**Objetivo:** o `TODO.md` (Bloco 1–6) é atualizado incrementalmente por
+múltiplos agentes ao longo do dia; alguns itens ficaram desatualizados
+porque o código avançou em entregas posteriores sem que a linha do TODO
+correspondente fosse revisitada. Esta tarefa foi uma auditoria de
+reconciliação **documental** (sem alteração de código) — para cada item
+`[ ]` do TODO, confirmou-se por leitura de código/rotas/testes se ele já
+estava implementado antes de corrigir a tag.
+
+### Itens corrigidos de `[ ]` para `[x]` (código já existia, TODO estava desatualizado)
+
+1. **Bloco 4.2 — `POST/PUT /api/warehouses` (CRUD de depósito, backend).**
+   Rotas reais: `POST /api/inventory/warehouses` e `PUT
+   /api/inventory/warehouses/:id`
+   (`server/src/modules/inventory/presentation/routes/inventory.ts`),
+   use cases `CreateWarehouseUseCase.ts`/`UpdateWarehouseUseCase.ts`.
+   Testado em `server/tests/unit/warehouse-crud.test.ts` (9/9 verde).
+2. **Bloco 4.3 — Tela "Configurações > Depósitos" (CRUD, frontend).**
+   `client/src/pages/logistics/WarehousesPage.tsx`, consumindo
+   `client/src/api/warehouses.ts` (`createWarehouse`/`updateWarehouse`/
+   `listWarehouses`).
+3. **Bloco 4.2 — Filtro `?warehouse_id=` em `GET /api/inventory/movements`.**
+   Implementado em
+   `server/src/modules/inventory/presentation/controllers/inventoryController.ts`
+   (`list`) → `ListInventoryMovementsUseCase.execute`. Testado em
+   `server/tests/unit/warehouse-crud.test.ts` (describe dedicado ao
+   filtro).
+4. **Bloco 4.3 — Saldo por depósito na tela de produto/item.** Botão
+   "Saldo por depósito" + `ProductWarehouseStockDialog` em
+   `client/src/pages/products/ProductsPage.tsx`, consumindo `GET
+   /api/inventory/warehouse-stock?product_id=`. **Nota:** esta alteração
+   estava presente apenas na árvore de trabalho (não commitada) no
+   momento da auditoria — confirmar `git log`/`git status` antes de
+   considerá-la definitivamente mesclada em `main`.
+5. **Bloco 1.3 — Relatórios: `authorizeModule` por sub-tipo
+   (`relatorios.producao`/`.compras`/`.custos`/`.financeiro`).** Item
+   duplicava trabalho já entregue no retrofit completo do Bloco 1.2.
+   Confirmado em `server/src/modules/reports/presentation/routes/reports.ts`.
+6. **Bloco 1.3 — Rastreabilidade: módulo próprio `rastreabilidade`
+   (não herdado).** Também já entregue no retrofit do Bloco 1.2.
+   Confirmado em
+   `server/src/modules/traceability/presentation/routes/traceability.ts`.
+
+### Itens revisados e confirmados como corretamente `[ ]` (código de fato ainda não existe)
+
+Verificados por leitura direta de código/grep e mantidos sem alteração
+(evidência já estava correta no TODO): `permission_version` (decisão
+deliberada de não implementar), diferenciação de `PUT
+/api/sales/:id/status` para `shipped`, filtro de cards do Dashboard por
+módulo, testes de integração HTTP (Supertest) do Bloco 1.5, tela
+"Engenharia > Solicitar Amostra" dedicada, badge "Amostra" no
+Recebimento, alerta de quantidade atípica, script de validação
+pós-backfill (`*_validation.sql`), endpoint
+`GET /api/products/:id/stock-by-warehouse` dedicado (o caso de uso é
+coberto por `GET /api/inventory/warehouse-stock?product_id=`, mas a rota
+aninhada específica não existe), ocultação de botões de NF-e por nível no
+frontend, e todo o retrofit de telas do Bloco 6.2/6.3
+(`ProductionOrdersPage.tsx`, `RegisterTestTab.tsx`, `MrpPage.tsx`,
+`InspectionTab.tsx` ainda não usam `translateApiError`).
+
+### Testes rodados para validar as evidências
+
+- `npx jest tests/unit/warehouse-crud.test.ts` — 9/9 verde
+- `npx jest tests/unit/warehouse-stock.test.ts` — 29/29 verde
+- `npx jest tests/unit/module-authorization-map.test.ts
+  tests/unit/access-profiles.test.ts tests/unit/handoff-signal.test.ts`
+  — 69/69 verde (todos rodados de dentro de `server/`)
+
+### Coordenação com agentes paralelos
+
+Esta tarefa foi executada em paralelo a um agente de frontend trabalhando
+em `client/src/pages/logistics/*.tsx` e a um DBA auditando
+`server/src/models/Warehouse*.ts`/`server/migrations/`. Nenhum arquivo de
+código foi alterado por esta tarefa — apenas `docs/governance/TODO.md` e
+este handoff.
+
+**Desenvolvedor**: Claude Code (Engenheiro de Governança e Documentação —
+reconciliação `docs/governance/TODO.md`)
+**Data**: 2026-08-04
+
+---
+
+## Triagem de Segurança 2026-08-04 — Fechamento de 3 Pendências Menores
+
+### Resumo da feature
+
+Fechamento de 3 pendências de baixa severidade apontadas em uma triagem
+de segurança pontual do repositório (nenhum P0 novo encontrado):
+
+1. **Validação de `:id` em `PUT /api/inventory/warehouses/:id`** — o
+   controller passava `req.params.id` direto ao use case sem validar que
+   é numérico. Não era uma vulnerabilidade de SQL injection (Sequelize
+   parametriza), mas um id inválido propagava um erro imprevisível do
+   driver Postgres em vez do `400`/`404` padronizado esperado. Corrigido
+   adicionando `idParamSchema` (`z.coerce.number().int().positive()`) em
+   `server/src/modules/inventory/presentation/validators/inventoryValidators.ts`
+   e aplicando-o em `exports.updateWarehouse`
+   (`server/src/modules/inventory/presentation/controllers/inventoryController.ts`),
+   seguindo o mesmo padrão Zod + `handleZodError` já usado pelos demais
+   endpoints do arquivo.
+
+2. **Cobertura RBAC ausente para o CRUD de Depósitos** — `POST
+   /api/inventory/warehouses` e `PUT /api/inventory/warehouses/:id`
+   (ambos exigindo `authenticate` + `authorizeModule('estoque',
+   'approve')`, ver `server/src/modules/inventory/presentation/routes/inventory.ts:37-38`)
+   não tinham nenhum teste de integração cobrindo 401/403/sucesso.
+   Adicionados 6 casos novos em
+   `server/tests/integration/legacy-routes-rbac-regression.test.ts`
+   (dentro de `describe('CRUD de Depositos (authorizeModule
+   estoque/approve)')`), seguindo exatamente o estilo já usado no arquivo
+   (criação de usuário via `User.create`, login real via
+   `POST /api/auth/login`, chamadas via `supertest`). O caso de 403 cria
+   um `AccessProfile`/`AccessProfilePermission` reais com
+   `estoque: 'operate'` (sem `approve`) para reproduzir o cenário de um
+   almoxarife comum tentando executar uma ação restrita a gestor da área.
+
+3. **Risco residual `react-router@7.18.2` (client)** — registrado
+   formalmente, sem upgrade de major version (decisão explicitamente
+   adiada para o gate G6):
+   - `docs/governance/TODO.md`, nova seção "Pendências de Segurança /
+     Gate G6", com o advisory (`GHSA-qwww-vcr4-c8h2`), a avaliação de
+     aplicabilidade (vetor RSC/Server Actions provavelmente não se aplica
+     a esta SPA Vite, mas isso ainda precisa de confirmação formal — não
+     tratar como aceito), o achado correlato do `node_modules` local
+     dessincronizado do lockfile, e a ação recomendada (upgrade
+     `>=8.3.0` pós-UAT ou aceitação formal de risco no G6 + garantia de
+     `npm ci` no pipeline).
+   - `docs/DIARIO_BORDO_GO_LIVE_G6.md`, nova entrada datada "2026-08-04 —
+     Triagem de Segurança (fechamento de 3 pendências menores)" (entradas
+     antigas do diário não foram alteradas).
+
+### Arquivos alterados
+
+- `server/src/modules/inventory/presentation/validators/inventoryValidators.ts`
+  — novo `idParamSchema`, exportado.
+- `server/src/modules/inventory/presentation/controllers/inventoryController.ts`
+  — `updateWarehouse` agora valida `req.params.id` com `idParamSchema`
+  antes de chamar `UpdateWarehouseUseCase`.
+- `server/tests/unit/warehouse-crud.test.ts` — novo `describe('idParamSchema
+  ...')` com 2 casos (aceita id válido, rejeita não numérico/zero/negativo/decimal/ausente).
+- `server/tests/integration/legacy-routes-rbac-regression.test.ts` — novo
+  `describe('CRUD de Depositos (authorizeModule estoque/approve)')` com 6
+  casos (401/403/2xx para `POST` e `PUT /warehouses/:id`).
+- `docs/governance/TODO.md` — nova seção "Pendências de Segurança / Gate
+  G6" com o item `[ ]` do risco residual `react-router`.
+- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+  (apenas apêndice, nenhuma entrada anterior foi reescrita).
+- `docs/HANDOFF_CODEX.md` — esta seção.
+
+### Documentações atualizadas
+
+- `docs/governance/TODO.md` (novo item `[ ]` de risco residual).
+- `docs/DIARIO_BORDO_GO_LIVE_G6.md` (nova entrada 2026-08-04).
+- JSDoc dos novos blocos de teste (comentários explicando o gap coberto)
+  em `legacy-routes-rbac-regression.test.ts`.
+- `docs/DATABASE.md` e `docs/projeto/04-USE_CASES.md` **não foram
+  alterados** — nenhuma mudança de schema/regra de negócio ocorreu nesta
+  triagem (apenas validação defensiva de input e testes).
+
+### Instruções de teste para o próximo agente/humano
+
+1. `cd server && npm run typecheck` — deve passar sem erros (validado
+   nesta sessão).
+2. `cd server && npx jest warehouse-crud` — deve passar 11/11 (validado
+   nesta sessão: 9 pré-existentes + 2 novos de `idParamSchema`).
+3. `cd server && npx jest tests/integration/legacy-routes-rbac-regression.test.ts`
+   — **exige** `RUN_INTEGRATION=true`, `TEST_API_URL` (API real rodando),
+   `TEST_AUTH_TOKEN` (token admin válido) e PostgreSQL acessível. Nesta
+   sessão nenhum desses pré-requisitos estava disponível, então os 9
+   testes do arquivo (3 pré-existentes + 6 novos) rodaram como
+   `describe.skip` — **não foram executados de fato**. O próximo agente
+   com acesso a um ambiente de integração completo deve rodar este
+   arquivo e confirmar 401/403/2xx nos 6 casos novos de depósito antes de
+   considerar a Tarefa 2 (RBAC de depósitos) validada ponta a ponta.
+4. Testar manualmente (ou via Postman/Insomnia) `PUT
+   /api/inventory/warehouses/abc` (id não numérico) com token admin válido
+   — deve retornar `400` com o envelope `{ success: false, error: {
+   code: 'VALIDATION_ERROR', ... } }` (via `ValidationError`/`handleZodError`),
+   nunca `500`.
+
+### Riscos residuais
+
+- **Cobertura de integração da Tarefa 2 não executada de fato** neste
+  ambiente (sem Postgres/API rodando) — código foi revisado
+  cuidadosamente contra o padrão existente do arquivo, mas só será
+  100% confirmado quando rodado contra infraestrutura real.
+- **`react-router` continua na versão vulnerável** — risco aceito
+  temporariamente e registrado para decisão formal no gate G6 (não é uma
+  remediação, é um registro de risco pendente).
+- **`node_modules` do `client/` dessincronizado do lockfile** — risco
+  observado mas não corrigido nesta sessão (fora do escopo: não é
+  código/doc, é estado local do ambiente); pipeline de build deve usar
+  `npm ci`.
+
+**Desenvolvedor**: Claude Code (Engenheiro Sênior — Triagem de Segurança)
+**Data**: 2026-08-04
+
+---
+
+## Consolidação de Governança — 4 entregas paralelas de 2026-08-04
+
+Rodada de verificação (Tech Lead de Governança/Documentação) sobre 4 entregas
+feitas por agentes distintos em paralelo hoje. Cada item abaixo foi conferido
+lendo o código/teste real antes de marcar qualquer coisa em
+`docs/governance/TODO.md` — nenhuma lista recebida foi aceita sem checagem.
+
+### 1. MRP fecha o ciclo — `POST /api/mrp/planned-orders/convert`
+
+Confirmado real: `server/src/modules/mrp/application/use-cases/ConvertPlannedOrdersToRequisitionUseCase.ts`
+(converte ordens `RASCUNHO`/`APROVADA` em 1 única requisição, sugere
+fornecedor preferencial via `ItemSupplierRepository.findPreferredByItem`,
+marca as ordens `EM_EXECUCAO` na mesma transação), rota
+`server/src/modules/mrp/presentation/routes/mrp.ts` com
+`authorizeModule('mrp', 'operate')`, 4 testes em
+`server/tests/unit/mrp-convert-to-requisition.test.ts` (conversão com
+fornecedor sugerido, notas customizadas, 422 `BusinessRuleError` para
+status inválido, 404 `NotFoundError` para ordem inexistente), documentado
+em `docs/API.md` §13. Item 3 da tabela em `docs/LEVANTAMENTO_ERP_2026-08-02.md`
+marcado ✅ resolvido (parcial — trigger 100% automático plano→requisição
+sem intervenção do planejador segue fora do escopo).
+
+### 2. Bloco 2 — Amostra da Engenharia (UC-39), frontend + QA
+
+Confirmado real, 6 itens: `client/src/pages/engineering/SampleRequestTab.tsx`
+(nova aba "sample-request" em `EngineeringPage.tsx`), badge "Amostra —
+Engenharia" em `client/src/pages/logistics/ReceivingPage.tsx` (compara
+`purchase.requisition?.origin === 'engenharia_amostra'`), alerta não
+bloqueante de quantidade > 50 unidades no mesmo form
+(`ATYPICAL_QUANTITY_THRESHOLD`), e 5 testes em
+`server/tests/unit/engineering-sample-requisition.test.ts` (422 sem
+justificativa, 422 justificativa em branco, persistência do vínculo com
+`engineering_project_id`, 404 projeto inválido, e cadeia unit-level
+amostra→pedido→recebimento roteando automaticamente para `LABORATORIO` sem
+`warehouse_code` explícito). A justificativa reaproveita o campo `notes`
+já existente em `purchase_requisitions` — **decisão confirmada, não é
+regressão**: não existe coluna dedicada `justificativa`, documentado desde
+a decisão 2.1 de `docs/governance/TODO.md`.
+
+### 3. Bloco 4 — Testes de invariante de depósitos + 1 gap real descoberto
+
+Novo arquivo `server/tests/unit/warehouse-invariants.test.ts`. Dos 4 itens
+pendentes na seção 4.4 do TODO:
+- **Expedição só lê `ACABADOS`** (mesmo com saldo positivo do mesmo produto
+  em `INSUMOS`) — coberto, 2 casos.
+- **Quarentena/bloqueio/liberação de lote nunca move depósito** (só muda
+  `LotControl.status`) — coberto, 3 casos (`BlockLotUseCase`/
+  `ReleaseLotUseCase`).
+- **Teste destrutivo com `consumed_quantity` debita `LABORATORIO`** — já
+  estava coberto em `warehouse-stock.test.ts`/`laboratory-tests.test.ts`;
+  confirmado que não há duplicação em `warehouse-invariants.test.ts`.
+- **[GAP REAL, PRÓXIMA TAREFA] Contagem cíclica escopada a um único
+  depósito** — **NÃO é apenas um teste faltando, é funcionalidade não
+  implementada**: `InventoryCount`/`InventoryCountItem` não têm coluna
+  `warehouse_id` (confirmado — grep em ambos os modelos não retorna
+  nenhuma ocorrência de `warehouse`), e `ApproveInventoryCountUseCase`
+  ajusta a variância via `InventoryService.adjust(item.product_id, ...)`,
+  que altera o saldo **global** de `Product.quantity` (dual-write legado),
+  não uma linha de `product_warehouse_stock`. Ou seja, hoje uma contagem
+  feita fisicamente em um depósito específico ajusta o total do produto em
+  todos os depósitos.
+  **Próxima tarefa de desenvolvimento a despachar:**
+  1. Migration adicionando `warehouse_id` a `InventoryCount`/`InventoryCountItem`.
+  2. `CreateInventoryCountUseCase` gravando o depósito contado.
+  3. `ApproveInventoryCountUseCase` ajustando `product_warehouse_stock` do
+     depósito específico (via `warehouseStockService`), não `Product.quantity`.
+  4. Tela de Contagem/Inventário mobile enviando o depósito selecionado.
+  5. Só então escrever o teste de invariante correspondente.
+
+### 4. Logo oficial da marca no login
+
+`client/src/pages/LoginPage.tsx` importa `@/assets/brand/evok-logo.png`
+(raio verde + wordmark "VOK ÁUDIO"), renderizado sobre fundo branco (o
+wordmark é preto e sumiria sobre fundo escuro).
+
+### Checklist G6
+
+`docs/GO_LIVE_G6_CHECKLIST.md` foi reconciliado por outro agente
+anteriormente — confirmado (grep) que não há nenhuma menção a Bloco 2,
+Bloco 4 ou ao endpoint `planned-orders/convert` nesse arquivo, logo não há
+contradição com o que foi registrado nesta rodada.
+
+### Documentos atualizados nesta consolidação
+
+- `docs/governance/TODO.md` — Bloco 2 (seções 2.3 Frontend e 2.4 QA, 7 itens
+  `[ ]` → `[x]` com evidência de arquivo/teste); Bloco 4 (seção 4.4 QA, 3
+  itens `[ ]` → `[x]`, 1 item reescrito como gap de desenvolvimento real
+  em vez de teste faltando).
+- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — item 3 da tabela de lacunas
+  marcado ✅ resolvido (parcial), no mesmo padrão `~~riscado~~` dos demais.
+- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+  (apêndice, entradas antigas preservadas).
+- Este arquivo (`docs/HANDOFF_CODEX.md`).
+
+### Próximos passos para o time humano
+
+1. Despachar a tarefa de desenvolvimento da contagem cíclica por depósito
+   (ver item 3 acima) — é a única entrega desta rodada que não fechou.
+2. Rodar `npx jest mrp-convert-to-requisition engineering-sample-requisition
+   warehouse-invariants` para confirmar os 3 arquivos de teste passam no
+   ambiente de CI/local antes do próximo checkpoint de Go-Live.
+3. Avaliar se o trigger 100% automático plano MRP → requisição (sem
+   seleção manual do planejador) entra no roadmap do próximo bloco.
+
+**Consolidado por**: Claude Code (Tech Lead de Governança/Documentação)
+
+---
+
+## Consolidação de Governança — Onda 2, segunda rodada de 5 entregas paralelas de 2026-08-04
+
+Segunda rodada de agentes rodando em paralelo, consolidada nesta sessão de
+governança. Cada evidência foi verificada por leitura direta do código/
+testes reais antes de qualquer item ser marcado `[x]` — nenhuma foi aceita
+apenas pela lista recebida do agente que despachou a rodada.
+
+### 1. Bloco 4 — schema de contagem cíclica por depósito (PARCIAL — não fechado)
+
+Migration `server/migrations/20260804-000006-add-warehouse-id-to-inventory-counts.cjs`
+aplicada: coluna `inventory_counts.warehouse_id` (FK `warehouses.id`,
+nullable por legado — 4 linhas pré-existentes sem noção de depósito,
+backfill para `INSUMOS`), índice `idx_inventory_counts_warehouse_id`.
+Model `server/src/models/InventoryCount.ts` com `warehouse_id` e
+associação `belongsTo(Warehouse, { foreignKey: 'warehouse_id', as:
+'warehouse' })`. Documentado em `docs/DATABASE.md` §"Coluna nova:
+inventory_counts.warehouse_id". `InventoryCountItem` deliberadamente
+**não** ganhou coluna própria — todo item herda o depósito do cabeçalho.
+
+**Por que não foi fechado no TODO:** o passo que efetivamente faz a
+contagem impactar o saldo por depósito (`ApproveInventoryCountUseCase`
+ajustar `product_warehouse_stock` em vez de `Product.quantity` global)
+estava sendo desenvolvido por outro agente **em paralelo, ao mesmo tempo**
+desta consolidação — marcar `[x]` agora seria prematuro e potencialmente
+incorreto. `docs/governance/TODO.md` registra explicitamente "schema
+pronto, use case em andamento" nesse item.
+
+### 2. Bloco 1.2 — bug real corrigido: expedição não valida mais NF-e cancelada pós-emissão
+
+`server/src/modules/sales/application/use-cases/ChangeSaleStatusUseCase.ts`:
+a transição `invoiced -> shipped` agora exige `sale.nfe_status ===
+'authorized'`, lançando `BusinessRuleError` 422 com `details.nfe_status`
+quando falha. **Bug real, não apenas gap de teste:** antes desta
+correção, uma venda cuja NF-e foi cancelada *depois* de emitida
+(`nfe_status` muda para `cancelled`, mas `sale.status` não reverte de
+`invoiced`) podia ser embarcada indevidamente, porque a máquina de
+estados genérica (`VALID_TRANSITIONS`) só examina `sale.status`. Testado
+em `server/tests/unit/onda3-shipping-cockpit-cashflow.test.ts` (5 casos).
+
+### 3. Bloco 5 — RBAC de NF-e completo (backend já correto + 3 testes novos + frontend)
+
+Backend confirmado já correto por leitura de código:
+`authorizeModule('vendas', 'approve')` em `POST /api/sales/:id/nfe` e
+`POST /api/sales/:id/nfe/cancel`
+(`server/src/modules/sales/presentation/routes/sales.ts`). 3 testes novos
+fecham a lacuna de QA do Bloco 5 (§5.3) em
+`server/tests/unit/sales-nfe-rbac.test.ts`:
+1. operador nível `operate` tenta emitir NF-e → 403
+   `APPROVAL_LEVEL_REQUIRED` + log `access_denied`;
+2. gestor nível `approve` emite NF-e → middleware libera, `IssueSaleNfeUseCase`
+   completa com `nfe_status: 'authorized'`;
+3. gestor cancela NF-e de venda `shipped` → `nfe_status` vira `cancelled`,
+   `sale.status` permanece `shipped` (nenhuma regra liga as duas coisas).
+
+Frontend: `client/src/pages/sales/SalesPage.tsx` calcula `canApproveNfe =
+hasRole('admin') || permissions?.vendas === 'approve'` (mesma fórmula do
+middleware do backend) e condiciona a exibição dos botões "Emitir NF-e"/
+"Cancelar NF-e" a esse flag, com mensagem explicativa no lugar quando
+ocultos.
+
+### 4. Bloco 1 — dashboard filtrado por módulo + preview de perfil na edição de usuário
+
+`client/src/pages/DashboardPage.tsx`: `canSee(module)` replica o padrão de
+fallback de `AppLayout.itemVisible`
+(`usingRoleFallback = permissionsFetchFailed || hasRole('admin')`, nunca
+esconde cards por falha de infraestrutura); cards e queries
+(`canSeeProdutos`/`canSeeCompras`/`canSeeProducao`/`canSeeFinanceiro`)
+condicionados a `hasModuleAccess(module)`.
+
+`client/src/pages/users/UsersPage.tsx`: dialog "Atribuir perfil" ganhou
+pré-visualização somente-leitura (`selectedProfilePreview`, alimentada por
+`accessProfilesApi.listAccessModules`) mostrando os módulos/níveis
+(`LEVEL_LABEL`) que o perfil selecionado concede. Confirmado por leitura
+de código: **não existe e não deveria existir** um campo `access_level`
+avulso no usuário — decisão de arquitetura já registrada no Bloco 1.2
+(nível 100% resolvido pela matriz do perfil), não é um gap novo.
+
+### 5. Bloco 6 — retrofit de 4 telas + checklist de conformidade (2 parciais + 1 item novo)
+
+`ProductionOrdersPage.tsx`, `RegisterTestTab.tsx`, `MrpPage.tsx`,
+`InspectionTab.tsx` migradas para `translateApiError`/`DidacticAlert`
+(confirmado por leitura de código nas 4). Checklist de conformidade §6.3
+rodado nas 9 telas priorizadas (5 já conformes + as 4 novas):
+
+- **`RegisterTestTab.tsx`** — parcial: alerta não-bloqueante, decisão
+  consciente de não travar o submit do formulário.
+- **`InspectionTab.tsx`** — parcial: backend
+  (`ReleaseLotUseCase`/`BlockLotUseCase`) lança `BusinessRuleError` só com
+  `message` em texto livre (confirmado por leitura direta do use case),
+  sem `details` estruturado — `translateApiError` cai no fallback
+  genérico em vez de um dado específico do lote.
+
+Item novo criado em `docs/governance/TODO.md` §6.1: "auditar e estruturar
+`details` no erro de `ReleaseLotUseCase`/`BlockLotUseCase`" — amarrado ao
+item 9 já existente da lista de priorização ("Liberação/bloqueio de lote
+em status terminal"), não duplica.
+
+### Coordenação com agentes paralelos
+
+2 outros agentes seguiam trabalhando em `server/src/modules/inventory/**`
+e `server/src/modules/products/**` (código) durante esta consolidação —
+esta sessão só editou arquivos `.md`, sem risco de conflito.
+
+### Documentos atualizados nesta consolidação
+
+- `docs/governance/TODO.md` — Bloco 1.2 (nota de bug corrigido em
+  `shipped`), Bloco 1.3 (dashboard filtrado `[x]`), Bloco 1.4 (edição de
+  usuário `[x]`), Bloco 4.1 (nota "schema pronto, use case em andamento" —
+  item permanece `[ ]`), Bloco 5 completo (§5.2 frontend e §5.3 QA, 5 itens
+  `[ ]` → `[x]`), Bloco 6 (§6.2 4 telas `[ ]` → `[x]` com 2 notas parciais,
+  §6.3 checklist `[ ]` → `[x]`, §6.1 item novo `[ ]` criado).
+- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+  (apêndice "Onda 2, segunda rodada em paralelo"; entradas antigas
+  preservadas).
+- Este arquivo (`docs/HANDOFF_CODEX.md`).
+
+### Próximos passos para o time humano
+
+1. Aguardar a conclusão do ajuste paralelo de `ApproveInventoryCountUseCase`
+   (item 1 acima) e então fechar o item de contagem cíclica por depósito
+   em `docs/governance/TODO.md` (Bloco 4) — hoje só o schema está pronto.
+2. Rodar `npx jest sales-nfe-rbac onda3-shipping-cockpit-cashflow` para
+   confirmar os 2 arquivos de teste novos desta rodada passam no ambiente
+   de CI/local.
+3. Despachar o item novo de `docs/governance/TODO.md` §6.1 (`details`
+   estruturado em `ReleaseLotUseCase`/`BlockLotUseCase`) numa próxima
+   rodada de Bloco 6.
+4. Avaliar se a UX não-bloqueante de `RegisterTestTab.tsx` (aviso sem
+   travar submit) deve virar bloqueio duro — decisão de produto, não
+   técnica.
+
+**Consolidado por**: Claude Code (Tech Lead de Governança/Documentação)
+
+---
+
+## Consolidação de Governança — Onda 3+4: Bloco 4 fechado, suíte de integração saudável, e correção de um bug crítico P0 real de produção (2026-08-04)
+
+Rodada final de governança do dia, fechando os 3 gaps deixados em aberto
+pela consolidação anterior ("Onda 2"). Toda evidência abaixo foi
+verificada por leitura direta de código/migrations/testes e por execução
+ao vivo dos comandos citados, antes de qualquer item ser marcado `[x]` em
+`docs/governance/TODO.md`.
+
+### 1. Bloco 4 (UC-42, Múltiplos Depósitos) fechado por completo
+
+O item pendente da rodada anterior — "contagem cíclica escopada a um
+único depósito, schema pronto, use case em ajuste paralelo" — está
+concluído full-stack:
+
+- **Schema** (já existente, sem alteração): migration
+  `server/migrations/20260804-000006-add-warehouse-id-to-inventory-counts.cjs`
+  — `inventory_counts.warehouse_id` (FK `warehouses.id`, nullable por
+  legado, backfill das 4 linhas pré-existentes para `INSUMOS`).
+- **Use case de criação:** `CreateInventoryCountUseCase.ts`
+  (`server/src/modules/inventory/application/use-cases/`) agora exige
+  `warehouse_id` no payload — 400 se ausente.
+- **Use case de aprovação:** `ApproveInventoryCountUseCase.ts` ajusta a
+  variância apenas no depósito especificamente contado
+  (`count.warehouse_id`), via `WarehouseStockService.addToWarehouse`/
+  `removeFromWarehouse`, mantendo `InventoryService.adjust` (que grava
+  `Product.quantity`, hot path do MRP) como a soma dos saldos por
+  depósito — nunca mais um ajuste "cego" no total global.
+- **Validador:** `createInventoryCountSchema`
+  (`server/src/modules/inventory/presentation/validators/inventoryValidators.ts`)
+  rejeita `warehouse_id` ausente com mensagem didática.
+- **Teste:** `server/tests/unit/warehouse-invariants.test.ts`, describe
+  `'Invariante 3 — contagem ciclica (CreateInventoryCountUseCase/
+  ApproveInventoryCountUseCase) escopada a um unico deposito'`.
+- **Frontend:** `client/src/pages/products/InventoryCountsPage.tsx`
+  ganhou seletor de depósito obrigatório no formulário de criação, coluna
+  "Depósito" na listagem e no detalhe da contagem, tratamento didático de
+  erro `422` e um banner com a identidade visual EVOK (gradiente
+  `bg-brand`) no topo da tela.
+
+As 2 últimas pendências do Bloco 4 também foram fechadas nesta rodada:
+
+- **`GET /api/products/:id/stock-by-warehouse`** — novo endpoint
+  (`server/src/modules/products/presentation/routes/products.ts`,
+  `authorizeModule('estoque')`), use case
+  `GetProductStockByWarehouseUseCase.ts`. Decisão documentada: retorna
+  **todos** os depósitos ativos, mesmo com saldo zero — diferente do
+  endpoint por query param (`GET /api/inventory/warehouse-stock?product_id=`),
+  que só lista linhas existentes em `product_warehouse_stock`. Os dois
+  endpoints coexistem por atenderem telas com necessidades de exibição
+  diferentes.
+- **Script de validação pós-backfill**
+  `server/src/scripts/backfill/04l_product_warehouse_stock_validation.ts`
+  — **rodado ao vivo contra Postgres real nesta sessão**: `4/4` blocos
+  PASS (cobertura de backfill, integridade referencial, invariante de
+  soma `products.quantity = SOMA(product_warehouse_stock.quantity)`,
+  ausência de saldo negativo). No momento desta execução o banco de
+  desenvolvimento tinha 106 produtos, todos com a invariante correta.
+
+Com isso, **Bloco 4 (UC-42) está fechado** em `docs/governance/TODO.md` —
+todos os itens de schema (4.1), backend (4.2), frontend (4.3) e QA (4.4)
+marcados `[x]`, exceto o retrofit do inventário mobile por QR Code para
+múltiplos depósitos, explicitamente fora do escopo desta entrega e
+registrado como pendência futura.
+
+### 2. Suíte de integração saudável pela primeira vez contra Postgres real
+
+Uma rodada completa de `node scripts/run-api-suite.cjs integration`
+contra o container `evok-postgres` encontrou 5 suítes falhando. Causa
+raiz identificada e corrigida em cada caso — nenhuma era regressão de
+produto:
+
+- **3 suítes** falhavam por falta de saldo no depósito `ACABADOS` no
+  fixture global de setup da suíte (o Bloco 4 fez a expedição/venda
+  passar a debitar especificamente `ACABADOS`, e o fixture global não
+  garantia saldo lá) — corrigido em `server/scripts/run-api-suite.cjs`
+  (garante saldo mínimo de 100.000 un em `ACABADOS` antes da suíte
+  rodar).
+- **2 suítes** falhavam por fragilidade pré-existente de fixture
+  (`category_id: 1` hardcoded — frágil em qualquer banco de
+  desenvolvimento reutilizado/de longa duração onde a sequência de
+  `categories.id` já avançou além de 1) — corrigido com uma fixture
+  dedicada nova, `server/tests/integration/helpers/categoryFixtures.ts`
+  (`ensureFixtureCategoryId`), que resolve a primeira categoria ativa
+  existente via `GET /api/categories` em vez de assumir um id fixo.
+
+### 3. BUG CRÍTICO P0 real de produção encontrado e corrigido
+
+No processo de investigar as falhas de integração acima, foi descoberto
+que **`POST /api/inventory/movements`** — o endpoint de lançamento manual
+de entrada/saída de estoque, usado no dia a dia operacional do
+almoxarifado — **derrubava o processo Node.js inteiro** em qualquer
+chamada bem-sucedida. Isto não é um bug de teste: é um risco operacional
+do mesmo escopo de gravidade dos bloqueadores P0 originais do go-live —
+qualquer lançamento manual de estoque em produção derrubaria o servidor
+para **todos** os usuários simultâneos, não apenas para quem fez a
+requisição.
+
+**Causa raiz:**
+`server/src/modules/inventory/presentation/controllers/inventoryController.ts`
+(`exports.create`) desestruturava `{ movement }` do retorno de
+`CreateInventoryMovementUseCase.execute(...)`, mas esse use case só
+retorna `{ movementId }` — `movement` ficava `undefined`. O código
+seguinte tentava usar esse valor e lançava um `TypeError` **depois** de a
+transação de banco já ter sido commitada; o tratamento de erro então
+tentava fazer `rollback()` de uma transação já commitada — uma operação
+inválida que derrubava o processo Node inteiro em vez de apenas
+responder com um erro HTTP.
+
+**Correção** (feita diretamente nesta sessão de governança, não por um
+subagente): o controller agora busca o movimento completo via
+`GetInventoryMovementByIdUseCase` usando o `movementId` retornado pelo
+use case, antes de responder `201`.
+
+**Validação ao vivo, feita pessoalmente:** subi o servidor real
+compilado (`node dist/index.js`), autentiquei como admin via `POST
+/api/auth/login`, chamei `POST /api/inventory/movements` com um
+lançamento manual real de entrada/saída — recebi `201` com o servidor
+**sobrevivendo** (antes desta correção, o mesmo passo derrubava o
+processo). Em seguida rodei a suíte completa novamente para garantir
+zero regressão.
+
+### Resultado final confirmado (comandos rodados diretamente nesta sessão)
+
+```
+cd server && npx jest tests/unit
+  → Test Suites: 60 passed, 60 total | Tests: 417 passed, 417 total
+
+cd server && node scripts/run-api-suite.cjs integration
+  → Test Suites: 23 passed, 23 total | Tests: 54 passed, 54 total
+
+cd server && npx tsx src/scripts/backfill/04l_product_warehouse_stock_validation.ts
+  → BLOCO 1/2/3/4: ✅ PASS (4/4) — invariante de soma validada em 106 produtos
+```
+
+### Documentos atualizados nesta consolidação
+
+- `docs/governance/TODO.md` — Bloco 4 §4.1 (script de validação `[ ]` →
+  `[x]`, endpoint `stock-by-warehouse` `[ ]` → `[x]`), Bloco 4 §4.4
+  (contagem cíclica `[ ]` → `[x]`, fechando o bloco), seção "Pendências
+  de Segurança / Gate G6" com 2 itens novos `[x]` (bug P0 corrigido, e
+  saúde da suíte de integração).
+- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+  (apêndice "Onda 3+4"; entradas antigas preservadas, nenhuma reescrita).
+- Este arquivo (`docs/HANDOFF_CODEX.md`).
+
+### Próximos passos para o time humano
+
+1. Revisar e aprovar formalmente o fechamento do Bloco 4 (UC-42) — não há
+   mais pendências técnicas conhecidas além do inventário mobile por QR
+   Code (explicitamente fora do escopo).
+2. Confirmar em code review a correção do bug P0 de
+   `POST /api/inventory/movements` — dado o risco (derrubava o processo
+   inteiro em produção), recomenda-se um segundo par de olhos antes do
+   próximo deploy, mesmo já validado ao vivo nesta sessão.
+3. Avaliar se o script de validação pós-backfill
+   (`04l_product_warehouse_stock_validation.ts`) deve entrar em um
+   pipeline de CI/monitoramento periódico pós-Go-Live, não apenas rodar
+   manualmente.
+4. Retrofit do inventário mobile por QR Code para múltiplos depósitos
+   (único item remanescente do Bloco 4) — despachar como tarefa nova
+   quando priorizado.
+
+**Consolidado por**: Claude Code (Tech Lead de Governança/Documentação)
+
+---
+
+## Rodada de 5 frentes paralelas — 2026-08-04 (governança/consolidação)
+
+Rodada grande concluída no mesmo dia, com 5 agentes trabalhando em
+paralelo em frentes independentes. Cada entrega abaixo foi verificada
+nesta consolidação por leitura direta do código-fonte/testes e execução
+real da suíte (não apenas pelo relato de cada agente). Detalhe completo
+em `docs/DIARIO_BORDO_GO_LIVE_G6.md` (apêndice "2026-08-04 — Rodada de 5
+frentes paralelas") e `docs/governance/TODO.md`.
+
+### 1. Bloco 6.1 — `details` estruturado (9 endpoints priorizados, `BUSINESS_RULES.md` §13.5)
+
+Fechado por completo. 6 casos já estavam corretos (liberação de OP,
+conclusão de OP, embarque sem NF-e, conversão de requisição sem
+fornecedor, conversão MRP em execução, aprovação de requisição fora de
+sequência) — confirmados por leitura de código; testes existentes
+reforçados para travar o formato de `details` contra regressão. 3
+corrigidos nesta rodada:
+
+- `server/src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase.ts`
+  — `details: { purchase_id, order_number, field: 'invoice_number' }`.
+- `server/src/modules/laboratory/application/use-cases/CreateAcousticTestUseCase.ts`
+  — `details: { product_id, test_type, missing_fields }`.
+- `server/src/modules/inventory/application/use-cases/ReleaseLotUseCase.ts`
+  / `BlockLotUseCase.ts` — `details: { lot_id, current_status,
+  allowed_statuses }`, fechando também a nota de conformidade parcial de
+  `InspectionTab.tsx` deixada pela Onda 2.
+
+### 2. Bloco 1.5 — 4 testes de integração/E2E de permissões
+
+- `server/tests/integration/rbac-module-access-denied.test.ts`
+- `server/tests/integration/auth-me-permissions.test.ts` — reinterpretação
+  deliberada e documentada explicitamente no arquivo: "Dashboard só
+  mostra cards do perfil" é renderização React, não testável via
+  Supertest; o teste valida o contrato `GET /api/auth/me/permissions`
+  consumido pelo Dashboard.
+- `server/tests/integration/reports-cross-module-permission.test.ts`
+- `server/tests/integration/quality-releases-receiving-lot.test.ts` — E2E
+  completo do UC-37 (recebimento cria lote em quarentena, só Qualidade
+  libera, não Recebimento).
+
+### 3. Roadmap item 3 — trigger automático do MRP
+
+Opt-in por item (`items.conversao_automatica`, migration
+`20260804-000010`), `UC-24b` em `docs/projeto/04-USE_CASES.md`. Decisão
+de design: **nunca 100% automático** — risco de compra sem revisão
+humana. `GenerateMrpPlanUseCase` fecha automaticamente, na mesma
+transação do plano, as ordens de itens com a flag; itens sem a flag
+seguem exigindo conversão manual. Testado em
+`server/tests/unit/mrp-auto-convert.test.ts` (4/4). **Pendência residual
+pequena:** falta endpoint/UI para ligar a flag por item (só via banco).
+
+### 4. Roadmap item 8 — rating de fornecedor via RNC
+
+`suppliers.quality_score` — calculado, nunca editável via API — migration
+`20260804-000011-add-supplier-quality-score.cjs`, recalculado
+sincronamente na criação de RNC vinculada a lote com fornecedor
+(`CreateNonConformityUseCase.recalculateSupplierQualityScore`), fórmula
+`MAX(0, 100 - (rncs_count / receipts_count * 100))`. Documentado por
+completo em `docs/DATABASE.md`. Testado em
+`server/tests/unit/quality-lot-lifecycle.test.ts` (20/20). **Risco
+residual importante:** sem backfill retroativo — RNCs fechadas antes
+desta entrega não contam no cálculo inicial (default neutro 100.00).
+
+### 5. Roadmap item 7 (parcial) — schema de mão-de-obra/overhead no custeio
+
+Só o schema (`work_centers.cost_per_hour` + `production_cost_settings`,
+migrations `20260804-000007/-000008/-000009`) — **cálculo real ainda não
+implementado**. Contrato documentado em `docs/DATABASE.md`, apontando
+`ChangeProductionOrderStatusUseCase.completeOrder()` como o lugar certo.
+**Não marcado como resolvido** no roadmap — é a próxima tarefa de
+custeio.
+
+### Achado operacional — risco de processo com migrations paralelas
+
+2 agentes colidiram numerando migrations como `20260804-000007` para
+arquivos diferentes; um renomeou para `-000011`, o que deixou
+`SequelizeMeta` dessincronizada do arquivo em disco (a migration já
+tinha sido aplicada sob o nome antigo por uma corrida de `migration:up`
+concorrente). Corrigido diretamente via `UPDATE` em `SequelizeMeta` para
+casar com o nome do arquivo atual — sem re-executar a migration.
+Confirmado via `npm run migration:status`: `000001` a `000011` todas
+`up`, sem lacunas. **Recomendação para o time humano em rodadas
+futuras:** um agente por vez rodando `migration:generate`/`migration:up`
+quando há múltiplos agentes de schema na mesma sessão, ou revisão manual
+de `migration:status` ao final da rodada.
+
+### Resultado final confirmado (comandos rodados diretamente nesta consolidação)
+
+```
+cd server && npx jest tests/unit
+  → Test Suites: 61 passed, 61 total | Tests: 431 passed, 431 total
+
+cd server && node scripts/run-api-suite.cjs integration
+  → Test Suites: 27 passed, 27 total | Tests: 65 passed, 65 total
+
+cd server && npm run migration:status
+  → todas as migrations até 20260804-000011 em estado "up", sem lacunas
+```
+
+### Documentos atualizados nesta consolidação
+
+- `docs/governance/TODO.md` — Bloco 6.1 fechado `[x]` por completo, Bloco
+  1.5 (4 itens) fechado `[x]`, nova seção "Rodada de 5 Frentes Paralelas
+  — 2026-08-04" com o achado de processo sobre migrations.
+- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — item 3 (trigger automático)
+  marcado `feito`, item 8 (rating de fornecedor) marcado `feito` com
+  risco residual de backfill em destaque, item 7 mantido `feito
+  (parcial)` com a distinção clara "schema pronto, cálculo pendente".
+- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+  (apêndice "Rodada de 5 frentes paralelas"; entradas antigas
+  preservadas, nenhuma reescrita).
+- Este arquivo (`docs/HANDOFF_CODEX.md`).
+
+### Próximos passos para o time humano
+
+1. Implementar o cálculo real de mão-de-obra/overhead em
+   `ChangeProductionOrderStatusUseCase.completeOrder()` usando o schema
+   já pronto (`work_centers.cost_per_hour` + `production_cost_settings`)
+   — roadmap item 7, próxima tarefa de custeio.
+2. Endpoint/UI para ligar `items.conversao_automatica` por item (hoje só
+   via UPDATE direto no banco) — pendência residual pequena do item 3.
+3. Avaliar se algum RNC histórico relevante para o rating inicial de
+   fornecedor deve ser backfillado manualmente (risco residual do item
+   8) ou se o comportamento prospectivo-only é aceitável para o negócio.
+4. Reforçar o processo de múltiplos agentes de schema na mesma sessão
+   (ver achado operacional acima) antes da próxima rodada paralela.
+
+**Consolidado por**: Claude Code (Tech Lead de Governança/Documentação)
+
+---
+
+## Encerramento do dia — 2026-08-04
+
+Rodada grande de múltiplas ondas de agentes hoje (Blocos 1-6, retrofit
+`authorizeModule`, múltiplos depósitos, triagem de segurança, e correção
+de um bug crítico P0 de produção). Duas consolidações finais fecharam o
+dia: o risco residual de segurança `react-router@7.18.2`
+(`GHSA-qwww-vcr4-c8h2`) foi resolvido via upgrade real para
+`react-router@8.3.0` (`npm audit` confirma 0 vulnerabilidades), e a tela
+de contagem cíclica (`InventoryCountsPage.tsx`) ganhou seletor de
+depósito obrigatório e identidade visual EVOK. Detalhe completo de cada
+item em `docs/DIARIO_BORDO_GO_LIVE_G6.md` (apêndice "2026-08-04 —
+Fechamento do risco residual react-router") e `docs/governance/TODO.md`.
+**Data**: 2026-08-04
+
+---
+
+## Custeio real de mão-de-obra/overhead + rastreabilidade por lote/QR — 2026-08-04
+
+Duas frentes de roadmap fechadas nesta data (`docs/LEVANTAMENTO_ERP_2026-08-02.md`,
+itens 6 e 7 da tabela de prioridades), verificadas por leitura direta do
+código/testes antes de marcar qualquer coisa. A seção "Rodada de 5
+frentes paralelas — 2026-08-04" logo acima deste bloco havia deixado o
+item 7 explicitamente como "próxima tarefa de custeio" (ver "Próximos
+passos", item 1) — esta entrega fecha exatamente essa pendência, e
+também o item 6.
+
+### 1. Custeio real (roadmap item 7)
+
+Schema já existia (`work_centers.cost_per_hour`, tabela
+`production_cost_settings`, migrations `20260804-000007/-000008/-000009`).
+Nesta entrega entrou o **cálculo**:
+
+- `server/src/services/costingService.ts` — novo método
+  `registerAdditionalProductionCost()`.
+- `server/src/modules/production/application/use-cases/ChangeProductionOrderStatusUseCase.ts`
+  — `completeOrder()` agora calcula, na MESMA transação da conclusão da
+  OP:
+  - **Mão-de-obra:** horas apontadas (`production_order_tracking`,
+    `finished_at - started_at`) × `work_centers.cost_per_hour` da etapa
+    (via `production_route_steps.work_center_id`), com fallback
+    `production_cost_settings.default_labor_rate_per_hour` quando a
+    etapa não tem centro de trabalho estruturado vinculado.
+  - **Overhead:** `overhead_rate_percent / 100` aplicado sobre a base
+    configurada em `overhead_calculation_basis`
+    (`material_labor`/`labor_only`/`material_only`).
+  - Lançamentos gravados em `ProductCostLedger` com
+    `source_type: 'production_labor'`/`'production_overhead'`, separados
+    do lançamento de material (`'production'`, já existia).
+- Contrato completo e justificativa de cada decisão de modelagem já
+  documentados em `docs/DATABASE.md`, seção "Cálculo implementado (item
+  7/9 — mão-de-obra e overhead)".
+- Teste dedicado: `server/tests/unit/production-labor-overhead-cost.test.ts`
+  (6 casos, `costingService` real não mockado — mão-de-obra via
+  `work_centers.cost_per_hour`, fallback global, OP sem apontamento, 3
+  bases de overhead).
+
+**Bug real encontrado e corrigido no caminho:**
+`SequelizeReportsRepository.findCostVarianceByProduct`
+(`server/src/modules/reports/infrastructure/sequelize/SequelizeReportsRepository.ts:225`)
+triplicava a contagem de `quantity` quando existiam múltiplos
+lançamentos-irmãos (material + mão-de-obra + overhead) da mesma OP
+compartilhando `source_id` — a média ponderada simples somava a
+quantidade 3x para o mesmo lote produzido, diluindo `avg_real_cost`
+incorretamente. Corrigido com uma CTE que colapsa as linhas-irmãs por
+`(product_id, source_id)` antes de agregar por produto. **QA deve
+validar isto ao vivo:** gerar uma OP com apontamento real (mão-de-obra
+via um centro de trabalho com `cost_per_hour` configurado), concluí-la, e
+conferir que o relatório de custos em `/reports` (aba "Custos") mostra a
+variância correta agora — sem a triplicação antiga de `quantity`.
+
+**Risco residual real, sem mitigação:** não há backfill retroativo — OPs
+concluídas antes desta entrega não ganham custo de mão-de-obra/overhead
+(permanecem só com custo de material). OEE completo (disponibilidade +
+qualidade, além do eixo de custo) continua fora de escopo.
+
+### 2. Rastreabilidade por lote/QR no chão de fábrica (roadmap item 6)
+
+Backend reaproveitou 100% a infraestrutura de QR já existente
+(`qrCodeService.ts`, `GenerateEntityQrCodeUseCase.ts`, hoje usada em
+Ativos) e o model `ProductionLotConsumption` já existente — nenhuma
+tabela nova. Endpoints novos em
+`server/src/modules/inventory/presentation/routes/inventory.ts`:
+
+- `GET /api/inventory/lots/by-code/:lot_number` — lookup por código
+  legível (`server/src/modules/inventory/application/use-cases/GetLotByCodeUseCase.ts`),
+  com desambiguação opcional por `product_id`.
+- `GET /api/inventory/lots/:id/qrcode` — gera QR para etiqueta física,
+  reaproveitando `GenerateEntityQrCodeUseCase`.
+
+Teste dedicado: `server/tests/unit/lot-traceability-qrcode.test.ts` (9
+casos).
+
+Frontend: novo componente
+`client/src/pages/production/CompleteOrderWithLotScanDialog.tsx` —
+conclusão de OP com leitura/digitação de código de lote consumido
+(resolvido via lookup ao endpoint acima) e lote produzido via
+`finished_lot_number` — integrado em `ShopFloorPage.tsx` (botão "Concluir
+OP (ler lote)", abre o QR da etiqueta pós-conclusão via `QrCodeDialog`
+reaproveitado de Ativos). Botão de reimpressão de QR adicionado em
+`client/src/pages/logistics/LotsTab.tsx`.
+
+**Decisão consciente, não é gap:** leitura por câmera (`getUserMedia`)
+não foi implementada — o leitor físico USB/Bluetooth de código de
+barras/QR, padrão em chão de fábrica, já preenche o campo de texto como
+se fosse digitação.
+
+### Validação — confirmada ao vivo nesta consolidação
+
+```
+cd server && npx jest tests/unit
+  → Test Suites: 63 passed, 63 total | Tests: 446 passed, 446 total
+
+cd server && node scripts/run-api-suite.cjs integration
+  → Test Suites: 27 passed, 27 total | Tests: 65 passed, 65 total
+
+cd client && npx vitest run
+  → Test Files: 6 passed (6) | Tests: 24 passed (24)
+```
+
+### Documentos atualizados nesta consolidação
+
+- `docs/governance/TODO.md` — nova seção "Custeio real de
+  mão-de-obra/overhead + rastreabilidade por lote/QR — 2026-08-04", nota
+  na seção "Rodada de 5 Frentes Paralelas" apontando que o item 7 deixou
+  de ser "próxima tarefa" e passou a `feito`.
+- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — itens 6 e 7 da tabela de
+  prioridades marcados `feito`, linha `production` da tabela de módulos
+  parciais atualizada.
+- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+  (apêndice; entradas antigas preservadas, nenhuma reescrita).
+- Este arquivo (`docs/HANDOFF_CODEX.md`).
+
+### O que QA deve validar
+
+1. **Custeio:** criar uma OP, apontar produção com etapas vinculadas a
+   um centro de trabalho com `cost_per_hour` configurado (ou usar o
+   fallback `default_labor_rate_per_hour` de `production_cost_settings`),
+   concluir a OP, e conferir em `/reports` → aba "Custos" que
+   `avg_real_cost` reflete material + mão-de-obra + overhead
+   corretamente (não triplicado).
+2. **Rastreabilidade:** no chão de fábrica (`/production/shop-floor`),
+   concluir uma OP usando o fluxo "Concluir OP (ler lote)" — informar
+   lote(s) consumido(s) por código e o `finished_lot_number` do lote
+   produzido; verificar que o QR da etiqueta gerado pós-conclusão abre
+   corretamente e que `GET /api/inventory/lots/by-code/:lot_number`
+   resolve o lote informado.
+3. Confirmar que nenhuma OP concluída antes desta entrega teve seu custo
+   de material alterado (backfill não foi aplicado por design — apenas
+   novo custo de mão-de-obra/overhead passa a ser lançado a partir de
+   agora).
+
+**Consolidado por**: Claude Code (Tech Lead de Governança/Documentação)
 **Data**: 2026-08-04

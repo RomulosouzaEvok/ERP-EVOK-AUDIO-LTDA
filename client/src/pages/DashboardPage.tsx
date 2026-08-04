@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ShoppingCart, Truck, Factory, Wallet } from 'lucide-react';
 
@@ -14,59 +14,81 @@ import { Badge } from '@/components/ui/badge';
 
 /** Página inicial pós-login: KPIs reais consolidados dos módulos operacionais. */
 export default function DashboardPage() {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, hasModuleAccess, permissionsFetchFailed } = useAuth();
+
+  // Interseção "cards existentes ∩ módulos com acesso" (Bloco 1.3, UC-38):
+  // mesmo padrão de fallback usado em `AppLayout.itemVisible` — admin e
+  // falha de rede na busca de permissões nunca escondem cards (regra antiga
+  // de `role` prevalece nesse caso, para não travar ninguém por bug de
+  // infraestrutura).
+  const usingRoleFallback = permissionsFetchFailed || hasRole('admin');
+  const canSee = (module: Parameters<typeof hasModuleAccess>[0]) => usingRoleFallback || hasModuleAccess(module);
+
+  const canSeeProdutos = canSee('produtos');
+  const canSeeCompras = canSee('compras');
+  const canSeeProducao = canSee('producao');
+  const canSeeFinanceiro = hasRole('admin', 'financial') && canSee('financeiro');
 
   const { data: lowStock, isLoading: loadingLowStock, isError: errorLowStock } = useQuery({
     queryKey: ['dashboard-low-stock'],
     queryFn: inventoryApi.listLowStock,
+    enabled: canSeeProdutos,
   });
 
   const { data: pendingPurchases, isLoading: loadingPurchases, isError: errorPurchases } = useQuery({
     queryKey: ['dashboard-purchases-pending'],
     queryFn: () => purchasesApi.listPurchases({ status: 'pending', limit: 1 }),
+    enabled: canSeeCompras,
   });
 
   const { data: openProduction, isLoading: loadingProduction, isError: errorProduction } = useQuery({
     queryKey: ['dashboard-production-in-progress'],
     queryFn: () => productionApi.listProductionOrders({ status: 'in_progress', limit: 1 }),
+    enabled: canSeeProducao,
   });
 
   const { data: overduePayables, isLoading: loadingPayables, isError: errorPayables } = useQuery({
     queryKey: ['dashboard-payables-overdue'],
     queryFn: () => financialApi.listPayables({ status: 'overdue', limit: 1 }),
-    enabled: hasRole('admin', 'financial'),
+    enabled: canSeeFinanceiro,
   });
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="flex flex-col gap-1 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
         <h1 className="text-2xl font-semibold">Olá, {user?.name?.split(' ')[0]}</h1>
         <p className="text-muted-foreground">Visão geral do ERP EVOK ÁUDIO.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          to="/products"
-          icon={AlertTriangle}
-          label="Produtos com estoque baixo"
-          value={loadingLowStock ? '...' : errorLowStock ? '—' : String(lowStock?.length ?? 0)}
-          tone={errorLowStock ? 'error' : lowStock && lowStock.length > 0 ? 'destructive' : 'default'}
-        />
-        <KpiCard
-          to="/purchases"
-          icon={Truck}
-          label="Compras pendentes"
-          value={loadingPurchases ? '...' : errorPurchases ? '—' : String(pendingPurchases?.pagination.total ?? 0)}
-          tone={errorPurchases ? 'error' : 'default'}
-        />
-        <KpiCard
-          to="/production"
-          icon={Factory}
-          label="Ordens em produção"
-          value={loadingProduction ? '...' : errorProduction ? '—' : String(openProduction?.pagination.total ?? 0)}
-          tone={errorProduction ? 'error' : 'default'}
-        />
-        {hasRole('admin', 'financial') && (
+        {canSeeProdutos && (
+          <KpiCard
+            to="/products"
+            icon={AlertTriangle}
+            label="Produtos com estoque baixo"
+            value={loadingLowStock ? '...' : errorLowStock ? '—' : String(lowStock?.length ?? 0)}
+            tone={errorLowStock ? 'error' : lowStock && lowStock.length > 0 ? 'destructive' : 'default'}
+          />
+        )}
+        {canSeeCompras && (
+          <KpiCard
+            to="/purchases"
+            icon={Truck}
+            label="Compras pendentes"
+            value={loadingPurchases ? '...' : errorPurchases ? '—' : String(pendingPurchases?.pagination.total ?? 0)}
+            tone={errorPurchases ? 'error' : 'default'}
+          />
+        )}
+        {canSeeProducao && (
+          <KpiCard
+            to="/production"
+            icon={Factory}
+            label="Ordens em produção"
+            value={loadingProduction ? '...' : errorProduction ? '—' : String(openProduction?.pagination.total ?? 0)}
+            tone={errorProduction ? 'error' : 'default'}
+          />
+        )}
+        {canSeeFinanceiro && (
           <KpiCard
             to="/financial"
             icon={Wallet}
@@ -77,10 +99,13 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {lowStock && lowStock.length > 0 && (
+      {canSeeProdutos && lowStock && lowStock.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Produtos com estoque baixo</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="size-4 text-destructive" />
+              Produtos com estoque baixo
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -95,12 +120,12 @@ export default function DashboardPage() {
               <TableBody>
                 {lowStock.slice(0, 10).map((product) => (
                   <TableRow key={product.id}>
-                    <TableCell>{product.code}</TableCell>
+                    <TableCell className="font-mono text-xs">{product.code}</TableCell>
                     <TableCell>{product.name}</TableCell>
                     <TableCell>
                       <Badge variant="destructive">{Number(product.quantity)}</Badge>
                     </TableCell>
-                    <TableCell>{Number(product.min_quantity)}</TableCell>
+                    <TableCell className="text-muted-foreground">{Number(product.min_quantity)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -115,19 +140,33 @@ export default function DashboardPage() {
             <CardTitle>Atalhos</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Link to="/sales" className="text-sm text-primary underline-offset-4 hover:underline">
-              <ShoppingCart className="mr-1 inline size-4" /> Nova venda
-            </Link>
-            <Link to="/purchases" className="text-sm text-primary underline-offset-4 hover:underline">
-              <Truck className="mr-1 inline size-4" /> Novo pedido de compra
-            </Link>
-            <Link to="/production" className="text-sm text-primary underline-offset-4 hover:underline">
-              <Factory className="mr-1 inline size-4" /> Nova ordem de produção
-            </Link>
+            <ShortcutLink to="/sales" icon={ShoppingCart} label="Nova venda" />
+            <ShortcutLink to="/purchases" icon={Truck} label="Novo pedido de compra" />
+            <ShortcutLink to="/production" icon={Factory} label="Nova ordem de produção" />
           </CardContent>
         </Card>
       </div>
     </div>
+  );
+}
+
+function ShortcutLink({
+  to,
+  icon: Icon,
+  label,
+}: {
+  to: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:border-brand hover:bg-brand/10 hover:text-brand"
+    >
+      <Icon className="size-4" />
+      {label}
+    </Link>
   );
 }
 
@@ -148,14 +187,22 @@ function KpiCard({
   // (dado real que exige atencao, ex.: estoque baixo) — sem isso, uma
   // falha de rede exibia "0 pendencias" identico a um KPI zerado
   // legitimo, escondendo do usuario que os dados estao desatualizados.
-  const toneClass = tone === 'destructive' ? 'text-destructive' : tone === 'error' ? 'text-muted-foreground' : '';
+  const valueToneClass = tone === 'destructive' ? 'text-destructive' : tone === 'error' ? 'text-muted-foreground' : '';
+  const badgeToneClass =
+    tone === 'destructive'
+      ? 'bg-destructive/10 text-destructive'
+      : tone === 'error'
+        ? 'bg-muted text-muted-foreground'
+        : 'bg-brand/10 text-brand';
   return (
     <Link to={to}>
-      <Card className="transition-colors hover:bg-accent/50">
+      <Card className="border-l-4 border-l-transparent transition-all hover:-translate-y-0.5 hover:border-l-brand hover:shadow-md">
         <CardContent className="flex items-center gap-3 pt-6">
-          <Icon className={tone === 'destructive' ? 'size-8 text-destructive' : 'size-8 text-muted-foreground'} />
+          <div className={`flex size-11 shrink-0 items-center justify-center rounded-lg ${badgeToneClass}`}>
+            <Icon className="size-5" />
+          </div>
           <div>
-            <p className={`text-2xl font-semibold ${toneClass}`}>{value}</p>
+            <p className={`text-2xl font-semibold leading-tight ${valueToneClass}`}>{value}</p>
             <p className="text-xs text-muted-foreground">
               {tone === 'error' ? `${label} (falha ao carregar)` : label}
             </p>

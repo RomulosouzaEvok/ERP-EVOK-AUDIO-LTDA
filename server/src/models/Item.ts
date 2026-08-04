@@ -7,10 +7,10 @@
 import { DataTypes, ModelDefined } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type ItemTipo = 'MATERIA_PRIMA' | 'SUBCONJUNTO' | 'PRODUTO_ACABADO';
-export type ItemStatus = 'ATIVO' | 'INATIVO' | 'BLOQUEADO';
+type ItemTipo = 'MATERIA_PRIMA' | 'SUBCONJUNTO' | 'PRODUTO_ACABADO';
+type ItemStatus = 'ATIVO' | 'INATIVO' | 'BLOQUEADO';
 
-export interface ItemAttributes {
+interface ItemAttributes {
   id: string;
   codigo: string;
   descricao: string;
@@ -24,14 +24,22 @@ export interface ItemAttributes {
   lead_time_dias: number;
   custo_padrao: string;
   fornecedor_padrao_id: string | null;
+  /**
+   * Opt-in do ciclo automatico do MRP (roadmap pos-Go-Live item 3): quando
+   * `true`, ordens planejadas `RASCUNHO` deste item sao convertidas em
+   * Requisicao de Compra automaticamente ao rodar o MRP
+   * (`GenerateMrpPlanUseCase`), sem intervencao do planejador. Default
+   * `false` preserva o fluxo manual (selecao na tela `/production/mrp`).
+   */
+  conversao_automatica: boolean;
   readonly criado_em?: Date;
   readonly atualizado_em?: Date;
 }
 
 type ItemCreationAttributes = Omit<
   ItemAttributes,
-  'id' | 'status' | 'estoque_atual' | 'estoque_reservado' | 'estoque_seguranca' | 'lote_minimo' | 'lead_time_dias' | 'custo_padrao'
-> & Partial<Pick<ItemAttributes, 'id' | 'status' | 'estoque_atual' | 'estoque_reservado' | 'estoque_seguranca' | 'lote_minimo' | 'lead_time_dias' | 'custo_padrao'>>;
+  'id' | 'status' | 'estoque_atual' | 'estoque_reservado' | 'estoque_seguranca' | 'lote_minimo' | 'lead_time_dias' | 'custo_padrao' | 'conversao_automatica'
+> & Partial<Pick<ItemAttributes, 'id' | 'status' | 'estoque_atual' | 'estoque_reservado' | 'estoque_seguranca' | 'lote_minimo' | 'lead_time_dias' | 'custo_padrao' | 'conversao_automatica'>>;
 
 /**
  * Representa o cadastro mestre industrial usado por BOM, MRP e rastreabilidade.
@@ -97,6 +105,11 @@ const Item: ModelDefined<ItemAttributes, ItemCreationAttributes> = sequelize.def
   fornecedor_padrao_id: {
     type: DataTypes.UUID,
     allowNull: true,
+  },
+  conversao_automatica: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
   },
 }, {
   tableName: 'items',

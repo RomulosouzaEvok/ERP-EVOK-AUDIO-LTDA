@@ -1,27 +1,43 @@
 # 🚀 GO-LIVE G6 CHECKLIST — ERP Evok Áudio
 ## Plano de Execução Faseado com Decisões Go/No-Go
 
-**Data Planejada:** 2 de agosto de 2026  
-**Versão:** 1.0  
-**Status:** ⏳ EM PLANEJAMENTO  
-**Horizonte:** 30h pré-Go-Live + Go-Live Day + 48h pós-Go-Live  
-**SSOT:** Auditoria pré-produção consolidada em `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`
+**Data Planejada (original):** 2 de agosto de 2026 — **superada**  
+**Versão:** 1.1 — reconciliada em 2026-08-04  
+**Status:** 🟡 **FASE 1 (bloqueadores P0) CONCLUÍDA** — commit `d1d3aff`, 2026-08-02. Gate atual = **UAT + aprovação formal G6**, ainda **não iniciado**. Deploy (Fase 2) **NÃO autorizado** — falta servidor de produção.  
+**Horizonte:** 30h pré-Go-Live (✅ executadas) + Go-Live Day (⏳ aguardando gate) + 48h pós-Go-Live (⏳ não iniciado)  
+**SSOT:** `CLAUDE.md` (seção 5 "Go-Live Readiness") e `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` são a fonte da verdade sobre o status dos bloqueadores. Este documento é o plano operacional/checklist detalhado, reconciliado com essas fontes.
+
+> ⚠️ **Nota de reconciliação (2026-08-04):** este arquivo estava desatualizado —
+> marcava os 4 bloqueadores P0 originais como `[ ]`/`⏳` quando na verdade
+> já haviam sido remediados em 2026-08-02 (commit `d1d3aff`). Os itens abaixo
+> foram atualizados com evidência (data, commit, arquivo/local da prova).
+> Itens de execução operacional do Go-Live Day (Fase 2) e pós-Go-Live
+> (Fase 3) que dependem de infraestrutura real (Kubernetes, Datadog,
+> PagerDuty) **permanecem `[PENDENTE]`** — são templates de processo que só
+> serão executados/preenchidos no dia real do deploy, e dependem da compra
+> do servidor de produção (ver pendência (a) abaixo).
 
 ---
 
 ## 📊 RESUMO EXECUTIVO
 
-| Fase | Duração | Objetivo | Risco | Go/No-Go |
-|------|---------|----------|-------|----------|
-| **Fase 1** | 30h | Resolver 4 bloqueadores + UAT | Crítico se atrasado | Decision Point 1 |
-| **Fase 2** | 4-6h | Deploy + Smoke Tests | Alto (janela restrita) | Decision Point 2 |
-| **Fase 3** | 48h | Monitoramento + Suporte | Médio (pré-configurado) | Decision Point 3 |
+| Fase | Duração | Objetivo | Status Real (2026-08-04) | Go/No-Go |
+|------|---------|----------|---------------------------|----------|
+| **Fase 1** | 30h | Resolver 4 bloqueadores + UAT | ✅ Bloqueadores resolvidos (d1d3aff, 2026-08-02) \| ⏳ UAT ainda não executado | Decision Point 1 — **aberto** |
+| **Fase 2** | 4-6h | Deploy + Smoke Tests | ⏳ Não iniciada — bloqueada por (a) falta de servidor de produção e (b) Decision Point 1 aberto | Decision Point 2 — não alcançável ainda |
+| **Fase 3** | 48h | Monitoramento + Suporte | ⏳ Não iniciada | Decision Point 3 — não alcançável ainda |
 
-**4 Bloqueadores Críticos (P0):**
-1. ✋ **Requisição de Compra inexistente** (1.1) — 8h
-2. ✋ **MRP congelado contra estoque_atual** (1.2) — 6h
-3. ✋ **37 tabelas sem Foreign Keys** (2.1) — 4h
-4. ✋ **IDOR sem validação tenant** (3.1) — 3h
+**4 Bloqueadores Críticos originais (P0) — todos remediados em 2026-08-02, commit `d1d3aff`:**
+1. ✅ **[IMPLEMENTADO] Requisição de Compra inexistente** (1.1) — módulo `/api/purchase-requisitions` implementado e testado end-to-end
+2. ✅ **[IMPLEMENTADO] MRP congelado contra estoque_atual** (1.2) — MRP roda contra estoque real (dual-read), validado
+3. ✅ **[IMPLEMENTADO] 37 tabelas sem Foreign Keys** (2.1) — 133 FKs aplicadas via migration `20260802-000003`
+4. ✅ **[IMPLEMENTADO] IDOR sem validação tenant** (3.1) — RBAC 100% + anti-spoofing de identidade a partir do JWT
+
+**Pendências reais restantes para o Go-Live (rastreadas centralmente em `docs/governance/TODO.md` e `docs/DIARIO_BORDO_GO_LIVE_G6.md`):**
+- **(a) [PENDENTE] Servidor de produção não adquirido** — VPS/on-premise ainda não comprado; bloqueia o deploy (Fase 2 / F10) independentemente do gate de UAT.
+- **(b) [PENDENTE] UAT completo com stakeholders** — nunca executado; é o gate formal da Fase 1 (Decision Point 1).
+- **(c) [x] Risco residual `react-router@7.18.2` — RESOLVIDO em 2026-08-04.** Advisory `GHSA-qwww-vcr4-c8h2` fechado via upgrade real para `react-router@8.3.0` (unificação `react-router-dom` → `react-router` a partir da v8). `npm audit --omit=dev` em `client/` confirma 0 vulnerabilidades. Detalhe em `docs/governance/TODO.md`, seção "Pendências de Segurança / Gate G6", e `docs/DIARIO_BORDO_GO_LIVE_G6.md`, apêndice 2026-08-04.
+- **(d) [PENDENTE] Testes de integração RBAC contra infraestrutura real** — cobertura foi adicionada em `server/tests/integration/legacy-routes-rbac-regression.test.ts` (2026-08-04), mas roda via `describe.skip` por falta de `RUN_INTEGRATION=true` + `TEST_API_URL` + `TEST_AUTH_TOKEN` + PostgreSQL acessível no ambiente de CI/dev atual. Precisa ser executada de fato contra infra real antes do Go-Live.
 
 ---
 
@@ -34,203 +50,226 @@ Garantir que os 4 bloqueadores críticos sejam resolvidos, testados com stakehol
 
 ## 1.1 — RESOLUÇÃO DE BLOQUEADORES CRÍTICOS (21h)
 
-### P0.1: Requisição de Compra gerada na Cadeia (8h)
+### P0.1: Requisição de Compra gerada na Cadeia (8h) — ✅ [IMPLEMENTADO]
+**Status:** Remediado em 2026-08-02, commit `d1d3aff`.
+**Evidência:** Módulo `/api/purchase-requisitions` implementado e testado end-to-end (ver `CLAUDE.md` seção 5, tabela de bloqueadores; `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` seção "Plano de Ação → Fase 1", item marcado `[x]`).
 **Responsável:** Programador Backend + TechLead  
 **⏱️ Estimado:** 8h  
 **📍 Arquivo crítico:** `src/usecases/SupplyChainUseCase.ts`  
 **Dependência:** Modelo Requisição criado e migrado  
 
-- [ ] **Análise (0.5h)**
-  - [ ] Revisar fluxo atual: MRP → PA → Requisição deveria nascer aqui
-  - [ ] Definir regra: Requisição criada automaticamente na geração da PA ou manualmente?
-  - [ ] Documento de decisão: RQ criada por job async ou síncrono?
+- [x] **Análise (0.5h)**
+  - [x] Revisar fluxo atual: MRP → PA → Requisição deveria nascer aqui
+  - [x] Definir regra: Requisição criada automaticamente na geração da PA ou manualmente?
+  - [x] Documento de decisão: RQ criada por job async ou síncrono?
   - 👤 Responsável: Backend Tech Lead
 
-- [ ] **Implementação (6h)**
-  - [ ] Criar modelo/tabela `purchase_requisitions` se não existe
-  - [ ] Adicionar endpoint POST `/supply-chain/requisitions`
-  - [ ] Lógica: MRP gera PA → trigger automático Requisição
-  - [ ] Validações: empresa_id, filial_id, tenant_id isolados
-  - [ ] Testes unitários: 3 casos (criação, validação, erro tenant)
+- [x] **Implementação (6h)**
+  - [x] Criar modelo/tabela `purchase_requisitions` se não existe
+  - [x] Adicionar endpoint POST `/supply-chain/requisitions` (via módulo `/api/purchase-requisitions`)
+  - [x] Lógica: MRP gera PA → trigger automático Requisição
+  - [x] Validações: empresa_id, filial_id, tenant_id isolados
+  - [x] Testes unitários: 3 casos (criação, validação, erro tenant)
   - 👤 Responsável: Backend Developer
 
 - [ ] **Testes (1.5h)**
-  - [ ] Test: MRP roda e cria requisição com status `PENDENTE`
-  - [ ] Test: Requisição vinculada à PA corretamente
-  - [ ] Test: Auditoria registra origem (MRP trigger)
-  - [ ] UAT: Gestor de Compras valida requisição visível no sistema
+  - [x] Test: MRP roda e cria requisição com status `PENDENTE`
+  - [x] Test: Requisição vinculada à PA corretamente
+  - [x] Test: Auditoria registra origem (MRP trigger)
+  - [ ] **[PENDENTE]** UAT: Gestor de Compras valida requisição visível no sistema — ainda não executado (ver pendência (b) no resumo executivo)
   - 👤 Responsável: QA + Gestor de Compras
 
 **🚨 Go/No-Go Decision P0.1:**
 - ✅ Requisição criada e visível 100% dos casos
 - ✅ Auditoria de origem preenchida
-- ✅ Aprovação de Gestor de Compras
-- ❌ **NO-GO se:** Requisição criada < 90% dos tempos ou origem não auditável
+- [PENDENTE] Aprovação de Gestor de Compras (depende do UAT)
+- ❌ **NO-GO se:** Requisição criada < 90% dos tempos ou origem não auditável — **não se aplica, critério GO atingido tecnicamente**
 
 ---
 
-### P0.2: MRP roda contra estoque_atual REAL (6h)
+### P0.2: MRP roda contra estoque_atual REAL (6h) — ✅ [IMPLEMENTADO]
+**Status:** Remediado em 2026-08-02, commit `d1d3aff`.
+**Evidência:** MRP roda contra estoque real (dual-read), validado (ver `CLAUDE.md` seção 5, item 1.2; `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`, "MRP estoque real (1.2) — dual-read validado (BOM + perda %)").
 **Responsável:** Programador Backend  
 **⏱️ Estimado:** 6h  
 **📍 Arquivo crítico:** `src/usecases/MRPUseCase.ts`  
 **Bloqueador:** MRP congelado contra `Item.estoque_atual` congelado  
 
-- [ ] **Análise (1h)**
-  - [ ] Investigar por que `estoque_atual` não atualiza durante MRP
-  - [ ] Revisar fluxo: Apontamento PA → estoque atualiza? (Hoje não)
-  - [ ] Documento de decisão: estoque_atual = sum(inventory_movements) real-time?
+- [x] **Análise (1h)**
+  - [x] Investigar por que `estoque_atual` não atualiza durante MRP
+  - [x] Revisar fluxo: Apontamento PA → estoque atualiza? (corrigido — ver P0.6)
+  - [x] Documento de decisão: estoque_atual = sum(inventory_movements) real-time?
   - 👤 Responsável: Backend Tech Lead
 
-- [ ] **Implementação (4h)**
-  - [ ] Refatorar MRP para usar `inventory_movements` SUM em vez de `estoque_atual` cache
-  - [ ] Adicionar índice em `inventory_movements` (company_id, item_id, date) se não existe
-  - [ ] Validar precisão: 6 casas decimais em cálculos
-  - [ ] Testes: MRP recalcula com dados reais
+- [x] **Implementação (4h)**
+  - [x] Refatorar MRP para usar `inventory_movements`/dual-read em vez de `estoque_atual` cache congelado
+  - [x] Adicionar índice em `inventory_movements` se necessário
+  - [x] Validar precisão em cálculos
+  - [x] Testes: MRP recalcula com dados reais
   - 👤 Responsável: Backend Developer
 
 - [ ] **Validação (1h)**
-  - [ ] Teste: Apontamento PA aumenta estoque → MRP reflete
-  - [ ] Teste: Movimentação de estoque → MRP recalcula ofertas
-  - [ ] Performance: MRP roda em < 30s para 5k itens
+  - [x] Teste: Apontamento PA aumenta estoque → MRP reflete
+  - [x] Teste: Movimentação de estoque → MRP recalcula ofertas
+  - [ ] **[PENDENTE]** Performance: MRP roda em < 30s para 5k itens — não há evidência de teste de carga documentado; validar em UAT/pré-deploy
   - 👤 Responsável: QA + DevOps
 
 **🚨 Go/No-Go Decision P0.2:**
 - ✅ MRP reflete mudanças de estoque real-time
 - ✅ Sem congelamento de netting
-- ✅ Performance aceitável (< 30s)
-- ❌ **NO-GO se:** MRP ainda congelado ou performance > 1min
+- [PENDENTE] Performance aceitável (< 30s) — não testado em escala, validar antes do deploy
+- ❌ **NO-GO se:** MRP ainda congelado ou performance > 1min — **congelamento resolvido; performance em escala ainda não validada**
 
 ---
 
-### P0.3: Foreign Keys em 37 tabelas operacionais (4h)
+### P0.3: Foreign Keys em 37 tabelas operacionais (4h) — ✅ [IMPLEMENTADO]
+**Status:** Remediado em 2026-08-02, commit `d1d3aff`.
+**Evidência:** 133 FKs aplicadas via migration versionada `20260802-000003` (ver `CLAUDE.md` seção 5, item 2.1: "133 FKs via migration versionada"; `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`: "Adicionar FKs (2.1) — 133 FKs via migration `20260802-000003`").
 **Responsável:** DevOps + Backend  
 **⏱️ Estimado:** 4h (migração + testes)  
 **📍 Arquivo crítico:** `migrations/` folder  
 **Dependência:** Backup full antes de aplicar  
 
-- [ ] **Mapeamento (1h)**
-  - [ ] Listar 37 tabelas sem FKs (extrair de auditoria)
-  - [ ] Priorizar: tabelas core (purchase_orders, inventory_movements, bills_of_materials)
-  - [ ] Identificar ciclos (BOM → Item → BOM?) e resolvê-los
+- [x] **Mapeamento (1h)**
+  - [x] Listar tabelas sem FKs (extrair de auditoria)
+  - [x] Priorizar: tabelas core (purchase_orders, inventory_movements, bills_of_materials)
+  - [x] Identificar ciclos (BOM → Item → BOM?) e resolvê-los
   - 👤 Responsável: Backend Tech Lead + DevOps
 
-- [ ] **Migração (2h)**
-  - [ ] Criar migration: ADD CONSTRAINT para cada FK crítica
-  - [ ] Validação de dados: nenhuma linha orfã
-  - [ ] Teste em dev: migration up/down funciona
-  - [ ] Teste em staging: replicar carga de produção se possível
+- [x] **Migração (2h)**
+  - [x] Criar migration: ADD CONSTRAINT para cada FK crítica (133 FKs, migration `20260802-000003`)
+  - [x] Validação de dados: nenhuma linha orfã
+  - [x] Teste em dev: migration up/down funciona
+  - [ ] **[PENDENTE]** Teste em staging real com carga de produção — sem ambiente de staging dedicado; validar quando servidor de produção estiver disponível
   - 👤 Responsável: DevOps + Backend Developer
 
-- [ ] **Validação (1h)**
-  - [ ] Teste: Não conseguir deletar Item com OPs referenciando
-  - [ ] Teste: Cascata de deletação (se configurado)
-  - [ ] Audit log: FKs adicionadas registradas
+- [x] **Validação (1h)**
+  - [x] Teste: Não conseguir deletar Item com OPs referenciando (RESTRICT aplicado por padrão, ver `CLAUDE.md` seção 7 "Foreign Keys Obrigatórias")
+  - [x] Teste: Cascata de deletação (CASCADE/SET NULL onde apropriado)
+  - [x] Audit log: FKs adicionadas registradas (migration versionada)
   - 👤 Responsável: QA
 
 **🚨 Go/No-Go Decision P0.3:**
 - ✅ FKs críticas aplicadas sem erro de constraint
 - ✅ Backup pré-migração confirmado
-- ✅ Rollback testado e documentado
-- ❌ **NO-GO se:** Há dados orfãos que quebram FK ou rollback falha
+- ✅ Rollback testado e documentado (migration down disponível via `npm run migration:down`)
+- ❌ **NO-GO se:** Há dados orfãos que quebram FK ou rollback falha — **não ocorreu**
 
 ---
 
-### P0.4: IDOR — Validação de company_id em cada request (3h)
+### P0.4: IDOR — Validação de company_id em cada request (3h) — ✅ [IMPLEMENTADO]
+**Status:** Remediado em 2026-08-02, commit `d1d3aff`.
+**Evidência:** RBAC 100% em todas as rotas + anti-spoofing de identidade (requester/approved_by/operator vêm do JWT ou são validados por FK) — ver `CLAUDE.md` seção 4 ("Proteção: RBAC em 100% das rotas; anti-spoofing de identidade... remediação 3.1 de 2026-08-02") e seção 5, item 3.1. Cobertura de teste de RBAC ampliada em 2026-08-04 (ver P0.4 nota abaixo e pendência (d) no resumo executivo).
 **Responsável:** Backend Security + Tech Lead  
 **⏱️ Estimado:** 3h  
 **📍 Arquivo crítico:** `src/middleware/authMiddleware.ts`, `src/middleware/tenantMiddleware.ts`  
 **Bloqueador:** Usuários acessam recursos de outras empresas  
 
-- [ ] **Auditoria (1h)**
-  - [ ] Listar endpoints vulneráveis: `/items/:id`, `/purchase-orders/:id`, `/inventory/:id`
-  - [ ] Testar: GET /items/1 como empresa B consegue acessar?
-  - [ ] Documentar vulnerabilidade encontrada
+- [x] **Auditoria (1h)**
+  - [x] Listar endpoints vulneráveis: `/items/:id`, `/purchase-orders/:id`, `/inventory/:id`
+  - [x] Testar: GET /items/1 como empresa B consegue acessar?
+  - [x] Documentar vulnerabilidade encontrada
   - 👤 Responsável: Security Team
 
-- [ ] **Implementação (1.5h)**
-  - [ ] Middleware: validar company_id na JWT (req.user.company_id)
-  - [ ] Middleware: cada endpoint verifica: resource.company_id === req.user.company_id
-  - [ ] Testes: 5 endpoints críticos (items, POs, bills, inventory, suppliers)
+- [x] **Implementação (1.5h)**
+  - [x] Middleware: validar identidade/permissão via JWT (`authorizeModule` retrofit em todos os módulos — ver commit `8f646dc`)
+  - [x] Middleware: cada endpoint verifica autorização e identidade (anti-spoofing)
+  - [x] Testes: endpoints críticos cobertos (items, POs, bills, inventory, suppliers)
   - 👤 Responsável: Backend Developer
 
 - [ ] **Teste de Segurança (0.5h)**
-  - [ ] Tester: Gerar JWT de empresa A, tentar GET /items/:empresa_B_id
-  - [ ] Esperado: 403 Forbidden
-  - [ ] Teste: 10 endpoints auditados, 100% com validação
+  - [x] Tester: Gerar JWT de empresa A, tentar GET /items/:empresa_B_id → esperado 403
+  - [x] Esperado: 403 Forbidden — validado
+  - [ ] **[PENDENTE]** Teste de integração RBAC dos endpoints de Depósito contra infraestrutura real — cobertura escrita em 2026-08-04 (`server/tests/integration/legacy-routes-rbac-regression.test.ts`), mas roda via `describe.skip` por falta de PostgreSQL/API de teste disponível no ambiente atual; precisa rodar de fato antes do Go-Live (ver pendência (d) no resumo executivo)
   - 👤 Responsável: QA Security
 
 **🚨 Go/No-Go Decision P0.4:**
-- ✅ 100% endpoints com validação company_id
-- ✅ Teste de segurança passou (cross-tenant rejected)
-- ✅ Documentação: quais endpoints auditados
-- ❌ **NO-GO se:** Qualquer endpoint retorna recurso de outra empresa ou 403 não funciona
+- ✅ Endpoints críticos com validação de identidade/RBAC
+- ✅ Teste de segurança passou (cross-tenant rejected) nos casos cobertos
+- [PENDENTE] Execução da suíte de integração RBAC contra infra real (hoje skipped)
+- ❌ **NO-GO se:** Qualquer endpoint retorna recurso de outra empresa ou 403 não funciona — **não observado nos testes existentes; integração real ainda deve ser executada**
 
 ---
 
-### P0.5: react-router-dom upgrade v7 (2h)
+### P0.5: react-router upgrade v7 → v8 (2h) — ✅ [IMPLEMENTADO] (risco residual RESOLVIDO em 2026-08-04)
+**Status:** Upgrade original para v7.18.2 concluído em 2026-08-02 (commit `d1d3aff`), resolvendo o CVE-2025-68470 original. Triagem de segurança de 2026-08-04 identificou que a própria v7.18.2 estava na faixa vulnerável de um advisory diferente: `GHSA-qwww-vcr4-c8h2` (CSRF em modo RSC/Server Actions, faixa afetada `>=7.12.0 <8.3.0`). **No mesmo dia (2026-08-04)** foi feito o upgrade para `react-router@8.3.0` (`client/package.json`; `react-router-dom` foi descontinuado a partir da v8 e unificado em `react-router`, incluindo bindings de DOM). `npm audit --omit=dev` em `client/` confirma **0 vulnerabilidades**. Risco fechado, não apenas aceito.
+**Evidência:** `CLAUDE.md` seção 5, item 3.2 ("react-router CVE-2025-68470 ✅ RESOLVIDO — v7.18.2"); `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entradas "2026-08-04 — Triagem de Segurança" e apêndice "2026-08-04 — Fechamento react-router@8.3.0"; `docs/governance/TODO.md`, seção "Pendências de Segurança / Gate G6" (item marcado `[x]`).
 **Responsável:** Frontend Dev  
 **⏱️ Estimado:** 2h  
 **📍 Arquivo crítico:** `package.json`, `src/routes/`  
 **Bloqueador:** CVE-2025-68470 (open redirect)  
 
-- [ ] **Upgrade (1h)**
-  - [ ] npm update react-router-dom@7
-  - [ ] Revisar breaking changes na docs
-  - [ ] Atualizar `<Router>`, `<Route>` se syntax mudou
-  - [ ] Build sem erros
+- [x] **Upgrade (1h)**
+  - [x] npm update react-router-dom@7 (v7.18.2)
+  - [x] Revisar breaking changes na docs
+  - [x] Atualizar `<Router>`, `<Route>` se syntax mudou
+  - [x] Build sem erros
   - 👤 Responsável: Frontend Developer
 
-- [ ] **Testes (1h)**
-  - [ ] Teste: Navegação básica funciona (home, about, login)
-  - [ ] Teste: Redirect após login não expõe URL perigosa
-  - [ ] Teste: Deep linking funciona
-  - [ ] npm audit: nenhuma vuln HIGH/CRITICAL
+- [x] **Testes (1h)**
+  - [x] Teste: Navegação básica funciona (home, about, login)
+  - [x] Teste: Redirect após login não expõe URL perigosa (CVE-2025-68470 original)
+  - [x] Teste: Deep linking funciona
+  - [x] npm audit: nenhuma vuln HIGH/CRITICAL — resolvido em 2026-08-04 via upgrade para `react-router@8.3.0` (`>=8.3.0` é o limite superior seguro do advisory `GHSA-qwww-vcr4-c8h2`). `npm audit --omit=dev` em `client/` confirma 0 vulnerabilidades.
   - 👤 Responsável: QA + Frontend Dev
 
+- **Achado correlato (2026-08-04):** `node_modules` local do `client/` estava dessincronizado do lockfile (`react-router-dom@6.30.4` instalado vs `^7.18.2` declarado em `package.json`) — reforça que build de produção deve sempre usar `npm ci` (nunca `npm install`). Achado histórico, sem impacto na versão final `react-router@8.3.0` já em `package.json`.
+
 **🚨 Go/No-Go Decision P0.5:**
-- ✅ Upgrade completo, npm audit clean
+- ✅ Upgrade completo (CVE-2025-68470 original resolvido)
+- ✅ npm audit clean — risco residual `GHSA-qwww-vcr4-c8h2` fechado em 2026-08-04 via upgrade para `react-router@8.3.0`
 - ✅ Testes de navegação passam
-- ✅ Sem breaking changes em produção
-- ❌ **NO-GO se:** Build falha, redirect vulnerável ou testes falham
+- ✅ **GO** — build, testes e audit OK; nenhum risco pendente neste item.
 
 ---
 
-### P0.6: Apontamento reconciliação com OP (6h)
+### P0.6: Apontamento reconciliação com OP (6h) — ✅ [IMPLEMENTADO]
+**Status:** Remediado em 2026-08-02, commit `d1d3aff` (item 1.3 da auditoria, tratado como ALTO mas incluído no pacote de remediação).
+**Evidência:** `CLAUDE.md` seção 5, item 1.3 ("Apontamento × OP desconectados ✅ RESOLVIDO — reconciliação na conclusão da OP"); `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`: "Apontamento reconciliação (1.3) — reconciliação na conclusão da OP + testes".
 **Responsável:** Backend + QA  
 **⏱️ Estimado:** 6h  
 **📍 Arquivo crítico:** `src/usecases/ProductionReportUseCase.ts`  
 **Bloqueador:** Apontamento desconectado da OP, quantity_produced sem validação  
 
-- [ ] **Análise (1h)**
-  - [ ] Revisar fluxo: OP criada → Apontamento registra quantity_produced → ?
-  - [ ] Validar: quantity_produced não pode > OP.quantidade_planejada?
-  - [ ] Decisão: Requisição de Material criada quando apontamento finaliza OP?
+- [x] **Análise (1h)**
+  - [x] Revisar fluxo: OP criada → Apontamento registra quantity_produced → reconciliação
+  - [x] Validar: quantity_produced não pode > OP.quantidade_planejada
+  - [x] Decisão: reconciliação ocorre na conclusão da OP
   - 👤 Responsável: Backend Tech Lead + Gestor Produção
 
-- [ ] **Implementação (4h)**
-  - [ ] Validação: quantity_produced <= OP.quantidade_planejada
-  - [ ] Reconciliação: quando quantity_produced = OP.quantidade, marcar OP como FINALIZADA
-  - [ ] Reverso: Apontamento deletado → desfazer reconciliação
-  - [ ] Custo: PA.custo_unitario = BOM.custo_atual
-  - [ ] Testes: 4 casos (parcial, completo, reverso, erro)
+- [x] **Implementação (4h)**
+  - [x] Validação: quantity_produced <= OP.quantidade_planejada
+  - [x] Reconciliação: quando quantity_produced = OP.quantidade, marcar OP como concluída
+  - [x] Reverso: Apontamento deletado → desfazer reconciliação
+  - [x] Custo: vinculado ao BOM
+  - [x] Testes: casos de reconciliação cobertos
   - 👤 Responsável: Backend Developer
 
 - [ ] **Validação (1h)**
-  - [ ] UAT: Operário aponta 10u → OP marca 10/20 (parcial)
-  - [ ] UAT: Aponta últimas 10u → OP marca FINALIZADA
-  - [ ] UAT: Deletar apontamento → OP volta a ABERTA
-  - [ ] Auditoria: cada reconciliação logged
+  - [ ] **[PENDENTE]** UAT: Operário aponta 10u → OP marca 10/20 (parcial) — depende do UAT geral (pendência (b))
+  - [ ] **[PENDENTE]** UAT: Aponta últimas 10u → OP marca FINALIZADA
+  - [ ] **[PENDENTE]** UAT: Deletar apontamento → OP volta a ABERTA
+  - [x] Auditoria: cada reconciliação logged (testes automatizados cobrem o fluxo)
   - 👤 Responsável: QA + Gestor Produção
 
 **🚨 Go/No-Go Decision P0.6:**
-- ✅ Apontamentos reconciliados com OP 100%
-- ✅ Sem overshooting (quantity > planejada)
+- ✅ Apontamentos reconciliados com OP (validado por testes automatizados)
+- ✅ Sem overshooting (quantity > planejada) — validado em código/testes
 - ✅ Reversão funciona
-- ❌ **NO-GO se:** Overshooting possível ou reconciliação inconsistente
+- [PENDENTE] Validação formal com stakeholder (Gestor de Produção) no UAT
+- ❌ **NO-GO se:** Overshooting possível ou reconciliação inconsistente — **não observado; falta apenas validação de negócio via UAT**
 
 ---
 
 ## 1.2 — TESTES DE PR & FUNCIONALIDADES (5h)
+
+> **Nota (2026-08-04):** as 6 remediações abaixo foram entregues como parte do
+> pacote único do commit `d1d3aff` (2026-08-02), não como 6 PRs
+> individuais separados. O conteúdo técnico de cada item foi validado (ver
+> seções P0.1–P0.6 acima, todas `[IMPLEMENTADO]`). Os itens abaixo
+> permanecem como checklist de rastreabilidade formal de teste/aprovação —
+> marcados `[x]` onde a evidência técnica já existe, e `[PENDENTE]` onde
+> falta o registro formal de aprovação (approval sign-off) por QA/stakeholder.
 
 ### PR Review & Testing Protocol
 **Responsável:** QA Lead + Backend/Frontend Leads  
@@ -286,7 +325,12 @@ Garantir que os 4 bloqueadores críticos sejam resolvidos, testados com stakehol
 
 ---
 
-## 1.3 — UAT FINAL COM STAKEHOLDERS (4h)
+## 1.3 — UAT FINAL COM STAKEHOLDERS (4h) — ⏳ [PENDENTE], NÃO INICIADO
+
+> **Status real (2026-08-04):** nenhum cenário de UAT abaixo foi executado
+> ainda. Este é o **gate formal atual** para a Decision Point 1 — o trabalho
+> técnico de remediação (P0.1–P0.6) está pronto, mas falta a validação de
+> negócio por stakeholders antes do Go/No-Go.
 
 ### UAT Scope: Validação de Negócio por Perfil
 **Responsável:** QA Lead + Stakeholders  
@@ -1016,23 +1060,27 @@ Garantir estabilidade do sistema nos primeiros 2 dias, escalalar incidentes rapi
 
 **Gate:** Todos os 4 bloqueadores resolvidos + aprovações
 
-| Item | Critério GO | Critério NO-GO | Status |
+| Item | Critério GO | Critério NO-GO | Status Real (2026-08-04) |
 |------|------------|----------------|--------|
-| P0.1: Requisição de Compra | ✅ Criada 100% casos | ❌ < 90% criada | ⏳ |
-| P0.2: MRP estoque real | ✅ Reflete mudanças | ❌ Ainda congelado | ⏳ |
-| P0.3: Foreign Keys | ✅ Nenhuma orfã | ❌ Há orfãs | ⏳ |
-| P0.4: IDOR validação | ✅ 100% endpoints | ❌ Endpoint bypassa | ⏳ |
-| P0.5: react-router v7 | ✅ Build OK, audit clean | ❌ Vulnerabilidade persiste | ⏳ |
-| P0.6: Apontamento reconciliação | ✅ OP finaliza correto | ❌ Overshooting possível | ⏳ |
-| PR Testing | ✅ 6/6 PRs passed | ❌ Qualquer PR falha | ⏳ |
-| UAT | ✅ 100% stakeholders | ❌ Rejeição crítica | ⏳ |
-| Backup + Rollback | ✅ Testado, < 30 min | ❌ Falha restore | ⏳ |
-| Sign-offs | ✅ 4/4 aprovados | ❌ Qualquer pendente | ⏳ |
+| P0.1: Requisição de Compra | ✅ Criada 100% casos | ❌ < 90% criada | ✅ [IMPLEMENTADO] (d1d3aff) |
+| P0.2: MRP estoque real | ✅ Reflete mudanças | ❌ Ainda congelado | ✅ [IMPLEMENTADO] (d1d3aff); performance em escala não testada |
+| P0.3: Foreign Keys | ✅ Nenhuma orfã | ❌ Há orfãs | ✅ [IMPLEMENTADO] (d1d3aff, 133 FKs) |
+| P0.4: IDOR validação | ✅ 100% endpoints | ❌ Endpoint bypassa | ✅ [IMPLEMENTADO] (d1d3aff); integração RBAC contra infra real ainda skipped |
+| P0.5: react-router v8 | ✅ Build OK, audit clean | ❌ Vulnerabilidade persiste | ✅ [IMPLEMENTADO] — upgrade para `react-router@8.3.0` em 2026-08-04, `GHSA-qwww-vcr4-c8h2` resolvido, audit 0 vulnerabilidades |
+| P0.6: Apontamento reconciliação | ✅ OP finaliza correto | ❌ Overshooting possível | ✅ [IMPLEMENTADO] (d1d3aff); falta validação UAT |
+| PR Testing | ✅ 6/6 PRs passed | ❌ Qualquer PR falha | ✅ Conteúdo técnico validado (entregue via commit único, não 6 PRs formais) |
+| UAT | ✅ 100% stakeholders | ❌ Rejeição crítica | ⏳ [PENDENTE] — não iniciado |
+| Backup + Rollback | ✅ Testado, < 30 min | ❌ Falha restore | ⏳ [PENDENTE] — não executado (sem servidor de produção ainda) |
+| Sign-offs | ✅ 4/4 aprovados | ❌ Qualquer pendente | ⏳ [PENDENTE] — nenhum sign-off formal registrado |
 
 **Decisão Final (CTO):**
 ```
-🟢 GO — Deploy autorizado, proceder Fase 2
-🔴 NO-GO — Postergar, resolver pendências listadas
+🔴 NO-GO (estado atual, 2026-08-04) — bloqueadores técnicos P0 resolvidos,
+   mas gate de UAT + sign-offs formais ainda não iniciado, e servidor de
+   produção ainda não adquirido (bloqueia Fase 2 independentemente do UAT).
+🟢 GO — Deploy autorizado, proceder Fase 2 (condicionado a: UAT completo +
+   sign-offs + servidor de produção disponível; risco residual react-router
+   já resolvido em 2026-08-04, não é mais condicionante)
 ```
 
 ---
@@ -1080,21 +1128,22 @@ Garantir estabilidade do sistema nos primeiros 2 dias, escalalar incidentes rapi
 # 📋 CHECKLIST RÁPIDO (PRINT & POST)
 
 ```
-PRÉ-GO-LIVE (30h)
+PRÉ-GO-LIVE (30h) — Status real em 2026-08-04
 ─────────────────
-☐ P0.1: Requisição de Compra .................... 8h ___
-☐ P0.2: MRP estoque real ....................... 6h ___
-☐ P0.3: Foreign Keys ........................... 4h ___
-☐ P0.4: IDOR validação ......................... 3h ___
-☐ P0.5: react-router v7 upgrade ............... 2h ___
-☐ P0.6: Apontamento reconciliação .............. 6h ___
-☐ PR Testing (6 PRs) ........................... 5h ___
-☐ UAT com stakeholders ......................... 4h ___
-☐ Migração de dados validada ................... 3h ___
-☐ Backup + Rollback testados ................... 2h ___
-☐ Sign-offs formais ............................ 1h ___
+☑ P0.1: Requisição de Compra .................... [IMPLEMENTADO] d1d3aff
+☑ P0.2: MRP estoque real ....................... [IMPLEMENTADO] d1d3aff
+☑ P0.3: Foreign Keys ........................... [IMPLEMENTADO] d1d3aff
+☑ P0.4: IDOR validação ......................... [IMPLEMENTADO] d1d3aff (integração real pendente)
+☑ P0.5: react-router v8 upgrade ................ [IMPLEMENTADO] GHSA-qwww-vcr4-c8h2 resolvido 2026-08-04
+☑ P0.6: Apontamento reconciliação .............. [IMPLEMENTADO] d1d3aff
+☑ PR Testing (conteúdo técnico) ................ validado via commit único d1d3aff
+☐ UAT com stakeholders ......................... [PENDENTE] não iniciado
+☐ Migração de dados validada ................... [PENDENTE] sem staging/servidor de produção
+☐ Backup + Rollback testados ................... [PENDENTE] sem servidor de produção
+☐ Sign-offs formais ............................ [PENDENTE] nenhum registrado
+☐ Servidor de produção adquirido ............... [PENDENTE] bloqueia Fase 2/F10
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨 DECISION POINT 1: GO/NO-GO?  ☐ GO  ☐ NO-GO
+🚨 DECISION POINT 1: GO/NO-GO?  ☐ GO  ☑ NO-GO (aguardando UAT, sign-offs e servidor de produção)
 
 GO-LIVE DAY (4-6h)
 ──────────────────
@@ -1159,12 +1208,13 @@ PÓS-GO-LIVE (48h)
 
 ---
 
-# ✅ DOCUMENTO ASSINADO
+# ✅ DOCUMENTO — STATUS DE ASSINATURA
 
 **Preparado por:** Tech Lead / Product Manager  
-**Data:** 2 de agosto de 2026
+**Data original:** 2 de agosto de 2026  
+**Reconciliado em:** 4 de agosto de 2026
 
-**Assinado e Aprovado por:**
+**Assinado e Aprovado por:** ⏳ **[PENDENTE]** — nenhuma assinatura formal registrada até 2026-08-04. Sign-off depende da conclusão do UAT (seção 1.3). O risco residual `react-router` (antiga pendência (c)) foi resolvido em 2026-08-04 e não é mais condicionante do sign-off.
 
 | Papel | Assinatura | Data |
 |------|-----------|------|
@@ -1175,6 +1225,13 @@ PÓS-GO-LIVE (48h)
 
 ---
 
-**SSOT:** Este é o único documento de Go-Live G6. Todas as informações consolidadas.  
-**Próximo passo:** Iniciar Fase 1 e atualizar status em tempo real neste documento.
+**SSOT deste documento:** plano operacional/checklist de Go-Live G6, reconciliado com `CLAUDE.md` (seção 5) e `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`, que são as fontes de verdade sobre o status dos bloqueadores P0.
+
+**Próximo passo real (2026-08-04):**
+1. Adquirir servidor de produção (VPS/on-premise) — bloqueia Fase 2/F10 independentemente de tudo mais.
+2. Executar UAT completo com stakeholders (seção 1.3).
+3. Executar a suíte de testes de integração RBAC (`legacy-routes-rbac-regression.test.ts`) contra infraestrutura real (Postgres + API viva), hoje `describe.skip`.
+
+~~Decisão formal do gate G6 sobre o risco residual `react-router@7.18.2` / `GHSA-qwww-vcr4-c8h2`~~ — **resolvido em 2026-08-04** (upgrade para `react-router@8.3.0`, ver `docs/governance/TODO.md` e `docs/DIARIO_BORDO_GO_LIVE_G6.md`); removido da lista de próximos passos.
+5. Coletar sign-offs formais (CTO, CFO, Gerente Produção, Compliance) — seção 1.6.
 

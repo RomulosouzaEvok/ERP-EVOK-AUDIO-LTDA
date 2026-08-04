@@ -9,13 +9,24 @@
 
 import ProductCostLedger = require('../models/ProductCostLedger');
 
-export type CostSourceType = 'purchase' | 'production' | 'adjustment';
+type CostSourceType = 'purchase' | 'production' | 'adjustment';
+type AdditionalProductionCostSourceType = 'production_labor' | 'production_overhead';
 
-export interface RegisterWeightedAverageCostInput {
+interface RegisterWeightedAverageCostInput {
   product: any;
   quantity: number;
   unitCost: number;
   sourceType: CostSourceType;
+  sourceId?: number | null;
+  userId?: number | null;
+  notes?: string | null;
+}
+
+interface RegisterAdditionalProductionCostInput {
+  product: any;
+  quantity: number;
+  unitCost: number;
+  sourceType: AdditionalProductionCostSourceType;
   sourceId?: number | null;
   userId?: number | null;
   notes?: string | null;
@@ -82,6 +93,74 @@ class CostingService {
     const newCost = currentQuantity > 0
       ? roundCost(((previousQuantity * previousCost) + totalCost) / currentQuantity)
       : roundCost(unitCost);
+
+    await input.product.update({ cost_price: newCost }, { transaction });
+
+    const ledger = await ProductCostLedger.create({
+      product_id: input.product.id,
+      source_type: input.sourceType,
+      source_id: input.sourceId || null,
+      quantity,
+      unit_cost: roundCost(unitCost),
+      total_cost: totalCost,
+      previous_cost: roundCost(previousCost),
+      new_cost: newCost,
+      created_by: input.userId || null,
+      notes: input.notes || null
+    }, { transaction });
+
+    return { ledger, previousCost, newCost, totalCost };
+  }
+
+  /**
+   * Registra um componente adicional de custo real de producao (mao-de-obra
+   * ou overhead) sobre uma OP ja custeada por material na mesma conclusao
+   * (ver `registerWeightedAverageCost` chamado antes, com `sourceType:
+   * 'production'`).
+   *
+   * Diferenca deliberada em relacao a `registerWeightedAverageCost`: aquele
+   * metodo recalcula a media ponderada completa contra
+   * `previousQuantity = product.quantity - quantity`, o que e correto
+   * apenas na PRIMEIRA chamada de uma mesma producao (material). Reaplicar
+   * essa formula numa segunda/terceira chamada para o mesmo lote recebido
+   * (mao-de-obra, overhead) rediluiria o custo ja incorporado na chamada
+   * anterior — na pratica, descartando parte do custo de material quando o
+   * estoque anterior era pequeno ou zero. Este metodo evita o bug somando a
+   * contribuicao marginal deste componente (quantity * unitCost / quantidade
+   * atual em estoque) sobre o `cost_price` ja atualizado pela chamada
+   * anterior, preservando o resultado correto de
+   * `(materialCost + laborCost + overheadCost) / producedQty` acumulado ao
+   * final da sequencia de chamadas da mesma OP.
+   *
+   * @param input - Dados do componente de custo adicional.
+   * @param transaction - Transacao Sequelize ativa.
+   * @returns Ledger criado e resumo do custo anterior/novo.
+   * @throws {Error} Se quantidade/custo forem invalidos ou se transacao estiver ausente.
+   */
+  static async registerAdditionalProductionCost(input: RegisterAdditionalProductionCostInput, transaction: any): Promise<{
+    ledger: any;
+    previousCost: number;
+    newCost: number;
+    totalCost: number;
+  }> {
+    if (!transaction) {
+      throw Object.assign(new Error('CostingService: transaction e obrigatoria'), { statusCode: 500 });
+    }
+
+    const quantity = assertFiniteNumber(input.quantity, 'quantity');
+    const unitCost = assertFiniteNumber(input.unitCost, 'unitCost');
+    if (quantity <= 0) {
+      throw Object.assign(new Error('quantity deve ser maior que zero'), { statusCode: 400 });
+    }
+    if (unitCost < 0) {
+      throw Object.assign(new Error('unitCost nao pode ser negativo'), { statusCode: 400 });
+    }
+
+    const currentQuantity = assertFiniteNumber(input.product.quantity || 0, 'product.quantity');
+    const previousCost = assertFiniteNumber(input.product.cost_price || 0, 'product.cost_price');
+    const totalCost = roundCost(quantity * unitCost);
+    const marginalContribution = currentQuantity > 0 ? totalCost / currentQuantity : unitCost;
+    const newCost = roundCost(previousCost + marginalContribution);
 
     await input.product.update({ cost_price: newCost }, { transaction });
 

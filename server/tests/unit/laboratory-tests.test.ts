@@ -1,3 +1,21 @@
+jest.mock('../../src/config/database', () => ({
+  sequelize: {
+    transaction: jest.fn(async (callback?: any) => {
+      const transaction = { id: 'tx-lab-unit-1', LOCK: { UPDATE: 'UPDATE' }, commit: jest.fn(), rollback: jest.fn(), finished: undefined };
+      if (callback) {
+        return callback(transaction);
+      }
+      return transaction;
+    }),
+  },
+}));
+
+jest.mock('../../src/services/warehouseStockService', () => ({
+  getWarehouseByCode: jest.fn(async (code: string) => ({ id: code === 'LABORATORIO' ? 3 : 1, code })),
+  addToWarehouse: jest.fn(async () => ({})),
+  removeFromWarehouse: jest.fn(async () => ({})),
+}));
+
 import CreateAcousticTestUseCase = require('../../src/modules/laboratory/application/use-cases/CreateAcousticTestUseCase');
 import { ValidationError } from '../../src/errors';
 
@@ -13,10 +31,14 @@ jest.mock('../../src/modules/nonConformities/infrastructure/sequelize/SequelizeN
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const CreateNonConformityUseCaseMock = require('../../src/modules/nonConformities/application/use-cases/CreateNonConformityUseCase');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const WarehouseStockService = require('../../src/services/warehouseStockService');
 
 describe('Use cases do modulo de Laboratorio', () => {
   beforeEach(() => {
     CreateNonConformityUseCaseMock.mockClear();
+    WarehouseStockService.getWarehouseByCode.mockClear();
+    WarehouseStockService.removeFromWarehouse.mockClear();
   });
 
   describe('CreateAcousticTestUseCase — calculo automatico de passed', () => {
@@ -37,7 +59,8 @@ describe('Use cases do modulo de Laboratorio', () => {
       });
 
       expect(laboratoryRepository.createTest).toHaveBeenCalledWith(
-        expect.objectContaining({ passed: true, tester_id: 42, result: 5 })
+        expect.objectContaining({ passed: true, tester_id: 42, result: 5 }),
+        expect.anything()
       );
       expect(result.passed).toBe(true);
     });
@@ -97,7 +120,8 @@ describe('Use cases do modulo de Laboratorio', () => {
       } as any);
 
       expect(laboratoryRepository.createTest).toHaveBeenCalledWith(
-        expect.objectContaining({ tester_id: 99 })
+        expect.objectContaining({ tester_id: 99 }),
+        expect.anything()
       );
     });
 
@@ -111,7 +135,14 @@ describe('Use cases do modulo de Laboratorio', () => {
 
       await expect(
         useCase.execute({ product_id: 1, test_type: 'noise', testerId: 1 })
-      ).rejects.toBeInstanceOf(ValidationError);
+      ).rejects.toMatchObject({
+        constructor: ValidationError,
+        details: {
+          product_id: 1,
+          test_type: 'noise',
+          missing_fields: ['result', 'specification_min', 'specification_max'],
+        },
+      });
       expect(laboratoryRepository.createTest).not.toHaveBeenCalled();
     });
   });
@@ -190,6 +221,54 @@ describe('Use cases do modulo de Laboratorio', () => {
 
       expect(CreateNonConformityUseCaseMock).not.toHaveBeenCalled();
       expect(laboratoryRepository.updateTest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('CreateAcousticTestUseCase — consumo de teste destrutivo (UC-42-E)', () => {
+    it('debita o deposito LABORATORIO quando consumed_quantity > 0, na mesma transacao do registro do teste', async () => {
+      const laboratoryRepository = {
+        createTest: jest.fn(async (data: any) => ({ id: 20, ...data })),
+        updateTest: jest.fn(),
+      };
+
+      const useCase = new CreateAcousticTestUseCase(laboratoryRepository as any);
+      await useCase.execute({
+        product_id: 5,
+        test_type: 'life',
+        result: 10,
+        specification_min: 5,
+        consumed_quantity: 3,
+        testerId: 7,
+      });
+
+      expect(WarehouseStockService.getWarehouseByCode).toHaveBeenCalledWith('LABORATORIO', expect.anything());
+      expect(WarehouseStockService.removeFromWarehouse).toHaveBeenCalledWith(5, 3, 3, expect.anything());
+    });
+
+    it('nao debita nada quando consumed_quantity esta ausente ou e zero', async () => {
+      const laboratoryRepository = {
+        createTest: jest.fn(async (data: any) => ({ id: 21, ...data })),
+        updateTest: jest.fn(),
+      };
+
+      const useCase = new CreateAcousticTestUseCase(laboratoryRepository as any);
+      await useCase.execute({
+        product_id: 5,
+        test_type: 'life',
+        result: 10,
+        specification_min: 5,
+        testerId: 7,
+      });
+      await useCase.execute({
+        product_id: 5,
+        test_type: 'life',
+        result: 10,
+        specification_min: 5,
+        consumed_quantity: 0,
+        testerId: 7,
+      });
+
+      expect(WarehouseStockService.removeFromWarehouse).not.toHaveBeenCalled();
     });
   });
 });

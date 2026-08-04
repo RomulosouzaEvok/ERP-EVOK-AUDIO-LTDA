@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ClipboardCheck } from 'lucide-react';
+import { ClipboardCheck, PackageSearch } from 'lucide-react';
 
 import * as purchasesApi from '@/api/purchases';
 import { HandoffDot } from '@/components/HandoffDot';
@@ -21,11 +21,21 @@ function isOverdue(expectedDate?: string | null): boolean {
 }
 
 /**
+ * Origem de amostra da Engenharia (Bloco 2, UC-39) — mesma convenção
+ * compartilhada com `RequisitionsPage.tsx`/backend (`origin` é texto livre).
+ */
+const ENGINEERING_SAMPLE_ORIGIN = 'engenharia_amostra';
+
+/**
  * `/logistics/recebimento` — fila de pedidos de compra aguardando
  * recebimento (`status` `sent`/`partial`) e conferência de itens.
  *
  * O backend (`GET /api/purchases`) só aceita um único `status` por
  * requisição (sem OR) — por isso a fila combina duas buscas client-side.
+ *
+ * Bloco 2 (UC-39): pedidos originados de requisição de amostra da
+ * Engenharia (`requisition.origin === 'engenharia_amostra'`) exibem o badge
+ * "Amostra — Engenharia" ao lado do número do pedido.
  */
 export default function ReceivingPage() {
   const [conferringPurchase, setConferringPurchase] = React.useState<purchasesApi.Purchase | null>(null);
@@ -54,11 +64,16 @@ export default function ReceivingPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Recebimento</h1>
-        <p className="text-sm text-muted-foreground">
-          Conferência de pedidos de compra enviados ou parcialmente recebidos.
-        </p>
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <PackageSearch className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Recebimento</h1>
+          <p className="text-sm text-muted-foreground">
+            Conferência de pedidos de compra enviados ou parcialmente recebidos.
+          </p>
+        </div>
       </div>
 
       <Table>
@@ -86,7 +101,14 @@ export default function ReceivingPage() {
             return (
               <TableRow key={purchase.id}>
                 <TableCell>{purchase.handoff_signal && <HandoffDot signal={purchase.handoff_signal} />}</TableCell>
-                <TableCell className="font-medium">{purchase.order_number}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    {purchase.order_number}
+                    {purchase.requisition?.origin === ENGINEERING_SAMPLE_ORIGIN && (
+                      <Badge variant="outline">Amostra — Engenharia</Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>{purchase.supplier?.company_name ?? purchase.supplier_id}</TableCell>
                 <TableCell className={overdue ? 'font-medium text-destructive' : ''}>
                   {formatDate(purchase.expected_date)}

@@ -9,7 +9,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface DepartmentAttributes {
+interface DepartmentAttributes {
   id: number;
   code: string;
   name: string;

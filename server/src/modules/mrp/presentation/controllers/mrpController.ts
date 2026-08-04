@@ -20,8 +20,23 @@ const requisitionRepository = new SequelizePurchaseRequisitionRepository();
 exports.generatePlan = async (req, res, next) => {
   try {
     const body = createMrpPlanSchema.parse(req.body);
-    const useCase = new GenerateMrpPlanUseCase(mrpRepository, itemRepository);
-    const data = await useCase.execute(body);
+    // Repositorios de requisicao/item-fornecedor sao injetados para
+    // habilitar o fechamento automatico plano -> requisicao (roadmap
+    // pos-Go-Live item 3, opt-in por item via `items.conversao_automatica`).
+    const useCase = new GenerateMrpPlanUseCase(mrpRepository, itemRepository, requisitionRepository, itemSupplierRepository);
+    const data = await useCase.execute({ ...body, requester_id: req.user.id });
+
+    const autoConvertedOrders = data.filter((order) => order.status === 'EM_EXECUCAO');
+    if (autoConvertedOrders.length > 0) {
+      logAction(req, {
+        action: 'mrp_auto_convert_to_requisition',
+        entityType: 'MrpOrdemPlanejada',
+        entityDescription: `${autoConvertedOrders.length} ordem(ns) planejada(s)`,
+        newValues: { converted_ids: autoConvertedOrders.map((order) => order.id) },
+        description: `${autoConvertedOrders.length} ordem(ns) planejada(s) convertida(s) automaticamente em requisicao de compra (opt-in items.conversao_automatica)`,
+      });
+    }
+
     res.status(201).json({ success: true, data });
   } catch (error) {
     if (error?.issues) {

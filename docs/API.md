@@ -588,6 +588,40 @@ Registra uma movimentacao manual de estoque (entrada ou saida) para um produto.
 }
 ```
 
+### GET /api/products/:id/stock-by-warehouse
+**Novo (Bloco 4 — Depósitos).** Retorna o saldo de UM produto específico,
+detalhado por depósito (`authorizeModule('estoque')`, nível de leitura —
+mesmo padrão do endpoint de listagem `GET /api/inventory/warehouse-stock`).
+Complementa `GET /api/inventory/warehouse-stock?product_id=` (que cobre o
+mesmo caso de uso via query param, com paginação para múltiplos produtos)
+com uma rota aninhada dedicada ao detalhe de um único produto.
+
+**Decisão de escopo:** a resposta inclui **todos os depósitos ativos**,
+mesmo aqueles em que o produto ainda não tem nenhuma linha em
+`product_warehouse_stock` (retornados com `quantity: 0`) — ao contrário do
+backfill original (que só cria linha para saldo > 0). Isso evita que o
+frontend precise cruzar a lista de depósitos com a lista de saldos para
+descobrir os que faltam (ex.: tela de transferência precisa oferecer os 3
+depósitos como origem/destino mesmo que o saldo atual em algum deles seja
+zero).
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "product": { "id": 1, "code": "AF-001", "name": "Alto-Falante 8\"", "quantity": "100.000000" },
+    "warehouses": [
+      { "warehouse_id": 2, "warehouse_code": "ACABADOS", "warehouse_name": "Deposito de Produto Acabado", "quantity": 0 },
+      { "warehouse_id": 1, "warehouse_code": "INSUMOS", "warehouse_name": "Deposito de Insumos de Producao", "quantity": 100 },
+      { "warehouse_id": 3, "warehouse_code": "LABORATORIO", "warehouse_name": "Deposito do Laboratorio", "quantity": 0 }
+    ]
+  }
+}
+```
+
+**Erro (404) — produto inexistente (`NotFoundError`, `NOT_FOUND`).**
+
 > Nota de arquitetura: desde a Fase 5 do TODO, o modulo Produtos foi migrado
 > para Clean Architecture (`server/src/modules/products/`). O contrato de
 > `/api/products` (paths, metodos, formato de resposta) permanece identico;
@@ -929,7 +963,7 @@ Relatório de fluxo de caixa.
 ### GET /api/inventory/movements
 Histórico de movimentações.
 
-**Query Params:** product_id, type (in/out), start_date, end_date
+**Query Params:** product_id, type (in/out), start_date, end_date, warehouse_id (INTEGER, opcional — filtra movimentações de um depósito específico, Bloco 4 UC-42; quando ausente, lista de todos os depósitos como antes)
 
 ### POST /api/inventory/movements
 Registra movimentação manual.
@@ -968,6 +1002,126 @@ Lista produtos ativos com estoque em ou abaixo do ponto de reposição (`quantit
 > `server/src/modules/inventory/README.md` para detalhes de regras de
 > negócio, entidades e pendências (ex.: `reserved_quantity` ainda não
 > existe no schema).
+
+---
+
+## 8.1 Múltiplos Depósitos
+
+Base URL: `/api/inventory`. Depósito físico do estoque (ex.: INSUMOS,
+ACABADOS, LABORATORIO — Bloco 4, UC-42, docs/business/BUSINESS_RULES.md
+§12). O saldo total de um produto é sempre a soma dos saldos em todos os
+depósitos ativos (`ProductWarehouseStock`).
+
+### GET /api/inventory/warehouses
+Lista depósitos ativos (`authorizeModule('estoque')`), ordenados por `code`.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    { "id": 1, "code": "INSUMOS", "name": "Depósito Insumos", "description": null, "active": true, "createdAt": "...", "updatedAt": "..." },
+    { "id": 2, "code": "ACABADOS", "name": "Depósito Acabados", "description": null, "active": true, "createdAt": "...", "updatedAt": "..." }
+  ]
+}
+```
+
+### POST /api/inventory/warehouses
+Cria um novo depósito (`authorizeModule('estoque', 'approve')` — mesmo
+nível exigido para aprovar/rejeitar transferência). `code` é obrigatório,
+único e normalizado para uppercase antes de persistir.
+
+**Request:**
+```json
+{
+  "code": "expedicao",
+  "name": "Depósito Expedição",
+  "description": "Área de separação para envio",
+  "active": true
+}
+```
+- `code` (string, obrigatório, máx. 30) — normalizado para uppercase (`EXPEDICAO`).
+- `name` (string, obrigatório, máx. 100).
+- `description` (string, opcional, máx. 2000, aceita `null`).
+- `active` (boolean, opcional, default `true`).
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": { "id": 4, "code": "EXPEDICAO", "name": "Depósito Expedição", "description": "Área de separação para envio", "active": true, "createdAt": "...", "updatedAt": "..." }
+}
+```
+
+**Erro (400) — `code`/`name` ausente ou payload inválido (`ValidationError`, `VALIDATION_ERROR`); erro (409) — já existe depósito com o mesmo `code` (case-insensitive) (`ConflictError`, `CONFLICT`):**
+```json
+{ "success": false, "error": { "code": "CONFLICT", "message": "Já existe um depósito com o código \"INSUMOS\"." } }
+```
+
+### PUT /api/inventory/warehouses/:id
+Edita `name`/`description`/`active` de um depósito existente
+(`authorizeModule('estoque', 'approve')`). **`code` nunca é editável** —
+é a chave usada por `WarehouseStockService.getWarehouseByCode` em todo o
+roteamento automático do dual-write (recebimento, produção, vendas,
+laboratório, transferências); enviar `code` no corpo retorna 400
+(`ValidationError`, schema é `.strict()`). Desativação lógica é feita com
+`{ "active": false }` — não existe DELETE físico.
+
+**Request (todos os campos opcionais, mas ao menos um deve ser enviado):**
+```json
+{
+  "name": "Depósito Insumos Renomeado",
+  "description": "Nova descrição",
+  "active": false
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": { "id": 1, "code": "INSUMOS", "name": "Depósito Insumos Renomeado", "description": "Nova descrição", "active": false, "createdAt": "...", "updatedAt": "..." }
+}
+```
+
+**Erro (404) — depósito inexistente (`NotFoundError`, `NOT_FOUND`).**
+
+### GET /api/inventory/warehouse-stock
+Lista saldos por par produto×depósito (`authorizeModule('estoque')`).
+
+**Query Params:** product_id, warehouse_code, page, limit
+
+> Ver também `GET /api/products/:id/stock-by-warehouse` (seção 3. Produtos)
+> — mesmo caso de uso, mas voltado ao detalhe de UM produto específico
+> (sem paginação, sempre traz todos os depósitos ativos, inclusive com
+> saldo 0).
+
+### GET /api/inventory/transfers
+Lista transferências entre depósitos (`authorizeModule('estoque')`).
+
+**Query Params:** status (pending/approved/rejected)
+
+### POST /api/inventory/transfers
+Solicita transferência de saldo entre depósitos
+(`authorizeModule('estoque', 'operate')`). Cria em `status='pending'` —
+não altera nenhum saldo até a aprovação.
+
+**Request:**
+```json
+{
+  "product_id": 10,
+  "from_warehouse_code": "INSUMOS",
+  "to_warehouse_code": "LABORATORIO",
+  "quantity": 7,
+  "reason": "Cessão para teste destrutivo"
+}
+```
+
+### PUT /api/inventory/transfers/:id/approve
+Aprova uma transferência pendente (`authorizeModule('estoque', 'approve')`). Executa débito/crédito atômico entre depósitos e gera 2 `InventoryMovement` (`type='transfer'`).
+
+### PUT /api/inventory/transfers/:id/reject
+Rejeita uma transferência pendente (`authorizeModule('estoque', 'approve')`), com `body.reason` obrigatório.
 
 ---
 
@@ -1187,10 +1341,19 @@ Lista fornecedores. Filtros: `search` (busca por `company_name`/`cnpj`, sanitiza
 ```json
 {
   "success": true,
-  "data": [ { "id": 2, "company_name": "Fornecedor X", "cnpj": "12345678000199", "status": "active", "rating": 3 } ],
+  "data": [ { "id": 2, "company_name": "Fornecedor X", "cnpj": "12345678000199", "status": "active", "rating": 3, "quality_score": "100.00" } ],
   "pagination": { "total": 1, "page": 1, "limit": 10, "totalPages": 1 }
 }
 ```
+`quality_score` (item 8 do levantamento, realimentação de rating a partir de
+RNCs): `DECIMAL(5,2)` **somente leitura** — não existe no schema Zod de
+`POST/PUT` (`.strict()`), logo nenhum payload consegue setá-lo. É recalculado
+de forma síncrona, na mesma transação de `POST /api/non-conformities`, apenas
+quando a RNC referencia um lote (`lot_number`+`product_id`) cujo
+`lot_controls.supplier_id` está preenchido — fórmula em
+`server/src/modules/nonConformities/application/use-cases/CreateNonConformityUseCase.ts`
+(`recalculateSupplierQualityScore`). Distinto de `rating` (inteiro 1-5,
+digitado manualmente no cadastro).
 
 ### GET /api/suppliers/:id
 Detalhes de um fornecedor. `404` (`{ "success": false, "error": "Fornecedor não encontrado" }`) se o id não existir.
@@ -1232,6 +1395,85 @@ Inativa (soft delete, `status="inactive"`) um fornecedor. Bloqueado (`400`) se o
 > `statusCode < 500`. Este módulo **não gera auditoria** (`AuditLog`) em
 > nenhum endpoint — pendência conhecida documentada em
 > `server/src/modules/suppliers/README.md`.
+
+---
+
+## 13. MRP (Planejamento de Materiais)
+
+> Módulo `server/src/modules/mrp/` (Clean Architecture). Todas as rotas exigem
+> `authenticate` + `authorizeModule('mrp', ...)`. Rotas de leitura exigem
+> permissão `view` implícita; rotas de escrita (`plan`, `planned-orders/convert`)
+> exigem `operate`.
+
+### POST /api/mrp/plan
+Roda o MRP contra o estoque real (não congelado) e cria ordens planejadas a partir de uma lista de demandas.
+```json
+{
+  "demands": [
+    { "item_id": "uuid-item", "quantidade": 100, "data_necessidade": "2026-08-20", "origem": "PEDIDO_VENDA" }
+  ]
+}
+```
+`origem` aceita `MANUAL`, `PEDIDO_VENDA`, `PREVISAO`, `ORDEM_PRODUCAO`. Retorna `201` com a lista de ordens planejadas geradas (`necessidade_bruta`, `estoque_disponivel`, `necessidade_liquida`, `quantidade_planejada`, `status` inicial `RASCUNHO`, ou `EM_EXECUCAO` para as convertidas automaticamente — ver abaixo).
+
+**Fechamento automático do ciclo (roadmap pós-Go-Live item 3):** na mesma
+transação em que o plano é persistido, ordens planejadas cujo item tem
+`items.conversao_automatica = true` são convertidas automaticamente em
+Requisição de Compra (`origin: "mrp_auto"`, `requester_id` = usuário que
+chamou este endpoint), sem esperar a seleção manual do UC-24
+(`POST /api/mrp/planned-orders/convert`, `origin: "mrp"`). Itens sem a
+flag (padrão `false`) continuam exigindo a conversão manual — comportamento
+inalterado. Decisão de design completa e justificativa (por que não é
+100% automático para todo item) em `docs/projeto/04-USE_CASES.md` (UC-24b)
+e no cabeçalho da migration
+`server/migrations/20260804-000010-add-mrp-auto-convert-to-items.cjs`.
+
+### GET /api/mrp/planned-orders
+Lista as ordens planejadas geradas pelo MRP, com o item relacionado (`id`, `codigo`, `descricao`).
+
+### POST /api/mrp/planned-orders/convert
+Converte um lote de ordens planejadas (status `RASCUNHO` ou `APROVADA`) em uma única **Requisição de Compra**, fechando o ciclo planejamento → suprimentos. A identidade do solicitante (`requester_id`) vem sempre de `req.user` (JWT) — nunca do body. A operação é atômica (transação Sequelize): se qualquer ordem informada não existir ou estiver em status inválido, nada é persistido.
+
+Requisição:
+```json
+{
+  "planned_order_ids": ["order-uuid-1", "order-uuid-2"],
+  "notes": "Urgente cliente XPTO"
+}
+```
+`notes` é opcional (default: `"Gerada automaticamente do plano MRP"`).
+
+Resposta (`201`):
+```json
+{
+  "success": true,
+  "data": {
+    "requisition": {
+      "id": 99,
+      "requisition_number": "RQ-1723123456789",
+      "status": "pending",
+      "origin": "mrp",
+      "items": [
+        {
+          "item_id": "uuid-item",
+          "quantity": "10.000000",
+          "required_date": "2026-08-20",
+          "suggested_supplier_id": 7,
+          "unit_price_estimated": 12.5
+        }
+      ]
+    },
+    "converted_ids": ["order-uuid-1", "order-uuid-2"]
+  }
+}
+```
+
+Regras de negócio:
+- Todas as ordens informadas devem existir; caso contrário `404` (`NotFoundError`).
+- Todas devem estar em status `RASCUNHO` ou `APROVADA`; caso contrário `422` (`BusinessRuleError`) com a lista de ids inválidos em `invalid_ids` — nenhuma conversão parcial é permitida.
+- Uma única requisição é criada (`origin: "mrp"`), com um item de requisição por ordem convertida.
+- O fornecedor preferencial ativo do item (`ItemSupplier`), quando existir, é sugerido automaticamente (`suggested_supplier_id`) junto com o preço de referência (`unit_price_estimated`).
+- Ao final, as ordens planejadas convertidas são marcadas como `EM_EXECUCAO`.
 
 ---
 

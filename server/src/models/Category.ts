@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface CategoryAttributes {
+interface CategoryAttributes {
   id: number;
   name: string;
   description: string;

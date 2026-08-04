@@ -7,7 +7,8 @@
  * @module modules/accessProfiles/infrastructure/sequelize/SequelizeAccessProfilesRepository
  */
 
-import AccessProfilesRepository, { AccessProfileListItem, AccessProfilePermissionInput } from '../../domain/repositories/AccessProfilesRepository';
+import AccessProfilesRepository from '../../domain/repositories/AccessProfilesRepository';
+import { AccessProfileListItem, AccessProfilePermissionInput } from '../../domain/repositories/AccessProfilePermissionInput';
 
 const { sequelize, AccessProfile, AccessProfilePermission, User } = require('../../../../models/index');
 

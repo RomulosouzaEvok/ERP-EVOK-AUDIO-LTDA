@@ -9,7 +9,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ProductionOrderTrackingAttributes {
+interface ProductionOrderTrackingAttributes {
   id: number;
   production_order_id: number;
   production_route_step_id: number | null;

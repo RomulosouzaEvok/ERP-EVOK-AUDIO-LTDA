@@ -12,7 +12,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface CompanyFiscalConfigAttributes {
+interface CompanyFiscalConfigAttributes {
   id: number;
   legal_name: string;
   trade_name: string | null;

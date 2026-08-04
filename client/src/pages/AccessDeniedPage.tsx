@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ShieldAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,9 @@ export function AccessDeniedPage({ variant = 'accessDenied' }: { variant?: 'acce
 
   return (
     <div className="flex flex-col items-center gap-4 py-20 text-center">
-      <ShieldAlert className="size-10 text-destructive" />
+      <div className="flex size-16 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+        <ShieldAlert className="size-8" />
+      </div>
       <h1 className="text-2xl font-semibold">{title}</h1>
       <p className="max-w-md text-sm text-muted-foreground">{message}</p>
       {variant === 'accessDenied' && (

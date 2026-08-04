@@ -11,9 +11,9 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type LotControlStatus = 'available' | 'reserved' | 'consumed' | 'blocked' | 'expired' | 'quarantine';
+type LotControlStatus = 'available' | 'reserved' | 'consumed' | 'blocked' | 'expired' | 'quarantine';
 
-export interface LotControlAttributes {
+interface LotControlAttributes {
   id: number;
   product_id: number;
   item_id?: string | null;

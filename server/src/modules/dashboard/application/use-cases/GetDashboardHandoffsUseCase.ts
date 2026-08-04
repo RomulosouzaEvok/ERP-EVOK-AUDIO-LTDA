@@ -14,7 +14,7 @@ import UseCase from '../../../../shared/application/UseCase';
 import DashboardRepository from '../../domain/repositories/DashboardRepository';
 
 /** Resumo de contadores por área, um bloco por fila de handoff. */
-export interface DashboardHandoffsSummary {
+interface DashboardHandoffsSummary {
   recebimento: { pending: number };
   requisicoes: { awaiting_approval: number };
   expedicao: { ready_to_ship: number };

@@ -7,7 +7,7 @@
 import { DataTypes, ModelDefined } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ItemCategoriaAttributes {
+interface ItemCategoriaAttributes {
   id: string;
   codigo: string;
   descricao: string;

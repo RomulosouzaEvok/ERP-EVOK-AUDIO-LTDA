@@ -1,6 +1,6 @@
 import { ValidationError } from '../../../../errors';
 import { isValidAccessModuleKey } from '../../../../shared/domain/accessModules';
-import { AccessProfilePermissionInput } from '../../domain/repositories/AccessProfilesRepository';
+import { AccessProfilePermissionInput } from '../../domain/repositories/AccessProfilePermissionInput';
 
 /**
  * Valida a forma da matriz de permissões recebida no payload de

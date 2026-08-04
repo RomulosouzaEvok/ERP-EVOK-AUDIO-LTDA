@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { BarChart3 } from 'lucide-react';
 
 import * as reportsApi from '@/api/reports';
 import { extractApiErrorMessage } from '@/api/httpClient';
@@ -101,15 +102,37 @@ export default function ReportsPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <BarChart3 className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Relatórios</h1>
+          <p className="text-sm text-muted-foreground">Indicadores de produção, compras e variação de custos.</p>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex gap-2">
-          <Button variant={tab === 'production' ? 'default' : 'outline'} onClick={() => setTab('production')}>
+          <Button
+            variant={tab === 'production' ? 'default' : 'outline'}
+            className={tab !== 'production' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
+            onClick={() => setTab('production')}
+          >
             Produção
           </Button>
-          <Button variant={tab === 'purchasing' ? 'default' : 'outline'} onClick={() => setTab('purchasing')}>
+          <Button
+            variant={tab === 'purchasing' ? 'default' : 'outline'}
+            className={tab !== 'purchasing' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
+            onClick={() => setTab('purchasing')}
+          >
             Compras
           </Button>
-          <Button variant={tab === 'costs' ? 'default' : 'outline'} onClick={() => setTab('costs')}>
+          <Button
+            variant={tab === 'costs' ? 'default' : 'outline'}
+            className={tab !== 'costs' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
+            onClick={() => setTab('costs')}
+          >
             Custos
           </Button>
         </div>
@@ -172,8 +195,8 @@ export default function ReportsPage() {
                     production.wip.map((row) => (
                       <TableRow key={row.status}>
                         <TableCell><Badge variant="secondary">{OP_STATUS_LABEL[row.status] ?? row.status}</Badge></TableCell>
-                        <TableCell className="text-right">{toNumber(row.orders_count)}</TableCell>
-                        <TableCell className="text-right">{toNumber(row.total_quantity).toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className="text-right tabular-nums">{toNumber(row.orders_count)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{toNumber(row.total_quantity).toLocaleString('pt-BR')}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -207,9 +230,9 @@ export default function ReportsPage() {
                         <TableRow key={`${row.work_center}-${row.step_name}-${index}`}>
                           <TableCell>{row.work_center ?? 'SEM ROTEIRO'}</TableCell>
                           <TableCell>{row.step_name ?? '—'} (seq. {toNumber(row.sequence)})</TableCell>
-                          <TableCell className="text-right">{toNumber(row.quantity_good).toLocaleString('pt-BR')}</TableCell>
-                          <TableCell className="text-right">{toNumber(row.quantity_scrapped).toLocaleString('pt-BR')}</TableCell>
-                          <TableCell className={`text-right font-medium ${rate > 0.05 ? 'text-destructive' : ''}`}>
+                          <TableCell className="text-right tabular-nums">{toNumber(row.quantity_good).toLocaleString('pt-BR')}</TableCell>
+                          <TableCell className="text-right tabular-nums">{toNumber(row.quantity_scrapped).toLocaleString('pt-BR')}</TableCell>
+                          <TableCell className={`text-right tabular-nums font-medium ${rate > 0.05 ? 'text-destructive' : ''}`}>
                             {formatRate(rate)}
                           </TableCell>
                         </TableRow>
@@ -261,15 +284,15 @@ export default function ReportsPage() {
                       return (
                         <TableRow key={String(row.supplier_id)}>
                           <TableCell className="font-medium">{row.company_name}</TableCell>
-                          <TableCell className="text-right">{toNumber(row.orders_count)}</TableCell>
-                          <TableCell className="text-right">{BRL.format(toNumber(row.total_amount))}</TableCell>
-                          <TableCell className="text-right">{formatDays(row.avg_lead_time_days)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{toNumber(row.orders_count)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{BRL.format(toNumber(row.total_amount))}</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatDays(row.avg_lead_time_days)}</TableCell>
                           <TableCell
                             className={`text-right font-medium ${onTime >= 0.9 ? 'text-emerald-600' : onTime < 0.7 ? 'text-destructive' : ''}`}
                           >
                             {formatRate(onTime)}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right tabular-nums">
                             {rncCount > 0
                               ? <Badge className="border-transparent bg-destructive text-destructive-foreground">{rncCount}</Badge>
                               : <span className="text-muted-foreground">0</span>}
@@ -326,9 +349,9 @@ export default function ReportsPage() {
                         <TableRow key={String(row.product_id)}>
                           <TableCell className="font-medium">{row.code}</TableCell>
                           <TableCell>{row.name}</TableCell>
-                          <TableCell className="text-right">{BRL.format(toNumber(row.standard_cost))}</TableCell>
-                          <TableCell className="text-right">{BRL.format(toNumber(row.avg_real_cost))}</TableCell>
-                          <TableCell className={`text-right font-medium ${tone}`}>{formatRate(rate)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{BRL.format(toNumber(row.standard_cost))}</TableCell>
+                          <TableCell className="text-right tabular-nums">{BRL.format(toNumber(row.avg_real_cost))}</TableCell>
+                          <TableCell className={`text-right tabular-nums font-medium ${tone}`}>{formatRate(rate)}</TableCell>
                         </TableRow>
                       );
                     })
@@ -365,11 +388,11 @@ export default function ReportsPage() {
                         <TableRow key={`${row.product_id}-${row.supplier_id}-${index}`}>
                           <TableCell className="font-medium">{row.code} — {row.name}</TableCell>
                           <TableCell>{row.company_name}</TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right tabular-nums">
                             {hasCatalog ? BRL.format(toNumber(row.catalog_price)) : '—'}
                           </TableCell>
-                          <TableCell className="text-right">{BRL.format(toNumber(row.avg_paid_price))}</TableCell>
-                          <TableCell className={`text-right font-medium ${tone}`}>
+                          <TableCell className="text-right tabular-nums">{BRL.format(toNumber(row.avg_paid_price))}</TableCell>
+                          <TableCell className={`text-right tabular-nums font-medium ${tone}`}>
                             {rate === null ? '—' : formatRate(rate)}
                           </TableCell>
                         </TableRow>

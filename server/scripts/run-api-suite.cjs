@@ -100,7 +100,7 @@ function waitForReady(url, timeoutMs) {
 
 async function ensureFixtures() {
   const models = require(path.join(serverDir, 'dist', 'src', 'models', 'index.js'));
-  const { sequelize, User, Supplier, Product, BillOfMaterial, CompanyFiscalConfig } = models;
+  const { sequelize, User, Supplier, Product, BillOfMaterial, CompanyFiscalConfig, Warehouse, ProductWarehouseStock } = models;
 
   try {
     await sequelize.authenticate();
@@ -154,6 +154,33 @@ async function ensureFixtures() {
         ...productFixtureDefaults,
       },
     });
+
+    // Dual-write por deposito (Bloco 4, docs/governance/TODO.md; §12 da
+    // BUSINESS_RULES.md): `CreateSaleUseCase`/`ChangeSaleStatusUseCase`
+    // debitam o saldo do produto ESPECIFICAMENTE no deposito ACABADOS, nao
+    // mais so `products.quantity` global. Este fixture so ajustava
+    // `products.quantity` (acima), entao qualquer teste que criasse/
+    // confirmasse uma venda com este produto recebia 422 ("saldo
+    // insuficiente ... no deposito ACABADOS"). Ajustado direto via
+    // Sequelize (mesmo padrao ja usado neste arquivo para os demais
+    // fixtures) para nao depender do endpoint HTTP `POST /api/inventory/
+    // movements` como fixture. Sempre reforca um saldo generoso (nao so na
+    // primeira execucao) para sobreviver a rodadas repetidas de CI no
+    // mesmo banco.
+    const acabadosWarehouse = await Warehouse.findOne({ where: { code: 'ACABADOS', active: true } });
+    if (!acabadosWarehouse) {
+      throw new Error('Deposito ACABADOS nao encontrado/ativo - rode as migrations do Bloco 4 antes dos testes.');
+    }
+    const [acabadosStock] = await ProductWarehouseStock.findOrCreate({
+      where: { product_id: purchaseProduct.id, warehouse_id: acabadosWarehouse.id },
+      defaults: { product_id: purchaseProduct.id, warehouse_id: acabadosWarehouse.id, quantity: 0 },
+    });
+    const ACABADOS_FIXTURE_QUANTITY = 100000;
+    if (Number(acabadosStock.quantity) < ACABADOS_FIXTURE_QUANTITY) {
+      const topUp = ACABADOS_FIXTURE_QUANTITY - Number(acabadosStock.quantity);
+      await acabadosStock.increment('quantity', { by: topUp });
+      await purchaseProduct.increment('quantity', { by: topUp });
+    }
 
     const [lowStockProduct] = await Product.findOrCreate({
       where: { code: 'CI-LOW-STOCK-001' },

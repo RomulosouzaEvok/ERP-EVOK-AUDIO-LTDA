@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2, Pencil, Clock } from 'lucide-react';
+import { Plus, Trash2, Pencil, Clock, Gauge } from 'lucide-react';
 
 import * as workCentersApi from '@/api/workCenters';
 import { extractApiErrorMessage } from '@/api/httpClient';
@@ -415,7 +415,15 @@ export default function WorkCentersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Centros de Trabalho</h1>
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <Gauge className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Centros de Trabalho</h1>
+          <p className="text-sm text-muted-foreground">Capacidade, turnos e carga-máquina por centro de trabalho.</p>
+        </div>
+      </div>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -461,7 +469,7 @@ export default function WorkCentersPage() {
                 </TableRow>
               ) : (
                 load.centers.map((center) => (
-                  <TableRow key={String(center.id)}>
+                  <TableRow key={String(center.id)} className="hover:bg-accent/50">
                     <TableCell className="font-medium">{center.code} — {center.name}</TableCell>
                     <TableCell className="text-right">{center.machines_count}</TableCell>
                     <TableCell className="text-right">{center.capacity_hours.toLocaleString('pt-BR')}</TableCell>
@@ -519,7 +527,7 @@ export default function WorkCentersPage() {
                 </TableRow>
               ) : (
                 workCenters.map((workCenter) => (
-                  <TableRow key={String(workCenter.id)}>
+                  <TableRow key={String(workCenter.id)} className="hover:bg-accent/50">
                     <TableCell className="font-medium">{workCenter.code}</TableCell>
                     <TableCell>{workCenter.name}</TableCell>
                     <TableCell className="text-right">{workCenter.machines_count}</TableCell>

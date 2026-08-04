@@ -24,9 +24,9 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type WarehouseTransferStatus = 'pending' | 'approved' | 'rejected';
+type WarehouseTransferStatus = 'pending' | 'approved' | 'rejected';
 
-export interface WarehouseTransferAttributes {
+interface WarehouseTransferAttributes {
   id: number;
   product_id: number;
   from_warehouse_id: number;
@@ -40,7 +40,7 @@ export interface WarehouseTransferAttributes {
   readonly updatedAt?: Date;
 }
 
-export interface WarehouseTransferCreationAttributes {
+interface WarehouseTransferCreationAttributes {
   id?: number;
   product_id: number;
   from_warehouse_id: number;

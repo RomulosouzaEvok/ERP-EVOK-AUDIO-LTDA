@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface AccountReceivableAttributes {
+interface AccountReceivableAttributes {
   id: number;
   sale_id: number | null;
   customer_id: number;

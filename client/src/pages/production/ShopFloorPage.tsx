@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Play, CheckCircle2, Plus, Search } from 'lucide-react';
+import { Play, CheckCircle2, Plus, Search, PackageCheck, HardHat } from 'lucide-react';
 
 import * as productionApi from '@/api/production';
 import * as trackingApi from '@/api/productionTracking';
 import * as employeesApi from '@/api/employees';
+import * as inventoryApi from '@/api/inventory';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,8 @@ import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { QrCodeDialog } from '@/components/QrCodeDialog';
+import CompleteOrderWithLotScanDialog from './CompleteOrderWithLotScanDialog';
 
 const TRACKING_STATUS_LABEL: Record<trackingApi.ProductionTrackingStatus, string> = {
   pending: 'Pendente',
@@ -56,6 +59,8 @@ export default function ShopFloorPage() {
   const [startingTracking, setStartingTracking] = React.useState<trackingApi.ProductionOrderTracking | null>(null);
   const [completingTracking, setCompletingTracking] = React.useState<trackingApi.ProductionOrderTracking | null>(null);
   const [addStepOpen, setAddStepOpen] = React.useState(false);
+  const [completingOrder, setCompletingOrder] = React.useState<productionApi.ProductionOrder | null>(null);
+  const [printingLot, setPrintingLot] = React.useState<inventoryApi.LotByCode | null>(null);
 
   const { data: releasedOrders, isLoading: loadingReleased } = useQuery({
     queryKey: ['production-orders', 'shop-floor', 'released'],
@@ -96,96 +101,117 @@ export default function ShopFloorPage() {
   const isLoadingOrders = loadingReleased || loadingInProgress;
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <Card className="w-full lg:w-96 lg:shrink-0">
-        <CardHeader>
-          <CardTitle className="text-xl">Ordens ativas</CardTitle>
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="h-12 pl-9 text-base"
-              placeholder="Buscar por ordem ou produto..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          {isLoadingOrders && <p className="text-sm text-muted-foreground">Carregando ordens...</p>}
-          {!isLoadingOrders && orders.length === 0 && (
-            <p className="text-sm text-muted-foreground">Nenhuma ordem liberada ou em produção encontrada.</p>
-          )}
-          {orders.map((order) => (
-            <button
-              key={order.id}
-              type="button"
-              onClick={() => setSelectedOrderId(order.id)}
-              className={`flex min-h-12 flex-col gap-1 rounded-lg border p-3 text-left transition-colors ${
-                selectedOrderId === order.id ? 'border-primary bg-accent' : 'border-input hover:bg-accent/50'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-base font-semibold">{order.order_number ?? `OP #${order.id}`}</span>
-                <Badge variant="secondary">{ORDER_STATUS_LABEL[order.status] ?? order.status}</Badge>
-              </div>
-              <span className="text-sm text-muted-foreground">{order.product?.name ?? `Produto #${order.product_id}`}</span>
-              <span className="text-sm text-muted-foreground">
-                Produzido: {order.quantity_produced ?? 0} / {order.quantity}
-              </span>
-            </button>
-          ))}
-        </CardContent>
-      </Card>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <HardHat className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Chão de fábrica</h1>
+          <p className="text-sm text-muted-foreground">Apontamento de etapas de produção por ordem, bancada ou tablet.</p>
+        </div>
+      </div>
 
-      <div className="flex w-full flex-col gap-4">
-        {!selectedOrder && (
-          <Card>
-            <CardContent className="p-6 text-center text-muted-foreground">
-              Selecione uma ordem de produção para ver as etapas de apontamento.
-            </CardContent>
-          </Card>
-        )}
-
-        {selectedOrder && (
-          <>
-            <Card>
-              <CardHeader className="flex-row items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-xl">
-                    {selectedOrder.order_number ?? `OP #${selectedOrder.id}`} — {selectedOrder.product?.name ?? selectedOrder.product_id}
-                  </CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Total bom acumulado: <span className="font-semibold text-foreground">{totalGood}</span> de{' '}
-                    <span className="font-semibold text-foreground">{selectedOrder.quantity}</span> planejados
-                  </p>
-                </div>
-                <Button className="min-h-12" onClick={() => setAddStepOpen(true)}>
-                  <Plus /> Adicionar etapa
-                </Button>
-              </CardHeader>
-            </Card>
-
-            <div className="flex flex-col gap-3">
-              {loadingSteps && <p className="text-sm text-muted-foreground">Carregando etapas...</p>}
-              {errorSteps && <p className="text-sm text-destructive">Não foi possível carregar as etapas desta ordem.</p>}
-              {!loadingSteps && !errorSteps && (steps ?? []).length === 0 && (
-                <Card>
-                  <CardContent className="p-6 text-center text-muted-foreground">
-                    Nenhuma etapa cadastrada ainda. Use "Adicionar etapa" para iniciar o apontamento.
-                  </CardContent>
-                </Card>
-              )}
-              {(steps ?? []).map((step) => (
-                <TrackingStepCard
-                  key={step.id}
-                  step={step}
-                  onStart={() => setStartingTracking(step)}
-                  onComplete={() => setCompletingTracking(step)}
-                />
-              ))}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <Card className="w-full lg:w-96 lg:shrink-0">
+          <CardHeader>
+            <CardTitle className="text-xl">Ordens ativas</CardTitle>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-12 pl-9 text-base"
+                placeholder="Buscar por ordem ou produto..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
             </div>
-          </>
-        )}
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {isLoadingOrders && <p className="text-sm text-muted-foreground">Carregando ordens...</p>}
+            {!isLoadingOrders && orders.length === 0 && (
+              <p className="text-sm text-muted-foreground">Nenhuma ordem liberada ou em produção encontrada.</p>
+            )}
+            {orders.map((order) => (
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => setSelectedOrderId(order.id)}
+                className={`flex min-h-12 flex-col gap-1 rounded-lg border p-3 text-left transition-colors ${
+                  selectedOrderId === order.id ? 'border-brand bg-brand/10' : 'border-input hover:bg-accent/50'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-base font-semibold">{order.order_number ?? `OP #${order.id}`}</span>
+                  <Badge variant="secondary">{ORDER_STATUS_LABEL[order.status] ?? order.status}</Badge>
+                </div>
+                <span className="text-sm text-muted-foreground">{order.product?.name ?? `Produto #${order.product_id}`}</span>
+                <span className="text-sm text-muted-foreground">
+                  Produzido: {order.quantity_produced ?? 0} / {order.quantity}
+                </span>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+
+        <div className="flex w-full flex-col gap-4">
+          {!selectedOrder && (
+            <Card>
+              <CardContent className="p-6 text-center text-muted-foreground">
+                Selecione uma ordem de produção para ver as etapas de apontamento.
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedOrder && (
+            <>
+              <Card>
+                <CardHeader className="flex-row items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="text-xl">
+                      {selectedOrder.order_number ?? `OP #${selectedOrder.id}`} — {selectedOrder.product?.name ?? selectedOrder.product_id}
+                    </CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Total bom acumulado: <span className="font-semibold text-foreground">{totalGood}</span> de{' '}
+                      <span className="font-semibold text-foreground">{selectedOrder.quantity}</span> planejados
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button className="min-h-12" onClick={() => setAddStepOpen(true)}>
+                      <Plus /> Adicionar etapa
+                    </Button>
+                    <Button
+                      className="min-h-12"
+                      variant="secondary"
+                      onClick={() => setCompletingOrder(selectedOrder)}
+                    >
+                      <PackageCheck /> Concluir OP (ler lote)
+                    </Button>
+                  </div>
+                </CardHeader>
+              </Card>
+
+              <div className="flex flex-col gap-3">
+                {loadingSteps && <p className="text-sm text-muted-foreground">Carregando etapas...</p>}
+                {errorSteps && <p className="text-sm text-destructive">Não foi possível carregar as etapas desta ordem.</p>}
+                {!loadingSteps && !errorSteps && (steps ?? []).length === 0 && (
+                  <Card>
+                    <CardContent className="p-6 text-center text-muted-foreground">
+                      Nenhuma etapa cadastrada ainda. Use "Adicionar etapa" para iniciar o apontamento.
+                    </CardContent>
+                  </Card>
+                )}
+                {(steps ?? []).map((step) => (
+                  <TrackingStepCard
+                    key={step.id}
+                    step={step}
+                    onStart={() => setStartingTracking(step)}
+                    onComplete={() => setCompletingTracking(step)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <StartTrackingDialog tracking={startingTracking} onClose={() => setStartingTracking(null)} />
@@ -195,6 +221,20 @@ export default function ShopFloorPage() {
           productionOrderId={selectedOrderId}
           open={addStepOpen}
           onClose={() => setAddStepOpen(false)}
+        />
+      )}
+      <CompleteOrderWithLotScanDialog
+        order={completingOrder}
+        onClose={() => setCompletingOrder(null)}
+        onCompleted={(lot) => setPrintingLot(lot)}
+      />
+      {printingLot && (
+        <QrCodeDialog
+          open={Boolean(printingLot)}
+          onOpenChange={(open) => !open && setPrintingLot(null)}
+          title={`Lote ${printingLot.lot_number} — ${printingLot.product?.name ?? printingLot.product_id}`}
+          queryKey={['lot-qrcode', printingLot.id]}
+          fetchQrCode={() => inventoryApi.getLotQrCode(printingLot.id)}
         />
       )}
     </div>

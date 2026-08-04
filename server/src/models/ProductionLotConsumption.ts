@@ -11,7 +11,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ProductionLotConsumptionAttributes {
+interface ProductionLotConsumptionAttributes {
   id: number;
   production_order_id: number;
   lot_control_id: number;

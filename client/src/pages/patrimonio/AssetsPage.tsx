@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Camera, QrCode } from 'lucide-react';
+import { Plus, Camera, QrCode, Boxes } from 'lucide-react';
 
 import * as assetsApi from '@/api/assets';
 import { extractApiErrorMessage, getUploadUrl } from '@/api/httpClient';
@@ -108,8 +108,16 @@ export default function AssetsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Patrimônio</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <Boxes className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Patrimônio</h1>
+            <p className="text-sm text-muted-foreground">Cadastro de ativos fixos, com foto e QR Code para etiquetagem física.</p>
+          </div>
+        </div>
         {canWrite && (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>

@@ -21,7 +21,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface WarehouseAttributes {
+interface WarehouseAttributes {
   id: number;
   code: string;
   name: string;
@@ -31,7 +31,7 @@ export interface WarehouseAttributes {
   readonly updatedAt?: Date;
 }
 
-export interface WarehouseCreationAttributes {
+interface WarehouseCreationAttributes {
   id?: number;
   code: string;
   name: string;

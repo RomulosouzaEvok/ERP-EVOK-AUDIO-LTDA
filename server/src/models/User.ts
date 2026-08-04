@@ -18,7 +18,7 @@ import { sequelize } from '../config/database';
 import bcrypt from 'bcryptjs';
 
 /** @interface Atributos da entidade User */
-export interface UserAttributes {
+interface UserAttributes {
   id: number;
   name: string;
   email: string;
@@ -35,7 +35,7 @@ export interface UserAttributes {
 }
 
 /** @interface Atributos para criação (id opcional) */
-export interface UserCreationAttributes {
+interface UserCreationAttributes {
   id?: number;
   name: string;
   email: string;

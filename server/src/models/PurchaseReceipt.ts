@@ -13,7 +13,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface PurchaseReceiptAttributes {
+interface PurchaseReceiptAttributes {
   id: number;
   purchase_id: number;
   invoice_number: string;

@@ -15,11 +15,13 @@ const { WarehouseTransfer } = require('../../../../models/index');
 
 import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError, BusinessRuleError, ValidationError } from '../../../../errors';
+import { Transaction } from 'sequelize';
 
 interface RejectWarehouseTransferInput {
   id: number | string;
   approverId: number;
   reason: string;
+  transaction: Transaction;
 }
 
 class RejectWarehouseTransferUseCase extends UseCase<RejectWarehouseTransferInput, any> {
@@ -36,7 +38,10 @@ class RejectWarehouseTransferUseCase extends UseCase<RejectWarehouseTransferInpu
       throw new ValidationError('reason (motivo da rejeição) é obrigatório.');
     }
 
-    const transfer = await WarehouseTransfer.findByPk(input.id);
+    const transfer = await WarehouseTransfer.findByPk(input.id, {
+      transaction: input.transaction,
+      lock: Transaction.LOCK.UPDATE,
+    });
     if (!transfer) {
       throw new NotFoundError('Transferência entre depósitos não encontrada.');
     }
@@ -50,7 +55,7 @@ class RejectWarehouseTransferUseCase extends UseCase<RejectWarehouseTransferInpu
       status: 'rejected',
       approved_by: input.approverId,
       reason: `${transfer.reason} | Rejeitada: ${reason}`,
-    });
+    }, { transaction: input.transaction });
 
     return transfer;
   }

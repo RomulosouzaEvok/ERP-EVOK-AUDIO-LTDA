@@ -1,7 +1,7 @@
 import * as React from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
-import { Eye, Send, AlertTriangle } from 'lucide-react';
+import { Eye, Send, AlertTriangle, Truck } from 'lucide-react';
 
 import * as salesApi from '@/api/sales';
 import { extractApiErrorMessage } from '@/api/httpClient';
@@ -95,8 +95,13 @@ export default function ShippingPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Expedição</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <Truck className="size-5" />
+          </div>
+          <h1 className="text-2xl font-semibold">Expedição</h1>
+        </div>
         <div className="flex gap-2">
           <Button size="sm" variant={filter === 'pending' ? 'default' : 'outline'} onClick={() => setFilter('pending')}>
             Fila de embarque

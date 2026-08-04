@@ -7,10 +7,10 @@
 import { DataTypes, ModelDefined } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export type MrpOrigem = 'PEDIDO_VENDA' | 'PREVISAO' | 'ORDEM_PRODUCAO' | 'MANUAL';
-export type OrdemStatus = 'RASCUNHO' | 'APROVADA' | 'EM_EXECUCAO' | 'CONCLUIDA' | 'CANCELADA';
+type MrpOrigem = 'PEDIDO_VENDA' | 'PREVISAO' | 'ORDEM_PRODUCAO' | 'MANUAL';
+type OrdemStatus = 'RASCUNHO' | 'APROVADA' | 'EM_EXECUCAO' | 'CONCLUIDA' | 'CANCELADA';
 
-export interface MrpOrdemPlanejadaAttributes {
+interface MrpOrdemPlanejadaAttributes {
   id: string;
   item_id: string;
   origem: MrpOrigem;

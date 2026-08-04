@@ -15,9 +15,12 @@ class LaboratoryRepository {
    *
    * @abstract
    * @param data - Campos do teste.
+   * @param transaction - Transacao Sequelize ativa (opcional; usada quando
+   *   o teste destrutivo precisa debitar o Deposito LABORATORIO na mesma
+   *   transacao, UC-42-E).
    * @returns Teste criado.
    */
-  async createTest(_data: Record<string, any>): Promise<any> {
+  async createTest(_data: Record<string, any>, _transaction?: any): Promise<any> {
     throw new Error('LaboratoryRepository.createTest nao implementado.');
   }
 
@@ -28,9 +31,10 @@ class LaboratoryRepository {
    * @abstract
    * @param id - Id do teste.
    * @param data - Campos a atualizar.
+   * @param transaction - Transacao Sequelize ativa (opcional).
    * @returns Teste atualizado ou `null` se nao existir.
    */
-  async updateTest(_id: number, _data: Record<string, any>): Promise<any | null> {
+  async updateTest(_id: number, _data: Record<string, any>, _transaction?: any): Promise<any | null> {
     throw new Error('LaboratoryRepository.updateTest nao implementado.');
   }
 

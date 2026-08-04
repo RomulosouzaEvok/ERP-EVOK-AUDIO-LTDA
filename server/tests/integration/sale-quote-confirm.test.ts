@@ -61,6 +61,9 @@ describeIntegration('F22 - Confirmacao de orcamento (quote -> confirmed)', () =>
     const productId = Number(process.env.TEST_PRODUCT_ID);
     const customerId = await ensureFixtureClient();
 
+    // NOTA: a confirmacao debita o saldo do produto no deposito ACABADOS
+    // (dual-write, Bloco 4) - o fixture global (scripts/run-api-suite.cjs
+    // `ensureFixtures`) garante saldo generoso la para TEST_PRODUCT_ID.
     const quantityBefore = await getProductQuantity(productId);
 
     const createResponse = await api()

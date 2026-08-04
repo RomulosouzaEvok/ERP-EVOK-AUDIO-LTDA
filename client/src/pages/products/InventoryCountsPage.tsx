@@ -1,17 +1,24 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { ClipboardList, Plus } from 'lucide-react';
 
 import * as inventoryApi from '@/api/inventory';
 import * as productsApi from '@/api/products';
+import * as warehousesApi from '@/api/warehouses';
 import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { Pagination } from '@/components/Pagination';
 
 const STATUS_LABEL: Record<inventoryApi.InventoryCountStatus, string> = {
@@ -23,7 +30,26 @@ const STATUS_LABEL: Record<inventoryApi.InventoryCountStatus, string> = {
   rejected: 'Rejeitada',
 };
 
-/** `FE1`: contagem de inventário cíclico — criar com produtos, contar item a item, submeter, aprovar/rejeitar. */
+const createCountSchema = z.object({
+  warehouse_id: z.coerce.number({ message: 'Selecione o depósito.' }).int().positive('Selecione o depósito.'),
+  location: z.string().trim().max(100).optional(),
+});
+
+type CreateCountFormData = z.infer<typeof createCountSchema>;
+
+/**
+ * Resolve `code — name` de um depósito a partir do `id` (a listagem/detalhe
+ * de contagens do backend não faz eager-load da associação `warehouse`, ver
+ * `SequelizeInventoryCountRepository.ts` — a tela reaproveita
+ * `listWarehouses()` e monta o rótulo aqui).
+ */
+function warehouseLabel(warehouses: warehousesApi.Warehouse[] | undefined, warehouseId: number | null): string {
+  if (!warehouseId) return '—';
+  const warehouse = warehouses?.find((w) => w.id === warehouseId);
+  return warehouse ? `${warehouse.code} — ${warehouse.name}` : `Depósito #${warehouseId}`;
+}
+
+/** `FE1`: contagem de inventário cíclico — criar (escopada a um depósito), contar item a item, submeter, aprovar/rejeitar. */
 export default function InventoryCountsPage() {
   const { hasRole } = useAuth();
   const canWrite = hasRole('admin', 'operator');
@@ -33,24 +59,44 @@ export default function InventoryCountsPage() {
   const [selectedProductIds, setSelectedProductIds] = React.useState<number[]>([]);
   const [openCountId, setOpenCountId] = React.useState<number | null>(null);
   const [page, setPage] = React.useState(1);
+  const [createFormError, setCreateFormError] = React.useState<DidacticError | null>(null);
+  const [approveError, setApproveError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['inventory-counts', page],
     queryFn: () => inventoryApi.listInventoryCounts({ limit: 20, page }),
   });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
+  const { data: warehouses } = useQuery({ queryKey: ['warehouses'], queryFn: warehousesApi.listWarehouses });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['inventory-counts'] });
   const onError = (error: unknown) => window.alert(extractApiErrorMessage(error));
 
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<CreateCountFormData>({
+    resolver: zodResolver(createCountSchema),
+    defaultValues: { warehouse_id: undefined, location: '' },
+  });
+
   const createMutation = useMutation({
-    mutationFn: () => inventoryApi.createInventoryCount({ product_ids: selectedProductIds }),
+    mutationFn: (values: CreateCountFormData) =>
+      inventoryApi.createInventoryCount({
+        warehouse_id: values.warehouse_id,
+        location: values.location?.trim() || undefined,
+        product_ids: selectedProductIds,
+      }),
     onSuccess: () => {
       invalidate();
       setCreateOpen(false);
       setSelectedProductIds([]);
+      reset({ warehouse_id: undefined, location: '' });
+      setCreateFormError(null);
     },
-    onError,
+    onError: (error) => setCreateFormError(translateApiError(error, 'Não foi possível criar a contagem de inventário')),
   });
   const startMutation = useMutation({ mutationFn: inventoryApi.startInventoryCount, onSuccess: invalidate, onError });
   const submitMutation = useMutation({ mutationFn: inventoryApi.submitInventoryCount, onSuccess: invalidate, onError });
@@ -59,8 +105,17 @@ export default function InventoryCountsPage() {
     onSuccess: () => {
       invalidate();
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      setApproveError(null);
     },
-    onError,
+    onError: (error) =>
+      setApproveError(
+        translateApiError(
+          error,
+          'Não foi possível aprovar a contagem',
+          undefined,
+          'A variância negativa não pôde ser aplicada porque o depósito contado não tem saldo suficiente. Isso é intencional — confira a contagem antes de reenviar.',
+        ),
+      ),
   });
   const rejectMutation = useMutation({ mutationFn: (id: number) => inventoryApi.rejectInventoryCount(id), onSuccess: invalidate, onError });
 
@@ -70,10 +125,30 @@ export default function InventoryCountsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Contagem de inventário</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <ClipboardList className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Contagem de inventário</h1>
+            <p className="text-sm text-muted-foreground">
+              Contagem cíclica escopada a um depósito — a aprovação ajusta apenas o saldo do depósito contado.
+            </p>
+          </div>
+        </div>
         {canWrite && (
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <Dialog
+            open={createOpen}
+            onOpenChange={(open) => {
+              setCreateOpen(open);
+              if (!open) {
+                setSelectedProductIds([]);
+                reset({ warehouse_id: undefined, location: '' });
+                setCreateFormError(null);
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button>
                 <Plus /> Nova contagem
@@ -83,45 +158,88 @@ export default function InventoryCountsPage() {
               <DialogHeader>
                 <DialogTitle>Nova contagem de inventário</DialogTitle>
               </DialogHeader>
-              <div className="flex max-h-80 flex-col gap-1 overflow-y-auto">
-                {products?.data.map((product) => (
-                  <label key={product.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
-                    <input
-                      type="checkbox"
-                      checked={selectedProductIds.includes(product.id)}
-                      onChange={() => toggleProduct(product.id)}
-                    />
-                    {product.code} — {product.name}
-                  </label>
-                ))}
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={() => createMutation.mutate()}
-                  disabled={createMutation.isPending || selectedProductIds.length === 0}
-                >
-                  {createMutation.isPending ? 'Salvando...' : `Criar contagem (${selectedProductIds.length} itens)`}
-                </Button>
-              </DialogFooter>
+              <form
+                className="flex flex-col gap-3"
+                noValidate
+                onSubmit={handleSubmit((values) => createMutation.mutate(values))}
+              >
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="count-warehouse">Depósito *</Label>
+                  <select
+                    id="count-warehouse"
+                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+                    defaultValue=""
+                    {...register('warehouse_id')}
+                  >
+                    <option value="" disabled>
+                      Selecione o depósito a contar
+                    </option>
+                    {warehouses?.map((warehouse) => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.code} — {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.warehouse_id && <p className="text-sm text-destructive">{errors.warehouse_id.message}</p>}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="count-location">Local/área (opcional)</Label>
+                  <Input id="count-location" placeholder="Ex.: Corredor A, Prateleira 3" {...register('location')} />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label>Produtos a contar *</Label>
+                  <div className="flex max-h-72 flex-col gap-1 overflow-y-auto rounded-md border p-1">
+                    {products?.data.map((product) => (
+                      <label key={product.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
+                        <input
+                          type="checkbox"
+                          checked={selectedProductIds.includes(product.id)}
+                          onChange={() => toggleProduct(product.id)}
+                        />
+                        {product.code} — {product.name}
+                      </label>
+                    ))}
+                  </div>
+                  {selectedProductIds.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Selecione ao menos um produto.</p>
+                  )}
+                </div>
+
+                {createFormError && <DidacticAlert error={createFormError} />}
+
+                <DialogFooter>
+                  <Button
+                    type="submit"
+                    disabled={createMutation.isPending || isSubmitting || selectedProductIds.length === 0}
+                  >
+                    {createMutation.isPending ? 'Salvando...' : `Criar contagem (${selectedProductIds.length} itens)`}
+                  </Button>
+                </DialogFooter>
+              </form>
             </DialogContent>
           </Dialog>
         )}
       </div>
 
+      {approveError && <DidacticAlert error={approveError} />}
+
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Número</TableHead>
+            <TableHead>Depósito</TableHead>
             <TableHead>Criada em</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={4} />}
+          {isLoading && <TableSkeletonRows columns={5} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-destructive">
+              <TableCell colSpan={5} className="text-center text-destructive">
                 Não foi possível carregar as contagens. Tente novamente.
               </TableCell>
             </TableRow>
@@ -129,6 +247,7 @@ export default function InventoryCountsPage() {
           {data?.data.map((count) => (
             <TableRow key={count.id}>
               <TableCell>{count.count_number}</TableCell>
+              <TableCell>{warehouseLabel(warehouses, count.warehouse_id)}</TableCell>
               <TableCell>{new Date(count.createdAt).toLocaleString('pt-BR')}</TableCell>
               <TableCell>
                 <Badge variant="secondary">{STATUS_LABEL[count.status]}</Badge>
@@ -146,8 +265,15 @@ export default function InventoryCountsPage() {
                 )}
                 {canApprove && count.status === 'pending_approval' && (
                   <>
-                    <Button size="sm" onClick={() => approveMutation.mutate(count.id)}>
-                      Aprovar (ajusta estoque)
+                    <Button
+                      size="sm"
+                      disabled={approveMutation.isPending}
+                      onClick={() => {
+                        setApproveError(null);
+                        approveMutation.mutate(count.id);
+                      }}
+                    >
+                      Aprovar (ajusta estoque do depósito)
                     </Button>
                     <Button size="sm" variant="destructive" onClick={() => rejectMutation.mutate(count.id)}>
                       Rejeitar
@@ -159,7 +285,7 @@ export default function InventoryCountsPage() {
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
+              <TableCell colSpan={5} className="text-center text-muted-foreground">
                 Nenhuma contagem registrada.
               </TableCell>
             </TableRow>
@@ -185,6 +311,7 @@ function CountItemsDialog({
 }) {
   const queryClient = useQueryClient();
   const [values, setValues] = React.useState<Record<number, string>>({});
+  const { data: warehouses } = useQuery({ queryKey: ['warehouses'], queryFn: warehousesApi.listWarehouses });
 
   const { data: count } = useQuery({
     queryKey: ['inventory-count', countId],
@@ -207,6 +334,9 @@ function CountItemsDialog({
         <DialogHeader>
           <DialogTitle>Contar itens — {count?.count_number}</DialogTitle>
         </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Depósito: <span className="font-medium text-foreground">{warehouseLabel(warehouses, count?.warehouse_id ?? null)}</span>
+        </p>
         <div className="flex flex-col gap-2">
           {count?.items?.map((item) => (
             <div key={item.id} className="flex items-center justify-between gap-3 border-b pb-2">

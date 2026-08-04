@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ScrollText } from 'lucide-react';
 
 import * as auditLogsApi from '@/api/auditLogs';
 import { Input } from '@/components/ui/input';
@@ -20,7 +21,15 @@ export default function AuditLogsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Log de auditoria</h1>
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <ScrollText className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Log de auditoria</h1>
+          <p className="text-sm text-muted-foreground">Registro somente-leitura de ações realizadas no sistema.</p>
+        </div>
+      </div>
 
       <Input
         aria-label="Filtrar log de auditoria por tipo de entidade"

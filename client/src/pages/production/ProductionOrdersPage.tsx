@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Eye } from 'lucide-react';
+import { Plus, Eye, Factory } from 'lucide-react';
 
 import * as productionApi from '@/api/production';
 import * as bomApi from '@/api/bom';
 import * as productsApi from '@/api/products';
 import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { DetailField } from '@/components/DetailField';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import CompleteProductionOrderDialog from './CompleteProductionOrderDialog';
 
 const PRIORITY_LABEL: Record<string, string> = {
@@ -37,6 +39,16 @@ const STATUS_LABEL: Record<productionApi.ProductionStatus, string> = {
   paused: 'Pausada',
   completed: 'Concluída',
   canceled: 'Cancelada',
+};
+
+/** Cores por status da ordem de produção — mesma linguagem visual do MRP. */
+const STATUS_BADGE_CLASS: Record<productionApi.ProductionStatus, string> = {
+  planned: 'border-transparent bg-muted text-muted-foreground',
+  released: 'border-transparent bg-blue-600 text-white',
+  in_progress: 'border-transparent bg-amber-500 text-white',
+  paused: 'border-transparent bg-secondary text-secondary-foreground',
+  completed: 'border-transparent bg-emerald-600 text-white',
+  canceled: 'border-transparent bg-destructive text-destructive-foreground',
 };
 
 // `in_progress -> completed` não avança por aqui: exige o diálogo de
@@ -65,6 +77,7 @@ export default function ProductionOrdersPage() {
   const [completingOrder, setCompletingOrder] = React.useState<productionApi.ProductionOrder | null>(null);
   const [detailsOrder, setDetailsOrder] = React.useState<productionApi.ProductionOrder | null>(null);
   const [page, setPage] = React.useState(1);
+  const [statusError, setStatusError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['production-orders', page],
@@ -93,16 +106,34 @@ export default function ProductionOrdersPage() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: productionApi.ProductionStatus }) =>
+    mutationFn: ({ id, status }: { id: number; status: productionApi.ProductionStatus; orderLabel: string }) =>
       productionApi.updateProductionOrderStatus(id, status),
-    onSuccess: invalidate,
-    onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível alterar o status da ordem.')),
+    onSuccess: () => {
+      setStatusError(null);
+      invalidate();
+    },
+    onError: (error, variables) =>
+      setStatusError(
+        translateApiError(
+          error,
+          `Não é possível liberar a ordem de produção ${variables.orderLabel}`,
+          variables.status === 'released' ? 'release-production-order' : undefined,
+        ),
+      ),
   });
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Ordens de produção</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <Factory className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Ordens de produção</h1>
+            <p className="text-sm text-muted-foreground">Acompanhe e avance o status das ordens de fabricação.</p>
+          </div>
+        </div>
         {canWrite && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -162,6 +193,8 @@ export default function ProductionOrdersPage() {
         )}
       </div>
 
+      {statusError && <DidacticAlert error={statusError} />}
+
       <Table>
         <TableHeader>
           <TableRow>
@@ -191,7 +224,7 @@ export default function ProductionOrdersPage() {
                 <TableCell>{order.quantity}</TableCell>
                 <TableCell>{new Date(order.due_date).toLocaleDateString('pt-BR')}</TableCell>
                 <TableCell>
-                  <Badge variant="secondary">{STATUS_LABEL[order.status]}</Badge>
+                  <Badge className={STATUS_BADGE_CLASS[order.status]}>{STATUS_LABEL[order.status]}</Badge>
                 </TableCell>
                 {canWrite && (
                   <TableCell className="flex gap-2" onClick={(event) => event.stopPropagation()}>
@@ -199,7 +232,17 @@ export default function ProductionOrdersPage() {
                       <Eye className="size-4" /> Detalhes
                     </Button>
                     {next && (
-                      <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: order.id, status: next })}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          statusMutation.mutate({
+                            id: order.id,
+                            status: next,
+                            orderLabel: order.order_number ?? `#${order.id}`,
+                          })
+                        }
+                      >
                         Avançar para "{STATUS_LABEL[next]}"
                       </Button>
                     )}
@@ -214,7 +257,11 @@ export default function ProductionOrdersPage() {
                         variant="destructive"
                         onClick={() => {
                           if (window.confirm(`Cancelar a ordem ${order.order_number ?? order.id}?`)) {
-                            statusMutation.mutate({ id: order.id, status: 'canceled' });
+                            statusMutation.mutate({
+                              id: order.id,
+                              status: 'canceled',
+                              orderLabel: order.order_number ?? `#${order.id}`,
+                            });
                           }
                         }}
                       >

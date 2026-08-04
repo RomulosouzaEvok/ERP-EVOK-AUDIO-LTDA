@@ -13,7 +13,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface ProductAttributes {
+interface ProductAttributes {
   id: number;
   name: string;
   code: string;

@@ -63,6 +63,7 @@ import AccessProfilePermission = require('./AccessProfilePermission');
 import Warehouse = require('./Warehouse');
 import ProductWarehouseStock = require('./ProductWarehouseStock');
 import WarehouseTransfer = require('./WarehouseTransfer');
+import ProductionCostSettings = require('./ProductionCostSettings');
 
 // ============================================
 // RELACIONAMENTOS
@@ -95,6 +96,12 @@ Purchase.belongsTo(User, { foreignKey: 'requester_id', as: 'requester' });
 // Purchase ↔ PurchaseItem
 Purchase.hasMany(PurchaseItem, { foreignKey: 'purchase_id', as: 'items' });
 PurchaseItem.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
+
+// Purchase ↔ PurchaseRequisition (Bloco 2, UC-39 — leitura simples para o
+// Recebimento identificar pedidos originados de amostra de engenharia via
+// `requisition.origin`, sem depender do texto livre em `notes`)
+PurchaseRequisition.hasMany(Purchase, { foreignKey: 'requisition_id', as: 'purchase_orders' });
+Purchase.belongsTo(PurchaseRequisition, { foreignKey: 'requisition_id', as: 'requisition' });
 
 // Purchase requisitions
 User.hasMany(PurchaseRequisition, { foreignKey: 'requester_id', as: 'purchase_requisitions' });
@@ -533,6 +540,11 @@ WarehouseTransfer.belongsTo(User, { foreignKey: 'user_id', as: 'requestedBy' });
 User.hasMany(WarehouseTransfer, { foreignKey: 'approved_by', as: 'approved_warehouse_transfers' });
 WarehouseTransfer.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' });
 
+// Warehouse ↔ InventoryCount (NULL = contagem legada anterior ao Bloco 4;
+// contagens novas devem sempre informar warehouse_id na camada de use case)
+Warehouse.hasMany(InventoryCount, { foreignKey: 'warehouse_id', as: 'inventory_counts' });
+InventoryCount.belongsTo(Warehouse, { foreignKey: 'warehouse_id', as: 'warehouse' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -550,5 +562,6 @@ export {
   WorkCenter, WorkCenterShift,
   EngineeringProject, ProductDrawing, AcousticTestResult,
   AccessProfile, AccessProfilePermission,
-  Warehouse, ProductWarehouseStock, WarehouseTransfer
+  Warehouse, ProductWarehouseStock, WarehouseTransfer,
+  ProductionCostSettings
 };

@@ -1,10 +1,10 @@
 import * as React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2, Eye, ClipboardList, PackageOpen, CalendarClock, AlertOctagon } from 'lucide-react';
+import { Plus, Trash2, Eye, ClipboardList, PackageOpen, CalendarClock, AlertOctagon, Truck } from 'lucide-react';
 
 import * as purchasesApi from '@/api/purchases';
 import * as suppliersApi from '@/api/suppliers';
@@ -32,6 +32,15 @@ const STATUS_LABEL: Record<purchasesApi.PurchaseStatus, string> = {
   partial: 'Recebido parcial',
   received: 'Recebido',
   canceled: 'Cancelado',
+};
+
+const STATUS_VARIANT: Record<purchasesApi.PurchaseStatus, 'default' | 'success' | 'destructive' | 'secondary' | 'warning'> = {
+  pending: 'secondary',
+  approved: 'default',
+  sent: 'warning',
+  partial: 'warning',
+  received: 'success',
+  canceled: 'destructive',
 };
 
 const NEXT_STATUS: Partial<Record<purchasesApi.PurchaseStatus, purchasesApi.PurchaseStatus>> = {
@@ -125,8 +134,16 @@ export default function PurchasesPage() {
         onNavigateOverdue={() => navigate('/logistics/recebimento')}
       />
 
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Compras</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <Truck className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Compras</h1>
+            <p className="text-sm text-muted-foreground">Pedidos de compra, recebimento e acompanhamento de fornecedores.</p>
+          </div>
+        </div>
         {canWrite && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -201,7 +218,7 @@ export default function PurchasesPage() {
             <TableHead className="w-6" />
             <TableHead>Pedido</TableHead>
             <TableHead>Fornecedor</TableHead>
-            <TableHead>Total</TableHead>
+            <TableHead className="text-right">Total</TableHead>
             <TableHead>Status</TableHead>
             {canWrite && <TableHead>Ações</TableHead>}
           </TableRow>
@@ -220,15 +237,15 @@ export default function PurchasesPage() {
             return (
               <TableRow
                 key={purchase.id}
-                className="cursor-pointer hover:bg-accent/50"
+                className="cursor-pointer border-l-4 border-l-transparent transition-colors hover:border-l-brand hover:bg-brand/5"
                 onClick={() => setDetailsPurchase(purchase)}
               >
                 <TableCell>{purchase.handoff_signal && <HandoffDot signal={purchase.handoff_signal} />}</TableCell>
                 <TableCell className="font-medium">{purchase.order_number ?? purchase.id}</TableCell>
                 <TableCell>{purchase.supplier?.company_name ?? purchase.supplier_id}</TableCell>
-                <TableCell>R$ {Number(purchase.total_amount).toFixed(2)}</TableCell>
+                <TableCell className="text-right tabular-nums">R$ {Number(purchase.total_amount).toFixed(2)}</TableCell>
                 <TableCell>
-                  <Badge variant="secondary">{STATUS_LABEL[purchase.status]}</Badge>
+                  <Badge variant={STATUS_VARIANT[purchase.status]}>{STATUS_LABEL[purchase.status]}</Badge>
                 </TableCell>
                 {canWrite && (
                   <TableCell className="flex gap-2" onClick={(event) => event.stopPropagation()}>
@@ -297,7 +314,7 @@ function PurchaseDetailSheet({ purchase, onClose }: { purchase: purchasesApi.Pur
 
             <div className="grid grid-cols-2 gap-4">
               <DetailField label="Fornecedor" value={purchase.supplier?.company_name ?? `#${purchase.supplier_id}`} />
-              <DetailField label="Status" value={<Badge variant="secondary">{STATUS_LABEL[purchase.status]}</Badge>} />
+              <DetailField label="Status" value={<Badge variant={STATUS_VARIANT[purchase.status]}>{STATUS_LABEL[purchase.status]}</Badge>} />
               <DetailField label="Criado em" value={new Date(purchase.createdAt).toLocaleDateString('pt-BR')} />
               <DetailField
                 label="Previsão de entrega"
@@ -311,20 +328,20 @@ function PurchaseDetailSheet({ purchase, onClose }: { purchase: purchasesApi.Pur
                 <TableHeader>
                   <TableRow>
                     <TableHead>Produto</TableHead>
-                    <TableHead>Qtd.</TableHead>
-                    <TableHead>Recebido</TableHead>
-                    <TableHead>Preço unit.</TableHead>
-                    <TableHead>Subtotal</TableHead>
+                    <TableHead className="text-right">Qtd.</TableHead>
+                    <TableHead className="text-right">Recebido</TableHead>
+                    <TableHead className="text-right">Preço unit.</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>{item.product ? `${item.product.code} — ${item.product.name}` : item.product_id}</TableCell>
-                      <TableCell>{Number(item.quantity)}</TableCell>
-                      <TableCell>{Number(item.received_quantity)}</TableCell>
-                      <TableCell>R$ {Number(item.unit_price).toFixed(2)}</TableCell>
-                      <TableCell>R$ {(Number(item.quantity) * Number(item.unit_price)).toFixed(2)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{Number(item.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{Number(item.received_quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums">R$ {Number(item.unit_price).toFixed(2)}</TableCell>
+                      <TableCell className="text-right tabular-nums">R$ {(Number(item.quantity) * Number(item.unit_price)).toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
                   {items.length === 0 && (
@@ -338,14 +355,14 @@ function PurchaseDetailSheet({ purchase, onClose }: { purchase: purchasesApi.Pur
               </Table>
             </div>
 
-            <div className="flex flex-col gap-1 rounded-lg border bg-muted/30 p-4">
+            <div className="flex flex-col gap-1 rounded-lg border bg-brand/5 p-4">
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>Soma dos itens</span>
-                <span>R$ {itemsTotal.toFixed(2)}</span>
+                <span className="tabular-nums">R$ {itemsTotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-base font-semibold">
+              <div className="flex justify-between text-base font-semibold text-brand">
                 <span>Total do pedido</span>
-                <span>R$ {Number(purchase.total_amount).toFixed(2)}</span>
+                <span className="tabular-nums">R$ {Number(purchase.total_amount).toFixed(2)}</span>
               </div>
             </div>
           </>
@@ -452,13 +469,15 @@ function PurchaseCockpitTiles({
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Card
-        className="cursor-pointer transition-colors hover:bg-accent/50"
+        className="cursor-pointer border-l-4 border-l-transparent transition-all hover:-translate-y-0.5 hover:border-l-brand hover:shadow-md"
         onClick={onNavigateRequisitions}
         role="button"
         tabIndex={0}
       >
         <CardContent className="flex items-center gap-3 p-4">
-          <ClipboardList className="size-8 text-muted-foreground" />
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <ClipboardList className="size-5" />
+          </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Requisições pendentes</p>
             <p className="text-2xl font-semibold">{isLoading ? '—' : (cockpit?.pending_requisitions ?? 0)}</p>
@@ -467,13 +486,15 @@ function PurchaseCockpitTiles({
       </Card>
 
       <Card
-        className={`cursor-pointer transition-colors hover:bg-accent/50 ${openOrdersOnly ? 'ring-2 ring-primary' : ''}`}
+        className={`cursor-pointer border-l-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${openOrdersOnly ? 'border-l-brand ring-2 ring-brand/40' : 'border-l-transparent hover:border-l-brand'}`}
         onClick={onToggleOpenOrders}
         role="button"
         tabIndex={0}
       >
         <CardContent className="flex items-center gap-3 p-4">
-          <PackageOpen className="size-8 text-muted-foreground" />
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <PackageOpen className="size-5" />
+          </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pedidos em aberto</p>
             <p className="text-2xl font-semibold">
@@ -483,9 +504,11 @@ function PurchaseCockpitTiles({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-l-4 border-l-transparent">
         <CardContent className="flex items-center gap-3 p-4">
-          <CalendarClock className="size-8 text-emerald-600" />
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-emerald-600/10 text-emerald-600">
+            <CalendarClock className="size-5" />
+          </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Chegando em 7 dias</p>
             <p className="text-2xl font-semibold text-emerald-700">{isLoading ? '—' : (cockpit?.arriving_this_week ?? 0)}</p>
@@ -494,13 +517,15 @@ function PurchaseCockpitTiles({
       </Card>
 
       <Card
-        className="cursor-pointer transition-colors hover:bg-accent/50"
+        className="cursor-pointer border-l-4 border-l-transparent transition-all hover:-translate-y-0.5 hover:border-l-destructive hover:shadow-md"
         onClick={onNavigateOverdue}
         role="button"
         tabIndex={0}
       >
         <CardContent className="flex items-center gap-3 p-4">
-          <AlertOctagon className="size-8 text-destructive" />
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+            <AlertOctagon className="size-5" />
+          </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Atrasados</p>
             <p className="text-2xl font-semibold text-destructive">{isLoading ? '—' : (cockpit?.overdue ?? 0)}</p>

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard,
@@ -19,10 +19,12 @@ import {
   ListTree,
   ShieldAlert,
   Warehouse,
+  Settings2,
   PackageCheck,
   FlaskConical,
   DraftingCompass,
   Send,
+  Zap,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -68,6 +70,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Estoque', to: '/logistics/estoque', icon: Warehouse, module: 'estoque' },
       { label: 'Recebimento', to: '/logistics/recebimento', icon: PackageCheck, module: 'recebimento', badgeKey: 'recebimento' },
       { label: 'Expedição', to: '/logistics/expedicao', icon: Send, module: 'expedicao', badgeKey: 'expedicao' },
+      { label: 'Depósitos', to: '/logistics/warehouses', icon: Settings2, module: 'estoque' },
     ],
   },
   {
@@ -114,6 +117,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/logistics/estoque': ['Logística', 'Estoque'],
   '/logistics/recebimento': ['Logística', 'Recebimento'],
   '/logistics/expedicao': ['Logística', 'Expedição'],
+  '/logistics/warehouses': ['Logística', 'Depósitos'],
   '/sales': ['Vendas'],
   '/sales/clients': ['Vendas', 'Clientes'],
   '/purchases': ['Compras'],
@@ -228,15 +232,17 @@ export default function AppLayout() {
   return (
     <div className="flex min-h-svh">
       <aside className="flex w-64 shrink-0 flex-col border-r bg-card">
-        <div className="flex items-center gap-2 border-b p-4">
-          <div className="flex size-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
-            EA
+        <Link to="/" className="flex items-center gap-2.5 border-b bg-brand-dark p-4 transition-opacity hover:opacity-90">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-[0_0_16px_color-mix(in_oklch,var(--brand)_55%,transparent)]">
+            <Zap className="size-5" fill="currentColor" />
           </div>
-          <div>
-            <p className="text-sm font-semibold leading-tight">ERP EVOK ÁUDIO</p>
-            <p className="text-xs text-muted-foreground">Gestão integrada</p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold leading-tight text-white">
+              EVOK <span className="text-brand">ÁUDIO</span>
+            </p>
+            <p className="text-xs text-white/50">Gestão integrada</p>
           </div>
-        </div>
+        </Link>
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-2 py-3">
           {visibleSections.map((section) => (
             <div key={section.label || 'root'} className="flex flex-col gap-1">
@@ -255,8 +261,8 @@ export default function AppLayout() {
                     end={to === '/'}
                     className={({ isActive }) =>
                       cn(
-                        'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground',
-                        isActive && 'bg-accent text-accent-foreground',
+                        'flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground',
+                        isActive && 'border-brand bg-brand/10 text-brand',
                       )
                     }
                   >
@@ -286,7 +292,7 @@ export default function AppLayout() {
               <p className="font-medium leading-tight">{user?.name}</p>
               <p className="text-xs text-muted-foreground">{roleLabel(user?.role)}</p>
             </div>
-            <div className="flex size-9 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground">
+            <div className="flex size-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-brand-foreground">
               {initials(user?.name)}
             </div>
             <Button asChild variant="ghost" size="icon" title="Trocar senha">

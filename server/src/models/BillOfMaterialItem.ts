@@ -15,7 +15,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface BillOfMaterialItemAttributes {
+interface BillOfMaterialItemAttributes {
   id: number;
   bom_id: number;
   component_product_id: number;

@@ -3,6 +3,7 @@ const SaleEntity = require('../../domain/entities/SaleEntity');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
 const { toCents, fromCents } = require('../../../../shared/utils/money');
 const InventoryService = require('../../../../services/inventoryService');
+const WarehouseStockService = require('../../../../services/warehouseStockService');
 
 /**
  * Cria uma venda com seus itens, opcionalmente debitando estoque e gerando
@@ -31,6 +32,14 @@ const InventoryService = require('../../../../services/inventoryService');
  * reservado/consumido de fato. A baixa real (e a validação de estoque
  * suficiente) só acontece quando o orçamento é confirmado via
  * `ChangeSaleStatusUseCase` (transição `quote -> confirmed`).
+ *
+ * Bloco 4 (multiplos depositos, BUSINESS_RULES.md §12 item 7): quando a
+ * venda ja nasce `confirmed` (fluxo mais comum, `isQuote` false), toda
+ * alteracao de `products.quantity` feita aqui via `InventoryService.consume`
+ * e acompanhada, na MESMA transacao, do dual-write correspondente em
+ * `WarehouseStockService.removeFromWarehouse` para o deposito 'ACABADOS',
+ * preservando a invariante de soma por deposito (mesmo padrao aplicado em
+ * `ChangeSaleStatusUseCase` para a transicao `quote -> confirmed`).
  */
 class CreateSaleUseCase extends UseCase {
   /**
@@ -114,6 +123,13 @@ class CreateSaleUseCase extends UseCase {
       notes: entity.notes
     }, transaction);
 
+    // Resolve o deposito ACABADOS uma unica vez para todos os itens (mesmo
+    // padrao de ChangeSaleStatusUseCase) — so e necessario quando a venda
+    // nasce confirmada, ja que orcamento (isQuote) nao debita nada.
+    const acabadosWarehouse = isQuote
+      ? null
+      : await WarehouseStockService.getWarehouseByCode('ACABADOS', transaction);
+
     // Cria os itens de venda. Quando `status: 'confirmed'` (padrão), também
     // debita estoque atomicamente: InventoryService trava a linha do Product
     // (SELECT ... FOR UPDATE) dentro desta mesma transação, revalida a
@@ -135,6 +151,11 @@ class CreateSaleUseCase extends UseCase {
           referenceId: sale.id,
           referenceType: 'sale'
         });
+
+        // Dual-write (Bloco 4, BUSINESS_RULES.md §12 item 3/7): venda criada
+        // ja confirmada sempre debita o deposito ACABADOS na mesma
+        // transacao (mesmo padrao de ChangeSaleStatusUseCase).
+        await WarehouseStockService.removeFromWarehouse(item.product_id, acabadosWarehouse.id, item.quantity, transaction);
       }
     }
 
@@ -179,5 +200,3 @@ class CreateSaleUseCase extends UseCase {
 }
 
 module.exports = CreateSaleUseCase;
-
-

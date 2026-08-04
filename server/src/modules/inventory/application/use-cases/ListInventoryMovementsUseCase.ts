@@ -18,14 +18,15 @@ class ListInventoryMovementsUseCase extends UseCase {
    * @param {string} [input.type]
    * @param {string|Date} [input.start_date]
    * @param {string|Date} [input.end_date]
+   * @param {number} [input.warehouse_id] - Filtra movimentações de um depósito específico (Bloco 4, UC-42).
    * @param {number} input.limit
    * @param {number} input.offset
    * @param {number} input.page
    * @returns {Promise<{ rows: Object[], count: number, page: number, limit: number, totalPages: number }>}
    */
-  async execute({ product_id, type, start_date, end_date, limit, offset, page }) {
+  async execute({ product_id, type, start_date, end_date, warehouse_id, limit, offset, page }) {
     const { rows, count } = await this.inventoryRepository.listMovements(
-      { product_id, type, start_date, end_date },
+      { product_id, type, start_date, end_date, warehouse_id },
       { limit, offset }
     );
     return { rows, count, page, limit, totalPages: Math.ceil(count / limit) };
@@ -33,5 +34,4 @@ class ListInventoryMovementsUseCase extends UseCase {
 }
 
 module.exports = ListInventoryMovementsUseCase;
-
 

@@ -13,7 +13,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface AcousticTestResultAttributes {
+interface AcousticTestResultAttributes {
   id: number;
   product_id: number;
   serial_number: string | null;
@@ -40,6 +40,13 @@ export interface AcousticTestResultAttributes {
   curve_data: Record<string, unknown> | null;
   notes: string | null;
   non_conformity_id: number | null;
+  /**
+   * Quantidade consumida (destruída) do produto testado, em teste
+   * destrutivo. Quando informada (> 0), é debitada automaticamente do
+   * Depósito LABORATORIO na MESMA transação do registro do teste
+   * (Bloco 4, UC-42-E). `null`/`0` para testes não destrutivos.
+   */
+  consumed_quantity: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -75,6 +82,11 @@ const AcousticTestResult = sequelize.define('AcousticTestResult', {
   curve_data: { type: DataTypes.JSONB, allowNull: true, comment: 'Dados de curva (ex.: frequência x SPL)' },
   notes: { type: DataTypes.TEXT, allowNull: true },
   non_conformity_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → non_conformities.id (quando reprovado)' },
+  consumed_quantity: {
+    type: DataTypes.DECIMAL(18, 6),
+    allowNull: true,
+    comment: 'Quantidade consumida (destruída) do produto testado, debitada automaticamente do Depósito LABORATORIO na mesma transação do registro do teste (UC-42-E).',
+  },
 }, {
   tableName: 'acoustic_test_results',
   underscored: true,

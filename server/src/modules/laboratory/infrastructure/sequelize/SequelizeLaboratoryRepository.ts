@@ -10,14 +10,14 @@ const LaboratoryRepository = require('../../domain/repositories/LaboratoryReposi
 const { AcousticTestResult, Product, User } = require('../../../../models/index');
 
 class SequelizeLaboratoryRepository extends LaboratoryRepository {
-  async createTest(data: Record<string, unknown>) {
-    return AcousticTestResult.create(data);
+  async createTest(data: Record<string, unknown>, transaction?: any) {
+    return AcousticTestResult.create(data, transaction ? { transaction } : undefined);
   }
 
-  async updateTest(id: number, data: Record<string, unknown>) {
-    const test = await AcousticTestResult.findByPk(id);
+  async updateTest(id: number, data: Record<string, unknown>, transaction?: any) {
+    const test = await AcousticTestResult.findByPk(id, transaction ? { transaction } : undefined);
     if (!test) return null;
-    await test.update(data);
+    await test.update(data, transaction ? { transaction } : undefined);
     return this.findTestById(id);
   }
 

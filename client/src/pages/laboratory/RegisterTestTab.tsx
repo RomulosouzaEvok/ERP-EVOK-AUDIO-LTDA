@@ -3,17 +3,18 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link } from 'react-router-dom';
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { Link } from 'react-router';
+import { CheckCircle2, XCircle, AlertTriangle, FlaskConical } from 'lucide-react';
 
 import * as laboratoryApi from '@/api/laboratory';
 import * as productsApi from '@/api/products';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SelectNative } from '@/components/ui/select-native';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DidacticAlert } from '@/components/DidacticAlert';
 
 const TEST_TYPE_LABEL: Record<laboratoryApi.AcousticTestType, string> = {
   impedance: 'Impedância',
@@ -67,7 +68,7 @@ const EMPTY_DEFAULTS: TestFormData = {
 
 /** Aba A: registro de um novo teste de laboratório, com veredito destacado após salvar. */
 export function RegisterTestTab() {
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [lastResult, setLastResult] = React.useState<laboratoryApi.AcousticTestResult | null>(null);
 
   const { data: products } = useQuery({
@@ -80,11 +81,21 @@ export function RegisterTestTab() {
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<TestFormData>({
     resolver: zodResolver(testSchema),
     defaultValues: EMPTY_DEFAULTS,
   });
+
+  const watchedResult = watch('result');
+  const watchedMin = watch('specification_min');
+  const watchedMax = watch('specification_max');
+  // Preventivo (Regra 1, BUSINESS_RULES.md §13.1): o backend só consegue calcular
+  // `passed` com "result" OU ao menos um limite de especificação — sem os dois,
+  // `CreateAcousticTestUseCase` rejeita com 400. Avisa antes do envio (não bloqueante),
+  // reaproveitando os próprios campos do formulário (sem endpoint de pré-checagem novo).
+  const missingResultOrRange = !watchedResult && !watchedMin && !watchedMax;
 
   const createMutation = useMutation({
     mutationFn: (values: TestFormData) =>
@@ -111,7 +122,8 @@ export function RegisterTestTab() {
       setFormError(null);
       reset(EMPTY_DEFAULTS);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error, 'Não foi possível registrar o teste.')),
+    onError: (error) =>
+      setFormError(translateApiError(error, 'Não foi possível registrar o teste de laboratório', 'register-lab-test')),
   });
 
   return (
@@ -119,6 +131,12 @@ export function RegisterTestTab() {
       {lastResult && <VerdictBanner test={lastResult} onDismiss={() => setLastResult(null)} />}
 
       <Card>
+        <CardHeader className="flex flex-row items-center gap-2 border-b pb-4">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <FlaskConical className="size-4" />
+          </div>
+          <CardTitle className="text-base">Novo teste de laboratório</CardTitle>
+        </CardHeader>
         <CardContent className="pt-6">
           <form
             className="flex flex-col gap-3"
@@ -190,6 +208,16 @@ export function RegisterTestTab() {
               </div>
             </div>
 
+            {missingResultOrRange && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <p>
+                  Informe o resultado medido ou ao menos um limite de especificação (mínima/máxima) — sem isso, o
+                  sistema não consegue calcular a aprovação/reprovação do teste.
+                </p>
+              </div>
+            )}
+
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="notes">Observações</Label>
               <textarea
@@ -211,7 +239,7 @@ export function RegisterTestTab() {
               </Label>
             </div>
 
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
+            {formError && <DidacticAlert error={formError} />}
 
             <div>
               <Button type="submit" disabled={isSubmitting || createMutation.isPending}>

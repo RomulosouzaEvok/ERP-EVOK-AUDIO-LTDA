@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ShieldAlert } from 'lucide-react';
 
 import * as purchasesApi from '@/api/purchases';
@@ -177,8 +177,8 @@ export function ReceivingConferenceDialog({
               <TableHeader>
                 <TableRow>
                   <TableHead>Item</TableHead>
-                  <TableHead>Pedida</TableHead>
-                  <TableHead>Já recebida</TableHead>
+                  <TableHead className="text-right">Pedida</TableHead>
+                  <TableHead className="text-right">Já recebida</TableHead>
                   <TableHead>Receber agora</TableHead>
                   <TableHead>Lote</TableHead>
                   <TableHead>Validade</TableHead>
@@ -192,13 +192,15 @@ export function ReceivingConferenceDialog({
                       <TableCell>
                         {purchaseItem?.product ? `${purchaseItem.product.code} — ${purchaseItem.product.name}` : purchaseItem?.product_id}
                       </TableCell>
-                      <TableCell>{purchaseItem ? Number(purchaseItem.quantity) : '-'}</TableCell>
-                      <TableCell>{purchaseItem ? Number(purchaseItem.received_quantity) : '-'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{purchaseItem ? Number(purchaseItem.quantity) : '-'}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {purchaseItem ? Number(purchaseItem.received_quantity) : '-'}
+                      </TableCell>
                       <TableCell>
                         <Input
                           type="number"
                           step="any"
-                          className="w-28"
+                          className="w-28 text-right tabular-nums"
                           placeholder={`máx. ${field.pending}`}
                           {...register(`items.${index}.quantity` as const)}
                         />

@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface AssetAttributes {
+interface AssetAttributes {
   id: number;
   tag: string;
   name: string;

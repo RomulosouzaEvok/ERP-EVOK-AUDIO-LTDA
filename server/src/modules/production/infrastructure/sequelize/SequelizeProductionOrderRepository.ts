@@ -6,7 +6,7 @@
 
 import { Op } from 'sequelize';
 import ProductionOrderRepository from '../../domain/repositories/ProductionOrderRepository';
-const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRouteStep, Item }: any = require('../../../../models/index');
+const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRouteStep, WorkCenter, Item }: any = require('../../../../models/index');
 
 class SequelizeProductionOrderRepository extends ProductionOrderRepository {
   /**
@@ -141,6 +141,30 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
       where: { production_order_id: productionOrderId },
       transaction,
       lock: transaction.LOCK.UPDATE,
+      order: [['sequence', 'ASC']]
+    });
+  }
+
+  /**
+   * Lista apontamentos da OP com etapa/centro de trabalho para custeio real
+   * de mao-de-obra na conclusao (`ChangeProductionOrderStatusUseCase`).
+   *
+   * @param productionOrderId - ID da OP.
+   * @param transaction - Transacao ativa.
+   * @returns Apontamentos com `routeStep.workCenter.cost_per_hour` (quando existir).
+   */
+  public async listTrackingWithRouteStepByOrder(productionOrderId: number, transaction: any): Promise<any[]> {
+    return ProductionOrderTracking.findAll({
+      where: { production_order_id: productionOrderId },
+      include: [
+        {
+          model: ProductionRouteStep,
+          as: 'routeStep',
+          attributes: ['id', 'work_center_id'],
+          include: [{ model: WorkCenter, as: 'workCenter', attributes: ['id', 'cost_per_hour'] }]
+        }
+      ],
+      transaction,
       order: [['sequence', 'ASC']]
     });
   }

@@ -30,6 +30,7 @@ class BlockLotUseCase extends UseCase<BlockLotInput, any> {
    * @throws {ValidationError} Se `reason` estiver ausente ou muito curto.
    * @throws {NotFoundError} Se o lote não existir.
    * @throws {BusinessRuleError} Se o lote não estiver em `quarantine` nem `available`.
+   *   `details: { lot_id, current_status, allowed_statuses }`.
    */
   public async execute({ id, reason }: BlockLotInput): Promise<any> {
     const trimmedReason = String(reason ?? '').trim();
@@ -43,7 +44,12 @@ class BlockLotUseCase extends UseCase<BlockLotInput, any> {
     }
     if (!BLOCKABLE_STATUSES.includes(lot.status)) {
       throw new BusinessRuleError(
-        `Apenas lotes em 'quarantine' ou 'available' podem ser bloqueados. Status atual: '${lot.status}'.`
+        `Apenas lotes em 'quarantine' ou 'available' podem ser bloqueados. Status atual: '${lot.status}'.`,
+        {
+          lot_id: lot.id,
+          current_status: lot.status,
+          allowed_statuses: BLOCKABLE_STATUSES
+        }
       );
     }
 

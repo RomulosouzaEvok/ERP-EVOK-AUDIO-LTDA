@@ -4,7 +4,7 @@
  * @module modules/suppliers/domain/repositories/SuppliersRepository
  */
 
-export interface SuppliersListOptions {
+interface SuppliersListOptions {
   limit: number;
   offset: number;
   search?: string;

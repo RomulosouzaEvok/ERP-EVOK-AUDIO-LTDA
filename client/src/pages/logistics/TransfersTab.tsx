@@ -101,7 +101,7 @@ export function TransfersTab() {
           <TableRow>
             <TableHead>Produto</TableHead>
             <TableHead>De → Para</TableHead>
-            <TableHead>Quantidade</TableHead>
+            <TableHead className="text-right">Quantidade</TableHead>
             <TableHead>Motivo</TableHead>
             <TableHead>Solicitante</TableHead>
             <TableHead>Situação</TableHead>
@@ -127,8 +127,8 @@ export function TransfersTab() {
                   ' → ' +
                   (transfer.toWarehouse?.name ?? transfer.to_warehouse_id)}
               </TableCell>
-              <TableCell>{Number(transfer.quantity)}</TableCell>
-              <TableCell className="max-w-64 truncate" title={transfer.reason}>
+              <TableCell className="text-right tabular-nums">{Number(transfer.quantity)}</TableCell>
+              <TableCell className="max-w-64 truncate text-muted-foreground" title={transfer.reason}>
                 {transfer.reason}
               </TableCell>
               <TableCell>{transfer.requestedBy?.name ?? '-'}</TableCell>

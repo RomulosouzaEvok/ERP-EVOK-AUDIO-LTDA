@@ -17,6 +17,7 @@ class SequelizeInventoryRepository extends InventoryRepository {
    * @param {string} [filters.type] - `in` | `out` | `adjustment`.
    * @param {string|Date} [filters.start_date]
    * @param {string|Date} [filters.end_date]
+   * @param {number} [filters.warehouse_id] - Filtra movimentações de um depósito específico (Bloco 4, UC-42).
    * @param {Object} [pagination]
    * @param {number} [pagination.limit]
    * @param {number} [pagination.offset]
@@ -38,6 +39,7 @@ class SequelizeInventoryRepository extends InventoryRepository {
     }
 
     if (filters.type) where.type = filters.type;
+    if (filters.warehouse_id) where.warehouse_id = filters.warehouse_id;
     if (filters.start_date || filters.end_date) {
       where.created_at = {};
       if (filters.start_date) where.created_at[Op.gte] = new Date(filters.start_date);

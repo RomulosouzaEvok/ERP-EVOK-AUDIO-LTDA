@@ -19,6 +19,7 @@ import { BusinessRuleError, NotFoundError } from '../../../../errors';
 import MrpRepository from '../../domain/repositories/MrpRepository';
 import PurchaseRequisitionRepository from '../../../purchaseRequisitions/domain/repositories/PurchaseRequisitionRepository';
 import ItemSupplierRepository from '../../../items/domain/repositories/ItemSupplierRepository';
+import createRequisitionFromPlannedOrders from './support/createRequisitionFromPlannedOrders';
 
 const { sequelize } = require('../../../../models/index');
 
@@ -76,35 +77,15 @@ class ConvertPlannedOrdersToRequisitionUseCase extends UseCase<ConvertPlannedOrd
         );
       }
 
-      const requisition = await this.requisitionRepository.createRequisition({
-        requisition_number: `RQ-${Date.now()}`,
-        requester_id: input.requester_id,
-        department_id: null,
-        production_order_id: null,
-        request_date: new Date(),
-        priority: 'normal',
-        status: 'pending',
+      const requisition = await createRequisitionFromPlannedOrders({
+        plannedOrders,
+        requesterId: input.requester_id,
         origin: 'mrp',
-        approved_by: null,
-        approval_date: null,
         notes: input.notes ?? 'Gerada automaticamente do plano MRP',
-      }, transaction);
-
-      for (const order of plannedOrders) {
-        const preferredSupplierLink = await this.itemSupplierRepository.findPreferredByItem(String(order.item_id));
-
-        await this.requisitionRepository.createRequisitionItem({
-          requisition_id: requisition.id,
-          item_id: order.item_id,
-          quantity: order.quantidade_planejada,
-          unit: null,
-          required_date: order.data_necessidade,
-          suggested_supplier_id: preferredSupplierLink?.supplier_id ?? null,
-          unit_price_estimated: preferredSupplierLink?.unit_price ?? null,
-          status: 'pending',
-          notes: null,
-        }, transaction);
-      }
+        requisitionRepository: this.requisitionRepository,
+        itemSupplierRepository: this.itemSupplierRepository,
+        transaction,
+      });
 
       await this.mrpRepository.updatePlannedOrdersStatus(uniqueIds, 'EM_EXECUCAO', transaction);
 

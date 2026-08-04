@@ -61,7 +61,10 @@ describe('ChangePurchaseRequisitionStatusUseCase', () => {
 
     await expect(
       useCase.execute({ id: 1, status: 'approved', userId: 1 })
-    ).rejects.toBeInstanceOf(BusinessRuleError);
+    ).rejects.toMatchObject({
+      constructor: BusinessRuleError,
+      details: { current_status: 'draft', requested_status: 'approved' },
+    });
 
     expect(requisitionRepository.updateRequisition).not.toHaveBeenCalled();
   });
@@ -76,7 +79,10 @@ describe('ChangePurchaseRequisitionStatusUseCase', () => {
 
     await expect(
       useCase.execute({ id: 1, status: 'pending', userId: 1 })
-    ).rejects.toBeInstanceOf(BusinessRuleError);
+    ).rejects.toMatchObject({
+      constructor: BusinessRuleError,
+      details: { current_status: 'approved', requested_status: 'pending' },
+    });
   });
 
   it('lanca NotFoundError (404) se a requisicao nao existir', async () => {

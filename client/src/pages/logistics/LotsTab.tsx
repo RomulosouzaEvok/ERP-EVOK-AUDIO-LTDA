@@ -1,14 +1,18 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { QrCode } from 'lucide-react';
 
 import * as lotsApi from '@/api/lots';
 import * as warehousesApi from '@/api/warehouses';
+import * as inventoryApi from '@/api/inventory';
 import { Label } from '@/components/ui/label';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
+import { QrCodeDialog } from '@/components/QrCodeDialog';
 
 const STATUS_LABEL: Record<lotsApi.LotStatus, string> = {
   available: 'Liberado',
@@ -45,6 +49,7 @@ function formatDate(value: string | null): string {
 export function LotsTab() {
   const [statusFilter, setStatusFilter] = React.useState<lotsApi.LotStatus | ''>('');
   const [page, setPage] = React.useState(1);
+  const [printingLot, setPrintingLot] = React.useState<lotsApi.Lot | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['logistics-lots', statusFilter, page],
@@ -94,44 +99,50 @@ export function LotsTab() {
             <TableHead>Produto</TableHead>
             <TableHead>Fornecedor</TableHead>
             <TableHead>Depósito</TableHead>
-            <TableHead>Qtd. inicial</TableHead>
-            <TableHead>Qtd. disponível</TableHead>
+            <TableHead className="text-right">Qtd. inicial</TableHead>
+            <TableHead className="text-right">Qtd. disponível</TableHead>
             <TableHead>Recebido em</TableHead>
             <TableHead>Validade</TableHead>
             <TableHead>Situação</TableHead>
+            <TableHead className="text-right">Etiqueta</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={9} />}
+          {isLoading && <TableSkeletonRows columns={10} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={9} className="text-center text-destructive">
+              <TableCell colSpan={10} className="text-center text-destructive">
                 Não foi possível carregar os lotes. Tente novamente.
               </TableCell>
             </TableRow>
           )}
           {data?.data.map((lot) => (
             <TableRow key={lot.id}>
-              <TableCell className="font-medium">{lot.lot_number}</TableCell>
+              <TableCell className="font-mono text-xs font-medium">{lot.lot_number}</TableCell>
               <TableCell>{lot.product ? `${lot.product.code} — ${lot.product.name}` : lot.product_id}</TableCell>
-              <TableCell>{lot.supplier?.company_name ?? '-'}</TableCell>
+              <TableCell className="text-muted-foreground">{lot.supplier?.company_name ?? '-'}</TableCell>
               <TableCell>
                 {lot.warehouse_id ? warehouseNameById.get(lot.warehouse_id) ?? `#${lot.warehouse_id}` : '-'}
               </TableCell>
-              <TableCell>{Number(lot.quantity_initial)}</TableCell>
-              <TableCell>{Number(lot.quantity_available)}</TableCell>
-              <TableCell>{formatDate(lot.received_at)}</TableCell>
-              <TableCell>{formatDate(lot.expires_at)}</TableCell>
+              <TableCell className="text-right tabular-nums">{Number(lot.quantity_initial)}</TableCell>
+              <TableCell className="text-right tabular-nums">{Number(lot.quantity_available)}</TableCell>
+              <TableCell className="text-muted-foreground">{formatDate(lot.received_at)}</TableCell>
+              <TableCell className="text-muted-foreground">{formatDate(lot.expires_at)}</TableCell>
               <TableCell>
                 <Badge variant={STATUS_BADGE[lot.status]} className={STATUS_BADGE_CLASS[lot.status]}>
                   {STATUS_LABEL[lot.status]}
                 </Badge>
               </TableCell>
+              <TableCell className="text-right">
+                <Button variant="ghost" size="icon" title="Imprimir etiqueta (QR)" onClick={() => setPrintingLot(lot)}>
+                  <QrCode className="size-4" />
+                </Button>
+              </TableCell>
             </TableRow>
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={9} className="text-center text-muted-foreground">
+              <TableCell colSpan={10} className="text-center text-muted-foreground">
                 Nenhum lote encontrado para este filtro.
               </TableCell>
             </TableRow>
@@ -140,6 +151,16 @@ export function LotsTab() {
       </Table>
 
       <Pagination pagination={data?.pagination} onPageChange={setPage} />
+
+      {printingLot && (
+        <QrCodeDialog
+          open={Boolean(printingLot)}
+          onOpenChange={(open) => !open && setPrintingLot(null)}
+          title={`Lote ${printingLot.lot_number} — ${printingLot.product?.name ?? printingLot.product_id}`}
+          queryKey={['lot-qrcode', printingLot.id]}
+          fetchQrCode={() => inventoryApi.getLotQrCode(printingLot.id)}
+        />
+      )}
     </div>
   );
 }

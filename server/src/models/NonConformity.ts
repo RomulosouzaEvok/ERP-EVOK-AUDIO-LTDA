@@ -11,7 +11,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface NonConformityAttributes {
+interface NonConformityAttributes {
   id: number;
   nc_number: string;
   origin: 'incoming' | 'in_process' | 'final' | 'audit' | 'customer_complaint' | 'supplier';

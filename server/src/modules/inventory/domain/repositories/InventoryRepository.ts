@@ -15,7 +15,7 @@ class InventoryRepository {
    * Lista movimentações de estoque com filtros e paginação.
    *
    * @abstract
-   * @param {Object} [filters] - Filtros de busca (product_id, type, start_date, end_date).
+   * @param {Object} [filters] - Filtros de busca (product_id, type, start_date, end_date, warehouse_id).
    * @param {Object} [pagination] - `{ limit, offset }`.
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
@@ -56,5 +56,4 @@ class InventoryRepository {
 }
 
 module.exports = InventoryRepository;
-
 

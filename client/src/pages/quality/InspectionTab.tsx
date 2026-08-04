@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, XCircle } from 'lucide-react';
 
 import * as lotsApi from '@/api/lots';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import type { NonConformityPrefill } from './NonConformitiesTab';
 
 const STATUS_LABEL: Record<lotsApi.LotStatus, string> = {
@@ -64,7 +65,7 @@ export function InspectionTab({
   const [page, setPage] = React.useState(1);
   const [releasingLot, setReleasingLot] = React.useState<lotsApi.Lot | null>(null);
   const [blockingLot, setBlockingLot] = React.useState<lotsApi.Lot | null>(null);
-  const [actionError, setActionError] = React.useState<string | null>(null);
+  const [actionError, setActionError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['quality-lots', statusFilter, page],
@@ -80,7 +81,8 @@ export function InspectionTab({
       setReleasingLot(null);
       setActionError(null);
     },
-    onError: (error) => setActionError(extractApiErrorMessage(error, 'Não foi possível liberar o lote.')),
+    onError: (error) =>
+      setActionError(translateApiError(error, 'Não foi possível liberar o lote', 'release-lot')),
   });
 
   const blockMutation = useMutation({
@@ -100,7 +102,8 @@ export function InspectionTab({
       }
       setBlockingLot(null);
     },
-    onError: (error) => setActionError(extractApiErrorMessage(error, 'Não foi possível bloquear o lote.')),
+    onError: (error) =>
+      setActionError(translateApiError(error, 'Não foi possível bloquear o lote', 'release-lot')),
   });
 
   return (
@@ -166,7 +169,12 @@ export function InspectionTab({
               {canWrite && (
                 <TableCell className="flex gap-2">
                   {(lot.status === 'quarantine' || lot.status === 'blocked') && (
-                    <Button size="sm" variant="outline" onClick={() => setReleasingLot(lot)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                      onClick={() => setReleasingLot(lot)}
+                    >
                       <CheckCircle2 className="size-4" /> Aprovar
                     </Button>
                   )}
@@ -224,7 +232,7 @@ function ReleaseLotDialog({
   onConfirm,
 }: {
   lot: lotsApi.Lot | null;
-  error: string | null;
+  error: DidacticError | null;
   isPending: boolean;
   onClose: () => void;
   onConfirm: (notes?: string) => void;
@@ -256,7 +264,7 @@ function ReleaseLotDialog({
           />
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <DidacticAlert error={error} />}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>
@@ -279,7 +287,7 @@ function BlockLotDialog({
   onConfirm,
 }: {
   lot: lotsApi.Lot | null;
-  error: string | null;
+  error: DidacticError | null;
   isPending: boolean;
   onClose: () => void;
   onConfirm: (reason: string, openRnc: boolean) => void;
@@ -341,7 +349,7 @@ function BlockLotDialog({
           </Label>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <DidacticAlert error={error} />}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>

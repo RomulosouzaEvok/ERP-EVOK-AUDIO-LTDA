@@ -6,22 +6,7 @@
  * @module modules/accessProfiles/domain/repositories/AccessProfilesRepository
  */
 
-export interface AccessProfilePermissionInput {
-  module: string;
-  level: 'operate' | 'approve';
-}
-
-export interface AccessProfileListItem {
-  id: number;
-  nome: string;
-  descricao: string | null;
-  allowedWarehouses: string[] | null;
-  active: boolean;
-  createdAt?: Date;
-  updatedAt?: Date;
-  permissions: AccessProfilePermissionInput[];
-  userCount: number;
-}
+import { AccessProfilePermissionInput, AccessProfileListItem } from './AccessProfilePermissionInput';
 
 class AccessProfilesRepository {
   /**

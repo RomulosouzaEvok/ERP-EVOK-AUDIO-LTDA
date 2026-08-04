@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ClipboardList } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -11,10 +11,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
  */
 export function CountsTab() {
   return (
-    <Card>
+    <Card className="border-l-4 border-l-brand/60">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <ClipboardList className="size-4" /> Contagem de inventário
+          <ClipboardList className="size-4 text-brand" /> Contagem de inventário
         </CardTitle>
         <CardDescription>
           Planejamento e execução de contagens cíclicas/gerais, com aprovação de ajustes de estoque.

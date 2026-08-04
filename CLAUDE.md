@@ -166,7 +166,7 @@ Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-
 | 1.2 | MRP congelado | ✅ RESOLVIDO — MRP contra estoque real (dual-read), validado |
 | 2.1 | Foreign keys ausentes | ✅ RESOLVIDO — 133 FKs via migration versionada |
 | 3.1 | IDOR / spoofing de identidade | ✅ RESOLVIDO — RBAC 100% + identidade do JWT |
-| 3.2 | react-router CVE-2025-68470 | ✅ RESOLVIDO — v7.18.2 |
+| 3.2 | react-router CVE-2025-68470 / `GHSA-qwww-vcr4-c8h2` | ✅ RESOLVIDO — upgrade para v8.3.0 (2026-08-04), `npm audit` 0 vulnerabilidades |
 | 1.3 | Apontamento × OP desconectados | ✅ RESOLVIDO — reconciliação na conclusão da OP |
 
 ### Roadmap

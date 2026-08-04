@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface PurchaseItemAttributes {
+interface PurchaseItemAttributes {
   id: number;
   purchase_id: number;
   product_id: number;

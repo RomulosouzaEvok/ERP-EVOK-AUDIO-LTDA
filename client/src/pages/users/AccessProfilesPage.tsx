@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus } from 'lucide-react';
+import { Plus, ShieldCheck } from 'lucide-react';
 
 import * as accessProfilesApi from '@/api/accessProfiles';
 import type { AccessModuleKey, AccessModuleLevel } from '@/api/accessProfiles';
@@ -154,8 +154,16 @@ export default function AccessProfilesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Perfis de Acesso</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <ShieldCheck className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Perfis de Acesso</h1>
+            <p className="text-sm text-muted-foreground">Matriz de permissões por módulo, atribuída aos usuários do sistema.</p>
+          </div>
+        </div>
         <Dialog
           open={open}
           onOpenChange={(nextOpen) => {

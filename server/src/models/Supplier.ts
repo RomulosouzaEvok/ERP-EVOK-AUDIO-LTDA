@@ -10,7 +10,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface SupplierAttributes {
+interface SupplierAttributes {
   id: number;
   company_name: string;
   trade_name: string;
@@ -30,6 +30,7 @@ export interface SupplierAttributes {
   payment_terms: string | null;
   delivery_time: number;
   rating: number;
+  quality_score: number;
   status: 'active' | 'inactive' | 'blocked';
   notes: string | null;
   readonly createdAt?: Date;
@@ -55,7 +56,13 @@ const Supplier = sequelize.define('Supplier', {
   contact_phone: DataTypes.STRING(20),
   payment_terms: DataTypes.STRING(100),
   delivery_time: { type: DataTypes.INTEGER, defaultValue: 15, comment: 'Prazo de entrega (dias)' },
-  rating: { type: DataTypes.INTEGER, defaultValue: 3, comment: 'Avaliação (1-5)' },
+  rating: { type: DataTypes.INTEGER, defaultValue: 3, comment: 'Avaliação (1-5) digitada manualmente no cadastro do fornecedor' },
+  quality_score: {
+    type: DataTypes.DECIMAL(5, 2),
+    defaultValue: 100.0,
+    allowNull: false,
+    comment: 'Avaliação calculada (0-100), NUNCA editável via API: recalculada de forma síncrona por CreateNonConformityUseCase (RNC → lote → recebimento → fornecedor). Distinta de `rating`.'
+  },
   status: { type: DataTypes.ENUM('active', 'inactive', 'blocked'), defaultValue: 'active' },
   notes: DataTypes.TEXT
 }, {

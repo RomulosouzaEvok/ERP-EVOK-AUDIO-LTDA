@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link } from 'react-router-dom';
-import { Plus, Trash2, ShoppingCart } from 'lucide-react';
+import { Link } from 'react-router';
+import { Plus, Trash2, ShoppingCart, ClipboardList } from 'lucide-react';
 
 import * as mrpApi from '@/api/mrp';
 import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/dialog';
 import { ItemSearchSelect } from '@/components/ItemSearchSelect';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { DidacticAlert } from '@/components/DidacticAlert';
 
 const ORIGIN_LABEL: Record<mrpApi.MrpDemandOrigin, string> = {
   MANUAL: 'Manual',
@@ -71,7 +73,7 @@ export default function MrpPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [convertDialogOpen, setConvertDialogOpen] = React.useState(false);
   const [convertNotes, setConvertNotes] = React.useState('');
-  const [convertError, setConvertError] = React.useState<string | null>(null);
+  const [convertError, setConvertError] = React.useState<DidacticError | null>(null);
   const [convertedRequisition, setConvertedRequisition] = React.useState<mrpApi.ConvertPlannedOrdersResult | null>(
     null,
   );
@@ -132,7 +134,10 @@ export default function MrpPage() {
       setConvertDialogOpen(false);
       setConvertedRequisition(result);
     },
-    onError: (error) => setConvertError(extractApiErrorMessage(error)),
+    onError: (error) =>
+      setConvertError(
+        translateApiError(error, 'Não é possível converter as ordens planejadas selecionadas', 'convert-mrp-order'),
+      ),
   });
 
   function closeConvertDialog() {
@@ -143,7 +148,17 @@ export default function MrpPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">MRP — Planejamento de necessidades</h1>
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <ClipboardList className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">MRP — Planejamento de necessidades</h1>
+          <p className="text-sm text-muted-foreground">
+            Cálculo de necessidades de materiais contra o estoque real, com conversão direta em requisição de compra.
+          </p>
+        </div>
+      </div>
 
       <div className="rounded-lg border p-4">
         <h2 className="mb-3 text-lg font-medium">Gerar plano</h2>
@@ -251,10 +266,10 @@ export default function MrpPage() {
                 />
               </TableHead>
               <TableHead>Item</TableHead>
-              <TableHead>Bruta</TableHead>
-              <TableHead>Disponível</TableHead>
-              <TableHead>Líquida</TableHead>
-              <TableHead>Planejada</TableHead>
+              <TableHead className="text-right">Bruta</TableHead>
+              <TableHead className="text-right">Disponível</TableHead>
+              <TableHead className="text-right">Líquida</TableHead>
+              <TableHead className="text-right">Planejada</TableHead>
               <TableHead>Necessidade</TableHead>
               <TableHead>Liberação</TableHead>
               <TableHead>Status</TableHead>
@@ -273,7 +288,7 @@ export default function MrpPage() {
               const id = String(order.id);
               const convertible = isConvertible(order.status);
               return (
-                <TableRow key={order.id}>
+                <TableRow key={order.id} className="hover:bg-accent/50">
                   <TableCell>
                     <input
                       type="checkbox"
@@ -284,10 +299,10 @@ export default function MrpPage() {
                     />
                   </TableCell>
                   <TableCell>{order.item ? `${order.item.codigo} — ${order.item.descricao}` : '-'}</TableCell>
-                  <TableCell>{Number(order.necessidade_bruta)}</TableCell>
-                  <TableCell>{Number(order.estoque_disponivel)}</TableCell>
-                  <TableCell>{Number(order.necessidade_liquida)}</TableCell>
-                  <TableCell>{Number(order.quantidade_planejada)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{Number(order.necessidade_bruta)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{Number(order.estoque_disponivel)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">{Number(order.necessidade_liquida)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{Number(order.quantidade_planejada)}</TableCell>
                   <TableCell>{new Date(order.data_necessidade).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell>{new Date(order.data_liberacao).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell>
@@ -331,7 +346,7 @@ export default function MrpPage() {
               placeholder="Ex.: Conversão via MRP, reposição urgente..."
             />
           </div>
-          {convertError && <p className="text-sm text-destructive">{convertError}</p>}
+          {convertError && <DidacticAlert error={convertError} />}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closeConvertDialog} disabled={convertMutation.isPending}>
               Cancelar

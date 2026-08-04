@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, TrendingUp, TrendingDown, Scale, AlarmClock, AlertTriangle } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Scale, AlarmClock, AlertTriangle, Wallet } from 'lucide-react';
 
 import * as financialApi from '@/api/financial';
 import { extractApiErrorMessage } from '@/api/httpClient';
@@ -102,9 +102,17 @@ export default function FinancialPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Financeiro</h1>
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <Wallet className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Financeiro</h1>
+          <p className="text-sm text-muted-foreground">Contas a pagar, contas a receber e projeção de fluxo de caixa.</p>
+        </div>
+      </div>
 
-      <Card>
+      <Card className="border-l-4 border-l-brand/40">
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>Contas a pagar</CardTitle>
           <Dialog open={open} onOpenChange={setOpen}>
@@ -150,8 +158,8 @@ export default function FinancialPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Descrição</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Pago</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead className="text-right">Pago</TableHead>
                 <TableHead>Vencimento</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
@@ -171,8 +179,8 @@ export default function FinancialPage() {
                 return (
                   <TableRow key={account.id}>
                     <TableCell>{account.description}</TableCell>
-                    <TableCell>R$ {Number(account.amount).toFixed(2)}</TableCell>
-                    <TableCell className="text-muted-foreground">R$ {Number(account.amount_paid ?? 0).toFixed(2)}</TableCell>
+                    <TableCell className="text-right tabular-nums">R$ {Number(account.amount).toFixed(2)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">R$ {Number(account.amount_paid ?? 0).toFixed(2)}</TableCell>
                     <TableCell>{new Date(account.due_date).toLocaleDateString('pt-BR')}</TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
@@ -209,7 +217,7 @@ export default function FinancialPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-l-4 border-l-brand/40">
         <CardHeader>
           <CardTitle>Contas a receber</CardTitle>
         </CardHeader>
@@ -218,8 +226,8 @@ export default function FinancialPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>#</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Recebido</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead className="text-right">Recebido</TableHead>
                 <TableHead>Vencimento</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
@@ -239,8 +247,8 @@ export default function FinancialPage() {
                 return (
                   <TableRow key={account.id}>
                     <TableCell>{account.id}</TableCell>
-                    <TableCell>R$ {Number(account.amount).toFixed(2)}</TableCell>
-                    <TableCell className="text-muted-foreground">R$ {Number(account.amount_paid ?? 0).toFixed(2)}</TableCell>
+                    <TableCell className="text-right tabular-nums">R$ {Number(account.amount).toFixed(2)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">R$ {Number(account.amount_paid ?? 0).toFixed(2)}</TableCell>
                     <TableCell>{new Date(account.due_date).toLocaleDateString('pt-BR')}</TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
@@ -309,7 +317,7 @@ function CashFlowProjectionSection() {
   const overdueTotal = (data?.totals.overdue_receivable ?? 0) + (data?.totals.overdue_payable ?? 0);
 
   return (
-    <Card>
+    <Card className="border-l-4 border-l-brand/40">
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle>Fluxo de caixa (projeção)</CardTitle>
         <div className="flex items-center gap-2">
@@ -392,20 +400,20 @@ function CashFlowProjectionSection() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Semana</TableHead>
-                  <TableHead>A receber</TableHead>
-                  <TableHead>A pagar</TableHead>
-                  <TableHead>Saldo da semana</TableHead>
-                  <TableHead>Acumulado</TableHead>
+                  <TableHead className="text-right">A receber</TableHead>
+                  <TableHead className="text-right">A pagar</TableHead>
+                  <TableHead className="text-right">Saldo da semana</TableHead>
+                  <TableHead className="text-right">Acumulado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.weeks.map((week) => (
                   <TableRow key={week.week_start}>
                     <TableCell>{formatWeekRange(week.week_start, week.week_end)}</TableCell>
-                    <TableCell className="text-emerald-700">{formatBRL(week.receivable)}</TableCell>
-                    <TableCell className="text-destructive">{formatBRL(week.payable)}</TableCell>
-                    <TableCell className={week.net >= 0 ? 'text-emerald-700' : 'text-destructive'}>{formatBRL(week.net)}</TableCell>
-                    <TableCell className={`font-bold ${week.cumulative_net >= 0 ? '' : 'text-destructive'}`}>
+                    <TableCell className="text-right tabular-nums text-emerald-700">{formatBRL(week.receivable)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-destructive">{formatBRL(week.payable)}</TableCell>
+                    <TableCell className={`text-right tabular-nums ${week.net >= 0 ? 'text-emerald-700' : 'text-destructive'}`}>{formatBRL(week.net)}</TableCell>
+                    <TableCell className={`text-right tabular-nums font-bold ${week.cumulative_net >= 0 ? '' : 'text-destructive'}`}>
                       {formatBRL(week.cumulative_net)}
                     </TableCell>
                   </TableRow>

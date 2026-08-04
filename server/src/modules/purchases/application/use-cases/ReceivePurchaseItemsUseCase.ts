@@ -33,6 +33,8 @@ class ReceivePurchaseItemsUseCase extends UseCase {
    * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
    * @throws {ConflictError} Se esta NF (invoiceNumber) ja tiver sido registrada para este pedido.
+   * @throws {ValidationError} Se invoiceNumber estiver ausente/vazio.
+   *   `details: { purchase_id, order_number, field: 'invoice_number' }`.
    */
   async execute({ id, items, invoiceNumber, warehouseCode, userId, transaction }) {
     const purchase = await this.purchaseRepository.findPurchaseWithItemsForUpdate(id, transaction);
@@ -46,7 +48,10 @@ class ReceivePurchaseItemsUseCase extends UseCase {
       throw new ValidationError('Lista de itens e obrigatoria');
     }
     if (!invoiceNumber || !String(invoiceNumber).trim()) {
-      throw new ValidationError('Numero da NF (invoice_number) e obrigatorio para registrar o recebimento.');
+      throw new ValidationError(
+        'Numero da NF (invoice_number) e obrigatorio para registrar o recebimento.',
+        { purchase_id: purchase.id, order_number: purchase.order_number, field: 'invoice_number' }
+      );
     }
 
     // Constraint unica (purchase_id, invoice_number) no banco: garante,

@@ -11,7 +11,7 @@
 import { DataTypes, Model, ModelStatic } from 'sequelize';
 import { sequelize } from '../config/database';
 
-export interface AuditLogAttributes {
+interface AuditLogAttributes {
   id?: number;
   user_id: number | null;
   user_name: string | null;

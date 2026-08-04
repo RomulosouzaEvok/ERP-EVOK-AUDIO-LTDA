@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus } from 'lucide-react';
+import { Plus, Users } from 'lucide-react';
 
 import * as clientsApi from '@/api/clients';
 import { extractApiErrorMessage } from '@/api/httpClient';
@@ -60,8 +60,16 @@ export default function ClientsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Clientes</h1>
+      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <Users className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Clientes</h1>
+            <p className="text-sm text-muted-foreground">Cadastro e busca de clientes.</p>
+          </div>
+        </div>
         {canWrite && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -137,7 +145,10 @@ export default function ClientsPage() {
             </TableRow>
           )}
           {data?.data.map((client) => (
-            <TableRow key={client.id}>
+            <TableRow
+              key={client.id}
+              className="border-l-4 border-l-transparent transition-colors hover:border-l-brand hover:bg-brand/5"
+            >
               <TableCell>{client.name}</TableCell>
               <TableCell>{client.cpf_cnpj}</TableCell>
               <TableCell>{client.phone ?? '-'}</TableCell>

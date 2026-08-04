@@ -7,6 +7,9 @@ const CreateInventoryMovementUseCase = require('../../application/use-cases/Crea
 const GetStockReportUseCase = require('../../application/use-cases/GetStockReportUseCase');
 const ListLowStockUseCase = require('../../application/use-cases/ListLowStockUseCase');
 const ListLotsUseCase = require('../../application/use-cases/ListLotsUseCase');
+const GetLotByCodeUseCase = require('../../application/use-cases/GetLotByCodeUseCase');
+const GenerateEntityQrCodeUseCase = require('../../../../shared/application/GenerateEntityQrCodeUseCase');
+const { LotControl, Product } = require('../../../../models/index');
 const ReleaseLotUseCase = require('../../application/use-cases/ReleaseLotUseCase');
 const BlockLotUseCase = require('../../application/use-cases/BlockLotUseCase');
 const CreateWarehouseTransferUseCase = require('../../application/use-cases/CreateWarehouseTransferUseCase');
@@ -15,10 +18,15 @@ const RejectWarehouseTransferUseCase = require('../../application/use-cases/Reje
 const ListWarehouseTransfersUseCase = require('../../application/use-cases/ListWarehouseTransfersUseCase');
 const ListWarehouseStockUseCase = require('../../application/use-cases/ListWarehouseStockUseCase');
 const ListWarehousesUseCase = require('../../application/use-cases/ListWarehousesUseCase');
+const CreateWarehouseUseCase = require('../../application/use-cases/CreateWarehouseUseCase');
+const UpdateWarehouseUseCase = require('../../application/use-cases/UpdateWarehouseUseCase');
 const {
   createInventoryMovementSchema,
   createWarehouseTransferSchema,
   rejectWarehouseTransferSchema,
+  createWarehouseSchema,
+  updateWarehouseSchema,
+  idParamSchema,
   handleZodError
 } = require('../validators/inventoryValidators');
 
@@ -40,6 +48,11 @@ const inventoryRepository = new SequelizeInventoryRepository();
  *
  * DUAL-READ: Aceita `product_id` (legado) OU `item_id` (novo, PREFERIDO).
  *
+ * Aceita também o filtro opcional `warehouse_id` (INTEGER) — quando
+ * informado, restringe a lista às movimentações registradas naquele
+ * depósito (`InventoryMovement.warehouse_id`). Quando ausente, o
+ * comportamento é exatamente o mesmo de antes (lista todas).
+ *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
@@ -47,7 +60,7 @@ const inventoryRepository = new SequelizeInventoryRepository();
  */
 exports.list = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, product_id, item_id, type, start_date, end_date } = req.query;
+    const { page = 1, limit = 10, product_id, item_id, type, start_date, end_date, warehouse_id } = req.query;
     const useCase = new ListInventoryMovementsUseCase(inventoryRepository);
     const { rows, count, page: p, limit: l, totalPages } = await useCase.execute({
       product_id: product_id ? parseInt(String(product_id), 10) : undefined,
@@ -55,6 +68,7 @@ exports.list = async (req, res, next) => {
       type,
       start_date,
       end_date,
+      warehouse_id: warehouse_id ? parseInt(String(warehouse_id), 10) : undefined,
       limit: parseInt(String(limit), 10),
       offset: (parseInt(String(page), 10) - 1) * parseInt(String(limit), 10),
       page: parseInt(String(page), 10)
@@ -99,7 +113,17 @@ exports.create = async (req, res, next) => {
     const { product_id, item_id, type, quantity, description, reference_id, reference_type, warehouse_code } = parsed.data;
     const useCase = new CreateInventoryMovementUseCase();
     try {
-      const { movement } = await useCase.execute({
+      // `InventoryService.adjust` (chamado internamente pelo use case) retorna
+      // `{ ..., movementId }`, não `{ movement }` — desestruturar `movement`
+      // aqui derrubava o processo inteiro: o `TypeError` de `movement.id`
+      // undefined era lançado DEPOIS do `t.commit()` já ter sido efetivado,
+      // caía no `catch` abaixo, que tentava `t.rollback()` numa transação já
+      // commitada (`Transaction cannot be rolled back because it has been
+      // finished with state: commit`) — exceção não tratada, crash fatal do
+      // Node. Buscamos o registro real pós-commit para manter o mesmo
+      // formato de resposta (`InventoryMovement` completo) já documentado
+      // no client (`client/src/api/inventory.ts`, `createMovement`).
+      const { movementId } = await useCase.execute({
         product_id, item_id, type, quantity, description, reference_id, reference_type, warehouse_code,
         userId: req.user.id,
         transaction: t
@@ -107,12 +131,14 @@ exports.create = async (req, res, next) => {
 
       await t.commit();
 
+      const movement = await new GetInventoryMovementByIdUseCase(inventoryRepository).execute({ id: movementId });
+
       // Log de auditoria feito após o commit para não segurar locks de banco.
       const entityDesc = item_id ? `Item #${item_id}` : `Produto #${product_id}`;
       logAction(req, {
         action: type === 'out' ? 'update' : 'create',
         entityType: 'InventoryMovement',
-        entityId: movement.id,
+        entityId: movementId,
         entityDescription: entityDesc,
         newValues: { type, quantity },
         description: `Movimentação de estoque (${type}) - quantidade ${quantity}`
@@ -120,11 +146,15 @@ exports.create = async (req, res, next) => {
 
       res.status(201).json({ success: true, data: movement });
     } catch (innerError) {
-      await t.rollback();
+      // Defesa extra: só faz rollback se a transação ainda não foi
+      // finalizada (nem commit nem rollback já ocorreram) — chamar
+      // `rollback()` numa transação já commitada lança um erro síncrono
+      // não relacionado ao `innerError` original e derruba o processo.
+      if (!t.finished) await t.rollback();
       throw innerError;
     }
   } catch (error) {
-    if (!error.statusCode) await t.rollback();
+    if (!error.statusCode && !t.finished) await t.rollback();
     if (error.statusCode && !error.code) {
       // Erros lançados por InventoryService (Error simples com statusCode),
       // mantém o mesmo formato de resposta do controller anterior.
@@ -192,6 +222,67 @@ exports.listLots = async (req, res, next) => {
     const useCase = new ListLotsUseCase();
     const { rows, total, page: p, limit: l, totalPages } = await useCase.execute({ product_id, status, page, limit });
     res.json({ success: true, data: rows, pagination: { total, page: p, limit: l, totalPages } });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/inventory/lots/by-code/:lot_number?product_id=` — resolve um
+ * lote a partir do código legível (`lot_number`) lido por scanner físico ou
+ * digitado manualmente no mobile. `product_id` é opcional, usado apenas
+ * para desambiguar quando o mesmo código existir em mais de um produto.
+ *
+ * Item 6 do roadmap (`docs/LEVANTAMENTO_ERP_2026-08-02.md`) —
+ * rastreabilidade por lote/QR no chão de fábrica.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.getLotByCode = async (req, res, next) => {
+  try {
+    const useCase = new GetLotByCodeUseCase();
+    const lot = await useCase.execute({ lot_number: req.params.lot_number, product_id: req.query.product_id });
+    res.json({ success: true, data: lot });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/inventory/lots/:id/qrcode?format=png|svg` — gera o QR Code de
+ * um lote (`LotControl`) para impressão em etiqueta física. Reaproveita o
+ * `GenerateEntityQrCodeUseCase` genérico já usado por Ativos/Produtos —
+ * nenhuma infraestrutura de QR nova foi criada.
+ *
+ * O QR codifica `{ type: 'lot', id, lot_number, product_code, product_name }`
+ * — a leitura no mobile deve extrair `lot_number` e chamar
+ * `GET /api/inventory/lots/by-code/:lot_number` para resolver o registro
+ * completo (padrão dual: QR carrega o código legível, não o id interno).
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.getLotQrCode = async (req, res, next) => {
+  try {
+    const useCase = new GenerateEntityQrCodeUseCase();
+    const result = await useCase.execute({
+      repository: {
+        findById: (id) => LotControl.findByPk(id, {
+          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }]
+        })
+      },
+      id: req.params.id,
+      entityType: 'lot',
+      entityLabel: 'Lote',
+      format: req.query.format === 'svg' ? 'svg' : 'png',
+      buildData: (lot) => ({
+        lot_number: lot.lot_number,
+        product_code: lot.product?.code,
+        product_name: lot.product?.name
+      }),
+    });
+    res.json({ success: true, data: result });
   } catch (error) { next(error); }
 };
 
@@ -336,13 +427,16 @@ exports.approveTransfer = async (req, res, next) => {
  * @returns {Promise<void>}
  */
 exports.rejectTransfer = async (req, res, next) => {
+  const t = await sequelize.transaction();
   try {
     const parsed = rejectWarehouseTransferSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
     const { reason } = parsed.data;
 
     const useCase = new RejectWarehouseTransferUseCase();
-    const transfer = await useCase.execute({ id: req.params.id, approverId: req.user.id, reason });
+    const transfer = await useCase.execute({ id: req.params.id, approverId: req.user.id, reason, transaction: t });
+
+    await t.commit();
 
     logAction(req, {
       action: 'reject',
@@ -354,7 +448,10 @@ exports.rejectTransfer = async (req, res, next) => {
     });
 
     res.json({ success: true, data: transfer });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (t && !t.finished) await t.rollback();
+    next(error);
+  }
 };
 
 /**
@@ -405,5 +502,74 @@ exports.listWarehouses = async (req, res, next) => {
     const useCase = new ListWarehousesUseCase();
     const warehouses = await useCase.execute();
     res.json({ success: true, data: warehouses });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `POST /api/inventory/warehouses` — cria um novo depósito
+ * (`authorizeModule('estoque', 'approve')`, docs/governance/TODO.md, Bloco
+ * 4.2/4.3). `code` deve ser único; é normalizado para uppercase.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.createWarehouse = async (req, res, next) => {
+  try {
+    const parsed = createWarehouseSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { code, name, description, active } = parsed.data;
+
+    const useCase = new CreateWarehouseUseCase();
+    const warehouse = await useCase.execute({ code, name, description, active });
+
+    logAction(req, {
+      action: 'create',
+      entityType: 'Warehouse',
+      entityId: warehouse.id,
+      entityDescription: `Deposito ${warehouse.code}`,
+      newValues: { code: warehouse.code, name: warehouse.name, description: warehouse.description, active: warehouse.active },
+      description: `Deposito ${warehouse.code} criado`
+    });
+
+    res.status(201).json({ success: true, data: warehouse });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `PUT /api/inventory/warehouses/:id` — edita `name`/`description`/`active`
+ * de um depósito existente (`authorizeModule('estoque', 'approve')`). O
+ * `code` NUNCA é editável por este endpoint — é a chave usada pelo
+ * roteamento automático do dual-write em todo o sistema.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.updateWarehouse = async (req, res, next) => {
+  try {
+    const parsedId = idParamSchema.safeParse(req.params.id);
+    if (!parsedId.success) handleZodError(parsedId.error);
+
+    const parsed = updateWarehouseSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { name, description, active } = parsed.data;
+
+    const useCase = new UpdateWarehouseUseCase();
+    const { before, warehouse } = await useCase.execute({ id: parsedId.data, name, description, active });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'Warehouse',
+      entityId: warehouse.id,
+      entityDescription: `Deposito ${warehouse.code}`,
+      oldValues: before,
+      newValues: { name: warehouse.name, description: warehouse.description, active: warehouse.active },
+      description: `Deposito ${warehouse.code} atualizado`
+    });
+
+    res.json({ success: true, data: warehouse });
   } catch (error) { next(error); }
 };

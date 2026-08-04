@@ -43,8 +43,14 @@ describe('Onda 3 - Expedicao (shipped)', () => {
 
   const baseInput = { userId: 7, transaction: { id: 'tx-shipping' } };
 
-  it('permite transicao invoiced -> shipped', async () => {
-    const sale = { id: 1, status: 'invoiced', items: [], save: jest.fn(async function (this: any) {}) };
+  it('permite transicao invoiced -> shipped com NF-e autorizada', async () => {
+    const sale = {
+      id: 1,
+      status: 'invoiced',
+      nfe_status: 'authorized',
+      items: [],
+      save: jest.fn(async function (this: any) {}),
+    };
     const saleRepository = buildSaleRepository(sale);
     const useCase = new ChangeSaleStatusUseCase(saleRepository);
 
@@ -54,6 +60,28 @@ describe('Onda 3 - Expedicao (shipped)', () => {
     expect(updated.status).toBe('shipped');
     expect(InventoryService.consume).not.toHaveBeenCalled();
     expect(InventoryService.receive).not.toHaveBeenCalled();
+  });
+
+  it('bloqueia invoiced -> shipped quando a NF-e foi cancelada apos a emissao (422 com details.nfe_status)', async () => {
+    // sale.status permanece 'invoiced' mesmo apos CancelSaleNfeUseCase mudar
+    // nfe_status para 'cancelled' (nao reverte sale.status) — cenario real
+    // que a checagem generica de VALID_TRANSITIONS nao cobre.
+    const sale = {
+      id: 5,
+      status: 'invoiced',
+      nfe_status: 'cancelled',
+      items: [],
+      save: jest.fn(async function (this: any) {}),
+    };
+    const saleRepository = buildSaleRepository(sale);
+    const useCase = new ChangeSaleStatusUseCase(saleRepository);
+
+    await expect(useCase.execute({ id: 5, status: 'shipped', ...baseInput })).rejects.toThrow(BusinessRuleError);
+    await expect(useCase.execute({ id: 5, status: 'shipped', ...baseInput })).rejects.toMatchObject({
+      statusCode: 422,
+      details: { nfe_status: 'cancelled', sale_status: 'invoiced' },
+    });
+    expect(sale.save).not.toHaveBeenCalled();
   });
 
   it('rejeita transicao confirmed -> shipped com 422 (BusinessRuleError)', async () => {

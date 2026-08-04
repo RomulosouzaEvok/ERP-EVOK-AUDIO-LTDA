@@ -11,6 +11,7 @@ import * as lotsApi from '@/api/lots';
 import * as warehousesApi from '@/api/warehouses';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -77,43 +78,43 @@ export function BalancesTab() {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="border-l-4 border-l-destructive/60 transition-shadow hover:shadow-md">
           <CardHeader className="flex flex-row items-center justify-between gap-2 p-4 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Abaixo do mínimo</CardTitle>
             <AlertTriangle className="size-4 text-destructive" />
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <p className="text-2xl font-semibold">{lowStock?.length ?? '-'}</p>
+            <p className="text-2xl font-semibold tabular-nums">{lowStock?.length ?? '-'}</p>
             <CardDescription>Itens com estoque em ou abaixo do ponto de reposição</CardDescription>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-amber-500/60 transition-shadow hover:shadow-md">
           <CardHeader className="flex flex-row items-center justify-between gap-2 p-4 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Em quarentena</CardTitle>
             <ShieldAlert className="size-4 text-amber-500" />
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <p className="text-2xl font-semibold">{quarantineLots?.pagination.total ?? '-'}</p>
+            <p className="text-2xl font-semibold tabular-nums">{quarantineLots?.pagination.total ?? '-'}</p>
             <CardDescription>Lotes aguardando inspeção da Qualidade</CardDescription>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-destructive/60 transition-shadow hover:shadow-md">
           <CardHeader className="flex flex-row items-center justify-between gap-2 p-4 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Bloqueados</CardTitle>
             <Lock className="size-4 text-destructive" />
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <p className="text-2xl font-semibold">{blockedLots?.pagination.total ?? '-'}</p>
+            <p className="text-2xl font-semibold tabular-nums">{blockedLots?.pagination.total ?? '-'}</p>
             <CardDescription>Lotes bloqueados pela Qualidade</CardDescription>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-brand/60 transition-shadow hover:shadow-md">
           <CardHeader className="flex flex-row items-center justify-between gap-2 p-4 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Valor em estoque</CardTitle>
-            <Boxes className="size-4 text-muted-foreground" />
+            <Boxes className="size-4 text-brand" />
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <p className="text-2xl font-semibold">
+            <p className="text-2xl font-semibold tabular-nums">
               {stockReport ? `R$ ${stockReport.summary.total_value.toFixed(2)}` : '-'}
             </p>
             <CardDescription>Custo total dos produtos ativos</CardDescription>
@@ -169,9 +170,9 @@ export function BalancesTab() {
               <TableRow>
                 <TableHead>Código</TableHead>
                 <TableHead>Nome</TableHead>
-                <TableHead>Saldo</TableHead>
-                <TableHead>Reservado</TableHead>
-                <TableHead>Mínimo</TableHead>
+                <TableHead className="text-right">Saldo</TableHead>
+                <TableHead className="text-right">Reservado</TableHead>
+                <TableHead className="text-right">Mínimo</TableHead>
                 <TableHead>Situação</TableHead>
                 {canWrite && <TableHead>Ações</TableHead>}
               </TableRow>
@@ -191,12 +192,14 @@ export function BalancesTab() {
                 const isLow = quantity <= minQuantity;
                 return (
                   <TableRow key={product.id}>
-                    <TableCell>{product.code}</TableCell>
+                    <TableCell className="font-mono text-xs">{product.code}</TableCell>
                     <TableCell>{product.name}</TableCell>
-                    <TableCell className={isLow ? 'font-medium text-destructive' : ''}>{quantity}</TableCell>
+                    <TableCell className={cn('text-right tabular-nums', isLow && 'font-medium text-destructive')}>
+                      {quantity}
+                    </TableCell>
                     {/* Reserva não é exposta por produto no backend atual (apenas agregada); exibimos "-" até existir endpoint dedicado. */}
-                    <TableCell>-</TableCell>
-                    <TableCell>{minQuantity}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">-</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">{minQuantity}</TableCell>
                     <TableCell>
                       <Badge variant={isLow ? 'destructive' : 'success'}>{isLow ? 'Abaixo do mínimo' : 'OK'}</Badge>
                     </TableCell>
@@ -232,7 +235,7 @@ export function BalancesTab() {
                 <TableHead>Código</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Depósito</TableHead>
-                <TableHead>Saldo</TableHead>
+                <TableHead className="text-right">Saldo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -246,10 +249,10 @@ export function BalancesTab() {
               )}
               {warehouseStock?.data.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell>{row.product?.code ?? row.product_id}</TableCell>
+                  <TableCell className="font-mono text-xs">{row.product?.code ?? row.product_id}</TableCell>
                   <TableCell>{row.product?.name ?? '-'}</TableCell>
                   <TableCell>{row.warehouse?.name ?? '-'}</TableCell>
-                  <TableCell>{Number(row.quantity)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{Number(row.quantity)}</TableCell>
                 </TableRow>
               ))}
               {!isWarehouseStockLoading && !isWarehouseStockError && warehouseStock?.data.length === 0 && (

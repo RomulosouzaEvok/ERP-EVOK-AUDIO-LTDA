@@ -1,10 +1,16 @@
 import UseCase from '../../../../shared/application/UseCase';
-import { NotFoundError } from '../../../../errors';
+import { NotFoundError, BusinessRuleError } from '../../../../errors';
 import ItemRepository from '../../../items/domain/repositories/ItemRepository';
 import PurchaseRequisitionRepository from '../../domain/repositories/PurchaseRequisitionRepository';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { EngineeringProject } = require('../../../../models/index');
+
+/**
+ * Bloco 2 (UC-39, BUSINESS_RULES.md §9): origem de amostra da engenharia.
+ * Ver `RequisitionsPage.tsx` (client) — mesma convenção compartilhada.
+ */
+const ENGINEERING_SAMPLE_ORIGIN = 'engenharia_amostra';
 
 class CreatePurchaseRequisitionUseCase extends UseCase<Record<string, any>, any> {
   private readonly requisitionRepository: PurchaseRequisitionRepository;
@@ -26,11 +32,24 @@ class CreatePurchaseRequisitionUseCase extends UseCase<Record<string, any>, any>
    * projeto antes de criar a requisicao (404 didatico), para qualquer
    * `origin`.
    *
+   * Bloco 2 (UC-39): quando `origin === 'engenharia_amostra'`, a
+   * justificativa da amostra e obrigatoria. Nao existe coluna dedicada
+   * `justificativa` em `purchase_requisitions` (decisao de reaproveitar o
+   * campo `notes`, ja livre, em vez de nova migration) — o texto informado
+   * em `notes` e a propria justificativa nesse caso.
+   *
    * @param input - Payload validado pelo controller (`createPurchaseRequisitionSchema`) + `requester_id`/`transaction` injetados.
    * @returns A requisicao criada, com itens e relacionamentos carregados.
    * @throws {NotFoundError} Se `engineering_project_id` for informado e nao corresponder a um projeto existente, ou se algum `item_id` nao existir.
+   * @throws {BusinessRuleError} Se `origin === 'engenharia_amostra'` e `notes` (justificativa) nao for informado. HTTP 422.
    */
   async execute(input: Record<string, any>): Promise<any> {
+    if (input.origin === ENGINEERING_SAMPLE_ORIGIN && !String(input.notes ?? '').trim()) {
+      throw new BusinessRuleError(
+        'Justificativa obrigatoria para requisicao de amostra de engenharia (origin=engenharia_amostra). Informe o motivo em "notes".',
+      );
+    }
+
     if (input.engineering_project_id) {
       const project = await EngineeringProject.findByPk(input.engineering_project_id, {
         transaction: input.transaction,

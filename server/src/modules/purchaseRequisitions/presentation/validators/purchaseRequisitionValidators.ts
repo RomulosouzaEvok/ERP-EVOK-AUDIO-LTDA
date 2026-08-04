@@ -24,6 +24,15 @@ const requisitionItemSchema = z.object({
 // `engineering_project_id` e sempre opcional (mesmo para amostra de
 // engenharia); quando informado, o use case valida a existencia do projeto
 // (404 didatico) para qualquer origin, nao apenas 'engenharia_amostra'.
+//
+// Justificativa da amostra (Bloco 2, UC-39): nao existe campo dedicado
+// `justificativa` — o texto e enviado em `notes` (ja existente, livre).
+// Quando `origin === 'engenharia_amostra'`, `notes` passa a ser obrigatorio
+// em runtime (regra de negocio, nao de schema — ver
+// `CreatePurchaseRequisitionUseCase`, `BusinessRuleError` HTTP 422). Fica no
+// use case (nao aqui no Zod) porque a obrigatoriedade depende do valor de
+// outro campo (`origin`) e porque o erro correto para essa condicao e 422
+// (regra de negocio), nao 400 (`ValidationError`, usado pelo Zod).
 export const createPurchaseRequisitionSchema = z.object({
   department_id: z.coerce.number().int().positive().optional(),
   production_order_id: z.coerce.number().int().positive().optional(),

@@ -6,7 +6,7 @@
 
 import UseCase from '../../../../shared/application/UseCase';
 
-export interface ListProductionOrdersInput {
+interface ListProductionOrdersInput {
   page?: number | string;
   limit?: number | string;
   status?: string;
