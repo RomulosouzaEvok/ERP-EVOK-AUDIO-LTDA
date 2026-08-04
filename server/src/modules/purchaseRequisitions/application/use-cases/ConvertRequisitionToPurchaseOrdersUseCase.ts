@@ -23,6 +23,15 @@
  *   da requisicao, senao `0`.
  * - Ao final, a requisicao e marcada `ordered` e todos os seus itens
  *   tambem sao marcados `ordered`.
+ * - Bloco 2 (UC-39, BUSINESS_RULES.md §9): se `requisition.origin ===
+ *   'engenharia_amostra'`, o(s) pedido(s) de compra gerado(s) recebem uma
+ *   marcacao automatica em `notes` ("AMOSTRA ENGENHARIA — receber no
+ *   Depósito do Laboratório"), concatenada com a nota informada/padrao.
+ *   Nao ha coluna nova em `purchase_orders` para isso — o roteamento REAL
+ *   de deposito no recebimento e resolvido separadamente por
+ *   `ReceivePurchaseItemsUseCase`, via join `purchase_orders.requisition_id
+ *   -> purchase_requisitions.origin` (a nota e apenas informativa/auditavel
+ *   para quem le a tela de Recebimento).
  *
  * Toda a operacao roda em uma unica transacao, com a requisicao e seus
  * itens travados via `SELECT ... FOR UPDATE` (repositorio) para impedir
@@ -202,6 +211,21 @@ class ConvertRequisitionToPurchaseOrdersUseCase extends UseCase<ConvertRequisiti
         };
       });
 
+      // Bloco 2 (UC-39, BUSINESS_RULES.md §9): requisicao de amostra da
+      // engenharia carrega uma marcacao automatica em `notes` do pedido
+      // gerado, para o Recebimento identificar a origem sem precisar de
+      // coluna nova em `purchase_orders` (nao existe campo dedicado —
+      // decisao explicita desta entrega). O roteamento REAL de deposito no
+      // recebimento e resolvido por `ReceivePurchaseItemsUseCase` via join
+      // com `requisition_id` -> `purchase_requisitions.origin`, nao pelo
+      // texto desta nota (que e apenas informativo/auditavel).
+      const isEngineeringSample = requisition.origin === 'engenharia_amostra';
+      const autoNote = isEngineeringSample
+        ? 'AMOSTRA ENGENHARIA — receber no Depósito do Laboratório'
+        : null;
+      const baseNote = notes ?? `Gerado automaticamente da requisicao ${requisition.requisition_number}`;
+      const finalNotes = autoNote ? `${autoNote} | ${baseNote}` : baseNote;
+
       const purchase = await this.purchaseRepository.createPurchase({
         order_number: orderNumber,
         supplier_id: supplierId,
@@ -214,7 +238,7 @@ class ConvertRequisitionToPurchaseOrdersUseCase extends UseCase<ConvertRequisiti
         freight_type: null,
         freight_value: 0,
         status: 'pending',
-        notes: notes ?? `Gerado automaticamente da requisicao ${requisition.requisition_number}`,
+        notes: finalNotes,
         invoice_number: null,
         invoice_date: null,
       }, transaction);

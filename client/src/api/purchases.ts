@@ -1,5 +1,6 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
+import type { HandoffSignal } from '@/components/HandoffDot';
 
 export type PurchaseStatus = 'pending' | 'approved' | 'sent' | 'partial' | 'received' | 'canceled';
 
@@ -22,6 +23,13 @@ export interface Purchase {
   createdAt: string;
   supplier?: { id: number; company_name: string };
   items?: PurchaseItem[];
+  /**
+   * Semáforo de handoff (UC-40, Bloco 3) — calculado on-the-fly pelo
+   * backend a cada listagem (`GET /api/purchases`), nunca persistido.
+   * Fila de Recebimento: vermelho = `expected_date` vencida sem
+   * `delivery_date`; verde = dentro do prazo/estados terminais.
+   */
+  handoff_signal?: HandoffSignal;
 }
 
 export interface PurchaseItemInput {

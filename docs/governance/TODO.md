@@ -281,48 +281,124 @@ Todas Confirmadas" ao final deste documento e o topo de
 
 **Depende de:** Bloco 4 (Depósitos) para o destino físico da amostra —
 implementar em conjunto ou sequenciar Bloco 4 antes deste item de
-roteamento de depósito.
+roteamento de depósito. **Bloco 4 já concluído** (ver acima) — este
+bloco foi implementado em sequência, reaproveitando `warehouseStockService`.
 
 ### 2.1 AdmDBA
 
-- [ ] Adicionar valor `engineering_sample` ao enum/domínio de `origin` de
-  `purchase_requisitions` (confirmar mecanismo já usado para adicionar
-  valores de enum no projeto — ver
-  `server/migrations/20260803-000002-add-quarantine-lot-status.cjs` como
-  precedente de `ALTER TYPE ... ADD VALUE`)
-- [ ] Adicionar `justificativa` (text, nullable — obrigatório só para
-  `engineering_sample`, validado em código) e `project_id` (FK nullable
-  para `engineering_projects`) em `purchase_requisitions`, se ainda não
-  existirem campos equivalentes
+- [x] Valor de `origin` para amostra da engenharia: **`purchase_requisitions
+  .origin` já era `VARCHAR(80)` livre** (não ENUM — confirmado em
+  `server/migrations/20260802-000002-purchase-requisitions.cjs`), portanto
+  **nenhuma migration de schema foi necessária** para o novo valor
+  (diferente do precedente `ALTER TYPE ... ADD VALUE` de
+  `20260803-000002-add-quarantine-lot-status.cjs`, que se aplica apenas a
+  colunas ENUM reais como `lot_controls.status`). **Desvio de nomenclatura
+  desta entrega:** o valor usado é **`'engenharia_amostra'`** (não
+  `'engineering_sample'` como rascunhado originalmente aqui) — decisão
+  explícita do orquestrador nesta entrega; todo o código
+  (validator/use case/roteamento de recebimento) usa a string em
+  português, consistente com os demais valores de `origin` já em uso
+  (`'manual'`, `'mrp'`).
+- [x] Migration `server/migrations/20260804-000003-requisition-engineering-project.cjs`
+  — adiciona **apenas** `engineering_project_id` (INTEGER, nullable, FK
+  `engineering_projects.id` `ON DELETE SET NULL`) + índice dedicado em
+  `purchase_requisitions`. **Desvio de escopo desta entrega:** o campo
+  `justificativa` (obrigatório apenas para `engenharia_amostra`) **não foi
+  criado** — decisão explícita do orquestrador: a requisição já tem
+  `notes` (TEXT, livre) suficiente para o texto de justificativa nesta
+  fase; criar uma coluna dedicada ficaria para uma iteração futura caso o
+  negócio queira validação estrutural separada de "justificativa" vs.
+  "observação". `engineering_project_id` é **sempre opcional**, inclusive
+  para `origin='engenharia_amostra'` (confirmado no enunciado desta
+  tarefa — diverge da nota "não existirem campos equivalentes" do
+  rascunho original, que sugeria obrigatoriedade condicional).
+  Modelo (`PurchaseRequisition.ts`) e associação
+  (`EngineeringProject.hasMany(PurchaseRequisition, ...)`) atualizados em
+  `server/src/models/index.ts`.
 
 ### 2.2 Backend
 
-- [ ] Endpoint/variante de criação de requisição aceitando
-  `origin='engineering_sample'`, `project_id` opcional, `justificativa`
-  obrigatória nesse caso (validação Zod condicional)
-- [ ] Reaproveitar 100% do workflow de aprovação/conversão já existente
-  (UC-23/UC-25) — nenhuma nova máquina de estados
-  - [ ] Sinalizar o item no Recebimento com badge de origem (campo
-    `origin` já propagável do pedido/requisição até a tela de recebimento)
-- [ ] Integração com Bloco 4: recebimento de item com requisição de
-  origem `engineering_sample` direciona entrada para o Depósito do
-  Laboratório (roteamento, ver `BUSINESS_RULES.md` §12 item 7)
+- [x] `createPurchaseRequisitionSchema` (Zod) aceita `origin` livre
+  (já aceitava qualquer string ≤ 80 chars) e o novo campo opcional
+  `engineering_project_id` (coerce int positivo). **Desvio:** nenhuma
+  validação condicional de `justificativa` obrigatória foi implementada
+  (ver decisão 2.1 — campo não existe nesta entrega).
+- [x] `CreatePurchaseRequisitionUseCase` valida a existência do projeto
+  quando `engineering_project_id` é informado (`EngineeringProject.findByPk`
+  dentro da mesma transação) — 404 didático `NotFoundError` se o projeto
+  não existir, para **qualquer** `origin` (não restrito a
+  `engenharia_amostra`).
+- [x] Reaproveitado 100% o workflow de aprovação/conversão já existente
+  (`ChangePurchaseRequisitionStatusUseCase`/
+  `ConvertRequisitionToPurchaseOrdersUseCase`) — nenhuma nova máquina de
+  estados.
+- [x] Sinalização do item no Recebimento: `ConvertRequisitionToPurchaseOrdersUseCase`
+  agora concatena uma marcação automática em `notes` do(s) pedido(s) de
+  compra gerado(s) quando `requisition.origin === 'engenharia_amostra'`
+  ("AMOSTRA ENGENHARIA — receber no Depósito do Laboratório"). **Decisão
+  confirmada nesta entrega:** nenhuma coluna nova em `purchase_orders`
+  (nem para a marcação, nem para propagar `engineering_project_id`) — a
+  marcação vive em `notes` (texto livre já existente), e o roteamento
+  REAL de depósito (item abaixo) não depende dessa nota, é resolvido por
+  join direto com a requisição de origem.
+- [x] Integração com Bloco 4 (roteamento de depósito): `ReceivePurchaseItemsUseCase`
+  agora resolve o depósito padrão do recebimento com base na origem da
+  requisição — se `warehouse_code` não for informado explicitamente no
+  payload de `POST /api/purchases/:id/receive` **e** o pedido tiver
+  `requisition_id` apontando para uma requisição com
+  `origin='engenharia_amostra'`, o default passa a ser `LABORATORIO` em
+  vez de `INSUMOS` (antes desta entrega, o Bloco 4 só oferecia
+  `warehouse_code` como parâmetro manual, sem detecção automática — ver
+  nota de escopo em `4.2` acima). `warehouse_code` explícito continua
+  prevalecendo sobre o default automático.
 
 ### 2.3 Frontend
 
-- [ ] Tela "Engenharia > Solicitar Amostra" (formulário simplificado
-  sobre a criação de requisição existente, pré-preenchendo `origin`)
-- [ ] Badge "Amostra — Engenharia" na tela de Recebimento
-- [ ] Alerta não bloqueante de quantidade atípica (> 50 unidades,
-  parâmetro configurável)
+- [ ] Tela "Engenharia > Solicitar Amostra" — **ainda não implementada**
+  (a criação de requisição com origem de amostra é feita em
+  `RequisitionsPage.tsx`, tela geral de Requisições — ver item abaixo;
+  uma tela dedicada dentro do módulo Engenharia não foi criada nesta
+  entrega, fora de escopo desta tarefa).
+- [x] `RequisitionsPage.tsx` (`client/src/pages/purchases/`): select de
+  origem ganhou a opção "Amostra de Engenharia"
+  (`origin='engenharia_amostra'`); ao selecioná-la, aparece select
+  opcional de Projeto de P&D (`GET /api/engineering/projects`) + aviso
+  "Pedidos desta requisição serão recebidos no Depósito do Laboratório";
+  badge "Amostra" na listagem e projeto vinculado no detalhe (2026-08-04,
+  ver `docs/HANDOFF_CODEX.md` seção "Frontend — Semáforo de Handoff...").
+- [ ] Badge "Amostra — Engenharia" na tela de Recebimento — ainda não
+  implementado (a marcação hoje só existe em `notes` do pedido de
+  compra, texto livre — ver Bloco 2.2; nenhuma UI de Recebimento lê essa
+  nota estruturadamente).
+- [ ] Alerta não bloqueante de quantidade atípica (> 50 unidades) — não
+  implementado nesta entrega.
 
 ### 2.4 QA
 
-- [ ] Teste: requisição `engineering_sample` sem justificativa → 422
-- [ ] Teste: requisição com `project_id` válido é persistida e rastreável
-  ao projeto
+- [x] Cobertura indireta: os testes unitários existentes de
+  `CreatePurchaseRequisitionUseCase`/`ConvertRequisitionToPurchaseOrdersUseCase`
+  continuam 100% verdes com os novos campos aditivos (nenhum teste
+  dedicado a `engenharia_amostra`/`engineering_project_id` foi criado
+  nesta entrega — os testes existentes não fixam `origin`, logo o
+  comportamento padrão/backward-compat foi validado; teste dedicado ao
+  fluxo de amostra fica como próxima tarefa de QA).
+- [ ] Teste: requisição `engenharia_amostra` sem justificativa → 422 —
+  **não aplicável nesta entrega** (campo `justificativa` não existe, ver
+  decisão 2.1).
+- [ ] Teste: requisição com `engineering_project_id` válido é persistida e
+  rastreável ao projeto (404 se inválido) — pendente, próxima tarefa de QA.
 - [ ] Teste E2E: requisição de amostra aprovada → convertida em pedido →
-  recebida → entra no Depósito do Laboratório (não no de Insumos)
+  recebida → entra no Depósito do Laboratório (não no de Insumos) —
+  pendente (requer integração real com banco, fora do escopo desta
+  entrega de testes unitários).
+
+**Decisão registrada nesta entrega (permissão):** criar requisição de
+amostra **permanece no módulo `requisicoes`** (não existe módulo
+`engenharia` dedicado a esta ação) — a Engenharia recebe a permissão do
+módulo `requisicoes` no seu perfil de acesso (via `AccessProfilePermission`)
+para poder criar requisições com `origin='engenharia_amostra'`. Nenhuma
+rota nova foi criada; `POST /api/purchase-requisitions` já exige
+`authorizeModule('requisicoes', 'operate')`.
 
 ---
 
@@ -330,41 +406,107 @@ roteamento de depósito.
 
 ### 3.1 Backend
 
-- [ ] Definir função utilitária `calculateHandoffSignal(entity, context)`
-  compartilhada (não duplicar lógica de cor por módulo) — implementa a
-  tabela normativa de `BUSINESS_RULES.md` §10
-- [ ] Enriquecer as listagens já existentes com campo aditivo
-  `handoff_signal` (`green|yellow|red`) — decisão proposta: aditivo, não
-  endpoint novo:
-  - [ ] `GET /api/purchases` (fila de Recebimento) — reaproveitar lógica
-    de `overdue` já usada em UC-28 (Cockpit de Compras)
-  - [ ] `GET /api/inventory/lots` (fila de Qualidade) — `quarantine`
-    amarelo, `blocked` vermelho
-  - [ ] `GET /api/sales` (fila de Expedição) — `invoiced` verde,
-    `processing` amarelo, `denied`/`cancelled` vermelho/fora da fila
-  - [ ] `GET /api/quality/non-conformities` (fila de tratativa)
-- [ ] Confirmar com o dono se é necessário endpoint de contador/badge
-  (ex.: `GET /api/notifications/counts` por módulo) — item em aberto, não
-  implementar sem confirmação (evitar escopo não solicitado)
+- [x] Função utilitária `calculateHandoffSignal(kind, entity, now?)`
+  compartilhada em `server/src/shared/domain/handoffSignal.ts` (não
+  duplicada por módulo) — implementa a tabela normativa de
+  `BUSINESS_RULES.md` §10/`01-USE_CASES.md` UC-40 para 4 cadeias
+  tabuladas (`purchase`, `lot`, `sale`, `non_conformity`) **+ 1 cadeia
+  aditiva não tabulada** (`purchase_requisition`, `pending` → `yellow`
+  "aguardando aprovação", pedida nominalmente no enunciado desta tarefa).
+  `now` é injetável (default `new Date()`) para testes determinísticos da
+  regra de `expected_date` vencida. Cor sempre calculada on-the-fly nas
+  listagens (nunca persistida — §10).
+- [x] Listagens enriquecidas com campo aditivo `handoff_signal`
+  (`green|yellow|red`), sem quebrar contrato (campo novo, aditivo, em
+  cada linha de `rows`):
+  - [x] `GET /api/purchases` (fila de Recebimento) —
+    `ListPurchasesUseCase` usa `calculateHandoffSignal('purchase', ...)`
+    com `status`/`expected_date`/`delivery_date`. **Desvio da nota
+    original** ("reaproveitar lógica de `overdue` já usada em UC-28"): a
+    lógica não foi importada de `GetPurchaseCockpitUseCase`
+    (`overdueRow` é uma query SQL agregada, não uma função reutilizável
+    por linha) — foi reimplementada como função pura em
+    `handoffSignal.ts`, com a MESMA regra (`expected_date < hoje` E
+    `delivery_date IS NULL` E fora dos status terminais
+    `received`/`canceled`), agora compartilhável por qualquer listagem
+    futura.
+  - [x] `GET /api/purchase-requisitions` (fila de aprovação) —
+    `ListPurchaseRequisitionsUseCase` usa
+    `calculateHandoffSignal('purchase_requisition', ...)`. **Não estava
+    nesta lista original do Bloco 3.1**, mas foi pedido nominalmente no
+    enunciado desta entrega ("purchase-requisitions list") — adicionado
+    como 5ª listagem enriquecida.
+  - [x] `GET /api/inventory/lots` (fila de Qualidade) —
+    `ListLotsUseCase` usa `calculateHandoffSignal('lot', ...)`:
+    `available` verde, `quarantine` amarelo, `blocked` vermelho (demais
+    status — `reserved`/`consumed`/`expired` — verde, fora da régua de
+    alerta desta tabela).
+  - [x] `GET /api/sales` (fila de Expedição) — `ListSalesUseCase` usa
+    `calculateHandoffSignal('sale', ...)`: `invoiced` verde, `nfe_status
+    ='processing'` amarelo, `nfe_status` em `denied`/`cancelled` OU
+    `sale.status='canceled'` vermelho.
+  - [x] `GET /api/quality/non-conformities` (fila de tratativa) —
+    `ListNonConformitiesUseCase` usa
+    `calculateHandoffSignal('non_conformity', ...)`: `open`/`analysis`
+    (equivalente a `in_analysis` do enunciado — nome real do enum do
+    model é `analysis`) amarelo; `closed` com `effectiveness_result !=
+    'effective'` vermelho (reincidente, redação literal de
+    `01-USE_CASES.md` UC-40); demais status verde.
+- [x] `GET /api/dashboard/handoffs` implementado nesta mesma entrega (ver
+  3.3 abaixo) — a pergunta original "confirmar com o dono se é necessário
+  endpoint de contador/badge" foi resolvida a favor do "sim" pelo
+  enunciado explícito desta tarefa (Bloco 3, item 3), que já especificou
+  o contrato exato do endpoint.
 
 ### 3.2 Frontend
 
-- [ ] Componente reutilizável de "bolinha de status" (semáforo) —
-  criar um único componente visual, usado em todas as telas de fila
-  (Recebimento, Qualidade, Expedição, RNC), consumindo o campo
-  `handoff_signal` do backend (nunca recalcular cor no client)
-- [ ] Aplicar o componente nas telas já existentes (Recebimento,
-  Qualidade — `InspectionTab.tsx`, Expedição, RNC —
-  `NonConformitiesTab.tsx`)
+- [x] Componente reutilizável de "bolinha de status" (semáforo) —
+  `client/src/components/HandoffDot.tsx` (`HandoffDot({ signal })`,
+  `title`/`aria-label` didáticos, sem texto cru de status) — 2026-08-04,
+  ver `docs/HANDOFF_CODEX.md`.
+- [x] Aplicar o componente nas telas já existentes — coluna extra (só a
+  bolinha) em `PurchasesPage.tsx`, `RequisitionsPage.tsx`,
+  `ReceivingPage.tsx`, `ShippingPage.tsx`, `InspectionTab.tsx` (aba de
+  `/quality`) e `NonConformitiesTab.tsx`, consumindo o `handoff_signal`
+  aditivo já retornado pelas listagens (item 3.1 acima). — 2026-08-04.
+- [x] **Contador/badge de menu** (ponto do dono ainda não respondido,
+  ver rodapé deste documento) — **versão mínima e reversível**
+  implementada por instrução explícita desta entrega, não é a decisão
+  final do dono: badge numérico discreto em Recebimento/Requisições/
+  Expedição/Qualidade em `client/src/layouts/AppLayout.tsx`, via
+  `GET /api/dashboard/handoffs` com polling de 60s (TanStack Query),
+  restrito a quem tem acesso ao módulo `dashboard`; falha da chamada
+  nunca quebra o menu (sem badge, sem erro visível). — 2026-08-04.
 
-### 3.3 QA
+### 3.3 Backend — `GET /api/dashboard/handoffs`
 
-- [ ] Teste: pedido `sent` dentro do prazo → `green`
-- [ ] Teste: pedido com `expected_date` vencida e sem `delivery_date` →
-  `red`, e continua aparecendo na fila (não desaparece por estar atrasado)
-- [ ] Teste: pedido `received` sai da fila de pendentes
-- [ ] Teste: venda `invoiced` aparece na fila de Expedição como `green`;
-  venda `denied`/`cancelled` não aparece como pronta para embarque
+- [x] `GetDashboardHandoffsUseCase` +
+  `SequelizeDashboardRepository.getHandoffsSummary()` (SQL parametrizado
+  leve, mesmo padrão de `getCockpitMetrics`) + rota
+  `GET /api/dashboard/handoffs` (`authenticate`, `authorizeModule
+  ('dashboard')`) retornando exatamente o contrato do enunciado:
+  `{ recebimento: { pending }, requisicoes: { awaiting_approval },
+  expedicao: { ready_to_ship }, qualidade: { quarantine, open_rncs } }`.
+  `recebimento.pending` conta `purchase_orders` em
+  `sent`/`approved`/`partial`; `requisicoes.awaiting_approval` conta
+  `purchase_requisitions.status='pending'`; `expedicao.ready_to_ship`
+  conta `sales.status='invoiced'`; `qualidade.quarantine` conta
+  `lot_controls.status='quarantine'`; `qualidade.open_rncs` conta
+  `non_conformities.status IN ('open','analysis')`.
+
+### 3.4 QA
+
+- [x] `server/tests/unit/handoff-signal.test.ts` — cobre a tabela
+  normativa §10/UC-40 completa (26 casos): pedido `sent`/`approved`/
+  `partial` dentro do prazo → `green`; pedido com `expected_date` vencida
+  e sem `delivery_date` → `red` (inclui o caso "continua na fila" —
+  garantido pela ausência de filtro de exclusão no próprio cálculo, a
+  listagem nunca remove o registro por cor); pedido `received`/`canceled`
+  saem da régua de atraso (estado terminal) → `green`; lote
+  `available`/`quarantine`/`blocked`; venda `invoiced`/`processing`/
+  `denied`/`cancelled`/`canceled`/`shipped`; RNC `open`/`analysis`/
+  `closed` efetivo/não efetivo/demais status; requisição `pending` vs.
+  demais status; guarda de `kind` desconhecido.
 
 ---
 
@@ -616,33 +758,55 @@ existentes (`server/src/modules/fiscal/...`), não cria fluxo fiscal novo.
 
 ### 5.1 Backend
 
-- [ ] Aplicar `authorizeModule('vendas', 'approve')` (ou módulo dedicado
-  `faturamento`, conforme decisão do dono) + checagem de
-  `access_level='gestor'` em:
-  - [ ] `POST /api/sales/:id/nfe` (emissão)
-  - [ ] `POST /api/sales/:id/nfe/cancel` (cancelamento)
-- [ ] Confirmar que `GET /api/sales/:id/nfe` (consulta de status)
-  permanece acessível a `view`/`operate` (não é uma ação de aprovação,
-  apenas leitura)
+- [x] Aplicado `authorizeModule('vendas', 'approve')` em:
+  - [x] `POST /api/sales/:id/nfe` (emissão) — antes desta entrega estava
+    em nível `operate` (retrofit anterior do Bloco 1.2); alterado para
+    `approve` nesta entrega para cumprir UC-41/§11 (DECIDIDO 2026-08-03:
+    emissão **e** cancelamento restritos ao nível gestor, sem distinção
+    entre as duas operações). Ver
+    `server/src/modules/sales/presentation/routes/sales.ts`.
+  - [x] `POST /api/sales/:id/nfe/cancel` (cancelamento) — já estava em
+    `approve` desde o retrofit do Bloco 1.2 (nenhuma mudança necessária
+    aqui; apenas alinhado o comentário da rota à fórmula formal do §11).
+  **Desvio de nomenclatura desta entrega:** não existe módulo
+  `faturamento` dedicado nem coluna `access_level='gestor'` no usuário —
+  o nível "gestor" já é resolvido pelo `level='approve'` da permissão do
+  perfil no módulo `vendas` (mesma decisão de arquitetura registrada no
+  Bloco 1.2), então `authorizeModule('vendas', 'approve')` já implementa
+  exatamente a fórmula de §11 sem necessidade de checagem adicional de
+  `access_level`.
+- [x] Confirmado: `GET /api/sales/:id/nfe` (consulta de status) permanece
+  em `authorizeModule('vendas')` (nível implícito `view`/`operate`) — não
+  foi alterado, continua acessível a qualquer nível do módulo `vendas`.
 
 ### 5.2 Frontend
 
-- [ ] Ocultar/desabilitar botões de emitir/cancelar NF-e para usuários
-  `access_level='operador'`, mesmo que o restante da tela de Vendas seja
-  visível
-- [ ] Mensagem clara ao tentar (caso o botão não seja escondido por algum
-  motivo): reaproveitar o padrão de erro 403 já usado
-  (`extractApiErrorMessage`)
+- [ ] Ocultar/desabilitar botões de emitir/cancelar NF-e para usuários sem
+  nível `approve` em `vendas` — **fora de escopo desta entrega** (tarefa
+  restrita a `server/`, sem tocar `client/`).
+- [ ] Mensagem clara ao tentar (caso o botão não seja escondido) — fora de
+  escopo (frontend).
 
 ### 5.3 QA
 
-- [ ] Teste: operador de Vendas tenta emitir NF-e → 403
-- [ ] Teste: gestor de Vendas emite NF-e → sucesso, `sale.status` muda
-  automaticamente para `invoiced`
-- [ ] Teste: gestor cancela NF-e de venda `shipped` → `nfe_status=cancelled`,
-  `sale.status` permanece `shipped` (não regride)
-- [ ] Regressão: `GET` de status de NF-e continua acessível a `operator`
-  (não deve virar `403` por engano ao aplicar a nova regra)
+- [ ] Teste: operador de Vendas (nível `operate`) tenta emitir NF-e → 403
+  — **não coberto por teste dedicado nesta entrega**. Cobertura indireta:
+  `server/tests/unit/access-profiles.test.ts` já cobre a fórmula genérica
+  do middleware (`operate` não autoriza ação que exige `approve` →
+  `APPROVAL_LEVEL_REQUIRED`); nenhum teste específico do endpoint
+  `/sales/:id/nfe` foi adicionado. Fica como próxima tarefa de QA
+  (integração HTTP real).
+- [ ] Teste: gestor de Vendas emite NF-e → sucesso — coberto apenas pelo
+  teste de integração já existente
+  `server/tests/integration/sale-nfe-issuance.test.ts` (usa token
+  admin/prerequisito de ambiente, `describe.skip` sem `TEST_PRODUCT_ID` —
+  não roda no `npx jest tests/unit`).
+- [ ] Teste: gestor cancela NF-e de venda `shipped` → `nfe_status
+  =cancelled`, `sale.status` permanece `shipped` — mesma cobertura
+  indireta acima (integração, não unitário).
+- [x] Regressão confirmada por leitura de código (não por teste
+  automatizado dedicado): `GET /api/sales/:id/nfe` não foi tocado nesta
+  entrega — permanece `authorizeModule('vendas')` sem `approve`.
 
 ---
 
@@ -833,3 +997,10 @@ blocos.
 bloqueia início de desenvolvimento):** UC-40 — se o campo
 `handoff_signal` aditivo é suficiente ou se o dono também quer um
 contador/badge de notificação por módulo no menu (ver Bloco 3, §3.1).
+**Atualização 2026-08-04:** uma **versão mínima e reversível** do
+contador/badge foi implementada no frontend (Bloco 3.2) por instrução
+explícita de uma entrega posterior — isso **não** substitui a decisão
+formal do dono; se o dono decidir que não quer contador algum, basta
+remover o bloco `useQuery`/`badgeCount` de `AppLayout.tsx` sem impacto em
+nenhum outro contrato (backend `GET /api/dashboard/handoffs` pode
+continuar existindo sem uso).

@@ -3628,4 +3628,315 @@ abaixo).
 
 **Desenvolvedor**: Claude Code (Senior Frontend Engineer — Múltiplos
 Depósitos, telas de Logística)
+
+---
+
+## Blocos 2, 3 e 5 (Backend) — Amostra da Engenharia, Semáforo de Handoff e NF-e Restrita a Gestor (2026-08-04)
+
+**Escopo:** exclusivamente `server/` (nenhum arquivo de `client/` tocado).
+Fonte da verdade: `docs/governance/TODO.md` Blocos 2/3/5; UC-39/UC-40/UC-41
+em `docs/business/01-USE_CASES.md`; `BUSINESS_RULES.md` §9/§10/§11.
+
+### Resumo da feature
+
+**Bloco 2 — Requisição de Amostra da Engenharia (UC-39):**
+- `purchase_requisitions.origin` já era `VARCHAR(80)` livre (confirmado
+  antes de codar) — nenhuma migration de `ALTER TYPE` foi necessária para
+  o novo valor. Nova migration
+  `server/migrations/20260804-000003-requisition-engineering-project.cjs`
+  adiciona **apenas** `engineering_project_id` (INT nullable, FK
+  `engineering_projects.id` `ON DELETE SET NULL`) + índice.
+- Valor de origem usado: **`'engenharia_amostra'`** (decisão explícita
+  desta entrega, diverge do rascunho anterior `'engineering_sample'` do
+  `TODO.md`, que foi atualizado para refletir a nomenclatura real).
+- `createPurchaseRequisitionSchema` aceita `engineering_project_id`
+  opcional (coerce int positivo); `CreatePurchaseRequisitionUseCase`
+  valida a existência do projeto quando informado (404 didático), para
+  qualquer `origin`.
+- `ConvertRequisitionToPurchaseOrdersUseCase`: quando
+  `requisition.origin === 'engenharia_amostra'`, o(s) pedido(s) de compra
+  gerado(s) recebem a marcação automática em `notes`: "AMOSTRA ENGENHARIA
+  — receber no Depósito do Laboratório" (concatenada com a nota
+  informada/padrão). Nenhuma coluna nova em `purchase_orders`.
+- `ReceivePurchaseItemsUseCase`: quando `warehouseCode` não é informado
+  explicitamente E o pedido tem `requisition_id` apontando para uma
+  requisição `origin='engenharia_amostra'`, o depósito de destino default
+  passa a ser `LABORATORIO` (antes: sempre `INSUMOS` por default, exigia
+  sinalização manual). `warehouseCode` explícito continua prevalecendo.
+- **Decisão de permissão confirmada:** criar requisição de amostra
+  permanece no módulo `requisicoes` (não existe módulo `engenharia`
+  dedicado) — a Engenharia recebe a permissão de `requisicoes` no perfil
+  dela. Nenhuma rota nova, nenhuma mudança de `authorizeModule`.
+
+**Bloco 3 — Semáforo de Handoff (UC-40):**
+- Utilitário compartilhado `server/src/shared/domain/handoffSignal.ts`:
+  `calculateHandoffSignal(kind, entity, now?)` → `'green'|'yellow'|'red'`,
+  implementando a tabela normativa de `BUSINESS_RULES.md` §10 para 4
+  cadeias (`purchase`, `lot`, `sale`, `non_conformity`) + 1 cadeia
+  aditiva (`purchase_requisition`, pedida nominalmente no enunciado desta
+  tarefa, `pending` → `yellow`).
+- 5 listagens enriquecidas com o campo aditivo `handoff_signal` (não
+  quebra contrato — campo novo em cada linha de `rows`):
+  `ListPurchasesUseCase`, `ListPurchaseRequisitionsUseCase`,
+  `ListLotsUseCase`, `ListSalesUseCase`, `ListNonConformitiesUseCase`.
+- `GET /api/dashboard/handoffs` (`authorizeModule('dashboard')`) novo:
+  `GetDashboardHandoffsUseCase` +
+  `SequelizeDashboardRepository.getHandoffsSummary()` (SQL parametrizado
+  leve, mesmo padrão de `getCockpitMetrics`), retornando
+  `{ recebimento: { pending }, requisicoes: { awaiting_approval },
+  expedicao: { ready_to_ship }, qualidade: { quarantine, open_rncs } }`.
+
+**Bloco 5 — NF-e Restrita a Gestor (UC-41):**
+- `POST /api/sales/:id/nfe` (emissão) alterado de `authorizeModule('vendas',
+  'operate')` para `authorizeModule('vendas', 'approve')` — alinhado à
+  decisão do dono (§11: emissão E cancelamento exigem gestor, sem
+  distinção). `POST /api/sales/:id/nfe/cancel` já estava em `approve`
+  (retrofit anterior do Bloco 1.2) — nenhuma mudança de código, apenas
+  comentário da rota atualizado. `GET /api/sales/:id/nfe` (consulta)
+  **não foi alterado**, continua acessível a qualquer nível de `vendas`.
+
+### Arquivos alterados/criados
+
+**Novos:**
+- `server/migrations/20260804-000003-requisition-engineering-project.cjs`
+- `server/src/shared/domain/handoffSignal.ts`
+- `server/src/modules/dashboard/application/use-cases/GetDashboardHandoffsUseCase.ts`
+- `server/tests/unit/handoff-signal.test.ts`
+
+**Modificados:**
+- `server/src/models/PurchaseRequisition.ts` (campo `engineering_project_id`)
+- `server/src/models/index.ts` (associação `EngineeringProject` ↔ `PurchaseRequisition`)
+- `server/src/modules/purchaseRequisitions/presentation/validators/purchaseRequisitionValidators.ts`
+- `server/src/modules/purchaseRequisitions/application/use-cases/CreatePurchaseRequisitionUseCase.ts`
+- `server/src/modules/purchaseRequisitions/application/use-cases/ConvertRequisitionToPurchaseOrdersUseCase.ts`
+- `server/src/modules/purchaseRequisitions/application/use-cases/ListPurchaseRequisitionsUseCase.ts`
+- `server/src/modules/purchaseRequisitions/infrastructure/sequelize/SequelizePurchaseRequisitionRepository.ts` (include `engineeringProject`)
+- `server/src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase.ts`
+- `server/src/modules/purchases/application/use-cases/ListPurchasesUseCase.ts`
+- `server/src/modules/sales/application/use-cases/ListSalesUseCase.ts`
+- `server/src/modules/sales/presentation/routes/sales.ts` (nível `approve` na emissão)
+- `server/src/modules/inventory/application/use-cases/ListLotsUseCase.ts`
+- `server/src/modules/nonConformities/application/use-cases/ListNonConformitiesUseCase.ts`
+- `server/src/modules/dashboard/domain/repositories/DashboardRepository.ts`
+- `server/src/modules/dashboard/infrastructure/sequelize/SequelizeDashboardRepository.ts`
+- `server/src/modules/dashboard/presentation/controllers/dashboardController.ts`
+- `server/src/modules/dashboard/presentation/routes/dashboard.ts`
+
+### Documentações atualizadas
+
+- `docs/governance/TODO.md` — Blocos 2, 3 e 5 marcados `[x]` item a item,
+  com todos os desvios de nomenclatura/escopo documentados inline.
+- `docs/projeto/04-USE_CASES.md` — consolidados UC-39 (parcial —
+  backend), UC-40 (parcial — backend) e UC-41 (completo — backend).
+- `docs/DATABASE.md` — nova entrada para o incremento de
+  `purchase_requisitions.engineering_project_id` (a tabela completa não
+  estava documentada neste arquivo antes desta entrega — pendência
+  anterior, fora de escopo corrigir agora).
+- `docs/HANDOFF_CODEX.md` — esta seção.
+
+### Contratos (não quebrados)
+
+- `POST /api/purchase-requisitions`: aceita `engineering_project_id`
+  opcional (novo, aditivo); `origin` continua string livre (nenhuma
+  mudança de tipo).
+- `GET /api/purchases`, `GET /api/purchase-requisitions`,
+  `GET /api/inventory/lots`, `GET /api/sales`,
+  `GET /api/quality/non-conformities`: cada linha de `rows` ganha
+  `handoff_signal` (aditivo).
+- `GET /api/dashboard/handoffs`: endpoint novo (não existia).
+- `POST /api/purchases/:id/receive`: `warehouse_code` continua opcional;
+  comportamento muda apenas quando **omitido** e a origem é
+  `engenharia_amostra` (antes: sempre `INSUMOS`; agora: `LABORATORIO`
+  neste caso específico).
+- `POST /api/sales/:id/nfe`: **mudança de autorização** (não de payload)
+  — de `operate` para `approve`. Usuários com apenas `operate` em
+  `vendas` que antes emitiam NF-e agora recebem `403`
+  (`APPROVAL_LEVEL_REQUIRED`) — mudança de comportamento intencional
+  (UC-41), não uma regressão.
+
+### Instruções de teste
+
+1. `cd server && npm run typecheck` — deve permanecer limpo (validado
+   nesta entrega).
+2. `cd server && npx jest tests/unit` — deve permanecer 100% verde
+   (validado nesta entrega: 56 suítes, 375 testes, incluindo os 26 novos
+   casos de `handoff-signal.test.ts`).
+3. **Não validado nesta entrega (requer banco Postgres real ou ambiente
+   de integração):**
+   - Rodar a migration `20260804-000003-requisition-engineering-project.cjs`
+     (`npm run migration:up`) e confirmar a coluna/índice/FK no banco.
+   - Criar uma requisição com `origin='engenharia_amostra'` e
+     `engineering_project_id` de um projeto existente → aprovar →
+     converter em pedido → conferir que o(s) pedido(s) tem a nota
+     "AMOSTRA ENGENHARIA..." → registrar o recebimento SEM informar
+     `warehouse_code` → conferir que o saldo sobe em `LABORATORIO`, não
+     em `INSUMOS` (via `GET /api/inventory/warehouse-stock`).
+   - Criar uma requisição com `engineering_project_id` inexistente →
+     confirmar `404` didático.
+   - Consultar `GET /api/purchases`, `/api/purchase-requisitions`,
+     `/api/inventory/lots`, `/api/sales`,
+     `/api/quality/non-conformities` e confirmar que cada linha tem
+     `handoff_signal` coerente com os dados reais.
+   - Consultar `GET /api/dashboard/handoffs` autenticado e comparar os 5
+     contadores com os dados reais do banco.
+   - Tentar emitir NF-e (`POST /api/sales/:id/nfe`) com um usuário cujo
+     perfil tem `vendas: 'operate'` (não `approve`) → confirmar `403`.
+     Repetir com `approve` (ou `admin`) → confirmar sucesso.
+   - Regressão: `GET /api/sales/:id/nfe` continua acessível a `operate`.
+
+### Riscos residuais / fora de escopo
+
+- Nenhuma tela de frontend foi criada/alterada (Blocos 2.3, 3.2, 5.2 —
+  fora do escopo desta tarefa, restrita a `server/`).
+- Bloco 2.4/3.4/5.3 (QA): testes E2E de integração real com banco
+  (fluxo completo requisição → pedido → recebimento → depósito;
+  emissão/cancelamento de NF-e por nível) não foram criados nesta
+  entrega — apenas cobertura unitária dos use cases/utilitário. O teste
+  de integração pré-existente `sale-nfe-issuance.test.ts` não foi
+  alterado e continua `describe.skip` sem `TEST_PRODUCT_ID` no ambiente.
+- `PurchaseRequisition` não estava documentada em `docs/DATABASE.md`
+  antes desta entrega — o dicionário de dados completo dessa tabela
+  (colunas pré-existentes) continua pendente como débito técnico anterior
+  a esta tarefa, não coberto aqui.
+
+**Desenvolvedor**: Claude Code (Senior Backend Engineer — Amostra da
+Engenharia, Semáforo de Handoff, NF-e restrita a gestor)
+
+---
+
+## Frontend — Semáforo de Handoff (UC-40), Contador de Menu e Amostra de
+## Engenharia na Requisição (UC-39) — 2026-08-04
+
+Entrega restrita a `client/` (consumo dos contratos já expostos pelo
+backend nas seções anteriores — `handoff_signal` aditivo nas listagens e
+`GET /api/dashboard/handoffs`). Nenhum arquivo de `server/` foi tocado.
+
+### Componentes criados
+
+- `client/src/components/HandoffDot.tsx` — `HandoffDot({ signal })`:
+  bolinha colorida (verde/âmbar/vermelho) com `title`/`aria-label`
+  explicando o significado ("No fluxo / a caminho", "Aguardando ação",
+  "Atrasado / problema"), nunca apenas a cor crua. Tipo `HandoffSignal`
+  (`'green'|'yellow'|'red'`) reexportado e usado pelos api clients.
+- `client/src/api/dashboard.ts` (novo arquivo — não existia client para o
+  módulo `dashboard`) — `getDashboardHandoffs()` consome
+  `GET /api/dashboard/handoffs`, tipado com `DashboardHandoffsSummary`
+  (`{ recebimento: { pending }, requisicoes: { awaiting_approval },
+  expedicao: { ready_to_ship }, qualidade: { quarantine, open_rncs } }`).
+
+### A) Semáforo aplicado nas filas (coluna extra, só a bolinha)
+
+Campo `handoff_signal?: HandoffSignal` adicionado aos tipos de:
+`client/src/api/purchases.ts` (`Purchase`), `purchaseRequisitions.ts`
+(`PurchaseRequisition`), `sales.ts` (`Sale`), `lots.ts` (`Lot`),
+`nonConformities.ts` (`NonConformity`) — todos aditivos, sem quebrar
+contrato existente.
+
+Coluna aplicada (primeira coluna, header vazio `<TableHead className="w-6" />`,
+renderização condicional `signal && <HandoffDot signal={signal} />` para
+não quebrar linhas de respostas antigas sem o campo) em:
+- `client/src/pages/purchases/PurchasesPage.tsx`
+- `client/src/pages/purchases/RequisitionsPage.tsx`
+- `client/src/pages/logistics/ReceivingPage.tsx` — usa `handoff_signal`
+  já vindo em cada linha combinada (`sent`+`partial`, ambas via
+  `GET /api/purchases`), sem recalcular nada client-side.
+- `client/src/pages/logistics/ShippingPage.tsx`
+- `client/src/pages/quality/InspectionTab.tsx`
+- `client/src/pages/quality/NonConformitiesTab.tsx`
+
+Todos os `colSpan` de linhas de loading/erro/vazio foram ajustados (+1)
+para a nova coluna.
+
+### B) Contador no menu (versão mínima e reversível — UC-40 rodapé)
+
+`client/src/layouts/AppLayout.tsx`: `NavItem` ganhou `badgeKey?:
+'recebimento'|'requisicoes'|'expedicao'|'qualidade'`, aplicado aos itens
+Recebimento, Requisições, Expedição e Qualidade. `useQuery(['dashboard-handoffs'],
+getDashboardHandoffs, { enabled: hasDashboardAccess, refetchInterval: 60_000,
+retry: false })` — `enabled` só quando o usuário tem acesso ao módulo
+`dashboard` (mesma regra `usingRoleFallback || hasModuleAccess('dashboard')`
+já usada no restante do layout). **Falha da chamada nunca quebra o
+menu**: sem `onError`/`retry` agressivo, `handoffs` fica `undefined` e
+`badgeCount()` retorna `undefined` → nenhum badge renderizado, item de
+menu normal. Badge visual: círculo pequeno com o número, ao lado do
+label, `title` com o total. `qualidade` soma `quarantine + open_rncs`
+(2 contadores do endpoint em 1 badge, já que o menu tem 1 único item
+Qualidade).
+
+**Decisão registrada**: a pergunta original do dono ("é necessário
+contador/badge, além do `handoff_signal`?") continua sem resposta formal
+— esta é a versão mínima implementada por instrução explícita desta
+tarefa, marcada como tal em `docs/governance/TODO.md`. Reversível: basta
+remover o `useQuery`/`badgeCount` do `AppLayout` sem tocar em nenhum
+outro contrato.
+
+### C) Amostra da Engenharia na Requisição (UC-39)
+
+`client/src/pages/purchases/RequisitionsPage.tsx`:
+- Campo `origin` (antes `<Input>` livre) virou `<SelectNative>` com
+  opções pré-definidas (`manual`, `mrp`, `estoque_baixo`, `op`,
+  **`engenharia_amostra`** = "Amostra de Engenharia") — `origin`
+  continua string livre no payload (backend não mudou o schema), a UI
+  apenas guia o operador em vez de aceitar texto arbitrário.
+- Quando `origin === 'engenharia_amostra'`: aparece bloco condicional
+  (âmbar) com select opcional "Projeto de P&D"
+  (`GET /api/engineering/projects`, via `engineeringApi.listEngineeringProjects`,
+  `enabled: open && isEngineeringSample` — só busca quando o dialog está
+  aberto e a origem selecionada) + aviso "Pedidos desta requisição serão
+  recebidos no Depósito do Laboratório."
+- Payload de criação inclui `engineering_project_id` (número, opcional)
+  quando um projeto é selecionado — client type `CreateRequisitionInput`
+  atualizado em `purchaseRequisitions.ts`.
+- Tipos de retorno atualizados: `PurchaseRequisition.engineering_project_id`
+  e `engineeringProject?: { id, project_code, name } | null` (shape
+  confirmado em `SequelizePurchaseRequisitionRepository.ts`, associação
+  `as: 'engineeringProject'`).
+- Listagem: badge "Amostra" (`variant="outline"`) ao lado do número da
+  requisição quando `origin === 'engenharia_amostra'`.
+- Detalhe (`RequisitionDetailSheet`): campo Origem mostra
+  "Amostra de Engenharia" + badge; linha extra "Projeto de P&D vinculado"
+  (só aparece para essa origem); aviso do Depósito do Laboratório
+  repetido no rodapé do detalhe.
+
+### Qualidade
+
+- `npx tsc -b --noEmit` — limpo, sem erros.
+- `npm run lint` (oxlint) — apenas os 4 warnings pré-existentes de
+  `only-export-components` (arquivos não tocados nesta entrega).
+- `npm test` (vitest) — 24/24 testes verdes (nenhum teste novo criado
+  nesta entrega; nenhuma regressão).
+- Nenhuma dependência nova instalada.
+
+### O que o Agente QA/humano deve testar na interface
+
+1. **Semáforo**: em Compras, Requisições, Recebimento, Expedição,
+   Qualidade → Inspeção e Qualidade → RNC, confirmar que a bolinha
+   aparece na primeira coluna de cada linha e que passar o mouse mostra
+   o tooltip explicando a cor. Casos a validar manualmente:
+   - Pedido de compra com `expected_date` vencida e sem `delivery_date`
+     → bolinha vermelha na fila de Recebimento.
+   - Requisição `pending` → bolinha amarela.
+   - Lote `quarantine` → amarela; `blocked` → vermelha; `available` →
+     verde.
+   - Venda `invoiced` com NF-e autorizada → verde; `nfe_status
+     ='processing'` → amarela; NF-e negada/cancelada → vermelha.
+   - RNC `open`/`analysis` → amarela; `closed` com
+     `effectiveness_result != 'effective'` → vermelha.
+2. **Badge do menu**: logar com um perfil que tenha acesso ao módulo
+   `dashboard` e confirmar que os badges de Recebimento/Requisições/
+   Expedição/Qualidade aparecem com os números corretos (comparar com
+   `GET /api/dashboard/handoffs`) e atualizam após ~60s sem reload
+   manual. Logar com um perfil sem acesso a `dashboard` e confirmar que
+   nenhum badge aparece, sem erro no console travando o menu. Simular
+   falha de rede (offline) e confirmar que o menu continua funcional,
+   apenas sem os números.
+3. **Amostra de Engenharia**: criar uma requisição com origem "Amostra de
+   Engenharia", confirmar que o aviso do Depósito do Laboratório aparece,
+   selecionar (e não selecionar) um projeto de P&D, salvar, e conferir
+   que a listagem mostra o badge "Amostra" e o detalhe mostra o projeto
+   vinculado (ou "Nenhum"). Repetir sem projeto de P&D selecionado —
+   confirmar que a requisição é criada normalmente (campo é opcional).
+
+**Desenvolvedor**: Claude Code (Senior Frontend Engineer & UI Architect —
+Semáforo de Handoff, Contador de Menu, Amostra de Engenharia)
 **Data**: 2026-08-04

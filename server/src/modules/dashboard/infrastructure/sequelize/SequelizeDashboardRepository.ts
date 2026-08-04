@@ -12,9 +12,10 @@ const {
   ProductionOrder,
   AccountReceivable,
   AccountPayable,
-  Client
+  Client,
+  sequelize
 }: any = require('../../../../models/index');
-const { Op, col }: any = require('sequelize');
+const { Op, col, QueryTypes }: any = require('sequelize');
 
 class SequelizeDashboardRepository extends DashboardRepository {
   /** @inheritdoc */
@@ -50,6 +51,59 @@ class SequelizeDashboardRepository extends DashboardRepository {
       clients: { total: clientCount },
       production: { open_orders: pOrderCount },
       financial: { pending_receivable: ar, pending_payable: ap, projected_balance: ar - ap }
+    };
+  }
+
+  /**
+   * Bloco 3.3 (UC-40, docs/governance/TODO.md) — resumo por área do
+   * semáforo de handoff. SQL parametrizado leve (sem interpolação de
+   * strings de usuário — os únicos parâmetros dinâmicos são listas fixas
+   * de status), mesmo padrão de `getCockpitMetrics`
+   * (`SequelizePurchaseRepository`).
+   *
+   * @inheritdoc
+   */
+  public async getHandoffsSummary(): Promise<any> {
+    const [receivingRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count
+       FROM purchase_orders
+       WHERE status IN (:pendingStatuses)`,
+      { replacements: { pendingStatuses: ['sent', 'approved', 'partial'] }, type: QueryTypes.SELECT }
+    );
+
+    const [requisitionsRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count
+       FROM purchase_requisitions
+       WHERE status = :pendingStatus`,
+      { replacements: { pendingStatus: 'pending' }, type: QueryTypes.SELECT }
+    );
+
+    const [shippingRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count
+       FROM sales
+       WHERE status = :invoicedStatus`,
+      { replacements: { invoicedStatus: 'invoiced' }, type: QueryTypes.SELECT }
+    );
+
+    const [quarantineRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count
+       FROM lot_controls
+       WHERE status = :quarantineStatus`,
+      { replacements: { quarantineStatus: 'quarantine' }, type: QueryTypes.SELECT }
+    );
+
+    const [openRncRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count
+       FROM non_conformities
+       WHERE status IN (:openStatuses)`,
+      { replacements: { openStatuses: ['open', 'analysis'] }, type: QueryTypes.SELECT }
+    );
+
+    return {
+      recebimento: { pending: receivingRow?.count ?? 0 },
+      requisicoes: { awaiting_approval: requisitionsRow?.count ?? 0 },
+      expedicao: { ready_to_ship: shippingRow?.count ?? 0 },
+      qualidade: { quarantine: quarantineRow?.count ?? 0, open_rncs: openRncRow?.count ?? 0 },
     };
   }
 }

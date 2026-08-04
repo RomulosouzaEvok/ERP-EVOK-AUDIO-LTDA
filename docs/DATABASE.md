@@ -465,6 +465,25 @@ de código.
 **Migration:** `server/migrations/20260803-000005-create-engineering-tables.cjs`
 — cria `engineering_projects` e `product_drawings` (schema estático, sem backfill).
 
+### Tabela: `purchase_requisitions` (Requisições de Compra) — coluna incremental
+
+> Nota: esta tabela já existia antes desta entrega
+> (`server/migrations/20260802-000002-purchase-requisitions.cjs`) e seu
+> dicionário completo não está neste documento ainda (pendência de
+> documentação anterior a esta tarefa). Registrado aqui apenas o
+> incremento desta entrega (Bloco 2, UC-39):
+
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| origin | VARCHAR(80) | DEFAULT 'manual', NOT NULL | **Já era texto livre, sem ENUM** — valores em uso: `'manual'`, `'mrp'`, e agora `'engenharia_amostra'` (UC-39). Nenhuma migration de schema foi necessária para este novo valor. |
+| engineering_project_id | INT | FK → engineering_projects.id, ON DELETE SET NULL, NULL | **Nova (Bloco 2, UC-39).** Vínculo opcional da requisição de amostra ao projeto de P&D de origem — opcional mesmo quando `origin='engenharia_amostra'`. |
+
+**Índices:** `engineering_project_id` (novo, `idx_purchase_requisitions_engineering_project_id`).
+
+**Migration:** `server/migrations/20260804-000003-requisition-engineering-project.cjs`
+— adiciona apenas `engineering_project_id` + índice (expand-only, sem
+ALTER TYPE — `origin` já era VARCHAR livre).
+
 ### Tabela: `acoustic_test_results` (Resultados de Teste Acústico)
 | Coluna | Tipo | Restrições | Descrição |
 |--------|------|------------|-----------|

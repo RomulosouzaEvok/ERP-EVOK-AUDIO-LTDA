@@ -1,5 +1,6 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
+import type { HandoffSignal } from '@/components/HandoffDot';
 
 export type RequisitionPriority = 'normal' | 'urgent' | 'emergency';
 
@@ -24,6 +25,20 @@ export interface PurchaseRequisition {
   origin: string | null;
   notes: string | null;
   items: RequisitionItem[];
+  /**
+   * `engineering_project_id` (Bloco 2, UC-39) — FK opcional para
+   * `EngineeringProject`, usada quando `origin === 'engenharia_amostra'`.
+   * `engineeringProject` é a associação carregada pelo backend em
+   * listagem/detalhe (`{ id, project_code, name }`), sempre opcional.
+   */
+  engineering_project_id?: number | null;
+  engineeringProject?: { id: number; project_code: string; name: string } | null;
+  /**
+   * Semáforo de handoff (UC-40, Bloco 3) — fila de aprovação do gestor de
+   * Requisições. `pending` = amarelo ("aguardando aprovação"), calculado
+   * on-the-fly pelo backend, nunca persistido.
+   */
+  handoff_signal?: HandoffSignal;
 }
 
 export interface RequisitionItemInput {
@@ -39,6 +54,12 @@ export interface CreateRequisitionInput {
   origin?: string;
   notes?: string;
   request_date?: string;
+  /**
+   * Projeto de P&D vinculado (Bloco 2, UC-39) — sempre opcional, inclusive
+   * quando `origin === 'engenharia_amostra'`. Backend valida a existência
+   * (404 se informado e inexistente).
+   */
+  engineering_project_id?: number;
   items: RequisitionItemInput[];
 }
 

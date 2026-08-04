@@ -5,6 +5,7 @@ import { CheckCircle2, XCircle } from 'lucide-react';
 import * as lotsApi from '@/api/lots';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
+import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
@@ -126,6 +127,7 @@ export function InspectionTab({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-6" />
             <TableHead>Lote</TableHead>
             <TableHead>Produto</TableHead>
             <TableHead>Fornecedor</TableHead>
@@ -138,16 +140,17 @@ export function InspectionTab({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={canWrite ? 9 : 8} />}
+          {isLoading && <TableSkeletonRows columns={canWrite ? 10 : 9} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={canWrite ? 9 : 8} className="text-center text-destructive">
+              <TableCell colSpan={canWrite ? 10 : 9} className="text-center text-destructive">
                 Não foi possível carregar os lotes. Tente novamente.
               </TableCell>
             </TableRow>
           )}
           {data?.data.map((lot) => (
             <TableRow key={lot.id}>
+              <TableCell>{lot.handoff_signal && <HandoffDot signal={lot.handoff_signal} />}</TableCell>
               <TableCell className="font-medium">{lot.lot_number}</TableCell>
               <TableCell>{lot.product ? `${lot.product.code} — ${lot.product.name}` : lot.product_id}</TableCell>
               <TableCell>{lot.supplier?.company_name ?? '-'}</TableCell>
@@ -178,7 +181,7 @@ export function InspectionTab({
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={canWrite ? 9 : 8} className="text-center text-muted-foreground">
+              <TableCell colSpan={canWrite ? 10 : 9} className="text-center text-muted-foreground">
                 Nenhum lote encontrado para este status.
               </TableCell>
             </TableRow>

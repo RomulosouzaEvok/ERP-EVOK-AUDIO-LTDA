@@ -2,10 +2,13 @@ const UseCase = require('../../../../shared/application/UseCase');
 const InventoryService = require('../../../../services/inventoryService');
 const WarehouseStockService = require('../../../../services/warehouseStockService');
 const CostingService = require('../../../../services/costingService');
-const { LotControl, PurchaseReceipt } = require('../../../../models/index');
+const { LotControl, PurchaseReceipt, PurchaseRequisition } = require('../../../../models/index');
 const { NotFoundError, ValidationError, BusinessRuleError, ConflictError } = require('../../../../errors');
 
 const UNIQUE_VIOLATION = 'SequelizeUniqueConstraintError';
+
+/** Origem de requisicao que direciona o recebimento para o Depósito do Laboratório por padrão (UC-39, Bloco 2, BUSINESS_RULES.md §9/§12 item 7). */
+const ENGINEERING_SAMPLE_ORIGIN = 'engenharia_amostra';
 
 function buildGeneratedLotNumber({ orderNumber, purchaseItemId, sequence }) {
   return `${orderNumber}-ITEM${purchaseItemId}-R${String(sequence).padStart(3, '0')}`;
@@ -25,7 +28,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
    * @param {number} input.id
    * @param {Array<{item_id:number, quantity:number}>} input.items
    * @param {string} input.invoiceNumber - Numero da NF do fornecedor deste recebimento (chave de deduplicacao).
-   * @param {'INSUMOS'|'LABORATORIO'} [input.warehouseCode] - Deposito de destino (Bloco 4, UC-42 §12 item 7). Default 'INSUMOS'.
+   * @param {'INSUMOS'|'LABORATORIO'} [input.warehouseCode] - Deposito de destino (Bloco 4, UC-42 §12 item 7). Se omitido, o default e 'INSUMOS', EXCETO quando o pedido veio de uma requisicao com `origin='engenharia_amostra'` (Bloco 2, UC-39/§9), caso em que o default passa a ser 'LABORATORIO' automaticamente.
    * @param {number} input.userId
    * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
@@ -67,11 +70,25 @@ class ReceivePurchaseItemsUseCase extends UseCase {
     const previousStatus = purchase.status;
     let generatedLotSequence = 0;
 
-    // Roteamento de deposito (Bloco 4, BUSINESS_RULES.md §12 item 7):
-    // recebimento de compra entra em INSUMOS por padrao; LABORATORIO quando
-    // o Recebimento sinaliza explicitamente que a origem e uma amostra de
-    // engenharia (UC-39). Resolvido uma unica vez para todo o recebimento.
-    const warehouse = await WarehouseStockService.getWarehouseByCode(warehouseCode || 'INSUMOS', transaction);
+    // Roteamento de deposito (Bloco 4, BUSINESS_RULES.md §12 item 7; Bloco 2,
+    // UC-39/§9): quando o Recebimento informa `warehouseCode` explicitamente,
+    // esse valor sempre prevalece. Quando NAO informa, o default deixa de
+    // ser sempre 'INSUMOS': se o pedido tem `requisition_id` e a requisicao
+    // de origem tem `origin='engenharia_amostra'`, o default passa a ser
+    // 'LABORATORIO' automaticamente (sem exigir que o Recebimento saiba/
+    // lembre de sinalizar manualmente a origem de amostra). Resolvido uma
+    // unica vez para todo o recebimento.
+    let defaultWarehouseCode = 'INSUMOS';
+    if (!warehouseCode && purchase.requisition_id) {
+      const requisition = await PurchaseRequisition.findByPk(purchase.requisition_id, {
+        attributes: ['id', 'origin'],
+        transaction,
+      });
+      if (requisition?.origin === ENGINEERING_SAMPLE_ORIGIN) {
+        defaultWarehouseCode = 'LABORATORIO';
+      }
+    }
+    const warehouse = await WarehouseStockService.getWarehouseByCode(warehouseCode || defaultWarehouseCode, transaction);
 
     for (const received of items) {
       if (!received.item_id || received.quantity === undefined) {

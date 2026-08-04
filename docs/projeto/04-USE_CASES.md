@@ -1048,4 +1048,112 @@ payload é tarefa do Bloco 1.4 (`docs/governance/TODO.md`), ainda pendente.
 > que continuam a fonte de verdade normativa até serem integralmente
 > implementados e consolidados aqui.
 
+## UC-39 (parcial — backend): Requisição de Amostra da Engenharia
+
+**Ator:** Qualquer usuário com permissão `operate` no módulo `requisicoes`
+(inclusive perfis de Engenharia, aos quais o módulo `requisicoes` é
+concedido — **não existe módulo `engenharia` dedicado a esta ação**,
+decisão registrada em `docs/governance/TODO.md` Bloco 2).
+**Endpoints:** `POST /api/purchase-requisitions` (reaproveitado, sem rota
+nova), `POST /api/purchase-requisitions/:id/convert`,
+`POST /api/purchases/:id/receive`.
+
+**Fluxo Principal:**
+1. Usuário cria uma requisição de compra normalmente, informando
+   `origin: 'engenharia_amostra'` e, opcionalmente,
+   `engineering_project_id` (vínculo ao projeto de P&D de origem).
+2. Se `engineering_project_id` for informado e não corresponder a um
+   projeto existente, o sistema responde `404` didático
+   (`Projeto de engenharia {id} não encontrado.`).
+3. O restante do ciclo de vida é **idêntico** ao de qualquer requisição
+   (aprovação — UC-23 — e conversão em pedido — UC-25): nenhuma máquina
+   de estados nova.
+4. Ao converter a requisição aprovada em pedido de compra
+   (`ConvertRequisitionToPurchaseOrdersUseCase`), o(s) pedido(s) gerado(s)
+   recebem uma marcação automática concatenada em `notes`: "AMOSTRA
+   ENGENHARIA — receber no Depósito do Laboratório". Não há coluna nova
+   em `purchase_orders` — a marcação é apenas informativa.
+5. Ao registrar o recebimento do pedido (`POST /api/purchases/:id/receive`),
+   se o campo `warehouse_code` não for informado explicitamente no
+   payload **e** o pedido tiver `requisition_id` apontando para uma
+   requisição com `origin='engenharia_amostra'`, o depósito de destino
+   default passa a ser `LABORATORIO` (em vez de `INSUMOS`).
+   `warehouse_code` explícito no payload sempre prevalece sobre esse
+   default automático.
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §9, UC-39 em
+`docs/business/01-USE_CASES.md`.
+
+**Nota de escopo:** este UC cobre apenas o backend (schema + validação +
+roteamento de depósito). Telas de frontend ("Engenharia > Solicitar
+Amostra", badge "Amostra — Engenharia" no Recebimento) permanecem
+pendentes — ver `docs/governance/TODO.md` Bloco 2.3.
+
+---
+
+## UC-40 (parcial — backend): Semáforo de Handoff Entre Departamentos
+
+**Ator:** Todos os perfis operacionais que consultam as filas de
+Recebimento, Requisições, Qualidade, Expedição e Dashboard.
+**Endpoints:** `GET /api/purchases`, `GET /api/purchase-requisitions`,
+`GET /api/inventory/lots`, `GET /api/sales`,
+`GET /api/quality/non-conformities` (todas com o campo aditivo
+`handoff_signal`), e `GET /api/dashboard/handoffs` (resumo agregado).
+
+**Fluxo Principal:**
+1. Usuário consulta qualquer uma das 5 listagens acima.
+2. Cada linha da resposta ganha o campo aditivo `handoff_signal`
+   (`'green'|'yellow'|'red'`), calculado no momento da consulta (nunca
+   persistido) via `calculateHandoffSignal` (utilitário compartilhado em
+   `server/src/shared/domain/handoffSignal.ts`), implementando a tabela
+   normativa de `BUSINESS_RULES.md` §10.
+3. Um documento **nunca desaparece** da fila por estar `red` (atrasado) —
+   apenas muda de cor; a exclusão da fila continua sendo controlada pelo
+   filtro de `status` de cada listagem (não pelo semáforo).
+4. `GET /api/dashboard/handoffs` (`authorizeModule('dashboard')`) retorna
+   um resumo agregado por área, para um futuro badge/contador de menu:
+   `{ recebimento: { pending }, requisicoes: { awaiting_approval },
+   expedicao: { ready_to_ship }, qualidade: { quarantine, open_rncs } }`.
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §10, UC-40 em
+`docs/business/01-USE_CASES.md`.
+
+**Nota de escopo:** este UC cobre apenas o backend. O componente visual de
+"bolinha de status" (semáforo) e sua aplicação nas telas existentes
+permanecem pendentes — ver `docs/governance/TODO.md` Bloco 3.2.
+
+---
+
+## UC-41: Emissão de Nota Fiscal pelo Vendas — Restrita a Gestor
+
+**Ator:** Usuário com nível `approve` (gestor) no módulo `vendas`, ou
+`admin` global.
+**Endpoints:** `POST /api/sales/:id/nfe` (emissão),
+`POST /api/sales/:id/nfe/cancel` (cancelamento) — ambos exigem
+`authorizeModule('vendas', 'approve')`. `GET /api/sales/:id/nfe`
+(consulta de status) permanece acessível a qualquer nível do módulo
+`vendas` (não é ação de aprovação).
+
+**Fluxo Principal:**
+1. Usuário com nível `operate` (não `approve`) em `vendas` tenta emitir ou
+   cancelar NF-e → `403` (`APPROVAL_LEVEL_REQUIRED`, mesma fórmula do
+   middleware `authorizeModule` já usada em outras ações `approve` do
+   sistema).
+2. Usuário com nível `approve` em `vendas` (ou `admin`) emite a NF-e
+   normalmente — `sale.status` avança automaticamente para `invoiced` ao
+   ser autorizada (regra pré-existente, `ChangeSaleStatusUseCase`, não
+   alterada nesta entrega).
+3. Cancelamento segue a mesma trava — sem distinção entre emitir e
+   cancelar (DECIDIDO 2026-08-03, `BUSINESS_RULES.md` §11).
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §11, UC-41 em
+`docs/business/01-USE_CASES.md`.
+
+**Nota de escopo:** não existe módulo `faturamento` dedicado nem coluna
+`access_level` no usuário — o nível "gestor" é resolvido pelo
+`level='approve'` da permissão do perfil no módulo `vendas` (mesma
+decisão de arquitetura do Bloco 1.2).
+
+---
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

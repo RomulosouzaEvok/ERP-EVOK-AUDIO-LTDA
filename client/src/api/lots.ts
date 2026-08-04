@@ -1,5 +1,6 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
+import type { HandoffSignal } from '@/components/HandoffDot';
 
 /** Status possíveis de um lote (`LotControl`), ver `server/src/models/LotControl.ts`. */
 export type LotStatus = 'available' | 'reserved' | 'consumed' | 'blocked' | 'expired' | 'quarantine';
@@ -28,6 +29,12 @@ export interface Lot {
   warehouse_id: number | null;
   product?: { id: number; name: string; code: string };
   supplier?: { id: number; company_name: string };
+  /**
+   * Semáforo de handoff (UC-40, Bloco 3) — filas Recebimento→Qualidade e
+   * Qualidade→Almoxarifado. `available` = verde; `quarantine` = amarelo;
+   * `blocked` = vermelho. Calculado on-the-fly, nunca persistido.
+   */
+  handoff_signal?: HandoffSignal;
 }
 
 export interface LotListParams {

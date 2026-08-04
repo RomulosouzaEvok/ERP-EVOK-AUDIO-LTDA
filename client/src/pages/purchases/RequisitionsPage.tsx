@@ -8,9 +8,11 @@ import { Plus, Trash2, Eye, ShoppingCart } from 'lucide-react';
 
 import * as requisitionsApi from '@/api/purchaseRequisitions';
 import * as suppliersApi from '@/api/suppliers';
+import * as engineeringApi from '@/api/engineering';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
+import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -51,6 +53,23 @@ const PRIORITY_LABEL: Record<requisitionsApi.RequisitionPriority, string> = {
   emergency: 'Emergencial',
 };
 
+/**
+ * Valor de `origin` para amostra da Engenharia (Bloco 2, UC-39). `origin` é
+ * texto livre no backend (`VARCHAR(80)`), não ENUM — este valor é uma
+ * convenção compartilhada com `ConvertRequisitionToPurchaseOrdersUseCase`/
+ * `ReceivePurchaseItemsUseCase` (roteamento automático para o Depósito do
+ * Laboratório).
+ */
+const ENGINEERING_SAMPLE_ORIGIN = 'engenharia_amostra';
+
+const ORIGIN_OPTIONS: { value: string; label: string }[] = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'mrp', label: 'MRP' },
+  { value: 'estoque_baixo', label: 'Estoque baixo' },
+  { value: 'op', label: 'Ordem de Produção' },
+  { value: ENGINEERING_SAMPLE_ORIGIN, label: 'Amostra de Engenharia' },
+];
+
 const requisitionItemSchema = z.object({
   item_id: z.string().min(1, 'Selecione um item.'),
   quantity: z.coerce.number().positive('Quantidade deve ser maior que zero.'),
@@ -60,6 +79,7 @@ const requisitionItemSchema = z.object({
 const requisitionSchema = z.object({
   priority: z.enum(['normal', 'urgent', 'emergency']),
   origin: z.string().optional(),
+  engineering_project_id: z.string().optional(),
   notes: z.string().optional(),
   items: z.array(requisitionItemSchema).min(1, 'Adicione ao menos um item.'),
 });
@@ -91,12 +111,22 @@ export default function RequisitionsPage() {
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<RequisitionFormData>({
     resolver: zodResolver(requisitionSchema),
-    defaultValues: { priority: 'normal', items: [{ item_id: '', quantity: 1, unit: '' }] },
+    defaultValues: { priority: 'normal', origin: '', engineering_project_id: '', items: [{ item_id: '', quantity: 1, unit: '' }] },
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
+
+  const originValue = watch('origin');
+  const isEngineeringSample = originValue === ENGINEERING_SAMPLE_ORIGIN;
+
+  const { data: engineeringProjects } = useQuery({
+    queryKey: ['engineering-projects-all'],
+    queryFn: () => engineeringApi.listEngineeringProjects({ limit: 200 }),
+    enabled: open && isEngineeringSample,
+  });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] });
 
@@ -107,6 +137,7 @@ export default function RequisitionsPage() {
         origin: values.origin || undefined,
         notes: values.notes || undefined,
         status: 'pending',
+        engineering_project_id: values.engineering_project_id ? Number(values.engineering_project_id) : undefined,
         items: values.items.map((item) => ({
           item_id: item.item_id,
           quantity: item.quantity,
@@ -116,7 +147,13 @@ export default function RequisitionsPage() {
     onSuccess: () => {
       invalidate();
       setOpen(false);
-      reset({ priority: 'normal', origin: '', notes: '', items: [{ item_id: '', quantity: 1, unit: '' }] });
+      reset({
+        priority: 'normal',
+        origin: '',
+        engineering_project_id: '',
+        notes: '',
+        items: [{ item_id: '', quantity: 1, unit: '' }],
+      });
       setFormError(null);
     },
     onError: (error) => setFormError(extractApiErrorMessage(error)),
@@ -168,9 +205,35 @@ export default function RequisitionsPage() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="origin">Origem</Label>
-                    <Input id="origin" placeholder="Ex.: MRP, Estoque baixo, OP..." {...register('origin')} />
+                    <SelectNative id="origin" {...register('origin')} defaultValue="">
+                      <option value="">Não informada</option>
+                      {ORIGIN_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </SelectNative>
                   </div>
                 </div>
+
+                {isEngineeringSample && (
+                  <div className="flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="engineering_project_id">Projeto de P&D (opcional)</Label>
+                      <SelectNative id="engineering_project_id" {...register('engineering_project_id')} defaultValue="">
+                        <option value="">Nenhum</option>
+                        {engineeringProjects?.data.map((project) => (
+                          <option key={project.id} value={project.id}>
+                            {project.project_code} — {project.name}
+                          </option>
+                        ))}
+                      </SelectNative>
+                    </div>
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      Pedidos desta requisição serão recebidos no Depósito do Laboratório.
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="notes">Observações</Label>
@@ -247,6 +310,7 @@ export default function RequisitionsPage() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-6" />
             <TableHead>Requisição</TableHead>
             <TableHead>Solicitante</TableHead>
             <TableHead>Prioridade</TableHead>
@@ -256,10 +320,10 @@ export default function RequisitionsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={6} />}
+          {isLoading && <TableSkeletonRows columns={7} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-destructive">
+              <TableCell colSpan={7} className="text-center text-destructive">
                 Não foi possível carregar as requisições de compra. Tente novamente.
               </TableCell>
             </TableRow>
@@ -270,7 +334,13 @@ export default function RequisitionsPage() {
               className="cursor-pointer hover:bg-accent/50"
               onClick={() => setDetailsRequisition(requisition)}
             >
-              <TableCell className="font-medium">{requisition.requisition_number ?? requisition.id}</TableCell>
+              <TableCell>{requisition.handoff_signal && <HandoffDot signal={requisition.handoff_signal} />}</TableCell>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-2">
+                  {requisition.requisition_number ?? requisition.id}
+                  {requisition.origin === ENGINEERING_SAMPLE_ORIGIN && <Badge variant="outline">Amostra</Badge>}
+                </div>
+              </TableCell>
               <TableCell>{requisition.requester?.name ?? '-'}</TableCell>
               <TableCell>{PRIORITY_LABEL[requisition.priority]}</TableCell>
               <TableCell>{new Date(requisition.request_date).toLocaleDateString('pt-BR')}</TableCell>
@@ -327,7 +397,7 @@ export default function RequisitionsPage() {
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell colSpan={7} className="text-center text-muted-foreground">
                 Nenhuma requisição registrada.
               </TableCell>
             </TableRow>
@@ -370,9 +440,36 @@ function RequisitionDetailSheet({
               />
               <DetailField label="Prioridade" value={PRIORITY_LABEL[requisition.priority]} />
               <DetailField label="Data da solicitação" value={new Date(requisition.request_date).toLocaleDateString('pt-BR')} />
-              <DetailField label="Origem" value={requisition.origin ?? 'Não informada'} />
+              <DetailField
+                label="Origem"
+                value={
+                  requisition.origin === ENGINEERING_SAMPLE_ORIGIN ? (
+                    <span className="flex items-center gap-2">
+                      Amostra de Engenharia <Badge variant="outline">Amostra</Badge>
+                    </span>
+                  ) : (
+                    requisition.origin ?? 'Não informada'
+                  )
+                }
+              />
+              {requisition.origin === ENGINEERING_SAMPLE_ORIGIN && (
+                <DetailField
+                  label="Projeto de P&D vinculado"
+                  value={
+                    requisition.engineeringProject
+                      ? `${requisition.engineeringProject.project_code} — ${requisition.engineeringProject.name}`
+                      : 'Nenhum'
+                  }
+                />
+              )}
               <DetailField label="Observações" value={requisition.notes ?? 'Nenhuma'} />
             </div>
+
+            {requisition.origin === ENGINEERING_SAMPLE_ORIGIN && (
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                Pedidos gerados a partir desta requisição são recebidos no Depósito do Laboratório.
+              </p>
+            )}
 
             <div className="flex flex-col gap-2">
               <p className="text-sm font-semibold">Itens da requisição</p>

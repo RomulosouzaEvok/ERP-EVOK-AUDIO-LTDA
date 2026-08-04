@@ -13,8 +13,14 @@ const fiscalController = require('../../../fiscal/presentation/controllers/fisca
  * RETROFIT `authorizeModule('vendas')` (docs/governance/TODO.md, Bloco 1.2
  * retrofit geral — substitui `authorize(role)` legado conforme decisão de
  * `docs/business/BUSINESS_RULES.md` §8): leituras exigem `view` implicito,
- * escritas exigem `operate`. Cancelamento de NF-e é tratado como `approve`
- * (equivalente ao antigo `authorize('admin')` pontual).
+ * escritas exigem `operate`.
+ *
+ * UC-41 / BUSINESS_RULES.md §11 (Bloco 5, DECIDIDO 2026-08-03): emissão
+ * **e** cancelamento de NF-e exigem nível `approve` (gestor) do módulo
+ * `vendas` — sem distinção entre as duas operações, mesma fórmula de
+ * `authorizeModule('vendas', 'approve')` para ambas. `GET .../nfe`
+ * (consulta de status) permanece em `view`/`operate` implícito — não é uma
+ * ação de aprovação.
  *
  * PENDÊNCIA registrada (ver enunciado da tarefa/`docs/governance/TODO.md`):
  * `PUT /:id/status` é usado tanto para transições operacionais comuns
@@ -29,7 +35,7 @@ router.get('/', authenticate, authorizeModule('vendas'), saleController.list);
 router.get('/:id', authenticate, authorizeModule('vendas'), saleController.getById);
 router.post('/', authenticate, authorizeModule('vendas', 'operate'), saleController.create);
 router.put('/:id/status', authenticate, authorizeModule('vendas', 'operate'), saleController.updateStatus);
-router.post('/:id/nfe', authenticate, authorizeModule('vendas', 'operate'), fiscalController.issueSaleNfe);
+router.post('/:id/nfe', authenticate, authorizeModule('vendas', 'approve'), fiscalController.issueSaleNfe);
 router.get('/:id/nfe', authenticate, authorizeModule('vendas'), fiscalController.getSaleNfeStatus);
 router.post('/:id/nfe/cancel', authenticate, authorizeModule('vendas', 'approve'), fiscalController.cancelSaleNfe);
 

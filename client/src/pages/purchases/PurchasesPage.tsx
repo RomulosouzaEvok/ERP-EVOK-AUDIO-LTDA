@@ -11,6 +11,7 @@ import * as suppliersApi from '@/api/suppliers';
 import * as productsApi from '@/api/products';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
+import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -197,6 +198,7 @@ export default function PurchasesPage() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-6" />
             <TableHead>Pedido</TableHead>
             <TableHead>Fornecedor</TableHead>
             <TableHead>Total</TableHead>
@@ -205,10 +207,10 @@ export default function PurchasesPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={5} />}
+          {isLoading && <TableSkeletonRows columns={6} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-destructive">
+              <TableCell colSpan={6} className="text-center text-destructive">
                 Não foi possível carregar os pedidos de compra. Tente novamente.
               </TableCell>
             </TableRow>
@@ -221,6 +223,7 @@ export default function PurchasesPage() {
                 className="cursor-pointer hover:bg-accent/50"
                 onClick={() => setDetailsPurchase(purchase)}
               >
+                <TableCell>{purchase.handoff_signal && <HandoffDot signal={purchase.handoff_signal} />}</TableCell>
                 <TableCell className="font-medium">{purchase.order_number ?? purchase.id}</TableCell>
                 <TableCell>{purchase.supplier?.company_name ?? purchase.supplier_id}</TableCell>
                 <TableCell>R$ {Number(purchase.total_amount).toFixed(2)}</TableCell>
@@ -262,7 +265,7 @@ export default function PurchasesPage() {
           })}
           {!isLoading && !isError && visiblePurchases.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 {openOrdersOnly ? 'Nenhum pedido em aberto nesta página.' : 'Nenhum pedido registrado.'}
               </TableCell>
             </TableRow>

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ClipboardCheck } from 'lucide-react';
 
 import * as purchasesApi from '@/api/purchases';
+import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -63,6 +64,7 @@ export default function ReceivingPage() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-6" />
             <TableHead>Pedido</TableHead>
             <TableHead>Fornecedor</TableHead>
             <TableHead>Data prevista</TableHead>
@@ -71,10 +73,10 @@ export default function ReceivingPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={5} />}
+          {isLoading && <TableSkeletonRows columns={6} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-destructive">
+              <TableCell colSpan={6} className="text-center text-destructive">
                 Não foi possível carregar a fila de recebimento. Tente novamente.
               </TableCell>
             </TableRow>
@@ -83,6 +85,7 @@ export default function ReceivingPage() {
             const overdue = isOverdue(purchase.expected_date);
             return (
               <TableRow key={purchase.id}>
+                <TableCell>{purchase.handoff_signal && <HandoffDot signal={purchase.handoff_signal} />}</TableCell>
                 <TableCell className="font-medium">{purchase.order_number}</TableCell>
                 <TableCell>{purchase.supplier?.company_name ?? purchase.supplier_id}</TableCell>
                 <TableCell className={overdue ? 'font-medium text-destructive' : ''}>
@@ -104,7 +107,7 @@ export default function ReceivingPage() {
           })}
           {!isLoading && !isError && queue.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 Nenhum pedido aguardando recebimento.
               </TableCell>
             </TableRow>

@@ -7,6 +7,7 @@ import * as salesApi from '@/api/sales';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
+import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -111,6 +112,7 @@ export default function ShippingPage() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-6" />
             <TableHead>Venda</TableHead>
             <TableHead>Cliente</TableHead>
             <TableHead>Itens</TableHead>
@@ -121,10 +123,10 @@ export default function ShippingPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={7} />}
+          {isLoading && <TableSkeletonRows columns={8} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-destructive">
+              <TableCell colSpan={8} className="text-center text-destructive">
                 Não foi possível carregar a fila de expedição. Tente novamente.
               </TableCell>
             </TableRow>
@@ -139,6 +141,7 @@ export default function ShippingPage() {
 
               return (
                 <TableRow key={sale.id}>
+                  <TableCell>{sale.handoff_signal && <HandoffDot signal={sale.handoff_signal} />}</TableCell>
                   <TableCell className="font-medium">#{sale.id}</TableCell>
                   <TableCell>{sale.customer?.name ?? sale.customer_id}</TableCell>
                   <TableCell>{itemsCount > 0 ? `${itemsCount} item(ns)` : '—'}</TableCell>
@@ -185,7 +188,7 @@ export default function ShippingPage() {
             })}
           {!isLoading && !isError && visibleSales.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
+              <TableCell colSpan={8} className="text-center text-muted-foreground">
                 {filter === 'pending' ? 'Nenhuma venda aguardando embarque.' : 'Nenhuma venda embarcada.'}
               </TableCell>
             </TableRow>

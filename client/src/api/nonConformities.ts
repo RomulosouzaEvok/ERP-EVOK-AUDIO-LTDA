@@ -1,5 +1,6 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
+import type { HandoffSignal } from '@/components/HandoffDot';
 
 /** Ver `server/src/models/NonConformity.ts` para o contrato completo do model. */
 export type NonConformityOrigin = 'incoming' | 'in_process' | 'final' | 'audit' | 'customer_complaint' | 'supplier';
@@ -35,6 +36,13 @@ export interface NonConformity {
   createdAt: string;
   product?: { id: number; name: string; code: string };
   reporter?: { id: number; name: string };
+  /**
+   * Semáforo de handoff (UC-40, Bloco 3) — fila de tratativa de RNC.
+   * `open`/`analysis` = amarelo; `closed` com `effectiveness_result !=
+   * 'effective'` = vermelho (reincidente). Calculado on-the-fly, nunca
+   * persistido.
+   */
+  handoff_signal?: HandoffSignal;
 }
 
 export interface NonConformityListParams {

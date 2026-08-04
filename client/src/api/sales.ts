@@ -1,5 +1,6 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
+import type { HandoffSignal } from '@/components/HandoffDot';
 
 export type SaleStatus = 'quote' | 'confirmed' | 'invoiced' | 'shipped' | 'canceled';
 
@@ -30,6 +31,12 @@ export interface Sale {
   nfe_danfe_url?: string | null;
   nfe_error_message?: string | null;
   nfe_issued_at?: string | null;
+  /**
+   * Semáforo de handoff (UC-40, Bloco 3) — fila de Expedição. `invoiced` =
+   * verde; `nfe_status='processing'` = amarelo; `denied`/`cancelled`/venda
+   * cancelada = vermelho. Calculado on-the-fly, nunca persistido.
+   */
+  handoff_signal?: HandoffSignal;
 }
 
 export interface SaleItemInput {

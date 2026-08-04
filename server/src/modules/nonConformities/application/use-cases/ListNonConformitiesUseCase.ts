@@ -1,11 +1,18 @@
 /**
  * Use case: listar não conformidades com filtros e paginacao.
  *
+ * Bloco 3 (UC-40, BUSINESS_RULES.md §10): cada linha ganha o campo aditivo
+ * `handoff_signal` (`green|yellow|red`), calculado via
+ * `calculateHandoffSignal('non_conformity', ...)` — fila de tratativa de
+ * Qualidade (Recebimento/Qualidade → RNC). Campo sempre calculado
+ * on-the-fly, nunca persistido.
+ *
  * @module modules/nonConformities/application/use-cases/ListNonConformitiesUseCase
  */
 
 import UseCase from '../../../../shared/application/UseCase';
 import NonConformitiesRepository from '../../domain/repositories/NonConformitiesRepository';
+import { calculateHandoffSignal } from '../../../../shared/domain/handoffSignal';
 
 interface ListNonConformitiesInput {
   page?: string | number;
@@ -46,7 +53,18 @@ class ListNonConformitiesUseCase extends UseCase<ListNonConformitiesInput, ListN
       { limit: l, offset: o }
     );
 
-    return { rows, total: count, page: p, limit: l, totalPages: Math.ceil(count / l) };
+    const rowsWithSignal = rows.map((row: any) => {
+      const json = row.toJSON ? row.toJSON() : row;
+      return {
+        ...json,
+        handoff_signal: calculateHandoffSignal('non_conformity', {
+          status: json.status,
+          effectiveness_result: json.effectiveness_result,
+        }),
+      };
+    });
+
+    return { rows: rowsWithSignal, total: count, page: p, limit: l, totalPages: Math.ceil(count / l) };
   }
 }
 

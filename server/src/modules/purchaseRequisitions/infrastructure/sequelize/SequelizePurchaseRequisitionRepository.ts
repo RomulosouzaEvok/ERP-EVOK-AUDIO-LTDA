@@ -1,6 +1,6 @@
 const { Op } = require('sequelize');
 const PurchaseRequisitionRepository = require('../../domain/repositories/PurchaseRequisitionRepository');
-const { PurchaseRequisition, PurchaseRequisitionItem, Item, User, Department, ProductionOrder, Supplier } = require('../../../../models/index');
+const { PurchaseRequisition, PurchaseRequisitionItem, Item, User, Department, ProductionOrder, Supplier, EngineeringProject } = require('../../../../models/index');
 
 class SequelizePurchaseRequisitionRepository extends PurchaseRequisitionRepository {
   async listRequisitions(filters: any = {}, pagination: any = {}) {
@@ -21,6 +21,7 @@ class SequelizePurchaseRequisitionRepository extends PurchaseRequisitionReposito
         { model: User, as: 'approver', attributes: ['id', 'name', 'email'], required: false },
         { model: Department, as: 'department', attributes: ['id', 'name', 'sigla'], required: false },
         { model: ProductionOrder, as: 'productionOrder', attributes: ['id', 'order_number'], required: false },
+        { model: EngineeringProject, as: 'engineeringProject', attributes: ['id', 'project_code', 'name'], required: false },
         {
           model: PurchaseRequisitionItem,
           as: 'items',
@@ -46,6 +47,7 @@ class SequelizePurchaseRequisitionRepository extends PurchaseRequisitionReposito
         { model: User, as: 'approver', attributes: ['id', 'name', 'email'], required: false },
         { model: Department, as: 'department', attributes: ['id', 'name', 'sigla'], required: false },
         { model: ProductionOrder, as: 'productionOrder', attributes: ['id', 'order_number'], required: false },
+        { model: EngineeringProject, as: 'engineeringProject', attributes: ['id', 'project_code', 'name'], required: false },
         {
           model: PurchaseRequisitionItem,
           as: 'items',

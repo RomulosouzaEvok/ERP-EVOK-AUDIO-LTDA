@@ -109,6 +109,10 @@ PurchaseRequisition.belongsTo(Department, { foreignKey: 'department_id', as: 'de
 ProductionOrder.hasMany(PurchaseRequisition, { foreignKey: 'production_order_id', as: 'purchase_requisitions' });
 PurchaseRequisition.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
 
+// Purchase requisitions ↔ EngineeringProject (Bloco 2, UC-39 — vinculo opcional da amostra ao projeto de P&D)
+EngineeringProject.hasMany(PurchaseRequisition, { foreignKey: 'engineering_project_id', as: 'purchase_requisitions' });
+PurchaseRequisition.belongsTo(EngineeringProject, { foreignKey: 'engineering_project_id', as: 'engineeringProject' });
+
 PurchaseRequisition.hasMany(PurchaseRequisitionItem, { foreignKey: 'requisition_id', as: 'items' });
 PurchaseRequisitionItem.belongsTo(PurchaseRequisition, { foreignKey: 'requisition_id', as: 'requisition' });
 

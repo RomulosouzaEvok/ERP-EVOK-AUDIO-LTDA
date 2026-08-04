@@ -17,9 +17,17 @@ const requisitionItemSchema = z.object({
 // requester_id sempre vem do JWT (req.user.id) e aprovacao tem fluxo proprio:
 // aceitar requester_id/approved_by/approval_date no body permitiria spoofing
 // de identidade e requisicao nascendo pre-aprovada (bypass do workflow).
+//
+// Bloco 2 (UC-39, BUSINESS_RULES.md §9): origin aceita o valor livre
+// 'engenharia_amostra' (origin ja e VARCHAR(80) livre no banco, nao ENUM —
+// nenhuma mudanca de schema necessaria para o valor em si).
+// `engineering_project_id` e sempre opcional (mesmo para amostra de
+// engenharia); quando informado, o use case valida a existencia do projeto
+// (404 didatico) para qualquer origin, nao apenas 'engenharia_amostra'.
 export const createPurchaseRequisitionSchema = z.object({
   department_id: z.coerce.number().int().positive().optional(),
   production_order_id: z.coerce.number().int().positive().optional(),
+  engineering_project_id: z.coerce.number().int().positive().optional(),
   request_date: z.string().date().optional(),
   priority: z.enum(['normal', 'urgent', 'emergency']).optional(),
   status: z.enum(['draft', 'pending']).optional(),

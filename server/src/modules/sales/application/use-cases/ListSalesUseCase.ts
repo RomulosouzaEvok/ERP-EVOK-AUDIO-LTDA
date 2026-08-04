@@ -1,8 +1,14 @@
 const UseCase = require('../../../../shared/application/UseCase');
+const { calculateHandoffSignal } = require('../../../../shared/domain/handoffSignal');
 
 /**
  * Lista vendas com filtros e paginação, cobrindo o fluxo do endpoint
  * `GET /api/sales`.
+ *
+ * Bloco 3 (UC-40, BUSINESS_RULES.md §10): cada linha ganha o campo aditivo
+ * `handoff_signal` (`green|yellow|red`), calculado via
+ * `calculateHandoffSignal('sale', ...)` — fila de Expedição (Vendas →
+ * Expedição). Campo sempre calculado on-the-fly, nunca persistido.
  */
 class ListSalesUseCase extends UseCase {
   /**
@@ -30,12 +36,18 @@ class ListSalesUseCase extends UseCase {
       { limit, offset }
     );
 
-    // Anexa `items_count` a cada venda, comportamento preservado 1:1 do
-    // controller anterior `server/src/controllers/saleController.ts#list`.
-    const salesWithCount = rows.map(s => ({
-      ...s.toJSON(),
-      items_count: s.items ? s.items.length : 0
-    }));
+    // Anexa `items_count` e `handoff_signal` a cada venda. `items_count`
+    // preservado 1:1 do controller anterior
+    // (`server/src/controllers/saleController.ts#list`); `handoff_signal`
+    // e o enriquecimento aditivo do Bloco 3.
+    const salesWithCount = rows.map(s => {
+      const json = s.toJSON();
+      return {
+        ...json,
+        items_count: s.items ? s.items.length : 0,
+        handoff_signal: calculateHandoffSignal('sale', { status: json.status, nfe_status: json.nfe_status }),
+      };
+    });
 
     return { rows: salesWithCount, count, page, limit, totalPages: Math.ceil(count / limit) };
   }

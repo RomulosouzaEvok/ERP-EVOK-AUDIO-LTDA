@@ -16,6 +16,7 @@ const { Op } = require('sequelize');
 
 import UseCase from '../../../../shared/application/UseCase';
 import { ValidationError } from '../../../../errors';
+import { calculateHandoffSignal } from '../../../../shared/domain/handoffSignal';
 
 interface ListLotsInput {
   product_id?: string | number;
@@ -79,7 +80,18 @@ class ListLotsUseCase extends UseCase<ListLotsInput, ListLotsOutput> {
       order: [['createdAt', 'ASC']]
     });
 
-    return { rows, total: count, page, limit, totalPages: Math.ceil(count / limit) || 0 };
+    // Bloco 3 (UC-40, BUSINESS_RULES.md §10): `handoff_signal` aditivo —
+    // fila de Qualidade (Recebimento → Qualidade → Almoxarifado), calculado
+    // on-the-fly via `calculateHandoffSignal('lot', ...)`.
+    const rowsWithSignal = rows.map((row: any) => {
+      const json = row.toJSON ? row.toJSON() : row;
+      return {
+        ...json,
+        handoff_signal: calculateHandoffSignal('lot', { status: json.status }),
+      };
+    });
+
+    return { rows: rowsWithSignal, total: count, page, limit, totalPages: Math.ceil(count / limit) || 0 };
   }
 }
 

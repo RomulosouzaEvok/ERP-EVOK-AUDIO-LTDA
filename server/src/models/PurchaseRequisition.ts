@@ -7,6 +7,7 @@ export interface PurchaseRequisitionAttributes {
   requester_id: number;
   department_id: number | null;
   production_order_id: number | null;
+  engineering_project_id: number | null;
   request_date: string;
   priority: 'normal' | 'urgent' | 'emergency';
   status: 'draft' | 'pending' | 'approved' | 'ordered' | 'partial' | 'received' | 'canceled';
@@ -24,10 +25,11 @@ const PurchaseRequisition = sequelize.define('PurchaseRequisition', {
   requester_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> users.id' },
   department_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> departments.id' },
   production_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> production_orders.id' },
+  engineering_project_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> engineering_projects.id (opcional) — vinculo da requisicao de amostra ao projeto de P&D (UC-39, Bloco 2)' },
   request_date: { type: DataTypes.DATEONLY, allowNull: false, defaultValue: DataTypes.NOW },
   priority: { type: DataTypes.ENUM('normal', 'urgent', 'emergency'), allowNull: false, defaultValue: 'normal' },
   status: { type: DataTypes.ENUM('draft', 'pending', 'approved', 'ordered', 'partial', 'received', 'canceled'), allowNull: false, defaultValue: 'pending' },
-  origin: { type: DataTypes.STRING(80), allowNull: false, defaultValue: 'manual', comment: 'manual, MRP, engenharia, etc.' },
+  origin: { type: DataTypes.STRING(80), allowNull: false, defaultValue: 'manual', comment: 'manual, mrp, engenharia_amostra (UC-39), etc.' },
   approved_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id' },
   approval_date: { type: DataTypes.DATEONLY, allowNull: true },
   notes: { type: DataTypes.TEXT, allowNull: true }

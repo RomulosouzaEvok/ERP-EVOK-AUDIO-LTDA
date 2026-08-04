@@ -10,6 +10,7 @@ import * as productsApi from '@/api/products';
 import * as suppliersApi from '@/api/suppliers';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
+import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -410,6 +411,7 @@ export function NonConformitiesTab({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-6" />
             <TableHead>RNC</TableHead>
             <TableHead>Produto</TableHead>
             <TableHead>Origem</TableHead>
@@ -419,16 +421,17 @@ export function NonConformitiesTab({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={6} />}
+          {isLoading && <TableSkeletonRows columns={7} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-destructive">
+              <TableCell colSpan={7} className="text-center text-destructive">
                 Não foi possível carregar as não-conformidades. Tente novamente.
               </TableCell>
             </TableRow>
           )}
           {data?.data.map((nc) => (
             <TableRow key={nc.id}>
+              <TableCell>{nc.handoff_signal && <HandoffDot signal={nc.handoff_signal} />}</TableCell>
               <TableCell className="font-medium">{nc.nc_number}</TableCell>
               <TableCell>{nc.product ? `${nc.product.code} — ${nc.product.name}` : '-'}</TableCell>
               <TableCell>{ORIGIN_LABEL[nc.origin]}</TableCell>
@@ -443,7 +446,7 @@ export function NonConformitiesTab({
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell colSpan={7} className="text-center text-muted-foreground">
                 Nenhuma não-conformidade registrada.
               </TableCell>
             </TableRow>

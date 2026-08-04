@@ -1,5 +1,6 @@
 import UseCase from '../../../../shared/application/UseCase';
 import PurchaseRequisitionRepository from '../../domain/repositories/PurchaseRequisitionRepository';
+import { calculateHandoffSignal } from '../../../../shared/domain/handoffSignal';
 
 type ListPurchaseRequisitionsInput = {
   status?: string;
@@ -20,6 +21,16 @@ type ListPurchaseRequisitionsOutput = {
   totalPages: number;
 };
 
+/**
+ * Lista requisições de compra com filtros e paginação, cobrindo o fluxo do
+ * endpoint `GET /api/purchase-requisitions`.
+ *
+ * Bloco 3 (UC-40, docs/governance/TODO.md): cada linha ganha o campo
+ * aditivo `handoff_signal` (`green|yellow|red`), calculado via
+ * `calculateHandoffSignal('purchase_requisition', ...)` — fila de
+ * aprovação do gestor de Requisições (`pending` = amarelo, "aguardando
+ * aprovação"). Campo sempre calculado on-the-fly, nunca persistido.
+ */
 class ListPurchaseRequisitionsUseCase extends UseCase<ListPurchaseRequisitionsInput, ListPurchaseRequisitionsOutput> {
   private readonly requisitionRepository: PurchaseRequisitionRepository;
 
@@ -33,7 +44,16 @@ class ListPurchaseRequisitionsUseCase extends UseCase<ListPurchaseRequisitionsIn
       { status, origin, requester_id, start_date, end_date },
       { limit, offset }
     );
-    return { rows, count, page, limit, totalPages: Math.ceil(count / limit) };
+
+    const rowsWithSignal = rows.map((row: any) => {
+      const json = row.toJSON ? row.toJSON() : row;
+      return {
+        ...json,
+        handoff_signal: calculateHandoffSignal('purchase_requisition', { status: json.status }),
+      };
+    });
+
+    return { rows: rowsWithSignal, count, page, limit, totalPages: Math.ceil(count / limit) };
   }
 }
 
