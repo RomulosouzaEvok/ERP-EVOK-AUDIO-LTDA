@@ -439,6 +439,61 @@ describe('Invariante 3 — contagem ciclica (CreateInventoryCountUseCase/Approve
     );
   });
 
+  it('CreateInventoryCountUseCase resolve item_ids (dual-read) via crosswalk Item->Product em vez de 404 (bug real corrigido)', async () => {
+    // Regressao: `findProductById` do repository de contagem sempre fazia
+    // `Product.findByPk(id)` mesmo quando `id` era um UUID de `Item` (fluxo
+    // "preferido" do dual-read) — nunca encontrava o Product legado (chave
+    // INTEGER), entao toda contagem criada via `item_ids` falhava com 404.
+    jest.doMock('../../src/modules/items/infrastructure/sequelize/SequelizeItemRepository', () => {
+      return jest.fn().mockImplementation(() => ({
+        findLegacyProductByItemId: jest.fn(async (itemId: string) =>
+          itemId === 'item-uuid-30' ? { id: 30, code: 'WOOFER-8', quantity: 15 } : null
+        ),
+      }));
+    });
+    jest.resetModules();
+    jest.doMock('../../src/models/index', () => ({ Product, Warehouse, ProductWarehouseStock, InventoryMovement }));
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const CreateInventoryCountUseCaseWithItemIds = require('../../src/modules/inventory/application/use-cases/CreateInventoryCountUseCase');
+
+    const repository = buildInventoryCountRepository();
+    const useCase = new CreateInventoryCountUseCaseWithItemIds(repository);
+
+    const { items } = await useCase.execute({
+      count_type: 'cycle',
+      warehouse_id: 2,
+      item_ids: ['item-uuid-30'],
+      created_by: 7
+    });
+
+    expect(repository.bulkCreateItems).toHaveBeenCalledWith(
+      [expect.objectContaining({ item_id: 'item-uuid-30', product_id: null, system_quantity: 15 })],
+      expect.anything()
+    );
+    expect(items).toHaveLength(1);
+  });
+
+  it('CreateInventoryCountUseCase rejeita item_id sem Product legado correspondente (404, sem side-effect)', async () => {
+    jest.doMock('../../src/modules/items/infrastructure/sequelize/SequelizeItemRepository', () => {
+      return jest.fn().mockImplementation(() => ({
+        findLegacyProductByItemId: jest.fn(async () => null),
+      }));
+    });
+    jest.resetModules();
+    jest.doMock('../../src/models/index', () => ({ Product, Warehouse, ProductWarehouseStock, InventoryMovement }));
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const CreateInventoryCountUseCaseWithItemIds = require('../../src/modules/inventory/application/use-cases/CreateInventoryCountUseCase');
+
+    const repository = buildInventoryCountRepository();
+    const useCase = new CreateInventoryCountUseCaseWithItemIds(repository);
+
+    await expect(
+      useCase.execute({ count_type: 'cycle', warehouse_id: 2, item_ids: ['item-uuid-orfao'], created_by: 7 })
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    expect(repository.bulkCreateItems).not.toHaveBeenCalled();
+  });
+
   it('InventoryCountEntity.validate lanca ValidationError explicita quando warehouse_id esta ausente', () => {
     expect(() => new InventoryCountEntity({ count_type: 'cycle', created_by: 7 })).toThrow(
       /Depósito \(warehouse_id\) é obrigatório/

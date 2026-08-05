@@ -110,7 +110,7 @@ class SequelizeItemRepository extends ItemRepository {
 
     return Product.findOne({
       where: { code: item.codigo },
-      attributes: ['id', 'code', 'name', 'status', 'product_type'],
+      attributes: ['id', 'code', 'name', 'status', 'product_type', 'quantity'],
     });
   }
 }

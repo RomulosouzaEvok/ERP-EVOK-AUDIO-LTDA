@@ -4,6 +4,9 @@ import InventoryCountRepository = require('../../domain/repositories/InventoryCo
 const InventoryCountEntity = require('../../domain/entities/InventoryCountEntity');
 const { NotFoundError } = require('../../../../errors');
 const { sequelize } = require('../../../../config/database');
+const SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
+
+const itemRepository = new SequelizeItemRepository();
 
 /** Dados de entrada de `CreateInventoryCountUseCase.execute`. */
 interface CreateInventoryCountInput {
@@ -84,7 +87,16 @@ class CreateInventoryCountUseCase extends UseCase {
       if (Array.isArray(idsToProcess) && idsToProcess.length > 0) {
         const itemsData = [];
         for (const id of idsToProcess) {
-          const product = await this.inventoryCountRepository.findProductById(id, t);
+          // DUAL-READ: item_ids referenciam o Item novo (chave UUID); o
+          // saldo/estoque ainda vive no Product legado (crosswalk por
+          // `codigo`, mesmo padrão de `CreateInventoryMovementUseCase`).
+          // Chamar `findProductById(id)` direto com um UUID de Item nunca
+          // batia no Product (chave INTEGER) — toda contagem criada via
+          // `item_ids` falhava com 404, ainda que a UI/API já aceitassem
+          // esse caminho como "preferido".
+          const product = isItemIds
+            ? await itemRepository.findLegacyProductByItemId(id)
+            : await this.inventoryCountRepository.findProductById(id, t);
           if (!product) {
             const idType = isItemIds ? 'Item' : 'Produto';
             throw new NotFoundError(`${idType} ID ${id} não encontrado`);

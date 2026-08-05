@@ -133,7 +133,19 @@ async function shouldBootstrapCanonicalSchema(queryInterface) {
 function mapAttribute(attribute) {
   const mapped = {
     type: attribute.type,
-    allowNull: attribute.allowNull,
+    // `model.getAttributes()` deixa `allowNull` como `undefined` (nao
+    // `true`) quando o model nao declara a chave explicitamente — e essa
+    // e a forma predominante neste projeto de expressar "coluna aceita
+    // NULL" (ver DYNAMIC_MODEL_FILES: a maioria dos campos so escreve
+    // `allowNull: false` onde e obrigatorio, deixando o resto implicito).
+    // Repassar `undefined` direto para `queryInterface.createTable` fazia
+    // a coluna nascer NOT NULL em qualquer banco criado do zero por este
+    // bootstrap (bug real, achado em 2026-08-05 ao configurar o primeiro
+    // banco de teste isolado — nfe_key/phone/reference_id/description
+    // entre outras). Bancos existentes (dev/producao) nao sao afetados:
+    // eles tomam o caminho "schema ja existe" (`shouldBootstrapCanonicalSchema`)
+    // e nunca passam por este createTable.
+    allowNull: attribute.allowNull !== false,
   };
 
   if (attribute.primaryKey) mapped.primaryKey = true;
