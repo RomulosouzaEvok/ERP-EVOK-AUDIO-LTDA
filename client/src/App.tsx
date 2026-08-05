@@ -47,6 +47,9 @@ const TraceabilityPage = lazy(() => import('@/pages/traceability/TraceabilityPag
 const AuditLogsPage = lazy(() => import('@/pages/traceability/AuditLogsPage'));
 const UsersPage = lazy(() => import('@/pages/users/UsersPage'));
 const AccessProfilesPage = lazy(() => import('@/pages/users/AccessProfilesPage'));
+const HrPage = lazy(() => import('@/pages/hr/HrPage'));
+const FiscalConfigPage = lazy(() => import('@/pages/settings/FiscalConfigPage'));
+const IntelligentAuditorPage = lazy(() => import('@/pages/reports/IntelligentAuditorPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 function PageFallback() {
@@ -68,6 +71,21 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <ChangePasswordPage />
+              </Suspense>
+            }
+          />
+          {/*
+            /hr: nao ha modulo dedicado em access-profiles para RH (ver
+            HrPage.tsx) — GET /api/employees e /api/departments exigem so
+            sessao autenticada (sem restricao de role), escrita e que exige
+            'admin' (checado dentro das abas via hasRole). Por isso a rota
+            fica fora de ModuleRoute/RoleRoute, igual /change-password.
+          */}
+          <Route
+            path="/hr"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <HrPage />
               </Suspense>
             }
           />
@@ -388,6 +406,22 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <AccessProfilesPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/settings/fiscal"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <FiscalConfigPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/reports/auditor"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <IntelligentAuditorPage />
                 </Suspense>
               }
             />

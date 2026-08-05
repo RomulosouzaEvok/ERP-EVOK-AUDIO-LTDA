@@ -27,6 +27,9 @@ import {
   Zap,
   Wrench,
   LifeBuoy,
+  Contact,
+  Landmark,
+  ShieldCheck,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -151,6 +154,13 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Usuários', to: '/users', icon: Users, roles: ['admin'] },
       { label: 'Perfis de Acesso', to: '/users/access-profiles', icon: KeyRound, roles: ['admin'] },
+      // RH: GET /api/employees e /api/departments exigem so sessao
+      // autenticada (sem role/module dedicado) — item visivel a qualquer
+      // usuario logado, igual o backend; escrita e restrita a admin dentro
+      // das proprias abas (ver HrPage.tsx).
+      { label: 'RH (Funcionários/Departamentos)', to: '/hr', icon: Contact },
+      { label: 'Configuração Fiscal', to: '/settings/fiscal', icon: Landmark, roles: ['admin'] },
+      { label: 'Auditor Inteligente', to: '/reports/auditor', icon: ShieldCheck, roles: ['admin'] },
     ],
   },
 ];
@@ -192,6 +202,9 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/users': ['Usuários'],
   '/users/access-profiles': ['Usuários', 'Perfis de Acesso'],
   '/audit-logs': ['Usuários', 'Log de auditoria'],
+  '/hr': ['Administração', 'RH'],
+  '/settings/fiscal': ['Administração', 'Configuração Fiscal'],
+  '/reports/auditor': ['Administração', 'Auditor Inteligente'],
 };
 
 function Breadcrumbs() {
