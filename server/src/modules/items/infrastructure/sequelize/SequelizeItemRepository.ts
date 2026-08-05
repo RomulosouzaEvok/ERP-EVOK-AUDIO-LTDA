@@ -100,6 +100,19 @@ class SequelizeItemRepository extends ItemRepository {
 
     return new Set(items.map((item: any) => String(item.id)));
   }
+
+  /** @inheritdoc */
+  public async findLegacyProductByItemId(itemId: string): Promise<any | null> {
+    const item = await Item.findByPk(itemId);
+    if (!item) {
+      return null;
+    }
+
+    return Product.findOne({
+      where: { code: item.codigo },
+      attributes: ['id', 'code', 'name', 'status', 'product_type'],
+    });
+  }
 }
 
 export = SequelizeItemRepository;

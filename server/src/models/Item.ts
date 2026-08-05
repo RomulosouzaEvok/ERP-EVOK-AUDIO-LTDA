@@ -7,7 +7,7 @@
 import { DataTypes, ModelDefined } from 'sequelize';
 import { sequelize } from '../config/database';
 
-type ItemTipo = 'MATERIA_PRIMA' | 'SUBCONJUNTO' | 'PRODUTO_ACABADO';
+type ItemTipo = 'MATERIA_PRIMA' | 'SUBCONJUNTO' | 'PRODUTO_ACABADO' | 'USO_E_CONSUMO' | 'ATIVO_IMOBILIZADO';
 type ItemStatus = 'ATIVO' | 'INATIVO' | 'BLOQUEADO';
 
 interface ItemAttributes {
@@ -60,7 +60,7 @@ const Item: ModelDefined<ItemAttributes, ItemCreationAttributes> = sequelize.def
     allowNull: false,
   },
   tipo: {
-    type: DataTypes.ENUM('MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO'),
+    type: DataTypes.ENUM('MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO', 'USO_E_CONSUMO', 'ATIVO_IMOBILIZADO'),
     allowNull: false,
   },
   unidade: {

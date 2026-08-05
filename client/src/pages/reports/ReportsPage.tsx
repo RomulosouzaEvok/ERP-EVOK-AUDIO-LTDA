@@ -1,9 +1,11 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router';
 import { BarChart3 } from 'lucide-react';
 
 import * as reportsApi from '@/api/reports';
 import { extractApiErrorMessage } from '@/api/httpClient';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +13,22 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+
+type ReportTab = 'production' | 'purchasing' | 'costs' | 'financial';
+
+const TAB_MODULE: Record<ReportTab, 'relatorios.producao' | 'relatorios.compras' | 'relatorios.custos' | 'relatorios.financeiro'> = {
+  production: 'relatorios.producao',
+  purchasing: 'relatorios.compras',
+  costs: 'relatorios.custos',
+  financial: 'relatorios.financeiro',
+};
+
+const TAB_QUERY_VALUE: Record<ReportTab, string> = {
+  production: 'production',
+  purchasing: 'purchasing',
+  costs: 'costs',
+  financial: 'financial',
+};
 
 const OP_STATUS_LABEL: Record<string, string> = {
   planned: 'Planejada',
@@ -71,9 +89,48 @@ function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
   );
 }
 
-/** Relatórios de manufatura e compras (item 9 do levantamento). */
+/**
+ * Relatórios de manufatura, compras e custos (item 9 do levantamento).
+ *
+ * Bloco E (`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`): decisão
+ * técnica de manter uma única página com abas (em vez de 3 páginas
+ * separadas) — os 3 relatórios compartilham quase todo o layout
+ * (tiles/tabelas/período), e o backend já expõe os módulos de RBAC
+ * separados (`relatorios.producao`/`relatorios.compras`/`relatorios.custos`).
+ * A separação por módulo acontece em duas camadas nesta tela: (1) cada aba
+ * só aparece se o usuário tiver acesso ao módulo correspondente; (2) cada
+ * seção do menu (Produção/Compras) linka direto para a aba certa via
+ * deep-link `?tab=production|purchasing|costs`, preservando a navegação
+ * "cada departamento tem seu relatório" pedida pelo dono do produto sem
+ * duplicar código de renderização.
+ */
 export default function ReportsPage() {
-  const [tab, setTab] = React.useState<'production' | 'purchasing' | 'costs'>('production');
+  const { hasRole, hasModuleAccess, permissionsFetchFailed } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const canSeeTab = (candidate: ReportTab): boolean =>
+    hasRole('admin') || permissionsFetchFailed || hasModuleAccess(TAB_MODULE[candidate]);
+
+  const availableTabs = (['production', 'purchasing', 'costs', 'financial'] as const).filter(canSeeTab);
+
+  const tabFromQuery = searchParams.get('tab');
+  const initialTab: ReportTab =
+    (tabFromQuery === 'purchasing' || tabFromQuery === 'costs' || tabFromQuery === 'production' || tabFromQuery === 'financial') &&
+    availableTabs.includes(tabFromQuery)
+      ? tabFromQuery
+      : (availableTabs[0] ?? 'production');
+
+  const [tab, setTabState] = React.useState<ReportTab>(initialTab);
+
+  const setTab = (nextTab: ReportTab) => {
+    setTabState(nextTab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', TAB_QUERY_VALUE[nextTab]);
+      return next;
+    });
+  };
+
   const [startInput, setStartInput] = React.useState(isoDaysAgo(30));
   const [endInput, setEndInput] = React.useState(isoDaysAgo(0));
   const [period, setPeriod] = React.useState({ start_date: isoDaysAgo(30), end_date: isoDaysAgo(0) });
@@ -96,9 +153,16 @@ export default function ReportsPage() {
     enabled: tab === 'costs',
   });
 
+  const cashFlowQuery = useQuery({
+    queryKey: ['reports-cash-flow', period],
+    queryFn: () => reportsApi.getCashFlowReport(period),
+    enabled: tab === 'financial',
+  });
+
   const production = productionQuery.data;
   const purchasing = purchasingQuery.data;
   const costVariance = costVarianceQuery.data;
+  const cashFlow = cashFlowQuery.data;
 
   return (
     <div className="flex flex-col gap-4">
@@ -108,33 +172,55 @@ export default function ReportsPage() {
         </div>
         <div>
           <h1 className="text-2xl font-semibold">Relatórios</h1>
-          <p className="text-sm text-muted-foreground">Indicadores de produção, compras e variação de custos.</p>
+          <p className="text-sm text-muted-foreground">Indicadores de produção, compras, custos e financeiro.</p>
         </div>
       </div>
 
+      {availableTabs.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Seu perfil de acesso não tem permissão para nenhum relatório. Solicite ao administrador a inclusão de um
+          módulo de relatórios (Produção, Compras ou Custos) no seu perfil.
+        </p>
+      )}
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex gap-2">
-          <Button
-            variant={tab === 'production' ? 'default' : 'outline'}
-            className={tab !== 'production' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
-            onClick={() => setTab('production')}
-          >
-            Produção
-          </Button>
-          <Button
-            variant={tab === 'purchasing' ? 'default' : 'outline'}
-            className={tab !== 'purchasing' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
-            onClick={() => setTab('purchasing')}
-          >
-            Compras
-          </Button>
-          <Button
-            variant={tab === 'costs' ? 'default' : 'outline'}
-            className={tab !== 'costs' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
-            onClick={() => setTab('costs')}
-          >
-            Custos
-          </Button>
+          {availableTabs.includes('production') && (
+            <Button
+              variant={tab === 'production' ? 'default' : 'outline'}
+              className={tab !== 'production' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
+              onClick={() => setTab('production')}
+            >
+              Produção
+            </Button>
+          )}
+          {availableTabs.includes('purchasing') && (
+            <Button
+              variant={tab === 'purchasing' ? 'default' : 'outline'}
+              className={tab !== 'purchasing' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
+              onClick={() => setTab('purchasing')}
+            >
+              Compras
+            </Button>
+          )}
+          {availableTabs.includes('costs') && (
+            <Button
+              variant={tab === 'costs' ? 'default' : 'outline'}
+              className={tab !== 'costs' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
+              onClick={() => setTab('costs')}
+            >
+              Custos
+            </Button>
+          )}
+          {availableTabs.includes('financial') && (
+            <Button
+              variant={tab === 'financial' ? 'default' : 'outline'}
+              className={tab !== 'financial' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
+              onClick={() => setTab('financial')}
+            >
+              Financeiro
+            </Button>
+          )}
         </div>
         <form
           className="flex items-end gap-2"
@@ -403,6 +489,26 @@ export default function ReportsPage() {
               </Table>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {tab === 'financial' && (
+        <div className="flex flex-col gap-4">
+          {cashFlowQuery.isError && (
+            <SectionError message={extractApiErrorMessage(cashFlowQuery.error, 'Falha ao carregar o relatório financeiro.')} />
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <StatTile label="Total de vendas" value={BRL.format(toNumber(cashFlow?.summary.total_sales))} />
+            <StatTile label="Total de compras" value={BRL.format(toNumber(cashFlow?.summary.total_purchases))} />
+            <StatTile
+              label="Saldo (vendas - compras)"
+              value={BRL.format(toNumber(cashFlow?.summary.balance))}
+              tone={toNumber(cashFlow?.summary.balance) >= 0 ? 'good' : 'bad'}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Fluxo de caixa agregado do período selecionado — sem série diária (mesma limitação do relatório de origem).
+          </p>
         </div>
       )}
     </div>

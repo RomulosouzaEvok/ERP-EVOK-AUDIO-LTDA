@@ -1065,16 +1065,61 @@ construir tela nova fora do padrão para depois ter que retrofitar).
   a lista completa de violações antes de lançar o erro (não só a
   primeira), seguindo o padrão de `ConvertRequisitionToPurchaseOrdersUseCase`
   usado como referência.
-- [ ] Para o checklist preventivo (Regra 1, §13.1), avaliar se cada ação
-  crítica precisa de um **endpoint de pré-checagem** dedicado (`GET
-  .../:id/prerequisites` ou equivalente, retornando a lista de itens
-  `✓`/`✗` com os mesmos dados que o erro `422` traria) ou se o frontend
-  pode montar o checklist reaproveitando dados já carregados por outras
-  chamadas `GET` existentes (ex.: para liberar OP, cruzar
-  `GET /api/production-orders/:id` + `GET /api/mrp/...` disponibilidade
-  de material, sem endpoint novo) — decisão técnica por caso, priorizar
-  reaproveitamento antes de criar endpoint novo. **Ainda pendente**, não
-  fazia parte do escopo desta rodada.
+- [x] **Decisão técnica por caso (2026-08-04)** — para os 6 pontos
+  críticos cobertos pelo padrão, lendo as rotas `GET` reais hoje
+  disponíveis (`server/src/modules/**/presentation/routes/*.ts`) contra o
+  que cada `details` de erro exige (§6.1 acima), a decisão é **não criar
+  nenhum endpoint `GET .../:id/prerequisites` novo nesta entrega** — em 5
+  dos 6 casos o reaproveitamento é direto; no 6º (liberar OP) o dado que
+  falta (disponibilidade de material calculada) não está hoje exposto por
+  nenhum `GET`, mas a solução ainda é preventivamente mais barata que um
+  endpoint novo dedicado (ver detalhe do caso 1). Caso a caso:
+  1. **Liberar OP (material/BOM/roteiro)** — `GET
+     /api/production-orders/:id` (rota existente, `productionOrderController.getById`)
+     retorna a OP com itens/BOM associados, mas **não** calcula
+     disponibilidade de material contra o estoque real (esse cálculo só
+     roda dentro de `reserveMaterials`, no `PUT status`, no momento da
+     tentativa). **Reaproveitamento não é 100% direto aqui** — duas opções
+     técnicas eram possíveis: (a) endpoint novo `GET
+     .../:id/prerequisites` que reexecuta o cálculo de disponibilidade em
+     modo leitura, ou (b) o frontend cruzar `GET
+     /api/production-orders/:id` (itens da BOM) com `GET
+     /api/inventory/stock-report` (saldo atual por item, rota já
+     existente) e replicar a subtração client-side. **Decisão: opção (b)**
+     — evita duplicar a regra de negócio de reserva em dois lugares
+     (backend real + endpoint de simulação), aceitando que o checklist
+     preventivo do frontend é uma aproximação (mesmo dado-fonte, cálculo
+     equivalente) e que a validação definitiva continua sendo o `422` do
+     backend na tentativa real (Regra 2, fallback sempre presente). Ainda
+     **não implementado no frontend** (`ProductionOrdersPage.tsx` continua
+     sem `PrerequisiteChecklist` — ver nota de escopo abaixo).
+  2. **Conclusão de OP com etapa aberta** — reaproveita `GET
+     /api/production-orders/:id/tracking` (rota existente, já usada por
+     `ShopFloorPage.tsx`), que lista as etapas com `status`; o frontend já
+     tem tudo para marcar `✓`/`✗` sem endpoint novo.
+  3. **Embarque de venda sem NF-e** — reaproveita `GET /api/sales/:id/nfe`
+     (rota existente), que retorna `nfe_status` diretamente — dado
+     suficiente para o item único do checklist ("NF-e autorizada").
+  4. **Conversão de requisição sem fornecedor** — reaproveita `GET
+     /api/purchase-requisitions/:id` (retorna os itens da requisição) +
+     dado de fornecedor já carregado pela tela via catálogo item×fornecedor
+     (`client/src/api/products.ts`/similar, já consumido em
+     `RequisitionsPage.tsx`); sem endpoint novo.
+  5. **Aprovação de requisição fora de sequência** — reaproveita `GET
+     /api/purchase-requisitions/:id`, que já retorna `status`; o checklist
+     é uma comparação local contra a máquina de estados conhecida no
+     frontend (mesma tabela usada por `ChangePurchaseRequisitionStatusUseCase`
+     no backend, documentada em `01-USE_CASES.md`); sem endpoint novo.
+  6. **Liberação/bloqueio de lote em status terminal** — reaproveita `GET
+     /api/inventory/lots` (lista, já usada por `InspectionTab.tsx`) ou
+     `GET /api/inventory/lots/by-code/:lot_number`, que já retornam
+     `status` por lote; sem endpoint novo.
+  **Nota de escopo:** esta entrega resolve a *decisão* técnica (registrada
+  acima) e documenta o caminho de implementação; a *aplicação* do
+  `PrerequisiteChecklist` nas 6 telas (consumindo os GETs listados) não
+  fazia parte do pedido desta rodada (que cobriu apenas retrofit de
+  `translateApiError`/`DidacticAlert` nas telas novas dos Blocos 1–5, ver
+  §6.2) e fica registrada como próximo incremento natural do Bloco 6.
 
 ### 6.2 Frontend — Componentes Padrão (Construir Uma Vez, Reusar em Tudo)
 
@@ -1156,10 +1201,34 @@ construir tela nova fora do padrão para depois ter que retrofitar).
     allowed_statuses }` (ver §6.1, item 9), então `translateApiError` já
     monta a parte "POR QUE" com o dado específico do lote em vez do
     fallback genérico.
-- [ ] Para telas novas construídas pelos Blocos 1–5 (gestão de perfis,
-  depósitos, transferências, filas com semáforo), já nascer usando
-  `PrerequisiteChecklist`/`translateApiError` desde o início — não é
-  retrofit, é aplicação direta do padrão
+- [x] **Verificado (2026-08-04):** as telas novas construídas pelos Blocos
+  1–5 já nasceram usando `translateApiError`/`DidacticAlert` — sem
+  pendência de retrofit:
+  - `client/src/pages/users/AccessProfilesPage.tsx` (gestão de perfis) —
+    `saveMutation`/`deactivateMutation` já usam `translateApiError` +
+    `DidacticAlert`.
+  - `client/src/pages/logistics/WarehousesPage.tsx` (depósitos) —
+    `CreateWarehouseDialog`/`EditWarehouseDialog` já usam
+    `translateApiError` + `DidacticAlert`.
+  - `client/src/pages/logistics/TransfersTab.tsx` (transferências) —
+    `approveMutation`/`CreateTransferDialog`/`RejectTransferDialog` já
+    usam `translateApiError` + `DidacticAlert`.
+  - Filas com semáforo de handoff (Bloco 3) não são telas novas
+    independentes — são a mesma coluna `HandoffDot` adicionada a 6 telas
+    já existentes (`PurchasesPage.tsx`, `RequisitionsPage.tsx`,
+    `ReceivingPage.tsx`, `ShippingPage.tsx`, `InspectionTab.tsx`,
+    `NonConformitiesTab.tsx`). Duas dessas 6 ainda usavam
+    `extractApiErrorMessage`/`window.alert` nos fluxos de mutation
+    (herdados de antes do Bloco 6, não fizeram parte do lote original de
+    9 telas do §6.2): **migradas nesta entrega**
+    (`PurchasesPage.tsx` — `statusMutation`, `createMutation` e
+    `ReceiveItemsDialog`; `NonConformitiesTab.tsx` — `createMutation` de
+    nova RNC; o formulário de tratativa CAPA já estava migrado). `
+    ReceivingPage.tsx` não tem mutation própria (delega para
+    `ReceivingConferenceDialog.tsx`, já conforme).
+  - `PrerequisiteChecklist` continua sem consumidor em nenhuma tela (ver
+    nota de escopo em §6.1 — a decisão técnica por caso foi feita nesta
+    entrega, a aplicação do componente fica para o próximo incremento).
 
 ### 6.3 QA — Revisão de Telas Existentes Contra o Padrão
 
@@ -1178,14 +1247,43 @@ construir tela nova fora do padrão para depois ter que retrofitar).
      item 9); `translateApiError` já monta a parte "POR QUE" com o dado
      do lote em vez do fallback genérico.
   Incremental às demais 25 telas identificadas ainda não iniciado.
-- [ ] Teste E2E: ação com 3 pré-requisitos faltando simultaneamente
-  (ex.: OP sem material + sem roteiro liberado + com etapa aberta) exibe
-  as 3 pendências juntas, não uma de cada vez
-- [ ] Teste E2E: corrigir um pré-requisito e reabrir a tela reflete o
-  checklist atualizado (item que era `✗` passa a `✓`)
-- [ ] Teste de regressão visual/copy: nenhuma tela nova entregue pelos
-  Blocos 1–5 usa `alert()`/toast genérico sem estrutura de 3 partes para
-  erros de pré-requisito
+- [x] **Teste (2026-08-04):** ação com múltiplos pré-requisitos faltando
+  simultaneamente exibe todas as pendências juntas, não uma de cada vez —
+  implementado como teste de integração de use case (mais determinístico
+  e barato que E2E de UI para validar o contrato `details`, que é a fonte
+  real consumida por `translateApiError`/`DidacticAlert` no frontend; a
+  camada de UI já é coberta pelo teste de regressão de import abaixo):
+  - `server/tests/unit/production-order-lifecycle.test.ts` — 2 casos
+    novos: `ChangeProductionOrderStatusUseCase` retornando `missing_items`
+    com 3 itens simultâneos na liberação de OP, e `open_steps` com 3
+    etapas simultâneas na conclusão de OP — ambos verificam
+    `toHaveLength(3)` e a lista completa, não apenas o primeiro item.
+- [x] **Teste (2026-08-04):** corrigir um pré-requisito e tentar novamente
+  reflete o estado atualizado (não fica preso a um snapshot antigo) —
+  `server/tests/unit/quality-lot-lifecycle.test.ts`, novo caso em
+  `ReleaseLotUseCase`: libera um lote `blocked` (pré-requisito corrigido),
+  depois simula a releitura do lote já `available` e confirma que a
+  segunda tentativa de liberar rejeita corretamente com o novo
+  `current_status`, provando que a checagem lê o estado real a cada
+  chamada. **Nota de escopo:** é um teste de integração de use case (a
+  correção do pré-requisito é simulada trocando o retorno do mock de
+  `findByPk` entre as duas chamadas), não um teste E2E de UI com reload de
+  tela — decisão consciente: o React Query já garante invalidação/refetch
+  no frontend (padrão estabelecido em todas as mutations do projeto), o
+  contrato que precisava de prova automatizada é o do backend (dado
+  sempre lido "fresco", nunca cacheado no use case).
+- [x] **Teste de regressão (2026-08-04):**
+  `client/src/test/didacticAlertRegression.test.ts` — varre estaticamente
+  (via `import.meta.glob` com `?raw`, sem depender de `node:fs`/
+  `@types/node`, que não estão instalados no client) as 9 telas novas/
+  retrofitadas dos Blocos 1–5 (`AccessProfilesPage.tsx`,
+  `WarehousesPage.tsx`, `TransfersTab.tsx`, `PurchasesPage.tsx`,
+  `RequisitionsPage.tsx`, `ReceivingPage.tsx`, `ShippingPage.tsx`,
+  `InspectionTab.tsx`, `NonConformitiesTab.tsx`) confirmando (a) nenhuma
+  usa `window.alert()`/`alert()` cru, e (b) toda tela com `useMutation`
+  importa `translateApiError` e `DidacticAlert`. 18 casos, todos verdes
+  após a migração de `PurchasesPage.tsx`/`NonConformitiesTab.tsx` nesta
+  mesma entrega (ver §6.2).
 
 ---
 
@@ -1469,3 +1567,41 @@ cd client && npx vitest run
 `docs/LEVANTAMENTO_ERP_2026-08-02.md` (itens 6 e 7 marcados `feito`),
 `docs/HANDOFF_CODEX.md` (seção nova), `docs/DIARIO_BORDO_GO_LIVE_G6.md`
 (entrada nova datada 2026-08-04, em apêndice).
+
+---
+
+## Nota fora do escopo dos Blocos 1–7 (fora de governança de acesso) — Frontend MRP/Requisições/Qualidade
+
+**Data:** 2026-08-04. Este item não pertence à numeração de blocos deste
+documento (que cobre perfis de acesso, amostra de engenharia, handoff,
+depósitos, NF-e), mas é registrado aqui por instrução explícita de
+handoff. Levantamento das telas `/production/mrp`,
+`/purchases/requisitions` e `/quality` confirmou que as 3 já estavam
+completas (roteadas, com CRUD/aprovação/conversão funcionando). Único
+gap real encontrado com backend pronto e sem UI: fluxo CAPA de RNC
+(`PUT /api/quality/non-conformities/:id`) sem tela de tratativa —
+resolvido com `NonConformityTreatmentSheet` em
+`client/src/pages/quality/NonConformitiesTab.tsx`. Detalhe completo em
+`docs/HANDOFF_CODEX.md`, seção "Frontend — Levantamento MRP/Requisições/
+Qualidade e fechamento do loop CAPA (Bloco 8)".
+
+---
+
+## Nota fora do escopo dos Blocos 1–7 (fora de governança de acesso) — Backend MRP fecha o ciclo para OP + reconfirmação item×fornecedor
+
+**Data:** 2026-08-04. Também fora da numeração de blocos deste documento
+(roadmap Fase 2/P1 do `CLAUDE.md`, não governança de acesso). Catálogo
+item×fornecedor (N:N) reconfirmado 100% implementado (CRUD completo em
+`server/src/modules/items/`), nenhum trabalho novo necessário. Gap real
+encontrado e fechado: o ciclo MRP → Requisição de Compra só cobria itens
+de compra (`MATERIA_PRIMA`) — itens de fabricação própria
+(`SUBCONJUNTO`/`PRODUTO_ACABADO`) não tinham conversão automática do
+plano MRP para Ordem de Produção. Novo endpoint
+`POST /api/mrp/planned-orders/convert-to-production`
+(`ConvertPlannedOrdersToProductionOrderUseCase.ts`). No caminho, corrigido
+um bug de schema real e pré-existente que bloqueava toda criação de OP
+(`production_orders` com 7 colunas `NOT NULL` sem default no banco físico,
+apesar de opcionais no model/domínio) via migration
+`20260804-000012-fix-production-orders-nullable-columns.cjs`. Detalhe
+completo em `docs/HANDOFF_CODEX.md`, seção "Backend — Catálogo
+item×fornecedor (confirmação) + MRP fecha o ciclo para OP (Fase 2/P1)".

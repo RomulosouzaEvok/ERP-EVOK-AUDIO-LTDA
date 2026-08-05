@@ -6,6 +6,12 @@ const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 
 const serverDir = path.resolve(__dirname, '..');
+// .env.test (banco isolado, ver server/.env.test) tem prioridade sobre
+// .env — carregado primeiro porque dotenv.config() NAO sobrescreve
+// variaveis ja presentes no processo; se .env.test nao existir, cai no
+// .env normal (comportamento antigo preservado para quem ainda nao criou
+// o arquivo, mas o guard em main() bloqueia rodar sem DB_NAME de teste).
+require('dotenv').config({ path: path.join(serverDir, '.env.test') });
 require('dotenv').config({ path: path.join(serverDir, '.env') });
 const jestBin = path.join(serverDir, 'node_modules', 'jest', 'bin', 'jest.js');
 
@@ -105,12 +111,28 @@ async function ensureFixtures() {
   try {
     await sequelize.authenticate();
 
-    const admin = await User.findOne({ where: { email: 'admin@evokaudio.com.br' } });
-    if (!admin) {
-      throw new Error('Usuario admin seed nao encontrado para os testes de integracao.');
-    }
+    // NUNCA usar o usuario admin real (admin@evokaudio.com.br) aqui: esta
+    // suite escreve senha/role via `.update()` direto no model, fora de
+    // qualquer use case auditado (nao gera audit_log), e roda contra
+    // qualquer banco que `DB_NAME` apontar no momento — inclusive o banco
+    // de desenvolvimento do dia a dia se ninguem isolar `.env.test`. Um
+    // incidente real (2026-08-05): isso sobrescreveu a senha do admin de
+    // producao/dev local, derrubando o acesso do dono do produto sem
+    // nenhum log explicando o motivo. Usuario sintetico `@evok.local`
+    // (mesma convencao ja usada em outros ~11 arquivos de teste do
+    // projeto) elimina o vetor por completo — nao ha usuario real para
+    // colidir, entao a senha pode ser fixa e conhecida sem risco.
+    const [admin] = await User.findOrCreate({
+      where: { email: 'ci-admin@evok.local' },
+      defaults: {
+        name: 'CI Admin (run-api-suite)',
+        password: process.env.ADMIN_SEED_PASSWORD || 'ci-admin-seed-password-2026',
+        active: true,
+        role: 'admin',
+      },
+    });
     await admin.update({
-      password: process.env.ADMIN_SEED_PASSWORD,
+      password: process.env.ADMIN_SEED_PASSWORD || 'ci-admin-seed-password-2026',
       active: true,
       role: 'admin',
     });
@@ -301,6 +323,27 @@ async function runJestSuite(suiteName, env) {
 }
 
 async function main() {
+  // Guard duro: esta suite escreve fixtures destrutivos (sobrescreve
+  // usuario admin, cria centenas de registros CI-*, incrementa estoque em
+  // +100000 unidades) direto no banco apontado por DB_HOST/DB_NAME/
+  // NODE_ENV do ambiente atual — nao existe isolamento de banco por
+  // codigo, so por configuracao. Se alguem rodar isto com credenciais de
+  // producao copiadas para debug local, o dano e real e imediato. Barato
+  // de checar, caro de nao checar.
+  if (process.env.NODE_ENV === 'production' || /prod/i.test(process.env.DB_NAME || '') || /prod/i.test(process.env.DB_HOST || '')) {
+    throw new Error(
+      'run-api-suite.cjs recusou rodar: NODE_ENV/DB_NAME/DB_HOST parecem apontar para producao. ' +
+      'Esta suite sobrescreve usuarios e dados de forma destrutiva — nunca rode contra producao.',
+    );
+  }
+  if (!/(_test|_ci)$/i.test(process.env.DB_NAME || '')) {
+    throw new Error(
+      `run-api-suite.cjs recusou rodar: DB_NAME="${process.env.DB_NAME}" nao parece ser um banco de teste ` +
+      '(esperado sufixo "_test" ou "_ci"). Esta suite sobrescreve dados de forma destrutiva — configure ' +
+      'DB_NAME em server/.env.test (ou equivalente) para um banco descartavel antes de rodar test:integration.',
+    );
+  }
+
   const suite = process.argv[2] || 'api';
   const port = process.env.TEST_API_PORT || '3101';
   const n8nWebhookSecret = process.env.N8N_WEBHOOK_SECRET || 'ci-n8n-webhook-secret-for-integration-tests';

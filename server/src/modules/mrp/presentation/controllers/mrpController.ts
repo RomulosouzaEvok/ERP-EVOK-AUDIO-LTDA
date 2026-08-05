@@ -2,10 +2,16 @@ const SequelizeMrpRepository = require('../../infrastructure/sequelize/Sequelize
 const SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
 const SequelizeItemSupplierRepository = require('../../../items/infrastructure/sequelize/SequelizeItemSupplierRepository');
 const SequelizePurchaseRequisitionRepository = require('../../../purchaseRequisitions/infrastructure/sequelize/SequelizePurchaseRequisitionRepository');
+const SequelizeProductionOrderRepository = require('../../../production/infrastructure/sequelize/SequelizeProductionOrderRepository');
 const GenerateMrpPlanUseCase = require('../../application/use-cases/GenerateMrpPlanUseCase');
 const ListPlannedOrdersUseCase = require('../../application/use-cases/ListPlannedOrdersUseCase');
 const ConvertPlannedOrdersToRequisitionUseCase = require('../../application/use-cases/ConvertPlannedOrdersToRequisitionUseCase');
-const { createMrpPlanSchema, convertPlannedOrdersSchema } = require('../validators/mrpValidators');
+const ConvertPlannedOrdersToProductionOrderUseCase = require('../../application/use-cases/ConvertPlannedOrdersToProductionOrderUseCase');
+const {
+  createMrpPlanSchema,
+  convertPlannedOrdersSchema,
+  convertPlannedOrdersToProductionSchema,
+} = require('../validators/mrpValidators');
 const { ValidationError } = require('../../../../errors');
 const { logAction } = require('../../../../services/auditLogService');
 
@@ -13,6 +19,7 @@ const mrpRepository = new SequelizeMrpRepository();
 const itemRepository = new SequelizeItemRepository();
 const itemSupplierRepository = new SequelizeItemSupplierRepository();
 const requisitionRepository = new SequelizePurchaseRequisitionRepository();
+const productionOrderRepository = new SequelizeProductionOrderRepository();
 
 /**
  * Controller do modulo de MRP persistente.
@@ -82,6 +89,47 @@ exports.convertPlannedOrders = async (req, res, next) => {
       entityDescription: data.requisition?.requisition_number,
       newValues: { status: data.requisition?.status, origin: data.requisition?.origin, converted_ids: data.converted_ids },
       description: `Requisicao de compra ${data.requisition?.requisition_number} gerada a partir de ${data.converted_ids.length} ordem(ns) planejada(s) do MRP`,
+    });
+
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    if (error?.issues) {
+      return next(new ValidationError('Payload invalido.', error.issues));
+    }
+    next(error);
+  }
+};
+
+/**
+ * `POST /api/mrp/planned-orders/convert-to-production` — converte um lote
+ * de ordens planejadas do MRP em Ordens de Producao (uma OP por ordem
+ * planejada), fechando o ciclo planejamento -> fabricacao propria para
+ * itens `SUBCONJUNTO`/`PRODUTO_ACABADO` (complemento da conversao em
+ * Requisicao de Compra, usada para itens `MATERIA_PRIMA`).
+ */
+exports.convertPlannedOrdersToProduction = async (req, res, next) => {
+  try {
+    const body = convertPlannedOrdersToProductionSchema.parse(req.body);
+    const useCase = new ConvertPlannedOrdersToProductionOrderUseCase(
+      mrpRepository,
+      itemRepository,
+      productionOrderRepository,
+    );
+    const data = await useCase.execute({
+      planned_order_ids: body.planned_order_ids,
+      notes: body.notes,
+      requester_id: req.user.id,
+    });
+
+    logAction(req, {
+      action: 'convert_to_production_order',
+      entityType: 'ProductionOrder',
+      entityDescription: `${data.production_orders.length} OP(s)`,
+      newValues: {
+        order_numbers: data.production_orders.map((order) => order.order_number),
+        converted_ids: data.converted_ids,
+      },
+      description: `${data.production_orders.length} Ordem(ns) de Producao gerada(s) a partir de ${data.converted_ids.length} ordem(ns) planejada(s) do MRP`,
     });
 
     res.status(201).json({ success: true, data });

@@ -26,9 +26,11 @@ import { BusinessRuleError, NotFoundError } from '../../src/errors';
 const ENGINEERING_SAMPLE_ORIGIN = 'engenharia_amostra';
 
 const engineeringProjectFindByPkMock = jest.fn();
+const employeeFindOneMock = jest.fn(async () => null);
 
 jest.mock('../../src/models/index', () => ({
   EngineeringProject: { findByPk: (...args: any[]) => engineeringProjectFindByPkMock(...args) },
+  Employee: { findOne: (...args: any[]) => employeeFindOneMock(...args) },
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -37,6 +39,8 @@ const CreatePurchaseRequisitionUseCase = require('../../src/modules/purchaseRequ
 describe('CreatePurchaseRequisitionUseCase — amostra de engenharia', () => {
   beforeEach(() => {
     engineeringProjectFindByPkMock.mockReset();
+    employeeFindOneMock.mockReset();
+    employeeFindOneMock.mockResolvedValue(null);
   });
 
   function makeUseCase(engineeringProjectFindByPk: jest.Mock) {

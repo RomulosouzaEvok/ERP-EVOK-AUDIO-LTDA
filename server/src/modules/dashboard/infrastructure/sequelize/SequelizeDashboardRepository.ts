@@ -99,11 +99,30 @@ class SequelizeDashboardRepository extends DashboardRepository {
       { replacements: { openStatuses: ['open', 'analysis'] }, type: QueryTypes.SELECT }
     );
 
+    // Bloco B (docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md): RNCs
+    // com `immediate_action = 'return_supplier'` ainda nao encerradas
+    // (status fora de closed/canceled) sao item de trabalho pendente na
+    // fila de Compras — Qualidade ja decidiu QUE devolver, falta Compras
+    // decidir COMO resolver com o fornecedor (credito/reposicao/
+    // cancelamento). Contador separado de `qualidade.open_rncs`
+    // (RNC pode estar aberta por outro motivo que nao devolucao).
+    const [pendingReturnsRow] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count
+       FROM non_conformities
+       WHERE immediate_action = :returnAction
+         AND status NOT IN (:closedStatuses)`,
+      {
+        replacements: { returnAction: 'return_supplier', closedStatuses: ['closed', 'canceled'] },
+        type: QueryTypes.SELECT
+      }
+    );
+
     return {
       recebimento: { pending: receivingRow?.count ?? 0 },
       requisicoes: { awaiting_approval: requisitionsRow?.count ?? 0 },
       expedicao: { ready_to_ship: shippingRow?.count ?? 0 },
       qualidade: { quarantine: quarantineRow?.count ?? 0, open_rncs: openRncRow?.count ?? 0 },
+      compras: { pending_returns: pendingReturnsRow?.count ?? 0 },
     };
   }
 }

@@ -19,7 +19,7 @@ interface AssetAttributes {
   department_id: number | null;
   responsible_id: number | null;
   location: string | null;
-  asset_type: 'machine' | 'equipment' | 'tool' | 'furniture' | 'vehicle' | 'it' | 'other';
+  asset_type: 'machine' | 'equipment' | 'tool' | 'furniture' | 'vehicle' | 'it' | 'other' | 'license';
   brand: string | null;
   model: string | null;
   serial_number: string | null;
@@ -27,11 +27,13 @@ interface AssetAttributes {
   purchase_value: number | null;
   current_value: number | null;
   useful_life_months: number | null;
-  status: 'active' | 'in_maintenance' | 'decommissioned' | 'lost';
+  status: 'active' | 'in_maintenance' | 'decommissioned' | 'lost' | 'returned_to_supplier';
   qr_code: string | null;
   notes: string | null;
   last_inventory_date: string | null;
   photo_path: string | null;
+  license_expires_at: string | null;
+  purchase_item_id: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -45,7 +47,7 @@ const Asset = sequelize.define('Asset', {
   department_id: { type: DataTypes.INTEGER, comment: 'FK → departments.id' },
   responsible_id: { type: DataTypes.INTEGER, comment: 'FK → employees.id' },
   location: DataTypes.STRING(100),
-  asset_type: { type: DataTypes.ENUM('machine', 'equipment', 'tool', 'furniture', 'vehicle', 'it', 'other'), defaultValue: 'equipment' },
+  asset_type: { type: DataTypes.ENUM('machine', 'equipment', 'tool', 'furniture', 'vehicle', 'it', 'other', 'license'), defaultValue: 'equipment' },
   brand: DataTypes.STRING(100),
   model: DataTypes.STRING(100),
   serial_number: DataTypes.STRING(100),
@@ -53,11 +55,17 @@ const Asset = sequelize.define('Asset', {
   purchase_value: { type: DataTypes.DECIMAL(10, 2), comment: 'Valor de aquisição' },
   current_value: { type: DataTypes.DECIMAL(10, 2), comment: 'Valor contábil atual' },
   useful_life_months: DataTypes.INTEGER,
-  status: { type: DataTypes.ENUM('active', 'in_maintenance', 'decommissioned', 'lost'), defaultValue: 'active' },
+  status: {
+    type: DataTypes.ENUM('active', 'in_maintenance', 'decommissioned', 'lost', 'returned_to_supplier'),
+    defaultValue: 'active',
+    comment: "'returned_to_supplier': ativo com defeito de fabrica devolvido ao fornecedor de origem via NonConformity.immediate_action='return_supplier' (Bloco B, docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md) — distinto de 'lost' (extravio sem fornecedor responsavel)."
+  },
   qr_code: DataTypes.STRING(255),
   notes: DataTypes.TEXT,
   last_inventory_date: DataTypes.DATEONLY,
-  photo_path: DataTypes.STRING(500)
+  photo_path: { type: DataTypes.STRING(500), allowNull: true },
+  license_expires_at: { type: DataTypes.DATEONLY, allowNull: true, comment: 'Data de vencimento da licenca (usado quando asset_type = license)' },
+  purchase_item_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → purchase_order_items.id (origem de compra do ativo, quando aplicável)' }
 }, {
   tableName: 'assets',
   underscored: true,

@@ -69,3 +69,24 @@ export function ModuleRoute({ module }: { module: AccessModuleKey }) {
 
   return <Outlet />;
 }
+
+/**
+ * Variante de `ModuleRoute` que libera acesso se o usuário tiver QUALQUER
+ * um dos módulos em `modules` (OR, não AND) — usado por `/reports` (Bloco
+ * E), onde a página se auto-filtra por aba conforme o módulo
+ * (`relatorios.producao`/`relatorios.compras`/`relatorios.custos`), então a
+ * rota só precisa bloquear quem não tem acesso a nenhum dos três.
+ */
+export function AnyModuleRoute({ modules }: { modules: AccessModuleKey[] }) {
+  const { hasModuleAccess, permissionsFetchFailed, isPermissionsLoading } = useAuth();
+
+  if (isPermissionsLoading) {
+    return <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">Carregando...</div>;
+  }
+
+  if (!modules.some((module) => hasModuleAccess(module)) && !permissionsFetchFailed) {
+    return <AccessDeniedPage variant="accessDenied" />;
+  }
+
+  return <Outlet />;
+}

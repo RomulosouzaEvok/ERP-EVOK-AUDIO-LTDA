@@ -28,6 +28,7 @@ interface AccountPayableAttributes {
   notes: string | null;
   approved_by: number | null;
   approval_date: string | null;
+  invoice_type: 'nfe' | 'nfse' | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -49,7 +50,8 @@ const AccountPayable = sequelize.define('AccountPayable', {
   cost_center: DataTypes.STRING(100),
   notes: DataTypes.TEXT,
   approved_by: { type: DataTypes.INTEGER, comment: 'FK → users.id' },
-  approval_date: DataTypes.DATEONLY
+  approval_date: DataTypes.DATEONLY,
+  invoice_type: { type: DataTypes.ENUM('nfe', 'nfse'), allowNull: true, comment: 'Tipo de nota vinculada: nfe (mercadoria) ou nfse (serviço/licença digital)' }
 }, {
   tableName: 'accounts_payable',
   underscored: true,

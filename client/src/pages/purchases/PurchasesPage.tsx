@@ -9,7 +9,7 @@ import { Plus, Trash2, Eye, ClipboardList, PackageOpen, CalendarClock, AlertOcta
 import * as purchasesApi from '@/api/purchases';
 import * as suppliersApi from '@/api/suppliers';
 import * as productsApi from '@/api/products';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DetailField } from '@/components/DetailField';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
+import { DidacticAlert } from '@/components/DidacticAlert';
 
 const STATUS_LABEL: Record<purchasesApi.PurchaseStatus, string> = {
   pending: 'Pendente',
@@ -70,11 +71,12 @@ export default function PurchasesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [receivingPurchase, setReceivingPurchase] = React.useState<purchasesApi.Purchase | null>(null);
   const [detailsPurchase, setDetailsPurchase] = React.useState<purchasesApi.Purchase | null>(null);
   const [page, setPage] = React.useState(1);
   const [openOrdersOnly, setOpenOrdersOnly] = React.useState(false);
+  const [statusError, setStatusError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['purchases', page],
@@ -114,13 +116,16 @@ export default function PurchasesPage() {
       reset({ supplier_id: undefined, items: [{ product_id: undefined, quantity: 1, unit_price: undefined }] } as never);
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível criar o pedido de compra.')),
   });
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: purchasesApi.PurchaseStatus }) => purchasesApi.updatePurchaseStatus(id, status),
-    onSuccess: invalidate,
-    onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível alterar o status do pedido.')),
+    onSuccess: () => {
+      invalidate();
+      setStatusError(null);
+    },
+    onError: (error) => setStatusError(translateApiError(error, 'Não foi possível alterar o status do pedido.')),
   });
 
   return (
@@ -200,7 +205,7 @@ export default function PurchasesPage() {
                   </Button>
                 </div>
 
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar pedido'}
@@ -211,6 +216,8 @@ export default function PurchasesPage() {
           </Dialog>
         )}
       </div>
+
+      {statusError && <DidacticAlert error={statusError} />}
 
       <Table>
         <TableHeader>
@@ -376,7 +383,7 @@ function ReceiveItemsDialog({ purchase, onClose }: { purchase: purchasesApi.Purc
   const queryClient = useQueryClient();
   const [quantities, setQuantities] = React.useState<Record<number, string>>({});
   const [invoiceNumber, setInvoiceNumber] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<DidacticError | null>(null);
 
   React.useEffect(() => {
     if (purchase) {
@@ -401,7 +408,7 @@ function ReceiveItemsDialog({ purchase, onClose }: { purchase: purchasesApi.Purc
       setError(null);
       onClose();
     },
-    onError: (err) => setError(extractApiErrorMessage(err)),
+    onError: (err) => setError(translateApiError(err, 'Não foi possível registrar o recebimento.', 'receive-purchase')),
   });
 
   return (
@@ -439,7 +446,7 @@ function ReceiveItemsDialog({ purchase, onClose }: { purchase: purchasesApi.Purc
               </div>
             );
           })}
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <DidacticAlert error={error} />}
         </div>
         <DialogFooter>
           <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>

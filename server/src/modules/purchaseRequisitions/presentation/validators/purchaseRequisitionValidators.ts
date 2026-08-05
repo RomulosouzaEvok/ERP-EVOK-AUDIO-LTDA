@@ -18,6 +18,13 @@ const requisitionItemSchema = z.object({
 // aceitar requester_id/approved_by/approval_date no body permitiria spoofing
 // de identidade e requisicao nascendo pre-aprovada (bypass do workflow).
 //
+// Bloco C (docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md): department_id
+// tambem nao e aceito do cliente pelo mesmo motivo — o use case resolve
+// sempre a partir do Employee vinculado ao usuario autenticado
+// (requester_id -> Employee.user_id -> Employee.department_id), nunca do
+// payload. Se o body enviar department_id, o schema `.strict()` rejeita
+// (campo desconhecido).
+//
 // Bloco 2 (UC-39, BUSINESS_RULES.md §9): origin aceita o valor livre
 // 'engenharia_amostra' (origin ja e VARCHAR(80) livre no banco, nao ENUM —
 // nenhuma mudanca de schema necessaria para o valor em si).
@@ -34,7 +41,6 @@ const requisitionItemSchema = z.object({
 // outro campo (`origin`) e porque o erro correto para essa condicao e 422
 // (regra de negocio), nao 400 (`ValidationError`, usado pelo Zod).
 export const createPurchaseRequisitionSchema = z.object({
-  department_id: z.coerce.number().int().positive().optional(),
   production_order_id: z.coerce.number().int().positive().optional(),
   engineering_project_id: z.coerce.number().int().positive().optional(),
   request_date: z.string().date().optional(),
@@ -45,12 +51,19 @@ export const createPurchaseRequisitionSchema = z.object({
   items: z.array(requisitionItemSchema).min(1),
 }).strict();
 
+// Bloco C (docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md): department_id
+// aqui e um FILTRO de leitura (query param), diferente do create — o
+// frontend usa para pedir "so as requisicoes do meu departamento" por tela
+// de departamento (Logistica/Producao/Manutencao/Qualidade). Nao ha risco de
+// spoofing de identidade em filtro de listagem (apenas restringe o
+// resultado, nunca grava nada).
 export const listPurchaseRequisitionQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(10),
   status: z.enum(['draft', 'pending', 'approved', 'ordered', 'partial', 'received', 'canceled']).optional(),
   origin: z.string().trim().optional(),
   requester_id: z.coerce.number().int().positive().optional(),
+  department_id: z.coerce.number().int().positive().optional(),
   start_date: z.string().date().optional(),
   end_date: z.string().date().optional(),
 }).strict();

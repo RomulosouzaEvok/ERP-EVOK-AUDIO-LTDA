@@ -25,6 +25,8 @@ import {
   DraftingCompass,
   Send,
   Zap,
+  Wrench,
+  LifeBuoy,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -54,7 +56,7 @@ interface NavItem {
    * derivado de `GET /api/dashboard/handoffs`. Itens sem `badgeKey` nunca
    * mostram badge.
    */
-  badgeKey?: 'recebimento' | 'requisicoes' | 'expedicao' | 'qualidade';
+  badgeKey?: 'recebimento' | 'requisicoes' | 'expedicao' | 'qualidade' | 'compras_devolucoes';
 }
 
 interface NavSection {
@@ -62,39 +64,85 @@ interface NavSection {
   items: NavItem[];
 }
 
+/**
+ * Menu reorganizado por departamento (Bloco E,
+ * `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`) — segue o desenho
+ * final decidido pelo dono do produto: "Logística" e "Operações" (antigas
+ * seções que misturavam departamentos) viram uma seção só por área,
+ * seguindo o fluxo físico do material; cada departamento com requisição
+ * própria (Logística/Produção/Manutenção/Qualidade) ganha seu próprio item
+ * de menu (Compras centraliza só aprovação/cotação); "Relatórios" deixa de
+ * ser um item genérico solto em Operações e ganha um atalho por área
+ * (deep-link `?tab=`, ver `ReportsPage`); Patrimônio se divide em dois
+ * departamentos novos (Manutenção interna de máquina vs. Ativos & Garantia
+ * — produto vendido que volta com defeito).
+ */
 const NAV_SECTIONS: NavSection[] = [
   { label: '', items: [{ label: 'Início', to: '/', icon: LayoutDashboard, module: 'dashboard' }] },
   {
     label: 'Logística',
     items: [
+      { label: 'Produtos', to: '/products', icon: Package, module: 'produtos' },
       { label: 'Estoque', to: '/logistics/estoque', icon: Warehouse, module: 'estoque' },
+      { label: 'Depósitos', to: '/logistics/warehouses', icon: Settings2, module: 'estoque' },
       { label: 'Recebimento', to: '/logistics/recebimento', icon: PackageCheck, module: 'recebimento', badgeKey: 'recebimento' },
       { label: 'Expedição', to: '/logistics/expedicao', icon: Send, module: 'expedicao', badgeKey: 'expedicao' },
-      { label: 'Depósitos', to: '/logistics/warehouses', icon: Settings2, module: 'estoque' },
+      { label: 'Requisições de Logística', to: '/logistics/requisitions', icon: ClipboardList, module: 'estoque' },
+      { label: 'Relatórios de Logística', to: '/reports?tab=purchasing', icon: BarChart3, module: 'relatorios.compras' },
     ],
   },
   {
-    label: 'Operações',
+    label: 'Vendas',
+    items: [{ label: 'Vendas', to: '/sales', icon: ShoppingCart, module: 'vendas' }],
+  },
+  {
+    label: 'Compras',
     items: [
-      { label: 'Produtos e estoque', to: '/products', icon: Package, module: 'produtos' },
-      { label: 'Vendas', to: '/sales', icon: ShoppingCart, module: 'vendas' },
-      { label: 'Compras', to: '/purchases', icon: Truck, module: 'compras' },
-      { label: 'Requisições', to: '/purchases/requisitions', icon: ClipboardList, module: 'requisicoes', badgeKey: 'requisicoes' },
+      { label: 'Compras', to: '/purchases', icon: Truck, module: 'compras', badgeKey: 'compras_devolucoes' },
+      { label: 'Fornecedores', to: '/purchases/suppliers', icon: Truck, module: 'compras' },
+      { label: 'Fila de aprovação', to: '/purchases/requisitions', icon: ClipboardList, module: 'requisicoes', badgeKey: 'requisicoes' },
+      { label: 'Relatórios de Compras', to: '/reports?tab=purchasing', icon: BarChart3, module: 'relatorios.compras' },
+    ],
+  },
+  {
+    label: 'Produção',
+    items: [
       { label: 'Produção', to: '/production', icon: Factory, module: 'producao' },
       { label: 'Chão de Fábrica', to: '/production/shop-floor', icon: ClipboardList, module: 'chao_de_fabrica' },
       { label: 'Centros de Trabalho', to: '/production/work-centers', icon: Factory, module: 'centros_de_trabalho' },
       { label: 'MRP', to: '/production/mrp', icon: ListTree, module: 'mrp' },
+      { label: 'Requisições de Produção', to: '/production/requisitions', icon: ClipboardList, module: 'producao' },
+      { label: 'Relatórios de Produção', to: '/reports?tab=production', icon: BarChart3, module: 'relatorios.producao' },
+    ],
+  },
+  {
+    label: 'Qualidade & Engenharia',
+    items: [
       { label: 'Qualidade', to: '/quality', icon: ShieldAlert, module: 'qualidade', badgeKey: 'qualidade' },
+      { label: 'Requisições de Qualidade', to: '/quality/requisitions', icon: ClipboardList, module: 'qualidade' },
       { label: 'Laboratório', to: '/laboratory', icon: FlaskConical, module: 'laboratorio' },
       { label: 'Engenharia', to: '/engineering', icon: DraftingCompass, module: 'engenharia' },
-      { label: 'Relatórios', to: '/reports', icon: BarChart3, module: 'relatorios.producao' },
+    ],
+  },
+  {
+    label: 'Manutenção',
+    items: [
+      { label: 'Ordens de Manutenção', to: '/maintenance', icon: Wrench, module: 'manutencao' },
+      { label: 'Requisições de Manutenção', to: '/maintenance/requisitions', icon: ClipboardList, module: 'manutencao' },
+    ],
+  },
+  {
+    label: 'Ativos & Garantia',
+    items: [
       { label: 'Patrimônio', to: '/patrimonio', icon: Boxes, module: 'patrimonio' },
+      { label: 'Garantia / Assistência Técnica', to: '/service-orders', icon: LifeBuoy, module: 'garantia' },
     ],
   },
   {
     label: 'Gestão',
     items: [
       { label: 'Financeiro', to: '/financial', icon: Wallet, roles: ['admin', 'financial'], module: 'financeiro' },
+      { label: 'Relatórios Financeiros', to: '/reports?tab=financial', icon: BarChart3, roles: ['admin', 'financial'], module: 'relatorios.financeiro' },
       { label: 'Rastreabilidade', to: '/traceability', icon: Search, module: 'rastreabilidade' },
     ],
   },
@@ -112,29 +160,35 @@ const NAV_SECTIONS: NavSection[] = [
 const BREADCRUMBS: Record<string, string[]> = {
   '/': ['Início'],
   '/change-password': ['Início', 'Trocar senha'],
-  '/products': ['Produtos e estoque'],
-  '/products/inventory-counts': ['Produtos e estoque', 'Contagem de inventário'],
+  '/products': ['Logística', 'Produtos'],
+  '/products/inventory-counts': ['Logística', 'Produtos', 'Contagem de inventário'],
   '/logistics/estoque': ['Logística', 'Estoque'],
   '/logistics/recebimento': ['Logística', 'Recebimento'],
   '/logistics/expedicao': ['Logística', 'Expedição'],
   '/logistics/warehouses': ['Logística', 'Depósitos'],
+  '/logistics/requisitions': ['Logística', 'Requisições de Logística'],
   '/sales': ['Vendas'],
   '/sales/clients': ['Vendas', 'Clientes'],
   '/purchases': ['Compras'],
   '/purchases/suppliers': ['Compras', 'Fornecedores'],
-  '/purchases/requisitions': ['Compras', 'Requisições'],
+  '/purchases/requisitions': ['Compras', 'Fila de aprovação'],
   '/production': ['Produção'],
   '/production/bom': ['Produção', 'Estrutura de produto (BOM)'],
   '/production/shop-floor': ['Produção', 'Chão de Fábrica'],
   '/production/work-centers': ['Produção', 'Centros de Trabalho'],
   '/production/mrp': ['Produção', 'MRP'],
-  '/quality': ['Qualidade'],
-  '/laboratory': ['Laboratório'],
-  '/engineering': ['Engenharia'],
+  '/production/requisitions': ['Produção', 'Requisições de Produção'],
+  '/quality': ['Qualidade & Engenharia', 'Qualidade'],
+  '/quality/requisitions': ['Qualidade & Engenharia', 'Requisições de Qualidade'],
+  '/laboratory': ['Qualidade & Engenharia', 'Laboratório'],
+  '/engineering': ['Qualidade & Engenharia', 'Engenharia'],
+  '/maintenance': ['Manutenção', 'Ordens de Manutenção'],
+  '/maintenance/requisitions': ['Manutenção', 'Requisições de Manutenção'],
   '/reports': ['Relatórios'],
-  '/patrimonio': ['Patrimônio'],
-  '/financial': ['Financeiro'],
-  '/traceability': ['Rastreabilidade'],
+  '/patrimonio': ['Ativos & Garantia', 'Patrimônio'],
+  '/service-orders': ['Ativos & Garantia', 'Garantia / Assistência Técnica'],
+  '/financial': ['Gestão', 'Financeiro'],
+  '/traceability': ['Gestão', 'Rastreabilidade'],
   '/users': ['Usuários'],
   '/users/access-profiles': ['Usuários', 'Perfis de Acesso'],
   '/audit-logs': ['Usuários', 'Log de auditoria'],
@@ -207,6 +261,8 @@ export default function AppLayout() {
         return handoffs.expedicao.ready_to_ship;
       case 'qualidade':
         return handoffs.qualidade.quarantine + handoffs.qualidade.open_rncs;
+      case 'compras_devolucoes':
+        return handoffs.compras.pending_returns;
       default:
         return undefined;
     }

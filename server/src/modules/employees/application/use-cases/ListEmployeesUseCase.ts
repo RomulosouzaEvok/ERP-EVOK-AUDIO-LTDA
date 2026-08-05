@@ -13,6 +13,7 @@ interface ListEmployeesInput {
   search?: string;
   status?: string;
   department_id?: string | number;
+  user_id?: string | number;
 }
 
 interface ListEmployeesOutput {
@@ -37,13 +38,13 @@ class ListEmployeesUseCase extends UseCase<ListEmployeesInput, ListEmployeesOutp
    * @returns Linhas encontradas, total e dados de paginacao.
    */
   public async execute(input: ListEmployeesInput): Promise<ListEmployeesOutput> {
-    const { page = '1', limit = '10', search, status, department_id } = input;
+    const { page = '1', limit = '10', search, status, department_id, user_id } = input;
     const p = parseInt(String(page), 10);
     const l = parseInt(String(limit), 10);
     const o = (p - 1) * l;
 
     const { count, rows } = await this.employeesRepository.findAndCountAll(
-      { search, status, department_id },
+      { search, status, department_id, user_id },
       { limit: l, offset: o }
     );
 

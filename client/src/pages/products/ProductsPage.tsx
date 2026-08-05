@@ -32,6 +32,7 @@ import { QrCodeDialog } from '@/components/QrCodeDialog';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
 import { useAuth } from '@/context/AuthContext';
+import { UsageItemsTab } from '@/pages/products/UsageItemsTab';
 
 const productSchema = z.object({
   name: z.string().min(1, 'Informe o nome.'),
@@ -58,6 +59,7 @@ export default function ProductsPage() {
   const { hasRole } = useAuth();
   const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
+  const [view, setView] = React.useState<'products' | 'usage'>('products');
   const [search, setSearch] = React.useState('');
   const [page, setPage] = React.useState(1);
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -126,12 +128,12 @@ export default function ProductsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Produtos e estoque</h1>
+        <h1 className="text-2xl font-semibold">Produtos</h1>
         <div className="flex gap-2">
           <Button asChild variant="outline">
             <Link to="/products/inventory-counts">Contagem de inventário</Link>
           </Button>
-          {canWrite && (
+          {view === 'products' && canWrite && (
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -213,6 +215,31 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      <div className="flex gap-2 border-b">
+        <button
+          type="button"
+          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            view === 'products' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setView('products')}
+        >
+          Matéria-prima e produção
+        </button>
+        <button
+          type="button"
+          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            view === 'usage' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setView('usage')}
+        >
+          Uso e consumo / Ativo
+        </button>
+      </div>
+
+      {view === 'usage' ? (
+        <UsageItemsTab />
+      ) : (
+        <>
       <p className="text-sm text-muted-foreground">
         Saldos e movimentações agora ficam em{' '}
         <Link to="/logistics/estoque" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
@@ -320,6 +347,8 @@ export default function ProductsPage() {
       </Table>
 
       <Pagination pagination={data?.pagination} onPageChange={setPage} />
+        </>
+      )}
 
       {qrCodeProduct && (
         <QrCodeDialog

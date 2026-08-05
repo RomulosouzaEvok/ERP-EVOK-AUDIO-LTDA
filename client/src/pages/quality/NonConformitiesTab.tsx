@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus } from 'lucide-react';
+import { Plus, Eye } from 'lucide-react';
 
 import * as nonConformitiesApi from '@/api/nonConformities';
 import * as productsApi from '@/api/products';
 import * as suppliersApi from '@/api/suppliers';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import * as usersApi from '@/api/users';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,9 @@ import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { DetailField } from '@/components/DetailField';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
 
@@ -88,6 +92,36 @@ const IMMEDIATE_ACTION_LABEL: Record<nonConformitiesApi.NonConformityImmediateAc
   other: 'Outro',
 };
 
+const ROOT_CAUSE_CATEGORY_LABEL: Record<nonConformitiesApi.NonConformityRootCauseCategory, string> = {
+  material: 'Material',
+  machine: 'Máquina',
+  method: 'Método',
+  manpower: 'Mão de obra',
+  measurement: 'Medição',
+  environment: 'Meio ambiente',
+};
+
+const EFFECTIVENESS_RESULT_LABEL: Record<nonConformitiesApi.NonConformityEffectivenessResult, string> = {
+  effective: 'Eficaz',
+  partially_effective: 'Parcialmente eficaz',
+  ineffective: 'Ineficaz',
+};
+
+/**
+ * Próximo status sugerido no fluxo CAPA (5 porquês → ação corretiva →
+ * verificação de eficácia → encerramento). O backend não impõe máquina de
+ * estados rígida em `UpdateNonConformityUseCase` — esta ordem é a
+ * convenção de UX desta tela, mas qualquer status pode ser selecionado
+ * manualmente no formulário de tratativa.
+ */
+const STATUS_FLOW_ORDER: nonConformitiesApi.NonConformityStatus[] = [
+  'open',
+  'analysis',
+  'corrective_action',
+  'effectiveness_check',
+  'closed',
+];
+
 
 const nonConformitySchema = z.object({
   origin: z.enum(['incoming', 'in_process', 'final', 'audit', 'customer_complaint', 'supplier']),
@@ -130,10 +164,11 @@ export function NonConformitiesTab({
   const queryClient = useQueryClient();
 
   const [open, setOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [statusFilter, setStatusFilter] = React.useState<nonConformitiesApi.NonConformityStatus | ''>('');
   const [severityFilter, setSeverityFilter] = React.useState<nonConformitiesApi.NonConformitySeverity | ''>('');
   const [page, setPage] = React.useState(1);
+  const [selectedNc, setSelectedNc] = React.useState<nonConformitiesApi.NonConformity | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['non-conformities', page, statusFilter, severityFilter],
@@ -210,7 +245,7 @@ export function NonConformitiesTab({
       reset(EMPTY_DEFAULTS);
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error, 'Não foi possível registrar a não-conformidade.')),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível registrar a não-conformidade.')),
   });
 
   return (
@@ -393,7 +428,7 @@ export function NonConformitiesTab({
                   </p>
                 </div>
 
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting || createMutation.isPending ? 'Salvando...' : 'Registrar RNC'}
@@ -415,19 +450,24 @@ export function NonConformitiesTab({
             <TableHead>Severidade</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Data</TableHead>
+            <TableHead>Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={7} />}
+          {isLoading && <TableSkeletonRows columns={8} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-destructive">
+              <TableCell colSpan={8} className="text-center text-destructive">
                 Não foi possível carregar as não-conformidades. Tente novamente.
               </TableCell>
             </TableRow>
           )}
           {data?.data.map((nc) => (
-            <TableRow key={nc.id}>
+            <TableRow
+              key={nc.id}
+              className="cursor-pointer border-l-4 border-l-transparent transition-colors hover:border-l-brand hover:bg-brand/5"
+              onClick={() => setSelectedNc(nc)}
+            >
               <TableCell>{nc.handoff_signal && <HandoffDot signal={nc.handoff_signal} />}</TableCell>
               <TableCell className="font-medium">{nc.nc_number}</TableCell>
               <TableCell>{nc.product ? `${nc.product.code} — ${nc.product.name}` : '-'}</TableCell>
@@ -439,11 +479,16 @@ export function NonConformitiesTab({
                 <Badge variant={STATUS_BADGE[nc.status]}>{STATUS_LABEL[nc.status]}</Badge>
               </TableCell>
               <TableCell>{new Date(nc.report_date ?? nc.createdAt).toLocaleDateString('pt-BR')}</TableCell>
+              <TableCell onClick={(event) => event.stopPropagation()}>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedNc(nc)}>
+                  <Eye className="size-4" /> Tratativa
+                </Button>
+              </TableCell>
             </TableRow>
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
+              <TableCell colSpan={8} className="text-center text-muted-foreground">
                 Nenhuma não-conformidade registrada.
               </TableCell>
             </TableRow>
@@ -452,6 +497,247 @@ export function NonConformitiesTab({
       </Table>
 
       <Pagination pagination={data?.pagination} onPageChange={setPage} />
+
+      <NonConformityTreatmentSheet
+        nonConformity={selectedNc}
+        canWrite={canWrite}
+        onClose={() => setSelectedNc(null)}
+      />
+    </div>
+  );
+}
+
+const treatmentSchema = z.object({
+  status: z.enum(['open', 'analysis', 'corrective_action', 'effectiveness_check', 'closed', 'canceled']),
+  root_cause_category: z.string().optional(),
+  root_cause: z.string().optional(),
+  corrective_action: z.string().optional(),
+  responsible_id: z.string().optional(),
+});
+
+type TreatmentFormData = z.infer<typeof treatmentSchema>;
+
+/**
+ * Sheet de tratativa CAPA de uma RNC: causa raiz, ação corretiva,
+ * responsável e avanço de status (`analysis` → `corrective_action` →
+ * `effectiveness_check` → `closed`), consumindo
+ * `PUT /api/quality/non-conformities/:id`.
+ */
+function NonConformityTreatmentSheet({
+  nonConformity,
+  canWrite,
+  onClose,
+}: {
+  nonConformity: nonConformitiesApi.NonConformity | null;
+  canWrite: boolean;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [treatmentError, setTreatmentError] = React.useState<DidacticError | null>(null);
+
+  const { data: users } = useQuery({
+    queryKey: ['users-all-for-nc'],
+    queryFn: () => usersApi.listUsers({ limit: 200, active: true }),
+    enabled: Boolean(nonConformity) && canWrite,
+  });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { isSubmitting },
+  } = useForm<TreatmentFormData>({
+    resolver: zodResolver(treatmentSchema),
+    defaultValues: {
+      status: 'open',
+      root_cause_category: '',
+      root_cause: '',
+      corrective_action: '',
+      responsible_id: '',
+    },
+  });
+
+  React.useEffect(() => {
+    if (nonConformity) {
+      reset({
+        status: nonConformity.status,
+        root_cause_category: nonConformity.root_cause_category ?? '',
+        root_cause: nonConformity.root_cause ?? '',
+        corrective_action: nonConformity.corrective_action ?? '',
+        responsible_id: nonConformity.responsible_id ? String(nonConformity.responsible_id) : '',
+      });
+      setTreatmentError(null);
+    }
+  }, [nonConformity, reset]);
+
+  const isFinalized = nonConformity?.status === 'closed' || nonConformity?.status === 'canceled';
+  const currentStatus = watch('status');
+
+  const updateMutation = useMutation({
+    mutationFn: (values: TreatmentFormData) => {
+      if (!nonConformity) return Promise.reject(new Error('RNC não selecionada.'));
+      return nonConformitiesApi.updateNonConformity(nonConformity.id, {
+        status: values.status,
+        root_cause: values.root_cause || undefined,
+        corrective_action: values.corrective_action || undefined,
+        responsible_id: values.responsible_id ? Number(values.responsible_id) : undefined,
+      });
+    },
+    onSuccess: () => {
+      setTreatmentError(null);
+      queryClient.invalidateQueries({ queryKey: ['non-conformities'] });
+      onClose();
+    },
+    onError: (error) =>
+      setTreatmentError(
+        translateApiError(
+          error,
+          `Não é possível atualizar a tratativa da RNC ${nonConformity?.nc_number ?? ''}`,
+          'treat-non-conformity',
+        ),
+      ),
+  });
+
+  return (
+    <Sheet open={Boolean(nonConformity)} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <SheetContent>
+        {nonConformity && (
+          <>
+            <SheetHeader>
+              <SheetTitle>RNC {nonConformity.nc_number}</SheetTitle>
+              <SheetDescription>
+                Tratativa (causa raiz, ação corretiva e verificação de eficácia — CAPA).
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="grid grid-cols-2 gap-4">
+              <DetailField label="Produto" value={nonConformity.product ? `${nonConformity.product.code} — ${nonConformity.product.name}` : '-'} />
+              <DetailField label="Fornecedor" value={nonConformity.supplier?.trade_name || nonConformity.supplier?.company_name || '-'} />
+              <DetailField label="Origem" value={ORIGIN_LABEL[nonConformity.origin]} />
+              <DetailField
+                label="Severidade"
+                value={<Badge variant={SEVERITY_BADGE[nonConformity.severity]}>{SEVERITY_LABEL[nonConformity.severity]}</Badge>}
+              />
+              <DetailField label="Tipo de defeito" value={DEFECT_TYPE_LABEL[nonConformity.defect_type]} />
+              <DetailField label="Ação imediata" value={IMMEDIATE_ACTION_LABEL[nonConformity.immediate_action]} />
+              <DetailField label="Lote" value={nonConformity.lot_number ?? '-'} />
+              <DetailField label="Qtd. afetada" value={Number(nonConformity.quantity_affected)} />
+              <DetailField
+                label="Status atual"
+                value={<Badge variant={STATUS_BADGE[nonConformity.status]}>{STATUS_LABEL[nonConformity.status]}</Badge>}
+              />
+              {nonConformity.effectiveness_result && (
+                <DetailField
+                  label="Resultado da verificação"
+                  value={EFFECTIVENESS_RESULT_LABEL[nonConformity.effectiveness_result]}
+                />
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Descrição</p>
+              <p className="text-sm">{nonConformity.description}</p>
+            </div>
+
+            {isFinalized && (
+              <p className="rounded-md border border-muted bg-muted/40 p-3 text-xs text-muted-foreground">
+                Esta RNC está {STATUS_LABEL[nonConformity.status].toLowerCase()} e não pode mais ser editada por
+                aqui.
+              </p>
+            )}
+
+            {canWrite && !isFinalized && (
+              <form
+                className="flex flex-col gap-3 border-t pt-4"
+                onSubmit={handleSubmit((values) => updateMutation.mutate(values))}
+                noValidate
+              >
+                <p className="text-sm font-semibold">Tratativa</p>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="root_cause_category">Categoria da causa raiz (6M)</Label>
+                  <SelectNative id="root_cause_category" {...register('root_cause_category')} defaultValue="">
+                    <option value="">Não informada</option>
+                    {Object.entries(ROOT_CAUSE_CATEGORY_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </SelectNative>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="root_cause">Causa raiz</Label>
+                  <textarea
+                    id="root_cause"
+                    className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    placeholder="Ex.: Parâmetro de processo fora da faixa (5 porquês)."
+                    {...register('root_cause')}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="corrective_action">Ação corretiva</Label>
+                  <textarea
+                    id="corrective_action"
+                    className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    placeholder="Ex.: Revisão de instrução de trabalho, treinamento..."
+                    {...register('corrective_action')}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="responsible_id">Responsável pela ação corretiva</Label>
+                  <SelectNative id="responsible_id" {...register('responsible_id')} defaultValue="">
+                    <option value="">Não atribuído</option>
+                    {users?.data.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </SelectNative>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="status">Status</Label>
+                  <SelectNative id="status" {...register('status')}>
+                    {STATUS_FLOW_ORDER.map((value) => (
+                      <option key={value} value={value}>
+                        {STATUS_LABEL[value]}
+                      </option>
+                    ))}
+                    <option value="canceled">{STATUS_LABEL.canceled}</option>
+                  </SelectNative>
+                  {currentStatus === 'closed' && (
+                    <p className="text-xs text-muted-foreground">
+                      Ao encerrar, a data e o responsável pelo fechamento são gravados automaticamente. Isto não
+                      libera lotes bloqueados — a liberação continua sendo feita manualmente na aba Inspeção.
+                    </p>
+                  )}
+                </div>
+
+                {treatmentError && <DidacticAlert error={treatmentError} />}
+
+                <SheetFooterActions isPending={isSubmitting || updateMutation.isPending} onCancel={onClose} />
+              </form>
+            )}
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function SheetFooterActions({ isPending, onCancel }: { isPending: boolean; onCancel: () => void }) {
+  return (
+    <div className="flex justify-end gap-2 pt-2">
+      <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
+        Cancelar
+      </Button>
+      <Button type="submit" disabled={isPending}>
+        {isPending ? 'Salvando...' : 'Salvar tratativa'}
+      </Button>
     </div>
   );
 }

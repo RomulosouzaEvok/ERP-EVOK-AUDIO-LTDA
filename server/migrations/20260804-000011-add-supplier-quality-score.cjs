@@ -36,13 +36,22 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn('suppliers', 'quality_score', {
-      type: Sequelize.DECIMAL(5, 2),
-      allowNull: false,
-      defaultValue: 100.0,
-      comment:
-        'Avaliacao calculada (0-100), NUNCA editavel via API: recalculada de forma sincrona por CreateNonConformityUseCase quando uma RNC referencia um lote (lote -> recebimento -> fornecedor). Distinto de `rating` (inteiro 1-5 digitado a mao no cadastro).',
-    });
+    // Idempotente: a migration baseline (20260731-000001) cria tabelas
+    // dinamicamente a partir dos models Sequelize *atuais* em dist/ — um
+    // banco criado do zero hoje já nasce com suppliers.quality_score
+    // pronto. Mesma causa/fix de 20260803-000004-create-work-centers.cjs,
+    // 20260803-000008-create-access-profiles.cjs e
+    // 20260804-000001-create-warehouses.cjs (2026-08-05).
+    const suppliersColumns = await queryInterface.describeTable('suppliers');
+    if (!suppliersColumns.quality_score) {
+      await queryInterface.addColumn('suppliers', 'quality_score', {
+        type: Sequelize.DECIMAL(5, 2),
+        allowNull: false,
+        defaultValue: 100.0,
+        comment:
+          'Avaliacao calculada (0-100), NUNCA editavel via API: recalculada de forma sincrona por CreateNonConformityUseCase quando uma RNC referencia um lote (lote -> recebimento -> fornecedor). Distinto de `rating` (inteiro 1-5 digitado a mao no cadastro).',
+      });
+    }
   },
 
   async down(queryInterface) {

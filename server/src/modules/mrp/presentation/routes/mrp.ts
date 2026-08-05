@@ -14,5 +14,6 @@ const mrpController = require('../controllers/mrpController');
 router.post('/plan', authenticate, authorizeModule('mrp', 'operate'), mrpController.generatePlan);
 router.get('/planned-orders', authenticate, authorizeModule('mrp'), mrpController.listPlannedOrders);
 router.post('/planned-orders/convert', authenticate, authorizeModule('mrp', 'operate'), mrpController.convertPlannedOrders);
+router.post('/planned-orders/convert-to-production', authenticate, authorizeModule('mrp', 'operate'), mrpController.convertPlannedOrdersToProduction);
 
 module.exports = router;

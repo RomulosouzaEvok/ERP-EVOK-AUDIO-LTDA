@@ -18,6 +18,7 @@ interface DashboardHandoffsSummary {
   requisicoes: { awaiting_approval: number };
   expedicao: { ready_to_ship: number };
   qualidade: { quarantine: number; open_rncs: number };
+  compras: { pending_returns: number };
 }
 
 class DashboardRepository {
@@ -30,7 +31,7 @@ class DashboardRepository {
    * Bloco 3.3 (UC-40, docs/governance/TODO.md) — resumo por área do
    * semáforo de handoff, para o badge/contador do menu lateral.
    *
-   * @returns Contadores por área (recebimento, requisições, expedição, qualidade).
+   * @returns Contadores por área (recebimento, requisições, expedição, qualidade, compras).
    * @throws {Error} Se não implementado.
    */
   public async getHandoffsSummary(): Promise<DashboardHandoffsSummary> {

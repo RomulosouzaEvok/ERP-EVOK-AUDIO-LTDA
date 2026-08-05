@@ -35,6 +35,95 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // Idempotente: a migration baseline (20260731-000001) cria tabelas
+    // dinamicamente a partir dos models Sequelize *atuais* em dist/ — um
+    // banco criado do zero hoje já nasce com warehouses/
+    // product_warehouse_stock prontos. Mesma causa/fix de
+    // 20260803-000004-create-work-centers.cjs e
+    // 20260803-000008-create-access-profiles.cjs (2026-08-05).
+    const tables = await queryInterface.showAllTables();
+    if (!tables.includes('warehouses')) {
+      await createWarehousesAndStock(queryInterface, Sequelize);
+    }
+
+    // 4. inventory_movements.warehouse_id (nullable — NULL = movimento legado sem deposito)
+    const movementsColumns = await queryInterface.describeTable('inventory_movements');
+    if (!movementsColumns.warehouse_id) {
+      await queryInterface.addColumn('inventory_movements', 'warehouse_id', {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: 'warehouses', key: 'id' },
+        onDelete: 'SET NULL',
+        onUpdate: 'CASCADE',
+      });
+    }
+    const movementsIndexes = await queryInterface.showIndex('inventory_movements');
+    if (!movementsIndexes.some((i) => i.name === 'idx_inventory_movements_warehouse_id')) {
+      await queryInterface.addIndex('inventory_movements', ['warehouse_id'], {
+        name: 'idx_inventory_movements_warehouse_id',
+      });
+    }
+
+    // 5. lot_controls.warehouse_id (nullable — NULL = lote legado sem deposito)
+    const lotControlsColumns = await queryInterface.describeTable('lot_controls');
+    if (!lotControlsColumns.warehouse_id) {
+      await queryInterface.addColumn('lot_controls', 'warehouse_id', {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: 'warehouses', key: 'id' },
+        onDelete: 'SET NULL',
+        onUpdate: 'CASCADE',
+      });
+    }
+    const lotControlsIndexes = await queryInterface.showIndex('lot_controls');
+    if (!lotControlsIndexes.some((i) => i.name === 'idx_lot_controls_warehouse_id')) {
+      await queryInterface.addIndex('lot_controls', ['warehouse_id'], {
+        name: 'idx_lot_controls_warehouse_id',
+      });
+    }
+
+    // 6. Backfill decidido: todo saldo atual de products.quantity > 0
+    // migra para product_warehouse_stock no deposito INSUMOS. Produtos
+    // com quantity = 0 (ou negativo) NAO ganham linha zero, para nao
+    // poluir a tabela (decisao explicita desta entrega).
+    await queryInterface.sequelize.query(`
+      INSERT INTO product_warehouse_stock (product_id, warehouse_id, quantity, created_at, updated_at)
+      SELECT p.id, w.id, p.quantity, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      FROM products p
+      CROSS JOIN (SELECT id FROM warehouses WHERE code = 'INSUMOS') w
+      WHERE p.quantity > 0
+      ON CONFLICT (product_id, warehouse_id) DO NOTHING;
+    `);
+
+    // 7. Backfill: lot_controls existentes recebem warehouse_id = INSUMOS
+    await queryInterface.sequelize.query(`
+      UPDATE lot_controls
+      SET warehouse_id = (SELECT id FROM warehouses WHERE code = 'INSUMOS')
+      WHERE warehouse_id IS NULL;
+    `);
+  },
+
+  async down(queryInterface, Sequelize) {
+    await queryInterface.removeIndex('lot_controls', 'idx_lot_controls_warehouse_id');
+    await queryInterface.removeColumn('lot_controls', 'warehouse_id');
+
+    await queryInterface.removeIndex('inventory_movements', 'idx_inventory_movements_warehouse_id');
+    await queryInterface.removeColumn('inventory_movements', 'warehouse_id');
+
+    await queryInterface.removeIndex('product_warehouse_stock', 'idx_product_warehouse_stock_warehouse_id');
+    await queryInterface.removeIndex('product_warehouse_stock', 'idx_product_warehouse_stock_product_id');
+    await queryInterface.sequelize.query(`
+      ALTER TABLE product_warehouse_stock
+      DROP CONSTRAINT IF EXISTS ck_product_warehouse_stock_quantity_non_negative;
+    `);
+    await queryInterface.removeConstraint('product_warehouse_stock', 'uq_product_warehouse_stock_product_warehouse');
+    await queryInterface.dropTable('product_warehouse_stock');
+
+    await queryInterface.dropTable('warehouses');
+  },
+};
+
+async function createWarehousesAndStock(queryInterface, Sequelize) {
     // 1. Tabela warehouses
     await queryInterface.createTable('warehouses', {
       id: {
@@ -148,76 +237,4 @@ module.exports = {
     await queryInterface.addIndex('product_warehouse_stock', ['warehouse_id'], {
       name: 'idx_product_warehouse_stock_warehouse_id',
     });
-
-    // 4. inventory_movements.warehouse_id (nullable — NULL = movimento legado sem deposito)
-    await queryInterface.addColumn('inventory_movements', 'warehouse_id', {
-      type: Sequelize.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'warehouses',
-        key: 'id',
-      },
-      onDelete: 'SET NULL',
-      onUpdate: 'CASCADE',
-    });
-
-    await queryInterface.addIndex('inventory_movements', ['warehouse_id'], {
-      name: 'idx_inventory_movements_warehouse_id',
-    });
-
-    // 5. lot_controls.warehouse_id (nullable — NULL = lote legado sem deposito)
-    await queryInterface.addColumn('lot_controls', 'warehouse_id', {
-      type: Sequelize.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'warehouses',
-        key: 'id',
-      },
-      onDelete: 'SET NULL',
-      onUpdate: 'CASCADE',
-    });
-
-    await queryInterface.addIndex('lot_controls', ['warehouse_id'], {
-      name: 'idx_lot_controls_warehouse_id',
-    });
-
-    // 6. Backfill decidido: todo saldo atual de products.quantity > 0
-    // migra para product_warehouse_stock no deposito INSUMOS. Produtos
-    // com quantity = 0 (ou negativo) NAO ganham linha zero, para nao
-    // poluir a tabela (decisao explicita desta entrega).
-    await queryInterface.sequelize.query(`
-      INSERT INTO product_warehouse_stock (product_id, warehouse_id, quantity, created_at, updated_at)
-      SELECT p.id, w.id, p.quantity, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-      FROM products p
-      CROSS JOIN (SELECT id FROM warehouses WHERE code = 'INSUMOS') w
-      WHERE p.quantity > 0
-      ON CONFLICT (product_id, warehouse_id) DO NOTHING;
-    `);
-
-    // 7. Backfill: lot_controls existentes recebem warehouse_id = INSUMOS
-    await queryInterface.sequelize.query(`
-      UPDATE lot_controls
-      SET warehouse_id = (SELECT id FROM warehouses WHERE code = 'INSUMOS')
-      WHERE warehouse_id IS NULL;
-    `);
-  },
-
-  async down(queryInterface, Sequelize) {
-    await queryInterface.removeIndex('lot_controls', 'idx_lot_controls_warehouse_id');
-    await queryInterface.removeColumn('lot_controls', 'warehouse_id');
-
-    await queryInterface.removeIndex('inventory_movements', 'idx_inventory_movements_warehouse_id');
-    await queryInterface.removeColumn('inventory_movements', 'warehouse_id');
-
-    await queryInterface.removeIndex('product_warehouse_stock', 'idx_product_warehouse_stock_warehouse_id');
-    await queryInterface.removeIndex('product_warehouse_stock', 'idx_product_warehouse_stock_product_id');
-    await queryInterface.sequelize.query(`
-      ALTER TABLE product_warehouse_stock
-      DROP CONSTRAINT IF EXISTS ck_product_warehouse_stock_quantity_non_negative;
-    `);
-    await queryInterface.removeConstraint('product_warehouse_stock', 'uq_product_warehouse_stock_product_warehouse');
-    await queryInterface.dropTable('product_warehouse_stock');
-
-    await queryInterface.dropTable('warehouses');
-  },
-};
+}

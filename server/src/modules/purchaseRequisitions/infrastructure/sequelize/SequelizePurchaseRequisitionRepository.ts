@@ -8,6 +8,7 @@ class SequelizePurchaseRequisitionRepository extends PurchaseRequisitionReposito
     if (filters.status) where.status = filters.status;
     if (filters.origin) where.origin = filters.origin;
     if (filters.requester_id) where.requester_id = filters.requester_id;
+    if (filters.department_id) where.department_id = filters.department_id;
     if (filters.start_date || filters.end_date) {
       where.request_date = {};
       if (filters.start_date) where.request_date[Op.gte] = filters.start_date;

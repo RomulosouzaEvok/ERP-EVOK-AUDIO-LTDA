@@ -15,7 +15,7 @@ class SequelizeEmployeesRepository extends EmployeesRepository {
     filters: Record<string, unknown>,
     pagination: { limit: number; offset: number }
   ): Promise<{ count: number; rows: any[] }> {
-    const { search, status, department_id } = filters as any;
+    const { search, status, department_id, user_id } = filters as any;
     const where: any = {};
     if (search) {
       const s = Validators.sanitizeSearch(search);
@@ -23,6 +23,12 @@ class SequelizeEmployeesRepository extends EmployeesRepository {
     }
     if (status) where.status = status;
     if (department_id) where.department_id = department_id;
+    // Bloco E (docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md): filtro
+    // de leitura por `user_id`, usado pelo frontend para resolver o
+    // `department_id` do Employee vinculado ao usuário logado (telas de
+    // requisição por departamento). Sem risco de spoofing — apenas restringe
+    // o resultado da listagem, nunca grava nada.
+    if (user_id) where.user_id = user_id;
     return Employee.findAndCountAll({
       where,
       include: [{ model: Department, as: 'department', attributes: ['id', 'name'] }],

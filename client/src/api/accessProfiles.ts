@@ -1,7 +1,12 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse } from './types';
 
-/** Chave estável de módulo — espelha `server/src/shared/domain/accessModules.ts` (26 módulos). */
+/**
+ * Chave estável de módulo — espelha `server/src/shared/domain/accessModules.ts`
+ * (28 módulos). `manutencao`/`garantia` adicionados no Bloco A/E
+ * (`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`), cobrindo os
+ * departamentos novos "Manutenção" e "Ativos & Garantia".
+ */
 export type AccessModuleKey =
   | 'dashboard'
   | 'produtos'
@@ -23,6 +28,8 @@ export type AccessModuleKey =
   | 'recebimento'
   | 'expedicao'
   | 'patrimonio'
+  | 'manutencao'
+  | 'garantia'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'

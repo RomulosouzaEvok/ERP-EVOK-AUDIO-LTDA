@@ -11,6 +11,13 @@ export interface DashboardHandoffsSummary {
   requisicoes: { awaiting_approval: number };
   expedicao: { ready_to_ship: number };
   qualidade: { quarantine: number; open_rncs: number };
+  /**
+   * Devoluções ao fornecedor pendentes de tratativa (Bloco B,
+   * `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`) — RNCs com
+   * `immediate_action = 'return_supplier'` ainda não fechadas/canceladas.
+   * Consumido pelo badge do item "Compras" no menu (Bloco E).
+   */
+  compras: { pending_returns: number };
 }
 
 /** `GET /api/dashboard/handoffs` — exige `authorizeModule('dashboard')`. */

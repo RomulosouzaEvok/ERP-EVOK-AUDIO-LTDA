@@ -130,3 +130,20 @@ export async function getCostVarianceReport(period: ReportsPeriodInput) {
   });
   return data.data;
 }
+
+/**
+ * Fluxo de caixa agregado (vendas - compras) no período — sem série diária
+ * (mesma limitação documentada no backend). Usado na aba "Financeiro" de
+ * `ReportsPage` (Bloco E, `relatorios.financeiro`).
+ */
+export interface CashFlowReport {
+  report_type: 'cash-flow';
+  generated_at: string;
+  period: { start: string; end: string };
+  summary: { total_sales: number | string; total_purchases: number | string; balance: number | string };
+}
+
+export async function getCashFlowReport(period: ReportsPeriodInput) {
+  const { data } = await httpClient.get<ItemResponse<CashFlowReport>>('/api/reports/cash-flow', { params: period });
+  return data.data;
+}

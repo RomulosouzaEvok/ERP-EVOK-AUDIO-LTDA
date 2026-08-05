@@ -22,6 +22,7 @@ const ALLOWED_FIELDS = [
   'purchase_value',
   'current_value',
   'useful_life_months',
+  'license_expires_at',
   'status',
   'notes'
 ];

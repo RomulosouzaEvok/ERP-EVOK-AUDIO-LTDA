@@ -47,8 +47,8 @@ class SequelizeNonConformitiesRepository extends NonConformitiesRepository {
   }
 
   /** @inheritdoc */
-  public async update(id: number | string, data: Record<string, unknown>): Promise<number> {
-    const [updated] = await NonConformity.update(data, { where: { id } });
+  public async update(id: number | string, data: Record<string, unknown>, transaction?: any): Promise<number> {
+    const [updated] = await NonConformity.update(data, { where: { id }, ...(transaction ? { transaction } : {}) });
     return updated;
   }
 }

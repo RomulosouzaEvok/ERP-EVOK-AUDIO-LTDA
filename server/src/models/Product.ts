@@ -92,7 +92,7 @@ const Product = sequelize.define('Product', {
   ts_params_mms: DataTypes.DECIMAL(10, 2),
   ts_params_cms: DataTypes.DECIMAL(10, 2),
   ts_params_spl: DataTypes.DECIMAL(10, 2),
-  photo_path: DataTypes.STRING(500)
+  photo_path: { type: DataTypes.STRING(500), allowNull: true }
 }, {
   tableName: 'products',
   underscored: true,

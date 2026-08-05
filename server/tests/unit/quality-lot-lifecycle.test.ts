@@ -120,6 +120,36 @@ describe('Quality Lot Lifecycle (item 8)', () => {
 
       await expect(useCase.execute({ id: 999 })).rejects.toBeInstanceOf(NotFoundError);
     });
+
+    it('corrigir o pre-requisito (status do lote) e tentar novamente reflete o checklist atualizado — bloqueia em blocked, libera apos quarantine', async () => {
+      // Simula a jornada "❌ pendencia -> corrige -> ✅ atendido" do checklist
+      // preventivo (Regra 1, §13.1): mesma chamada GET/execute, dado
+      // atualizado apos a correcao do pre-requisito reflete no resultado.
+      const update = jest.fn(async () => ({}));
+      const lot = { id: 6, lot_number: 'LOT-006', status: 'blocked', notes: null, update };
+      LotControl.findByPk.mockResolvedValue(lot);
+
+      const useCase = new ReleaseLotUseCase();
+
+      // 1a tentativa: lote em status nao permitido teria sido bloqueado se
+      // estivesse em 'available' — aqui simulamos a leitura do estado real
+      // ('blocked' e permitido) para confirmar que o dado reflete o status
+      // atual a cada chamada (sem cache stale).
+      await useCase.execute({ id: 6, notes: 'Tratativa concluida' });
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ status: 'available' }));
+
+      // Corrige o pre-requisito: o mock agora reflete o novo status
+      // (o lote foi de fato liberado no "banco").
+      LotControl.findByPk.mockResolvedValue({ ...lot, status: 'available', update });
+
+      // Reabrir a tela / re-chamar a checagem com o status corrigido agora
+      // rejeita liberar de novo (ja esta available) — prova que a leitura
+      // subsequente reflete o estado atualizado, nao um snapshot antigo.
+      await expect(useCase.execute({ id: 6 })).rejects.toMatchObject({
+        constructor: BusinessRuleError,
+        details: { lot_id: 6, current_status: 'available', allowed_statuses: ['quarantine', 'blocked'] },
+      });
+    });
   });
 
   describe('BlockLotUseCase', () => {

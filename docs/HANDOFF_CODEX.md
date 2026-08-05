@@ -4897,3 +4897,1435 @@ cd client && npx vitest run
 
 **Consolidado por**: Claude Code (Tech Lead de Governança/Documentação)
 **Data**: 2026-08-04
+
+---
+
+## Frontend — Levantamento MRP/Requisições/Qualidade e fechamento do loop CAPA (Bloco 8)
+
+**Data**: 2026-08-04
+**Escopo**: Levantamento do estado real das telas de MRP, Requisição de Compra e Qualidade (Fase 2/P1 do roadmap `CLAUDE.md`) + construção do único gap real encontrado com backend pronto e sem UI.
+
+### Levantamento (achado principal)
+
+As 3 telas pedidas neste escopo **já estavam completas e roteadas** (não
+foi um levantamento desatualizado — `docs/LEVANTAMENTO_ERP_2026-08-02.md`
+já marcava os itens 1–9 do top 10 como `feito`, confirmado por leitura de
+código):
+- `client/src/pages/production/MrpPage.tsx` (rota `/production/mrp`):
+  geração de plano por demanda, listagem de ordens planejadas com
+  seleção múltipla, conversão em requisição de compra
+  (`POST /api/mrp/planned-orders/convert`). Completo.
+- `client/src/pages/purchases/RequisitionsPage.tsx` (rota
+  `/purchases/requisitions`): criação, listagem com filtro de status,
+  aprovação, cancelamento, conversão em pedido de compra agrupado por
+  fornecedor, suporte a amostra de engenharia (`origin=engenharia_amostra`
+  + projeto de P&D). Completo.
+- `client/src/pages/quality/QualityPage.tsx` (rota `/quality`, abas
+  `InspectionTab.tsx` + `NonConformitiesTab.tsx`): inspeção de
+  recebimento (liberar/bloquear lote em quarentena, com abertura de RNC
+  pré-preenchida) e criação/listagem de RNC. **Gap real encontrado aqui**
+  (ver abaixo).
+
+### Gap real encontrado e resolvido: tratativa CAPA de RNC
+
+**Achado:** o backend de não-conformidades
+(`server/src/modules/nonConformities/`) já expõe `PUT
+/api/quality/non-conformities/:id` (`UpdateNonConformityUseCase`,
+`ALLOWED_FIELDS`: `root_cause`, `root_cause_category`,
+`corrective_action`, `status`, `responsible_id`, `closed_by` automático)
+e `DELETE /api/quality/non-conformities/:id` (fechamento direto), mas o
+frontend só implementava `POST` (criar) e `GET` (listar) — não havia
+nenhuma forma de avançar o fluxo CAPA (`open` → `analysis` →
+`corrective_action` → `effectiveness_check` → `closed`) pela interface.
+Uma RNC criada ficava presa para sempre em `open` do ponto de vista da
+UI, mesmo o backend suportando o ciclo completo.
+
+**Implementado:**
+- `client/src/api/nonConformities.ts` — tipos `NonConformityRootCauseCategory`,
+  `NonConformityEffectivenessResult`, campos completos do model
+  (`root_cause`, `corrective_action`, `responsible_id`,
+  `effectiveness_result` etc.) adicionados à interface `NonConformity`;
+  novas funções `updateNonConformity()` (`PUT`) e `closeNonConformity()`
+  (`DELETE`, não usado ainda na UI — reservado para um botão futuro de
+  "encerrar diretamente").
+- `client/src/lib/translateApiError.ts` — novo `ErrorContext`
+  `'treat-non-conformity'` (aponta de volta para `/quality`), seguindo o
+  padrão didático de 3 partes já usado no resto do projeto.
+- `client/src/pages/quality/NonConformitiesTab.tsx` — linha da tabela
+  agora é clicável (mesmo padrão de `RequisitionsPage.tsx`) e abre
+  `NonConformityTreatmentSheet`: painel de detalhe completo (produto,
+  fornecedor, severidade, tipo de defeito, ação imediata, lote,
+  quantidade afetada, status, resultado de eficácia quando existir) +
+  formulário de tratativa (categoria 6M da causa raiz, causa raiz,
+  ação corretiva, responsável via `SelectNative` de usuários ativos,
+  avanço de status). RNC `closed`/`canceled` vira somente-leitura (sem
+  formulário). Aviso explícito de que fechar a RNC **não** libera lote
+  bloqueado automaticamente (decisão já documentada no backend,
+  `UpdateNonConformityUseCase` JSDoc) — a liberação continua manual na
+  aba Inspeção.
+
+### Telas que dependiam de endpoint ainda não pronto no backend
+
+Nenhuma. Catálogo item×fornecedor N:N (`itemSuppliers.ts`) e conversão
+MRP→OP já têm UI e backend prontos (ver
+`docs/LEVANTAMENTO_ERP_2026-08-02.md`, itens 1 e 3 da tabela de
+prioridades). O agente paralelo de backend não tinha, no momento desta
+sessão, nenhum endpoint novo aguardando UI dentro do escopo MRP/
+Requisições/Qualidade — o único gap encontrado (CAPA de RNC) já tinha
+backend 100% pronto, sem dependência cruzada.
+
+### Arquivos alterados
+
+- `client/src/api/nonConformities.ts`
+- `client/src/lib/translateApiError.ts`
+- `client/src/pages/quality/NonConformitiesTab.tsx`
+
+### Validação rodada
+
+- `npx tsc --noEmit -p client` — sem erros.
+- `npm run lint` (oxlint) em `client/` — sem novos warnings/erros (apenas
+  4 warnings pré-existentes de fast-refresh, não relacionados).
+- `npx vitest run` em `client/` — 24/24 testes passando (6 arquivos),
+  nenhuma regressão.
+- Backend (`localhost:5000/health/live`) e frontend
+  (`localhost:5173`) confirmados no ar (`200`) durante a sessão.
+
+### O que QA deve testar na interface
+
+1. Em `/quality` → aba "Não-conformidades (RNC)", criar uma RNC nova
+   (ou usar uma já existente em `open`).
+2. Clicar na linha da RNC (ou no botão "Tratativa") — deve abrir o
+   painel lateral com todos os dados e o formulário de tratativa.
+3. Preencher causa raiz (com categoria 6M), ação corretiva, atribuir um
+   responsável, avançar o status para `analysis` → salvar → reabrir a
+   RNC e confirmar que os campos persistiram.
+4. Avançar até `closed` — confirmar que o backend grava `closed_by`/
+   `closed_at` automaticamente (não há campo para isso no formulário,
+   é implícito) e que, ao reabrir, o painel vira somente-leitura com o
+   aviso "não pode mais ser editada por aqui".
+5. Confirmar que fechar a RNC **não** libera automaticamente nenhum lote
+   bloqueado vinculado — a liberação deve continuar exigindo ação manual
+   na aba "Inspeção de recebimento".
+6. Testar com um usuário sem papel `admin`/`operator` (ex.: `financial`)
+   — a linha deve continuar clicável para visualizar o detalhe, mas o
+   formulário de tratativa não deve aparecer (somente leitura).
+
+**Consolidado por**: Claude Code (Frontend Engineer)
+**Data**: 2026-08-04
+
+---
+
+## Bloco 6 — Fechamento dos Itens Pendentes (Decisão de Pré-Checagem, Retrofit Final, Testes de Regressão)
+
+**Data**: 2026-08-04
+**Escopo**: Fechar os `[ ]` remanescentes do Bloco 6 (`docs/governance/TODO.md`) — decisão técnica de pré-checagem por caso (§6.1), retrofit das 2 telas do lote das 9 que ainda não estavam 100% migradas (§6.2), e os 3 testes de regressão pendentes (§6.3). Não tocou em nenhuma outra frente do roadmap (MRP, Fase 2, Fase 3).
+
+### 1. Decisão técnica de pré-checagem (§6.1)
+
+Avaliados os 6 pontos críticos cobertos pelo padrão, lendo as rotas `GET`
+reais hoje disponíveis (`server/src/modules/**/presentation/routes/*.ts`)
+contra o que o `details` de cada erro `422` exige. **Decisão: não criar
+nenhum endpoint `GET .../:id/prerequisites` novo nesta entrega** — em 5
+dos 6 casos o reaproveitamento de `GET`s existentes é direto (conclusão de
+OP via `GET /:id/tracking`, embarque via `GET /sales/:id/nfe`, conversão e
+aprovação de requisição via `GET /purchase-requisitions/:id`, liberação/
+bloqueio de lote via `GET /inventory/lots`). No 6º caso (liberar OP), o
+dado que falta (disponibilidade de material calculada contra estoque real)
+não está hoje exposto por nenhum `GET` — a decisão registrada foi montar
+o checklist no frontend cruzando `GET /production-orders/:id` (itens da
+BOM) com `GET /inventory/stock-report` (saldo por item, rota já existente)
+em vez de duplicar a regra de negócio de reserva em um endpoint de
+simulação dedicado. Detalhamento completo caso a caso em
+`docs/governance/TODO.md` §6.1. **Aplicação do `PrerequisiteChecklist`
+nas 6 telas usando esses GETs não fazia parte desta rodada** — fica
+registrada como próximo incremento natural.
+
+### 2. Retrofit final das telas (§6.2)
+
+Auditadas as telas novas dos Blocos 1–5 (`AccessProfilesPage.tsx`,
+`WarehousesPage.tsx`, `TransfersTab.tsx`) e as 6 telas retrofitadas com o
+semáforo de handoff do Bloco 3 (`PurchasesPage.tsx`,
+`RequisitionsPage.tsx`, `ReceivingPage.tsx`, `ShippingPage.tsx`,
+`InspectionTab.tsx`, `NonConformitiesTab.tsx`). As 3 telas novas dos
+Blocos 1/4 já nasceram usando `translateApiError`/`DidacticAlert` —
+nenhuma mudança necessária. Duas das 6 telas com semáforo ainda usavam
+`extractApiErrorMessage`/`window.alert` (herdado de antes do Bloco 6, fora
+do lote original de 9 telas priorizadas):
+- `client/src/pages/purchases/PurchasesPage.tsx` — migrados `createMutation`
+  (criar pedido), `statusMutation` (`window.alert` → `DidacticAlert`, era o
+  único `window.alert` restante fora dos 9 casos já fechados) e o
+  `ReceiveItemsDialog` local (dialog redundante ao
+  `ReceivingConferenceDialog.tsx`, que já estava conforme).
+- `client/src/pages/quality/NonConformitiesTab.tsx` — migrado o
+  `createMutation` do formulário de nova RNC (o formulário de tratativa
+  CAPA, adicionado em sessão paralela, já estava conforme).
+- `client/src/pages/logistics/ReceivingPage.tsx` — sem mutation própria
+  (delega para `ReceivingConferenceDialog.tsx`, já conforme); nenhuma
+  mudança necessária.
+
+### 3. Testes de regressão (§6.3)
+
+- **Múltiplos pré-requisitos juntos**: 2 casos novos em
+  `server/tests/unit/production-order-lifecycle.test.ts` —
+  `ChangeProductionOrderStatusUseCase` com 3 `missing_items` simultâneos
+  na liberação de OP e 3 `open_steps` simultâneos na conclusão de OP,
+  ambos verificando a lista completa (não só o primeiro item).
+- **Corrigir pré-requisito reflete no recheck**: 1 caso novo em
+  `server/tests/unit/quality-lot-lifecycle.test.ts` — `ReleaseLotUseCase`
+  libera um lote `blocked`, depois simula a releitura já `available` e
+  confirma que a tentativa seguinte usa o `current_status` atualizado (sem
+  cache stale).
+- **Regressão de `alert()` cru**: novo arquivo
+  `client/src/test/didacticAlertRegression.test.ts` — varredura estática
+  (via `import.meta.glob` com `?raw`, sem `node:fs`, que exigiria
+  `@types/node` não instalado no client) das 9 telas do retrofit,
+  confirmando ausência de `window.alert()`/`alert()` cru e presença de
+  `translateApiError`/`DidacticAlert` em toda tela com `useMutation`.
+
+### Arquivos alterados
+
+- `client/src/pages/purchases/PurchasesPage.tsx`
+- `client/src/pages/quality/NonConformitiesTab.tsx`
+- `server/tests/unit/production-order-lifecycle.test.ts`
+- `server/tests/unit/quality-lot-lifecycle.test.ts`
+- `client/src/test/didacticAlertRegression.test.ts` (novo)
+- `docs/governance/TODO.md` (Bloco 6 — §6.1/§6.2/§6.3 fechados)
+
+### Validação rodada
+
+- `npx tsc -b --noEmit` em `client/` — sem erros.
+- `npx vitest run` em `client/` — 7 arquivos, 60 testes, todos passando
+  (42 pré-existentes + 18 novos do teste de regressão).
+- `npm run test:unit` em `server/` — 64 suítes, 456 testes, todos
+  passando (452 pré-existentes + 4 novos).
+
+### O que QA/próximo agente deve testar
+
+1. `PurchasesPage.tsx`: forçar um erro de transição de status inválida
+   (ex.: tentar avançar um pedido `received`) e confirmar que aparece
+   `DidacticAlert` (3 partes) em vez do `window.confirm`/`alert` antigo.
+2. `PurchasesPage.tsx`: no dialog "Receber itens", tentar confirmar sem
+   informar nota fiscal — confirmar que o erro aparece no formato
+   didático, não mais como texto simples vermelho.
+3. `NonConformitiesTab.tsx`: tentar registrar uma RNC com dados inválidos
+   (ex.: sem descrição) e confirmar o novo formato de erro no dialog de
+   criação.
+4. Rodar `npx vitest run src/test/didacticAlertRegression.test.ts` sempre
+   que uma dessas 9 telas for editada — falha imediatamente se alguém
+   reintroduzir `window.alert()`/`alert()` cru ou remover
+   `translateApiError`/`DidacticAlert` de uma mutation existente.
+5. Próximo incremento natural (fora do escopo desta entrega): aplicar
+   `PrerequisiteChecklist` nas 6 telas usando os `GET`s já mapeados em
+   §6.1 do TODO, fechando o padrão preventivo (Regra 1, §13.1) além do
+   reativo (Regra 2, §13.2) já 100% coberto.
+
+**Consolidado por**: Claude Code (Backend/Frontend Engineer — fechamento Bloco 6)
+**Data**: 2026-08-04
+
+---
+
+## Backend — Catálogo item×fornecedor (confirmação) + MRP fecha o ciclo para OP (Fase 2/P1)
+
+**Data**: 2026-08-04
+**Escopo**: Duas frentes do roadmap Fase 2 (P1) do `CLAUDE.md`/`docs/LEVANTAMENTO_ERP_2026-08-02.md` §3. Somente `server/` — nenhum arquivo de `client/` tocado.
+
+### 1. Catálogo item×fornecedor (N:N) — já estava 100% pronto, sem trabalho novo
+
+Levantamento confirmou que este item já tinha CRUD completo de ponta a
+ponta (migration `20260803-000001-create-item-suppliers.cjs`, model
+`ItemSupplier.ts`, use cases
+`server/src/modules/items/application/use-cases/{List,Create,Update,Deactivate}ItemSupplierUseCase.ts`
++ `GetItemPurchaseHistoryUseCase.ts`, controller `itemController.ts`,
+validators e rotas):
+
+```
+GET    /api/items/:id/suppliers
+POST   /api/items/:id/suppliers
+PUT    /api/items/:id/suppliers/:linkId
+DELETE /api/items/:id/suppliers/:linkId
+GET    /api/items/:id/purchase-history
+```
+
+Nenhuma alteração feita aqui — apenas confirmação por leitura direta do
+código para não duplicar trabalho (item 1 da tabela de prioridades do
+levantamento já estava marcado `feito` desde 2026-08-03, commit
+`490d512`).
+
+### 2. MRP fecha o ciclo — conversão plano → Ordem de Produção (gap real, implementado)
+
+O ciclo MRP → Requisição de Compra (para itens `MATERIA_PRIMA`, de
+compra) já existia (`ConvertPlannedOrdersToRequisitionUseCase.ts` +
+auto-conversão opt-in via `items.conversao_automatica`, entregues em
+2026-08-04 em rodada anterior). **Faltava o caminho irmão**: ordens
+planejadas de itens de fabricação própria (`SUBCONJUNTO`/
+`PRODUTO_ACABADO`) não tinham nenhuma forma de virar Ordem de Produção —
+só o operador criando a OP manualmente do zero, sem nenhum vínculo com o
+plano MRP que identificou a necessidade.
+
+**Implementado:**
+
+- `server/src/modules/mrp/application/use-cases/ConvertPlannedOrdersToProductionOrderUseCase.ts`
+  (novo) — analogamente a `ConvertPlannedOrdersToRequisitionUseCase`:
+  recebe uma lista de `planned_order_ids`, valida status convertível
+  (`RASCUNHO`/`APROVADA`), valida que o item é de fabricação própria
+  (rejeita `MATERIA_PRIMA` com `BusinessRuleError` orientando a usar a
+  conversão para requisição), resolve o produto legado correspondente e
+  cria **uma OP por ordem planejada** (diferente da requisição, que
+  agrupa N ordens em 1 cabeçalho — OP não tem conceito de "OP
+  consolidada"). Ao final, marca as ordens planejadas convertidas como
+  `EM_EXECUCAO`, tudo na mesma transação Sequelize.
+- `ItemRepository.findLegacyProductByItemId()` (novo método, interface +
+  implementação Sequelize) — resolve o `product_id` (INTEGER, tabela
+  legada `products`) correspondente a um `item_id` (UUID, tabela
+  canônica `items`) por casamento de código/SKU
+  (`items.codigo === products.code`). **Mesma estratégia dual-read já em
+  uso** por `SequelizeItemRepository.listMrpInventoryPositions()` — não
+  inventei um mecanismo novo, reaproveitei o que já existia.
+- Rota nova: `POST /api/mrp/planned-orders/convert-to-production`
+  (`authorizeModule('mrp', 'operate')`, mesmo nível de permissão da
+  conversão para requisição), controller
+  `mrpController.convertPlannedOrdersToProduction`, schema Zod
+  `convertPlannedOrdersToProductionSchema` (idêntico em forma ao de
+  requisição: `planned_order_ids[]` + `notes` opcional).
+
+**Por que não reaproveitei `CreateProductionOrderUseCase` (rota normal
+de OP) diretamente:** aquele use case valida disponibilidade de material
+via `BomService.checkAvailability` (regra pensada para criação manual,
+"não deixe o operador criar uma OP sem material"). Uma ordem vinda do
+MRP já nasceu do cálculo de necessidade líquida contra estoque real —
+recalcular disponibilidade aqui seria redundante e poderia bloquear
+exatamente o caso de uso que a MRP existe para resolver (gerar a OP
+*porque* falta material, não apesar disso). Segui o mesmo padrão do
+helper de requisição (`createRequisitionFromPlannedOrders.ts`): criação
+direta via repositório, sem duplicar regras de outro caminho de entrada.
+
+### 3. Bug de schema real encontrado e corrigido no caminho (bloqueava TODA criação de OP, não só a nova rota)
+
+Ao testar a conversão manualmente contra a API rodando (Docker), a
+criação da primeira OP falhou com:
+
+```
+null value in column "start_date" of relation "production_orders" violates not-null constraint
+```
+
+**Causa raiz:** `server/src/models/ProductionOrder.ts` declarava
+`start_date`, `completion_date`, `sales_order_id`, `responsible_id`,
+`notes`, `created_by`, `item_id` **sem `allowNull: true` explícito**
+(ex.: `start_date: DataTypes.DATEONLY` em vez de
+`{ type: DataTypes.DATEONLY, allowNull: true }`). O Sequelize assume
+`allowNull: false` por omissão. A migration baseline
+(`20260731-000001-baseline-schema.cjs`) cria a tabela física lendo
+exatamente `attribute.allowNull` do model via `getAttributes()` — o
+resultado foi `NOT NULL` **sem default** em colunas que a entidade de
+domínio (`ProductionOrderEntity.toCreatePersistence()`), a interface
+TypeScript do próprio model (`string | null`) e todas as FKs
+(`ON DELETE SET NULL`, que só faz sentido em coluna nullable) sempre
+trataram como opcionais.
+
+**Efeito real, confirmado ao vivo:** isso quebrava **também a rota
+normal** `POST /api/production-orders` (`CreateProductionOrderUseCase`)
+sempre que o payload não populava manualmente cada um desses 7 campos —
+o caso comum de uma OP nova (planejada, sem `start_date` ainda, sem
+venda/responsável/criador vinculado). Não era um bug introduzido por
+esta entrega; a nova rota apenas foi o primeiro código a exercitar esse
+caminho de criação de forma automatizada e revelar o problema pré-existente.
+
+**Correção:**
+- `server/src/models/ProductionOrder.ts` — `allowNull: true` explícito
+  nos 7 campos.
+- `server/migrations/20260804-000012-fix-production-orders-nullable-columns.cjs`
+  (novo) — `ALTER TABLE production_orders ALTER COLUMN ... DROP NOT NULL`
+  para as mesmas 7 colunas na tabela física já existente. Aplicada e
+  validada contra o Postgres do Docker local (`evok-postgres`).
+
+**Validação ao vivo pós-correção** (API rebuildada no Docker,
+`evok-api`): criado item canônico + produto legado + BOM (`ItemEstrutura`)
+de teste, gerado plano MRP demandando o item pai (gera ordem planejada
+`RASCUNHO` para o subconjunto filho), convertido via
+`POST /api/mrp/planned-orders/convert-to-production` → OP
+`OP-2026-0001` criada com `product_id`/`item_id` corretos e ordem
+planejada marcada `EM_EXECUCAO`. Confirmado também que a rota normal
+`POST /api/production-orders` deixou de falhar por schema (passa a
+falhar apenas pela regra de negócio esperada, "produto sem BOM legada
+ativa", quando aplicável).
+
+### Arquivos alterados/criados
+
+- `server/src/modules/mrp/application/use-cases/ConvertPlannedOrdersToProductionOrderUseCase.ts` (novo)
+- `server/src/modules/items/domain/repositories/ItemRepository.ts` (método `findLegacyProductByItemId`)
+- `server/src/modules/items/infrastructure/sequelize/SequelizeItemRepository.ts` (implementação)
+- `server/src/modules/mrp/presentation/controllers/mrpController.ts` (`convertPlannedOrdersToProduction`)
+- `server/src/modules/mrp/presentation/validators/mrpValidators.ts` (`convertPlannedOrdersToProductionSchema`)
+- `server/src/modules/mrp/presentation/routes/mrp.ts` (rota nova)
+- `server/src/models/ProductionOrder.ts` (correção de nullability)
+- `server/migrations/20260804-000012-fix-production-orders-nullable-columns.cjs` (novo)
+- `server/tests/unit/mrp-convert-to-production-order.test.ts` (novo, 7 casos)
+
+### Validação rodada
+
+```
+cd server && npm run typecheck        → sem erros
+cd server && npm run test:unit        → 64 suítes, 456 testes, todos passando
+cd server && npm run test:integration → mrp.test.ts e purchase-requisitions.test.ts
+                                          passando contra API real (Docker);
+                                          demais falhas pré-existentes de
+                                          fixtures/estado de dados de outros
+                                          módulos, não relacionadas a esta entrega
+                                          (confirmado por leitura de log antes e
+                                          depois da mudança)
+```
+
+Rebuild + restart do container `evok-api` (`docker compose build api && docker compose up -d api`)
+e migration aplicada localmente via `DB_HOST=localhost npm run migration:up`
+para validar a correção de schema contra o Postgres real do Docker.
+
+### Riscos residuais
+
+1. **`findLegacyProductByItemId` depende de código/SKU idêntico entre
+   `items.codigo` e `products.code`.** Itens canônicos criados fora do
+   backfill oficial (`02b_product_to_item.ts`) sem produto legado
+   correspondente (ou com código divergente) não conseguem gerar OP via
+   MRP — a `BusinessRuleError` resultante é clara e orienta o operador,
+   mas não há fallback automático. Isso é o mesmo risco estrutural já
+   documentado no levantamento como item 10 ("Unificar schema
+   legado/novo") — não é uma regressão desta entrega, é a mesma bomba
+   latente de sempre, agora tocada por um novo caminho de código.
+2. **Migration `20260804-000012` não foi aplicada em nenhum ambiente
+   além do Docker local desta sessão.** Antes do próximo deploy,
+   confirmar que `npm run migration:up` roda limpo contra qualquer
+   ambiente de staging/produção existente (o `down` desta migration
+   reintroduz `NOT NULL`, mas não deve ser necessário — não há motivo de
+   negócio para reverter esta correção).
+3. Não existe endpoint/UI para disparar a conversão em lote a partir da
+   tela `/production/mrp` (mesma pendência já registrada para a
+   conversão em requisição — fica para o agente de frontend).
+
+### O que QA/próximo agente deve testar
+
+1. `POST /api/mrp/plan` com uma demanda cujo item raiz tenha BOM
+   (`ItemEstrutura`) apontando para um item `SUBCONJUNTO`/`PRODUTO_ACABADO`
+   — confirmar que a ordem planejada resultante do componente pode ser
+   convertida via `POST /api/mrp/planned-orders/convert-to-production`.
+2. Repetir o mesmo teste com um item `MATERIA_PRIMA` — confirmar que a
+   conversão para OP é rejeitada com `422` e mensagem orientando o uso de
+   `POST /api/mrp/planned-orders/convert` (requisição).
+3. `POST /api/production-orders` (rota normal, fora do MRP) para um
+   produto com BOM legada ativa — confirmar que a criação não falha mais
+   por `start_date`/`completion_date`/etc. NOT NULL.
+4. Rodar `npm run migration:status` em qualquer ambiente antes de aplicar
+   `migration:up`, para confirmar que `20260804-000012` está `down` e
+   será aplicada.
+
+**Consolidado por**: Claude Code (Backend Engineer — Fase 2/P1 MRP + item×fornecedor)
+
+---
+
+## Correção — Rate-limit de login/API por conta (não por IP compartilhado) — 2026-08-04/05
+
+### Problema relatado
+
+Usuário reportou (com print) receber "Muitas requisições. Tente novamente
+em 15 minutos." na tela de login sem ter feito muitas tentativas —
+sensação de que o clique "não pegou" e travou o sistema.
+
+### Causa raiz
+
+`server/app.ts` usava `express-rate-limit` com a chave padrão (IP do
+request) tanto no `authLimiter` (`/api/auth/login`, 10 tentativas/15min)
+quanto no `apiLimiter` (`/api`, 100 requisições/15min). Numa fábrica com
+~100-150 colaboradores atrás do mesmo IP público/NAT corporativo, essa
+cota é **compartilhada por todo o prédio**: um colega errando a senha, ou
+várias abas do ERP fazendo refetch (TanStack Query refetch-on-focus) ao
+trocar de tela rapidamente, esgota a cota de todo mundo atrás daquele IP
+por 15 minutos — mesmo digitando a senha certa depois.
+
+### Correção
+
+1. **`authLimiter`/`passwordRecoveryLimiter`** (login, forgot/reset
+   password): chave composta `IP + email` normalizado
+   (`loginAttemptKey`), via `ipKeyGenerator` do próprio
+   `express-rate-limit` (IPv6-safe). Um usuário errando a senha não
+   consome mais a cota dos colegas atrás do mesmo IP; um atacante
+   testando N contas do mesmo IP ainda soma normalmente por conta visada
+   (proteção de brute-force preservada).
+2. **`apiLimiter`** (`/api` geral): chave por **usuário autenticado**
+   (`apiRequestKey` decodifica — não verifica, a validação de assinatura
+   real continua em `authenticate` — o `sub`/`id` do Bearer token e usa
+   `user:<id>` como chave), caindo para IP só quando não há token
+   decodificável. Teto subido de 100 para 300 req/15min (100 era baixo
+   para um ERP com várias abas/queries em paralelo por usuário).
+3. **Bug de ordenação corrigido no caminho:** os `app.use(<rota>,
+   <limiter>)` estavam registrados **antes** de `app.use(express.json())`
+   — `req.body` chegava sempre `undefined` nos limiters, então
+   `loginAttemptKey` nunca conseguia ler `email` e todo login caía no
+   fallback por IP (a correção acima não tinha efeito prático até esse
+   reorder). Motivo do bug ser sutil de detectar sem teste real: nenhum
+   teste automatizado existente exercita rate-limit end-to-end contra a
+   API rodando (os testes de integração mockam ou rodam com
+   `NODE_ENV=test`, que usa `max: 100000`).
+
+### Validação
+
+- `npx tsc --noEmit` limpo, `npm run test:unit` 64 suítes/456 testes
+  passando (sem teste dedicado de rate-limit — nenhum existia antes;
+  não adicionado nesta correção pontual, ver nota abaixo).
+- Validado ao vivo contra o container Docker (`evok-api` rebuildado):
+  conta A estourando 10 tentativas de login recebe `429` a partir da
+  11ª; conta B, mesma máquina/IP, continua recebendo `401` normal
+  (credencial inválida) sem herdar o bloqueio de A.
+
+### Pendência para próximo agente
+
+- Nenhum teste automatizado cobre o comportamento do rate-limit em si
+  (nem antes, nem depois desta correção) — considerar um teste de
+  integração dedicado que sobe a app real (não mockada) e bate
+  `/api/auth/login` N+1 vezes com emails diferentes, confirmando
+  isolamento de chave. Não foi adicionado nesta entrega por ser uma
+  correção pontual e urgente (usuário bloqueado em produção/homolog).
+- `TRUST_PROXY` continua exigindo configuração manual correta em
+  produção atrás de proxy reverso (nginx/load balancer) — sem isso,
+  `req.ip` é sempre o IP do proxy e a chave por IP (fallback) volta a
+  colapsar todos os requests sem Bearer token válido em uma única chave.
+  Não é um problema novo desta mudança, já documentado em
+  `server/src/config/runtimeEnv.ts`.
+
+**Consolidado por**: Claude Code (correção pontual, 2026-08-04/05)
+**Data**: 2026-08-04
+
+---
+
+## Planejamento — Reorganização de menu por departamento + classificação de item (2026-08-05)
+
+Sessão com o dono do produto revisou o menu lateral (departamentos
+misturados: "Logística"/"Operações" deveriam ser um só; Requisições
+longe de Compras; Relatórios genérico; Patrimônio sem departamento
+próprio) e a modelagem de `Item`/`Asset`/documento fiscal (falta
+categoria de uso-e-consumo/MRO e ativo imobilizado; devolução ao
+fornecedor registrada mas sem consequência real; produto digital sem
+onde existir no schema). Cada decisão foi validada contra prática de
+mercado (SAP item master data, RMA/QMS, legislação fiscal NF-e/NFS-e)
+antes de ser fechada — 2 pontos confirmados, 2 corrigidos (nem todo
+software é Ativo; NFS-e não é "campo simples", é regime fiscal
+diferente, mas escopo real da EVOK é só recebimento).
+
+**Nenhum código foi alterado nesta sessão** — é planejamento puro. O
+plano de execução completo, com todas as decisões e blocos técnicos
+(schema → backend → frontend), está em
+[`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md).
+Qualquer agente retomando este trabalho deve começar lendo aquele
+documento, não este resumo — ele é a fonte de verdade executável
+(checkboxes por bloco, ordem de execução, ponto em aberto não
+bloqueante).
+
+**Consolidado por**: Claude Code (planejamento, 2026-08-05)
+
+---
+
+## Bloco A — Schema: classificação de item + ativo/licença + NF-e/NFS-e + módulos RBAC (2026-08-05)
+
+Execução do "Bloco A — Schema" de
+[`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md).
+Todas as migrations abaixo já foram **aplicadas** no Postgres local
+(`npm run migration:up`, dentro de `server/`). `npx tsc --noEmit` e
+`npm run test:unit` passam limpos (64 suites, 456 testes).
+
+### Migrations criadas (`server/migrations/`)
+
+1. `20260805-000001-add-item-tipo-uso-consumo-ativo.cjs` — `ALTER TYPE
+   "item_tipo" ADD VALUE` para `USO_E_CONSUMO` e `ATIVO_IMOBILIZADO`
+   (enum físico chama-se `item_tipo`, não `enum_items_tipo` — foi criado
+   via SQL raw na baseline `01_schema.sql`/`20260731-000001-baseline-schema.cjs`,
+   diferente do padrão automático do Sequelize). Sem backfill, mesmo
+   padrão de `20260803-000002-add-quarantine-lot-status.cjs` (raw query
+   fora de transação, `down()` no-op documentado).
+2. `20260805-000002-add-asset-type-license.cjs` — `ALTER TYPE
+   "enum_assets_asset_type" ADD VALUE 'license'`.
+3. `20260805-000003-add-asset-license-and-purchase-item.cjs` —
+   `assets.license_expires_at` (DATEONLY nullable) e
+   `assets.purchase_item_id` (INTEGER nullable, FK →
+   `purchase_order_items.id`, `ON DELETE SET NULL`, índice
+   `idx_assets_purchase_item_id`). **Desvio do enunciado do TODO**: o
+   TODO cita a tabela como `purchase_items`, mas a tabela física real
+   (ver `server/src/models/PurchaseItem.ts`, `tableName:
+   'purchase_order_items'`) é `purchase_order_items` — a FK aponta para
+   o nome real.
+4. `20260805-000004-add-invoice-type-payable-and-purchase.cjs` —
+   `accounts_payable.invoice_type` e `purchase_orders.invoice_type`,
+   cada um com seu próprio enum Postgres nomeado pelo Sequelize
+   (`enum_accounts_payable_invoice_type` /
+   `enum_purchase_orders_invoice_type`), valores `'nfe'`/`'nfse'`,
+   nullable, sem backfill. **Nota técnica importante para quem for criar
+   migrations parecidas**: `addColumn` com `type: Sequelize.ENUM(...)`
+   **e** `comment` juntos gera `unterminated quoted string` no Postgres
+   local (Sequelize 6.37 monta `CREATE TYPE`/`ALTER TABLE`/`COMMENT ON
+   COLUMN` como uma única string multi-statement que quebra). Correção
+   aplicada: `addColumn` sem `comment`, e o comentário da coluna é
+   setado depois via `COMMENT ON COLUMN ...` isolado (raw query simples).
+5. `20260805-000005-add-asset-id-non-conformities.cjs` —
+   `non_conformities.asset_id` (INTEGER nullable, FK → `assets.id`, `ON
+   DELETE SET NULL`, índice `idx_non_conformities_asset_id`).
+
+### `PurchaseRequisition.department_id` — já existia, nada a fazer
+
+O item 4 do Bloco A (`PurchaseRequisition.department_id`) **já estava
+implementado** desde a migration original de criação da tabela
+(`20260802-000002-purchase-requisitions.cjs`): coluna INTEGER nullable
+com FK `purchase_requisitions_department_id_fkey → departments(id) ON
+DELETE SET NULL` já presente no banco, e o model
+`server/src/models/PurchaseRequisition.ts` já declara o campo. **Nenhuma
+migration nova foi criada para este item.**
+
+Backfill não foi feito: as 8 requisições existentes no banco local têm
+`department_id` NULL. Avaliação pedida no TODO (backfill via
+`requester_id` → `Employee.department_id`) não foi executada nesta
+entrega porque preencher dados históricos é decisão de aplicação/negócio
+(potencialmente errada se o solicitante mudou de departamento depois da
+requisição), não uma correção estrutural de schema — fica para quem
+implementar o Bloco C (`CreatePurchaseRequisitionUseCase` passa a
+preencher o campo automaticamente dali para frente; requisições antigas
+continuam NULL, mesma lógica de "não forçar dado que não se tem" já
+usada para `access_profile_id`).
+
+### Models Sequelize atualizados
+
+- `server/src/models/Item.ts` — `ItemTipo` ganhou `'USO_E_CONSUMO' |
+  'ATIVO_IMOBILIZADO'`, `DataTypes.ENUM(...)` da coluna `tipo`
+  atualizado na mesma ordem.
+- `server/src/models/Asset.ts` — `asset_type` ganhou `'license'`;
+  colunas `license_expires_at: string | null` e `purchase_item_id:
+  number | null` adicionadas à interface e à definição.
+- `server/src/models/AccountPayable.ts` e `server/src/models/Purchase.ts`
+  — `invoice_type: 'nfe' | 'nfse' | null` adicionado a ambos.
+- `server/src/models/NonConformity.ts` — `asset_id: number | null`
+  adicionado à interface, à definição e aos `indexes` do model (mesmo
+  padrão de `product_id`/`production_order_id`).
+- `server/src/models/PurchaseRequisition.ts` — não modificado (campo já
+  existia).
+
+### Catálogo de módulos RBAC (`server/src/shared/domain/accessModules.ts`)
+
+Adicionadas as chaves `manutencao` (label "Manutenção") e `garantia`
+(label "Garantia/Assistência Técnica") ao tipo `AccessModuleKey` e à
+lista `ACCESS_MODULES`, entre `patrimonio` e `rastreabilidade` (mesma
+posição relativa do menu proposto no TODO). **Não é migration de
+banco** — não há CHECK constraint no Postgres sobre
+`access_profile_permissions.module` (validação é só em código, via
+`isValidAccessModuleKey`), então não havia nada para alterar no schema
+além do catálogo TypeScript. O SSOT agora tem 28 módulos (26 originais +
+2 novos); comentário de cabeçalho do arquivo atualizado.
+
+**Escopo explicitamente fora desta entrega** (fica para os blocos
+seguintes, conforme o TODO): retrofit de `authorizeModule('manutencao'
+| 'garantia', ...)` nas rotas de `maintenance.ts`/`serviceOrders.ts`
+(Bloco D); qualquer lógica de negócio que reaja aos novos campos —
+estorno de estoque/mudança de status de Asset na devolução ao
+fornecedor (Bloco B), preenchimento automático de `department_id` em
+requisições novas (Bloco C), telas de menu/formulário (Blocos E/F).
+
+### Teste ajustado
+
+`server/tests/unit/items-models.test.ts` — assertiva de
+`Item.rawAttributes.tipo.values` atualizada para incluir os 2 valores
+novos do enum (teste existente, não um teste novo criado para esta
+entrega).
+
+**Consolidado por**: Claude Code (AdmDBA, Bloco A, 2026-08-05)
+
+---
+
+## Bloco D — Backend: retrofit RBAC de Manutenção e Garantia (Concluída)
+
+**Data**: 2026-08-05
+**Escopo**: [`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md),
+Bloco D. Depende do Bloco A (chaves `manutencao`/`garantia` já
+adicionadas ao catálogo `server/src/shared/domain/accessModules.ts`).
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+As rotas dos módulos `maintenance` (Manutenção) e `serviceOrders`
+(Garantia/Assistência Técnica) ainda usavam o RBAC legado por papel
+global (`authorize('admin', 'operator')`/`authorize('admin')`),
+ignorando o sistema de perfis de acesso por área já retrofitado em
+todos os outros módulos (`authorizeModule`). Este bloco troca os dois
+roteadores para o padrão atual, usando exatamente a mesma estrutura já
+aplicada ao módulo `patrimonio`
+(`server/src/modules/assets/presentation/routes/assets.ts`, usado como
+referência direta).
+
+### Arquivos modificados
+
+- `server/src/modules/maintenance/presentation/routes/maintenance.ts`
+  — `authorize('admin', 'operator')`/`authorize('admin')` substituídos
+  por `authorizeModule('manutencao', 'operate')` (create/update) e
+  `authorizeModule('manutencao', 'approve')` (delete). GET (`list`,
+  `getById`) passou a exigir `authorizeModule('manutencao')`, que antes
+  não tinha nenhuma checagem de RBAC além de `authenticate` (qualquer
+  usuário autenticado conseguia listar ordens de manutenção) — agora
+  exige que o `AccessProfile` do usuário inclua o módulo `manutencao`
+  (nível de leitura implícito, mesmo padrão de `assets.ts`).
+- `server/src/modules/serviceOrders/presentation/routes/serviceOrders.ts`
+  — mesmo retrofit, usando `authorizeModule('garantia', ...)` nos
+  mesmos níveis. Mesma observação: GET antes só exigia `authenticate`,
+  agora exige o módulo `garantia` no perfil.
+- `server/tests/integration/rbac-maintenance-service-orders-access-denied.test.ts`
+  (novo) — teste de regressão RBAC HTTP fim-a-fim (Supertest + servidor
+  + PostgreSQL reais via `scripts/run-api-suite.cjs`), seguindo
+  exatamente o padrão de
+  `server/tests/integration/rbac-module-access-denied.test.ts`: cria um
+  usuário `operator` com `AccessProfile` que só tem o módulo `vendas`
+  (nunca `manutencao`/`garantia`) e confirma 403 `MODULE_ACCESS_DENIED`
+  em GET/POST/PUT/DELETE de `/api/maintenance` e `/api/service-orders`,
+  sem vazamento de dados (`response.body.data` undefined) e sem
+  side-effects (nada é criado/alterado/removido); confirma também que
+  o token admin do fixture da suíte segue autorizado (`GET` não retorna
+  403) nos dois módulos.
+
+### Documentações atualizadas
+
+- `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md` — Bloco D
+  marcado `[x]` com nota de conclusão e resultado dos testes.
+- `docs/HANDOFF_CODEX.md` — esta entrada.
+
+Nenhum JSDoc de model/schema/caso de uso precisou de atualização — não
+houve mudança de regra de negócio, apenas troca do mecanismo de
+autorização nas rotas (os cabeçalhos JSDoc dos próprios arquivos de
+rotas foram atualizados para descrever o novo RBAC).
+
+### Instruções de teste
+
+1. `cd server && npx tsc --noEmit` — deve passar limpo.
+2. `cd server && npm run test:unit` — 456/456 passando (nenhuma
+   regressão).
+3. `cd server && npm run test:integration:strict` — sobe a API própria
+   na porta 3101 via `scripts/run-api-suite.cjs` (não usa os containers
+   Docker `evok-api`/`evok-postgres`, que podem continuar rodando em
+   paralelo sem conflito). O novo arquivo
+   `rbac-maintenance-service-orders-access-denied.test.ts` deve mostrar
+   10/10 testes passando. **Atenção**: nesta rodada, 7 suítes de
+   integração não relacionadas a este bloco falharam (`clients-suppliers-financial-bom-validation`,
+   `product-movement-concurrency`, `entity-photo-qrcode`,
+   `bom-component-type-regression`, `sale-quote-confirm`,
+   `sale-nfe-issuance`, `sale-cancel-concurrency`) — confirmado via
+   `git diff --stat` que nenhuma delas toca em arquivo alterado por
+   este bloco; a causa está em mudanças concorrentes de outros agentes
+   (Blocos B/C, módulos `mrp`/`items`/`purchaseRequisitions`) rodando
+   em paralelo no mesmo working tree. Não foram investigadas nem
+   corrigidas aqui — ficam para quem estiver de posse desses blocos.
+4. Validação manual opcional: logar como usuário cujo `AccessProfile`
+   não inclui `manutencao`/`garantia` e confirmar 403 ao acessar
+   `/api/maintenance` e `/api/service-orders`; logar como admin e
+   confirmar acesso normal.
+
+### Riscos residuais
+
+- GET de `maintenance`/`serviceOrders` passou a exigir o módulo no
+  perfil (antes bastava estar autenticado) — qualquer perfil de
+  usuário em produção que dependa de acessar essas rotas sem o módulo
+  `manutencao`/`garantia` atribuído explicitamente perderá acesso após
+  o deploy. Nenhum perfil de acesso existente foi migrado/ajustado
+  neste bloco (fora de escopo — é decisão de negócio de quem administra
+  perfis, não uma correção estrutural).
+- As 7 falhas de integração pré-existentes citadas acima permanecem
+  não corrigidas; não bloqueiam este bloco mas bloqueiam um
+  `test:integration:strict` 100% verde até os outros blocos em paralelo
+  fecharem.
+
+**Consolidado por**: Claude Code (Bloco D, 2026-08-05)
+**Data**: 2026-08-05
+
+---
+
+## Bloco C — Backend: requisição por departamento (Concluída)
+
+**Data**: 2026-08-06
+**Escopo**: [`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md),
+Bloco C. Depende do Bloco A (`PurchaseRequisition.department_id` já
+existia desde a migration original da tabela, coluna + FK + model já
+prontos — nenhuma migration nova neste bloco).
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+Decisão do dono do produto: cada departamento (Logística, Produção,
+Manutenção, Qualidade) tem sua própria fila de requisição de compra,
+filtrada automaticamente por `department_id` — não uma fila única
+global. Este bloco fecha a parte de backend: (1) `department_id` passa
+a ser sempre resolvido a partir do `Employee` vinculado ao usuário
+autenticado no momento da criação (nunca aceito do cliente, mesmo
+raciocínio anti-spoofing já usado para `requester_id`/`approved_by`);
+(2) o endpoint de listagem aceita `department_id` como filtro de query
+para as telas por departamento do Bloco E.
+
+### Arquivos modificados
+
+- `server/src/modules/purchaseRequisitions/application/use-cases/CreatePurchaseRequisitionUseCase.ts`
+  — passa a importar `Employee` de `models/index` (junto do já existente
+  `EngineeringProject`) e resolver `department_id` via
+  `Employee.findOne({ where: { user_id: input.requester_id } })` antes
+  de montar o payload de `createRequisition`. Se o usuário autenticado
+  não tiver `Employee` vinculado (ex.: admin sem cadastro de
+  funcionário), `department_id` fica `null` e a requisição é criada
+  normalmente — não é bloqueante. JSDoc do método `execute` atualizado
+  explicando a regra.
+- `server/src/modules/purchaseRequisitions/presentation/validators/purchaseRequisitionValidators.ts`
+  — `department_id` **removido** de `createPurchaseRequisitionSchema`
+  (não é mais aceito no body de criação; o schema é `.strict()`, então
+  um body que envie `department_id` agora é rejeitado como campo
+  desconhecido). `department_id` **adicionado** a
+  `listPurchaseRequisitionQuerySchema` como filtro opcional de query
+  (`z.coerce.number().int().positive().optional()`) — comentários
+  explicam a distinção: no create é campo de identidade (nunca do
+  cliente), na listagem é filtro de leitura (sem risco de spoofing).
+- `server/src/modules/purchaseRequisitions/application/use-cases/ListPurchaseRequisitionsUseCase.ts`
+  — `department_id` adicionado ao tipo `ListPurchaseRequisitionsInput` e
+  repassado para `requisitionRepository.listRequisitions(...)`. JSDoc
+  da classe atualizado.
+- `server/src/modules/purchaseRequisitions/infrastructure/sequelize/SequelizePurchaseRequisitionRepository.ts`
+  — `listRequisitions` aplica `where.department_id = filters.department_id`
+  quando informado, mesmo padrão dos filtros existentes (`status`,
+  `origin`, `requester_id`).
+- `server/tests/unit/purchase-requisition-department.test.ts` (novo) —
+  cobre: (a) criação preenche `department_id` a partir do `Employee`
+  vinculado ao usuário logado; (b) valor de `department_id` enviado pelo
+  cliente é ignorado (anti-spoofing) — o resultado final vem sempre do
+  `Employee` resolvido; (c) `department_id` fica `null` quando o usuário
+  autenticado não tem `Employee` vinculado; (d) listagem repassa o
+  filtro `department_id` ao repositório; (e) listagem sem `department_id`
+  não quebra e não filtra.
+- `server/tests/unit/engineering-sample-requisition.test.ts` — ajustado
+  para mockar `Employee.findOne` (resolvendo `null` por padrão) junto do
+  mock já existente de `EngineeringProject`, já que o use case agora
+  também chama `Employee.findOne` no fluxo de amostra de engenharia
+  (mesmo `execute`, sem branch novo). Sem mudança de comportamento nos
+  testes existentes, apenas o mock ficou completo — todos os 11 testes
+  do arquivo continuam passando.
+
+### Documentações atualizadas
+
+- `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md` — Bloco C
+  marcado `[x]` com nota de conclusão e detalhamento por item.
+- `docs/HANDOFF_CODEX.md` — esta entrada.
+- JSDoc atualizado diretamente em `CreatePurchaseRequisitionUseCase.ts`
+  e `ListPurchaseRequisitionsUseCase.ts` (cabeçalhos de classe/método
+  explicando a nova regra). Nenhum caso de uso de
+  `docs/projeto/04-USE_CASES.md` precisou de alteração — este bloco é
+  refinamento de como um campo já existente (`department_id`) é
+  preenchido/filtrado, não uma regra de negócio nova documentada lá.
+
+### Instruções de teste
+
+1. `cd server && npx tsc --noEmit` — passou limpo.
+2. `cd server && npm run test:unit` — 461/461 passando (nenhuma
+   regressão; 456 pré-existentes + 4 novos deste bloco + 1 caso do
+   arquivo de amostra de engenharia recontado por causa do mock extra).
+3. Validação manual opcional: `POST /api/purchase-requisitions` com um
+   usuário cujo `Employee.department_id` seja conhecido e confirmar que
+   a requisição criada aponta o `department_id` correto mesmo sem
+   enviar o campo no body (e que enviar `department_id` no body agora
+   retorna 400 de payload inválido, campo desconhecido); `GET
+   /api/purchase-requisitions?department_id=<id>` e confirmar que só
+   retorna requisições daquele departamento.
+
+### Riscos residuais
+
+- As 8 requisições locais com `department_id` NULL citadas no Bloco A
+  (criadas antes deste bloco) continuam `NULL` — nenhum backfill foi
+  feito aqui (decisão do Bloco A, mantida: é aceitável, fila de
+  departamento simplesmente não vai listar essas requisições antigas
+  quando filtrada; ficam visíveis normalmente na listagem sem filtro).
+- Usuários autenticados sem `Employee` vinculado (ex.: contas
+  administrativas criadas direto em `users` sem registro em
+  `employees`) sempre criam requisição com `department_id = null` — se
+  o frontend do Bloco E decidir que toda tela de departamento **exige**
+  `department_id` não-nulo para aparecer em alguma fila, esses usuários
+  ficam de fora; não foi tratado aqui por ser decisão de UX do Bloco E.
+
+**Consolidado por**: Claude Code (Bloco C, 2026-08-06)
+**Data**: 2026-08-06
+
+---
+
+## Correção — Idempotência de migrations contra banco novo (achado ao isolar `server/.env.test`) — 2026-08-05
+
+**Data**: 2026-08-05
+**Escopo**: `server/migrations/*.cjs`
+**Status**: ✅ Concluído
+
+### Causa raiz
+
+Ao investigar uma falha de segurança (a suíte de testes de integração
+rodava contra o mesmo banco de desenvolvimento `erp_evok_audio` e
+sobrescrevia a senha do admin real), criamos um banco isolado dedicado
+a testes (`server/.env.test`, `DB_NAME=erp_evok_audio_test`) e tentamos
+aplicar todas as migrations do zero contra ele
+(`npx sequelize-cli db:migrate`).
+
+Isso expôs um problema sistêmico pré-existente, sem relação com o bug
+de segurança em si: a migration baseline
+(`server/migrations/20260731-000001-baseline-schema.cjs`) cria tabelas
+**dinamicamente a partir dos models Sequelize atuais** (lê
+`dist/src/models/*.js` já buildado). Como consequência, um banco criado
+HOJE do zero já nasce com todas as colunas/tabelas que os models
+*atuais* definem — inclusive campos que só deveriam existir depois de
+migrations posteriores (mais recentes) rodarem. A baseline não reflete
+o estado histórico em que cada migration foi originalmente escrita;
+reflete sempre o presente.
+
+Resultado prático: qualquer migration posterior à baseline que faça
+`createTable`/`addColumn`/`addConstraint`/`addIndex` assumindo que a
+coluna/tabela ainda não existe falha com erro
+`column/constraint/table "X" already exists` ao rodar contra um banco
+novo — mesmo que essas mesmas migrations rodem sem problema no banco de
+desenvolvimento existente (onde já foram aplicadas uma vez, em ordem,
+há semanas).
+
+Este bug é **anterior** e **independente** do achado de segurança do
+`.env.test` — ele sempre existiu, só nunca havia sido testado (nenhum
+banco havia sido recriado do zero desde que a baseline dinâmica foi
+introduzida em 2026-07-31).
+
+### Padrão de correção aplicado
+
+Idempotência via checagem de existência antes de cada operação DDL:
+
+1. Antes de `createTable('tabela', ...)`: checar
+   `(await queryInterface.showAllTables()).includes('tabela')` — se já
+   existe, pular a criação inteira da tabela (e das
+   constraints/índices/seeds associados criados junto dela no mesmo
+   bloco).
+2. Antes de `addColumn('tabela', 'coluna', ...)`: checar
+   `!(await queryInterface.describeTable('tabela')).coluna`.
+3. Antes de `addIndex(...)`: checar se o nome já existe em
+   `await queryInterface.showIndex('tabela')`.
+4. Backfills de dados (INSERT/UPDATE) mantidos como estavam — já eram
+   idempotentes por natureza (`ON CONFLICT DO NOTHING`,
+   `WHERE coluna IS NULL`), confirmado caso a caso.
+5. `down()` de cada migration preservado exatamente como estava — nada
+   mudou em rollback, só no `up()`.
+
+### Migrations corrigidas (6 arquivos)
+
+- `server/migrations/20260803-000004-create-work-centers.cjs` — guard
+  em `createTable('work_centers'/'work_center_shifts')`,
+  `addColumn('production_route_steps', 'work_center_id')` e índice
+  associado.
+- `server/migrations/20260803-000008-create-access-profiles.cjs` —
+  guard em `createTable('access_profiles'/'access_profile_permissions')`
+  e `addColumn('users', 'access_profile_id')`; seed do perfil
+  "Administrador Geral" isolado em função própria, chamada
+  incondicionalmente (idempotente via `ON CONFLICT DO NOTHING`).
+- `server/migrations/20260804-000001-create-warehouses.cjs` — guard em
+  `createTable('warehouses'/'product_warehouse_stock')`,
+  `addColumn('inventory_movements', 'warehouse_id')` e
+  `addColumn('lot_controls', 'warehouse_id')` + índices associados.
+- `server/migrations/20260804-000006-add-warehouse-id-to-inventory-counts.cjs`
+  — guard em `addColumn('inventory_counts', 'warehouse_id')` e índice
+  `idx_inventory_counts_warehouse_id`.
+- `server/migrations/20260804-000011-add-supplier-quality-score.cjs` —
+  guard em `addColumn('suppliers', 'quality_score')`.
+- `server/migrations/20260805-000003-add-asset-license-and-purchase-item.cjs`
+  — guard em `addColumn('assets', 'license_expires_at')`,
+  `addColumn('assets', 'purchase_item_id')` e índice
+  `idx_assets_purchase_item_id`.
+- `server/migrations/20260805-000004-add-invoice-type-payable-and-purchase.cjs`
+  — guard independente em `addColumn('accounts_payable', 'invoice_type')`
+  e `addColumn('purchase_orders', 'invoice_type')` (cada um cria seu
+  próprio tipo ENUM Postgres, `COMMENT ON COLUMN` movido para dentro do
+  bloco condicional de cada coluna).
+- `server/migrations/20260805-000005-add-asset-id-non-conformities.cjs`
+  — guard em `addColumn('non_conformities', 'asset_id')` e índice
+  `idx_non_conformities_asset_id`.
+
+(8 arquivos ao todo — os 3 primeiros já haviam sido corrigidos em uma
+etapa anterior desta mesma investigação, antes desta entrada de
+handoff; os 5 seguintes foram corrigidos nesta rodada, ao continuar o
+ciclo de recriar o banco `erp_evok_audio_test` do zero e reaplicar
+migrations até não haver mais erro de "already exists".)
+
+### Validação
+
+1. Ciclo repetido de `DROP DATABASE erp_evok_audio_test` → `CREATE
+   DATABASE erp_evok_audio_test OWNER evok_admin` →
+   `DB_NAME=erp_evok_audio_test NODE_ENV=test npm run migration:up` até
+   as 50 migrations aplicarem limpo do zero, sem nenhum erro
+   `already exists`. `DB_NAME=erp_evok_audio_test npm run
+   migration:status` confirma todas as 50 migrations como `up`.
+2. `cd server && npx tsc --noEmit` — passou limpo (sem erros de tipo).
+3. `cd server && npm run test:unit` (contra o banco de desenvolvimento
+   normal `erp_evok_audio`, sem `DB_NAME` sobrescrito) — 67 suítes / 473
+   testes, todos passando, nenhuma regressão introduzida pelas
+   checagens de idempotência.
+4. `cd server && npm run migration:status` no banco de desenvolvimento
+   — todas as migrations continuam `up` (nada foi re-executado ali;
+   as migrations já estavam aplicadas e o Sequelize não re-roda
+   migrations já registradas em `SequelizeMeta`, então o guard de
+   idempotência é só relevante para bancos novos, mas não altera o
+   comportamento do banco existente).
+
+### Riscos residuais / fora de escopo desta correção
+
+- Não foi rodado `npm run test:integration` / `run-api-suite.cjs`
+  contra `erp_evok_audio_test` nesta etapa — isso é validado por uma
+  etapa separada da investigação de segurança do `.env.test`, fora do
+  escopo desta entrada.
+- Se novas migrations forem adicionadas no futuro seguindo o padrão
+  antigo (sem guard de idempotência), o mesmo problema pode reaparecer
+  para qualquer coluna/tabela que a baseline dinâmica já tenha
+  absorvido até aquele momento. Recomenda-se que todo novo
+  `addColumn`/`createTable`/`addIndex` em migrations siga o padrão
+  estabelecido aqui (ou que a baseline deixe de ser dinâmica — decisão
+  arquitetural maior, fora do escopo desta correção pontual).
+
+**Consolidado por**: Claude Code (correção de idempotência de
+migrations, 2026-08-05)
+**Data**: 2026-08-05
+
+---
+
+## Auditoria de segurança — reset destrutivo de senha do admin via suíte de integração (2026-08-05)
+
+### Incidente
+
+O dono do produto ficou bloqueado da própria conta (`admin@evokaudio.com.br`,
+"Email ou senha incorretos" mesmo digitando a senha correta) sem nenhum
+aviso. Investigação encontrou a causa em minutos: `password_version`
+incrementado e `updated_at` do usuário batendo exatamente com o horário em
+que subagentes rodavam `npm run test:integration` em background para os
+Blocos B/C/D de `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`.
+
+### Causa raiz (2 problemas empilhados)
+
+1. **`server/scripts/run-api-suite.cjs:108-116` (`ensureFixtures`)**
+   buscava o usuário **pelo e-mail real** `admin@evokaudio.com.br` — o
+   mesmo usado no dia a dia, não um usuário de teste sintético — e
+   sobrescrevia senha/role via `.update()` direto no model Sequelize,
+   fora de qualquer use case auditado (por isso zero rastro em
+   `audit_logs`).
+2. **Nenhum isolamento de banco entre dev e teste local.** `DB_NAME`
+   sempre resolvia para `erp_evok_audio` (o banco de desenvolvimento
+   real) independente de `NODE_ENV`; `run-api-suite.cjs` só
+   sobrescrevia `NODE_ENV`/`PORT`/`N8N_WEBHOOK_SECRET` no `baseEnv`,
+   nunca `DB_NAME`. O CI do GitHub Actions (`.github/workflows/server-ci.yml`)
+   já usa um banco isolado (`erp_evok_audio_ci`) em container efêmero —
+   o problema era exclusivo de execução local, onde ninguém garantia o
+   mesmo isolamento.
+3. **Nenhum guard impedia rodar contra produção.** Se alguém (ou um
+   agente) rodasse este script com `.env` de produção copiado para
+   debug local, o mesmo dano ocorreria em produção, sem aviso.
+
+Auditoria completa rodada via agente `auditor-seguranca` confirmou mais
+2 pontos correlatos (severidade menor): `mrp.test.ts`/`traceability.test.ts`
+faziam login HTTP direto contra o admin real em vez de usar o
+`TEST_AUTH_TOKEN` já injetado pela suíte; `password-recovery-and-session-revocation.test.ts`
+disparava `forgot-password` contra o e-mail real sem necessidade.
+
+### Correção aplicada
+
+1. **Acesso restaurado imediatamente** — senha do admin real resetada
+   direto no banco (bcrypt) para uma senha temporária informada ao
+   dono, com instrução de trocar após o login.
+2. **`server/.env.test` criado** (git-ignored, adicionado ao
+   `.gitignore`) com `DB_NAME=erp_evok_audio_test` — banco Postgres
+   separado, criado no mesmo container Docker local
+   (`erp_evok_audio_test`, owner `evok_admin`). `run-api-suite.cjs`
+   agora carrega `.env.test` com prioridade sobre `.env`.
+3. **Guard duro em `run-api-suite.cjs` `main()`**: recusa rodar
+   (`throw`) se `NODE_ENV === 'production'`, ou se `DB_NAME`/`DB_HOST`
+   contiver `prod`, ou se `DB_NAME` não terminar em `_test`/`_ci`.
+   Fecha tanto o vetor de produção quanto o de rodar sem isolamento
+   local por esquecimento.
+4. **`ensureFixtures` trocado para usuário sintético**: `User.findOrCreate`
+   por `ci-admin@evok.local` (convenção `@evok.local` já usada em ~11
+   outros arquivos de teste do projeto) em vez de buscar
+   `admin@evokaudio.com.br`. Não há mais nenhum caminho pelo qual a
+   suíte toca o usuário admin real.
+
+### Efeito colateral descoberto e corrigido: idempotência de migrations
+
+Isolar `.env.test` e criar o banco de teste do zero expôs um problema
+sistêmico pré-existente e não relacionado à causa raiz acima — ver
+entrada anterior "Correção — Idempotência de migrations contra banco
+novo" nesta mesma seção do handoff (8 migrations corrigidas + 2 models
+com `allowNull` implícito divergente da migration original —
+`Product.photo_path`/`Asset.photo_path` agora explicitamente
+`allowNull: true`, alinhado à migration `20260731-000020`).
+
+### Validação
+
+- `npx tsc --noEmit` limpo; `npm run test:unit` 67 suítes/473 testes
+  passando.
+- `node scripts/run-api-suite.cjs api` (suíte de integração completa)
+  rodou contra `erp_evok_audio_test` do início ao fim — confirmado por
+  leitura direta do banco que `admin@evokaudio.com.br` (banco de
+  desenvolvimento real) **não** teve `updated_at`/`password_version`
+  alterados durante a execução. 15 de 75 testes de integração falharam
+  por fixtures/dados que o banco de teste novo não tem (produtos
+  específicos que só existiam no banco de dev acumulado ao longo do
+  projeto) — **não é regressão desta correção**, é esperado que um
+  banco de teste isolado precise de fixtures completos que a suíte
+  ainda assume via dados pré-existentes; fica como próximo passo, fora
+  do escopo desta auditoria de segurança (o objetivo era eliminar o
+  vetor de escrita destrutiva sobre a conta real, não fazer 100% dos
+  testes de integração passarem contra base vazia).
+
+### Pendências / próximos passos (não bloqueantes)
+
+- `mrp.test.ts`/`traceability.test.ts` ainda fazem login HTTP com
+  `admin@evokaudio.com.br` + `ADMIN_SEED_PASSWORD` — agora seguro
+  porque roda contra `erp_evok_audio_test` (que tem seu próprio seed
+  de admin, isolado do banco real), mas o ideal é migrar para
+  `TEST_AUTH_TOKEN` como o resto da suíte, eliminando a dependência
+  redundante.
+- `password-recovery-and-session-revocation.test.ts` ainda usa o
+  e-mail real no corpo da requisição `forgot-password` — mesma lógica,
+  seguro pelo isolamento de banco, mas trocar por e-mail sintético é
+  mais correto por princípio.
+- Completar fixtures do banco de teste para os 15 testes de integração
+  hoje falhando por dado ausente (produtos/BOM específicos que os
+  testes assumem existir).
+- Documentar `server/.env.test` no `README.md`/runbook do projeto, para
+  que qualquer pessoa (não só quem participou deste incidente) saiba
+  que precisa existir antes de rodar `test:integration` localmente.
+
+**Consolidado por**: Claude Code (auditoria e correção de segurança,
+2026-08-05)
+**Data**: 2026-08-05
+
+---
+
+## Bloco F — Frontend: NF-e/NFS-e e licença de Ativo (2026-08-05)
+
+**Escopo**: `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`, Bloco F.
+Depende do Bloco A (schema já concluído — `AccountPayable.invoice_type`,
+`Purchase.invoice_type`, `Asset.asset_type = 'license'`,
+`Asset.license_expires_at`, `Asset.purchase_item_id`).
+
+### O que foi feito
+
+**Contas a Pagar** (`client/src/pages/financial/FinancialPage.tsx`):
+- Novo campo `invoice_type` (select `SelectNative`, opções "NF-e
+  (mercadoria)" / "NFS-e (serviço)", opcional) no formulário de criação
+  de conta a pagar, com texto de apoio explicando o critério (NF-e =
+  mercadoria/matéria-prima; NFS-e = serviço ou licença digital recebida
+  de fornecedor — a EVOK só *recebe* NFS-e, não emite, então é
+  classificação simples, sem integração de layout municipal).
+- Nova coluna "Nota" na tabela de contas a pagar, exibindo um `Badge`
+  com o tipo (ou "—" quando não informado).
+- Valor vazio do select é normalizado para `undefined` antes do submit
+  (evita mandar string vazia para um enum Zod no backend).
+
+**Ativo/Patrimônio** (`client/src/pages/patrimonio/AssetsPage.tsx`):
+- Novo valor `license` ("Licença de software") no seletor de tipo já
+  existente (`asset_type`), reaproveitando o mesmo `SelectNative`.
+- Campo `license_expires_at` (date picker) exibido apenas quando
+  `asset_type === 'license'` (via `watch('asset_type')` do
+  react-hook-form), com nota de apoio reforçando que só licença
+  perpétua/multianual capitalizada deve virar Ativo (SaaS de curto
+  prazo não).
+- Nova coluna "Licença" na tabela, com `LicenseExpiryBadge` (helper
+  local): `destructive` se já venceu, `warning` se vence em ≤30 dias
+  (`LICENSE_EXPIRY_WARNING_DAYS`), texto neutro caso contrário. **Decisão
+  técnica**: não foi reaproveitado `DidacticAlert`
+  (`client/src/components/DidacticAlert.tsx`) — esse componente é
+  desenhado para erros de mutation com estrutura `DidacticError`
+  (título + motivos + ação corretiva, tipicamente produzido por
+  `translateApiError`), não para um aviso informativo de prazo por linha
+  de tabela. Um `Badge` (`variant="warning"`/`"destructive"`, já usado em
+  outras telas do projeto) comunica o alerta de forma mais direta aqui,
+  sem forçar semântica de erro sobre algo que não é um erro.
+- `purchase_item_id` exibido como texto somente-leitura ("Origem: compra
+  #N") abaixo da tag do ativo, quando presente — **não** editável pelo
+  usuário nesta entrega, conforme decisão do Bloco A (o campo é
+  preenchido por outro fluxo, ainda não implementado, que gera Ativo a
+  partir de recebimento de compra).
+- `AssetStatus` (tipo do client) ganhou `'returned_to_supplier'` (já
+  existia no backend desde o Bloco B) com label "Devolvido ao
+  fornecedor", para não deixar o tipo do client dessincronizado do enum
+  real — sem UI adicional além do label na badge de status existente.
+
+### Backend: passthrough que faltava (fora do Bloco A, mínimo e necessário)
+
+O Bloco A criou coluna/schema, mas a camada de aplicação (Zod schema,
+entidade de domínio, use case, controller) de Contas a Pagar e de Ativo
+ainda não aceitava os novos campos — sem isso, os campos novos do
+formulário seriam descartados silenciosamente pelo backend (schemas
+`.strict()` no financeiro rejeitariam a requisição inteira; o use case
+de Asset usa uma whitelist de campos que não incluía os novos). Ajustes:
+
+- `server/src/modules/financial/presentation/validators/financialValidators.ts`
+  — `createPayableSchema` ganhou `invoice_type: z.enum(['nfe', 'nfse']).optional()`.
+- `server/src/modules/financial/domain/entities/AccountPayableEntity.ts`
+  e `server/src/modules/financial/application/use-cases/CreatePayableUseCase.ts`
+  — `invoice_type` propagado da entrada até `financialRepository.createPayable`.
+- `server/src/modules/financial/presentation/controllers/financialController.ts`
+  — `createPayable` desestrutura e repassa `invoice_type`.
+- `server/src/modules/assets/application/use-cases/CreateAssetUseCase.ts`
+  — `license_expires_at` adicionado ao input e propagado para
+  `assetsRepository.create`.
+- `server/src/modules/assets/application/use-cases/UpdateAssetUseCase.ts`
+  — `license_expires_at` adicionado a `ALLOWED_FIELDS` (whitelist de
+  campos editáveis via `PUT /api/assets/:id`).
+- `purchase_item_id` **não** foi adicionado a nenhuma whitelist de
+  escrita (create/update) — permanece somente-leitura no schema/model,
+  como decidido no Bloco A; não há endpoint nem caminho de UI que o
+  grave a partir desta entrega.
+- `assetController.ts` não tem validação Zod própria (repassa `req.body`
+  direto ao use case), então a whitelist do use case já é a única guarda
+  — nenhuma mudança necessária ali.
+
+### API client (`client/src/api/`)
+
+- `financial.ts` — novo tipo `InvoiceType = 'nfe' | 'nfse'`;
+  `AccountPayable.invoice_type` e `CreatePayableInput.invoice_type`
+  adicionados (opcionais).
+- `assets.ts` — `AssetType` ganhou `'license'`; `AssetStatus` ganhou
+  `'returned_to_supplier'`; `Asset` ganhou `license_expires_at` e
+  `purchase_item_id` (ambos opcionais, leitura); `AssetInput` ganhou
+  `license_expires_at` (opcional, escrita).
+
+### Validação
+
+- `npx tsc --noEmit` limpo em `client/` e em `server/`.
+- `npx oxlint` limpo nos arquivos tocados (`FinancialPage.tsx`,
+  `AssetsPage.tsx`, `api/financial.ts`, `api/assets.ts`). Há um erro de
+  parsing pré-existente em `client/src/pages/products/ProductsPage.tsx`
+  (JSX fragment malformado) **não relacionado a este bloco** — arquivo
+  sendo editado em paralelo por outro agente (Bloco E) no momento desta
+  entrega; não foi tocado aqui.
+- `npx vitest run` em `client/`: 7 arquivos de teste / 42 testes
+  passando.
+
+### O que o Agente QA (ou humano) deve testar na interface
+
+1. **Contas a Pagar**: criar uma conta a pagar escolhendo "NF-e" e outra
+   escolhendo "NFS-e"; confirmar que a coluna "Nota" reflete o valor
+   escolhido após reload. Criar uma terceira sem escolher nada
+   ("Não informado") e confirmar que não quebra a criação (campo é
+   opcional) e a coluna mostra "—".
+2. **Ativo — tipo licença**: criar um ativo com Tipo = "Licença de
+   software"; confirmar que o campo "Vencimento da licença" aparece
+   somente quando esse tipo está selecionado (alternar entre tipos no
+   select e observar o campo aparecer/desaparecer antes de submeter).
+   Preencher uma data no passado e confirmar badge vermelho ("Vencida em
+   ..."); preencher uma data nos próximos 30 dias e confirmar badge
+   amarelo ("Vence em Nd..."); data além de 30 dias deve mostrar texto
+   neutro sem badge.
+3. **Ativo — outros tipos**: confirmar que criar um ativo com tipo
+   diferente de "license" não exige nem exibe o campo de vencimento, e a
+   coluna "Licença" mostra "-" para esses ativos.
+4. **`purchase_item_id`**: como ainda não há fluxo de UI que popule esse
+   campo automaticamente, validar via API/seed manual (ou aguardar o
+   fluxo de recebimento→ativo, fora de escopo aqui) que, quando presente,
+   o texto "Origem: compra #N" aparece abaixo da tag na listagem.
+5. Rodar contra `http://localhost:5173` (frontend) com backend Docker em
+   `http://localhost:5000`, usuário com módulo `financeiro`/`patrimonio`
+   habilitado no perfil de acesso.
+
+**Consolidado por**: Claude Code (frontend, Bloco F)
+**Data**: 2026-08-05
+
+---
+
+## Bloco E — Frontend: menu reorganizado (2026-08-05)
+
+**Escopo**: `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`, Bloco E.
+Depende dos Blocos A/C/D (schema, `department_id` automático em
+`PurchaseRequisition`, RBAC de `manutencao`/`garantia`), todos já
+concluídos.
+
+### Menu (`client/src/layouts/AppLayout.tsx`)
+
+`NAV_SECTIONS` reestruturado nas 9 seções finais: Logística (Produtos +
+Estoque + Depósitos + Recebimento + Expedição + Requisições de Logística +
+Relatórios de Logística), Vendas, Compras (+ Fornecedores + Fila de
+aprovação + Relatórios de Compras), Produção (+ Chão de Fábrica + Centros
+de Trabalho + MRP + Requisições de Produção + Relatórios de Produção),
+Qualidade & Engenharia (+ Requisições de Qualidade), Manutenção (nova
+seção), Ativos & Garantia (nova seção — Patrimônio + Garantia/Assistência
+Técnica), Gestão (Financeiro + Relatórios Financeiros + Rastreabilidade),
+Administração. "Produtos e estoque" mudou de rótulo para "Produtos"
+(passa a viver dentro de Logística — o rótulo antigo já não fazia sentido
+fora de "Operações"). `BREADCRUMBS` atualizado para as rotas
+novas/movidas.
+
+Novo badge `compras_devolucoes` no item "Compras" (`handoffs.compras.pending_returns`,
+já exposto pelo backend desde o Bloco B, que deixou o consumo de frontend
+explicitamente para este bloco).
+
+### Rotas novas (`client/src/App.tsx`)
+
+- `/maintenance` → `MaintenanceOrdersTab` (export nomeado, não default —
+  `lazy(() => import(...).then(m => ({ default: m.MaintenanceOrdersTab })))`),
+  guardada por `ModuleRoute module="manutencao"`.
+- `/service-orders` → `ServiceOrdersTab` (mesmo padrão de export nomeado),
+  guardada por `ModuleRoute module="garantia"`, rotulada no menu "Garantia
+  / Assistência Técnica".
+- `/logistics/requisitions`, `/production/requisitions`,
+  `/quality/requisitions`, `/maintenance/requisitions` → requisição por
+  departamento (ver seção própria abaixo).
+- `/reports` trocou de guarda: era `ModuleRoute module="relatorios.producao"`
+  (bloqueava quem só tinha acesso a Compras/Custos/Financeiro), agora é o
+  novo `AnyModuleRoute` (`client/src/routes/ProtectedRoute.tsx`) com os 4
+  módulos de relatório — libera se o usuário tiver QUALQUER um deles,
+  já que a própria página se auto-filtra por aba.
+
+### Relatórios: decisão de manter página única + deep-link (não 4 páginas)
+
+`ReportsPage.tsx` continua uma única página com abas, não foi quebrada em
+telas separadas por departamento. Razão: as 3 (agora 4) visualizações
+compartilham quase todo o layout (tiles de KPI + tabelas + filtro de
+período) — separar em arquivos distintos duplicaria esse layout sem
+ganho real, e o backend já expõe os 4 módulos de RBAC
+(`relatorios.producao/compras/custos/financeiro`) que bastam para
+controlar visibilidade dentro da página existente. Implementação:
+
+- Cada aba (`production`/`purchasing`/`costs`/`financial`) só aparece se
+  `hasModuleAccess(TAB_MODULE[aba])` (ou `admin`/fallback de rede).
+- Deep-link via querystring: `?tab=production|purchasing|costs|financial`,
+  lido de `useSearchParams` no mount e escrito de volta a cada troca de
+  aba (não quebra o botão voltar do navegador).
+- Cada seção do menu linka direto para a aba certa: "Relatórios de
+  Logística"/"Relatórios de Compras" → `/reports?tab=purchasing`,
+  "Relatórios de Produção" → `?tab=production`, "Relatórios Financeiros"
+  → `?tab=financial`. Não existe uma 5ª aba de "custos" no menu — Custos
+  fica acessível só por quem tem o módulo mas não tem item de menu
+  dedicado (é uma sub-visão de Compras/Financeiro na prática atual).
+- Nova aba "Financeiro" (fluxo de caixa agregado — total de vendas, total
+  de compras, saldo): o endpoint `GET /api/reports/cash-flow` já existia
+  no backend (`relatorios.financeiro`) mas não tinha nenhum consumidor no
+  frontend antes desta entrega. Adicionado `getCashFlowReport` em
+  `client/src/api/reports.ts`.
+
+### Cadastro de item: nova aba "Uso e consumo / Ativo" em `ProductsPage.tsx`
+
+Novo componente `client/src/pages/products/UsageItemsTab.tsx`, acessado
+por um toggle de 2 abas no topo de `ProductsPage.tsx` ("Matéria-prima e
+produção" / "Uso e consumo / Ativo"). Decisão técnica: usa o `Item`
+mestre (`/api/items`, `POST /api/items`), **não** o modelo `Product`
+legado que a aba principal usa — `Product.product_type` (enum
+`finished/semi_finished/component/raw_material`) não tem os 2 valores
+novos, e o handoff de arquitetura (`docs/HANDOFF_CODEX.md`, migração
+Product→Item) já trata `Item` como o núcleo real de MRP/BOM, com `Product`
+em dual-read fora de sincronia estrutural. Consequência aceita: os dois
+cadastros (Produto e Item de uso/ativo) não compartilham código-fonte de
+formulário, mas também não competem pelo mesmo model — cadastro de
+matéria-prima/produto acabado continua 100% inalterado.
+
+**Correção de backend necessária dentro deste bloco** (sem ela o cadastro
+seria rejeitado com 400 mesmo com o schema do banco já aceitando os 2
+valores novos desde o Bloco A):
+`server/src/modules/items/presentation/validators/itemValidators.ts` —
+`createItemSchema.tipo` e `listItemsQuerySchema.tipo` ainda listavam só 3
+dos 5 valores de `ItemTipo` (`MATERIA_PRIMA`/`SUBCONJUNTO`/
+`PRODUTO_ACABADO`), faltando `USO_E_CONSUMO`/`ATIVO_IMOBILIZADO` — Zod
+`.strict()` rejeitava qualquer um dos dois valores novos no `POST
+/api/items`. Corrigido para os 5 valores em ambos os schemas.
+
+Novo helper no client: `createItem` em `client/src/api/items.ts`
+(`POST /api/items`), `ItemType` estendido com os 2 valores novos.
+
+### Requisição por departamento (Logística/Produção/Manutenção/Qualidade)
+
+Componente compartilhado `client/src/pages/shared/DepartmentRequisitionsPage.tsx`
+(lista + criação, sem a aprovação/conversão em pedido de compra — isso
+continua exclusivo de `RequisitionsPage.tsx`/Compras) + 4 páginas finas
+que só passam título/descrição/`origin`:
+`client/src/pages/logistics/LogisticsRequisitionsPage.tsx`,
+`client/src/pages/production/ProductionRequisitionsPage.tsx`,
+`client/src/pages/maintenance/MaintenanceRequisitionsPage.tsx`,
+`client/src/pages/quality/QualityRequisitionsPage.tsx`.
+
+Cada uma resolve o `department_id` do usuário logado via novo hook
+`client/src/hooks/useMyDepartment.ts` e passa como filtro de leitura
+(`?department_id=`, já suportado pelo backend desde o Bloco C) para
+`listPurchaseRequisitions`. **Pequena adição de backend necessária**: o
+hook resolve o departamento chamando `GET /api/employees?user_id=<id do
+usuário logado>`, mas `user_id` não era um filtro aceito por
+`ListEmployeesUseCase`/`SequelizeEmployeesRepository.findAndCountAll` (só
+`department_id`/`status`/`search` existiam) — adicionado como filtro de
+leitura simples (mesmo raciocínio de "filtro não é spoofing" já
+documentado para `department_id` em
+`purchaseRequisitionValidators.ts`/`ListPurchaseRequisitionsUseCase` no
+Bloco C). Usuário sem `Employee` vinculado recebe `departmentId: null` e a
+tela lista sem filtro (nunca trava por falta de vínculo).
+
+`client/src/api/purchaseRequisitions.ts` ganhou `department_id`/`origin`
+em `RequisitionListParams` e `department_id`/`department` em
+`PurchaseRequisition` (já retornados pelo backend, só não tipados no
+client). `client/src/api/employees.ts` ganhou `user_id` em
+`ListEmployeesParams`.
+
+### Sincronização de tipos frontend↔backend (achados durante o bloco)
+
+- `client/src/api/accessProfiles.ts` (`AccessModuleKey`) estava
+  desatualizado — faltavam `manutencao`/`garantia`, já existentes no
+  catálogo do backend (`accessModules.ts`) desde o Bloco A. Sem essa
+  sincronização, `hasModuleAccess('manutencao')` no client nunca
+  compilaria/funcionaria corretamente. Corrigido (28 módulos, igual ao
+  backend).
+- `client/src/api/dashboard.ts` (`DashboardHandoffsSummary`) não tinha
+  `compras.pending_returns` (Bloco B já retornava no JSON, mas o tipo
+  client não sabia) — adicionado.
+
+### Testes
+
+- `client/src/routes/ProtectedRoute.test.tsx` ganhou 3 testes novos: (1)
+  `ModuleRoute` bloqueia `/maintenance` para usuário sem o módulo
+  `manutencao` no perfil; (2) `ModuleRoute` libera `/maintenance` para
+  quem tem o módulo; (3) novo `AnyModuleRoute` libera `/reports` com
+  apenas 1 dos módulos de relatório informados (OR, não AND).
+- Novo componente `AnyModuleRoute` em `client/src/routes/ProtectedRoute.tsx`
+  (variante de `ModuleRoute` para múltiplos módulos aceitáveis).
+
+### Validação
+
+- `npx tsc --noEmit` limpo em `client/` e `server/`.
+- `npm run lint` (oxlint) em `client/`: só os 4 warnings pré-existentes
+  de `only-export-components` (arquivos não tocados neste bloco), nenhum
+  erro novo.
+- `npx vitest run` em `client/`: 7 arquivos / 45 testes passando (42
+  pré-existentes + 3 novos de `ProtectedRoute.test.tsx`).
+- `npm run test:unit` em `server/`: 473/473 passando (nenhuma regressão
+  nos módulos `items`/`employees` tocados).
+- Backend confirmado de pé (`GET /health/ready` → `status: ready`) e
+  frontend servindo em `http://localhost:5173` durante a validação.
+
+### O que o Agente QA (ou humano) deve testar na interface
+
+1. **Menu**: logar como `admin` e conferir as 9 seções na ordem/rótulos
+   descritos acima; confirmar que "Manutenção" e "Ativos & Garantia" só
+   aparecem para perfis com os módulos `manutencao`/`garantia`
+   atribuídos (criar um perfil de teste sem esses módulos e confirmar que
+   as seções somem do menu).
+2. **`/maintenance`**: abrir uma ordem de manutenção vinculada a um Ativo
+   existente; confirmar que a tela é a mesma `MaintenanceOrdersTab` que já
+   existia (sem regressão funcional, só ganhou rota de menu).
+3. **`/service-orders`**: mesmo teste para `ServiceOrdersTab`, acessível
+   pelo item "Garantia / Assistência Técnica".
+4. **Relatórios**: clicar em "Relatórios de Produção" (menu Produção) e
+   confirmar que abre `/reports` já na aba "Produção"; repetir para
+   "Relatórios de Compras" (Logística ou Compras) e "Relatórios
+   Financeiros" (Gestão, aba "Financeiro" — novo, confirmar que mostra
+   total de vendas/compras/saldo do período). Testar com um usuário que só
+   tem `relatorios.compras` no perfil: deve conseguir abrir `/reports`
+   (antes bloqueava 403) e ver só a aba "Compras".
+5. **Cadastro de item — Uso e consumo**: em Produtos, clicar na aba "Uso e
+   consumo / Ativo"; criar um item com tipo "Uso e consumo (MRO)" (ex.:
+   "Luva de proteção") e outro "Ativo imobilizado"; confirmar que nenhum
+   dos dois aparece na aba "Matéria-prima e produção" (listagem
+   principal) e que ambos aparecem na aba nova, com badge do tipo
+   correto.
+6. **Requisições por departamento**: logar com um usuário vinculado (via
+   `Employee.user_id`) a um departamento de Produção; abrir "Requisições
+   de Produção" e confirmar que só requisições desse departamento
+   aparecem; criar uma requisição nova por ali e confirmar que ela some
+   também na fila de aprovação de Compras (`/purchases/requisitions`,
+   inalterada) com o departamento correto preenchido. Repetir com um
+   usuário sem `Employee` vinculado e confirmar que a tela não trava
+   (lista sem filtro de departamento).
+7. Rodar contra `http://localhost:5173` (frontend) com backend Docker em
+   `http://localhost:5000`.
+
+**Consolidado por**: Claude Code (frontend, Bloco E)
+**Data**: 2026-08-05

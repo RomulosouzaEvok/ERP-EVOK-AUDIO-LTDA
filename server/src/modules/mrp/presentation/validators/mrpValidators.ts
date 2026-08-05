@@ -25,7 +25,18 @@ export const convertPlannedOrdersSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 }).strict();
 
+/**
+ * Schema do body de `POST /api/mrp/planned-orders/convert-to-production`.
+ * Mesmo formato de `convertPlannedOrdersSchema`, mas cria uma OP por ordem
+ * planejada (nao consolida em um unico cabecalho, ao contrario da requisicao).
+ */
+export const convertPlannedOrdersToProductionSchema = z.object({
+  planned_order_ids: z.array(legacyUuidLike).min(1).max(100),
+  notes: z.string().trim().max(1000).optional(),
+}).strict();
+
 module.exports = {
   createMrpPlanSchema,
   convertPlannedOrdersSchema,
+  convertPlannedOrdersToProductionSchema,
 };

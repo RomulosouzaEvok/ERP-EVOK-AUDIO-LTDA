@@ -102,9 +102,9 @@ exports.createPayable = async (req, res, next) => {
   try {
     const parsed = createPayableSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { description, amount, due_date, category, supplier_id, purchase_id, notes } = parsed.data;
+    const { description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes } = parsed.data;
     const useCase = new CreatePayableUseCase(financialRepository);
-    const account = await useCase.execute({ description, amount, due_date, category, supplier_id, purchase_id, notes });
+    const account = await useCase.execute({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes });
 
     logAction(req, {
       action: 'create',

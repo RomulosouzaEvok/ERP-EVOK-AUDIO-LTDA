@@ -11,11 +11,16 @@ import { sequelize } from '../../../../config/database';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { LotControl, Supplier, NonConformity } = require('../../../../models/index');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { applySupplierReturn } = require('../services/SupplierReturnHandler');
 
 const BLOCKABLE_STATUSES = ['available', 'quarantine', 'reserved'];
+const RETURN_TO_SUPPLIER_ACTION = 'return_supplier';
 
 interface CreateNonConformityInput {
   product_id?: number;
+  purchase_item_id?: number;
+  asset_id?: number;
   production_order_id?: number;
   supplier_id?: number;
   description?: string;
@@ -57,6 +62,15 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
    * produção interna) NÃO alteram nenhum rating — não há como atribuir a
    * responsabilidade a um fornecedor sem essa rastreabilidade.
    *
+   * Devolução ao fornecedor (Bloco B, docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md):
+   * quando `immediate_action = 'return_supplier'`, a MESMA transação
+   * também aciona `SupplierReturnHandler.applySupplierReturn` — estorna
+   * estoque (item produtivo/uso-consumo, via `purchase_item_id`) ou muda
+   * `Asset.status` (ativo imobilizado, via `asset_id`). A tratativa
+   * comercial em si (crédito/reposição/cancelamento) vira item de trabalho
+   * na fila de Compras via contador de handoff
+   * (`GetDashboardHandoffsUseCase`), não é resolvida aqui.
+   *
    * @param input - Dados da não conformidade (description obrigatória) e id do usuário autenticado.
    * @returns Não conformidade criada.
    * @throws {ValidationError} Se `description` estiver ausente.
@@ -64,6 +78,8 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
   public async execute(input: CreateNonConformityInput): Promise<any> {
     const {
       product_id,
+      purchase_item_id,
+      asset_id,
       production_order_id,
       supplier_id,
       description,
@@ -103,6 +119,8 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
         // nc_number segue o mesmo padrao de numeracao de RQ/PO do sistema.
         nc_number: `NC-${Date.now()}`,
         product_id,
+        purchase_item_id,
+        asset_id,
         production_order_id,
         supplier_id: resolvedSupplierId,
         description,
@@ -128,6 +146,16 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
 
       if (lot && lot.supplier_id) {
         await this.recalculateSupplierQualityScore(lot.supplier_id, t);
+      }
+
+      if (immediate_action === RETURN_TO_SUPPLIER_ACTION) {
+        await applySupplierReturn({
+          nonConformityId: nonConformity.id,
+          purchaseItemId: purchase_item_id,
+          assetId: asset_id,
+          quantityAffected: quantity_affected,
+          userId: reportedBy
+        }, t);
       }
 
       await t.commit();

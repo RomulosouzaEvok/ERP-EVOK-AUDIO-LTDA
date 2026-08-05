@@ -32,6 +32,7 @@ interface PurchaseAttributes {
   nfe_xml_path: string | null;
   nfe_registered_by: number | null;
   nfe_registered_at: Date | null;
+  invoice_type: 'nfe' | 'nfse' | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -56,7 +57,8 @@ const Purchase = sequelize.define('Purchase', {
   nfe_series: DataTypes.STRING(10),
   nfe_xml_path: DataTypes.STRING(500),
   nfe_registered_by: DataTypes.INTEGER,
-  nfe_registered_at: DataTypes.DATE
+  nfe_registered_at: DataTypes.DATE,
+  invoice_type: { type: DataTypes.ENUM('nfe', 'nfse'), allowNull: true, comment: 'Tipo de nota vinculada: nfe (mercadoria) ou nfse (serviço/licença digital)' }
 }, {
   tableName: 'purchase_orders',
   underscored: true,

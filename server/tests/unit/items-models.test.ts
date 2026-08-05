@@ -9,7 +9,13 @@ describe('Models canonicos industriais', () => {
     expect(Item.rawAttributes.estoque_reservado.type.toString()).toContain('DECIMAL');
     expect(Item.rawAttributes.estoque_seguranca.type.toString()).toContain('DECIMAL');
     expect(Item.rawAttributes.lote_minimo.type.toString()).toContain('DECIMAL');
-    expect(Item.rawAttributes.tipo.values).toEqual(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO']);
+    expect(Item.rawAttributes.tipo.values).toEqual([
+      'MATERIA_PRIMA',
+      'SUBCONJUNTO',
+      'PRODUTO_ACABADO',
+      'USO_E_CONSUMO',
+      'ATIVO_IMOBILIZADO',
+    ]);
 
     expect(ItemEstrutura.rawAttributes.quantidade.type.toString()).toContain('DECIMAL');
     expect(ItemEstrutura.rawAttributes.perda_percentual.type.toString()).toContain('DECIMAL');

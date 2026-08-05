@@ -4,7 +4,7 @@ import ItemRepository from '../../../items/domain/repositories/ItemRepository';
 import PurchaseRequisitionRepository from '../../domain/repositories/PurchaseRequisitionRepository';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { EngineeringProject } = require('../../../../models/index');
+const { EngineeringProject, Employee } = require('../../../../models/index');
 
 /**
  * Bloco 2 (UC-39, BUSINESS_RULES.md §9): origem de amostra da engenharia.
@@ -38,6 +38,16 @@ class CreatePurchaseRequisitionUseCase extends UseCase<Record<string, any>, any>
    * campo `notes`, ja livre, em vez de nova migration) — o texto informado
    * em `notes` e a propria justificativa nesse caso.
    *
+   * Bloco C (docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md): `department_id`
+   * nunca e aceito do cliente (nao existe mais no schema Zod de entrada
+   * relevante para este calculo) — e sempre resolvido a partir do
+   * `Employee` vinculado ao usuario autenticado (`requester_id` ->
+   * `Employee.user_id` -> `Employee.department_id`), mesmo padrao de
+   * `requester_id`/`approved_by` (identidade nunca confia em payload do
+   * cliente). Se o usuario nao tiver `Employee` vinculado (ex.: admin sem
+   * cadastro de funcionario), `department_id` fica `null` — a requisicao
+   * ainda e criada normalmente, apenas sem fila de departamento associada.
+   *
    * @param input - Payload validado pelo controller (`createPurchaseRequisitionSchema`) + `requester_id`/`transaction` injetados.
    * @returns A requisicao criada, com itens e relacionamentos carregados.
    * @throws {NotFoundError} Se `engineering_project_id` for informado e nao corresponder a um projeto existente, ou se algum `item_id` nao existir.
@@ -59,10 +69,18 @@ class CreatePurchaseRequisitionUseCase extends UseCase<Record<string, any>, any>
       }
     }
 
+    const requesterEmployee = input.requester_id
+      ? await Employee.findOne({
+        where: { user_id: input.requester_id },
+        attributes: ['id', 'department_id'],
+        transaction: input.transaction,
+      })
+      : null;
+
     const requisition = await this.requisitionRepository.createRequisition({
       requisition_number: `RQ-${Date.now()}`,
       requester_id: input.requester_id,
-      department_id: input.department_id ?? null,
+      department_id: requesterEmployee?.department_id ?? null,
       production_order_id: input.production_order_id ?? null,
       engineering_project_id: input.engineering_project_id ?? null,
       request_date: input.request_date ?? new Date(),

@@ -1,7 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { Route, Routes } from 'react-router';
 
-import { ProtectedRoute, RoleRoute, ModuleRoute } from '@/routes/ProtectedRoute';
+import { ProtectedRoute, RoleRoute, ModuleRoute, AnyModuleRoute } from '@/routes/ProtectedRoute';
 import AppLayout from '@/layouts/AppLayout';
 import LoginPage from '@/pages/LoginPage';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
@@ -17,6 +17,7 @@ const InventoryPage = lazy(() => import('@/pages/logistics/InventoryPage'));
 const ReceivingPage = lazy(() => import('@/pages/logistics/ReceivingPage'));
 const ShippingPage = lazy(() => import('@/pages/logistics/ShippingPage'));
 const WarehousesPage = lazy(() => import('@/pages/logistics/WarehousesPage'));
+const LogisticsRequisitionsPage = lazy(() => import('@/pages/logistics/LogisticsRequisitionsPage'));
 const ClientsPage = lazy(() => import('@/pages/sales/ClientsPage'));
 const SalesPage = lazy(() => import('@/pages/sales/SalesPage'));
 const SuppliersPage = lazy(() => import('@/pages/purchases/SuppliersPage'));
@@ -27,11 +28,20 @@ const ProductionOrdersPage = lazy(() => import('@/pages/production/ProductionOrd
 const MrpPage = lazy(() => import('@/pages/production/MrpPage'));
 const ShopFloorPage = lazy(() => import('@/pages/production/ShopFloorPage'));
 const WorkCentersPage = lazy(() => import('@/pages/production/WorkCentersPage'));
+const ProductionRequisitionsPage = lazy(() => import('@/pages/production/ProductionRequisitionsPage'));
 const QualityPage = lazy(() => import('@/pages/quality/QualityPage'));
+const QualityRequisitionsPage = lazy(() => import('@/pages/quality/QualityRequisitionsPage'));
 const LaboratoryPage = lazy(() => import('@/pages/laboratory/LaboratoryPage'));
 const EngineeringPage = lazy(() => import('@/pages/engineering/EngineeringPage'));
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'));
 const AssetsPage = lazy(() => import('@/pages/patrimonio/AssetsPage'));
+const MaintenanceRequisitionsPage = lazy(() => import('@/pages/maintenance/MaintenanceRequisitionsPage'));
+const MaintenanceOrdersPage = lazy(() =>
+  import('@/pages/maintenance/MaintenanceOrdersTab').then((m) => ({ default: m.MaintenanceOrdersTab })),
+);
+const ServiceOrdersPage = lazy(() =>
+  import('@/pages/maintenance/ServiceOrdersTab').then((m) => ({ default: m.ServiceOrdersTab })),
+);
 const FinancialPage = lazy(() => import('@/pages/financial/FinancialPage'));
 const TraceabilityPage = lazy(() => import('@/pages/traceability/TraceabilityPage'));
 const AuditLogsPage = lazy(() => import('@/pages/traceability/AuditLogsPage'));
@@ -120,6 +130,14 @@ export default function App() {
                 </Suspense>
               }
             />
+            <Route
+              path="/logistics/requisitions"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <LogisticsRequisitionsPage />
+                </Suspense>
+              }
+            />
           </Route>
 
           <Route element={<ModuleRoute module="vendas" />}>
@@ -187,6 +205,14 @@ export default function App() {
                 </Suspense>
               }
             />
+            <Route
+              path="/production/requisitions"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ProductionRequisitionsPage />
+                </Suspense>
+              }
+            />
           </Route>
           <Route element={<ModuleRoute module="mrp" />}>
             <Route
@@ -228,6 +254,44 @@ export default function App() {
                 </Suspense>
               }
             />
+            <Route
+              path="/quality/requisitions"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <QualityRequisitionsPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="manutencao" />}>
+            <Route
+              path="/maintenance"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <MaintenanceOrdersPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/maintenance/requisitions"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <MaintenanceRequisitionsPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="garantia" />}>
+            <Route
+              path="/service-orders"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ServiceOrdersPage />
+                </Suspense>
+              }
+            />
           </Route>
 
           <Route element={<ModuleRoute module="laboratorio" />}>
@@ -252,7 +316,11 @@ export default function App() {
             />
           </Route>
 
-          <Route element={<ModuleRoute module="relatorios.producao" />}>
+          <Route
+            element={
+              <AnyModuleRoute modules={['relatorios.producao', 'relatorios.compras', 'relatorios.custos', 'relatorios.financeiro']} />
+            }
+          >
             <Route
               path="/reports"
               element={

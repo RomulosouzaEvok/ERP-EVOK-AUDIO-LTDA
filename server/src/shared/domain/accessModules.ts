@@ -1,7 +1,7 @@
 /**
  * 🔐 Catálogo fixo de módulos atribuíveis a um Perfil de Acesso (área/departamento).
  *
- * Fonte única de verdade (SSOT) da lista de 26 `module keys` válidos usada
+ * Fonte única de verdade (SSOT) da lista de 28 `module keys` válidos usada
  * por:
  * - `server/src/middlewares/auth.ts` (`authorizeModule`), para resolver e
  *   validar o módulo dono de uma ação;
@@ -10,9 +10,14 @@
  *   `GET /api/access-profiles/modules`.
  *
  * Mapeada a partir da matriz módulo × permissão de
- * `docs/business/BUSINESS_RULES.md` §1 (26 módulos atribuíveis a perfis de
- * área — `usuarios` e `audit_logs` são exclusivos do papel `admin` global e
- * propositalmente NÃO fazem parte deste catálogo, ver nota em §1).
+ * `docs/business/BUSINESS_RULES.md` §1 (26 módulos originais, atribuíveis a
+ * perfis de área — `usuarios` e `audit_logs` são exclusivos do papel
+ * `admin` global e propositalmente NÃO fazem parte deste catálogo, ver nota
+ * em §1). `manutencao` e `garantia` foram adicionados em 2026-08-05 (Bloco A
+ * de `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`) para cobrir os
+ * dois departamentos novos do menu (Manutenção interna de máquina e
+ * Ativos & Garantia/Assistência Técnica), desbloqueando o retrofit RBAC do
+ * Bloco D sobre `maintenance.ts`/`serviceOrders.ts`.
  *
  * @module shared/domain/accessModules
  */
@@ -39,6 +44,8 @@ export type AccessModuleKey =
   | 'recebimento'
   | 'expedicao'
   | 'patrimonio'
+  | 'manutencao'
+  | 'garantia'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'
@@ -81,6 +88,8 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   { key: 'recebimento', label: 'Recebimento' },
   { key: 'expedicao', label: 'Expedição' },
   { key: 'patrimonio', label: 'Patrimônio' },
+  { key: 'manutencao', label: 'Manutenção' },
+  { key: 'garantia', label: 'Garantia/Assistência Técnica' },
   { key: 'rastreabilidade', label: 'Rastreabilidade' },
   { key: 'financeiro', label: 'Financeiro' },
   { key: 'relatorios.producao', label: 'Relatórios de Produção' },

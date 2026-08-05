@@ -26,6 +26,18 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // Idempotente: a migration baseline (20260731-000001) cria tabelas
+    // dinamicamente a partir dos models Sequelize *atuais* em dist/ — um
+    // banco criado do zero hoje já nasce com access_profiles/
+    // access_profile_permissions/users.access_profile_id prontos. Sem essa
+    // checagem, createTable/addColumn falham com "already exists" contra
+    // qualquer banco novo (descoberto ao isolar server/.env.test, 2026-08-05
+    // — mesma causa do fix em 20260803-000004-create-work-centers.cjs).
+    const tables = await queryInterface.showAllTables();
+    if (tables.includes('access_profiles')) {
+      return seedAdministradorGeral(queryInterface);
+    }
+
     // 1. Tabela access_profiles
     await queryInterface.createTable('access_profiles', {
       id: {
@@ -114,58 +126,28 @@ module.exports = {
     });
 
     // 3. users.access_profile_id (FK nullable — null = sem perfil = bloqueio total)
-    await queryInterface.addColumn('users', 'access_profile_id', {
-      type: Sequelize.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'access_profiles',
-        key: 'id',
-      },
-      onDelete: 'SET NULL',
-      onUpdate: 'CASCADE',
-    });
-
-    await queryInterface.addIndex('users', ['access_profile_id'], {
-      name: 'idx_users_access_profile_id',
-    });
-
-    // 4. Seed idempotente: perfil "Administrador Geral" com todas as
-    // permissoes em approve. Nao atribuido a nenhum usuario — o admin
-    // global (role='admin') ja esta acima do sistema de perfis (§3).
-    const modules = [
-      'dashboard', 'produtos', 'contagens', 'vendas', 'clientes', 'compras',
-      'requisicoes', 'fornecedores', 'producao', 'bom', 'mrp',
-      'chao_de_fabrica', 'centros_de_trabalho', 'qualidade', 'laboratorio',
-      'engenharia', 'estoque', 'recebimento', 'expedicao', 'patrimonio',
-      'rastreabilidade', 'financeiro', 'relatorios.producao',
-      'relatorios.compras', 'relatorios.custos', 'relatorios.financeiro',
-    ];
-
-    const [existing] = await queryInterface.sequelize.query(
-      `SELECT id FROM access_profiles WHERE nome = 'Administrador Geral' LIMIT 1;`
-    );
-
-    let profileId;
-    if (existing.length > 0) {
-      profileId = existing[0].id;
-    } else {
-      const [inserted] = await queryInterface.sequelize.query(
-        `INSERT INTO access_profiles (nome, descricao, active, created_at, updated_at)
-         VALUES ('Administrador Geral', 'Perfil de referencia com acesso total a todos os modulos (nao atribuido a usuarios — o admin global ja opera acima do sistema de perfis)', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         RETURNING id;`
-      );
-      profileId = inserted[0].id;
+    const usersColumns = await queryInterface.describeTable('users');
+    if (!usersColumns.access_profile_id) {
+      await queryInterface.addColumn('users', 'access_profile_id', {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'access_profiles',
+          key: 'id',
+        },
+        onDelete: 'SET NULL',
+        onUpdate: 'CASCADE',
+      });
     }
 
-    const values = modules
-      .map((mod) => `(${profileId}, '${mod}', 'approve', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
-      .join(',\n         ');
+    const usersIndexes = await queryInterface.showIndex('users');
+    if (!usersIndexes.some((index) => index.name === 'idx_users_access_profile_id')) {
+      await queryInterface.addIndex('users', ['access_profile_id'], {
+        name: 'idx_users_access_profile_id',
+      });
+    }
 
-    await queryInterface.sequelize.query(
-      `INSERT INTO access_profile_permissions (access_profile_id, module, level, created_at, updated_at)
-       VALUES ${values}
-       ON CONFLICT (access_profile_id, module) DO NOTHING;`
-    );
+    await seedAdministradorGeral(queryInterface);
   },
 
   async down(queryInterface, Sequelize) {
@@ -181,3 +163,44 @@ module.exports = {
     await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_access_profile_permissions_level";');
   },
 };
+
+// Seed idempotente: perfil "Administrador Geral" com todas as permissoes
+// em approve. Nao atribuido a nenhum usuario — o admin global (role='admin')
+// ja esta acima do sistema de perfis (§3). Seguro rodar mesmo quando as
+// tabelas ja existiam antes desta migration (baseline).
+async function seedAdministradorGeral(queryInterface) {
+  const modules = [
+    'dashboard', 'produtos', 'contagens', 'vendas', 'clientes', 'compras',
+    'requisicoes', 'fornecedores', 'producao', 'bom', 'mrp',
+    'chao_de_fabrica', 'centros_de_trabalho', 'qualidade', 'laboratorio',
+    'engenharia', 'estoque', 'recebimento', 'expedicao', 'patrimonio',
+    'rastreabilidade', 'financeiro', 'relatorios.producao',
+    'relatorios.compras', 'relatorios.custos', 'relatorios.financeiro',
+  ];
+
+  const [existing] = await queryInterface.sequelize.query(
+    `SELECT id FROM access_profiles WHERE nome = 'Administrador Geral' LIMIT 1;`
+  );
+
+  let profileId;
+  if (existing.length > 0) {
+    profileId = existing[0].id;
+  } else {
+    const [inserted] = await queryInterface.sequelize.query(
+      `INSERT INTO access_profiles (nome, descricao, active, created_at, updated_at)
+       VALUES ('Administrador Geral', 'Perfil de referencia com acesso total a todos os modulos (nao atribuido a usuarios — o admin global ja opera acima do sistema de perfis)', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING id;`
+    );
+    profileId = inserted[0].id;
+  }
+
+  const values = modules
+    .map((mod) => `(${profileId}, '${mod}', 'approve', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+    .join(',\n       ');
+
+  await queryInterface.sequelize.query(
+    `INSERT INTO access_profile_permissions (access_profile_id, module, level, created_at, updated_at)
+     VALUES ${values}
+     ON CONFLICT (access_profile_id, module) DO NOTHING;`
+  );
+}

@@ -6,6 +6,7 @@ type ListPurchaseRequisitionsInput = {
   status?: string;
   origin?: string;
   requester_id?: number;
+  department_id?: number;
   start_date?: string;
   end_date?: string;
   page?: number;
@@ -30,6 +31,13 @@ type ListPurchaseRequisitionsOutput = {
  * `calculateHandoffSignal('purchase_requisition', ...)` — fila de
  * aprovação do gestor de Requisições (`pending` = amarelo, "aguardando
  * aprovação"). Campo sempre calculado on-the-fly, nunca persistido.
+ *
+ * Bloco C (docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md):
+ * `department_id` é aceito como filtro de query (`?department_id=`) para o
+ * frontend restringir a fila às requisições do departamento do usuário
+ * logado (Logística, Produção, Manutenção, Qualidade). Diferente de
+ * `requester_id`/`approved_by`, este campo é apenas leitura/filtro — não
+ * há risco de spoofing de identidade.
  */
 class ListPurchaseRequisitionsUseCase extends UseCase<ListPurchaseRequisitionsInput, ListPurchaseRequisitionsOutput> {
   private readonly requisitionRepository: PurchaseRequisitionRepository;
@@ -39,9 +47,9 @@ class ListPurchaseRequisitionsUseCase extends UseCase<ListPurchaseRequisitionsIn
     this.requisitionRepository = requisitionRepository;
   }
 
-  async execute({ status, origin, requester_id, start_date, end_date, page = 1, limit = 20, offset = 0 }: ListPurchaseRequisitionsInput = {}) {
+  async execute({ status, origin, requester_id, department_id, start_date, end_date, page = 1, limit = 20, offset = 0 }: ListPurchaseRequisitionsInput = {}) {
     const { rows, count } = await this.requisitionRepository.listRequisitions(
-      { status, origin, requester_id, start_date, end_date },
+      { status, origin, requester_id, department_id, start_date, end_date },
       { limit, offset }
     );
 

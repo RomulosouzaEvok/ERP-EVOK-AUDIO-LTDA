@@ -33,7 +33,8 @@ export type ErrorContext =
   | 'register-lab-test'
   | 'convert-mrp-order'
   | 'release-lot'
-  | 'create-engineering-sample';
+  | 'create-engineering-sample'
+  | 'treat-non-conformity';
 
 /** Link de ação sugerido para o usuário resolver o pré-requisito pendente. */
 export interface DidacticErrorAction {
@@ -115,6 +116,10 @@ const CONTEXT_ACTION_MAP: Record<ErrorContext, DidacticErrorAction> = {
   'create-engineering-sample': {
     label: 'Informe a justificativa da amostra',
     to: '',
+  },
+  'treat-non-conformity': {
+    label: 'Ver não-conformidades em Qualidade',
+    to: '/quality',
   },
 };
 

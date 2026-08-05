@@ -8,7 +8,7 @@ const decimalLike = decimalQuantitySchema();
 export const createItemSchema = z.object({
   codigo: z.string().trim().min(1).max(80),
   descricao: z.string().trim().min(1).max(240),
-  tipo: z.enum(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO']),
+  tipo: z.enum(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO', 'USO_E_CONSUMO', 'ATIVO_IMOBILIZADO']),
   unidade: z.string().trim().min(1).max(12),
   status: z.enum(['ATIVO', 'INATIVO', 'BLOQUEADO']).optional(),
   estoque_atual: z.coerce.number().min(0).optional(),
@@ -39,7 +39,7 @@ export const listItemsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   search: z.string().trim().max(120).optional(),
-  tipo: z.enum(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO']).optional(),
+  tipo: z.enum(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO', 'USO_E_CONSUMO', 'ATIVO_IMOBILIZADO']).optional(),
   status: z.enum(['ATIVO', 'INATIVO', 'BLOQUEADO']).optional(),
 });
 

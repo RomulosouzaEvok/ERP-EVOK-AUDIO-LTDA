@@ -49,21 +49,33 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn('inventory_counts', 'warehouse_id', {
-      type: Sequelize.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'warehouses',
-        key: 'id',
-      },
-      onDelete: 'RESTRICT',
-      onUpdate: 'CASCADE',
-      comment: 'FK -> warehouses.id. Deposito ao qual TODA a contagem pertence (nullable apenas por legado pre-Bloco 4; use case de criacao deve exigir o campo em contagens novas).',
-    });
+    // Idempotente: a migration baseline (20260731-000001) cria tabelas
+    // dinamicamente a partir dos models Sequelize *atuais* em dist/ — um
+    // banco criado do zero hoje já nasce com inventory_counts.warehouse_id
+    // pronto. Mesma causa/fix de 20260803-000004-create-work-centers.cjs,
+    // 20260803-000008-create-access-profiles.cjs e
+    // 20260804-000001-create-warehouses.cjs (2026-08-05).
+    const countsColumns = await queryInterface.describeTable('inventory_counts');
+    if (!countsColumns.warehouse_id) {
+      await queryInterface.addColumn('inventory_counts', 'warehouse_id', {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'warehouses',
+          key: 'id',
+        },
+        onDelete: 'RESTRICT',
+        onUpdate: 'CASCADE',
+        comment: 'FK -> warehouses.id. Deposito ao qual TODA a contagem pertence (nullable apenas por legado pre-Bloco 4; use case de criacao deve exigir o campo em contagens novas).',
+      });
+    }
 
-    await queryInterface.addIndex('inventory_counts', ['warehouse_id'], {
-      name: 'idx_inventory_counts_warehouse_id',
-    });
+    const countsIndexes = await queryInterface.showIndex('inventory_counts');
+    if (!countsIndexes.some((i) => i.name === 'idx_inventory_counts_warehouse_id')) {
+      await queryInterface.addIndex('inventory_counts', ['warehouse_id'], {
+        name: 'idx_inventory_counts_warehouse_id',
+      });
+    }
 
     // Backfill das contagens legadas (criadas antes do conceito de
     // deposito existir) para o deposito INSUMOS, mesmo criterio adotado

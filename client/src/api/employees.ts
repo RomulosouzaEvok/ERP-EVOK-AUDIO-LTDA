@@ -57,9 +57,16 @@ export interface ListEmployeesParams {
   search?: string;
   status?: EmployeeStatus;
   department_id?: number;
+  /**
+   * Filtro por usuário vinculado (Bloco E,
+   * `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`) — usado para
+   * resolver o `department_id` do Employee do usuário logado nas telas de
+   * requisição por departamento (`useMyDepartment`).
+   */
+  user_id?: number;
 }
 
-/** `GET /api/employees?page=&limit=&search=&status=&department_id=` — lista paginada de funcionários. */
+/** `GET /api/employees?page=&limit=&search=&status=&department_id=&user_id=` — lista paginada de funcionários. */
 export async function listEmployees(params: ListEmployeesParams = {}) {
   const { data } = await httpClient.get<ListResponse<Employee>>('/api/employees', { params });
   return data;

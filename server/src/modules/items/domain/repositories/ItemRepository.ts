@@ -53,6 +53,23 @@ class ItemRepository {
   public async listAutoConvertItemIds(_itemIds: string[]): Promise<Set<string>> {
     throw new Error('ItemRepository.listAutoConvertItemIds nao implementado.');
   }
+
+  /**
+   * Resolve o `product_id` (tabela legada `products`, INTEGER) correspondente
+   * a um item canonico (`items`, UUID), pelo casamento de codigo/SKU
+   * (`items.codigo === products.code`) — mesma estrategia dual-read ja usada
+   * por `listMrpInventoryPositions`. Usado para fechar o ciclo MRP -> Ordem
+   * de Producao (`ConvertPlannedOrdersToProductionOrderUseCase`), ja que
+   * `production_orders.product_id` ainda e a coluna obrigatoria de criacao
+   * (Fase 4.4 expand-contract, `item_id` e dual-write).
+   *
+   * @param _itemId - Id (UUID) do item canonico.
+   * @returns Produto legado encontrado (com `id`, `status`, `product_type`,
+   *   `name`) ou `null` se nao houver produto com o mesmo codigo.
+   */
+  public async findLegacyProductByItemId(_itemId: string): Promise<any | null> {
+    throw new Error('ItemRepository.findLegacyProductByItemId nao implementado.');
+  }
 }
 
 export = ItemRepository;

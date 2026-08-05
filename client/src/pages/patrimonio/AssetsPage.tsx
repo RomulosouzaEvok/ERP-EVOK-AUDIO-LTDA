@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Camera, QrCode, Boxes } from 'lucide-react';
+import { Plus, Camera, QrCode, Boxes, AlertTriangle } from 'lucide-react';
 
 import * as assetsApi from '@/api/assets';
 import { extractApiErrorMessage, getUploadUrl } from '@/api/httpClient';
@@ -26,6 +26,7 @@ const ASSET_TYPE_LABEL: Record<string, string> = {
   furniture: 'Móvel',
   vehicle: 'Veículo',
   it: 'TI',
+  license: 'Licença de software',
   other: 'Outro',
 };
 
@@ -34,20 +35,61 @@ const STATUS_LABEL: Record<string, string> = {
   in_maintenance: 'Em manutenção',
   decommissioned: 'Baixado',
   lost: 'Perdido',
+  returned_to_supplier: 'Devolvido ao fornecedor',
 };
+
+/** Dias de antecedência para o alerta de licença perto do vencimento (Bloco F, TODO_REORGANIZACAO_DEPARTAMENTOS.md). */
+const LICENSE_EXPIRY_WARNING_DAYS = 30;
 
 const assetSchema = z.object({
   tag: z.string().trim().min(1, 'Informe a tag/plaqueta.').max(20, 'Máximo de 20 caracteres.'),
   name: z.string().trim().min(1, 'Informe o nome.'),
-  asset_type: z.enum(['machine', 'equipment', 'tool', 'furniture', 'vehicle', 'it', 'other']).optional(),
+  asset_type: z.enum(['machine', 'equipment', 'tool', 'furniture', 'vehicle', 'it', 'license', 'other']).optional(),
   location: z.string().optional(),
   brand: z.string().optional(),
   model: z.string().optional(),
   serial_number: z.string().optional(),
+  license_expires_at: z.string().optional(),
   notes: z.string().optional(),
 });
 
 type AssetFormData = z.infer<typeof assetSchema>;
+
+/** Dias restantes até `dateStr` (negativo se já venceu). */
+function daysUntil(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(`${dateStr}T00:00:00`);
+  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Badge de status da licença: usa o mesmo vocabulário visual dos outros
+ * alertas de vencimento do sistema (badge simples, não o `DidacticAlert` —
+ * este último é voltado a erros de mutation com ação corretiva; aqui é só
+ * um aviso informativo de prazo, então um badge direto na linha da tabela
+ * comunica melhor sem exigir um componente de erro).
+ */
+function LicenseExpiryBadge({ expiresAt }: { expiresAt: string }) {
+  const days = daysUntil(expiresAt);
+  const formatted = new Date(`${expiresAt}T00:00:00`).toLocaleDateString('pt-BR');
+
+  if (days < 0) {
+    return (
+      <Badge variant="destructive" className="gap-1">
+        <AlertTriangle className="size-3" /> Vencida em {formatted}
+      </Badge>
+    );
+  }
+  if (days <= LICENSE_EXPIRY_WARNING_DAYS) {
+    return (
+      <Badge variant="warning" className="gap-1">
+        <AlertTriangle className="size-3" /> Vence em {days}d ({formatted})
+      </Badge>
+    );
+  }
+  return <span className="text-xs text-muted-foreground">Vence em {formatted}</span>;
+}
 
 /** Patrimônio: cadastro de ativos fixos, com foto e QR Code para etiquetagem física. */
 export default function AssetsPage() {
@@ -70,8 +112,12 @@ export default function AssetsPage() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<AssetFormData>({ resolver: zodResolver(assetSchema) });
+
+  const selectedAssetType = watch('asset_type');
+  const isLicense = selectedAssetType === 'license';
 
   const createMutation = useMutation({
     mutationFn: assetsApi.createAsset,
@@ -131,7 +177,12 @@ export default function AssetsPage() {
               </DialogHeader>
               <form
                 className="flex flex-col gap-3"
-                onSubmit={handleSubmit((values) => createMutation.mutate(values))}
+                onSubmit={handleSubmit((values) =>
+                  createMutation.mutate({
+                    ...values,
+                    license_expires_at: values.asset_type === 'license' ? values.license_expires_at || undefined : undefined,
+                  }),
+                )}
                 noValidate
               >
                 <div className="grid grid-cols-2 gap-3">
@@ -176,6 +227,16 @@ export default function AssetsPage() {
                     <Input id="serial_number" {...register('serial_number')} />
                   </div>
                 </div>
+                {isLicense && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="license_expires_at">Vencimento da licença</Label>
+                    <Input id="license_expires_at" type="date" {...register('license_expires_at')} />
+                    <p className="text-xs text-muted-foreground">
+                      Só se aplica a licença perpétua/multianual capitalizada como ativo — assinatura de curto prazo
+                      (SaaS) não deve virar registro de Patrimônio.
+                    </p>
+                  </div>
+                )}
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="notes">Observações</Label>
                   <Input id="notes" {...register('notes')} />
@@ -203,15 +264,16 @@ export default function AssetsPage() {
             <TableHead>Nome</TableHead>
             <TableHead>Tipo</TableHead>
             <TableHead>Localização</TableHead>
+            <TableHead>Licença</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={7} />}
+          {isLoading && <TableSkeletonRows columns={8} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-destructive">
+              <TableCell colSpan={8} className="text-center text-destructive">
                 Não foi possível carregar o patrimônio. Tente novamente.
               </TableCell>
             </TableRow>
@@ -228,10 +290,24 @@ export default function AssetsPage() {
                   </div>
                 )}
               </TableCell>
-              <TableCell className="font-mono text-xs">{asset.tag}</TableCell>
+              <TableCell className="font-mono text-xs">
+                {asset.tag}
+                {asset.purchase_item_id && (
+                  <p className="mt-0.5 font-sans text-[10px] font-normal text-muted-foreground">
+                    Origem: compra #{asset.purchase_item_id}
+                  </p>
+                )}
+              </TableCell>
               <TableCell>{asset.name}</TableCell>
               <TableCell>{ASSET_TYPE_LABEL[asset.asset_type] ?? asset.asset_type}</TableCell>
               <TableCell>{asset.location ?? '-'}</TableCell>
+              <TableCell>
+                {asset.asset_type === 'license' && asset.license_expires_at ? (
+                  <LicenseExpiryBadge expiresAt={asset.license_expires_at} />
+                ) : (
+                  <span className="text-xs text-muted-foreground">-</span>
+                )}
+              </TableCell>
               <TableCell>
                 <Badge variant={asset.status === 'active' ? 'success' : 'secondary'}>
                   {STATUS_LABEL[asset.status] ?? asset.status}
@@ -251,7 +327,7 @@ export default function AssetsPage() {
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
+              <TableCell colSpan={8} className="text-center text-muted-foreground">
                 Nenhum ativo cadastrado.
               </TableCell>
             </TableRow>

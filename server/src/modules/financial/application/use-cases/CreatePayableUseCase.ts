@@ -26,12 +26,13 @@ class CreatePayableUseCase extends UseCase {
    * @param {string} [input.category]
    * @param {number} [input.supplier_id]
    * @param {number} [input.purchase_id]
+   * @param {'nfe'|'nfse'} [input.invoice_type]
    * @param {string} [input.notes]
    * @returns {Promise<Object>} Conta a pagar criada.
    * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos.
    */
-  async execute({ description, amount, due_date, category, supplier_id, purchase_id, notes }) {
-    const entity = new AccountPayableEntity({ description, amount, due_date, category, supplier_id, purchase_id, notes });
+  async execute({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes }) {
+    const entity = new AccountPayableEntity({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes });
 
     return this.financialRepository.createPayable({
       description: entity.description,
@@ -40,6 +41,7 @@ class CreatePayableUseCase extends UseCase {
       category: entity.category,
       supplier_id: entity.supplier_id,
       purchase_id: entity.purchase_id,
+      invoice_type: entity.invoice_type,
       notes: entity.notes,
       status: 'pending'
     });

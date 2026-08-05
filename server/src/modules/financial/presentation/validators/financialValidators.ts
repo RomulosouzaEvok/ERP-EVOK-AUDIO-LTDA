@@ -10,6 +10,7 @@ export const createPayableSchema = z.object({
   category: z.string().trim().max(80).optional(),
   supplier_id: z.coerce.number().int().positive().optional(),
   purchase_id: z.coerce.number().int().positive().optional(),
+  invoice_type: z.enum(['nfe', 'nfse']).optional(),
   notes: z.string().trim().max(2000).optional(),
 }).strict();
 

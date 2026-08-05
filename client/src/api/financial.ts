@@ -2,6 +2,7 @@ import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
 
 export type AccountStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'canceled';
+export type InvoiceType = 'nfe' | 'nfse';
 
 export interface AccountPayable {
   id: number;
@@ -11,6 +12,7 @@ export interface AccountPayable {
   due_date: string;
   status: AccountStatus;
   supplier_id?: number | null;
+  invoice_type?: InvoiceType | null;
 }
 
 export interface AccountReceivable {
@@ -41,6 +43,7 @@ export interface CreatePayableInput {
   due_date: string;
   category?: string;
   supplier_id?: number;
+  invoice_type?: InvoiceType;
   notes?: string;
 }
 

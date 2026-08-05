@@ -43,14 +43,22 @@ const ProductionOrder = sequelize.define('ProductionOrder', {
   scrap_reason: { type: DataTypes.TEXT, allowNull: true, comment: 'Motivo do refugo registrado na conclusao da OP' },
   priority: { type: DataTypes.ENUM('low', 'normal', 'high', 'urgent'), defaultValue: 'normal' },
   status: { type: DataTypes.ENUM('planned', 'released', 'in_progress', 'completed', 'paused', 'canceled'), defaultValue: 'planned' },
-  start_date: DataTypes.DATEONLY,
+  // allowNull:true explicito (bomba de schema corrigida em 2026-08-04, ver
+  // migration 20260804-000012-fix-production-orders-nullable-columns.cjs):
+  // sem essa flag o Sequelize assume allowNull:false por padrao, e a
+  // baseline migration (20260731-000001) usa exatamente attribute.allowNull
+  // para criar a tabela fisica — o resultado era NOT NULL sem default em
+  // colunas legitimamente opcionais, quebrando toda criacao de OP (rota
+  // normal e a nova conversao MRP -> OP) que nao populava manualmente cada
+  // um destes campos.
+  start_date: { type: DataTypes.DATEONLY, allowNull: true },
   due_date: { type: DataTypes.DATEONLY, allowNull: false, comment: 'Prazo final' },
-  completion_date: DataTypes.DATEONLY,
-  sales_order_id: { type: DataTypes.INTEGER, comment: 'FK → sales.id (pedido de venda associado)' },
-  responsible_id: { type: DataTypes.INTEGER, comment: 'FK → employees.id (responsável)' },
-  notes: DataTypes.TEXT,
-  created_by: { type: DataTypes.INTEGER, comment: 'FK → users.id (criador)' },
-  item_id: { type: DataTypes.UUID, comment: 'FK → items.id (Fase 4.4 expand-contract)' }
+  completion_date: { type: DataTypes.DATEONLY, allowNull: true },
+  sales_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → sales.id (pedido de venda associado)' },
+  responsible_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → employees.id (responsável)' },
+  notes: { type: DataTypes.TEXT, allowNull: true },
+  created_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → users.id (criador)' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (Fase 4.4 expand-contract)' }
 }, {
   tableName: 'production_orders',
   underscored: true,

@@ -21,6 +21,7 @@ class AccountPayableEntity extends Entity {
    * @param {string} [props.category]
    * @param {number} [props.supplier_id]
    * @param {number} [props.purchase_id]
+   * @param {'nfe'|'nfse'} [props.invoice_type] - Tipo de nota vinculada (mercadoria ou serviço/licença digital).
    * @param {string} [props.notes]
    * @throws {ValidationError} Se `description`, `amount` ou `due_date` estiverem ausentes, ou `amount` não for maior que zero.
    */
@@ -32,6 +33,7 @@ class AccountPayableEntity extends Entity {
     this.category = props.category ?? null;
     this.supplier_id = props.supplier_id ?? null;
     this.purchase_id = props.purchase_id ?? null;
+    this.invoice_type = props.invoice_type ?? null;
     this.notes = props.notes ?? null;
 
     this.validate();

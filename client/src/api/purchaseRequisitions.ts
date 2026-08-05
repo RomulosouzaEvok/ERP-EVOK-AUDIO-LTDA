@@ -34,6 +34,13 @@ export interface PurchaseRequisition {
   engineering_project_id?: number | null;
   engineeringProject?: { id: number; project_code: string; name: string } | null;
   /**
+   * Departamento de origem (Bloco C/E) — preenchido automaticamente pelo
+   * backend a partir do `Employee` vinculado ao solicitante, nunca enviado
+   * pelo cliente na criação.
+   */
+  department_id?: number | null;
+  department?: { id: number; name: string; sigla?: string | null } | null;
+  /**
    * Semáforo de handoff (UC-40, Bloco 3) — fila de aprovação do gestor de
    * Requisições. `pending` = amarelo ("aguardando aprovação"), calculado
    * on-the-fly pelo backend, nunca persistido.
@@ -74,6 +81,15 @@ export interface RequisitionListParams {
   page?: number;
   limit?: number;
   status?: RequisitionStatus;
+  /**
+   * Filtro por departamento (Bloco C/E,
+   * `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`) — usado pelas
+   * telas de requisição por departamento (Logística, Produção, Manutenção,
+   * Qualidade) para restringir a listagem ao departamento do usuário
+   * logado. Filtro de leitura, sem risco de spoofing.
+   */
+  department_id?: number;
+  origin?: string;
 }
 
 /** `GET /api/purchase-requisitions` — listagem paginada, filtro por status. */

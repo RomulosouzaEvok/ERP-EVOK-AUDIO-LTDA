@@ -34,8 +34,15 @@ class NonConformitiesRepository {
     throw new Error('NonConformitiesRepository.create não implementado.');
   }
 
-  /** @param id - Id da não conformidade. @param data - Campos a atualizar. @returns Linhas afetadas. @throws {Error} Se nao implementado. */
-  public async update(id: number | string, data: Record<string, unknown>): Promise<number> { // eslint-disable-line @typescript-eslint/no-unused-vars
+  /**
+   * @param id - Id da não conformidade.
+   * @param data - Campos a atualizar.
+   * @param transaction - Transação Sequelize opcional (usada quando a atualização
+   *   precisa ficar atômica com efeitos colaterais, ex.: devolução ao fornecedor).
+   * @returns Linhas afetadas.
+   * @throws {Error} Se nao implementado.
+   */
+  public async update(id: number | string, data: Record<string, unknown>, transaction?: unknown): Promise<number> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('NonConformitiesRepository.update não implementado.');
   }
 }

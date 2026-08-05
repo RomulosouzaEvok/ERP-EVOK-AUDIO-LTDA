@@ -17,6 +17,7 @@ interface NonConformityAttributes {
   origin: 'incoming' | 'in_process' | 'final' | 'audit' | 'customer_complaint' | 'supplier';
   product_id: number | null;
   purchase_item_id: number | null;
+  asset_id: number | null;
   production_order_id: number | null;
   service_order_id: number | null;
   supplier_id: number | null;
@@ -55,6 +56,7 @@ const NonConformity = sequelize.define('NonConformity', {
   origin: { type: DataTypes.ENUM('incoming', 'in_process', 'final', 'audit', 'customer_complaint', 'supplier'), allowNull: false, comment: 'Origem da NC' },
   product_id: { type: DataTypes.INTEGER, comment: 'FK → products.id' },
   purchase_item_id: { type: DataTypes.INTEGER },
+  asset_id: { type: DataTypes.INTEGER, comment: 'FK → assets.id (quando a NC se refere a um ativo/patrimônio, não a um produto)' },
   production_order_id: { type: DataTypes.INTEGER, comment: 'FK → production_orders.id' },
   service_order_id: { type: DataTypes.INTEGER },
   supplier_id: { type: DataTypes.INTEGER, comment: 'FK → suppliers.id' },
@@ -92,7 +94,8 @@ const NonConformity = sequelize.define('NonConformity', {
     { fields: ['origin'] },
     { fields: ['severity'] },
     { fields: ['product_id'] },
-    { fields: ['production_order_id'] }
+    { fields: ['production_order_id'] },
+    { fields: ['asset_id'] }
   ]
 });
 

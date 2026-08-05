@@ -4,11 +4,12 @@
  */
 
 import cors from 'cors';
-import express from 'express';
+import express, { Request } from 'express';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 
-import { loadRuntimeEnv } from './src/config/runtimeEnv';
+import { loadRuntimeEnv, getJwtRuntimeConfig } from './src/config/runtimeEnv';
 import healthRouter from './src/routes/health';
 
 const errorHandler = require('./src/middlewares/errorHandler');
@@ -36,9 +37,23 @@ app.use(requestContext);
 
 app.use('/health', healthRouter);
 
+// Chave de rate-limit por e-mail+IP (nao so IP): varios colaboradores da
+// fabrica saem atras do mesmo IP publico/NAT, entao uma chave so-IP faz um
+// unico usuario errando a senha bloquear o predio inteiro por 15min. Uma
+// chave composta isola o brute-force por CONTA visada, sem perder a
+// protecao (um atacante testando N contas do mesmo IP ainda soma por IP
+// via `ipKeyGenerator`, so nao compartilha cota com contas legitimas de
+// outros colegas atras do mesmo IP).
+function loginAttemptKey(req: Request): string {
+  const ip = ipKeyGenerator(req.ip ?? '');
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  return email ? `${ip}:${email}` : ip;
+}
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  keyGenerator: loginAttemptKey,
   message: { success: false, error: 'Muitas tentativas. Tente novamente em 15 minutos.' },
 });
 const registerLimiter = rateLimit({
@@ -46,6 +61,33 @@ const registerLimiter = rateLimit({
   max: 5,
   message: { success: false, error: 'Muitas tentativas de registro. Tente novamente em 1 hora.' },
 });
+// Chave de rate-limit por USUARIO autenticado (nao por IP) quando o
+// request traz um Bearer token decodificavel: o objetivo deste limiter e
+// conter abuso por CONTA (credencial vazada, script rodando sem limite),
+// nao por endereco de rede - varios colaboradores atras do mesmo IP/NAT
+// nao devem compartilhar cota, senao trocar de aba rapido em varias
+// estacoes do mesmo escritorio derruba o sistema para todo mundo. O token
+// so e decodificado (nao verificado) aqui: chave errada na pior hipotese
+// isola mal um request nao autenticado, nunca autoriza nada — a validacao
+// de assinatura real continua em `authenticate`.
+function apiRequestKey(req: Request): string {
+  const authHeader = req.headers.authorization;
+
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.decode(authHeader.slice('Bearer '.length)) as { id?: number | string } | null;
+
+      if (decoded?.id !== undefined) {
+        return `user:${decoded.id}`;
+      }
+    } catch {
+      // Token ilegivel — cai para chave por IP abaixo.
+    }
+  }
+
+  return ipKeyGenerator(req.ip ?? '');
+}
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   // Em NODE_ENV=test, a suite de integracao/edge legitimamente dispara
@@ -54,7 +96,8 @@ const apiLimiter = rateLimit({
   // conter. Sem esta excecao, adicionar novos testes de integracao
   // eventualmente esbarra no limite e derruba suites nao relacionadas com
   // 429, mascarando falhas reais.
-  max: runtimeEnv.nodeEnv === 'test' ? 100000 : 100,
+  max: runtimeEnv.nodeEnv === 'test' ? 100000 : 300,
+  keyGenerator: apiRequestKey,
   message: { success: false, error: 'Muitas requisicoes. Tente novamente em 15 minutos.' },
 });
 // Limiter proprio (nao compartilhado com login) para recuperacao de senha
@@ -65,14 +108,9 @@ const apiLimiter = rateLimit({
 const passwordRecoveryLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  keyGenerator: loginAttemptKey,
   message: { success: false, error: 'Muitas tentativas. Tente novamente em 15 minutos.' },
 });
-
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', registerLimiter);
-app.use('/api/auth/forgot-password', passwordRecoveryLimiter);
-app.use('/api/auth/reset-password', passwordRecoveryLimiter);
-app.use('/api', apiLimiter);
 
 app.use(express.json({
   limit: '5mb',
@@ -82,6 +120,17 @@ app.use(express.json({
   verify: (req: any, _res, buf) => { req.rawBody = buf; },
 }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+
+// Os limiters precisam vir DEPOIS do body parser: `loginAttemptKey` le
+// `req.body.email` para compor a chave por conta (nao so por IP) — antes
+// do parser, `req.body` sempre chega `undefined` e todo login cai no
+// fallback por IP, fazendo qualquer usuario atras do mesmo IP/NAT
+// compartilhar (e esgotar) a cota de tentativas dos colegas.
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', registerLimiter);
+app.use('/api/auth/forgot-password', passwordRecoveryLimiter);
+app.use('/api/auth/reset-password', passwordRecoveryLimiter);
+app.use('/api', apiLimiter);
 
 app.use('/api/auth', require('./src/modules/auth/presentation/routes/auth'));
 app.use('/api/users', require('./src/modules/users/presentation/routes/users'));

@@ -22,6 +22,7 @@ interface CreateAssetInput {
   purchase_date?: string;
   purchase_value?: number;
   useful_life_months?: number;
+  license_expires_at?: string;
   notes?: string;
 }
 
@@ -55,6 +56,7 @@ class CreateAssetUseCase extends UseCase<CreateAssetInput, any> {
       purchase_date,
       purchase_value,
       useful_life_months,
+      license_expires_at,
       notes
     } = input;
 
@@ -77,6 +79,7 @@ class CreateAssetUseCase extends UseCase<CreateAssetInput, any> {
         purchase_date,
         purchase_value,
         useful_life_months,
+        license_expires_at,
         current_value: purchase_value,
         status: 'active',
         notes

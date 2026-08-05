@@ -165,6 +165,49 @@ describe('Production Order Lifecycle (F.10)', () => {
       expect(productionOrderRepository.update).not.toHaveBeenCalled();
     });
 
+    it('lista TODOS os itens em falta simultaneamente (Regra 3, BUSINESS_RULES.md §13.3) — nao apenas o primeiro', async () => {
+      const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'planned',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(async () => ({ id: 1, status: 'released' })),
+      };
+
+      BomService.checkAvailability.mockResolvedValueOnce({
+        available: false,
+        max_possible_quantity: 2,
+        missing_items: [
+          { item_id: 101, missing_quantity: 3 },
+          { item_id: 102, missing_quantity: 7 },
+          { item_id: 103, missing_quantity: 1 },
+        ],
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      const error: any = await useCase
+        .execute({ id: 1, status: 'released', user_id: 1 })
+        .catch((err: any) => err);
+
+      expect(error).toBeInstanceOf(BusinessRuleError);
+      // As 3 pendencias devem aparecer juntas em uma unica resposta, nao uma de cada vez.
+      expect(error.details.missing_items).toHaveLength(3);
+      expect(error.details.missing_items).toEqual([
+        { item_id: 101, missing_quantity: 3 },
+        { item_id: 102, missing_quantity: 7 },
+        { item_id: 103, missing_quantity: 1 },
+      ]);
+      expect(productionOrderRepository.update).not.toHaveBeenCalled();
+    });
+
     it('reserva materiais ao liberar com disponibilidade confirmada', async () => {
       const productionOrderRepository = {
         listTrackingByOrderForUpdate: jest.fn(async () => []),
@@ -428,6 +471,44 @@ describe('Production Order Lifecycle (F.10)', () => {
         },
       });
 
+      expect(productionOrderRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('lista TODAS as etapas em aberto simultaneamente (Regra 3, BUSINESS_RULES.md §13.3) — nao apenas a primeira', async () => {
+      const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => [
+          { id: 1, sequence: 1, status: 'pending', quantity_good: 0 },
+          { id: 2, sequence: 2, status: 'in_progress', quantity_good: 0 },
+          { id: 3, sequence: 3, status: 'paused', quantity_good: 0 },
+          { id: 4, sequence: 4, status: 'completed', quantity_good: 10 },
+        ]),
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 1,
+          status: 'in_progress',
+          order_number: 'OP-2026-0001',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(),
+      };
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+
+      const error: any = await useCase
+        .execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
+        .catch((err: any) => err);
+
+      expect(error).toBeInstanceOf(BusinessRuleError);
+      // As 3 etapas em aberto (pending/in_progress/paused) devem aparecer juntas, a etapa completed fica de fora.
+      expect(error.details.open_steps).toHaveLength(3);
+      expect(error.details.open_steps).toEqual([
+        { id: 1, sequence: 1, status: 'pending' },
+        { id: 2, sequence: 2, status: 'in_progress' },
+        { id: 3, sequence: 3, status: 'paused' },
+      ]);
       expect(productionOrderRepository.update).not.toHaveBeenCalled();
     });
 

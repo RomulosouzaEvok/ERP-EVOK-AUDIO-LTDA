@@ -45,10 +45,16 @@ function promptPaymentAmount(remaining: number): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+const INVOICE_TYPE_LABEL: Record<string, string> = {
+  nfe: 'NF-e (mercadoria)',
+  nfse: 'NFS-e (serviço)',
+};
+
 const payableSchema = z.object({
   description: z.string().min(1, 'Informe a descrição.'),
   amount: z.coerce.number().positive('Informe um valor maior que zero.'),
   due_date: z.string().min(1, 'Informe o vencimento.'),
+  invoice_type: z.enum(['nfe', 'nfse']).optional(),
 });
 
 type PayableFormData = z.infer<typeof payableSchema>;
@@ -125,7 +131,13 @@ export default function FinancialPage() {
               <DialogHeader>
                 <DialogTitle>Nova conta a pagar</DialogTitle>
               </DialogHeader>
-              <form className="flex flex-col gap-3" onSubmit={handleSubmit((values) => createMutation.mutate(values))} noValidate>
+              <form
+                className="flex flex-col gap-3"
+                onSubmit={handleSubmit((values) =>
+                  createMutation.mutate({ ...values, invoice_type: values.invoice_type || undefined }),
+                )}
+                noValidate
+              >
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="description">Descrição</Label>
                   <Input id="description" {...register('description')} />
@@ -142,6 +154,20 @@ export default function FinancialPage() {
                     <Input id="due_date" type="date" {...register('due_date')} />
                     {errors.due_date && <p className="text-sm text-destructive">{errors.due_date.message}</p>}
                   </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="invoice_type">Tipo de nota</Label>
+                  <SelectNative id="invoice_type" defaultValue="" {...register('invoice_type')}>
+                    <option value="">Não informado</option>
+                    {Object.entries(INVOICE_TYPE_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </SelectNative>
+                  <p className="text-xs text-muted-foreground">
+                    NF-e para mercadoria/matéria-prima; NFS-e para serviço ou licença digital recebida de fornecedor.
+                  </p>
                 </div>
                 {formError && <p className="text-sm text-destructive">{formError}</p>}
                 <DialogFooter>
@@ -161,15 +187,16 @@ export default function FinancialPage() {
                 <TableHead className="text-right">Valor</TableHead>
                 <TableHead className="text-right">Pago</TableHead>
                 <TableHead>Vencimento</TableHead>
+                <TableHead>Nota</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loadingPayables && <TableSkeletonRows columns={6} />}
+              {loadingPayables && <TableSkeletonRows columns={7} />}
               {errorPayables && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-destructive">
+                  <TableCell colSpan={7} className="text-center text-destructive">
                     Não foi possível carregar as contas a pagar. Tente novamente.
                   </TableCell>
                 </TableRow>
@@ -182,6 +209,13 @@ export default function FinancialPage() {
                     <TableCell className="text-right tabular-nums">R$ {Number(account.amount).toFixed(2)}</TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">R$ {Number(account.amount_paid ?? 0).toFixed(2)}</TableCell>
                     <TableCell>{new Date(account.due_date).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell>
+                      {account.invoice_type ? (
+                        <Badge variant="secondary">{INVOICE_TYPE_LABEL[account.invoice_type] ?? account.invoice_type}</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
                     </TableCell>
@@ -204,7 +238,7 @@ export default function FinancialPage() {
               })}
               {!loadingPayables && !errorPayables && payables?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     Nenhuma conta a pagar.
                   </TableCell>
                 </TableRow>

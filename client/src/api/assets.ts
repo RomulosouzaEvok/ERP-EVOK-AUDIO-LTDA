@@ -1,8 +1,8 @@
 import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
 
-export type AssetType = 'machine' | 'equipment' | 'tool' | 'furniture' | 'vehicle' | 'it' | 'other';
-export type AssetStatus = 'active' | 'in_maintenance' | 'decommissioned' | 'lost';
+export type AssetType = 'machine' | 'equipment' | 'tool' | 'furniture' | 'vehicle' | 'it' | 'other' | 'license';
+export type AssetStatus = 'active' | 'in_maintenance' | 'decommissioned' | 'lost' | 'returned_to_supplier';
 
 export interface Asset {
   id: number;
@@ -20,6 +20,10 @@ export interface Asset {
   status: AssetStatus;
   photo_path?: string | null;
   notes?: string | null;
+  /** Vencimento da licença — só relevante quando `asset_type === 'license'`. */
+  license_expires_at?: string | null;
+  /** Origem de compra do ativo (FK para o item do pedido de compra que o gerou), somente leitura nesta tela. */
+  purchase_item_id?: number | null;
 }
 
 export interface AssetListParams {
@@ -41,6 +45,8 @@ export interface AssetInput {
   purchase_date?: string;
   purchase_value?: number;
   useful_life_months?: number;
+  /** Vencimento da licença — só enviado quando `asset_type === 'license'`. */
+  license_expires_at?: string;
   notes?: string;
 }
 

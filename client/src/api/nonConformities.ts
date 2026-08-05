@@ -16,6 +16,15 @@ export type NonConformitySeverity = 'critical' | 'major' | 'minor';
 export type NonConformityImmediateAction = 'rework' | 'scrap' | 'return_supplier' | 'use_as_is' | 'sorting' | 'other';
 export type NonConformityStatus = 'open' | 'analysis' | 'corrective_action' | 'effectiveness_check' | 'closed' | 'canceled';
 
+export type NonConformityRootCauseCategory =
+  | 'material'
+  | 'machine'
+  | 'method'
+  | 'manpower'
+  | 'measurement'
+  | 'environment';
+export type NonConformityEffectivenessResult = 'effective' | 'partially_effective' | 'ineffective';
+
 export interface NonConformity {
   id: number;
   nc_number: string;
@@ -29,13 +38,27 @@ export interface NonConformity {
   quantity_affected: number;
   immediate_action: NonConformityImmediateAction;
   immediate_action_desc: string | null;
+  root_cause: string | null;
+  root_cause_category: NonConformityRootCauseCategory | null;
+  corrective_action: string | null;
+  corrective_action_deadline: string | null;
+  responsible_id: number | null;
+  effectiveness_check: string | null;
+  effectiveness_date: string | null;
+  effectiveness_result: NonConformityEffectivenessResult | null;
   status: NonConformityStatus;
   lot_number: string | null;
   report_date: string;
+  closed_date: string | null;
   reported_by: number;
+  closed_by: number | null;
+  notes: string | null;
   createdAt: string;
   product?: { id: number; name: string; code: string };
+  supplier?: { id: number; company_name: string; trade_name: string | null };
   reporter?: { id: number; name: string };
+  responsible?: { id: number; name: string };
+  closer?: { id: number; name: string };
   /**
    * Semáforo de handoff (UC-40, Bloco 3) — fila de tratativa de RNC.
    * `open`/`analysis` = amarelo; `closed` com `effectiveness_result !=
@@ -90,5 +113,44 @@ export async function getNonConformity(id: number) {
  */
 export async function createNonConformity(input: NonConformityInput) {
   const { data } = await httpClient.post<ItemResponse<NonConformity>>('/api/quality/non-conformities', input);
+  return data.data;
+}
+
+/**
+ * Payload de atualização/tratativa (CAPA — causa raiz, ação corretiva,
+ * verificação de eficácia). Ver `ALLOWED_FIELDS` em
+ * `server/src/modules/nonConformities/application/use-cases/UpdateNonConformityUseCase.ts`
+ * para a lista exata de campos aceitos pelo backend.
+ */
+export interface NonConformityUpdateInput {
+  description?: string;
+  severity?: NonConformitySeverity;
+  origin?: NonConformityOrigin;
+  quantity_affected?: number;
+  immediate_action?: NonConformityImmediateAction;
+  root_cause?: string;
+  corrective_action?: string;
+  status?: NonConformityStatus;
+  responsible_id?: number;
+}
+
+/**
+ * `PUT /api/quality/non-conformities/:id` — atualiza a tratativa da RNC
+ * (causa raiz, ação corretiva, avanço de status). Ao enviar
+ * `status: 'closed'`, o backend grava `closed_by`/`closed_at`
+ * automaticamente a partir do usuário autenticado.
+ */
+export async function updateNonConformity(id: number, input: NonConformityUpdateInput) {
+  const { data } = await httpClient.put<ItemResponse<NonConformity>>(`/api/quality/non-conformities/${id}`, input);
+  return data.data;
+}
+
+/**
+ * `DELETE /api/quality/non-conformities/:id` — encerra (soft close) a RNC
+ * diretamente, sem exigir preenchimento de causa raiz/ação corretiva. Uso
+ * típico: RNC aberta por engano ou já tratada fora do fluxo.
+ */
+export async function closeNonConformity(id: number) {
+  const { data } = await httpClient.delete<ItemResponse<{ message: string }>>(`/api/quality/non-conformities/${id}`);
   return data.data;
 }
