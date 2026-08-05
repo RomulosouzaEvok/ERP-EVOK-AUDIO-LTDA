@@ -108,9 +108,9 @@ Base URL: `/api/inventory` (autenticação obrigatória via middleware `authenti
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/inventory/movements` | Lista movimentações (filtros: `product_id`, `type`, `start_date`, `end_date`; paginação: `page`, `limit`) |
+| GET | `/api/inventory/movements` | Lista movimentações (filtros: `product_id` (legado) OU `item_id` (novo, dual-read); `type`, `start_date`, `end_date`, `warehouse_id`; paginação: `page`, `limit`) |
 | GET | `/api/inventory/movements/:id` | Busca movimentação por id |
-| POST | `/api/inventory/movements` | Registra movimentação (entrada/saída/ajuste) — transacional, lock pessimista via `InventoryService` |
+| POST | `/api/inventory/movements` | Registra movimentação (entrada/saída/ajuste) — transacional, lock pessimista via `InventoryService`. Aceita `product_id` (legado) OU `item_id` (novo, dual-read) — exatamente um dos dois. Ver "Dual-read `item_id`" abaixo. |
 | GET | `/api/inventory/stock-report` | Relatório consolidado de estoque (resumo + produtos ativos) |
 | GET | `/api/inventory/low-stock` | Lista produtos ativos com `quantity <= min_quantity` |
 | GET | `/api/inventory/lots?status=&product_id=&page=&limit=` | Lista lotes (`LotControl`) com `product`/`supplier` incluídos. Sem `status` + com `product_id`: mantém o comportamento legado (`available` + saldo > 0), usado na conclusão de OP. Com `status` explícito (ex. `quarantine`): usado pela inspeção de recebimento de qualidade. |
@@ -234,13 +234,40 @@ Envelope de resposta padrão do projeto: `{ success: true, data }` /
 message } }` (erros `AppError`/`ValidationError`/`NotFoundError`/
 `BusinessRuleError` lançados pelas entidades e use cases deste submódulo).
 
+### Dual-read `item_id` em `POST/GET /api/inventory/movements`
+
+Corrigido (ver `docs/HANDOFF_CODEX.md`): `createInventoryMovementSchema`
+(Zod) aceita `product_id` (legado, INTEGER) OU `item_id` (novo, UUID,
+PREFERIDO) — exatamente um dos dois (`.refine()` XOR), nunca os dois, nunca
+nenhum. Mesma regra vale para o filtro `item_id` em `GET .../movements`
+(já suportado por `SequelizeInventoryRepository.listMovements`, agora
+efetivamente repassado por `ListInventoryMovementsUseCase`).
+
+Quando `item_id` é informado no `POST`, `CreateInventoryMovementUseCase`
+resolve o `Product` legado correspondente via
+`ItemRepository.findLegacyProductByItemId` (crosswalk por
+`items.codigo === products.code`, mesmo padrão já usado por
+`ConvertPlannedOrdersToProductionOrderUseCase` no módulo MRP) ANTES de
+seguir o fluxo normal (lock pessimista, saldo por depósito,
+`InventoryService.adjust`) — que permanece 100% acoplado a `Product`, sem
+nenhum caminho de estoque paralelo. Se o item não tiver um `Product`
+correspondente, a requisição é rejeitada com `BusinessRuleError` (422):
+movimentação manual por `item_id` puro ainda não é suportada para itens
+novos sem vínculo legado. O `item_id` original é gravado em
+`InventoryMovement.item_id` (coluna já existente, antes sempre `null` neste
+fluxo) apenas para rastreabilidade — não afeta nenhum saldo.
+
 ### Uso de `InventoryService.adjust`
 
 `ApproveInventoryCountUseCase` é o único ponto do submódulo que altera
 `Product.quantity`, e faz isso **exclusivamente** chamando
 `InventoryService.adjust(productId, type, quantity, userId, reason,
-transaction)` (assinatura atual de `server/src/services/inventoryService.ts`)
-para cada item cuja `variance_quantity` seja diferente de zero:
+transaction, warehouseId?, itemId?)` (assinatura atual de
+`server/src/services/inventoryService.ts` — os dois últimos parâmetros são
+opcionais; `itemId` é usado apenas por `CreateInventoryMovementUseCase`
+quando a movimentação foi criada via `item_id`, ver seção "Dual-read
+`item_id`" acima) para cada item cuja `variance_quantity` seja diferente de
+zero:
 
 - `type = 'in'` quando `variance_quantity > 0` (contagem física maior que o sistema).
 - `type = 'out'` quando `variance_quantity < 0` (contagem física menor que o sistema).

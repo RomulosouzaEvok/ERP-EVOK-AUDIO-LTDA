@@ -1,16 +1,29 @@
+import type { Transaction } from 'sequelize';
+import type { IFinancialRepository } from '../../domain/repositories/FinancialRepository';
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { sequelize } = require('../../../../config/database');
 const { NotFoundError, ValidationError } = require('../../../../errors');
+
+/** Dados de entrada de `PayPayableUseCase.execute`. */
+interface PayPayableInput {
+  id: number;
+  payment_date?: string | Date;
+  payment_method?: string;
+  amount?: number | string;
+}
 
 /**
  * Registra o pagamento de uma conta a pagar em transacao com lock
  * pessimista para impedir pagamento duplo em concorrencia.
  */
 class PayPayableUseCase extends UseCase {
+  financialRepository: IFinancialRepository;
+
   /**
    * @param {import('../../domain/repositories/FinancialRepository')} financialRepository
    */
-  constructor(financialRepository) {
+  constructor(financialRepository: IFinancialRepository) {
     super();
     this.financialRepository = financialRepository;
   }
@@ -23,8 +36,8 @@ class PayPayableUseCase extends UseCase {
    * @param {number|string} [input.amount]
    * @returns {Promise<{ account: Object, previousStatus: string }>}
    */
-  async execute({ id, payment_date, payment_method, amount }) {
-    return sequelize.transaction(async (transaction) => {
+  async execute({ id, payment_date, payment_method, amount }: PayPayableInput) {
+    return sequelize.transaction(async (transaction: Transaction) => {
       const account = await this.financialRepository.findPayableByIdForUpdate(id, transaction);
       if (!account) throw new NotFoundError('Conta a pagar nao encontrada');
       if (account.status === 'paid') throw new ValidationError('Conta ja foi paga');
@@ -38,7 +51,7 @@ class PayPayableUseCase extends UseCase {
       const remainingCents = totalCents - alreadyPaidCents;
 
       const paymentCents = amount !== undefined
-        ? Math.round(parseFloat(amount) * 100)
+        ? Math.round(parseFloat(String(amount)) * 100)
         : remainingCents;
 
       if (paymentCents <= 0) throw new ValidationError('Valor deve ser maior que zero');

@@ -1,5 +1,21 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryCountRepository = require('../../domain/repositories/InventoryCountRepository');
+
 const { NotFoundError, BusinessRuleError, ValidationError } = require('../../../../errors');
+
+/** Dados de entrada de `CountInventoryItemUseCase.execute`. */
+interface CountInventoryItemInput {
+  /** Id da contagem (cabeçalho). */
+  id: number | string;
+  /** Id do item da contagem. */
+  itemId: number | string;
+  /** Quantidade contada fisicamente (>= 0). */
+  counted_quantity: number;
+  /** Observações do item (ex.: divergência encontrada). */
+  notes?: string;
+  /** Id do usuário que realizou a contagem física. */
+  userId: number;
+}
 
 /**
  * Registra a quantidade contada fisicamente de um item de uma contagem de
@@ -8,25 +24,22 @@ const { NotFoundError, BusinessRuleError, ValidationError } = require('../../../
  * /api/inventory-counts/:id/items/:itemId/count`.
  */
 class CountInventoryItemUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/InventoryCountRepository')} inventoryCountRepository */
-  constructor(inventoryCountRepository) {
+  private readonly inventoryCountRepository: InventoryCountRepository;
+
+  /** @param inventoryCountRepository - Repositório de contagens de inventário. */
+  constructor(inventoryCountRepository: InventoryCountRepository) {
     super();
     this.inventoryCountRepository = inventoryCountRepository;
   }
 
   /**
-   * @param {Object} input
-   * @param {number} input.id - Id da contagem (cabeçalho).
-   * @param {number} input.itemId - Id do item da contagem.
-   * @param {number} input.counted_quantity - Quantidade contada fisicamente (>= 0).
-   * @param {string} [input.notes] - Observações do item (ex.: divergência encontrada).
-   * @param {number} input.userId - Id do usuário que realizou a contagem física.
+   * @param input - Dados da contagem do item.
    * @returns {Promise<Object>} O item atualizado.
    * @throws {ValidationError} Se `counted_quantity` for inválida.
    * @throws {NotFoundError} Se a contagem ou o item não existirem.
    * @throws {BusinessRuleError} Se a contagem não estiver em status `counting` ou o item não pertencer a ela.
    */
-  async execute({ id, itemId, counted_quantity, notes, userId }) {
+  async execute({ id, itemId, counted_quantity, notes, userId }: CountInventoryItemInput) {
     const qty = Number(counted_quantity);
     if (counted_quantity === undefined || counted_quantity === null || Number.isNaN(qty)) {
       throw new ValidationError('Quantidade contada (counted_quantity) é obrigatória e deve ser numérica.');
@@ -63,6 +76,6 @@ class CountInventoryItemUseCase extends UseCase {
   }
 }
 
-module.exports = CountInventoryItemUseCase;
+export = CountInventoryItemUseCase;
 
 

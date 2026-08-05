@@ -1,3 +1,6 @@
+import type { Transaction } from 'sequelize';
+import type PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, BusinessRuleError } = require('../../../../errors');
 
@@ -15,7 +18,9 @@ class UpdatePurchaseUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/PurchaseRepository')} purchaseRepository
    */
-  constructor(purchaseRepository) {
+  private purchaseRepository: PurchaseRepository;
+
+  constructor(purchaseRepository: PurchaseRepository) {
     super();
     this.purchaseRepository = purchaseRepository;
   }
@@ -29,7 +34,7 @@ class UpdatePurchaseUseCase extends UseCase {
    * @throws {NotFoundError} Se o pedido não existir.
    * @throws {BusinessRuleError} Se o pedido não estiver em `pending`/`approved`.
    */
-  async execute({ id, body, transaction }) {
+  async execute({ id, body, transaction }: { id: number | string; body: Record<string, unknown>; transaction: Transaction }) {
     // Lock pessimista: serializa esta edicao contra uma mudanca de status
     // concorrente (ex.: aprovacao) do MESMO pedido — sem isso, esta edicao
     // podia ler status='pending' e aplicar as alteracoes mesmo apos o

@@ -6,11 +6,18 @@
  * @module modules/fiscal/application/use-cases/CancelSaleNfeUseCase
  */
 
+import type { Transaction } from 'sequelize';
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { sequelize } = require('../../../../config/database');
 const { NotFoundError, BusinessRuleError } = require('../../../../errors');
 const { Sale, CompanyFiscalConfig } = require('../../../../models/index');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
+
+interface CancelSaleNfeInput {
+  saleId: number | string;
+  reason: string;
+}
 
 class CancelSaleNfeUseCase extends UseCase {
   /**
@@ -19,7 +26,7 @@ class CancelSaleNfeUseCase extends UseCase {
    * @param {string} input.reason - Justificativa do cancelamento (mínimo 15 caracteres, exigência da SEFAZ).
    * @returns {Promise<Object>} A venda com a NF-e cancelada.
    */
-  async execute({ saleId, reason }) {
+  async execute({ saleId, reason }: CancelSaleNfeInput) {
     if (!reason || reason.trim().length < 15) {
       throw new BusinessRuleError('Justificativa de cancelamento deve ter ao menos 15 caracteres (exigência da SEFAZ).');
     }
@@ -36,7 +43,7 @@ class CancelSaleNfeUseCase extends UseCase {
     const provider = createNfeProvider(config.nfe_provider);
     const result = await provider.cancel(sale.nfe_provider_ref, reason.trim());
 
-    return sequelize.transaction(async (transaction) => {
+    return sequelize.transaction(async (transaction: Transaction) => {
       const locked = await Sale.findByPk(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!locked) throw new NotFoundError('Venda não encontrada');
 

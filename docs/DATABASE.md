@@ -292,13 +292,16 @@
 | Coluna | Tipo | Restrições | Descrição |
 |--------|------|------------|-----------|
 | id | INT | PK, AUTO_INCREMENT | Identificador |
-| product_id | INT | FK → products.id | Produto |
-| user_id | INT | FK → users.id | Responsável |
+| product_id | INT | NOT NULL, FK → products.id | Produto (legado — sempre preenchido, inclusive quando a movimentação se origina de um `item_id`, ver coluna `item_id`) |
+| item_id | UUID | NULL, FK → items.id (dual-read) | Item novo de origem, quando aplicável. Preenchido por `POST /api/inventory/movements` quando o payload usa `item_id` (resolvido para `product_id` via crosswalk por código em `ItemRepository.findLegacyProductByItemId` antes da escrita) — ver `server/src/modules/inventory/README.md` seção "Dual-read `item_id`". `NULL` nos demais fluxos (legado por `product_id`, vendas, compras, produção, contagem de inventário) |
+| user_id | INT | NOT NULL, FK → users.id | Responsável |
+| warehouse_id | INT | NULL, FK → warehouses.id (`ON DELETE SET NULL`) | Depósito onde a movimentação ocorreu (Bloco 4, UC-42). `NULL` = movimento legado sem depósito atribuído |
 | type | ENUM('in','out','adjustment') | NOT NULL | Tipo |
-| quantity | INT | NOT NULL | Quantidade |
+| quantity | DECIMAL(18,6) | NOT NULL | Quantidade movimentada |
+| unit_cost | DECIMAL(10,2) | DEFAULT 0 | Custo unitário no momento da movimentação |
 | description | TEXT | - | Motivo |
 | reference_id | INT | - | ID da referência |
-| reference_type | ENUM('sale','purchase','production','adjustment') | - | Tipo de referência |
+| reference_type | ENUM('sale','purchase','production','adjustment','transfer') | - | Tipo de referência |
 | created_at | DATETIME | DEFAULT NOW | Data (timestamps habilitado) |
 
 ### Tabela: `suppliers` (Fornecedores)

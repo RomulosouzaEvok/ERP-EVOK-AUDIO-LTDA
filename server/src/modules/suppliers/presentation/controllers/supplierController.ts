@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeSuppliersRepository = require('../../infrastructure/sequelize/SequelizeSuppliersRepository');
 const SequelizeItemSupplierRepository = require('../../../items/infrastructure/sequelize/SequelizeItemSupplierRepository');
 const ListSuppliersUseCase = require('../../application/use-cases/ListSuppliersUseCase');
@@ -28,7 +30,7 @@ const itemSupplierRepository = new SequelizeItemSupplierRepository();
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page = 1, limit = 10, search, status } = req.query;
     const useCase = new ListSuppliersUseCase(suppliersRepository);
@@ -54,7 +56,7 @@ exports.list = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetSupplierByIdUseCase(suppliersRepository);
     const supplier = await useCase.execute({ id: req.params.id });
@@ -72,7 +74,7 @@ exports.getById = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createSupplierSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -94,7 +96,7 @@ exports.create = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = updateSupplierSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -115,7 +117,7 @@ exports.update = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new DeactivateSupplierUseCase(suppliersRepository);
     const result = await useCase.execute({ id: req.params.id });
@@ -134,7 +136,7 @@ exports.remove = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listItems = async (req, res, next) => {
+exports.listItems = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListSupplierItemsUseCase(suppliersRepository, itemSupplierRepository);
     const data = await useCase.execute({ supplierId: Number(req.params.id) });

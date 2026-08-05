@@ -1,3 +1,5 @@
+import type { Transaction } from 'sequelize';
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
 const InventoryService = require('../../../../services/inventoryService');
@@ -7,7 +9,7 @@ const { toCents, fromCents } = require('../../../../shared/utils/money');
 /**
  * Maquina de estados de status da venda.
  */
-const VALID_TRANSITIONS = {
+const VALID_TRANSITIONS: Record<string, string[]> = {
   quote: ['confirmed', 'canceled'],
   confirmed: ['invoiced', 'canceled'],
   // 'shipped' (expedicao) so pode ser atingido a partir de 'invoiced' (venda
@@ -61,7 +63,7 @@ class ChangeSaleStatusUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/SaleRepository')} saleRepository
    */
-  constructor(saleRepository) {
+  constructor(saleRepository: any) {
     super();
     this.saleRepository = saleRepository;
   }
@@ -74,7 +76,7 @@ class ChangeSaleStatusUseCase extends UseCase {
    * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ sale: Object, previousStatus: string }>}
    */
-  async execute({ id, status, userId, transaction }) {
+  async execute({ id, status, userId, transaction }: { id: number; status: string; userId: number; transaction: Transaction }) {
     if (!status) {
       throw new ValidationError('Status e obrigatorio');
     }

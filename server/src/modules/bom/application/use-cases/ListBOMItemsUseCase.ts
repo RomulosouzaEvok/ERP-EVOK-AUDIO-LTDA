@@ -1,12 +1,15 @@
 const UseCase = require('../../../../shared/application/UseCase');
+import type { IBOMRepository } from '../../domain/repositories/BOMRepository';
 
 /**
  * Lista todos os itens de uma BOM específica, cobrindo
  * `GET /api/engineering/bom/:id/items`.
  */
 class ListBOMItemsUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/BOMRepository')} bomRepository */
-  constructor(bomRepository) {
+  private bomRepository: IBOMRepository;
+
+  /** @param {IBOMRepository} bomRepository */
+  constructor(bomRepository: IBOMRepository) {
     super();
     this.bomRepository = bomRepository;
   }
@@ -16,7 +19,7 @@ class ListBOMItemsUseCase extends UseCase {
    * @param {number} input.id - Id da BOM.
    * @returns {Promise<Object[]>} Lista de itens da BOM.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number }) {
     const items = await this.bomRepository.listItems(id);
 
     // `unit_cost` persistido e um snapshot; expoe o custo ATUAL do

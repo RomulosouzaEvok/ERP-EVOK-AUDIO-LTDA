@@ -1,4 +1,35 @@
-﻿/**
+﻿import type { Transaction } from 'sequelize';
+
+/** Filtros e paginação genéricos aceitos pelos métodos de listagem deste repositório. */
+type FinancialFilters = Record<string, any>;
+/** Paginação `{ limit, offset }` aceita pelos métodos de listagem. */
+type FinancialPagination = { limit?: number; offset?: number };
+
+/**
+ * Formato estrutural do contrato `FinancialRepository`, usado pelos use
+ * cases da camada de aplicação para tipar a dependência sem acoplar à
+ * classe concreta (nominal) — qualquer objeto com esta forma (ex.:
+ * `SequelizeFinancialRepository`) satisfaz o tipo.
+ */
+export interface IFinancialRepository {
+  listReceivables(filters: FinancialFilters, pagination: FinancialPagination): Promise<{ rows: any[]; count: number }>;
+  findReceivableById(id: number | string): Promise<any>;
+  findReceivableByIdForUpdate(id: number | string, transaction: Transaction): Promise<any>;
+  listPayables(filters: FinancialFilters, pagination: FinancialPagination): Promise<{ rows: any[]; count: number }>;
+  findPayableById(id: number | string): Promise<any>;
+  findPayableByIdForUpdate(id: number | string, transaction: Transaction): Promise<any>;
+  createPayable(data: Record<string, any>): Promise<any>;
+  sumReceivableByStatus(start: Date, end: Date): Promise<Array<{ status: string; total: number }>>;
+  sumPayableByStatus(start: Date, end: Date): Promise<Array<{ status: string; total: number }>>;
+  getOpenTitlesForProjection(days: number): Promise<{
+    receivableRows: Array<{ due_date: string; amount: number }>;
+    payableRows: Array<{ due_date: string; amount: number }>;
+    overdueReceivable: number;
+    overduePayable: number;
+  }>;
+}
+
+/**
  * Interface (contrato) de repositório do módulo Financeiro (contas a
  * receber, contas a pagar e fluxo de caixa).
  *
@@ -15,7 +46,7 @@ class FinancialRepository {
    * @param {Object} [pagination] - `{ limit, offset }`.
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
-  async listReceivables(filters, pagination) { // eslint-disable-line no-unused-vars
+  async listReceivables(filters: FinancialFilters, pagination: FinancialPagination) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.listReceivables não implementado.');
   }
 
@@ -26,7 +57,7 @@ class FinancialRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findReceivableById(id) { // eslint-disable-line no-unused-vars
+  async findReceivableById(id: number | string) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.findReceivableById não implementado.');
   }
 
@@ -38,7 +69,7 @@ class FinancialRepository {
    * @param {import('sequelize').Transaction} transaction
    * @returns {Promise<Object|null>}
    */
-  async findReceivableByIdForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
+  async findReceivableByIdForUpdate(id: number | string, transaction: Transaction) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.findReceivableByIdForUpdate não implementado.');
   }
 
@@ -50,7 +81,7 @@ class FinancialRepository {
    * @param {Object} [pagination] - `{ limit, offset }`.
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
-  async listPayables(filters, pagination) { // eslint-disable-line no-unused-vars
+  async listPayables(filters: FinancialFilters, pagination: FinancialPagination) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.listPayables não implementado.');
   }
 
@@ -61,7 +92,7 @@ class FinancialRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findPayableById(id) { // eslint-disable-line no-unused-vars
+  async findPayableById(id: number | string) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.findPayableById não implementado.');
   }
 
@@ -73,7 +104,7 @@ class FinancialRepository {
    * @param {import('sequelize').Transaction} transaction
    * @returns {Promise<Object|null>}
    */
-  async findPayableByIdForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
+  async findPayableByIdForUpdate(id: number | string, transaction: Transaction) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.findPayableByIdForUpdate não implementado.');
   }
 
@@ -84,7 +115,7 @@ class FinancialRepository {
    * @param {Object} data
    * @returns {Promise<Object>}
    */
-  async createPayable(data) { // eslint-disable-line no-unused-vars
+  async createPayable(data: Record<string, any>) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.createPayable não implementado.');
   }
 
@@ -96,7 +127,7 @@ class FinancialRepository {
    * @param {Date} end
    * @returns {Promise<Array<{status: string, total: number}>>}
    */
-  async sumReceivableByStatus(start, end) { // eslint-disable-line no-unused-vars
+  async sumReceivableByStatus(start: Date, end: Date) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.sumReceivableByStatus não implementado.');
   }
 
@@ -108,7 +139,7 @@ class FinancialRepository {
    * @param {Date} end
    * @returns {Promise<Array<{status: string, total: number}>>}
    */
-  async sumPayableByStatus(start, end) { // eslint-disable-line no-unused-vars
+  async sumPayableByStatus(start: Date, end: Date) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.sumPayableByStatus não implementado.');
   }
 
@@ -128,7 +159,7 @@ class FinancialRepository {
    *   overduePayable: number
    * }>}
    */
-  async getOpenTitlesForProjection(days) { // eslint-disable-line no-unused-vars
+  async getOpenTitlesForProjection(days: number) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.getOpenTitlesForProjection não implementado.');
   }
 }

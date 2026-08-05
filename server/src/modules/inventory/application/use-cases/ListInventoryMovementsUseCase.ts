@@ -1,37 +1,54 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
+
+/** Filtros e paginação aceitos por `ListInventoryMovementsUseCase.execute`. */
+interface ListInventoryMovementsInput {
+  product_id?: number;
+  /** Filtro dual-read (novo, PREFERIDO) — repassado a `listMovements`. */
+  item_id?: string;
+  type?: string;
+  start_date?: string | Date;
+  end_date?: string | Date;
+  /** Filtra movimentações de um depósito específico (Bloco 4, UC-42). */
+  warehouse_id?: number;
+  limit: number;
+  offset: number;
+  page: number;
+}
+
+/** Resultado paginado de `ListInventoryMovementsUseCase.execute`. */
+interface ListInventoryMovementsOutput {
+  rows: any[];
+  count: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 
 /**
  * Lista movimentações de estoque com filtros e paginação.
  */
-class ListInventoryMovementsUseCase extends UseCase {
-  /**
-   * @param {import('../../domain/repositories/InventoryRepository')} inventoryRepository
-   */
-  constructor(inventoryRepository) {
+class ListInventoryMovementsUseCase extends UseCase<ListInventoryMovementsInput, ListInventoryMovementsOutput> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
     super();
     this.inventoryRepository = inventoryRepository;
   }
 
   /**
-   * @param {Object} input
-   * @param {number} [input.product_id]
-   * @param {string} [input.type]
-   * @param {string|Date} [input.start_date]
-   * @param {string|Date} [input.end_date]
-   * @param {number} [input.warehouse_id] - Filtra movimentações de um depósito específico (Bloco 4, UC-42).
-   * @param {number} input.limit
-   * @param {number} input.offset
-   * @param {number} input.page
-   * @returns {Promise<{ rows: Object[], count: number, page: number, limit: number, totalPages: number }>}
+   * @param input - Filtros e paginação.
+   * @returns Movimentações paginadas.
    */
-  async execute({ product_id, type, start_date, end_date, warehouse_id, limit, offset, page }) {
+  async execute({ product_id, item_id, type, start_date, end_date, warehouse_id, limit, offset, page }: ListInventoryMovementsInput): Promise<ListInventoryMovementsOutput> {
     const { rows, count } = await this.inventoryRepository.listMovements(
-      { product_id, type, start_date, end_date, warehouse_id },
+      { product_id, item_id, type, start_date, end_date, warehouse_id },
       { limit, offset }
     );
     return { rows, count, page, limit, totalPages: Math.ceil(count / limit) };
   }
 }
 
-module.exports = ListInventoryMovementsUseCase;
+export = ListInventoryMovementsUseCase;
 

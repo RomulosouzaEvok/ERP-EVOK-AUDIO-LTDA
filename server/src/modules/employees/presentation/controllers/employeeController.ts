@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeEmployeesRepository = require('../../infrastructure/sequelize/SequelizeEmployeesRepository');
 const ListEmployeesUseCase = require('../../application/use-cases/ListEmployeesUseCase');
 const GetEmployeeByIdUseCase = require('../../application/use-cases/GetEmployeeByIdUseCase');
@@ -14,7 +16,7 @@ const DeactivateEmployeeUseCase = require('../../application/use-cases/Deactivat
 const employeesRepository = new SequelizeEmployeesRepository();
 
 /** `GET /api/employees` — lista funcionários (busca/filtro/paginação). */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListEmployeesUseCase(employeesRepository);
     const { rows, total, page, limit, totalPages } = await useCase.execute(req.query);
@@ -25,7 +27,7 @@ exports.list = async (req, res, next) => {
 };
 
 /** `GET /api/employees/:id` — busca um funcionário pelo id. */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetEmployeeByIdUseCase(employeesRepository);
     const employee = await useCase.execute({ id: req.params.id });
@@ -36,7 +38,7 @@ exports.getById = async (req, res, next) => {
 };
 
 /** `POST /api/employees` — cria um novo funcionário. */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CreateEmployeeUseCase(employeesRepository);
     const employee = await useCase.execute(req.body);
@@ -47,7 +49,7 @@ exports.create = async (req, res, next) => {
 };
 
 /** `PUT /api/employees/:id` — atualiza um funcionário existente. */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new UpdateEmployeeUseCase(employeesRepository);
     const employee = await useCase.execute({ id: req.params.id, body: req.body });
@@ -58,7 +60,7 @@ exports.update = async (req, res, next) => {
 };
 
 /** `DELETE /api/employees/:id` — desliga (soft delete) um funcionário. */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new DeactivateEmployeeUseCase(employeesRepository);
     const result = await useCase.execute({ id: req.params.id });

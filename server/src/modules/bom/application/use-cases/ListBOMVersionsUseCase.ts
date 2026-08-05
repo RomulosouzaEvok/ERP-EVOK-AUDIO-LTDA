@@ -1,5 +1,6 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
+import type { IBOMRepository } from '../../domain/repositories/BOMRepository';
 
 /**
  * Lista todas as versões (qualquer status: draft/active/inactive/superseded)
@@ -8,8 +9,10 @@ const { NotFoundError } = require('../../../../errors');
  * (não existia antes desta migração).
  */
 class ListBOMVersionsUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/BOMRepository')} bomRepository */
-  constructor(bomRepository) {
+  private bomRepository: IBOMRepository;
+
+  /** @param {IBOMRepository} bomRepository */
+  constructor(bomRepository: IBOMRepository) {
     super();
     this.bomRepository = bomRepository;
   }
@@ -20,7 +23,7 @@ class ListBOMVersionsUseCase extends UseCase {
    * @returns {Promise<Object[]>} Lista de BOMs (todas as versões) do produto.
    * @throws {NotFoundError} Se o produto não existir.
    */
-  async execute({ productId }) {
+  async execute({ productId }: { productId: number }) {
     const product = await this.bomRepository.findProductById(productId);
     if (!product) {
       throw new NotFoundError('Produto não encontrado');

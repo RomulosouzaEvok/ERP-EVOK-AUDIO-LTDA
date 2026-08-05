@@ -1,6 +1,18 @@
+import type { Transaction } from 'sequelize';
+import type PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const PurchaseEntity = require('../../domain/entities/PurchaseEntity');
 const { NotFoundError } = require('../../../../errors');
+
+interface CreatePurchaseInput {
+  supplier_id: number | string;
+  items: Array<{ product_id: number | string; quantity: number | string; unit_price: number | string }>;
+  notes?: string;
+  expected_date?: string | Date;
+  userId: number;
+  transaction: Transaction;
+}
 
 /**
  * Cria um pedido de compra (Purchase Order) com seus itens, cobrindo o
@@ -16,7 +28,9 @@ class CreatePurchaseUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/PurchaseRepository')} purchaseRepository
    */
-  constructor(purchaseRepository) {
+  private purchaseRepository: PurchaseRepository;
+
+  constructor(purchaseRepository: PurchaseRepository) {
     super();
     this.purchaseRepository = purchaseRepository;
   }
@@ -33,7 +47,7 @@ class CreatePurchaseUseCase extends UseCase {
    * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos.
    * @throws {NotFoundError} Se algum `product_id` referenciado não existir.
    */
-  async execute({ supplier_id, items, notes, expected_date, userId, transaction }) {
+  async execute({ supplier_id, items, notes, expected_date, userId, transaction }: CreatePurchaseInput) {
     const entity = new PurchaseEntity({ supplier_id, items, notes, expected_date });
 
     let totalAmount = 0;

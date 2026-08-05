@@ -1,3 +1,5 @@
+import type { IFinancialRepository } from '../../domain/repositories/FinancialRepository';
+
 const UseCase = require('../../../../shared/application/UseCase');
 
 /**
@@ -7,7 +9,7 @@ const UseCase = require('../../../../shared/application/UseCase');
  * @param {Date} date
  * @returns {Date}
  */
-function startOfWeek(date) {
+function startOfWeek(date: Date): Date {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const day = d.getDay(); // 0 = domingo, 1 = segunda, ...
   const diffToMonday = day === 0 ? -6 : 1 - day;
@@ -22,7 +24,7 @@ function startOfWeek(date) {
  * @param {Date} date
  * @returns {string}
  */
-function toDateOnly(date) {
+function toDateOnly(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -43,7 +45,9 @@ class GetCashFlowProjectionUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/FinancialRepository')} financialRepository
    */
-  constructor(financialRepository) {
+  financialRepository: IFinancialRepository;
+
+  constructor(financialRepository: IFinancialRepository) {
     super();
     this.financialRepository = financialRepository;
   }
@@ -58,7 +62,7 @@ class GetCashFlowProjectionUseCase extends UseCase {
    *   weeks: Array<{ week_start: string, week_end: string, receivable: number, payable: number, net: number, cumulative_net: number }>
    * }>}
    */
-  async execute({ days }) {
+  async execute({ days }: { days?: number }) {
     const horizonDays = days || 30;
     const {
       receivableRows,
@@ -98,7 +102,7 @@ class GetCashFlowProjectionUseCase extends UseCase {
     let dueNext7Payable = 0;
 
     for (const row of receivableRows) {
-      const amount = parseFloat(row.amount || 0);
+      const amount = Number(row.amount) || 0;
       totalReceivable += amount;
       const dueDate = new Date(row.due_date);
       if (dueDate < next7End) dueNext7Receivable += amount;
@@ -108,7 +112,7 @@ class GetCashFlowProjectionUseCase extends UseCase {
     }
 
     for (const row of payableRows) {
-      const amount = parseFloat(row.amount || 0);
+      const amount = Number(row.amount) || 0;
       totalPayable += amount;
       const dueDate = new Date(row.due_date);
       if (dueDate < next7End) dueNext7Payable += amount;

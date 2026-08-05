@@ -21,7 +21,7 @@ class CreateUserUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/UsersRepository')} usersRepository
    */
-  constructor(usersRepository) {
+  constructor(usersRepository: any) {
     super();
     this.usersRepository = usersRepository;
   }
@@ -37,7 +37,7 @@ class CreateUserUseCase extends UseCase {
    * @throws {ValidationError} Se algum campo obrigatório estiver ausente, o email for inválido, a senha for curta demais (via `RegisterUserEntity`) ou `role` for inválido.
    * @throws {ConflictError} Com mensagem `'Email já cadastrado'` se o email já existir (`SequelizeUniqueConstraintError`).
    */
-  async execute({ name, email, password, role, req }) {
+  async execute({ name, email, password, role, req }: { name: string; email: string; password: string; role?: string; req: any }) {
     const entity = new RegisterUserEntity({ name, email, password, role });
 
     if (role && !VALID_ROLES.includes(role)) {
@@ -52,7 +52,7 @@ class CreateUserUseCase extends UseCase {
         password: entity.password,
         role: entity.role || 'operator'
       });
-    } catch (error) {
+    } catch (error: any) {
       if (error.name === 'SequelizeUniqueConstraintError') {
         throw new ConflictError('Email já cadastrado');
       }

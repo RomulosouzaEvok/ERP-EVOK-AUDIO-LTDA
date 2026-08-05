@@ -68,7 +68,7 @@ class SequelizeInventoryRepository extends InventoryRepository {
   }
 
   /** @inheritdoc */
-  async findMovementById(id) {
+  async findMovementById(id: number | string) {
     return InventoryMovement.findByPk(id, {
       include: [
         { model: Product, as: 'product', attributes: ['id', 'name', 'code', 'quantity'] },

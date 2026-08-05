@@ -16,6 +16,15 @@ const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../
 const { Purchase } = require('../../../../models/index');
 const { isValidNfeAccessKey } = require('../../domain/services/NfeAccessKeyValidator');
 
+interface RegisterIncomingNfeInput {
+  purchaseId: number | string;
+  nfeKey: string;
+  invoiceNumber?: string;
+  nfeSeries?: string;
+  xmlPath?: string;
+  userId: number;
+}
+
 class RegisterIncomingNfeUseCase extends UseCase {
   /**
    * @param {Object} input
@@ -27,7 +36,7 @@ class RegisterIncomingNfeUseCase extends UseCase {
    * @param {number} input.userId
    * @returns {Promise<Object>} O pedido de compra atualizado.
    */
-  async execute({ purchaseId, nfeKey, invoiceNumber, nfeSeries, xmlPath, userId }) {
+  async execute({ purchaseId, nfeKey, invoiceNumber, nfeSeries, xmlPath, userId }: RegisterIncomingNfeInput) {
     if (!isValidNfeAccessKey(nfeKey)) {
       throw new ValidationError('Chave de acesso da NF-e inválida (44 dígitos com dígito verificador correto).');
     }

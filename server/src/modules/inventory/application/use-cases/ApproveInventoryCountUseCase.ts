@@ -1,4 +1,6 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryCountRepository = require('../../domain/repositories/InventoryCountRepository');
+
 const { NotFoundError, BusinessRuleError, ConflictError } = require('../../../../errors');
 const { sequelize } = require('../../../../config/database');
 const InventoryService = require('../../../../services/inventoryService');
@@ -30,22 +32,22 @@ const WarehouseStockService = require('../../../../services/warehouseStockServic
  * backfilled) não pode ser aprovada — ver checagem explícita abaixo.
  */
 class ApproveInventoryCountUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/InventoryCountRepository')} inventoryCountRepository */
-  constructor(inventoryCountRepository) {
+  private readonly inventoryCountRepository: InventoryCountRepository;
+
+  /** @param inventoryCountRepository - Repositório de contagens de inventário. */
+  constructor(inventoryCountRepository: InventoryCountRepository) {
     super();
     this.inventoryCountRepository = inventoryCountRepository;
   }
 
   /**
-   * @param {Object} input
-   * @param {number} input.id - Id da contagem a aprovar.
-   * @param {number} input.approverId - Id do usuário que está aprovando.
+   * @param input - `{ id, approverId }`.
    * @returns {Promise<Object>} A contagem atualizada (status `adjusted`, com itens).
    * @throws {NotFoundError} Se a contagem não existir.
    * @throws {BusinessRuleError} Se a contagem não estiver em status `pending_approval` ou não tiver `warehouse_id` definido.
    * @throws {Error} Propagado por `InventoryService.adjust`/`WarehouseStockService` (produto não encontrado, saldo insuficiente no depósito para saída, etc.), com `statusCode`.
    */
-  async execute({ id, approverId }) {
+  async execute({ id, approverId }: { id: number | string; approverId: number }) {
     const t = await sequelize.transaction();
     try {
       // Lock pessimista: serializa aprovações concorrentes da MESMA
@@ -123,6 +125,6 @@ class ApproveInventoryCountUseCase extends UseCase {
   }
 }
 
-module.exports = ApproveInventoryCountUseCase;
+export = ApproveInventoryCountUseCase;
 
 

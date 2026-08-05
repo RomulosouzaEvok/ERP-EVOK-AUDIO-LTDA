@@ -6,8 +6,17 @@ const decimalQuantity = z.coerce.number().positive().refine((value) => {
   return decimals.length <= 6;
 }, { message: 'Quantidade deve ter no maximo 6 casas decimais.' });
 
+// DUAL-READ: aceita `product_id` (legado, INTEGER) OU `item_id` (novo, UUID,
+// PREFERIDO) — nunca os dois, nunca nenhum. Quando `item_id` é informado, o
+// `CreateInventoryMovementUseCase` resolve o `Product` legado correspondente
+// via `ItemRepository.findLegacyProductByItemId` (crosswalk por
+// `items.codigo === products.code`, mesmo padrão já usado por
+// `ConvertPlannedOrdersToProductionOrderUseCase` no módulo MRP) antes de
+// chamar `InventoryService.adjust` — não existe caminho de estoque paralelo
+// para itens sem produto legado correspondente (ver `CreateInventoryMovementUseCase`).
 export const createInventoryMovementSchema = z.object({
-  product_id: z.coerce.number().int().positive(),
+  product_id: z.coerce.number().int().positive().optional(),
+  item_id: z.string().trim().min(1).optional(),
   type: z.enum(['in', 'out']),
   quantity: decimalQuantity,
   description: z.string().trim().min(1).max(1000),
@@ -16,7 +25,10 @@ export const createInventoryMovementSchema = z.object({
   // Deposito onde a movimentacao manual ocorre (Bloco 4, UC-42). Opcional —
   // default 'INSUMOS' quando ausente.
   warehouse_code: z.string().trim().min(1).max(30).optional(),
-}).strict();
+}).strict().refine((data) => Boolean(data.product_id) !== Boolean(data.item_id), {
+  message: 'Informe exatamente um entre product_id (legado) ou item_id (novo, preferido) — nunca os dois, nunca nenhum.',
+  path: ['product_id'],
+});
 
 export const createWarehouseTransferSchema = z.object({
   product_id: z.coerce.number().int().positive(),

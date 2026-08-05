@@ -1,6 +1,8 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { ValidationError } = require('../../../../errors');
 const InventoryService = require('../../../../services/inventoryService');
+import type { IProductRepository } from '../../domain/repositories/ProductRepository';
+import type { Transaction } from 'sequelize';
 
 /**
  * Registra uma movimentação manual de estoque (entrada/saída) para um
@@ -18,10 +20,12 @@ const InventoryService = require('../../../../services/inventoryService');
  * `InventoryMovement` atomicamente.
  */
 class RegisterProductMovementUseCase extends UseCase {
+  private productRepository: IProductRepository;
+
   /**
-   * @param {import('../../domain/repositories/ProductRepository')} productRepository - Mantido no construtor por compatibilidade, não usado neste fluxo (a leitura/escrita passa a ser feita via `InventoryService`, que já trava a linha).
+   * @param {IProductRepository} productRepository - Mantido no construtor por compatibilidade, não usado neste fluxo (a leitura/escrita passa a ser feita via `InventoryService`, que já trava a linha).
    */
-  constructor(productRepository) {
+  constructor(productRepository: IProductRepository) {
     super();
     this.productRepository = productRepository;
   }
@@ -38,7 +42,14 @@ class RegisterProductMovementUseCase extends UseCase {
    * @throws {ValidationError} Se produto, tipo ou quantidade forem inválidos.
    * @throws {Error} Com `statusCode` 404/409 propagado de `InventoryService.adjust` se o produto não existir ou o estoque for insuficiente (revalidado sob lock).
    */
-  async execute({ product_id, type, quantity, description, userId, transaction }) {
+  async execute({ product_id, type, quantity, description, userId, transaction }: {
+    product_id: number | string;
+    type: 'in' | 'out';
+    quantity: number;
+    description?: string;
+    userId: number;
+    transaction: Transaction;
+  }) {
     if (!product_id || !type || !quantity) {
       throw new ValidationError('Produto, tipo e quantidade são obrigatórios');
     }

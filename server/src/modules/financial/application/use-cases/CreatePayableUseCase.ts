@@ -1,5 +1,19 @@
+import type { IFinancialRepository } from '../../domain/repositories/FinancialRepository';
+
 const UseCase = require('../../../../shared/application/UseCase');
 const AccountPayableEntity = require('../../domain/entities/AccountPayableEntity');
+
+/** Dados de entrada de `CreatePayableUseCase.execute`. */
+interface CreatePayableInput {
+  description: string;
+  amount: number | string;
+  due_date: string | Date;
+  category?: string;
+  supplier_id?: number;
+  purchase_id?: number;
+  invoice_type?: 'nfe' | 'nfse';
+  notes?: string;
+}
 
 /**
  * Cria uma conta a pagar, cobrindo o fluxo do endpoint
@@ -13,7 +27,9 @@ class CreatePayableUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/FinancialRepository')} financialRepository
    */
-  constructor(financialRepository) {
+  financialRepository: IFinancialRepository;
+
+  constructor(financialRepository: IFinancialRepository) {
     super();
     this.financialRepository = financialRepository;
   }
@@ -31,7 +47,7 @@ class CreatePayableUseCase extends UseCase {
    * @returns {Promise<Object>} Conta a pagar criada.
    * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos.
    */
-  async execute({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes }) {
+  async execute({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes }: CreatePayableInput) {
     const entity = new AccountPayableEntity({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes });
 
     return this.financialRepository.createPayable({

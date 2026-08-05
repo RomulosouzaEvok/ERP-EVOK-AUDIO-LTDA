@@ -37,27 +37,27 @@ class SequelizeProductRepository extends ProductRepository {
     return { rows, count };
   }
 
-  async findById(id, { withCategory = true } = {}) {
+  async findById(id: number | string, { withCategory = true }: { withCategory?: boolean } = {}) {
     return Product.findByPk(id, withCategory
       ? { include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }] }
       : {});
   }
 
-  async findByCode(code) {
+  async findByCode(code: string) {
     return Product.findOne({ where: { code } });
   }
 
-  async create(data) {
+  async create(data: Record<string, unknown>) {
     return Product.create(data);
   }
 
-  async update(id, data) {
+  async update(id: number | string, data: Record<string, unknown>) {
     const [updated] = await Product.update(data, { where: { id } });
     if (!updated) return null;
     return this.findById(id);
   }
 
-  async countActiveSales(productId) {
+  async countActiveSales(productId: number | string) {
     return SaleItem.count({
       where: { product_id: productId },
       include: [{
@@ -69,7 +69,7 @@ class SequelizeProductRepository extends ProductRepository {
     });
   }
 
-  async countActiveBomLinks(productId) {
+  async countActiveBomLinks(productId: number | string) {
     const [activeAsParent, activeAsComponent] = await Promise.all([
       BillOfMaterial.count({
         where: {

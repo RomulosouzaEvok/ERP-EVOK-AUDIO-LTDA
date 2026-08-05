@@ -21,7 +21,13 @@ class SequelizeBOMRepository extends BOMRepository {
    * @param {number} filters.offset
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
-  async list({ status, product_id, search, limit, offset }) {
+  async list({ status, product_id, search, limit, offset }: {
+    status?: string;
+    product_id?: number;
+    search?: string;
+    limit: number;
+    offset: number;
+  }) {
     const where: any = {};
     if (status) where.status = status;
     if (product_id) where.product_id = product_id;
@@ -54,7 +60,7 @@ class SequelizeBOMRepository extends BOMRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findById(id) {
+  async findById(id: number) {
     return BillOfMaterial.findByPk(id, {
       include: [
         { model: Product, as: 'product', attributes: ['id', 'name', 'code', 'product_type'] },
@@ -74,7 +80,7 @@ class SequelizeBOMRepository extends BOMRepository {
    * @param {number} productId
    * @returns {Promise<Object|null>}
    */
-  async findActiveByProduct(productId) {
+  async findActiveByProduct(productId: number) {
     return BillOfMaterial.findOne({
       where: { product_id: productId, status: 'active' },
       include: [
@@ -96,7 +102,7 @@ class SequelizeBOMRepository extends BOMRepository {
    * @param {number} productId
    * @returns {Promise<Object[]>}
    */
-  async listVersionsByProduct(productId) {
+  async listVersionsByProduct(productId: number) {
     return BillOfMaterial.findAll({
       where: { product_id: productId },
       include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }],
@@ -110,7 +116,7 @@ class SequelizeBOMRepository extends BOMRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findRawById(id) {
+  async findRawById(id: number) {
     return BillOfMaterial.findByPk(id);
   }
 
@@ -120,7 +126,7 @@ class SequelizeBOMRepository extends BOMRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findProductById(id) {
+  async findProductById(id: number) {
     return Product.findByPk(id);
   }
 
@@ -131,7 +137,7 @@ class SequelizeBOMRepository extends BOMRepository {
    * @param {Object} data
    * @returns {Promise<number>} Número de linhas afetadas.
    */
-  async update(id, data) {
+  async update(id: number, data: Record<string, unknown>) {
     const [updated] = await BillOfMaterial.update(data, { where: { id } });
     return updated;
   }
@@ -142,7 +148,7 @@ class SequelizeBOMRepository extends BOMRepository {
    * @param {number} bomId
    * @returns {Promise<Object[]>}
    */
-  async listItems(bomId) {
+  async listItems(bomId: number) {
     return BillOfMaterialItem.findAll({
       where: { bom_id: bomId },
       include: [{ model: Product, as: 'componentProduct', attributes: ['id', 'name', 'code', 'cost_price', 'quantity'] }],

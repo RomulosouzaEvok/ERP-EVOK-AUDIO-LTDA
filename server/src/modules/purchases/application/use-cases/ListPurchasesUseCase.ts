@@ -1,5 +1,17 @@
+import type PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { calculateHandoffSignal } = require('../../../../shared/domain/handoffSignal');
+
+interface ListPurchasesInput {
+  status?: string;
+  supplier_id?: number | string;
+  start_date?: string;
+  end_date?: string;
+  page: number;
+  limit: number;
+  offset: number;
+}
 
 /**
  * Lista pedidos de compra com filtros e paginação, cobrindo o fluxo do
@@ -16,7 +28,9 @@ class ListPurchasesUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/PurchaseRepository')} purchaseRepository
    */
-  constructor(purchaseRepository) {
+  private purchaseRepository: PurchaseRepository;
+
+  constructor(purchaseRepository: PurchaseRepository) {
     super();
     this.purchaseRepository = purchaseRepository;
   }
@@ -32,13 +46,13 @@ class ListPurchasesUseCase extends UseCase {
    * @param {number} input.offset
    * @returns {Promise<{ rows: Object[], count: number, page: number, limit: number, totalPages: number }>}
    */
-  async execute({ status, supplier_id, start_date, end_date, page, limit, offset }) {
+  async execute({ status, supplier_id, start_date, end_date, page, limit, offset }: ListPurchasesInput) {
     const { rows, count } = await this.purchaseRepository.listPurchases(
       { status, supplier_id, start_date, end_date },
       { limit, offset }
     );
 
-    const rowsWithSignal = rows.map((row) => {
+    const rowsWithSignal = rows.map((row: any) => {
       const json = row.toJSON ? row.toJSON() : row;
       return {
         ...json,

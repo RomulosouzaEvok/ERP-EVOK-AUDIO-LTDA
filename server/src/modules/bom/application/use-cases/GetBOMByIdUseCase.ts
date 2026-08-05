@@ -1,13 +1,16 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
+import type { IBOMRepository } from '../../domain/repositories/BOMRepository';
 
 /**
  * Busca uma BOM por id com produto e itens, cobrindo
  * `GET /api/engineering/bom/:id`.
  */
 class GetBOMByIdUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/BOMRepository')} bomRepository */
-  constructor(bomRepository) {
+  private bomRepository: IBOMRepository;
+
+  /** @param {IBOMRepository} bomRepository */
+  constructor(bomRepository: IBOMRepository) {
     super();
     this.bomRepository = bomRepository;
   }
@@ -18,7 +21,7 @@ class GetBOMByIdUseCase extends UseCase {
    * @returns {Promise<Object>} BOM encontrada.
    * @throws {NotFoundError} Se a BOM não existir.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number }) {
     const bom = await this.bomRepository.findById(id);
     if (!bom) {
       throw new NotFoundError('Estrutura de produto (BOM) não encontrada');

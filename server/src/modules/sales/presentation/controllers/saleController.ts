@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const { sequelize } = require('../../../../config/database');
 const { logAction } = require('../../../../services/auditLogService');
 const SequelizeSaleRepository = require('../../infrastructure/sequelize/SequelizeSaleRepository');
@@ -32,7 +34,7 @@ const saleRepository = new SequelizeSaleRepository();
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Validação de payload
     const validatedQuery = listSalesQuerySchema.safeParse(req.query);
@@ -58,7 +60,7 @@ exports.list = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Validação de payload
     const validatedParams = getSaleByIdParamSchema.safeParse(req.params);
@@ -81,7 +83,7 @@ exports.getById = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
     // Validação de payload. `handleZodError` sempre lança; o rollback desta
@@ -95,7 +97,7 @@ exports.create = async (req, res, next) => {
     const useCase = new CreateSaleUseCase(saleRepository);
     const { sale, totalNet } = await useCase.execute({
       customer_id, items, discount, payment_method, installments, notes, status,
-      userId: req.user.id, transaction: t
+      userId: (req as any).user.id, transaction: t
     });
 
     await t.commit();
@@ -128,7 +130,7 @@ exports.create = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.updateStatus = async (req, res, next) => {
+exports.updateStatus = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
     // Validação de payload. `handleZodError` sempre lança; o rollback desta
@@ -140,7 +142,7 @@ exports.updateStatus = async (req, res, next) => {
 
     const { status } = validatedBody.data;
     const useCase = new ChangeSaleStatusUseCase(saleRepository);
-    const { sale, previousStatus } = await useCase.execute({ id: req.params.id, status, userId: req.user.id, transaction: t });
+    const { sale, previousStatus } = await useCase.execute({ id: req.params.id, status, userId: (req as any).user.id, transaction: t });
 
     await t.commit();
 

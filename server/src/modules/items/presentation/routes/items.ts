@@ -14,6 +14,7 @@ const itemController = require('../controllers/itemController');
  */
 router.get('/', authenticate, authorizeModule('produtos'), itemController.list);
 router.post('/', authenticate, authorizeModule('produtos', 'operate'), itemController.create);
+router.patch('/:id', authenticate, authorizeModule('produtos', 'operate'), itemController.update);
 router.post('/:id/estrutura', authenticate, authorizeModule('produtos', 'operate'), itemController.createStructure);
 router.get('/:id/estrutura/explode', authenticate, authorizeModule('produtos'), itemController.explode);
 router.patch('/:id/inactivate', authenticate, authorizeModule('produtos', 'operate'), itemController.inactivate);

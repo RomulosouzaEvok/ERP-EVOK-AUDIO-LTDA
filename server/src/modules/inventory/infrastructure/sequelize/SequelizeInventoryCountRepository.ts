@@ -1,3 +1,5 @@
+import type { Transaction } from 'sequelize';
+
 const { Op } = require('sequelize');
 const InventoryCountRepository = require('../../domain/repositories/InventoryCountRepository');
 const {
@@ -15,17 +17,17 @@ const {
  */
 class SequelizeInventoryCountRepository extends InventoryCountRepository {
   /** @inheritdoc */
-  async create(data, transaction) {
+  async create(data: Record<string, unknown>, transaction?: Transaction) {
     return InventoryCount.create(data, { transaction });
   }
 
   /** @inheritdoc */
-  async countByCountNumberPrefix(yearPrefix, transaction) {
+  async countByCountNumberPrefix(yearPrefix: string, transaction?: Transaction) {
     return InventoryCount.count({ where: { count_number: { [Op.like]: `${yearPrefix}%` } }, transaction });
   }
 
   /** @inheritdoc */
-  async bulkCreateItems(items, transaction) {
+  async bulkCreateItems(items: Record<string, unknown>[], transaction?: Transaction) {
     return InventoryCountItem.bulkCreate(items, { transaction });
   }
 
@@ -48,7 +50,7 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
   }
 
   /** @inheritdoc */
-  async findById(id) {
+  async findById(id: number | string) {
     return InventoryCount.findByPk(id, {
       include: [
         { model: User, as: 'createdBy', attributes: ['id', 'name'] },
@@ -66,7 +68,7 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
   }
 
   /** @inheritdoc */
-  async findRawById(id, transaction) {
+  async findRawById(id: number | string, transaction?: Transaction) {
     return InventoryCount.findByPk(id, { transaction });
   }
 
@@ -76,12 +78,12 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
    *
    * @inheritdoc
    */
-  async findRawByIdForUpdate(id, transaction) {
+  async findRawByIdForUpdate(id: number | string, transaction: Transaction) {
     return InventoryCount.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
   }
 
   /** @inheritdoc */
-  async update(id, data, transaction) {
+  async update(id: number | string, data: Record<string, unknown>, transaction?: Transaction) {
     const [updated] = await InventoryCount.update(data, { where: { id }, transaction });
     return updated;
   }
@@ -95,7 +97,7 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
    *
    * @inheritdoc
    */
-  async updateIfStatus(id, expectedStatus, data, transaction) {
+  async updateIfStatus(id: number | string, expectedStatus: string, data: Record<string, unknown>, transaction?: Transaction) {
     const [updated] = await InventoryCount.update(data, {
       where: { id, status: expectedStatus },
       transaction
@@ -104,7 +106,7 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
   }
 
   /** @inheritdoc */
-  async findItemById(itemId, transaction) {
+  async findItemById(itemId: number | string, transaction?: Transaction) {
     return InventoryCountItem.findByPk(itemId, {
       include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code', 'quantity'] }],
       transaction
@@ -112,7 +114,7 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
   }
 
   /** @inheritdoc */
-  async listItems(inventoryCountId, transaction) {
+  async listItems(inventoryCountId: number | string, transaction?: Transaction) {
     return InventoryCountItem.findAll({
       where: { inventory_count_id: inventoryCountId },
       include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code', 'quantity'] }],
@@ -122,13 +124,13 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
   }
 
   /** @inheritdoc */
-  async updateItem(itemId, data, transaction) {
+  async updateItem(itemId: number | string, data: Record<string, unknown>, transaction?: Transaction) {
     const [updated] = await InventoryCountItem.update(data, { where: { id: itemId }, transaction });
     return updated;
   }
 
   /** @inheritdoc */
-  async findProductById(id, transaction) {
+  async findProductById(id: number | string, transaction?: Transaction) {
     return Product.findByPk(id, { transaction });
   }
 }

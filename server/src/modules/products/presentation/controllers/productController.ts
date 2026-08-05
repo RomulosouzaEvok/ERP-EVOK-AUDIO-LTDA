@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const { sequelize } = require('../../../../config/database');
 const { logAction } = require('../../../../services/auditLogService');
 const SequelizeProductRepository = require('../../infrastructure/sequelize/SequelizeProductRepository');
@@ -23,6 +25,39 @@ const { createProductSchema, updateProductSchema, productMovementSchema, handleZ
  */
 const productRepository = new SequelizeProductRepository();
 
+/** Requisição autenticada: `req.user` é populado pelo middleware `authenticate` (não tipado globalmente em `Express.Request` neste projeto). */
+type AuthenticatedRequest = Request & { user: { id: number } };
+
+/**
+ * Arquivo de upload processado pelo Multer (memória ou disco).
+ * Definido localmente pois `@types/multer` não faz merge com `@types/express`
+ * nesta versão do projeto (express 4.x runtime + @types/express 5.x).
+ */
+type MulterFile = {
+  originalname: string;
+  mimetype: string;
+  size: number;
+  buffer?: Buffer;
+};
+
+type RequestWithFile = Request & { file?: MulterFile };
+
+/**
+ * Extrai `name`/`statusCode`/`code`/`message` de um valor de `catch` tipado
+ * `unknown` (via `useUnknownInCatchVariables`), sem assumir `instanceof
+ * Error` (alguns erros do projeto são objetos simples com `statusCode`).
+ *
+ * @param error - Valor capturado no `catch` (tipo `unknown`).
+ * @returns Campos relevantes extraídos de forma segura.
+ */
+function describeError(error: unknown): { name?: string; statusCode?: number; code?: string; message: string } {
+  if (error && typeof error === 'object') {
+    const e = error as { name?: string; statusCode?: number; code?: string; message?: string };
+    return { name: e.name, statusCode: e.statusCode, code: e.code, message: e.message ?? 'Erro desconhecido' };
+  }
+  return { message: String(error) };
+}
+
 /**
  * `GET /api/products` — lista produtos com filtros e paginação.
  *
@@ -31,7 +66,7 @@ const productRepository = new SequelizeProductRepository();
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page = 1, limit = 10, search, category_id, low_stock, status } = req.query;
     const useCase = new ListProductsUseCase(productRepository);
@@ -51,7 +86,7 @@ exports.list = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetProductByIdUseCase(productRepository);
     const product = await useCase.execute({ id: req.params.id });
@@ -72,7 +107,7 @@ exports.getById = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getStockByWarehouse = async (req, res, next) => {
+exports.getStockByWarehouse = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetProductStockByWarehouseUseCase(productRepository);
     const result = await useCase.execute({ id: req.params.id });
@@ -88,7 +123,7 @@ exports.getStockByWarehouse = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createProductSchema.safeParse(req.body);
     if (!parsed.success) return handleZodError(parsed.error);
@@ -107,7 +142,7 @@ exports.create = async (req, res, next) => {
 
     res.status(201).json({ success: true, data: product });
   } catch (error) {
-    if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Código do produto já existe' });
+    if (describeError(error).name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Código do produto já existe' });
     next(error);
   }
 };
@@ -120,7 +155,7 @@ exports.create = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = updateProductSchema.safeParse(req.body);
     if (!parsed.success) return handleZodError(parsed.error);
@@ -142,7 +177,7 @@ exports.update = async (req, res, next) => {
 
     res.json({ success: true, data: product });
   } catch (error) {
-    if (error.name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Código já existe' });
+    if (describeError(error).name === 'SequelizeUniqueConstraintError') return res.status(409).json({ success: false, error: 'Código já existe' });
     next(error);
   }
 };
@@ -155,7 +190,7 @@ exports.update = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new DeactivateProductUseCase(productRepository);
     const { before } = await useCase.execute({ id: req.params.id });
@@ -182,7 +217,7 @@ exports.remove = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.movement = async (req, res, next) => {
+exports.movement = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   let t;
   try {
     const parsed = productMovementSchema.safeParse(req.body);
@@ -211,8 +246,9 @@ exports.movement = async (req, res, next) => {
     res.status(201).json({ success: true, data: { product, movementId: movement.id } });
   } catch (error) {
     if (t && !t.finished) await t.rollback();
-    if (error.statusCode && !error.code) {
-      return res.status(error.statusCode).json({ success: false, error: error.message });
+    const described = describeError(error);
+    if (described.statusCode && !described.code) {
+      return res.status(described.statusCode).json({ success: false, error: described.message });
     }
     next(error);
   }
@@ -226,7 +262,7 @@ exports.movement = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.uploadPhoto = async (req, res, next) => {
+exports.uploadPhoto = async (req: RequestWithFile, res: Response, next: NextFunction) => {
   try {
     const useCase = new UploadEntityPhotoUseCase();
     const { photo_path, entity } = await useCase.execute({
@@ -258,7 +294,7 @@ exports.uploadPhoto = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getQrCode = async (req, res, next) => {
+exports.getQrCode = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GenerateEntityQrCodeUseCase();
     const result = await useCase.execute({
@@ -267,7 +303,7 @@ exports.getQrCode = async (req, res, next) => {
       entityType: 'product',
       entityLabel: 'Produto',
       format: req.query.format === 'svg' ? 'svg' : 'png',
-      buildData: (product) => ({ code: product.code, name: product.name }),
+      buildData: (product: any) => ({ code: product.code, name: product.name }),
     });
 
     res.json({ success: true, data: result });
@@ -284,10 +320,10 @@ exports.getQrCode = async (req, res, next) => {
  * @param {Object} body - `req.body`.
  * @returns {Object} Objeto `{ fs, qms, qes, ... }` pronto para `ThieleSmallParams`.
  */
-function extractTsParams(body) {
+function extractTsParams(body: Record<string, any>): Record<string, unknown> {
   if (body.tsParams && typeof body.tsParams === 'object') return body.tsParams;
   const fields = ['fs', 'qms', 'qes', 'qts', 'vas', 'sd', 'xmax', 're', 'le', 'bl', 'mms', 'cms', 'spl'];
-  const out = {};
+  const out: Record<string, unknown> = {};
   for (const f of fields) {
     const key = `ts_params_${f}`;
     if (body[key] !== undefined) out[f] = body[key];

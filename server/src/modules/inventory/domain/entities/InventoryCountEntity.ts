@@ -7,6 +7,18 @@ const COUNT_TYPES = ['cycle', 'full', 'spot'];
 /** Status suportados (mesmo ENUM do model Sequelize `InventoryCount.status`). */
 const COUNT_STATUSES = ['draft', 'counting', 'pending_approval', 'approved', 'rejected', 'adjusted'];
 
+/** Propriedades aceitas pelo construtor de `InventoryCountEntity`. */
+interface InventoryCountEntityProps {
+  id?: number | string;
+  count_type?: 'cycle' | 'full' | 'spot';
+  warehouse_id: number;
+  location?: string | null;
+  notes?: string | null;
+  created_by: number;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
 /**
  * Entidade de domínio leve que representa o cabeçalho de uma contagem de
  * inventário cíclico. Valida apenas a FORMA dos dados de entrada
@@ -26,7 +38,7 @@ class InventoryCountEntity extends Entity {
    * @param {number} props.created_by - Id do usuário que criou a contagem.
    * @throws {ValidationError} Se `count_type` for inválido, `warehouse_id` ou `created_by` estiverem ausentes.
    */
-  constructor(props) {
+  constructor(props: InventoryCountEntityProps) {
     super({ id: props.id, createdAt: props.createdAt, updatedAt: props.updatedAt });
 
     this.count_type = props.count_type || 'cycle';

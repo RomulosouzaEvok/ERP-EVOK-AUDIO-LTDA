@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeMaintenanceRepository = require('../../infrastructure/sequelize/SequelizeMaintenanceRepository');
 const ListMaintenanceOrdersUseCase = require('../../application/use-cases/ListMaintenanceOrdersUseCase');
 const GetMaintenanceOrderByIdUseCase = require('../../application/use-cases/GetMaintenanceOrderByIdUseCase');
@@ -14,7 +16,7 @@ const CancelMaintenanceOrderUseCase = require('../../application/use-cases/Cance
 const maintenanceRepository = new SequelizeMaintenanceRepository();
 
 /** `GET /api/maintenance` — lista ordens de manutenção (filtros e paginação). */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListMaintenanceOrdersUseCase(maintenanceRepository);
     const { rows, total, page, limit, totalPages } = await useCase.execute(req.query);
@@ -25,7 +27,7 @@ exports.list = async (req, res, next) => {
 };
 
 /** `GET /api/maintenance/:id` — busca uma ordem de manutenção pelo id. */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetMaintenanceOrderByIdUseCase(maintenanceRepository);
     const order = await useCase.execute({ id: req.params.id });
@@ -36,10 +38,10 @@ exports.getById = async (req, res, next) => {
 };
 
 /** `POST /api/maintenance` — cria uma nova ordem de manutenção. */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CreateMaintenanceOrderUseCase(maintenanceRepository);
-    const order = await useCase.execute({ ...req.body, reportedBy: req.user.id });
+    const order = await useCase.execute({ ...req.body, reportedBy: (req as any).user.id });
     res.status(201).json({ success: true, data: order });
   } catch (error) {
     next(error);
@@ -47,7 +49,7 @@ exports.create = async (req, res, next) => {
 };
 
 /** `PUT /api/maintenance/:id` — atualiza uma ordem de manutenção existente. */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new UpdateMaintenanceOrderUseCase(maintenanceRepository);
     const order = await useCase.execute({ id: req.params.id, body: req.body });
@@ -58,7 +60,7 @@ exports.update = async (req, res, next) => {
 };
 
 /** `DELETE /api/maintenance/:id` — cancela uma ordem de manutenção. */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CancelMaintenanceOrderUseCase(maintenanceRepository);
     const result = await useCase.execute({ id: req.params.id });

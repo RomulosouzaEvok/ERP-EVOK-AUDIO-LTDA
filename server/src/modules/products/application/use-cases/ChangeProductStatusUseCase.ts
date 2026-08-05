@@ -1,6 +1,7 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError } = require('../../../../errors');
 const { PRODUCT_STATUSES } = require('../../domain/entities/ProductEntity');
+import type { IProductRepository } from '../../domain/repositories/ProductRepository';
 
 /**
  * Altera o status (`active`/`inactive`) de um produto diretamente, sem a
@@ -9,10 +10,12 @@ const { PRODUCT_STATUSES } = require('../../domain/entities/ProductEntity');
  * que já tenham validado a transição por outro meio.
  */
 class ChangeProductStatusUseCase extends UseCase {
+  private productRepository: IProductRepository;
+
   /**
-   * @param {import('../../domain/repositories/ProductRepository')} productRepository
+   * @param {IProductRepository} productRepository
    */
-  constructor(productRepository) {
+  constructor(productRepository: IProductRepository) {
     super();
     this.productRepository = productRepository;
   }
@@ -25,7 +28,7 @@ class ChangeProductStatusUseCase extends UseCase {
    * @throws {NotFoundError} Se o produto não existir.
    * @throws {ValidationError} Se `status` não for um valor suportado.
    */
-  async execute({ id, status }) {
+  async execute({ id, status }: { id: number | string; status: string }) {
     if (!PRODUCT_STATUSES.includes(status)) {
       throw new ValidationError(`Status inválido. Valores aceitos: ${PRODUCT_STATUSES.join(', ')}.`);
     }

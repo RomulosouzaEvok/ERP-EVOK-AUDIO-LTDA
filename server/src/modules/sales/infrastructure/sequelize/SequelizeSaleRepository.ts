@@ -1,3 +1,5 @@
+import type { Transaction } from 'sequelize';
+
 const { Op } = require('sequelize');
 const { Sale, SaleItem, Product, Client, AccountReceivable } = require('../../../../models/index');
 const SaleRepository = require('../../domain/repositories/SaleRepository');
@@ -47,7 +49,7 @@ class SequelizeSaleRepository extends SaleRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findSaleById(id) {
+  async findSaleById(id: number) {
     return Sale.findByPk(id, {
       include: [
         { model: Client, as: 'customer', attributes: ['id', 'name', 'cpf_cnpj', 'phone', 'email'] },
@@ -64,7 +66,7 @@ class SequelizeSaleRepository extends SaleRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findSaleWithCustomerSummary(id) {
+  async findSaleWithCustomerSummary(id: number) {
     return Sale.findByPk(id, {
       include: [
         { model: Client, as: 'customer', attributes: ['id', 'name'] },
@@ -78,7 +80,7 @@ class SequelizeSaleRepository extends SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findSaleWithItems(id, transaction) {
+  async findSaleWithItems(id: number, transaction?: Transaction) {
     return Sale.findByPk(id, {
       include: [{ model: SaleItem, as: 'items' }],
       transaction
@@ -90,7 +92,7 @@ class SequelizeSaleRepository extends SaleRepository {
    * @param {import('sequelize').Transaction} transaction
    * @returns {Promise<Object|null>}
    */
-  async findSaleWithItemsForUpdate(id, transaction) {
+  async findSaleWithItemsForUpdate(id: number, transaction: Transaction) {
     // Nao usar `include` (LEFT OUTER JOIN) junto de `lock` aqui: o Postgres
     // rejeita "FOR UPDATE" no lado nullable de um outer join
     // ("FOR UPDATE cannot be applied to the nullable side of an outer
@@ -119,7 +121,7 @@ class SequelizeSaleRepository extends SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findProductById(id, transaction) {
+  async findProductById(id: number, transaction?: Transaction) {
     return Product.findByPk(id, { transaction });
   }
 
@@ -128,7 +130,7 @@ class SequelizeSaleRepository extends SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async createSale(data, transaction) {
+  async createSale(data: Record<string, unknown>, transaction?: Transaction) {
     return Sale.create(data, { transaction });
   }
 
@@ -137,7 +139,7 @@ class SequelizeSaleRepository extends SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async createSaleItem(data, transaction) {
+  async createSaleItem(data: Record<string, unknown>, transaction?: Transaction) {
     return SaleItem.create(data, { transaction });
   }
 
@@ -146,7 +148,7 @@ class SequelizeSaleRepository extends SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async createAccountReceivable(data, transaction) {
+  async createAccountReceivable(data: Record<string, unknown>, transaction?: Transaction) {
     return AccountReceivable.create(data, { transaction });
   }
 
@@ -155,7 +157,7 @@ class SequelizeSaleRepository extends SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<void>}
    */
-  async cancelPendingReceivables(saleId, transaction) {
+  async cancelPendingReceivables(saleId: number, transaction?: Transaction) {
     await AccountReceivable.update({ status: 'canceled' }, {
       where: { sale_id: saleId, status: { [Op.notIn]: ['paid', 'canceled'] } },
       transaction

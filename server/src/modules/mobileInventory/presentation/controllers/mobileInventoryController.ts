@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeMobileInventoryRepository = require('../../infrastructure/sequelize/SequelizeMobileInventoryRepository');
 const ScanItemUseCase = require('../../application/use-cases/ScanItemUseCase');
 const BatchScanUseCase = require('../../application/use-cases/BatchScanUseCase');
@@ -16,11 +18,12 @@ const { sequelize } = require('../../../../config/database');
 const mobileInventoryRepository = new SequelizeMobileInventoryRepository();
 
 /** `POST /api/mobile-inventory/scan` — registra uma movimentação de estoque via scanner mobile. */
-exports.scanItem = async (req, res, next) => {
+exports.scanItem = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
+    const user = (req as any).user;
     const useCase = new ScanItemUseCase(mobileInventoryRepository);
-    const result = await useCase.execute({ ...req.body, userId: req.user.id, transaction: t });
+    const result = await useCase.execute({ ...req.body, userId: user.id, transaction: t });
     await t.commit();
     res.json({ success: true, data: result });
   } catch (error) {
@@ -30,11 +33,12 @@ exports.scanItem = async (req, res, next) => {
 };
 
 /** `POST /api/mobile-inventory/batch` — registra em lote movimentações de estoque via scanner mobile. */
-exports.batchScan = async (req, res, next) => {
+exports.batchScan = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
+    const user = (req as any).user;
     const useCase = new BatchScanUseCase(mobileInventoryRepository);
-    const result = await useCase.execute({ items: req.body.items, userId: req.user.id, transaction: t });
+    const result = await useCase.execute({ items: req.body.items, userId: user.id, transaction: t });
     await t.commit();
     res.json({ success: true, data: result });
   } catch (error) {
@@ -44,7 +48,7 @@ exports.batchScan = async (req, res, next) => {
 };
 
 /** `GET /api/mobile-inventory/movements` — lista movimentações de estoque (paginação). */
-exports.listMovements = async (req, res, next) => {
+exports.listMovements = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListMobileInventoryMovementsUseCase(mobileInventoryRepository);
     const { rows, total, page, limit, totalPages } = await useCase.execute(req.query);

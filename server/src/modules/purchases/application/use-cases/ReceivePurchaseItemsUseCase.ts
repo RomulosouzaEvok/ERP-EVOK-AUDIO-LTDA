@@ -1,3 +1,6 @@
+import type { Transaction } from 'sequelize';
+import type PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const InventoryService = require('../../../../services/inventoryService');
 const WarehouseStockService = require('../../../../services/warehouseStockService');
@@ -10,15 +13,32 @@ const UNIQUE_VIOLATION = 'SequelizeUniqueConstraintError';
 /** Origem de requisicao que direciona o recebimento para o Depósito do Laboratório por padrão (UC-39, Bloco 2, BUSINESS_RULES.md §9/§12 item 7). */
 const ENGINEERING_SAMPLE_ORIGIN = 'engenharia_amostra';
 
-function buildGeneratedLotNumber({ orderNumber, purchaseItemId, sequence }) {
+interface GeneratedLotNumberInput {
+  orderNumber: string;
+  purchaseItemId: number | string;
+  sequence: number;
+}
+
+function buildGeneratedLotNumber({ orderNumber, purchaseItemId, sequence }: GeneratedLotNumberInput) {
   return `${orderNumber}-ITEM${purchaseItemId}-R${String(sequence).padStart(3, '0')}`;
 }
 
+interface ReceivePurchaseItemsInput {
+  id: number | string;
+  items: Array<Record<string, any>>;
+  invoiceNumber: string;
+  warehouseCode?: 'INSUMOS' | 'LABORATORIO';
+  userId: number;
+  transaction: Transaction;
+}
+
 class ReceivePurchaseItemsUseCase extends UseCase {
+  private purchaseRepository: PurchaseRepository;
+
   /**
    * @param {import('../../domain/repositories/PurchaseRepository')} purchaseRepository
    */
-  constructor(purchaseRepository) {
+  constructor(purchaseRepository: PurchaseRepository) {
     super();
     this.purchaseRepository = purchaseRepository;
   }
@@ -36,7 +56,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
    * @throws {ValidationError} Se invoiceNumber estiver ausente/vazio.
    *   `details: { purchase_id, order_number, field: 'invoice_number' }`.
    */
-  async execute({ id, items, invoiceNumber, warehouseCode, userId, transaction }) {
+  async execute({ id, items, invoiceNumber, warehouseCode, userId, transaction }: ReceivePurchaseItemsInput) {
     const purchase = await this.purchaseRepository.findPurchaseWithItemsForUpdate(id, transaction);
     if (!purchase) {
       throw new NotFoundError('Pedido nao encontrado');
@@ -66,7 +86,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
         received_at: new Date(),
       }, { transaction });
     } catch (error) {
-      if (error?.name === UNIQUE_VIOLATION) {
+      if (error instanceof Error && error.name === UNIQUE_VIOLATION) {
         throw new ConflictError(`NF ${invoiceNumber} ja foi registrada para o pedido ${purchase.order_number}.`);
       }
       throw error;
@@ -104,7 +124,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
         throw new ValidationError('Quantidade deve ser maior que zero');
       }
 
-      const item = purchase.items.find((candidate) => candidate.id === parseInt(received.item_id, 10));
+      const item = purchase.items.find((candidate: any) => candidate.id === parseInt(received.item_id, 10));
       if (!item) {
         throw new ValidationError(`Item ${received.item_id} nao encontrado`);
       }
@@ -203,7 +223,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
     }
 
     const updatedItems = await this.purchaseRepository.findPurchaseItemsForUpdate(purchase.id, transaction);
-    const allReceived = updatedItems.every((item) => item.status === 'received');
+    const allReceived = updatedItems.every((item: any) => item.status === 'received');
     purchase.status = allReceived ? 'received' : 'partial';
     await purchase.save({ transaction });
 

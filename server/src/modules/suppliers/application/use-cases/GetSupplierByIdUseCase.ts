@@ -1,3 +1,5 @@
+import type SuppliersRepository = require('../../domain/repositories/SuppliersRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
 
@@ -6,10 +8,12 @@ const { NotFoundError } = require('../../../../errors');
  * `GET /api/suppliers/:id`.
  */
 class GetSupplierByIdUseCase extends UseCase {
+  private suppliersRepository: SuppliersRepository;
+
   /**
    * @param {import('../../domain/repositories/SuppliersRepository')} suppliersRepository
    */
-  constructor(suppliersRepository) {
+  constructor(suppliersRepository: SuppliersRepository) {
     super();
     this.suppliersRepository = suppliersRepository;
   }
@@ -20,8 +24,8 @@ class GetSupplierByIdUseCase extends UseCase {
    * @returns {Promise<Object>} Fornecedor encontrado.
    * @throws {NotFoundError} Com mensagem `'Fornecedor não encontrado'` se o id não existir.
    */
-  async execute({ id }) {
-    const supplier = await this.suppliersRepository.findById(id);
+  async execute({ id }: { id: number | string }) {
+    const supplier = await this.suppliersRepository.findById(Number(id));
     if (!supplier) {
       throw new NotFoundError('Fornecedor não encontrado');
     }

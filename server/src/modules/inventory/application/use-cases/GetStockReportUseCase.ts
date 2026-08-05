@@ -1,14 +1,15 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 
 /**
  * Monta o relatório consolidado de estoque (resumo + lista de produtos
  * ativos), cobrindo o fluxo do endpoint `GET /api/inventory/stock-report`.
  */
 class GetStockReportUseCase extends UseCase {
-  /**
-   * @param {import('../../domain/repositories/InventoryRepository')} inventoryRepository
-   */
-  constructor(inventoryRepository) {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
     super();
     this.inventoryRepository = inventoryRepository;
   }
@@ -20,14 +21,14 @@ class GetStockReportUseCase extends UseCase {
     const products = await this.inventoryRepository.listActiveProductsWithCategory();
     const summary = {
       total_products: products.length,
-      total_items: products.reduce((sum, p) => sum + p.quantity, 0),
-      total_value: products.reduce((sum, p) => sum + (parseFloat(p.cost_price || 0) * p.quantity), 0),
-      low_stock_count: products.filter(p => p.quantity <= p.min_quantity).length
+      total_items: products.reduce((sum: number, p: any) => sum + p.quantity, 0),
+      total_value: products.reduce((sum: number, p: any) => sum + (parseFloat(p.cost_price || 0) * p.quantity), 0),
+      low_stock_count: products.filter((p: any) => p.quantity <= p.min_quantity).length
     };
     return { summary, products };
   }
 }
 
-module.exports = GetStockReportUseCase;
+export = GetStockReportUseCase;
 
 

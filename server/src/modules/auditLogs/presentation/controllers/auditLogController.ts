@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeAuditLogsRepository = require('../../infrastructure/sequelize/SequelizeAuditLogsRepository');
 const ListAuditLogsUseCase = require('../../application/use-cases/ListAuditLogsUseCase');
 const GetAuditLogByIdUseCase = require('../../application/use-cases/GetAuditLogByIdUseCase');
@@ -11,7 +13,7 @@ const GetAuditLogByIdUseCase = require('../../application/use-cases/GetAuditLogB
 const auditLogsRepository = new SequelizeAuditLogsRepository();
 
 /** `GET /api/audit-logs` — lista logs de auditoria com filtros e paginação. */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListAuditLogsUseCase(auditLogsRepository);
     const { rows, total, page, limit, totalPages } = await useCase.execute(req.query);
@@ -22,7 +24,7 @@ exports.list = async (req, res, next) => {
 };
 
 /** `GET /api/audit-logs/:id` — busca um log de auditoria pelo id. */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetAuditLogByIdUseCase(auditLogsRepository);
     const log = await useCase.execute({ id: req.params.id });

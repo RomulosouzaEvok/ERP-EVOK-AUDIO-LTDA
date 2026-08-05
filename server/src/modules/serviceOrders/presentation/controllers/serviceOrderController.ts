@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeServiceOrdersRepository = require('../../infrastructure/sequelize/SequelizeServiceOrdersRepository');
 const ListServiceOrdersUseCase = require('../../application/use-cases/ListServiceOrdersUseCase');
 const GetServiceOrderByIdUseCase = require('../../application/use-cases/GetServiceOrderByIdUseCase');
@@ -14,7 +16,7 @@ const CancelServiceOrderUseCase = require('../../application/use-cases/CancelSer
 const serviceOrdersRepository = new SequelizeServiceOrdersRepository();
 
 /** `GET /api/service-orders` — lista ordens de serviço (filtros e paginação). */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListServiceOrdersUseCase(serviceOrdersRepository);
     const { rows, total, page, limit, totalPages } = await useCase.execute(req.query);
@@ -25,7 +27,7 @@ exports.list = async (req, res, next) => {
 };
 
 /** `GET /api/service-orders/:id` — busca uma ordem de serviço pelo id. */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetServiceOrderByIdUseCase(serviceOrdersRepository);
     const order = await useCase.execute({ id: req.params.id });
@@ -36,7 +38,7 @@ exports.getById = async (req, res, next) => {
 };
 
 /** `POST /api/service-orders` — cria uma nova ordem de serviço. */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CreateServiceOrderUseCase(serviceOrdersRepository);
     const order = await useCase.execute(req.body);
@@ -47,7 +49,7 @@ exports.create = async (req, res, next) => {
 };
 
 /** `PUT /api/service-orders/:id` — atualiza uma ordem de serviço existente. */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new UpdateServiceOrderUseCase(serviceOrdersRepository);
     const order = await useCase.execute({ id: req.params.id, body: req.body });
@@ -58,7 +60,7 @@ exports.update = async (req, res, next) => {
 };
 
 /** `DELETE /api/service-orders/:id` — cancela uma ordem de serviço. */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CancelServiceOrderUseCase(serviceOrdersRepository);
     const result = await useCase.execute({ id: req.params.id });

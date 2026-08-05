@@ -1,12 +1,15 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryCountRepository = require('../../domain/repositories/InventoryCountRepository');
 
 /**
  * Lista contagens de inventário cíclico com filtros e paginação, cobrindo
  * `GET /api/inventory-counts`.
  */
 class ListInventoryCountsUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/InventoryCountRepository')} inventoryCountRepository */
-  constructor(inventoryCountRepository) {
+  private readonly inventoryCountRepository: InventoryCountRepository;
+
+  /** @param inventoryCountRepository - Repositório de contagens de inventário. */
+  constructor(inventoryCountRepository: InventoryCountRepository) {
     super();
     this.inventoryCountRepository = inventoryCountRepository;
   }
@@ -30,7 +33,7 @@ class ListInventoryCountsUseCase extends UseCase {
   }
 }
 
-module.exports = ListInventoryCountsUseCase;
+export = ListInventoryCountsUseCase;
 
 
 

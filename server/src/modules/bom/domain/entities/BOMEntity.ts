@@ -4,8 +4,35 @@ const { ValidationError } = require('../../../../errors');
 const MAX_BOM_LEVEL = 10;
 const MAX_SCRAP_PERCENTAGE = 100;
 
+/** Item componente de entrada para construção de uma {@link BOMEntity}. */
+interface BOMEntityItemInput {
+  component_product_id: number | string;
+  quantity: number | string;
+  scrap_percentage?: number | string;
+  bom_level?: number | string;
+  [key: string]: unknown;
+}
+
+/** Props aceitas pelo construtor de {@link BOMEntity}. */
+interface BOMEntityProps {
+  id?: number | string | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+  product_id: number | string;
+  items: BOMEntityItemInput[];
+  revision?: string;
+  revision_notes?: string;
+  notes?: string;
+}
+
 class BOMEntity extends Entity {
-  constructor(props) {
+  product_id: number | string;
+  items: BOMEntityItemInput[] | undefined;
+  revision: string | undefined;
+  revision_notes: string | undefined;
+  notes: string | undefined;
+
+  constructor(props: BOMEntityProps) {
     super({ id: props.id, createdAt: props.createdAt, updatedAt: props.updatedAt });
 
     this.product_id = props.product_id;
@@ -26,14 +53,14 @@ class BOMEntity extends Entity {
     }
 
     const seenComponents = new Set();
-    this.items.forEach((item, i) => {
+    this.items.forEach((item: BOMEntityItemInput, i: number) => {
       if (!item.component_product_id) {
         throw new ValidationError(`Item ${i + 1}: component_product_id e obrigatorio`);
       }
       if (Number(item.component_product_id) === Number(this.product_id)) {
         throw new ValidationError(`Item ${i + 1}: produto nao pode ser componente dele mesmo`);
       }
-      if (!item.quantity || parseFloat(item.quantity) <= 0) {
+      if (!item.quantity || parseFloat(String(item.quantity)) <= 0) {
         throw new ValidationError(`Item ${i + 1}: quantidade deve ser maior que zero`);
       }
 
@@ -55,7 +82,7 @@ class BOMEntity extends Entity {
     });
   }
 
-  toServiceInput(createdBy) {
+  toServiceInput(createdBy: number | string | undefined) {
     return {
       product_id: this.product_id,
       created_by: createdBy,

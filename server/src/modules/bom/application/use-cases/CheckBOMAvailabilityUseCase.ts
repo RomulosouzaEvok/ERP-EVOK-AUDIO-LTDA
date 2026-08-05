@@ -1,6 +1,7 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError } = require('../../../../errors');
 const BomService = require('../../../../services/bomService');
+import type { IBOMRepository } from '../../domain/repositories/BOMRepository';
 
 /**
  * Verifica disponibilidade de estoque para produzir uma quantidade,
@@ -9,8 +10,10 @@ const BomService = require('../../../../services/bomService');
  * Wrapper fino sobre `BomService.checkAvailability`.
  */
 class CheckBOMAvailabilityUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/BOMRepository')} bomRepository */
-  constructor(bomRepository) {
+  private bomRepository: IBOMRepository;
+
+  /** @param {IBOMRepository} bomRepository */
+  constructor(bomRepository: IBOMRepository) {
     super();
     this.bomRepository = bomRepository;
   }
@@ -23,7 +26,7 @@ class CheckBOMAvailabilityUseCase extends UseCase {
    * @throws {ValidationError} Se `qty` estiver ausente ou <= 0.
    * @throws {NotFoundError} Se a BOM não existir.
    */
-  async execute({ id, qty }) {
+  async execute({ id, qty }: { id: number; qty?: number | string }) {
     const parsedQty = parseFloat(String(qty));
     if (!qty || !Number.isFinite(parsedQty) || parsedQty <= 0) {
       throw new ValidationError('Parâmetro "qty" (quantidade) é obrigatório');

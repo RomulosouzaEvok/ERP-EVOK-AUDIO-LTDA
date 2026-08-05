@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const { logAction } = require('../../../../services/auditLogService');
 const SequelizeFinancialRepository = require('../../infrastructure/sequelize/SequelizeFinancialRepository');
 const ListReceivablesUseCase = require('../../application/use-cases/ListReceivablesUseCase');
@@ -28,7 +30,7 @@ const financialRepository = new SequelizeFinancialRepository();
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listReceivable = async (req, res, next) => {
+exports.listReceivable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, start_date, end_date, customer_id, page = 1, limit = 10 } = req.query;
     const useCase = new ListReceivablesUseCase(financialRepository);
@@ -48,7 +50,7 @@ exports.listReceivable = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.receivePayment = async (req, res, next) => {
+exports.receivePayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = payAccountSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -78,7 +80,7 @@ exports.receivePayment = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listPayable = async (req, res, next) => {
+exports.listPayable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, start_date, end_date, page = 1, limit = 10 } = req.query;
     const useCase = new ListPayablesUseCase(financialRepository);
@@ -98,7 +100,7 @@ exports.listPayable = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.createPayable = async (req, res, next) => {
+exports.createPayable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createPayableSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -127,7 +129,7 @@ exports.createPayable = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.payPayable = async (req, res, next) => {
+exports.payPayable = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = payAccountSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -157,7 +159,7 @@ exports.payPayable = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.cashFlow = async (req, res, next) => {
+exports.cashFlow = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { start_date, end_date } = req.query;
     const useCase = new GetCashFlowUseCase(financialRepository);
@@ -176,7 +178,7 @@ exports.cashFlow = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.cashFlowProjection = async (req, res, next) => {
+exports.cashFlowProjection = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = cashFlowProjectionQuerySchema.safeParse(req.query);
     if (!parsed.success) handleZodError(parsed.error);

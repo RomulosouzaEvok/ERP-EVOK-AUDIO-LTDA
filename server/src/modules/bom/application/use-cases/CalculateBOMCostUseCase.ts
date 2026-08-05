@@ -1,6 +1,7 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError } = require('../../../../errors');
 const BomService = require('../../../../services/bomService');
+import type { IBOMRepository } from '../../domain/repositories/BOMRepository';
 
 /**
  * Calcula o custo do produto baseado na BOM ativa, cobrindo
@@ -9,8 +10,10 @@ const BomService = require('../../../../services/bomService');
  * Wrapper fino sobre `BomService.calculateCost`.
  */
 class CalculateBOMCostUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/BOMRepository')} bomRepository */
-  constructor(bomRepository) {
+  private bomRepository: IBOMRepository;
+
+  /** @param {IBOMRepository} bomRepository */
+  constructor(bomRepository: IBOMRepository) {
     super();
     this.bomRepository = bomRepository;
   }
@@ -23,7 +26,7 @@ class CalculateBOMCostUseCase extends UseCase {
    * @throws {ValidationError} Se `qty` for <= 0.
    * @throws {NotFoundError} Se a BOM não existir.
    */
-  async execute({ id, qty }) {
+  async execute({ id, qty }: { id: number; qty?: number | string }) {
     const quantity = qty === undefined ? 1 : parseFloat(String(qty));
     if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new ValidationError('Quantidade deve ser maior que zero');

@@ -7,6 +7,19 @@ const MOVEMENT_TYPES = ['in', 'out', 'adjustment'];
 /** Origens suportadas (mesmo ENUM do model Sequelize `InventoryMovement.reference_type`). */
 const REFERENCE_TYPES = ['sale', 'purchase', 'production', 'adjustment', 'transfer'];
 
+/** Propriedades aceitas pelo construtor de `InventoryMovementEntity`. */
+interface InventoryMovementEntityProps {
+  id?: number | string;
+  product_id: number;
+  type: 'in' | 'out' | 'adjustment';
+  quantity: number;
+  description?: string | null;
+  reference_id?: number | null;
+  reference_type?: string | null;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
 /**
  * Entidade de domínio leve que representa uma movimentação de estoque
  * (entrada, saída ou ajuste) de um produto.
@@ -30,7 +43,7 @@ class InventoryMovementEntity extends Entity {
    * @param {Date|string} [props.updatedAt]
    * @throws {ValidationError} Se algum campo obrigatório estiver ausente ou fora do formato esperado.
    */
-  constructor(props) {
+  constructor(props: InventoryMovementEntityProps) {
     super({ id: props.id, createdAt: props.createdAt, updatedAt: props.updatedAt });
 
     this.product_id = props.product_id;

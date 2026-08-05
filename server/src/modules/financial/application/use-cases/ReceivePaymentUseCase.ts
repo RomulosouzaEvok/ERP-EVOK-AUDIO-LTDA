@@ -1,16 +1,29 @@
+import type { Transaction } from 'sequelize';
+import type { IFinancialRepository } from '../../domain/repositories/FinancialRepository';
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { sequelize } = require('../../../../config/database');
 const { NotFoundError, ValidationError } = require('../../../../errors');
+
+/** Dados de entrada de `ReceivePaymentUseCase.execute`. */
+interface ReceivePaymentInput {
+  id: number;
+  payment_date?: string | Date;
+  payment_method?: string;
+  amount?: number | string;
+}
 
 /**
  * Registra o recebimento de uma conta a receber em transacao com lock
  * pessimista para impedir baixa dupla em concorrencia.
  */
 class ReceivePaymentUseCase extends UseCase {
+  financialRepository: IFinancialRepository;
+
   /**
    * @param {import('../../domain/repositories/FinancialRepository')} financialRepository
    */
-  constructor(financialRepository) {
+  constructor(financialRepository: IFinancialRepository) {
     super();
     this.financialRepository = financialRepository;
   }
@@ -23,8 +36,8 @@ class ReceivePaymentUseCase extends UseCase {
    * @param {number|string} [input.amount]
    * @returns {Promise<{ account: Object, previousStatus: string }>}
    */
-  async execute({ id, payment_date, payment_method, amount }) {
-    return sequelize.transaction(async (transaction) => {
+  async execute({ id, payment_date, payment_method, amount }: ReceivePaymentInput) {
+    return sequelize.transaction(async (transaction: Transaction) => {
       const account = await this.financialRepository.findReceivableByIdForUpdate(id, transaction);
       if (!account) throw new NotFoundError('Conta a receber nao encontrada');
       if (account.status === 'paid') throw new ValidationError('Conta ja foi paga');
@@ -38,7 +51,7 @@ class ReceivePaymentUseCase extends UseCase {
       const remainingCents = totalCents - alreadyPaidCents;
 
       const paymentCents = amount !== undefined
-        ? Math.round(parseFloat(amount) * 100)
+        ? Math.round(parseFloat(String(amount)) * 100)
         : remainingCents;
 
       if (paymentCents <= 0) throw new ValidationError('Valor deve ser maior que zero');

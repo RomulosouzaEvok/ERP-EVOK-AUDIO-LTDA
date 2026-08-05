@@ -4,6 +4,8 @@
  * @module modules/traceability/presentation/controllers/traceabilityController
  */
 
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeTraceabilityRepository = require('../../infrastructure/sequelize/SequelizeTraceabilityRepository');
 const GetItemTraceabilityUseCase = require('../../application/use-cases/GetItemTraceabilityUseCase');
 const GetLotTraceabilityUseCase = require('../../application/use-cases/GetLotTraceabilityUseCase');
@@ -17,7 +19,7 @@ const traceabilityRepository = new SequelizeTraceabilityRepository();
  * GET /api/traceability/items/:id
  * Retorna o historico de movimentacoes de um item.
  */
-exports.getItemTraceability = async (req, res, next) => {
+exports.getItemTraceability = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = traceabilityIdParamSchema.safeParse(req.params);
     if (!parsed.success) {
@@ -41,7 +43,7 @@ exports.getItemTraceability = async (req, res, next) => {
  * GET /api/traceability/lots/:id
  * Retorna o historico completo de um lote.
  */
-exports.getLotTraceability = async (req, res, next) => {
+exports.getLotTraceability = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = traceabilityIdParamSchema.safeParse(req.params);
     if (!parsed.success) {
@@ -65,7 +67,7 @@ exports.getLotTraceability = async (req, res, next) => {
  * GET /api/traceability/production-orders/:id
  * Retorna os detalhes de uma OP com todos os insumos consumidos.
  */
-exports.getProductionOrderTraceability = async (req, res, next) => {
+exports.getProductionOrderTraceability = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = traceabilityIdParamSchema.safeParse(req.params);
     if (!parsed.success) {

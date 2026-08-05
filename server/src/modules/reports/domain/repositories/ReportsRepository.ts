@@ -3,69 +3,82 @@
  *
  * @module modules/reports/domain/repositories/ReportsRepository
  */
+import type {
+  SalesReportFilters,
+  CashFlowTotals,
+  ProductionWipRow,
+  ProductionCompletedAggregates,
+  ScrapByStepRow,
+  PurchasingBySupplierRow,
+  RncCountBySupplierRow,
+  PurchasingTotals,
+  CostVarianceRow,
+  PurchasePriceVarianceRow,
+} from '../reportTypes';
+
 class ReportsRepository {
   /**
-   * @param {Object} filters - `{ start_date, end_date, customer_id }`.
-   * @returns {Promise<Object[]>} Vendas não canceladas no período, com cliente.
+   * @param filters - `{ start_date, end_date, customer_id }`.
+   * @returns Vendas não canceladas no período, com cliente (instâncias do model `Sale`).
    * @throws {Error} Se não implementado.
    */
-  async findSales(filters) { // eslint-disable-line no-unused-vars
+  async findSales(_filters: SalesReportFilters): Promise<any[]> {
     throw new Error('ReportsRepository.findSales não implementado.');
   }
 
   /**
-   * @returns {Promise<Object[]>} Produtos ativos, com categoria.
+   * @returns Produtos ativos, com categoria (instâncias do model `Product`).
    * @throws {Error} Se não implementado.
    */
-  async findActiveProducts() {
+  async findActiveProducts(): Promise<any[]> {
     throw new Error('ReportsRepository.findActiveProducts não implementado.');
   }
 
   /**
-   * @returns {Promise<Object[]>} Clientes ativos.
+   * @returns Clientes ativos (instâncias do model `Client`).
    * @throws {Error} Se não implementado.
    */
-  async findActiveCustomers() {
+  async findActiveCustomers(): Promise<any[]> {
     throw new Error('ReportsRepository.findActiveCustomers não implementado.');
   }
 
   /**
-   * @param {Date} start
-   * @param {Date} end
-   * @returns {Promise<{ sales: number, purchases: number }>} Totais não cancelados no período.
+   * @param _start - Início do período.
+   * @param _end - Fim do período.
+   * @returns Totais não cancelados no período.
    * @throws {Error} Se não implementado.
    */
-  async sumCashFlow(start, end) { // eslint-disable-line no-unused-vars
+  async sumCashFlow(_start: Date, _end: Date): Promise<CashFlowTotals> {
     throw new Error('ReportsRepository.sumCashFlow não implementado.');
   }
 
-  /** @returns {Promise<Object[]>} WIP por status de OP. */
-  async findProductionWip(start, end) { // eslint-disable-line no-unused-vars
+  /** @returns WIP por status de OP. */
+  async findProductionWip(_start: Date, _end: Date): Promise<ProductionWipRow[]> {
     throw new Error('ReportsRepository.findProductionWip não implementado.');
   }
 
-  /** @returns {Promise<Object>} Agregados de OPs concluídas no período. */
-  async findProductionCompletedAggregates(start, end) { // eslint-disable-line no-unused-vars
+  /** @returns Agregados de OPs concluídas no período. */
+  async findProductionCompletedAggregates(_start: Date, _end: Date): Promise<ProductionCompletedAggregates> {
     throw new Error('ReportsRepository.findProductionCompletedAggregates não implementado.');
   }
 
-  /** @returns {Promise<Object[]>} Refugo por etapa de roteiro no período. */
-  async findScrapByStep(start, end) { // eslint-disable-line no-unused-vars
+  /** @returns Refugo por etapa de roteiro no período. */
+  async findScrapByStep(_start: Date, _end: Date): Promise<ScrapByStepRow[]> {
     throw new Error('ReportsRepository.findScrapByStep não implementado.');
   }
 
-  /** @returns {Promise<Object[]>} Compras agregadas por fornecedor no período. */
-  async findPurchasingBySupplier(start, end) { // eslint-disable-line no-unused-vars
+  /** @returns Compras agregadas por fornecedor no período. */
+  async findPurchasingBySupplier(_start: Date, _end: Date): Promise<PurchasingBySupplierRow[]> {
     throw new Error('ReportsRepository.findPurchasingBySupplier não implementado.');
   }
 
-  /** @returns {Promise<Object[]>} Contagem de RNCs por fornecedor no período. */
-  async findRncCountBySupplier(start, end) { // eslint-disable-line no-unused-vars
+  /** @returns Contagem de RNCs por fornecedor no período. */
+  async findRncCountBySupplier(_start: Date, _end: Date): Promise<RncCountBySupplierRow[]> {
     throw new Error('ReportsRepository.findRncCountBySupplier não implementado.');
   }
 
-  /** @returns {Promise<Object>} Totais de compras do período. */
-  async findPurchasingTotals(start, end) { // eslint-disable-line no-unused-vars
+  /** @returns Totais de compras do período. */
+  async findPurchasingTotals(_start: Date, _end: Date): Promise<PurchasingTotals> {
     throw new Error('ReportsRepository.findPurchasingTotals não implementado.');
   }
 
@@ -73,9 +86,9 @@ class ReportsRepository {
    * Custo real por produto no período (lançamentos de `product_cost_ledgers`),
    * com custo padrão via `items.custo_padrao` (fallback `products.cost_price`).
    *
-   * @returns {Promise<Object[]>} `[{ product_id, code, name, standard_cost, avg_real_cost, entries_count, total_quantity }]`.
+   * @returns Linhas de variação de custo por produto.
    */
-  async findCostVarianceByProduct(start, end) { // eslint-disable-line no-unused-vars
+  async findCostVarianceByProduct(_start: Date, _end: Date): Promise<CostVarianceRow[]> {
     throw new Error('ReportsRepository.findCostVarianceByProduct não implementado.');
   }
 
@@ -83,11 +96,11 @@ class ReportsRepository {
    * Variação entre preço de catálogo (`item_suppliers.unit_price`) e preço
    * médio pago em pedidos de compra não cancelados do período.
    *
-   * @returns {Promise<Object[]>} `[{ product_id, code, name, supplier_id, company_name, catalog_price, avg_paid_price, total_quantity }]`.
+   * @returns Linhas de variação de preço por produto x fornecedor.
    */
-  async findPurchasePriceVarianceByProductSupplier(start, end) { // eslint-disable-line no-unused-vars
+  async findPurchasePriceVarianceByProductSupplier(_start: Date, _end: Date): Promise<PurchasePriceVarianceRow[]> {
     throw new Error('ReportsRepository.findPurchasePriceVarianceByProductSupplier não implementado.');
   }
 }
 
-module.exports = ReportsRepository;
+export = ReportsRepository;

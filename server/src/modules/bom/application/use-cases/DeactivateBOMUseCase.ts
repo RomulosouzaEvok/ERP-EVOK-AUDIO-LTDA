@@ -1,5 +1,6 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, BusinessRuleError } = require('../../../../errors');
+import type { IBOMRepository } from '../../domain/repositories/BOMRepository';
 
 /**
  * Inativa (soft delete) uma BOM, cobrindo `DELETE /api/engineering/bom/:id`.
@@ -7,8 +8,10 @@ const { NotFoundError, BusinessRuleError } = require('../../../../errors');
  * regra do controller anterior).
  */
 class DeactivateBOMUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/BOMRepository')} bomRepository */
-  constructor(bomRepository) {
+  private bomRepository: IBOMRepository;
+
+  /** @param {IBOMRepository} bomRepository */
+  constructor(bomRepository: IBOMRepository) {
     super();
     this.bomRepository = bomRepository;
   }
@@ -20,7 +23,7 @@ class DeactivateBOMUseCase extends UseCase {
    * @throws {NotFoundError} Se a BOM não existir.
    * @throws {BusinessRuleError} Se a BOM estiver em status que não permite inativação.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number }) {
     const bom = await this.bomRepository.findRawById(id);
     if (!bom) {
       throw new NotFoundError('BOM não encontrada');

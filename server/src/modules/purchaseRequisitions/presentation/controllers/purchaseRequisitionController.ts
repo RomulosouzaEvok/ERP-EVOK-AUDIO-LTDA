@@ -1,14 +1,21 @@
+import type { Request, Response, NextFunction } from 'express';
+import type { Transaction } from 'sequelize';
+
 const { sequelize } = require('../../../../config/database');
 const { logAction } = require('../../../../services/auditLogService');
-const SequelizePurchaseRequisitionRepository = require('../../infrastructure/sequelize/SequelizePurchaseRequisitionRepository');
-const SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
+import SequelizePurchaseRequisitionRepository = require('../../infrastructure/sequelize/SequelizePurchaseRequisitionRepository');
+import SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
+// `SequelizePurchaseRepository` (modulo `purchases`, fora do escopo desta
+// tarefa) ainda usa `module.exports =` em vez de `export =`, entao o TS o
+// resolve como namespace (nao construtivel) em `import X = require(...)`.
+// Mantido como `require` "solto" ate o modulo `purchases` ser normalizado.
 const SequelizePurchaseRepository = require('../../../purchases/infrastructure/sequelize/SequelizePurchaseRepository');
-const SequelizeItemSupplierRepository = require('../../../items/infrastructure/sequelize/SequelizeItemSupplierRepository');
-const CreatePurchaseRequisitionUseCase = require('../../application/use-cases/CreatePurchaseRequisitionUseCase');
-const ListPurchaseRequisitionsUseCase = require('../../application/use-cases/ListPurchaseRequisitionsUseCase');
-const GetPurchaseRequisitionByIdUseCase = require('../../application/use-cases/GetPurchaseRequisitionByIdUseCase');
-const ChangePurchaseRequisitionStatusUseCase = require('../../application/use-cases/ChangePurchaseRequisitionStatusUseCase');
-const ConvertRequisitionToPurchaseOrdersUseCase = require('../../application/use-cases/ConvertRequisitionToPurchaseOrdersUseCase');
+import SequelizeItemSupplierRepository = require('../../../items/infrastructure/sequelize/SequelizeItemSupplierRepository');
+import CreatePurchaseRequisitionUseCase = require('../../application/use-cases/CreatePurchaseRequisitionUseCase');
+import ListPurchaseRequisitionsUseCase = require('../../application/use-cases/ListPurchaseRequisitionsUseCase');
+import GetPurchaseRequisitionByIdUseCase = require('../../application/use-cases/GetPurchaseRequisitionByIdUseCase');
+import ChangePurchaseRequisitionStatusUseCase = require('../../application/use-cases/ChangePurchaseRequisitionStatusUseCase');
+import ConvertRequisitionToPurchaseOrdersUseCase = require('../../application/use-cases/ConvertRequisitionToPurchaseOrdersUseCase');
 const {
   createPurchaseRequisitionSchema,
   listPurchaseRequisitionQuerySchema,
@@ -23,13 +30,57 @@ const itemRepository = new SequelizeItemRepository();
 const purchaseRepository = new SequelizePurchaseRepository();
 const itemSupplierRepository = new SequelizeItemSupplierRepository();
 
-async function rollbackIfPending(transaction) {
+/**
+ * Requisicao autenticada: `req.user` e populado pelo middleware
+ * `authenticate` (nao tipado globalmente em `Express.Request` neste
+ * projeto). `permissions` e opcional/parcial pois usuarios `admin` nao tem
+ * `AccessProfile` associado.
+ */
+type AuthenticatedRequest = Request & {
+  user: {
+    id: number;
+    role: 'admin' | 'operator' | 'financial';
+    permissions?: Partial<Record<string, string>>;
+  };
+};
+
+/**
+ * Extrai a lista de `issues` de um erro de validacao Zod (`ZodError`), sem
+ * depender de `instanceof`. Retorna `null` quando o erro nao tem o formato
+ * esperado.
+ *
+ * @param error - Erro capturado no `catch` (tipado `unknown`).
+ * @returns Lista de issues do Zod, ou `null`.
+ */
+function extractZodIssues(error: unknown): unknown[] | null {
+  if (error && typeof error === 'object' && 'issues' in error) {
+    return (error as { issues: unknown[] }).issues;
+  }
+  return null;
+}
+
+/**
+ * `Transaction` do Sequelize expõe `finished` (`'commit'|'rollback'|undefined`)
+ * em runtime, mas a definição de tipos pública do pacote não a declara —
+ * usado no projeto todo (ver outros controllers) para evitar `rollback()`
+ * duplo depois de um `commit()` bem-sucedido.
+ */
+type TransactionWithFinishedFlag = Transaction & { finished?: 'commit' | 'rollback' };
+
+/**
+ * Desfaz (`ROLLBACK`) uma transacao Sequelize ainda pendente, se houver.
+ * Usado nos `catch` de rotas que abrem transacao antes de qualquer `await`
+ * que possa falhar (`create`, `convert`).
+ *
+ * @param transaction - Transacao Sequelize aberta, ou `undefined`.
+ */
+async function rollbackIfPending(transaction: TransactionWithFinishedFlag | undefined): Promise<void> {
   if (transaction && !transaction.finished) {
     await transaction.rollback();
   }
 }
 
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const query = listPurchaseRequisitionQuerySchema.parse(req.query);
     const useCase = new ListPurchaseRequisitionsUseCase(requisitionRepository);
@@ -40,14 +91,15 @@ exports.list = async (req, res, next) => {
 
     res.json({ success: true, data: rows, pagination: { total: count, page, limit, totalPages } });
   } catch (error) {
-    if (error?.issues) {
-      return next(new ValidationError('Payload invalido.', error.issues));
+    const issues = extractZodIssues(error);
+    if (issues) {
+      return next(new ValidationError('Payload invalido.', issues));
     }
     next(error);
   }
 };
 
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetPurchaseRequisitionByIdUseCase(requisitionRepository);
     const requisition = await useCase.execute({ id: Number(req.params.id) });
@@ -57,8 +109,8 @@ exports.getById = async (req, res, next) => {
   }
 };
 
-exports.create = async (req, res, next) => {
-  const t = await sequelize.transaction();
+exports.create = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const t: Transaction = await sequelize.transaction();
   try {
     const parsed = createPurchaseRequisitionSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -95,7 +147,7 @@ exports.create = async (req, res, next) => {
  * `authorizeModule('requisicoes', 'approve')` (admin global ou gestor da
  * area); o controller nao repete checagem por role.
  */
-exports.changeStatus = async (req, res, next) => {
+exports.changeStatus = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const parsed = changePurchaseRequisitionStatusSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -136,8 +188,8 @@ exports.changeStatus = async (req, res, next) => {
  * de compra APROVADA em um ou mais pedidos de compra (um por fornecedor
  * resolvido), transacional com lock pessimista na requisicao.
  */
-exports.convert = async (req, res, next) => {
-  const t = await sequelize.transaction();
+exports.convert = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const t: Transaction = await sequelize.transaction();
   try {
     const parsed = convertPurchaseRequisitionSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -161,7 +213,7 @@ exports.convert = async (req, res, next) => {
       action: 'convert',
       entityType: 'PurchaseRequisition',
       entityId: result.requisition_id,
-      newValues: { status: result.requisition_status, purchase_orders: result.purchase_orders.map((p) => p.order_number) },
+      newValues: { status: result.requisition_status, purchase_orders: result.purchase_orders.map((p: { order_number: string }) => p.order_number) },
       description: `Requisicao de compra ${result.requisition_id} convertida em ${result.purchase_orders.length} pedido(s) de compra`,
     });
 

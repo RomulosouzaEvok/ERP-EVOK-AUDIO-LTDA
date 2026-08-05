@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeDashboardRepository = require('../../infrastructure/sequelize/SequelizeDashboardRepository');
 const GetDashboardSummaryUseCase = require('../../application/use-cases/GetDashboardSummaryUseCase');
 const GetDashboardHandoffsUseCase = require('../../application/use-cases/GetDashboardHandoffsUseCase');
@@ -10,7 +12,7 @@ const GetDashboardHandoffsUseCase = require('../../application/use-cases/GetDash
 const dashboardRepository = new SequelizeDashboardRepository();
 
 /** `GET /api/dashboard` — indicadores agregados do dashboard principal. */
-exports.index = async (req, res, next) => {
+exports.index = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetDashboardSummaryUseCase(dashboardRepository);
     const summary = await useCase.execute();
@@ -26,7 +28,7 @@ exports.index = async (req, res, next) => {
  * aprovação, vendas prontas para embarque (Expedição) e Qualidade
  * (lotes em quarentena + RNCs abertas/em análise).
  */
-exports.handoffs = async (req, res, next) => {
+exports.handoffs = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetDashboardHandoffsUseCase(dashboardRepository);
     const summary = await useCase.execute();

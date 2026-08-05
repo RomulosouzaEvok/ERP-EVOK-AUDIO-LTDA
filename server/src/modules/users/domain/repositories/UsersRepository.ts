@@ -18,7 +18,7 @@ class UsersRepository {
    * @param {boolean} [options.active] - Filtro exato de ativo/inativo.
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
-  async list(options) { // eslint-disable-line no-unused-vars
+  async list(options: Record<string, unknown>) { // eslint-disable-line no-unused-vars
     throw new Error('UsersRepository.list não implementado.');
   }
 
@@ -29,7 +29,7 @@ class UsersRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findById(id) { // eslint-disable-line no-unused-vars
+  async findById(id: number | string) { // eslint-disable-line no-unused-vars
     throw new Error('UsersRepository.findById não implementado.');
   }
 
@@ -40,7 +40,7 @@ class UsersRepository {
    * @param {Object} data - `{ name, email, password, role }`.
    * @returns {Promise<Object>}
    */
-  async create(data) { // eslint-disable-line no-unused-vars
+  async create(data: Record<string, unknown>) { // eslint-disable-line no-unused-vars
     throw new Error('UsersRepository.create não implementado.');
   }
 
@@ -52,7 +52,7 @@ class UsersRepository {
    * @param {Object} data - Campos a atualizar.
    * @returns {Promise<number>} Número de linhas afetadas (0 se o id não existir).
    */
-  async update(id, data) { // eslint-disable-line no-unused-vars
+  async update(id: number | string, data: Record<string, unknown>) { // eslint-disable-line no-unused-vars
     throw new Error('UsersRepository.update não implementado.');
   }
 
@@ -65,7 +65,7 @@ class UsersRepository {
    * @param {number} id
    * @returns {Promise<void>}
    */
-  async incrementPasswordVersion(id) { // eslint-disable-line no-unused-vars
+  async incrementPasswordVersion(id: number | string) { // eslint-disable-line no-unused-vars
     throw new Error('UsersRepository.incrementPasswordVersion não implementado.');
   }
 }

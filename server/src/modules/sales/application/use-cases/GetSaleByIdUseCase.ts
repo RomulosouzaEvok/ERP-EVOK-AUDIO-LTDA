@@ -9,7 +9,7 @@ class GetSaleByIdUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/SaleRepository')} saleRepository
    */
-  constructor(saleRepository) {
+  constructor(saleRepository: any) {
     super();
     this.saleRepository = saleRepository;
   }
@@ -20,7 +20,7 @@ class GetSaleByIdUseCase extends UseCase {
    * @returns {Promise<Object>} Venda encontrada.
    * @throws {NotFoundError} Se a venda não existir.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number }) {
     const sale = await this.saleRepository.findSaleById(id);
     if (!sale) {
       throw new NotFoundError('Venda não encontrada');

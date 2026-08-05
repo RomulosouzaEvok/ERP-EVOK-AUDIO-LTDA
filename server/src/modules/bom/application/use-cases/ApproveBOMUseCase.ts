@@ -1,5 +1,6 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
+import type { IBOMRepository } from '../../domain/repositories/BOMRepository';
 
 /**
  * Aprova uma BOM (transição de status para `active`), cobrindo o caso
@@ -14,8 +15,10 @@ const { NotFoundError } = require('../../../../errors');
  * auditoria, replicando o comportamento hoje inline no controller anterior.
  */
 class ApproveBOMUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/BOMRepository')} bomRepository */
-  constructor(bomRepository) {
+  private bomRepository: IBOMRepository;
+
+  /** @param {IBOMRepository} bomRepository */
+  constructor(bomRepository: IBOMRepository) {
     super();
     this.bomRepository = bomRepository;
   }
@@ -26,7 +29,7 @@ class ApproveBOMUseCase extends UseCase {
    * @returns {Promise<{ before: Object, bom: Object }>}
    * @throws {NotFoundError} Se a BOM não existir.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number }) {
     const before = await this.bomRepository.findRawById(id);
     if (!before) {
       throw new NotFoundError('BOM não encontrada');

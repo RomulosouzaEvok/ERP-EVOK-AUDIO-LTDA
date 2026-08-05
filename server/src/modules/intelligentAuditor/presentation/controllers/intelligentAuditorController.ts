@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeIntelligentAuditorRepository = require('../../infrastructure/sequelize/SequelizeIntelligentAuditorRepository');
 const AuditStockUseCase = require('../../application/use-cases/AuditStockUseCase');
 const AuditSalesUseCase = require('../../application/use-cases/AuditSalesUseCase');
@@ -13,7 +15,7 @@ const AuditFinancialUseCase = require('../../application/use-cases/AuditFinancia
 const intelligentAuditorRepository = new SequelizeIntelligentAuditorRepository();
 
 /** `GET /api/auditor/stock` — audita consistência de estoque. */
-exports.auditStock = async (req, res, next) => {
+exports.auditStock = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new AuditStockUseCase(intelligentAuditorRepository);
     const data = await useCase.execute();
@@ -24,7 +26,7 @@ exports.auditStock = async (req, res, next) => {
 };
 
 /** `GET /api/auditor/sales` — audita consistência de vendas. */
-exports.auditSales = async (req, res, next) => {
+exports.auditSales = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new AuditSalesUseCase(intelligentAuditorRepository);
     const data = await useCase.execute();
@@ -35,7 +37,7 @@ exports.auditSales = async (req, res, next) => {
 };
 
 /** `GET /api/auditor/purchases` — audita compras paradas. */
-exports.auditPurchases = async (req, res, next) => {
+exports.auditPurchases = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new AuditPurchasesUseCase(intelligentAuditorRepository);
     const data = await useCase.execute();
@@ -46,7 +48,7 @@ exports.auditPurchases = async (req, res, next) => {
 };
 
 /** `GET /api/auditor/financial` — audita consistência financeira. */
-exports.auditFinancial = async (req, res, next) => {
+exports.auditFinancial = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new AuditFinancialUseCase(intelligentAuditorRepository);
     const data = await useCase.execute();

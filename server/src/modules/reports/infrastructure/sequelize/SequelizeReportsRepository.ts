@@ -1,7 +1,20 @@
+import type {
+  SalesReportFilters,
+  CashFlowTotals,
+  ProductionWipRow,
+  ProductionCompletedAggregates,
+  ScrapByStepRow,
+  PurchasingBySupplierRow,
+  RncCountBySupplierRow,
+  PurchasingTotals,
+  CostVarianceRow,
+  PurchasePriceVarianceRow,
+} from '../../domain/reportTypes';
+
 const { Op, QueryTypes } = require('sequelize');
 const { Sale, Product, Client, Purchase } = require('../../../../models/index');
 const Category = require('../../../../models/Category');
-const ReportsRepository = require('../../domain/repositories/ReportsRepository');
+import ReportsRepository = require('../../domain/repositories/ReportsRepository');
 const { sequelize } = require('../../../../config/database');
 
 /**
@@ -14,7 +27,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Object} filters - `{ start_date, end_date, customer_id }`.
    * @returns {Promise<Object[]>}
    */
-  async findSales({ start_date, end_date, customer_id }) {
+  async findSales({ start_date, end_date, customer_id }: SalesReportFilters) {
     const where: any = { status: { [Op.notIn]: ['canceled'] } };
     if (start_date) where.createdAt = { [Op.gte]: new Date(start_date) };
     if (end_date) {
@@ -49,7 +62,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Date} end
    * @returns {Promise<{ sales: number, purchases: number }>}
    */
-  async sumCashFlow(start, end) {
+  async sumCashFlow(start: Date, end: Date): Promise<CashFlowTotals> {
     const sales = await Sale.sum('total_amount', {
       where: { createdAt: { [Op.between]: [start, end] }, status: { [Op.notIn]: ['canceled'] } }
     }) || 0;
@@ -67,7 +80,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Date} end
    * @returns {Promise<Object[]>} `[{ status, orders_count, total_quantity }]`
    */
-  async findProductionWip(start, end) {
+  async findProductionWip(start: Date, end: Date): Promise<ProductionWipRow[]> {
     return sequelize.query(
       `SELECT status,
               COUNT(*)::int                    AS orders_count,
@@ -90,7 +103,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Date} end
    * @returns {Promise<Object>}
    */
-  async findProductionCompletedAggregates(start, end) {
+  async findProductionCompletedAggregates(start: Date, end: Date): Promise<ProductionCompletedAggregates> {
     const [row] = await sequelize.query(
       `SELECT COUNT(*)::int                                 AS orders_completed,
               COALESCE(SUM(quantity), 0)::float             AS total_planned_quantity,
@@ -114,7 +127,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Date} end
    * @returns {Promise<Object[]>}
    */
-  async findScrapByStep(start, end) {
+  async findScrapByStep(start: Date, end: Date): Promise<ScrapByStepRow[]> {
     return sequelize.query(
       `SELECT COALESCE(prs.work_center, 'SEM ROTEIRO')  AS work_center,
               COALESCE(prs.name, 'Etapa manual')        AS step_name,
@@ -137,7 +150,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Date} end
    * @returns {Promise<Object[]>}
    */
-  async findPurchasingBySupplier(start, end) {
+  async findPurchasingBySupplier(start: Date, end: Date): Promise<PurchasingBySupplierRow[]> {
     return sequelize.query(
       `SELECT s.id                                    AS supplier_id,
               s.company_name,
@@ -165,7 +178,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Date} end
    * @returns {Promise<Object[]>} `[{ supplier_id, rnc_count }]`
    */
-  async findRncCountBySupplier(start, end) {
+  async findRncCountBySupplier(start: Date, end: Date): Promise<RncCountBySupplierRow[]> {
     return sequelize.query(
       `SELECT supplier_id, COUNT(*)::int AS rnc_count
          FROM non_conformities
@@ -183,7 +196,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Date} end
    * @returns {Promise<Object>}
    */
-  async findPurchasingTotals(start, end) {
+  async findPurchasingTotals(start: Date, end: Date): Promise<PurchasingTotals> {
     const [row] = await sequelize.query(
       `SELECT COUNT(*)::int                            AS orders_count,
               COALESCE(SUM(total_amount), 0)::float    AS total_amount,
@@ -222,7 +235,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Date} end
    * @returns {Promise<Object[]>}
    */
-  async findCostVarianceByProduct(start, end) {
+  async findCostVarianceByProduct(start: Date, end: Date): Promise<CostVarianceRow[]> {
     return sequelize.query(
       `WITH normalized AS (
          SELECT product_id,
@@ -275,7 +288,7 @@ class SequelizeReportsRepository extends ReportsRepository {
    * @param {Date} end
    * @returns {Promise<Object[]>}
    */
-  async findPurchasePriceVarianceByProductSupplier(start, end) {
+  async findPurchasePriceVarianceByProductSupplier(start: Date, end: Date): Promise<PurchasePriceVarianceRow[]> {
     return sequelize.query(
       `SELECT p.id                                    AS product_id,
               p.code,
@@ -302,4 +315,4 @@ class SequelizeReportsRepository extends ReportsRepository {
   }
 }
 
-module.exports = SequelizeReportsRepository;
+export = SequelizeReportsRepository;

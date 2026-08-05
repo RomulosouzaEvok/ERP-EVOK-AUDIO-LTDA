@@ -14,7 +14,7 @@ class ListSalesUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/SaleRepository')} saleRepository
    */
-  constructor(saleRepository) {
+  constructor(saleRepository: any) {
     super();
     this.saleRepository = saleRepository;
   }
@@ -30,7 +30,15 @@ class ListSalesUseCase extends UseCase {
    * @param {number} input.offset
    * @returns {Promise<{ rows: Object[], count: number, page: number, limit: number, totalPages: number }>}
    */
-  async execute({ status, customer_id, start_date, end_date, page, limit, offset }) {
+  async execute({ status, customer_id, start_date, end_date, page, limit, offset }: {
+    status?: string;
+    customer_id?: number;
+    start_date?: string;
+    end_date?: string;
+    page: number;
+    limit: number;
+    offset: number;
+  }) {
     const { rows, count } = await this.saleRepository.listSales(
       { status, customer_id, start_date, end_date },
       { limit, offset }
@@ -40,7 +48,7 @@ class ListSalesUseCase extends UseCase {
     // preservado 1:1 do controller anterior
     // (`server/src/controllers/saleController.ts#list`); `handoff_signal`
     // e o enriquecimento aditivo do Bloco 3.
-    const salesWithCount = rows.map(s => {
+    const salesWithCount = rows.map((s: any) => {
       const json = s.toJSON();
       return {
         ...json,

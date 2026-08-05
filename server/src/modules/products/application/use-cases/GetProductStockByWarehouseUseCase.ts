@@ -2,6 +2,7 @@ const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Warehouse, ProductWarehouseStock } = require('../../../../models/index');
+import type { IProductRepository } from '../../domain/repositories/ProductRepository';
 
 /**
  * Use case: saldo de UM produto específico, detalhado por depósito
@@ -25,10 +26,12 @@ const { Warehouse, ProductWarehouseStock } = require('../../../../models/index')
  * @module modules/products/application/use-cases/GetProductStockByWarehouseUseCase
  */
 class GetProductStockByWarehouseUseCase extends UseCase {
+  private productRepository: IProductRepository;
+
   /**
-   * @param {import('../../domain/repositories/ProductRepository')} productRepository
+   * @param {IProductRepository} productRepository
    */
-  constructor(productRepository) {
+  constructor(productRepository: IProductRepository) {
     super();
     this.productRepository = productRepository;
   }
@@ -40,7 +43,7 @@ class GetProductStockByWarehouseUseCase extends UseCase {
    *   Produto (resumido) e saldo em cada depósito ativo (0 quando não houver linha).
    * @throws {NotFoundError} Se o produto não existir.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number | string }) {
     const product = await this.productRepository.findById(id, { withCategory: false });
     if (!product) throw new NotFoundError('Produto não encontrado');
 
@@ -49,9 +52,9 @@ class GetProductStockByWarehouseUseCase extends UseCase {
       ProductWarehouseStock.findAll({ where: { product_id: product.id } }),
     ]);
 
-    const stockByWarehouseId = new Map(stocks.map((s) => [s.warehouse_id, Number(s.quantity)]));
+    const stockByWarehouseId = new Map(stocks.map((s: any) => [s.warehouse_id, Number(s.quantity)]));
 
-    const result = warehouses.map((w) => ({
+    const result = warehouses.map((w: any) => ({
       warehouse_id: w.id,
       warehouse_code: w.code,
       warehouse_name: w.name,

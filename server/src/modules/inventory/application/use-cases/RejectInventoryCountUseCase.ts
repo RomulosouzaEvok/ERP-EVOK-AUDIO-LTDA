@@ -1,5 +1,17 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryCountRepository = require('../../domain/repositories/InventoryCountRepository');
+
 const { NotFoundError, BusinessRuleError, ConflictError } = require('../../../../errors');
+
+/** Dados de entrada de `RejectInventoryCountUseCase.execute`. */
+interface RejectInventoryCountInput {
+  /** Id da contagem a rejeitar. */
+  id: number | string;
+  /** Id do usuário que está rejeitando. */
+  approverId: number;
+  /** Motivo da rejeição (armazenado em `notes`). */
+  reason?: string;
+}
 
 /**
  * Rejeita uma contagem de inventário (transição `pending_approval` →
@@ -7,22 +19,21 @@ const { NotFoundError, BusinessRuleError, ConflictError } = require('../../../..
  * ajuste de estoque é aplicado.
  */
 class RejectInventoryCountUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/InventoryCountRepository')} inventoryCountRepository */
-  constructor(inventoryCountRepository) {
+  private readonly inventoryCountRepository: InventoryCountRepository;
+
+  /** @param inventoryCountRepository - Repositório de contagens de inventário. */
+  constructor(inventoryCountRepository: InventoryCountRepository) {
     super();
     this.inventoryCountRepository = inventoryCountRepository;
   }
 
   /**
-   * @param {Object} input
-   * @param {number} input.id - Id da contagem a rejeitar.
-   * @param {number} input.approverId - Id do usuário que está rejeitando.
-   * @param {string} [input.reason] - Motivo da rejeição (armazenado em `notes`).
+   * @param input - `{ id, approverId, reason }`.
    * @returns {Promise<Object>} A contagem atualizada (com itens).
    * @throws {NotFoundError} Se a contagem não existir.
    * @throws {BusinessRuleError} Se a contagem não estiver em status `pending_approval`.
    */
-  async execute({ id, approverId, reason }) {
+  async execute({ id, approverId, reason }: RejectInventoryCountInput) {
     const count = await this.inventoryCountRepository.findRawById(id);
     if (!count) {
       throw new NotFoundError('Contagem de inventário não encontrada');
@@ -51,6 +62,6 @@ class RejectInventoryCountUseCase extends UseCase {
   }
 }
 
-module.exports = RejectInventoryCountUseCase;
+export = RejectInventoryCountUseCase;
 
 

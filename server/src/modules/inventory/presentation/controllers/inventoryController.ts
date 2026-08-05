@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const { sequelize } = require('../../../../config/database');
 const { logAction } = require('../../../../services/auditLogService');
 const SequelizeInventoryRepository = require('../../infrastructure/sequelize/SequelizeInventoryRepository');
@@ -58,7 +60,7 @@ const inventoryRepository = new SequelizeInventoryRepository();
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page = 1, limit = 10, product_id, item_id, type, start_date, end_date, warehouse_id } = req.query;
     const useCase = new ListInventoryMovementsUseCase(inventoryRepository);
@@ -85,7 +87,7 @@ exports.list = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetInventoryMovementByIdUseCase(inventoryRepository);
     const movement = await useCase.execute({ id: req.params.id });
@@ -105,7 +107,7 @@ exports.getById = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
     const parsed = createInventoryMovementSchema.safeParse(req.body);
@@ -125,7 +127,7 @@ exports.create = async (req, res, next) => {
       // no client (`client/src/api/inventory.ts`, `createMovement`).
       const { movementId } = await useCase.execute({
         product_id, item_id, type, quantity, description, reference_id, reference_type, warehouse_code,
-        userId: req.user.id,
+        userId: (req as any).user.id,
         transaction: t
       });
 
@@ -153,7 +155,7 @@ exports.create = async (req, res, next) => {
       if (!t.finished) await t.rollback();
       throw innerError;
     }
-  } catch (error) {
+  } catch (error: any) {
     if (!error.statusCode && !t.finished) await t.rollback();
     if (error.statusCode && !error.code) {
       // Erros lançados por InventoryService (Error simples com statusCode),
@@ -173,7 +175,7 @@ exports.create = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getStockReport = async (req, res, next) => {
+exports.getStockReport = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetStockReportUseCase(inventoryRepository);
     const { summary, products } = await useCase.execute();
@@ -191,7 +193,7 @@ exports.getStockReport = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listLowStock = async (req, res, next) => {
+exports.listLowStock = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListLowStockUseCase(inventoryRepository);
     const products = await useCase.execute();
@@ -216,7 +218,7 @@ exports.listLowStock = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listLots = async (req, res, next) => {
+exports.listLots = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { product_id, status, page, limit } = req.query;
     const useCase = new ListLotsUseCase();
@@ -239,7 +241,7 @@ exports.listLots = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getLotByCode = async (req, res, next) => {
+exports.getLotByCode = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetLotByCodeUseCase();
     const lot = await useCase.execute({ lot_number: req.params.lot_number, product_id: req.query.product_id });
@@ -263,12 +265,12 @@ exports.getLotByCode = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getLotQrCode = async (req, res, next) => {
+exports.getLotQrCode = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GenerateEntityQrCodeUseCase();
     const result = await useCase.execute({
       repository: {
-        findById: (id) => LotControl.findByPk(id, {
+        findById: (id: string | number) => LotControl.findByPk(id, {
           include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }]
         })
       },
@@ -276,7 +278,7 @@ exports.getLotQrCode = async (req, res, next) => {
       entityType: 'lot',
       entityLabel: 'Lote',
       format: req.query.format === 'svg' ? 'svg' : 'png',
-      buildData: (lot) => ({
+      buildData: (lot: any) => ({
         lot_number: lot.lot_number,
         product_code: lot.product?.code,
         product_name: lot.product?.name
@@ -297,7 +299,7 @@ exports.getLotQrCode = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.releaseLot = async (req, res, next) => {
+exports.releaseLot = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ReleaseLotUseCase();
     const lot = await useCase.execute({ id: req.params.id, notes: req.body?.notes });
@@ -327,7 +329,7 @@ exports.releaseLot = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.blockLot = async (req, res, next) => {
+exports.blockLot = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new BlockLotUseCase();
     const lot = await useCase.execute({ id: req.params.id, reason: req.body?.reason });
@@ -356,7 +358,7 @@ exports.blockLot = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.createTransfer = async (req, res, next) => {
+exports.createTransfer = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createWarehouseTransferSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -365,7 +367,7 @@ exports.createTransfer = async (req, res, next) => {
     const useCase = new CreateWarehouseTransferUseCase();
     const transfer = await useCase.execute({
       product_id, from_warehouse_code, to_warehouse_code, quantity, reason,
-      userId: req.user.id
+      userId: (req as any).user.id
     });
 
     logAction(req, {
@@ -392,11 +394,11 @@ exports.createTransfer = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.approveTransfer = async (req, res, next) => {
+exports.approveTransfer = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
     const useCase = new ApproveWarehouseTransferUseCase();
-    const transfer = await useCase.execute({ id: req.params.id, approverId: req.user.id, transaction: t });
+    const transfer = await useCase.execute({ id: req.params.id, approverId: (req as any).user.id, transaction: t });
 
     await t.commit();
 
@@ -426,7 +428,7 @@ exports.approveTransfer = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.rejectTransfer = async (req, res, next) => {
+exports.rejectTransfer = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
     const parsed = rejectWarehouseTransferSchema.safeParse(req.body);
@@ -434,7 +436,7 @@ exports.rejectTransfer = async (req, res, next) => {
     const { reason } = parsed.data;
 
     const useCase = new RejectWarehouseTransferUseCase();
-    const transfer = await useCase.execute({ id: req.params.id, approverId: req.user.id, reason, transaction: t });
+    const transfer = await useCase.execute({ id: req.params.id, approverId: (req as any).user.id, reason, transaction: t });
 
     await t.commit();
 
@@ -463,7 +465,7 @@ exports.rejectTransfer = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listTransfers = async (req, res, next) => {
+exports.listTransfers = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListWarehouseTransfersUseCase();
     const transfers = await useCase.execute({ status: req.query.status });
@@ -480,7 +482,7 @@ exports.listTransfers = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listWarehouseStock = async (req, res, next) => {
+exports.listWarehouseStock = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { product_id, warehouse_code, page, limit } = req.query;
     const useCase = new ListWarehouseStockUseCase();
@@ -497,7 +499,7 @@ exports.listWarehouseStock = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listWarehouses = async (req, res, next) => {
+exports.listWarehouses = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListWarehousesUseCase();
     const warehouses = await useCase.execute();
@@ -515,7 +517,7 @@ exports.listWarehouses = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.createWarehouse = async (req, res, next) => {
+exports.createWarehouse = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createWarehouseSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -548,7 +550,7 @@ exports.createWarehouse = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.updateWarehouse = async (req, res, next) => {
+exports.updateWarehouse = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsedId = idParamSchema.safeParse(req.params.id);
     if (!parsedId.success) handleZodError(parsedId.error);

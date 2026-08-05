@@ -1,3 +1,19 @@
+import type { Request, Response, NextFunction } from 'express';
+
+/**
+ * Arquivo de upload processado pelo Multer (memória ou disco).
+ * Definido localmente pois `@types/multer` não faz merge com `@types/express`
+ * nesta versão do projeto (express 4.x runtime + @types/express 5.x).
+ */
+type MulterFile = {
+  originalname: string;
+  mimetype: string;
+  size: number;
+  buffer?: Buffer;
+};
+
+type RequestWithFile = Request & { file?: MulterFile };
+
 const SequelizeAssetsRepository = require('../../infrastructure/sequelize/SequelizeAssetsRepository');
 const ListAssetsUseCase = require('../../application/use-cases/ListAssetsUseCase');
 const GetAssetByIdUseCase = require('../../application/use-cases/GetAssetByIdUseCase');
@@ -16,7 +32,7 @@ const GenerateEntityQrCodeUseCase = require('../../../../shared/application/Gene
 const assetsRepository = new SequelizeAssetsRepository();
 
 /** `GET /api/assets` — lista ativos (filtros e paginação). */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListAssetsUseCase(assetsRepository);
     const { rows, total, page, limit, totalPages } = await useCase.execute(req.query);
@@ -27,7 +43,7 @@ exports.list = async (req, res, next) => {
 };
 
 /** `GET /api/assets/:id` — busca um ativo pelo id. */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetAssetByIdUseCase(assetsRepository);
     const asset = await useCase.execute({ id: req.params.id });
@@ -38,7 +54,7 @@ exports.getById = async (req, res, next) => {
 };
 
 /** `POST /api/assets` — cria um novo ativo. */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CreateAssetUseCase(assetsRepository);
     const asset = await useCase.execute(req.body);
@@ -49,7 +65,7 @@ exports.create = async (req, res, next) => {
 };
 
 /** `PUT /api/assets/:id` — atualiza um ativo existente. */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new UpdateAssetUseCase(assetsRepository);
     const asset = await useCase.execute({ id: req.params.id, body: req.body });
@@ -60,7 +76,7 @@ exports.update = async (req, res, next) => {
 };
 
 /** `DELETE /api/assets/:id` — inativa (soft delete) um ativo. */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new DeactivateAssetUseCase(assetsRepository);
     const result = await useCase.execute({ id: req.params.id });
@@ -71,7 +87,7 @@ exports.remove = async (req, res, next) => {
 };
 
 /** `POST /api/assets/:id/photo` — envia/substitui a foto do ativo. */
-exports.uploadPhoto = async (req, res, next) => {
+exports.uploadPhoto = async (req: RequestWithFile, res: Response, next: NextFunction) => {
   try {
     const useCase = new UploadEntityPhotoUseCase();
     const { entity } = await useCase.execute({
@@ -88,7 +104,7 @@ exports.uploadPhoto = async (req, res, next) => {
 };
 
 /** `GET /api/assets/:id/qrcode` — gera o QR Code do ativo (PNG ou SVG via `?format=svg`). */
-exports.getQrCode = async (req, res, next) => {
+exports.getQrCode = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GenerateEntityQrCodeUseCase();
     const result = await useCase.execute({
@@ -97,7 +113,7 @@ exports.getQrCode = async (req, res, next) => {
       entityType: 'asset',
       entityLabel: 'Ativo',
       format: req.query.format === 'svg' ? 'svg' : 'png',
-      buildData: (asset) => ({ tag: asset.tag, name: asset.name }),
+      buildData: (asset: { tag: string; name: string }) => ({ tag: asset.tag, name: asset.name }),
     });
     res.json({ success: true, data: result });
   } catch (error) {

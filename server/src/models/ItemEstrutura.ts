@@ -58,7 +58,7 @@ const ItemEstrutura: ModelDefined<ItemEstruturaAttributes, ItemEstruturaCreation
     allowNull: false,
     validate: {
       isDifferentFromParent(value: string) {
-        if (value === (this as ItemEstruturaAttributes).item_pai_id) {
+        if (value === (this as unknown as ItemEstruturaAttributes).item_pai_id) {
           throw new Error('item_pai_id nao pode ser igual a item_componente_id');
         }
       },

@@ -1,3 +1,5 @@
+import type { Transaction } from 'sequelize';
+
 const UseCase = require('../../../../shared/application/UseCase');
 const SaleEntity = require('../../domain/entities/SaleEntity');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
@@ -45,7 +47,7 @@ class CreateSaleUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/SaleRepository')} saleRepository
    */
-  constructor(saleRepository) {
+  constructor(saleRepository: any) {
     super();
     this.saleRepository = saleRepository;
   }
@@ -67,7 +69,17 @@ class CreateSaleUseCase extends UseCase {
    * @throws {BusinessRuleError} Se algum produto estiver inativo ou (quando `status: 'confirmed'`) sem estoque suficiente.
    * @throws {Error} Com `statusCode` 404/409 propagado de `InventoryService.consume` se o estoque for insuficiente no momento da baixa (revalidado sob lock), quando `status: 'confirmed'`.
    */
-  async execute({ customer_id, items, discount = 0, payment_method, installments = 1, notes, status = 'confirmed', userId, transaction }) {
+  async execute({ customer_id, items, discount = 0, payment_method, installments = 1, notes, status = 'confirmed', userId, transaction }: {
+    customer_id: number;
+    items: Array<{ product_id: number; quantity: number; unit_price: number }>;
+    discount?: number;
+    payment_method?: string;
+    installments?: number;
+    notes?: string;
+    status?: 'quote' | 'confirmed';
+    userId: number;
+    transaction: Transaction;
+  }) {
     const entity = new SaleEntity({ customer_id, items, discount, payment_method, installments, notes });
     const isQuote = status === 'quote';
 

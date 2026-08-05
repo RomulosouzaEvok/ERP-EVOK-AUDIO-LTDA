@@ -1,3 +1,6 @@
+import type { Request, Response, NextFunction } from 'express';
+import type { Transaction } from 'sequelize';
+
 const { sequelize } = require('../../../../config/database');
 const { logAction } = require('../../../../services/auditLogService');
 const SequelizePurchaseRepository = require('../../infrastructure/sequelize/SequelizePurchaseRepository');
@@ -27,8 +30,8 @@ const {
  */
 const purchaseRepository = new SequelizePurchaseRepository();
 
-async function rollbackIfPending(transaction) {
-  if (transaction && !transaction.finished) {
+async function rollbackIfPending(transaction: Transaction) {
+  if (transaction && !(transaction as any).finished) {
     await transaction.rollback();
   }
 }
@@ -41,7 +44,7 @@ async function rollbackIfPending(transaction) {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page = 1, limit = 10, status, supplier_id, start_date, end_date } = req.query;
     const useCase = new ListPurchasesUseCase(purchaseRepository);
@@ -63,7 +66,7 @@ exports.list = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.cockpit = async (req, res, next) => {
+exports.cockpit = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetPurchaseCockpitUseCase(purchaseRepository);
     const data = await useCase.execute();
@@ -79,7 +82,7 @@ exports.cockpit = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetPurchaseByIdUseCase(purchaseRepository);
     const purchase = await useCase.execute({ id: req.params.id });
@@ -96,7 +99,7 @@ exports.getById = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
     const parsed = createPurchaseSchema.safeParse(req.body);
@@ -104,7 +107,7 @@ exports.create = async (req, res, next) => {
     const { supplier_id, items, notes, expected_date } = parsed.data;
     const useCase = new CreatePurchaseUseCase(purchaseRepository);
     const { purchase, totalAmount } = await useCase.execute({
-      supplier_id, items, notes, expected_date, userId: req.user.id, transaction: t
+      supplier_id, items, notes, expected_date, userId: (req as any).user.id, transaction: t
     });
 
     await t.commit();
@@ -135,7 +138,7 @@ exports.create = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
     const parsed = updatePurchaseSchema.safeParse(req.body);
@@ -174,14 +177,14 @@ exports.update = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.updateStatus = async (req, res, next) => {
+exports.updateStatus = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
     const parsed = updatePurchaseStatusSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
     const { status } = parsed.data;
     const useCase = new ChangePurchaseStatusUseCase(purchaseRepository);
-    const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, status, userId: req.user.id, transaction: t });
+    const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, status, userId: (req as any).user.id, transaction: t });
 
     await t.commit();
 
@@ -213,14 +216,14 @@ exports.updateStatus = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.receiveItems = async (req, res, next) => {
+exports.receiveItems = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
     const parsed = receivePurchaseItemsSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
     const { items, invoice_number, warehouse_code } = parsed.data;
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
-    const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, items, invoiceNumber: invoice_number, warehouseCode: warehouse_code, userId: req.user.id, transaction: t });
+    const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, items, invoiceNumber: invoice_number, warehouseCode: warehouse_code, userId: (req as any).user.id, transaction: t });
 
     await t.commit();
 

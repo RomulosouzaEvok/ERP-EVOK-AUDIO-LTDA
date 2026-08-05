@@ -1,3 +1,5 @@
+import type SuppliersRepository = require('../../domain/repositories/SuppliersRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
 
@@ -16,7 +18,9 @@ class UpdateSupplierUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/SuppliersRepository')} suppliersRepository
    */
-  constructor(suppliersRepository) {
+  private suppliersRepository: SuppliersRepository;
+
+  constructor(suppliersRepository: SuppliersRepository) {
     super();
     this.suppliersRepository = suppliersRepository;
   }
@@ -28,18 +32,19 @@ class UpdateSupplierUseCase extends UseCase {
    * @returns {Promise<Object>} Fornecedor atualizado.
    * @throws {NotFoundError} Com mensagem `'Fornecedor não encontrado'` se o id não existir.
    */
-  async execute({ id, body }) {
+  async execute({ id, body }: { id: number | string; body: Record<string, unknown> }) {
     const updateData: any = {};
     for (const field of ALLOWED_FIELDS) {
       if (body[field] !== undefined) updateData[field] = body[field];
     }
 
-    const updated = await this.suppliersRepository.update(id, updateData);
+    const supplierId = Number(id);
+    const updated = await this.suppliersRepository.update(supplierId, updateData);
     if (!updated) {
       throw new NotFoundError('Fornecedor não encontrado');
     }
 
-    return this.suppliersRepository.findById(id);
+    return this.suppliersRepository.findById(supplierId);
   }
 }
 

@@ -13,6 +13,8 @@ import * as itemSuppliersApi from '@/api/itemSuppliers';
 import * as suppliersApi from '@/api/suppliers';
 import * as warehousesApi from '@/api/warehouses';
 import { extractApiErrorMessage, getUploadUrl } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -396,10 +398,13 @@ type ItemSupplierFormData = z.infer<typeof itemSupplierSchema>;
  * lista/gerencia vínculos com fornecedores e exibe o histórico de compras.
  */
 function ProductSuppliersDialog({ product, onClose }: { product: productsApi.Product | null; onClose: () => void }) {
+  const { hasRole } = useAuth();
+  const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
   const [editingLink, setEditingLink] = React.useState<itemSuppliersApi.ItemSupplierLink | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [showForm, setShowForm] = React.useState(false);
+  const [mrpError, setMrpError] = React.useState<DidacticError | null>(null);
 
   const { data: matchedItems, isLoading: isResolvingItem } = useQuery({
     queryKey: ['item-by-code', product?.code],
@@ -409,6 +414,16 @@ function ProductSuppliersDialog({ product, onClose }: { product: productsApi.Pro
 
   const item = matchedItems?.data.find((candidate) => candidate.codigo === product?.code) ?? null;
   const itemNotFound = Boolean(product) && !isResolvingItem && !item;
+
+  const toggleAutoConvertMutation = useMutation({
+    mutationFn: (conversao_automatica: boolean) => itemsApi.updateItem(item!.id, { conversao_automatica }),
+    onSuccess: () => {
+      setMrpError(null);
+      queryClient.invalidateQueries({ queryKey: ['item-by-code', product?.code] });
+    },
+    onError: (error) =>
+      setMrpError(translateApiError(error, 'Não foi possível atualizar a configuração de conversão automática do MRP')),
+  });
 
   const { data: links, isLoading: isLoadingLinks } = useQuery({
     queryKey: ['item-suppliers', item?.id],
@@ -523,6 +538,28 @@ function ProductSuppliersDialog({ product, onClose }: { product: productsApi.Pro
 
             {item && (
               <>
+                <div className="flex flex-col gap-2 rounded-lg border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col gap-0.5">
+                      <Label htmlFor="conversao-automatica">Conversão automática no MRP</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Quando ligado, ordens planejadas do MRP para este item viram requisição de compra
+                        automaticamente, sem revisão humana. Quando desligado (padrão), exige conversão manual pelo
+                        planejador.
+                      </p>
+                    </div>
+                    <input
+                      id="conversao-automatica"
+                      type="checkbox"
+                      className="size-4"
+                      checked={Boolean(item.conversao_automatica)}
+                      disabled={!canWrite || toggleAutoConvertMutation.isPending}
+                      onChange={(event) => toggleAutoConvertMutation.mutate(event.target.checked)}
+                    />
+                  </div>
+                  {mrpError && <DidacticAlert error={mrpError} />}
+                </div>
+
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold">Vínculos de fornecimento</p>
                   <Button

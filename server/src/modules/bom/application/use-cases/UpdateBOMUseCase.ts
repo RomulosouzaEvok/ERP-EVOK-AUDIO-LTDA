@@ -1,5 +1,6 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
+import type { IBOMRepository } from '../../domain/repositories/BOMRepository';
 
 /** Campos gerais da BOM que podem ser alterados via `PUT /:id` (mesmos do controller anterior). */
 const ALLOWED_FIELDS = ['revision', 'revision_notes', 'notes', 'status'];
@@ -16,8 +17,10 @@ const ALLOWED_FIELDS = ['revision', 'revision_notes', 'notes', 'status'];
  * cases dedicados.
  */
 class UpdateBOMUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/BOMRepository')} bomRepository */
-  constructor(bomRepository) {
+  private bomRepository: IBOMRepository;
+
+  /** @param {IBOMRepository} bomRepository */
+  constructor(bomRepository: IBOMRepository) {
     super();
     this.bomRepository = bomRepository;
   }
@@ -29,8 +32,8 @@ class UpdateBOMUseCase extends UseCase {
    * @returns {Promise<{ before: Object, updateData: Object, bom: Object }>}
    * @throws {NotFoundError} Se a BOM não existir.
    */
-  async execute({ id, data }) {
-    const updateData: any = {};
+  async execute({ id, data }: { id: number; data: Record<string, unknown> }) {
+    const updateData: Record<string, unknown> = {};
     for (const field of ALLOWED_FIELDS) {
       if (data[field] !== undefined) updateData[field] = data[field];
     }

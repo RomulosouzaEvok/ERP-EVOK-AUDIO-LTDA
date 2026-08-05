@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeUsersRepository = require('../../infrastructure/sequelize/SequelizeUsersRepository');
 const ListUsersUseCase = require('../../application/use-cases/ListUsersUseCase');
 const GetUserByIdUseCase = require('../../application/use-cases/GetUserByIdUseCase');
@@ -26,7 +28,7 @@ const usersRepository = new SequelizeUsersRepository();
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, search, role, active } = req.query;
     const useCase = new ListUsersUseCase(usersRepository);
@@ -55,7 +57,7 @@ exports.list = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetUserByIdUseCase(usersRepository);
     const user = await useCase.execute({ id: req.params.id });
@@ -73,7 +75,7 @@ exports.getById = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, password, role } = req.body;
     const useCase = new CreateUserUseCase(usersRepository);
@@ -92,7 +94,7 @@ exports.create = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, role, active, password } = req.body;
     const useCase = new UpdateUserUseCase(usersRepository);
@@ -111,10 +113,10 @@ exports.update = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new DeactivateUserUseCase(usersRepository);
-    const result = await useCase.execute({ id: parseInt(req.params.id), currentUserId: req.user.id, req });
+    const result = await useCase.execute({ id: parseInt(req.params.id as string), currentUserId: (req as any).user.id, req });
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
@@ -131,10 +133,10 @@ exports.remove = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.revokeSessions = async (req, res, next) => {
+exports.revokeSessions = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new RevokeUserSessionsUseCase(usersRepository);
-    const result = await useCase.execute({ id: parseInt(req.params.id), req });
+    const result = await useCase.execute({ id: parseInt(req.params.id as string), req });
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
@@ -150,11 +152,11 @@ exports.revokeSessions = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.assignAccessProfile = async (req, res, next) => {
+exports.assignAccessProfile = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new AssignAccessProfileUseCase(usersRepository);
     const result = await useCase.execute({
-      id: parseInt(req.params.id),
+      id: parseInt(req.params.id as string),
       accessProfileId: req.body.access_profile_id ?? null,
       req
     });

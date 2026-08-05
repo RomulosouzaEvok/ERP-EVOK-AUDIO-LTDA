@@ -1,5 +1,6 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ConflictError, ValidationError } = require('../../../../errors');
+import type { IProductRepository } from '../../domain/repositories/ProductRepository';
 
 /** Campos aceitos no update, na mesma ordem/conjunto do controller anterior. */
 const ALLOWED_FIELDS = ['name', 'description', 'category_id', 'price', 'cost_price', 'min_quantity', 'status', 'product_type', 'ncm', 'cest', 'weight', 'unit', 'lead_time', 'drawing_number', 'revision', 'location'];
@@ -14,10 +15,12 @@ const ALLOWED_FIELDS = ['name', 'description', 'category_id', 'price', 'cost_pri
  * comportamento anterior.
  */
 class UpdateProductUseCase extends UseCase {
+  private productRepository: IProductRepository;
+
   /**
-   * @param {import('../../domain/repositories/ProductRepository')} productRepository
+   * @param {IProductRepository} productRepository
    */
-  constructor(productRepository) {
+  constructor(productRepository: IProductRepository) {
     super();
     this.productRepository = productRepository;
   }
@@ -31,7 +34,7 @@ class UpdateProductUseCase extends UseCase {
    * @throws {ValidationError} Se preço de venda <= preço de custo quando ambos informados.
    * @throws {ConflictError} Se a atualização violar unicidade de código (propagado pelo Sequelize/controller).
    */
-  async execute({ id, body }) {
+  async execute({ id, body }: { id: number | string; body: Record<string, unknown> }) {
     const updateData: any = {};
     for (const field of ALLOWED_FIELDS) {
       if (body[field] !== undefined) updateData[field] = body[field];

@@ -113,7 +113,29 @@ async function processLote(
       const itemId = uuidv4();
       itemIds.push(itemId);
 
-      // 1. Criar/atualizar Item
+      // 1a. Resolver categoria via crosswalk migracao_categoria_map (criado em 02b-bis)
+      // Fallback seguro: categoria órfã/ausente -> null + aviso (não interrompe o lote)
+      let categoriaId: string | null = null;
+      if (product.category_id !== null && product.category_id !== undefined) {
+        const categoriaMapping: any = await sequelize.query(
+          'SELECT item_categoria_id FROM migracao_categoria_map WHERE product_category_id = :category_id LIMIT 1',
+          {
+            replacements: { category_id: product.category_id },
+            type: 'SELECT' as any,
+            transaction,
+          }
+        );
+
+        if (categoriaMapping && categoriaMapping.length > 0) {
+          categoriaId = categoriaMapping[0].item_categoria_id;
+        } else {
+          console.warn(
+            `⚠️ Produto ${product.id} (${product.code}): categoria legada ${product.category_id} não encontrada em migracao_categoria_map (execute 02b-bis antes de 02b). categoria_id ficará null.`
+          );
+        }
+      }
+
+      // 1b. Criar/atualizar Item
       const item = await Item.create(
         {
           id: itemId,
@@ -138,7 +160,7 @@ async function processLote(
         {
           item_id: itemId,
           preco_venda: product.price.toString(),
-          categoria_id: null, // TODO: mapear via crosswalk de categories em Fase 2B-bis
+          categoria_id: categoriaId, // Resolvido via crosswalk migracao_categoria_map (Fase 2B-bis)
           ncm: product.ncm || '85182100',
           cest: product.cest,
           peso_kg: (product.weight || 0).toString(),

@@ -1,4 +1,19 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import ReportsRepository = require('../../domain/repositories/ReportsRepository');
+
+/** Filtro de entrada de `GetCashFlowReportUseCase` (query string do endpoint). */
+interface GetCashFlowReportInput {
+  start_date?: string;
+  end_date?: string;
+}
+
+/** Saída de `GetCashFlowReportUseCase`. */
+interface GetCashFlowReportOutput {
+  report_type: 'cash-flow';
+  generated_at: Date;
+  period: { start: Date; end: Date };
+  summary: { total_sales: number; total_purchases: number; balance: number };
+}
 
 /**
  * Calcula o fluxo de caixa agregado (vendas - compras) no período, cobrindo
@@ -6,18 +21,20 @@ const UseCase = require('../../../../shared/application/UseCase');
  * `docs/CRONOGRAMA_FRONTEND_2026-07-31.md`: agrega totais por período, sem
  * série diária.
  */
-class GetCashFlowReportUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/ReportsRepository')} reportsRepository */
-  constructor(reportsRepository) {
+class GetCashFlowReportUseCase extends UseCase<GetCashFlowReportInput, GetCashFlowReportOutput> {
+  private readonly reportsRepository: ReportsRepository;
+
+  /** @param reportsRepository - Repositório de relatórios. */
+  constructor(reportsRepository: ReportsRepository) {
     super();
     this.reportsRepository = reportsRepository;
   }
 
   /**
-   * @param {Object} input - `{ start_date, end_date }`.
-   * @returns {Promise<Object>} `{ report_type, generated_at, period, summary }`.
+   * @param input - `{ start_date, end_date }`.
+   * @returns `{ report_type, generated_at, period, summary }`.
    */
-  async execute({ start_date, end_date }) {
+  async execute({ start_date, end_date }: GetCashFlowReportInput): Promise<GetCashFlowReportOutput> {
     const start = start_date ? new Date(start_date) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const end = end_date ? new Date(end_date) : new Date();
 
@@ -32,4 +49,4 @@ class GetCashFlowReportUseCase extends UseCase {
   }
 }
 
-module.exports = GetCashFlowReportUseCase;
+export = GetCashFlowReportUseCase;

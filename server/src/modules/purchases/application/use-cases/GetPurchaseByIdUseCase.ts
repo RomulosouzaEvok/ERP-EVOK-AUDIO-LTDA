@@ -1,3 +1,5 @@
+import type PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
 
@@ -6,10 +8,12 @@ const { NotFoundError } = require('../../../../errors');
  * cobrindo o fluxo do endpoint `GET /api/purchases/:id`.
  */
 class GetPurchaseByIdUseCase extends UseCase {
+  private purchaseRepository: PurchaseRepository;
+
   /**
    * @param {import('../../domain/repositories/PurchaseRepository')} purchaseRepository
    */
-  constructor(purchaseRepository) {
+  constructor(purchaseRepository: PurchaseRepository) {
     super();
     this.purchaseRepository = purchaseRepository;
   }
@@ -20,7 +24,7 @@ class GetPurchaseByIdUseCase extends UseCase {
    * @returns {Promise<Object>} Pedido de compra encontrado.
    * @throws {NotFoundError} Se o pedido não existir.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number | string }) {
     const purchase = await this.purchaseRepository.findPurchaseById(id);
     if (!purchase) {
       throw new NotFoundError('Pedido não encontrado');

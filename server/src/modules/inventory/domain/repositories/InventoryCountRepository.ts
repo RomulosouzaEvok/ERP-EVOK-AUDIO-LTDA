@@ -1,3 +1,10 @@
+import type { Transaction } from 'sequelize';
+
+/** Filtros de listagem `{ status, count_type }` aceitos por `list`. */
+type InventoryCountFilters = Record<string, any>;
+/** Paginação `{ limit, offset }` aceita por `list`. */
+type InventoryCountPagination = { limit?: number; offset?: number };
+
 /**
  * Interface (contrato) de repositório de Inventário Cíclico
  * (`InventoryCount` + `InventoryCountItem`).
@@ -19,7 +26,7 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async create(data, transaction) { // eslint-disable-line no-unused-vars
+  async create(data: Record<string, unknown>, transaction?: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.create não implementado.');
   }
 
@@ -32,7 +39,7 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<number>}
    */
-  async countByCountNumberPrefix(yearPrefix, transaction) { // eslint-disable-line no-unused-vars
+  async countByCountNumberPrefix(yearPrefix: string, transaction?: Transaction): Promise<number> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.countByCountNumberPrefix não implementado.');
   }
 
@@ -44,7 +51,7 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object[]>}
    */
-  async bulkCreateItems(items, transaction) { // eslint-disable-line no-unused-vars
+  async bulkCreateItems(items: Record<string, unknown>[], transaction?: Transaction): Promise<any[]> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.bulkCreateItems não implementado.');
   }
 
@@ -56,7 +63,7 @@ class InventoryCountRepository {
    * @param {Object} [pagination] - `{ limit, offset }`.
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
-  async list(filters, pagination) { // eslint-disable-line no-unused-vars
+  async list(filters?: InventoryCountFilters, pagination?: InventoryCountPagination): Promise<{ rows: any[]; count: number }> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.list não implementado.');
   }
 
@@ -67,7 +74,7 @@ class InventoryCountRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findById(id) { // eslint-disable-line no-unused-vars
+  async findById(id: number | string): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.findById não implementado.');
   }
 
@@ -80,7 +87,7 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findRawById(id, transaction) { // eslint-disable-line no-unused-vars
+  async findRawById(id: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.findRawById não implementado.');
   }
 
@@ -93,7 +100,7 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} transaction
    * @returns {Promise<Object|null>}
    */
-  async findRawByIdForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
+  async findRawByIdForUpdate(id: number | string, transaction: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.findRawByIdForUpdate não implementado.');
   }
 
@@ -106,7 +113,7 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<number>} Número de linhas afetadas.
    */
-  async update(id, data, transaction) { // eslint-disable-line no-unused-vars
+  async update(id: number | string, data: Record<string, unknown>, transaction?: Transaction): Promise<number> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.update não implementado.');
   }
 
@@ -120,10 +127,10 @@ class InventoryCountRepository {
    * @param {number} id
    * @param {string} expectedStatus
    * @param {Object} data
-   * @param {import('sequelize').Transaction} transaction
+   * @param {import('sequelize').Transaction} [transaction] - Opcional: os use cases de aprovação/rejeição hoje não abrem transação própria (comportamento pré-existente, preservado aqui).
    * @returns {Promise<number>}
    */
-  async updateIfStatus(id, expectedStatus, data, transaction) { // eslint-disable-line no-unused-vars
+  async updateIfStatus(id: number | string, expectedStatus: string, data: Record<string, unknown>, transaction?: Transaction): Promise<number> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.updateIfStatus não implementado.');
   }
 
@@ -135,7 +142,7 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findItemById(itemId, transaction) { // eslint-disable-line no-unused-vars
+  async findItemById(itemId: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.findItemById não implementado.');
   }
 
@@ -147,7 +154,7 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object[]>}
    */
-  async listItems(inventoryCountId, transaction) { // eslint-disable-line no-unused-vars
+  async listItems(inventoryCountId: number | string, transaction?: Transaction): Promise<any[]> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.listItems não implementado.');
   }
 
@@ -160,7 +167,7 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<number>} Número de linhas afetadas.
    */
-  async updateItem(itemId, data, transaction) { // eslint-disable-line no-unused-vars
+  async updateItem(itemId: number | string, data: Record<string, unknown>, transaction?: Transaction): Promise<number> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.updateItem não implementado.');
   }
 
@@ -173,11 +180,11 @@ class InventoryCountRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findProductById(id, transaction) { // eslint-disable-line no-unused-vars
+  async findProductById(id: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.findProductById não implementado.');
   }
 }
 
-module.exports = InventoryCountRepository;
+export = InventoryCountRepository;
 
 

@@ -18,6 +18,34 @@ export const createItemSchema = z.object({
   lead_time_dias: z.coerce.number().int().min(0).optional(),
   custo_padrao: z.coerce.number().min(0).optional(),
   fornecedor_padrao_id: z.string().uuid().nullable().optional(),
+  /**
+   * Opt-in do ciclo automatico do MRP (roadmap pos-Go-Live item 3): quando
+   * `true`, ordens planejadas deste item sao convertidas em Requisicao de
+   * Compra automaticamente pelo `GenerateMrpPlanUseCase`. Default `false`.
+   */
+  conversao_automatica: z.boolean().optional(),
+}).strict();
+
+/**
+ * Schema para atualizar cadastro de item industrial (partial update).
+ * Todos os campos sao opcionais; apenas os presentes no payload sao
+ * alterados (ver `UpdateItemUseCase`).
+ */
+export const updateItemSchema = z.object({
+  descricao: z.string().trim().min(1).max(240).optional(),
+  status: z.enum(['ATIVO', 'INATIVO', 'BLOQUEADO']).optional(),
+  estoque_seguranca: z.coerce.number().min(0).optional(),
+  lote_minimo: z.coerce.number().min(0).optional(),
+  lead_time_dias: z.coerce.number().int().min(0).optional(),
+  custo_padrao: z.coerce.number().min(0).optional(),
+  fornecedor_padrao_id: z.string().uuid().nullable().optional(),
+  /**
+   * Opt-in do ciclo automatico do MRP (roadmap pos-Go-Live item 3): quando
+   * `true`, ordens planejadas deste item sao convertidas em Requisicao de
+   * Compra automaticamente pelo `GenerateMrpPlanUseCase`, sem revisao
+   * humana. Quando `false`/omitido no cadastro, exige conversao manual.
+   */
+  conversao_automatica: z.boolean().optional(),
 }).strict();
 
 /** Schema para criar ligacao de estrutura. */
@@ -74,6 +102,7 @@ export const updateItemSupplierSchema = z.object({
 
 const schemas = {
   createItemSchema,
+  updateItemSchema,
   createItemStructureSchema,
   listItemsQuerySchema,
   explodeItemStructureQuerySchema,

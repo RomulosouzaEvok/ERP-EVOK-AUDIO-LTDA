@@ -1,3 +1,5 @@
+import type { Request, Response } from 'express';
+
 const ProcessN8nWebhookUseCase = require('../../application/use-cases/ProcessN8nWebhookUseCase');
 const HandleNfeStatusWebhookUseCase = require('../../../fiscal/application/use-cases/HandleNfeStatusWebhookUseCase');
 
@@ -9,11 +11,11 @@ const HandleNfeStatusWebhookUseCase = require('../../../fiscal/application/use-c
  */
 
 /** `POST /api/webhooks/n8n` — recebe eventos do n8n. */
-exports.n8n = async (req, res) => {
+exports.n8n = async (req: Request, res: Response) => {
   const useCase = new ProcessN8nWebhookUseCase();
   try {
     const signature = req.header('X-Evok-Signature');
-    const result = await useCase.execute({ signature, rawBody: req.rawBody, body: req.body });
+    const result = await useCase.execute({ signature, rawBody: (req as any).rawBody, body: req.body });
     res.status(202).json({ success: true, accepted: result.accepted, event: result.event, duplicate: result.duplicate });
   } catch (error: any) {
     if (error?.message === 'MISSING_SIGNATURE') {
@@ -43,7 +45,7 @@ exports.n8n = async (req, res) => {
  * recebido é usado APENAS para extrair a referência — o status real é
  * sempre reconsultado diretamente na API (nunca aplicado do payload).
  */
-exports.focusNfeStatusChange = async (req, res) => {
+exports.focusNfeStatusChange = async (req: Request, res: Response) => {
   const secret = process.env.FOCUS_NFE_WEBHOOK_SECRET;
   if (!secret) {
     res.status(503).json({ success: false, error: 'Webhook não configurado' });

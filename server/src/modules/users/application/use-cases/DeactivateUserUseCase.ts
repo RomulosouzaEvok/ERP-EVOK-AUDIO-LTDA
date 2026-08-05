@@ -14,7 +14,7 @@ class DeactivateUserUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/UsersRepository')} usersRepository
    */
-  constructor(usersRepository) {
+  constructor(usersRepository: any) {
     super();
     this.usersRepository = usersRepository;
   }
@@ -28,7 +28,7 @@ class DeactivateUserUseCase extends UseCase {
    * @throws {BusinessRuleError} Com mensagem `'Você não pode inativar seu próprio usuário'` se `id === currentUserId`.
    * @throws {NotFoundError} Com mensagem `'Usuário não encontrado'` se o id não existir.
    */
-  async execute({ id, currentUserId, req }) {
+  async execute({ id, currentUserId, req }: { id: number; currentUserId: number; req: any }) {
     if (id === currentUserId) {
       throw new BusinessRuleError('Você não pode inativar seu próprio usuário');
     }

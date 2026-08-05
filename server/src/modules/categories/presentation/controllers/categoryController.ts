@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeCategoriesRepository = require('../../infrastructure/sequelize/SequelizeCategoriesRepository');
 const ListCategoriesUseCase = require('../../application/use-cases/ListCategoriesUseCase');
 const GetCategoryByIdUseCase = require('../../application/use-cases/GetCategoryByIdUseCase');
@@ -14,7 +16,7 @@ const DeactivateCategoryUseCase = require('../../application/use-cases/Deactivat
 const categoriesRepository = new SequelizeCategoriesRepository();
 
 /** `GET /api/categories` — lista categorias ativas. */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListCategoriesUseCase(categoriesRepository);
     const categories = await useCase.execute();
@@ -25,7 +27,7 @@ exports.list = async (req, res, next) => {
 };
 
 /** `GET /api/categories/:id` — busca uma categoria pelo id. */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetCategoryByIdUseCase(categoriesRepository);
     const category = await useCase.execute({ id: req.params.id });
@@ -36,7 +38,7 @@ exports.getById = async (req, res, next) => {
 };
 
 /** `POST /api/categories` — cria uma nova categoria. */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, description } = req.body;
     const useCase = new CreateCategoryUseCase(categoriesRepository);
@@ -48,7 +50,7 @@ exports.create = async (req, res, next) => {
 };
 
 /** `PUT /api/categories/:id` — atualiza uma categoria existente. */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new UpdateCategoryUseCase(categoriesRepository);
     const category = await useCase.execute({ id: req.params.id, body: req.body });
@@ -59,7 +61,7 @@ exports.update = async (req, res, next) => {
 };
 
 /** `DELETE /api/categories/:id` — inativa (soft delete) uma categoria. */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new DeactivateCategoryUseCase(categoriesRepository);
     const result = await useCase.execute({ id: req.params.id });

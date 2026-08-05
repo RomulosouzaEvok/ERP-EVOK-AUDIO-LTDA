@@ -1,4 +1,6 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryCountRepository = require('../../domain/repositories/InventoryCountRepository');
+
 const { NotFoundError, BusinessRuleError } = require('../../../../errors');
 
 /**
@@ -9,20 +11,21 @@ const { NotFoundError, BusinessRuleError } = require('../../../../errors');
  * tenham sido contados (nenhum em status `pending`).
  */
 class SubmitInventoryCountUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/InventoryCountRepository')} inventoryCountRepository */
-  constructor(inventoryCountRepository) {
+  private readonly inventoryCountRepository: InventoryCountRepository;
+
+  /** @param inventoryCountRepository - Repositório de contagens de inventário. */
+  constructor(inventoryCountRepository: InventoryCountRepository) {
     super();
     this.inventoryCountRepository = inventoryCountRepository;
   }
 
   /**
-   * @param {Object} input
-   * @param {number} input.id - Id da contagem a enviar para aprovação.
+   * @param input - `{ id }`.
    * @returns {Promise<Object>} A contagem atualizada (com itens).
    * @throws {NotFoundError} Se a contagem não existir.
    * @throws {BusinessRuleError} Se a contagem não estiver em status `counting`, não tiver itens ou tiver itens pendentes de contagem.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number | string }) {
     const count = await this.inventoryCountRepository.findRawById(id);
     if (!count) {
       throw new NotFoundError('Contagem de inventário não encontrada');
@@ -35,7 +38,7 @@ class SubmitInventoryCountUseCase extends UseCase {
     if (items.length === 0) {
       throw new BusinessRuleError('A contagem não possui itens. Adicione itens antes de enviar para aprovação.');
     }
-    const pendingItems = items.filter((item) => item.status === 'pending');
+    const pendingItems = items.filter((item: any) => item.status === 'pending');
     if (pendingItems.length > 0) {
       throw new BusinessRuleError(`Existem ${pendingItems.length} item(ns) ainda não contados. Registre a contagem de todos os itens antes de enviar para aprovação.`);
     }
@@ -46,6 +49,6 @@ class SubmitInventoryCountUseCase extends UseCase {
   }
 }
 
-module.exports = SubmitInventoryCountUseCase;
+export = SubmitInventoryCountUseCase;
 
 

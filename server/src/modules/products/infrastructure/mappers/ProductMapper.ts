@@ -13,9 +13,9 @@ class ProductMapper {
    * @param {Object} record - Instância Sequelize (`.get({ plain: true })`-like) ou objeto plano do produto.
    * @returns {ProductEntity} Entidade de domínio equivalente.
    */
-  static toEntity(record) {
-    const plain = typeof record.get === 'function' ? record.get({ plain: true }) : record;
-    const tsParams = {};
+  static toEntity(record: Record<string, any>) {
+    const plain: Record<string, any> = typeof record.get === 'function' ? record.get({ plain: true }) : record;
+    const tsParams: Record<string, unknown> = {};
     for (const field of TS_FIELDS) {
       const value = plain[`ts_params_${field}`];
       if (value !== undefined && value !== null) tsParams[field] = value;
@@ -53,7 +53,7 @@ class ProductMapper {
    * @param {ProductEntity} entity - Entidade de domínio.
    * @returns {Object} Objeto plano pronto para `Product.create`/`Product.update`.
    */
-  static toPersistence(entity) {
+  static toPersistence(entity: { toPersistence(): Record<string, unknown> }) {
     return entity.toPersistence();
   }
 }

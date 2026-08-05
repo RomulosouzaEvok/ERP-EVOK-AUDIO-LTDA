@@ -1,12 +1,14 @@
-const SequelizeMrpRepository = require('../../infrastructure/sequelize/SequelizeMrpRepository');
-const SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
-const SequelizeItemSupplierRepository = require('../../../items/infrastructure/sequelize/SequelizeItemSupplierRepository');
-const SequelizePurchaseRequisitionRepository = require('../../../purchaseRequisitions/infrastructure/sequelize/SequelizePurchaseRequisitionRepository');
-const SequelizeProductionOrderRepository = require('../../../production/infrastructure/sequelize/SequelizeProductionOrderRepository');
-const GenerateMrpPlanUseCase = require('../../application/use-cases/GenerateMrpPlanUseCase');
-const ListPlannedOrdersUseCase = require('../../application/use-cases/ListPlannedOrdersUseCase');
-const ConvertPlannedOrdersToRequisitionUseCase = require('../../application/use-cases/ConvertPlannedOrdersToRequisitionUseCase');
-const ConvertPlannedOrdersToProductionOrderUseCase = require('../../application/use-cases/ConvertPlannedOrdersToProductionOrderUseCase');
+import type { Request, Response, NextFunction } from 'express';
+
+import SequelizeMrpRepository = require('../../infrastructure/sequelize/SequelizeMrpRepository');
+import SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
+import SequelizeItemSupplierRepository = require('../../../items/infrastructure/sequelize/SequelizeItemSupplierRepository');
+import SequelizePurchaseRequisitionRepository = require('../../../purchaseRequisitions/infrastructure/sequelize/SequelizePurchaseRequisitionRepository');
+import SequelizeProductionOrderRepository = require('../../../production/infrastructure/sequelize/SequelizeProductionOrderRepository');
+import GenerateMrpPlanUseCase = require('../../application/use-cases/GenerateMrpPlanUseCase');
+import ListPlannedOrdersUseCase = require('../../application/use-cases/ListPlannedOrdersUseCase');
+import ConvertPlannedOrdersToRequisitionUseCase = require('../../application/use-cases/ConvertPlannedOrdersToRequisitionUseCase');
+import ConvertPlannedOrdersToProductionOrderUseCase = require('../../application/use-cases/ConvertPlannedOrdersToProductionOrderUseCase');
 const {
   createMrpPlanSchema,
   convertPlannedOrdersSchema,
@@ -21,10 +23,36 @@ const itemSupplierRepository = new SequelizeItemSupplierRepository();
 const requisitionRepository = new SequelizePurchaseRequisitionRepository();
 const productionOrderRepository = new SequelizeProductionOrderRepository();
 
+/** Requisicao autenticada: `req.user` e populado pelo middleware `authenticate` (nao tipado globalmente em `Express.Request` neste projeto). */
+type AuthenticatedRequest = Request & { user: { id: number } };
+
+/** Ordem planejada do MRP, campos usados pelo controller (shape real de `mrp_ordens_planejadas`). */
+interface PlannedOrderSummary {
+  id: string;
+  status: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Extrai a lista de `issues` de um erro de validacao Zod (`ZodError`),
+ * sem depender de `instanceof` (o objeto pode vir de um `safeParse`/`parse`
+ * de uma instancia diferente do pacote `zod`). Retorna `null` quando o erro
+ * nao tem o formato esperado.
+ *
+ * @param error - Erro capturado no `catch` (tipado `unknown`).
+ * @returns Lista de issues do Zod, ou `null`.
+ */
+function extractZodIssues(error: unknown): unknown[] | null {
+  if (error && typeof error === 'object' && 'issues' in error) {
+    return (error as { issues: unknown[] }).issues;
+  }
+  return null;
+}
+
 /**
  * Controller do modulo de MRP persistente.
  */
-exports.generatePlan = async (req, res, next) => {
+exports.generatePlan = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const body = createMrpPlanSchema.parse(req.body);
     // Repositorios de requisicao/item-fornecedor sao injetados para
@@ -33,27 +61,28 @@ exports.generatePlan = async (req, res, next) => {
     const useCase = new GenerateMrpPlanUseCase(mrpRepository, itemRepository, requisitionRepository, itemSupplierRepository);
     const data = await useCase.execute({ ...body, requester_id: req.user.id });
 
-    const autoConvertedOrders = data.filter((order) => order.status === 'EM_EXECUCAO');
+    const autoConvertedOrders = data.filter((order: PlannedOrderSummary) => order.status === 'EM_EXECUCAO');
     if (autoConvertedOrders.length > 0) {
       logAction(req, {
         action: 'mrp_auto_convert_to_requisition',
         entityType: 'MrpOrdemPlanejada',
         entityDescription: `${autoConvertedOrders.length} ordem(ns) planejada(s)`,
-        newValues: { converted_ids: autoConvertedOrders.map((order) => order.id) },
+        newValues: { converted_ids: autoConvertedOrders.map((order: PlannedOrderSummary) => order.id) },
         description: `${autoConvertedOrders.length} ordem(ns) planejada(s) convertida(s) automaticamente em requisicao de compra (opt-in items.conversao_automatica)`,
       });
     }
 
     res.status(201).json({ success: true, data });
   } catch (error) {
-    if (error?.issues) {
-      return next(new ValidationError('Payload invalido.', error.issues));
+    const issues = extractZodIssues(error);
+    if (issues) {
+      return next(new ValidationError('Payload invalido.', issues));
     }
     next(error);
   }
 };
 
-exports.listPlannedOrders = async (_req, res, next) => {
+exports.listPlannedOrders = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListPlannedOrdersUseCase(mrpRepository);
     const data = await useCase.execute();
@@ -68,7 +97,7 @@ exports.listPlannedOrders = async (_req, res, next) => {
  * planejadas do MRP em uma unica Requisicao de Compra, fechando o ciclo
  * planejamento -> suprimentos.
  */
-exports.convertPlannedOrders = async (req, res, next) => {
+exports.convertPlannedOrders = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const body = convertPlannedOrdersSchema.parse(req.body);
     const useCase = new ConvertPlannedOrdersToRequisitionUseCase(
@@ -93,8 +122,9 @@ exports.convertPlannedOrders = async (req, res, next) => {
 
     res.status(201).json({ success: true, data });
   } catch (error) {
-    if (error?.issues) {
-      return next(new ValidationError('Payload invalido.', error.issues));
+    const issues = extractZodIssues(error);
+    if (issues) {
+      return next(new ValidationError('Payload invalido.', issues));
     }
     next(error);
   }
@@ -107,7 +137,7 @@ exports.convertPlannedOrders = async (req, res, next) => {
  * itens `SUBCONJUNTO`/`PRODUTO_ACABADO` (complemento da conversao em
  * Requisicao de Compra, usada para itens `MATERIA_PRIMA`).
  */
-exports.convertPlannedOrdersToProduction = async (req, res, next) => {
+exports.convertPlannedOrdersToProduction = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const body = convertPlannedOrdersToProductionSchema.parse(req.body);
     const useCase = new ConvertPlannedOrdersToProductionOrderUseCase(
@@ -126,7 +156,7 @@ exports.convertPlannedOrdersToProduction = async (req, res, next) => {
       entityType: 'ProductionOrder',
       entityDescription: `${data.production_orders.length} OP(s)`,
       newValues: {
-        order_numbers: data.production_orders.map((order) => order.order_number),
+        order_numbers: data.production_orders.map((order: { order_number: string }) => order.order_number),
         converted_ids: data.converted_ids,
       },
       description: `${data.production_orders.length} Ordem(ns) de Producao gerada(s) a partir de ${data.converted_ids.length} ordem(ns) planejada(s) do MRP`,
@@ -134,8 +164,9 @@ exports.convertPlannedOrdersToProduction = async (req, res, next) => {
 
     res.status(201).json({ success: true, data });
   } catch (error) {
-    if (error?.issues) {
-      return next(new ValidationError('Payload invalido.', error.issues));
+    const issues = extractZodIssues(error);
+    if (issues) {
+      return next(new ValidationError('Payload invalido.', issues));
     }
     next(error);
   }

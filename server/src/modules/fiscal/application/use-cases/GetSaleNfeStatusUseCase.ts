@@ -9,11 +9,17 @@
  * @module modules/fiscal/application/use-cases/GetSaleNfeStatusUseCase
  */
 
+import type { Transaction } from 'sequelize';
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { sequelize } = require('../../../../config/database');
 const { NotFoundError, BusinessRuleError } = require('../../../../errors');
 const { Sale, CompanyFiscalConfig } = require('../../../../models/index');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
+
+interface GetSaleNfeStatusInput {
+  saleId: number | string;
+}
 
 class GetSaleNfeStatusUseCase extends UseCase {
   /**
@@ -21,7 +27,7 @@ class GetSaleNfeStatusUseCase extends UseCase {
    * @param {number} input.saleId
    * @returns {Promise<Object>} A venda com o status de NF-e reconciliado.
    */
-  async execute({ saleId }) {
+  async execute({ saleId }: GetSaleNfeStatusInput) {
     const sale = await Sale.findByPk(saleId);
     if (!sale) throw new NotFoundError('Venda não encontrada');
 
@@ -42,7 +48,7 @@ class GetSaleNfeStatusUseCase extends UseCase {
     const provider = createNfeProvider(config.nfe_provider);
     const result = await provider.queryStatus(sale.nfe_provider_ref);
 
-    return sequelize.transaction(async (transaction) => {
+    return sequelize.transaction(async (transaction: Transaction) => {
       const locked = await Sale.findByPk(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!locked) throw new NotFoundError('Venda não encontrada');
 

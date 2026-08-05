@@ -13,7 +13,7 @@ class SequelizeUsersRepository extends UsersRepository {
    * @param {Object} options - `{ page, limit, search, role, active }`.
    * @returns {Promise<{ rows: Object[], count: number }>} Mesma lógica de busca/filtro/paginação do controller anterior.
    */
-  async list({ page, limit, search, role, active }) {
+  async list({ page, limit, search, role, active }: { page: number; limit: number; search?: string; role?: string; active?: boolean }) {
     const where: any = {};
     if (search) {
       const sanitized = Validators.sanitizeSearch(search);
@@ -39,7 +39,7 @@ class SequelizeUsersRepository extends UsersRepository {
    * @param {number} id
    * @returns {Promise<Object|null>} Instância do model `User` sem o campo `password`.
    */
-  async findById(id) {
+  async findById(id: number | string) {
     return User.findByPk(id, { attributes: { exclude: ['password'] } });
   }
 
@@ -47,7 +47,7 @@ class SequelizeUsersRepository extends UsersRepository {
    * @param {Object} data - `{ name, email, password, role }`.
    * @returns {Promise<Object>} Instância do model `User` criada (o hook `beforeSave` faz o hash da senha).
    */
-  async create(data) {
+  async create(data: Record<string, unknown>) {
     return User.create(data);
   }
 
@@ -56,7 +56,7 @@ class SequelizeUsersRepository extends UsersRepository {
    * @param {Object} data - Campos a atualizar.
    * @returns {Promise<number>} Número de linhas afetadas (0 se o id não existir).
    */
-  async update(id, data) {
+  async update(id: number | string, data: Record<string, unknown>) {
     const [updated] = await User.update(data, { where: { id } });
     return updated;
   }
@@ -65,7 +65,7 @@ class SequelizeUsersRepository extends UsersRepository {
    * @param {number} id
    * @returns {Promise<void>}
    */
-  async incrementPasswordVersion(id) {
+  async incrementPasswordVersion(id: number | string) {
     await User.increment('passwordVersion', { where: { id } });
   }
 }

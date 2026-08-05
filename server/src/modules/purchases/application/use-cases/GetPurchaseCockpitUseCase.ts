@@ -1,3 +1,5 @@
+import type PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 
 /**
@@ -14,7 +16,9 @@ class GetPurchaseCockpitUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/PurchaseRepository')} purchaseRepository
    */
-  constructor(purchaseRepository) {
+  private purchaseRepository: PurchaseRepository;
+
+  constructor(purchaseRepository: PurchaseRepository) {
     super();
     this.purchaseRepository = purchaseRepository;
   }

@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const { logAction } = require('../../../../services/auditLogService');
 const SequelizeBOMRepository = require('../../infrastructure/sequelize/SequelizeBOMRepository');
 const ListBOMsUseCase = require('../../application/use-cases/ListBOMsUseCase');
@@ -27,6 +29,9 @@ const { createBomSchema, updateBomSchema, handleZodError } = require('../validat
  */
 const bomRepository = new SequelizeBOMRepository();
 
+/** Requisição autenticada: `req.user` é populado pelo middleware `authenticate` (não tipado globalmente em `Express.Request` neste projeto). */
+type AuthenticatedRequest = Request & { user: { id: number } };
+
 /**
  * Responde erros lançados por `BomService` (objetos `Error` simples com
  * `statusCode`, não `AppError`) no mesmo formato usado pelo controller
@@ -37,7 +42,7 @@ const bomRepository = new SequelizeBOMRepository();
  * @param {import('express').NextFunction} next
  * @returns {void}
  */
-function handleError(error, res, next) {
+function handleError(error: any, res: Response, next: NextFunction) {
   if (error.statusCode && !error.code) {
     return res.status(error.statusCode).json({ success: false, error: error.message });
   }
@@ -52,7 +57,7 @@ function handleError(error, res, next) {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, status, search, product_id } = req.query;
     const useCase = new ListBOMsUseCase(bomRepository);
@@ -69,7 +74,7 @@ exports.list = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetBOMByIdUseCase(bomRepository);
     const bom = await useCase.execute({ id: req.params.id });
@@ -85,7 +90,7 @@ exports.getById = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getByProduct = async (req, res, next) => {
+exports.getByProduct = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetActiveBOMByProductUseCase(bomRepository);
     const bom = await useCase.execute({ productId: req.params.productId });
@@ -103,7 +108,7 @@ exports.getByProduct = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listVersions = async (req, res, next) => {
+exports.listVersions = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListBOMVersionsUseCase(bomRepository);
     const versions = await useCase.execute({ productId: req.params.productId });
@@ -121,7 +126,7 @@ exports.listVersions = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.create = async (req, res, next) => {
+exports.create = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const parsed = createBomSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -156,7 +161,7 @@ exports.create = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Usa sempre UpdateBOMUseCase (aceita todos os ALLOWED_FIELDS, incluindo
     // status) para preservar 100% o comportamento do controller anterior, que
@@ -199,7 +204,7 @@ exports.update = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new DeactivateBOMUseCase(bomRepository);
     const bom = await useCase.execute({ id: req.params.id });
@@ -226,7 +231,7 @@ exports.remove = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.explode = async (req, res, next) => {
+exports.explode = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ExplodeBOMUseCase(bomRepository);
     const result = await useCase.execute({ id: req.params.id, qty: req.query.qty });
@@ -242,7 +247,7 @@ exports.explode = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.cost = async (req, res, next) => {
+exports.cost = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CalculateBOMCostUseCase(bomRepository);
     const result = await useCase.execute({ id: req.params.id, qty: req.query.qty });
@@ -258,7 +263,7 @@ exports.cost = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.availability = async (req, res, next) => {
+exports.availability = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CheckBOMAvailabilityUseCase(bomRepository);
     const result = await useCase.execute({ id: req.params.id, qty: req.query.qty });
@@ -274,7 +279,7 @@ exports.availability = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.tree = async (req, res, next) => {
+exports.tree = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetBOMTreeUseCase();
     const result = await useCase.execute({ id: req.params.id });
@@ -290,7 +295,7 @@ exports.tree = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.listItems = async (req, res, next) => {
+exports.listItems = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListBOMItemsUseCase(bomRepository);
     const items = await useCase.execute({ id: req.params.id });

@@ -1,3 +1,5 @@
+import type { Transaction } from 'sequelize';
+
 const { Op, QueryTypes } = require('sequelize');
 const FinancialRepository = require('../../domain/repositories/FinancialRepository');
 const { sequelize } = require('../../../../config/database');
@@ -38,12 +40,12 @@ class SequelizeFinancialRepository extends FinancialRepository {
   }
 
   /** @inheritdoc */
-  async findReceivableById(id) {
+  async findReceivableById(id: number | string) {
     return AccountReceivable.findByPk(id);
   }
 
   /** @inheritdoc */
-  async findReceivableByIdForUpdate(id, transaction) {
+  async findReceivableByIdForUpdate(id: number | string, transaction: Transaction) {
     return AccountReceivable.findByPk(id, {
       transaction,
       lock: transaction.LOCK.UPDATE
@@ -71,12 +73,12 @@ class SequelizeFinancialRepository extends FinancialRepository {
   }
 
   /** @inheritdoc */
-  async findPayableById(id) {
+  async findPayableById(id: number | string) {
     return AccountPayable.findByPk(id);
   }
 
   /** @inheritdoc */
-  async findPayableByIdForUpdate(id, transaction) {
+  async findPayableByIdForUpdate(id: number | string, transaction: Transaction) {
     return AccountPayable.findByPk(id, {
       transaction,
       lock: transaction.LOCK.UPDATE
@@ -84,12 +86,12 @@ class SequelizeFinancialRepository extends FinancialRepository {
   }
 
   /** @inheritdoc */
-  async createPayable(data) {
+  async createPayable(data: Record<string, any>) {
     return AccountPayable.create(data);
   }
 
   /** @inheritdoc */
-  async sumReceivableByStatus(start, end) {
+  async sumReceivableByStatus(start: Date, end: Date) {
     return AccountReceivable.findAll({
       where: { due_date: { [Op.between]: [start, end] } },
       attributes: ['status', [sequelize.fn('SUM', sequelize.col('amount')), 'total']],
@@ -99,7 +101,7 @@ class SequelizeFinancialRepository extends FinancialRepository {
   }
 
   /** @inheritdoc */
-  async sumPayableByStatus(start, end) {
+  async sumPayableByStatus(start: Date, end: Date) {
     return AccountPayable.findAll({
       where: { due_date: { [Op.between]: [start, end] } },
       attributes: ['status', [sequelize.fn('SUM', sequelize.col('amount')), 'total']],

@@ -10,6 +10,11 @@
  * `server/src/services/inventoryService.ts` (não duplicada aqui); este
  * repositório cobre apenas leitura/listagem de movimentações e produtos.
  */
+/** Filtros de listagem (product_id, type, start_date, end_date, warehouse_id) aceitos por `listMovements`. */
+type InventoryMovementFilters = Record<string, any>;
+/** Paginação `{ limit, offset }` aceita por `listMovements`. */
+type InventoryMovementPagination = { limit?: number; offset?: number };
+
 class InventoryRepository {
   /**
    * Lista movimentações de estoque com filtros e paginação.
@@ -19,7 +24,7 @@ class InventoryRepository {
    * @param {Object} [pagination] - `{ limit, offset }`.
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
-  async listMovements(filters, pagination) { // eslint-disable-line no-unused-vars
+  async listMovements(filters?: InventoryMovementFilters, pagination?: InventoryMovementPagination): Promise<{ rows: any[]; count: number }> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryRepository.listMovements não implementado.');
   }
 
@@ -30,7 +35,7 @@ class InventoryRepository {
    * @param {number} id - Id da movimentação.
    * @returns {Promise<Object|null>} Registro encontrado ou `null`.
    */
-  async findMovementById(id) { // eslint-disable-line no-unused-vars
+  async findMovementById(id: number | string): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryRepository.findMovementById não implementado.');
   }
 
@@ -40,7 +45,7 @@ class InventoryRepository {
    * @abstract
    * @returns {Promise<Object[]>}
    */
-  async listActiveProductsWithCategory() {
+  async listActiveProductsWithCategory(): Promise<any[]> {
     throw new Error('InventoryRepository.listActiveProductsWithCategory não implementado.');
   }
 
@@ -50,10 +55,10 @@ class InventoryRepository {
    * @abstract
    * @returns {Promise<Object[]>}
    */
-  async listLowStockProducts() {
+  async listLowStockProducts(): Promise<any[]> {
     throw new Error('InventoryRepository.listLowStockProducts não implementado.');
   }
 }
 
-module.exports = InventoryRepository;
+export = InventoryRepository;
 

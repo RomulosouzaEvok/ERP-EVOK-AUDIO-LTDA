@@ -17,7 +17,7 @@ class UpdateUserUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/UsersRepository')} usersRepository
    */
-  constructor(usersRepository) {
+  constructor(usersRepository: any) {
     super();
     this.usersRepository = usersRepository;
   }
@@ -36,7 +36,15 @@ class UpdateUserUseCase extends UseCase {
    * @throws {NotFoundError} Com mensagem `'Usuário não encontrado'` se o id não existir.
    * @throws {ConflictError} Com mensagem `'Email já cadastrado'` se o novo email já existir (`SequelizeUniqueConstraintError`).
    */
-  async execute({ id, name, email, role, active, password, req }) {
+  async execute({ id, name, email, role, active, password, req }: {
+    id: number | string;
+    name?: string;
+    email?: string;
+    role?: string;
+    active?: boolean;
+    password?: unknown;
+    req: any;
+  }) {
     const entity = new UpdateUserEntity({ name, email, role, active, password });
     const updateData = entity.toUpdateData();
 
@@ -50,7 +58,7 @@ class UpdateUserUseCase extends UseCase {
     let updated;
     try {
       updated = await this.usersRepository.update(id, updateData);
-    } catch (error) {
+    } catch (error: any) {
       if (error.name === 'SequelizeUniqueConstraintError') {
         throw new ConflictError('Email já cadastrado');
       }

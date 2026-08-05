@@ -1,4 +1,6 @@
-﻿/**
+﻿import type { Transaction } from 'sequelize';
+
+/**
  * Interface (contrato) de repositório de Pedidos de Compra (Purchase Orders).
  *
  * Define os métodos que qualquer implementação de persistência deve
@@ -15,7 +17,7 @@ class PurchaseRepository {
    * @param {Object} [pagination] - `{ limit, offset }`.
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
-  async listPurchases(filters, pagination) { // eslint-disable-line no-unused-vars
+  async listPurchases(filters?: Record<string, unknown>, pagination?: Record<string, unknown>): Promise<{ rows: any[]; count: number }> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.listPurchases não implementado.');
   }
 
@@ -26,7 +28,7 @@ class PurchaseRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findPurchaseById(id) { // eslint-disable-line no-unused-vars
+  async findPurchaseById(id: number | string): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findPurchaseById não implementado.');
   }
 
@@ -38,7 +40,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findPurchaseByIdRaw(id, transaction) { // eslint-disable-line no-unused-vars
+  async findPurchaseByIdRaw(id: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findPurchaseByIdRaw não implementado.');
   }
 
@@ -50,7 +52,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} transaction
    * @returns {Promise<Object|null>}
    */
-  async findPurchaseByIdRawForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
+  async findPurchaseByIdRawForUpdate(id: number | string, transaction: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findPurchaseByIdRawForUpdate não implementado.');
   }
 
@@ -62,7 +64,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findPurchaseWithItems(id, transaction) { // eslint-disable-line no-unused-vars
+  async findPurchaseWithItems(id: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findPurchaseWithItems não implementado.');
   }
 
@@ -75,7 +77,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} transaction
    * @returns {Promise<Object|null>}
    */
-  async findPurchaseWithItemsForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
+  async findPurchaseWithItemsForUpdate(id: number | string, transaction: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findPurchaseWithItemsForUpdate não implementado.');
   }
 
@@ -87,7 +89,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async createPurchase(data, transaction) { // eslint-disable-line no-unused-vars
+  async createPurchase(data: Record<string, unknown>, transaction?: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.createPurchase não implementado.');
   }
 
@@ -99,7 +101,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async createPurchaseItem(data, transaction) { // eslint-disable-line no-unused-vars
+  async createPurchaseItem(data: Record<string, unknown>, transaction?: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.createPurchaseItem não implementado.');
   }
 
@@ -112,7 +114,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<void>}
    */
-  async updatePurchaseFields(id, data, transaction) { // eslint-disable-line no-unused-vars
+  async updatePurchaseFields(id: number | string, data: Record<string, unknown>, transaction?: Transaction): Promise<void> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.updatePurchaseFields não implementado.');
   }
 
@@ -124,7 +126,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findProductById(id, transaction) { // eslint-disable-line no-unused-vars
+  async findProductById(id: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findProductById não implementado.');
   }
 
@@ -139,7 +141,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findProductByCode(code, transaction) { // eslint-disable-line no-unused-vars
+  async findProductByCode(code: string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findProductByCode não implementado.');
   }
 
@@ -151,7 +153,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object[]>}
    */
-  async findPurchaseItems(purchaseId, transaction) { // eslint-disable-line no-unused-vars
+  async findPurchaseItems(purchaseId: number | string, transaction?: Transaction): Promise<any[]> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findPurchaseItems não implementado.');
   }
 
@@ -163,7 +165,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} transaction
    * @returns {Promise<Object[]>}
    */
-  async findPurchaseItemsForUpdate(purchaseId, transaction) { // eslint-disable-line no-unused-vars
+  async findPurchaseItemsForUpdate(purchaseId: number | string, transaction: Transaction): Promise<any[]> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findPurchaseItemsForUpdate não implementado.');
   }
 
@@ -176,7 +178,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<void>}
    */
-  async updatePurchaseItem(id, data, transaction) { // eslint-disable-line no-unused-vars
+  async updatePurchaseItem(id: number | string, data: Record<string, unknown>, transaction?: Transaction): Promise<void> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.updatePurchaseItem não implementado.');
   }
 
@@ -188,7 +190,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findAccountPayableByPurchaseId(purchaseId, transaction) { // eslint-disable-line no-unused-vars
+  async findAccountPayableByPurchaseId(purchaseId: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.findAccountPayableByPurchaseId não implementado.');
   }
 
@@ -200,7 +202,7 @@ class PurchaseRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async createAccountPayable(data, transaction) { // eslint-disable-line no-unused-vars
+  async createAccountPayable(data: Record<string, unknown>, transaction?: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
     throw new Error('PurchaseRepository.createAccountPayable não implementado.');
   }
 
@@ -223,5 +225,5 @@ class PurchaseRepository {
   }
 }
 
-module.exports = PurchaseRepository;
+export = PurchaseRepository;
 

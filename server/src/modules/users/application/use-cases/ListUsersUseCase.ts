@@ -11,7 +11,7 @@ class ListUsersUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/UsersRepository')} usersRepository
    */
-  constructor(usersRepository) {
+  constructor(usersRepository: any) {
     super();
     this.usersRepository = usersRepository;
   }

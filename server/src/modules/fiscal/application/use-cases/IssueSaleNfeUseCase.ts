@@ -14,6 +14,8 @@
  * @module modules/fiscal/application/use-cases/IssueSaleNfeUseCase
  */
 
+import type { Transaction } from 'sequelize';
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { sequelize } = require('../../../../config/database');
 const { NotFoundError, BusinessRuleError, ConflictError } = require('../../../../errors');
@@ -21,14 +23,18 @@ const { Sale, SaleItem, Client, Product, CompanyFiscalConfig } = require('../../
 const TaxCalculationService = require('../../domain/services/TaxCalculationService');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
 
+interface IssueSaleNfeInput {
+  saleId: number | string;
+}
+
 class IssueSaleNfeUseCase extends UseCase {
   /**
    * @param {Object} input
    * @param {number} input.saleId
    * @returns {Promise<Object>} A venda atualizada com o resultado da emissão.
    */
-  async execute({ saleId }) {
-    const reserved = await sequelize.transaction(async (transaction) => {
+  async execute({ saleId }: IssueSaleNfeInput) {
+    const reserved = await sequelize.transaction(async (transaction: Transaction) => {
       const sale = await Sale.findByPk(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!sale) throw new NotFoundError('Venda não encontrada');
 
@@ -60,7 +66,7 @@ class IssueSaleNfeUseCase extends UseCase {
       config.nfe_next_number += 1;
       await config.save({ transaction });
 
-      const productIds = items.map((item) => item.product_id);
+      const productIds = items.map((item: any) => item.product_id);
       const products = await Product.findAll({ where: { id: productIds }, transaction });
       const productById = new Map<number, any>(products.map((p: any) => [p.id, p]));
 
@@ -172,7 +178,7 @@ class IssueSaleNfeUseCase extends UseCase {
       };
     }
 
-    return sequelize.transaction(async (transaction) => {
+    return sequelize.transaction(async (transaction: Transaction) => {
       const sale = await Sale.findByPk(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!sale) throw new NotFoundError('Venda não encontrada');
 

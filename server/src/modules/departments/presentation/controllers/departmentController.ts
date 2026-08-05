@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const SequelizeDepartmentsRepository = require('../../infrastructure/sequelize/SequelizeDepartmentsRepository');
 const ListDepartmentsUseCase = require('../../application/use-cases/ListDepartmentsUseCase');
 const GetDepartmentByIdUseCase = require('../../application/use-cases/GetDepartmentByIdUseCase');
@@ -14,7 +16,7 @@ const DeactivateDepartmentUseCase = require('../../application/use-cases/Deactiv
 const departmentsRepository = new SequelizeDepartmentsRepository();
 
 /** `GET /api/departments` — lista departamentos ativos. */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListDepartmentsUseCase(departmentsRepository);
     const departments = await useCase.execute();
@@ -25,7 +27,7 @@ exports.list = async (req, res, next) => {
 };
 
 /** `GET /api/departments/:id` — busca um departamento pelo id. */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetDepartmentByIdUseCase(departmentsRepository);
     const department = await useCase.execute({ id: req.params.id });
@@ -36,7 +38,7 @@ exports.getById = async (req, res, next) => {
 };
 
 /** `POST /api/departments` — cria um novo departamento. */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CreateDepartmentUseCase(departmentsRepository);
     const department = await useCase.execute(req.body);
@@ -47,7 +49,7 @@ exports.create = async (req, res, next) => {
 };
 
 /** `PUT /api/departments/:id` — atualiza um departamento existente. */
-exports.update = async (req, res, next) => {
+exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new UpdateDepartmentUseCase(departmentsRepository);
     const department = await useCase.execute({ id: req.params.id, body: req.body });
@@ -58,7 +60,7 @@ exports.update = async (req, res, next) => {
 };
 
 /** `DELETE /api/departments/:id` — inativa (soft delete) um departamento. */
-exports.remove = async (req, res, next) => {
+exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new DeactivateDepartmentUseCase(departmentsRepository);
     const result = await useCase.execute({ id: req.params.id });

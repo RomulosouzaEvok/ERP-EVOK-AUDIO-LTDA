@@ -24,6 +24,15 @@ export interface Item {
   unidade: string;
   estoque_atual: string | number;
   status: string;
+  /**
+   * Opt-in de conversão automática do MRP (roadmap pós-Go-Live item 3,
+   * `docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 3): quando `true`, ordens
+   * planejadas geradas pelo MRP para este item são convertidas
+   * automaticamente em requisição de compra, sem revisão humana. Default
+   * `false`/`undefined` (conversão manual). Ver
+   * `server/src/modules/mrp/application/use-cases/GenerateMrpPlanUseCase.ts`.
+   */
+  conversao_automatica?: boolean;
 }
 
 export interface ItemListParams {
@@ -65,5 +74,26 @@ export interface CreateItemInput {
  */
 export async function createItem(input: CreateItemInput) {
   const { data } = await httpClient.post<ItemResponse<Item>>('/api/items', input);
+  return data.data;
+}
+
+/** Payload parcial aceito por `PATCH /api/items/:id` (`.strict()` no backend). */
+export interface UpdateItemInput {
+  descricao?: string;
+  unidade?: string;
+  estoque_seguranca?: number;
+  lote_minimo?: number;
+  lead_time_dias?: number;
+  custo_padrao?: number;
+  conversao_automatica?: boolean;
+}
+
+/**
+ * `PATCH /api/items/:id` — atualização parcial de um item mestre. Usado
+ * hoje para o toggle de `conversao_automatica` (opt-in de compra sem
+ * revisão humana no MRP).
+ */
+export async function updateItem(id: string, input: UpdateItemInput) {
+  const { data } = await httpClient.patch<ItemResponse<Item>>(`/api/items/${id}`, input);
   return data.data;
 }

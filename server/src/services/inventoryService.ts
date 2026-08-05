@@ -90,12 +90,14 @@ async function createMovement(
     referenceId?: number;
     referenceType?: string;
     warehouseId?: number | null;
+    itemId?: string | null;
   },
   transaction: Transaction
 ) {
   return InventoryMovement.create(
     {
       product_id: data.productId,
+      item_id: data.itemId ?? null,
       user_id: data.userId,
       type: data.type,
       quantity: data.quantity,
@@ -234,6 +236,12 @@ export async function receive(
  * @param userId - ID do usuário responsável.
  * @param reason - Motivo do ajuste (obrigatório).
  * @param transaction - Transação Sequelize ativa.
+ * @param warehouseId - Id do depósito onde o ajuste ocorre (opcional).
+ * @param itemId - Id (UUID) do `Item` novo de origem, quando a movimentação
+ *   foi criada via `item_id` (dual-read, resolvido para `productId` antes de
+ *   chamar esta função) — gravado em `InventoryMovement.item_id` apenas para
+ *   rastreabilidade; não altera nenhum saldo. `null`/`undefined` para o
+ *   fluxo legado por `product_id` (comportamento inalterado).
  * @returns Resultado da operação.
  * @throws {Error} Se produto não existir, estoque insuficiente ou reason vazio.
  */
@@ -244,7 +252,8 @@ export async function adjust(
   userId: number,
   reason: string,
   transaction: Transaction,
-  warehouseId?: number | null
+  warehouseId?: number | null,
+  itemId?: string | null
 ): Promise<InventoryResult> {
   if (!reason || reason.trim().length === 0) {
     throw Object.assign(new Error('Motivo do ajuste é obrigatório'), {
@@ -273,7 +282,8 @@ export async function adjust(
       quantity,
       description: reason,
       referenceType: 'adjustment',
-      warehouseId
+      warehouseId,
+      itemId
     },
     transaction
   );

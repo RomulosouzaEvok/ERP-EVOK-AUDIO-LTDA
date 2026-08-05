@@ -1,4 +1,6 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryCountRepository = require('../../domain/repositories/InventoryCountRepository');
+
 const { NotFoundError } = require('../../../../errors');
 
 /**
@@ -6,19 +8,20 @@ const { NotFoundError } = require('../../../../errors');
  * /api/inventory-counts/:id`.
  */
 class GetInventoryCountByIdUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/InventoryCountRepository')} inventoryCountRepository */
-  constructor(inventoryCountRepository) {
+  private readonly inventoryCountRepository: InventoryCountRepository;
+
+  /** @param inventoryCountRepository - Repositório de contagens de inventário. */
+  constructor(inventoryCountRepository: InventoryCountRepository) {
     super();
     this.inventoryCountRepository = inventoryCountRepository;
   }
 
   /**
-   * @param {Object} input
-   * @param {number} input.id
+   * @param input - `{ id }`.
    * @returns {Promise<Object>}
    * @throws {NotFoundError} Se a contagem não existir.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number | string }) {
     const count = await this.inventoryCountRepository.findById(id);
     if (!count) {
       throw new NotFoundError('Contagem de inventário não encontrada');
@@ -27,6 +30,6 @@ class GetInventoryCountByIdUseCase extends UseCase {
   }
 }
 
-module.exports = GetInventoryCountByIdUseCase;
+export = GetInventoryCountByIdUseCase;
 
 

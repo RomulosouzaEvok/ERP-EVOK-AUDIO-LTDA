@@ -1,5 +1,6 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError } = require('../../../../errors');
+import type { IProductRepository } from '../../domain/repositories/ProductRepository';
 
 /**
  * Registra uma nova revisão técnica para um produto (ex.: alteração de
@@ -11,10 +12,12 @@ const { NotFoundError, ValidationError } = require('../../../../errors');
  * a revisão evoluir para uma tabela de histórico própria sem afetar o update geral.
  */
 class CreateProductRevisionUseCase extends UseCase {
+  private productRepository: IProductRepository;
+
   /**
-   * @param {import('../../domain/repositories/ProductRepository')} productRepository
+   * @param {IProductRepository} productRepository
    */
-  constructor(productRepository) {
+  constructor(productRepository: IProductRepository) {
     super();
     this.productRepository = productRepository;
   }
@@ -27,7 +30,7 @@ class CreateProductRevisionUseCase extends UseCase {
    * @throws {NotFoundError} Se o produto não existir.
    * @throws {ValidationError} Se `revision` for vazia ou igual à atual.
    */
-  async execute({ id, revision }) {
+  async execute({ id, revision }: { id: number | string; revision: string }) {
     if (!revision || String(revision).trim() === '') {
       throw new ValidationError('Nova revisão é obrigatória.');
     }

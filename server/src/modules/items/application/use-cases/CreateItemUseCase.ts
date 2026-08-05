@@ -33,6 +33,7 @@ class CreateItemUseCase extends UseCase<Record<string, any>, any> {
       lead_time_dias: input.lead_time_dias ?? 0,
       custo_padrao: input.custo_padrao ?? 0,
       fornecedor_padrao_id: input.fornecedor_padrao_id ?? null,
+      conversao_automatica: input.conversao_automatica ?? false,
     });
   }
 }

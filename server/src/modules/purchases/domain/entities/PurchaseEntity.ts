@@ -1,6 +1,20 @@
 const Entity = require('../../../../shared/domain/Entity');
 const { ValidationError } = require('../../../../errors');
 
+interface PurchaseEntityItemInput {
+  product_id: number | string;
+  quantity: number | string;
+  unit_price: number | string;
+}
+
+interface PurchaseEntityProps {
+  id?: number | string;
+  supplier_id: number | string;
+  items: PurchaseEntityItemInput[];
+  notes?: string;
+  expected_date?: string | Date;
+}
+
 /**
  * Entidade de domínio leve que representa um Pedido de Compra (Purchase
  * Order) na criação.
@@ -23,7 +37,12 @@ class PurchaseEntity extends Entity {
    * @param {string|Date} [props.expected_date]
    * @throws {ValidationError} Se `supplier_id` ausente, `items` vazio/ausente, ou algum item inválido.
    */
-  constructor(props) {
+  public supplier_id: number | string;
+  public items: PurchaseEntityItemInput[];
+  public notes: string | null;
+  public expected_date: string | Date | null;
+
+  constructor(props: PurchaseEntityProps) {
     super({ id: props.id });
     this.supplier_id = props.supplier_id;
     this.items = props.items;
@@ -50,11 +69,11 @@ class PurchaseEntity extends Entity {
       if (!item.product_id || item.quantity === undefined || item.unit_price === undefined) {
         throw new ValidationError('Cada item deve ter product_id, quantity e unit_price.');
       }
-      const qty = parseFloat(item.quantity);
+      const qty = parseFloat(String(item.quantity));
       if (Number.isNaN(qty) || qty <= 0) {
         throw new ValidationError('Quantidade deve ser maior que zero.');
       }
-      const unitPrice = parseFloat(item.unit_price);
+      const unitPrice = parseFloat(String(item.unit_price));
       if (Number.isNaN(unitPrice) || unitPrice <= 0) {
         throw new ValidationError('Preço unitário deve ser maior que zero.');
       }

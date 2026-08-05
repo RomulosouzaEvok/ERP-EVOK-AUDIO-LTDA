@@ -11,7 +11,7 @@ class GetUserByIdUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/UsersRepository')} usersRepository
    */
-  constructor(usersRepository) {
+  constructor(usersRepository: any) {
     super();
     this.usersRepository = usersRepository;
   }
@@ -22,7 +22,7 @@ class GetUserByIdUseCase extends UseCase {
    * @returns {Promise<Object>} Usuário encontrado (sem `password`).
    * @throws {NotFoundError} Com mensagem `'Usuário não encontrado'` se o id não existir.
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number | string }) {
     const user = await this.usersRepository.findById(id);
     if (!user) {
       throw new NotFoundError('Usuário não encontrado');

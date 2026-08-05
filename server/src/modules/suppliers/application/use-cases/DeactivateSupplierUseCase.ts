@@ -1,3 +1,5 @@
+import type SuppliersRepository = require('../../domain/repositories/SuppliersRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError } = require('../../../../errors');
 
@@ -14,7 +16,9 @@ class DeactivateSupplierUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/SuppliersRepository')} suppliersRepository
    */
-  constructor(suppliersRepository) {
+  private suppliersRepository: SuppliersRepository;
+
+  constructor(suppliersRepository: SuppliersRepository) {
     super();
     this.suppliersRepository = suppliersRepository;
   }
@@ -26,13 +30,14 @@ class DeactivateSupplierUseCase extends UseCase {
    * @throws {ValidationError} Com mensagem `'Fornecedor possui N pedido(s) de compra pendente(s).'` se houver compras pendentes.
    * @throws {NotFoundError} Com mensagem `'Fornecedor não encontrado'` se o id não existir.
    */
-  async execute({ id }) {
-    const pendingPurchases = await this.suppliersRepository.countPendingPurchases(id);
+  async execute({ id }: { id: number | string }) {
+    const supplierId = Number(id);
+    const pendingPurchases = await this.suppliersRepository.countPendingPurchases(supplierId);
     if (pendingPurchases > 0) {
       throw new ValidationError(`Fornecedor possui ${pendingPurchases} pedido(s) de compra pendente(s).`);
     }
 
-    const updated = await this.suppliersRepository.update(id, { status: 'inactive' });
+    const updated = await this.suppliersRepository.update(supplierId, { status: 'inactive' });
     if (!updated) {
       throw new NotFoundError('Fornecedor não encontrado');
     }

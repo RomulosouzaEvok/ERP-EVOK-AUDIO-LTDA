@@ -20,6 +20,8 @@
  * - OCP: Extensível via estratégias de cálculo de custo
  */
 
+import type { Transaction } from 'sequelize';
+
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const { BillOfMaterial, BillOfMaterialItem, Product } = require('../models/index');
@@ -38,8 +40,32 @@ const VALID_COMPONENT_TYPES = new Set(['raw_material', 'component', 'semi_finish
  * @param {string} productType - `product_type` do produto usado como componente.
  * @returns {string} Um `component_type` válido.
  */
-function mapProductTypeToComponentType(productType) {
+function mapProductTypeToComponentType(productType: string): string {
   return VALID_COMPONENT_TYPES.has(productType) ? productType : 'component';
+}
+
+/** Item de entrada para {@link BomService.createBOM} (um componente da nova BOM). */
+interface BomCreateItemInput {
+  component_product_id: number | string;
+  quantity: number | string;
+  unit?: string;
+  bom_level?: number;
+  sequence_order?: number;
+  component_type?: string;
+  scrap_percentage?: number | string;
+  notes?: string;
+  alternative_product_id?: number | string | null;
+  is_critical?: boolean;
+}
+
+/** Payload de entrada para {@link BomService.createBOM}. */
+interface BomCreateData {
+  product_id: number | string;
+  created_by?: number | string;
+  items: BomCreateItemInput[];
+  revision?: string;
+  revision_notes?: string;
+  notes?: string;
 }
 
 class BomService {
@@ -92,7 +118,7 @@ class BomService {
    *   ]
    * });
    */
-  static async createBOM(bomData) {
+  static async createBOM(bomData: BomCreateData) {
     const { product_id, created_by, items, revision, revision_notes, notes } = bomData;
 
     // Validações de negócio
@@ -125,7 +151,7 @@ class BomService {
     );
 
     // Cria BOM com os itens em transação
-    const result = await sequelize.transaction(async (transaction) => {
+    const result = await sequelize.transaction(async (transaction: Transaction) => {
       const bom = await BillOfMaterial.create({
         product_id,
         revision: revision || '00',
@@ -143,8 +169,8 @@ class BomService {
         const component = await Product.findByPk(item.component_product_id, { transaction });
         
         const unitCost = parseFloat(component.cost_price || 0);
-        const quantity = parseFloat(item.quantity) || 1;
-        const scrapPct = parseFloat(item.scrap_percentage) || 0;
+        const quantity = parseFloat(String(item.quantity)) || 1;
+        const scrapPct = parseFloat(String(item.scrap_percentage)) || 0;
         const quantityWithScrap = quantity * (1 + scrapPct / 100);
         const totalCost = unitCost * quantityWithScrap;
 
@@ -196,7 +222,7 @@ class BomService {
    * await BomService.explodeBOM(1, 1000);
    * // Retorna: { totalComponents: [...], summary: { ... } }
    */
-  static async explodeBOM(productId, quantity, options: any = {}) {
+  static async explodeBOM(productId: number | string, quantity: number, options: any = {}) {
     const maxDepth = options.maxDepth || this.MAX_BOM_DEPTH;
     const includeCost = options.includeCost !== false;
 
@@ -217,8 +243,8 @@ class BomService {
       );
     }
 
-    const componentMap = new Map();
-    const errors = [];
+    const componentMap = new Map<string, Record<string, any>>();
+    const errors: string[] = [];
     let totalCost = 0;
 
     // Caminho de ancestrais (ids de produto) da recursão atual, usado para
@@ -227,7 +253,7 @@ class BomService {
     const ancestorPath = new Set([productId]);
 
     // Função recursiva para explodir BOM
-    const explodeLevel = async (items, level, parentQty) => {
+    const explodeLevel = async (items: any[], level: number, parentQty: number) => {
       if (level > maxDepth) {
         throw Object.assign(
           new Error(`Profundidade máxima (${maxDepth}) excedida ao explodir a BOM do produto ID ${productId}. Possível ciclo não detectado pela checagem de ancestrais.`),
@@ -274,7 +300,8 @@ class BomService {
           // Componente folha (matéria-prima ou componente simples)
           const key = `${item.component_product_id}`;
           if (componentMap.has(key)) {
-            const existing = componentMap.get(key);
+            // Seguro: acabamos de confirmar a existência da chave com `.has(key)` acima.
+            const existing = componentMap.get(key)!;
             existing.quantity += netQty;
             existing.total_cost = existing.quantity * existing.unit_cost;
           } else {
@@ -339,10 +366,10 @@ class BomService {
    * await BomService.calculateCost(1);
    * // Retorna: { total_cost: 85.50, items: [...], summary: { materials: 75.00, labor: 10.50 } }
    */
-  static async calculateCost(productId, quantity = 1) {
+  static async calculateCost(productId: number | string, quantity = 1) {
     const explosion = await this.explodeBOM(productId, quantity, { includeCost: true });
-    
-    const byType = {
+
+    const byType: Record<string, number> = {
       raw_material: 0,
       component: 0,
       semi_finished: 0,
@@ -351,8 +378,8 @@ class BomService {
       other: 0
     };
 
-    explosion.components.forEach(c => {
-      const type = c.component_type || 'other';
+    explosion.components.forEach((c: any) => {
+      const type: string = c.component_type || 'other';
       if (byType[type] !== undefined) {
         byType[type] += c.total_cost;
       } else {
@@ -382,13 +409,13 @@ class BomService {
    * await BomService.checkAvailability(1, 500);
    * // Retorna: { available: false, missing_items: [...], can_produce: 320 }
    */
-  static async checkAvailability(productId, quantity) {
+  static async checkAvailability(productId: number | string, quantity: number) {
     const explosion = await this.explodeBOM(productId, quantity, { includeCost: false });
 
-    const missingItems = [];
+    const missingItems: Record<string, any>[] = [];
     let maxPossible = Infinity;
 
-    explosion.components.forEach(comp => {
+    explosion.components.forEach((comp: any) => {
       const needed = comp.quantity;
       const available = comp.stock_available;
       
@@ -431,9 +458,9 @@ class BomService {
    * Agrupa um array por uma chave.
    * @private
    */
-  static _groupBy(array, key) {
-    const result: any = {};
-    array.forEach(item => {
+  static _groupBy(array: any[], key: string) {
+    const result: Record<string, number> = {};
+    array.forEach((item) => {
       const value = item[key] || 'unknown';
       if (!result[value]) result[value] = 0;
       result[value]++;
@@ -447,7 +474,7 @@ class BomService {
    * @param {number} bomId - ID da BOM
    * @returns {Promise<Object>} Árvore estruturada com níveis
    */
-  static async getBOMTree(bomId) {
+  static async getBOMTree(bomId: number | string) {
     const bom = await BillOfMaterial.findByPk(bomId, {
       include: [{
         model: BillOfMaterialItem,
@@ -471,10 +498,10 @@ class BomService {
       }
 
       const children = bom.items
-        .filter(item => item.parent_item_id === parentId)
-        .sort((a, b) => a.sequence_order - b.sequence_order);
+        .filter((item: any) => item.parent_item_id === parentId)
+        .sort((a: any, b: any) => a.sequence_order - b.sequence_order);
 
-      return children.map(item => {
+      return children.map((item: any) => {
         if (visitedItemIds.has(item.id)) {
           throw Object.assign(new Error(`Ciclo detectado na árvore da BOM ${bomId} no item #${item.id}.`), { statusCode: 422 });
         }

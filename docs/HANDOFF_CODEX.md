@@ -6328,4 +6328,197 @@ client). `client/src/api/employees.ts` ganhou `user_id` em
    `http://localhost:5000`.
 
 **Consolidado por**: Claude Code (frontend, Bloco E)
+
+---
+
+## Toggle de conversão automática do MRP (`conversao_automatica`) — frontend
+
 **Data**: 2026-08-05
+**Escopo**: UI para o opt-in `items.conversao_automatica` (roadmap pós-Go-Live item 3,
+`docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 3). Consome o endpoint novo
+`PATCH /api/items/:id` (`authenticate` + `authorizeModule('produtos', 'operate')`).
+**Status**: ✅ Concluído (só frontend — backend já existia)
+
+### Decisão de onde colocar o toggle
+`server/src/modules/mrp/application/mrpEngine.ts` só considera itens
+`MATERIA_PRIMA | SUBCONJUNTO | PRODUTO_ACABADO` na geração de ordens planejadas —
+itens `USO_E_CONSUMO`/`ATIVO_IMOBILIZADO` (listados em `UsageItemsTab.tsx`) nunca
+entram no MRP, então colocar o toggle lá seria enganoso. Esses três tipos
+elegíveis correspondem hoje ao modelo legado `Product` (não ao cadastro direto de
+`Item` usado por `UsageItemsTab`), e a única tela que já resolve o `Item` mestre
+correspondente a um `Product` é o painel "Fornecedores" (`ProductSuppliersDialog`,
+dentro de `ProductsPage.tsx`) — ele já faz `GET /api/items?search=<code>` para achar
+o item. O toggle foi adicionado ali, num bloco "Conversão automática no MRP" acima
+da lista de vínculos de fornecimento.
+
+### Arquivos modificados
+- `client/src/api/items.ts` — campo `conversao_automatica?: boolean` no tipo `Item`;
+  novo `UpdateItemInput` e `updateItem(id, input)` (`PATCH /api/items/:id`).
+- `client/src/pages/products/ProductsPage.tsx` — em `ProductSuppliersDialog`:
+  - `canWrite` via `useAuth().hasRole('admin', 'operator')` (mesmo padrão RBAC de UI
+    do resto da tela) controla se o checkbox fica habilitado.
+  - `useMutation` (`toggleAutoConvertMutation`) chama `itemsApi.updateItem`,
+    invalida `['item-by-code', product?.code]` no sucesso.
+  - Erro tratado com `translateApiError` + `<DidacticAlert />` (padrão UC-43, mesmo
+    usado em `WarehousesPage.tsx`).
+  - Texto de ajuda curto explicando a implicação: liga = requisição de compra
+    automática sem revisão humana; desliga (padrão) = conversão manual.
+
+### O que o Agente QA (ou humano) deve testar na interface
+1. Logar como `admin`/`operator`, ir em Produtos → linha de um produto
+   matéria-prima/subconjunto/produto acabado → botão "Fornecedores".
+2. Confirmar que o bloco "Conversão automática no MRP" aparece acima dos
+   vínculos de fornecimento, com o checkbox refletindo o estado atual do item
+   (`conversao_automatica`).
+3. Ligar o checkbox; confirmar que persiste após fechar/reabrir o painel (refaz
+   `GET /api/items?search=`) e que uma ordem planejada do MRP para esse item passa
+   a ser convertida automaticamente em requisição (`POST /api/mrp/plan`).
+4. Logar com um usuário sem papel `admin`/`operator` (ex.: `financial`) e
+   confirmar que o checkbox aparece desabilitado (não interativo).
+5. Simular erro de rede/servidor (ex.: backend fora do ar) e confirmar que o
+   `DidacticAlert` aparece com mensagem amigável, sem stack trace.
+**Data**: 2026-08-05
+
+---
+
+## Correção de bugs reais: dual-read `item_id` em `POST/GET /api/inventory/movements`
+
+**Data**: 2026-08-05
+**Escopo**: dois bugs reais encontrados durante leitura de código para ativação
+do TypeScript strict mode, no módulo `inventory` (`server/src/modules/inventory`).
+**Status**: ✅ Concluído (GET e POST)
+
+### Resumo da feature
+
+1. **`GET /api/inventory/movements`** — `ListInventoryMovementsUseCase.execute`
+   recebia `item_id` no input (já tipado) mas nunca o repassava para
+   `inventoryRepository.listMovements`, que já sabia filtrar por ele
+   (dual-read implementado em `SequelizeInventoryRepository.listMovements`).
+   O filtro era silenciosamente ignorado. **Corrigido**: `item_id` agora é
+   desestruturado e repassado.
+
+2. **`POST /api/inventory/movements`** — `createInventoryMovementSchema`
+   (Zod `.strict()`) não declarava `item_id` no shape, só `product_id`
+   (obrigatório). Qualquer request com `item_id` no body era rejeitada com
+   400 antes de chegar ao use case, apesar do comentário do controller
+   afirmar suporte a `item_id` (dual-read). **Investigação prévia à
+   implementação** (ver decisão abaixo): encontrado um crosswalk seguro e já
+   estabelecido em produção — `ItemRepository.findLegacyProductByItemId`
+   (`SequelizeItemRepository.ts`), que resolve `item_id` (UUID) →
+   `Product` legado pelo casamento de código (`items.codigo === products.code`),
+   já usado por `ConvertPlannedOrdersToProductionOrderUseCase` (módulo MRP)
+   para fechar o ciclo MRP → Ordem de Produção. **Corrigido** reaproveitando
+   esse mesmo padrão: `createInventoryMovementSchema` agora aceita `item_id`
+   como alternativa a `product_id` (XOR via `.refine()` — exatamente um dos
+   dois, nunca os dois, nunca nenhum), e `CreateInventoryMovementUseCase`
+   resolve `item_id` → `product_id` ANTES de seguir o fluxo normal (lock
+   pessimista, saldo por depósito, `InventoryService.adjust`), que permanece
+   100% acoplado a `Product` — **nenhum caminho de estoque paralelo foi
+   criado**. Se o item não tiver `Product` correspondente, a requisição é
+   rejeitada com `BusinessRuleError` (422), mensagem didática explicando a
+   limitação (movimentação manual por `item_id` puro ainda não suportada
+   para itens novos sem vínculo legado).
+
+   Como efeito colateral positivo, `InventoryService.adjust` ganhou um 8º
+   parâmetro opcional `itemId` (default `null`, não quebra nenhum dos 4
+   chamadores existentes) para gravar o `item_id` de origem no
+   `InventoryMovement` criado (`inventory_movements.item_id`, coluna já
+   existente no schema, sempre `null` neste fluxo antes desta correção) —
+   preserva rastreabilidade sem afetar nenhum saldo.
+
+### Decisão da Parte 2 (a mais delicada) — por que foi seguro implementar
+
+- `InventoryService.adjust` continua operando **exclusivamente** sobre
+  `Product`/`products.quantity` — não foi alterado o hot path do MRP nem
+  criado nenhum caminho de estoque baseado em `Item` diretamente.
+- A resolução `item_id → product_id` usa uma função **já em produção**
+  (`findLegacyProductByItemId`, chamada pelo módulo MRP desde antes desta
+  tarefa) — não foi inventado um crosswalk novo. É o mesmo padrão de
+  "casamento por código" documentado em
+  `ItemRepository.findLegacyProductByItemId` (JSDoc já existente).
+  IMPORTANTE: essa é uma crosswalk diferente (e mais confiável) da usada em
+  `CreateInventoryCountUseCase.findProductById`, que na verdade faz
+  `Product.findByPk(id)` com o próprio `item_id`/`product_id` recebido — ou
+  seja, quando alimentada com um UUID de `item_id`, não faz nenhum
+  casamento real (`Product.id` é INTEGER, então a busca por PK com uma
+  string UUID nunca bate) e teria retornado `NotFoundError` sempre que
+  usada com `item_ids`. Esse é um bug pré-existente e diferente, fora do
+  escopo desta tarefa (não mexido), documentado aqui apenas para não ser
+  confundido com o crosswalk correto usado nesta correção.
+- Ausência de crosswalk (`Product` não encontrado) resulta em erro 422
+  claro, sem inventar um caminho de estoque alternativo.
+- `product_id` sozinho continua funcionando exatamente como antes (testado).
+
+### Arquivos alterados
+- `server/src/modules/inventory/application/use-cases/ListInventoryMovementsUseCase.ts`
+  — `item_id` desestruturado e repassado ao repositório; JSDoc de bug removido.
+- `server/src/modules/inventory/presentation/validators/inventoryValidators.ts`
+  — `createInventoryMovementSchema`: `product_id` passou a opcional, `item_id`
+  adicionado como alternativa opcional, `.refine()` XOR.
+- `server/src/modules/inventory/application/use-cases/CreateInventoryMovementUseCase.ts`
+  — resolução `item_id → product_id` via `SequelizeItemRepository.findLegacyProductByItemId`;
+  `BusinessRuleError` (422) quando não há produto correspondente; `item_id`
+  original repassado a `InventoryService.adjust` para gravação em
+  `InventoryMovement.item_id`.
+- `server/src/services/inventoryService.ts` — `adjust()` e `createMovement()`
+  ganharam parâmetro opcional `itemId`/`item_id` (aditivo, não quebra
+  chamadores existentes).
+- `server/tests/unit/inventory-movements-dual-read.test.ts` (novo) — 9 testes
+  cobrindo: passthrough de `item_id` no `ListInventoryMovementsUseCase`;
+  validação XOR do schema Zod; resolução `item_id → product_id` no
+  `CreateInventoryMovementUseCase` (sucesso, 422 sem crosswalk, fluxo legado
+  inalterado por `product_id`).
+
+### Documentações atualizadas
+- `server/src/modules/inventory/README.md` — nova seção "Dual-read `item_id`
+  em `POST/GET /api/inventory/movements`"; tabela de endpoints atualizada;
+  assinatura documentada de `InventoryService.adjust` atualizada com os dois
+  parâmetros opcionais novos.
+- `docs/DATABASE.md` — tabela `inventory_movements` atualizada: linha nova
+  `item_id`, e colunas que já existiam no model mas estavam ausentes da
+  doc (`warehouse_id`, `unit_cost`) adicionadas para não ficar incompleta
+  justamente na tabela tocada por esta correção.
+- JSDoc revisado em: `ListInventoryMovementsUseCase.ts`,
+  `CreateInventoryMovementUseCase.ts`, `inventoryValidators.ts`,
+  `inventoryService.ts` (`adjust`, `createMovement`).
+
+### Instruções de teste para o próximo agente/humano
+
+1. **Automatizado (já validado nesta tarefa)**:
+   - `cd server && npx tsc --noEmit` → sem erros.
+   - `npx jest tests/unit/inventory-movements-dual-read.test.ts` → 9/9 passam.
+   - `npx jest --testPathPatterns="tests/unit"` → 491/491 passam (suíte
+     completa, sem regressão).
+2. **Manual/integração (requer Postgres + servidor rodando, gate
+   `hasIntegrationPrerequisites()` de `tests/integration/*`)**:
+   - `POST /api/inventory/movements` com `{ product_id, type, quantity,
+     description }` (sem `item_id`) → continua funcionando exatamente como
+     antes (200/201, saldo do produto e do depósito atualizados).
+   - `POST /api/inventory/movements` com `{ item_id: '<uuid de um Item cujo
+     codigo bate com o code de um Product ativo>', type, quantity,
+     description }` → 201, `InventoryMovement` criado com `product_id`
+     resolvido e `item_id` preenchido; saldo do produto/depósito
+     correspondente é ajustado.
+   - `POST /api/inventory/movements` com `item_id` de um Item **sem**
+     `Product` correspondente (`codigo` não bate com nenhum `products.code`)
+     → 422 com mensagem clara, nenhuma alteração de estoque.
+   - `POST /api/inventory/movements` com `product_id` E `item_id` juntos, ou
+     nenhum dos dois → 400 (Zod).
+   - `GET /api/inventory/movements?item_id=<uuid>` → retorna apenas
+     movimentações daquele item (filtro efetivamente aplicado, incluindo as
+     novas geradas pelo fluxo acima).
+
+### Riscos residuais
+- `CreateInventoryCountUseCase.findProductById` tem um bug de crosswalk
+  diferente e pré-existente (busca `Product.findByPk` com o próprio
+  `item_id`/`product_id` recebido, sem casamento por código) — não é
+  exercitado hoje porque a tela de contagem cíclica ainda não envia
+  `item_ids` na prática, mas deve ser corrigido numa tarefa futura dedicada
+  (reaproveitando `findLegacyProductByItemId`, mesmo padrão desta correção).
+  Não mexido aqui por estar fora do escopo desta tarefa (POST/GET
+  `/inventory/movements`).
+- Testes de integração reais (`stock-concurrency.test.ts`,
+  `product-movement-concurrency.test.ts`) não foram executados nesta sessão
+  por dependerem de Postgres/servidor rodando (`hasIntegrationPrerequisites()`
+  → skip local); recomenda-se rodá-los no pipeline/CI ou localmente com
+  Docker Compose antes do próximo Go-Live check.

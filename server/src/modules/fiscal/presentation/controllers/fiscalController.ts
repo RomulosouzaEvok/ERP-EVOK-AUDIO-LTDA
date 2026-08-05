@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const { logAction } = require('../../../../services/auditLogService');
 const IssueSaleNfeUseCase = require('../../application/use-cases/IssueSaleNfeUseCase');
 const GetSaleNfeStatusUseCase = require('../../application/use-cases/GetSaleNfeStatusUseCase');
@@ -15,7 +17,7 @@ const { cancelNfeSchema, registerIncomingNfeSchema, upsertCompanyFiscalConfigSch
  */
 
 /** `POST /api/sales/:id/nfe` — emite a NF-e da venda. */
-exports.issueSaleNfe = async (req, res, next) => {
+exports.issueSaleNfe = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new IssueSaleNfeUseCase();
     const sale = await useCase.execute({ saleId: req.params.id });
@@ -34,7 +36,7 @@ exports.issueSaleNfe = async (req, res, next) => {
 };
 
 /** `GET /api/sales/:id/nfe` — consulta/reconcilia o status da NF-e da venda. */
-exports.getSaleNfeStatus = async (req, res, next) => {
+exports.getSaleNfeStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetSaleNfeStatusUseCase();
     const sale = await useCase.execute({ saleId: req.params.id });
@@ -43,7 +45,7 @@ exports.getSaleNfeStatus = async (req, res, next) => {
 };
 
 /** `POST /api/sales/:id/nfe/cancel` — cancela a NF-e autorizada da venda. */
-exports.cancelSaleNfe = async (req, res, next) => {
+exports.cancelSaleNfe = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = cancelNfeSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -65,7 +67,7 @@ exports.cancelSaleNfe = async (req, res, next) => {
 };
 
 /** `POST /api/purchases/:id/nfe` — registra manualmente a NF-e de entrada. */
-exports.registerIncomingNfe = async (req, res, next) => {
+exports.registerIncomingNfe = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = registerIncomingNfeSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -77,7 +79,7 @@ exports.registerIncomingNfe = async (req, res, next) => {
       invoiceNumber: parsed.data.invoice_number,
       nfeSeries: parsed.data.nfe_series,
       xmlPath: parsed.data.xml_path,
-      userId: req.user.id,
+      userId: (req as any).user.id,
     });
 
     logAction(req, {
@@ -94,7 +96,7 @@ exports.registerIncomingNfe = async (req, res, next) => {
 };
 
 /** `GET /api/fiscal/config` — retorna a configuração fiscal da empresa. */
-exports.getCompanyFiscalConfig = async (req, res, next) => {
+exports.getCompanyFiscalConfig = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetCompanyFiscalConfigUseCase();
     const config = await useCase.execute();
@@ -103,7 +105,7 @@ exports.getCompanyFiscalConfig = async (req, res, next) => {
 };
 
 /** `PUT /api/fiscal/config` — cria/atualiza a configuração fiscal da empresa. */
-exports.upsertCompanyFiscalConfig = async (req, res, next) => {
+exports.upsertCompanyFiscalConfig = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = upsertCompanyFiscalConfigSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);

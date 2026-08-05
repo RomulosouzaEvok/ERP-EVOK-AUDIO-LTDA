@@ -31,7 +31,14 @@ class CreateBOMUseCase extends UseCase {
    * @throws {Error} Com `statusCode` 404/400 propagado por `BomService.createBOM`
    * (produto/componente não encontrado, produto não é `finished`, etc.).
    */
-  async execute({ product_id, items, revision, revision_notes, notes, userId }) {
+  async execute({ product_id, items, revision, revision_notes, notes, userId }: {
+    product_id: number;
+    items: Record<string, unknown>[];
+    revision?: string;
+    revision_notes?: string;
+    notes?: string;
+    userId: number;
+  }) {
     const entity = new BOMEntity({ product_id, items, revision, revision_notes, notes });
     const input = entity.toServiceInput(userId);
 

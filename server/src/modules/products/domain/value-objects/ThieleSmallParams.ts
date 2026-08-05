@@ -17,8 +17,10 @@ class ThieleSmallParams extends ValueObject {
    * @param {Object} [props] - Parâmetros Thiele-Small, todos opcionais.
    * @throws {ValidationError} Se algum parâmetro informado não for numérico ou for negativo.
    */
-  constructor(props = {}) {
-    const normalized = {};
+  [key: string]: unknown;
+
+  constructor(props: Record<string, unknown> = {}) {
+    const normalized: Record<string, number> = {};
     for (const field of TS_FIELDS) {
       const raw = props[field];
       if (raw === undefined || raw === null || raw === '') continue;
@@ -40,8 +42,8 @@ class ThieleSmallParams extends ValueObject {
    *
    * @returns {Object} Mapa `{ ts_params_fs, ts_params_qms, ... }` apenas com os campos informados.
    */
-  toPersistence() {
-    const out = {};
+  toPersistence(): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
     for (const field of TS_FIELDS) {
       if (this[field] !== undefined) out[`ts_params_${field}`] = this[field];
     }

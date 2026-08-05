@@ -184,6 +184,36 @@ async function processBom(
       // approved_by agora e INTEGER com FK para users(id): copia direta.
       const approvedById: number | null = bom.approved_by ?? null;
 
+      // criado_por: bill_of_materials.created_by (INTEGER, FK -> users.id) mapeia
+      // diretamente para item_estruturas.criado_por (mesmo tipo/FK). Origem existe
+      // no legado (BillOfMaterial.created_by), então isso é um mapeamento real,
+      // não um dado ausente.
+      const criadoPorId: number | null = bom.created_by ?? null;
+
+      // alternative_product_id: resolvido via crosswalk migracao_product_item_map
+      // (mesma crosswalk usada para item_componente_id acima). Se o produto
+      // substituto legado não tiver sido migrado para Item (órfão), o campo fica
+      // null + log de aviso — não interrompe o processamento da BOM.
+      let alternativeItemId: string | null = null;
+      if (bomItem.alternative_product_id !== null && bomItem.alternative_product_id !== undefined) {
+        const alternativeMapping: any = await sequelize.query(
+          'SELECT item_id FROM migracao_product_item_map WHERE product_id = :product_id LIMIT 1',
+          {
+            replacements: { product_id: bomItem.alternative_product_id },
+            type: 'SELECT' as any,
+            transaction,
+          }
+        );
+
+        if (alternativeMapping && alternativeMapping.length > 0) {
+          alternativeItemId = alternativeMapping[0].item_id;
+        } else {
+          console.warn(
+            `⚠️ BOMItem ${bomItem.id}: alternative_product_id legado ${bomItem.alternative_product_id} não encontrado em migracao_product_item_map. alternative_product_id ficará null.`
+          );
+        }
+      }
+
       // Criar ItemEstrutura
       await ItemEstrutura.create(
         {
@@ -197,7 +227,7 @@ async function processBom(
           ativo: bom.status !== 'inactive',
           revisao: bom.revision || '00',
           observacoes: bomItem.notes,
-          criado_por: null, // TODO: Mapear user se disponível
+          criado_por: criadoPorId,
           status: bom.status,
           approved_by: approvedById,
           approval_date: bom.approval_date,
@@ -206,7 +236,7 @@ async function processBom(
           parent_item_estrutura_id: parentItemEstruturaId,
           component_type: mapComponentType(bomItem.component_type),
           is_critical: bomItem.is_critical || false,
-          alternative_product_id: null, // TODO: Mapear via crosswalk se houver
+          alternative_product_id: alternativeItemId,
         },
         { transaction }
       );

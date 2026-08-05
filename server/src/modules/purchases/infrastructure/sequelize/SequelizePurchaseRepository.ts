@@ -1,3 +1,5 @@
+import type { Transaction } from 'sequelize';
+
 const { Op, QueryTypes } = require('sequelize');
 const PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
 const { sequelize } = require('../../../../config/database');
@@ -40,7 +42,7 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     return { rows, count };
   }
 
-  async findPurchaseById(id) {
+  async findPurchaseById(id: number | string) {
     return Purchase.findByPk(id, {
       include: [
         { model: Supplier, as: 'supplier', attributes: ['id', 'company_name', 'cnpj'] },
@@ -57,18 +59,18 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     });
   }
 
-  async findPurchaseByIdRaw(id, transaction) {
+  async findPurchaseByIdRaw(id: number | string, transaction?: Transaction) {
     return Purchase.findByPk(id, { transaction });
   }
 
-  async findPurchaseByIdRawForUpdate(id, transaction) {
+  async findPurchaseByIdRawForUpdate(id: number | string, transaction: Transaction) {
     return Purchase.findByPk(id, {
       transaction,
       lock: transaction.LOCK.UPDATE,
     });
   }
 
-  async findPurchaseWithItems(id, transaction) {
+  async findPurchaseWithItems(id: number | string, transaction?: Transaction) {
     return Purchase.findByPk(id, {
       include: [
         {
@@ -83,7 +85,7 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     });
   }
 
-  async findPurchaseWithItemsForUpdate(id, transaction) {
+  async findPurchaseWithItemsForUpdate(id: number | string, transaction: Transaction) {
     // Nao usar `include` (LEFT OUTER JOIN) junto de `lock` aqui: o Postgres
     // rejeita "FOR UPDATE" no lado nullable de um outer join
     // ("FOR UPDATE cannot be applied to the nullable side of an outer
@@ -109,31 +111,31 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     return purchase;
   }
 
-  async createPurchase(data, transaction) {
+  async createPurchase(data: Record<string, unknown>, transaction?: Transaction) {
     return Purchase.create(data, { transaction });
   }
 
-  async createPurchaseItem(data, transaction) {
+  async createPurchaseItem(data: Record<string, unknown>, transaction?: Transaction) {
     return PurchaseItem.create(data, { transaction });
   }
 
-  async updatePurchaseFields(id, data, transaction) {
+  async updatePurchaseFields(id: number | string, data: Record<string, unknown>, transaction?: Transaction) {
     await Purchase.update(data, { where: { id }, transaction });
   }
 
-  async findProductById(id, transaction) {
+  async findProductById(id: number | string, transaction?: Transaction) {
     return Product.findByPk(id, { transaction });
   }
 
-  async findProductByCode(code, transaction) {
+  async findProductByCode(code: string, transaction?: Transaction) {
     return Product.findOne({ where: { code }, transaction });
   }
 
-  async findPurchaseItems(purchaseId, transaction) {
+  async findPurchaseItems(purchaseId: number | string, transaction?: Transaction) {
     return PurchaseItem.findAll({ where: { purchase_id: purchaseId }, transaction });
   }
 
-  async findPurchaseItemsForUpdate(purchaseId, transaction) {
+  async findPurchaseItemsForUpdate(purchaseId: number | string, transaction: Transaction) {
     return PurchaseItem.findAll({
       where: { purchase_id: purchaseId },
       transaction,
@@ -141,15 +143,15 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     });
   }
 
-  async updatePurchaseItem(id, data, transaction) {
+  async updatePurchaseItem(id: number | string, data: Record<string, unknown>, transaction?: Transaction) {
     await PurchaseItem.update(data, { where: { id }, transaction });
   }
 
-  async findAccountPayableByPurchaseId(purchaseId, transaction) {
+  async findAccountPayableByPurchaseId(purchaseId: number | string, transaction?: Transaction) {
     return AccountPayable.findOne({ where: { purchase_id: purchaseId }, transaction });
   }
 
-  async createAccountPayable(data, transaction) {
+  async createAccountPayable(data: Record<string, unknown>, transaction?: Transaction) {
     return AccountPayable.create(data, { transaction });
   }
 

@@ -1,4 +1,5 @@
 const UseCase = require('../../../../shared/application/UseCase');
+import type { IBOMRepository } from '../../domain/repositories/BOMRepository';
 
 /**
  * Lista BOMs com paginação e filtros, cobrindo `GET /api/engineering/bom`.
@@ -7,8 +8,10 @@ const UseCase = require('../../../../shared/application/UseCase');
  * `bomController.list` anterior).
  */
 class ListBOMsUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/BOMRepository')} bomRepository */
-  constructor(bomRepository) {
+  private bomRepository: IBOMRepository;
+
+  /** @param {IBOMRepository} bomRepository */
+  constructor(bomRepository: IBOMRepository) {
     super();
     this.bomRepository = bomRepository;
   }

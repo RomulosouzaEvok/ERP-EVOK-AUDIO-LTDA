@@ -1,5 +1,37 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import ReportsRepository = require('../../domain/repositories/ReportsRepository');
+import type { ProductionWipRow, ProductionCompletedAggregates, ScrapByStepRow } from '../../domain/reportTypes';
+import type { ReportPeriodInput, ResolvedReportPeriod } from './reportPeriod';
+
 const { resolveReportPeriod, safeRate } = require('./reportPeriod');
+
+/** Linha de refugo por etapa, já com a taxa calculada. */
+interface ScrapByStepWithRate {
+  work_center: string;
+  step_name: string;
+  sequence: number;
+  quantity_good: number;
+  quantity_scrapped: number;
+  scrap_rate: number;
+}
+
+/** Saída de `GetProductionReportUseCase`. */
+interface GetProductionReportOutput {
+  report_type: 'production';
+  generated_at: Date;
+  period: ResolvedReportPeriod['period'];
+  wip: { status: string; orders_count: number; total_quantity: number }[];
+  adherence: {
+    orders_completed: number;
+    total_planned_quantity: number;
+    total_produced_quantity: number;
+    total_scrapped_quantity: number;
+    adherence_rate: number;
+    scrap_rate: number;
+  };
+  scrap_by_step: ScrapByStepWithRate[];
+  lead_time: { avg_days: number; min_days: number; max_days: number };
+}
 
 /**
  * Relatório de manufatura (`GET /api/reports/production`): WIP por status,
@@ -9,21 +41,23 @@ const { resolveReportPeriod, safeRate } = require('./reportPeriod');
  * modelados); este relatório entrega os indicadores deriváveis dos dados
  * atuais de OP e apontamento.
  */
-class GetProductionReportUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/ReportsRepository')} reportsRepository */
-  constructor(reportsRepository) {
+class GetProductionReportUseCase extends UseCase<ReportPeriodInput, GetProductionReportOutput> {
+  private readonly reportsRepository: ReportsRepository;
+
+  /** @param reportsRepository - Repositório de relatórios. */
+  constructor(reportsRepository: ReportsRepository) {
     super();
     this.reportsRepository = reportsRepository;
   }
 
   /**
-   * @param {Object} input - `{ start_date?, end_date? }` (YYYY-MM-DD; default últimos 30 dias).
-   * @returns {Promise<Object>}
+   * @param input - `{ start_date?, end_date? }` (YYYY-MM-DD; default últimos 30 dias).
+   * @returns Relatório de manufatura (WIP, aderência, refugo por etapa, lead time).
    */
-  async execute(input = {}) {
+  async execute(input: ReportPeriodInput = {}): Promise<GetProductionReportOutput> {
     const { start, end, period } = resolveReportPeriod(input);
 
-    const [wip, aggregates, scrapRows] = await Promise.all([
+    const [wip, aggregates, scrapRows]: [ProductionWipRow[], ProductionCompletedAggregates, ScrapByStepRow[]] = await Promise.all([
       this.reportsRepository.findProductionWip(start, end),
       this.reportsRepository.findProductionCompletedAggregates(start, end),
       this.reportsRepository.findScrapByStep(start, end),
@@ -33,7 +67,7 @@ class GetProductionReportUseCase extends UseCase {
     const planned = Number(aggregates?.total_planned_quantity ?? 0);
     const scrapped = Number(aggregates?.total_scrapped_quantity ?? 0);
 
-    const scrapByStep = (scrapRows || [])
+    const scrapByStep: ScrapByStepWithRate[] = (scrapRows || [])
       .map((row) => {
         const good = Number(row.quantity_good ?? 0);
         const scrap = Number(row.quantity_scrapped ?? 0);
@@ -75,4 +109,4 @@ class GetProductionReportUseCase extends UseCase {
   }
 }
 
-module.exports = GetProductionReportUseCase;
+export = GetProductionReportUseCase;

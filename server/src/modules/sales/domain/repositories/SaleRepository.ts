@@ -1,4 +1,6 @@
-﻿/**
+import type { Transaction } from 'sequelize';
+
+/**
  * Interface (contrato) de repositório de Vendas.
  *
  * Define os métodos que qualquer implementação de persistência deve
@@ -15,7 +17,7 @@ class SaleRepository {
    * @param {Object} [pagination] - `{ limit, offset }`.
    * @returns {Promise<{ rows: Object[], count: number }>}
    */
-  async listSales(filters, pagination) { // eslint-disable-line no-unused-vars
+  async listSales(filters?: Record<string, unknown>, pagination?: Record<string, unknown>): Promise<{ rows: any[]; count: number }> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.listSales não implementado.');
   }
 
@@ -26,7 +28,7 @@ class SaleRepository {
    * @param {number} id
    * @returns {Promise<Object|null>}
    */
-  async findSaleById(id) { // eslint-disable-line no-unused-vars
+  async findSaleById(id: number): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.findSaleById não implementado.');
   }
 
@@ -38,7 +40,7 @@ class SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findSaleWithItems(id, transaction) { // eslint-disable-line no-unused-vars
+  async findSaleWithItems(id: number, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.findSaleWithItems não implementado.');
   }
 
@@ -51,7 +53,7 @@ class SaleRepository {
    * @param {import('sequelize').Transaction} transaction
    * @returns {Promise<Object|null>}
    */
-  async findSaleWithItemsForUpdate(id, transaction) { // eslint-disable-line no-unused-vars
+  async findSaleWithItemsForUpdate(id: number, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.findSaleWithItemsForUpdate não implementado.');
   }
 
@@ -63,7 +65,7 @@ class SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object|null>}
    */
-  async findProductById(id, transaction) { // eslint-disable-line no-unused-vars
+  async findProductById(id: number, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.findProductById não implementado.');
   }
 
@@ -75,7 +77,7 @@ class SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async createSale(data, transaction) { // eslint-disable-line no-unused-vars
+  async createSale(data: Record<string, unknown>, transaction?: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.createSale não implementado.');
   }
 
@@ -87,7 +89,7 @@ class SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async createSaleItem(data, transaction) { // eslint-disable-line no-unused-vars
+  async createSaleItem(data: Record<string, unknown>, transaction?: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.createSaleItem não implementado.');
   }
 
@@ -99,7 +101,7 @@ class SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<Object>}
    */
-  async createAccountReceivable(data, transaction) { // eslint-disable-line no-unused-vars
+  async createAccountReceivable(data: Record<string, unknown>, transaction?: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.createAccountReceivable não implementado.');
   }
 
@@ -112,10 +114,9 @@ class SaleRepository {
    * @param {import('sequelize').Transaction} [transaction]
    * @returns {Promise<void>}
    */
-  async cancelPendingReceivables(saleId, transaction) { // eslint-disable-line no-unused-vars
+  async cancelPendingReceivables(saleId: number, transaction?: Transaction): Promise<void> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.cancelPendingReceivables não implementado.');
   }
 }
 
 module.exports = SaleRepository;
-

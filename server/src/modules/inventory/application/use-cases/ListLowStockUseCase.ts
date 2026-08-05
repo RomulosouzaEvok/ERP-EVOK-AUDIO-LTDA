@@ -1,4 +1,5 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 
 /**
  * Lista produtos ativos com estoque em ou abaixo do ponto de reposição
@@ -9,10 +10,10 @@ const UseCase = require('../../../../shared/application/UseCase');
  * de `GetStockReportUseCase`, mas expõe a lista completa dos produtos.
  */
 class ListLowStockUseCase extends UseCase {
-  /**
-   * @param {import('../../domain/repositories/InventoryRepository')} inventoryRepository
-   */
-  constructor(inventoryRepository) {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
     super();
     this.inventoryRepository = inventoryRepository;
   }
@@ -25,6 +26,6 @@ class ListLowStockUseCase extends UseCase {
   }
 }
 
-module.exports = ListLowStockUseCase;
+export = ListLowStockUseCase;
 
 

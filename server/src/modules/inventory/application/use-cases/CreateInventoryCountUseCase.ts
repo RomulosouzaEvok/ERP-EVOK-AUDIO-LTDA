@@ -1,7 +1,24 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import InventoryCountRepository = require('../../domain/repositories/InventoryCountRepository');
+
 const InventoryCountEntity = require('../../domain/entities/InventoryCountEntity');
 const { NotFoundError } = require('../../../../errors');
 const { sequelize } = require('../../../../config/database');
+
+/** Dados de entrada de `CreateInventoryCountUseCase.execute`. */
+interface CreateInventoryCountInput {
+  count_type?: 'cycle' | 'full' | 'spot';
+  /** Depósito ao qual TODA a contagem pertence (obrigatório). */
+  warehouse_id: number;
+  location?: string;
+  notes?: string;
+  /** Produtos a incluir desde já na contagem (legado, opcional). */
+  product_ids?: number[];
+  /** Itens a incluir desde já na contagem (novo, PREFERIDO, opcional). */
+  item_ids?: string[];
+  /** Id do usuário que está criando a contagem. */
+  created_by: number;
+}
 
 /**
  * Cria uma nova contagem de inventário cíclico (cabeçalho em status
@@ -23,8 +40,10 @@ const { sequelize } = require('../../../../config/database');
  * `ValidationError` (400) se ausente.
  */
 class CreateInventoryCountUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/InventoryCountRepository')} inventoryCountRepository */
-  constructor(inventoryCountRepository) {
+  private readonly inventoryCountRepository: InventoryCountRepository;
+
+  /** @param inventoryCountRepository - Repositório de contagens de inventário. */
+  constructor(inventoryCountRepository: InventoryCountRepository) {
     super();
     this.inventoryCountRepository = inventoryCountRepository;
   }
@@ -42,7 +61,7 @@ class CreateInventoryCountUseCase extends UseCase {
    * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos (inclusive `warehouse_id` ausente).
    * @throws {NotFoundError} Se algum id em `product_ids` ou `item_ids` não corresponder a um item/produto existente.
    */
-  async execute({ count_type, warehouse_id, location, notes, product_ids, item_ids, created_by }) {
+  async execute({ count_type, warehouse_id, location, notes, product_ids, item_ids, created_by }: CreateInventoryCountInput) {
     const entity = new InventoryCountEntity({ count_type, warehouse_id, location, notes, created_by });
 
     const t = await sequelize.transaction();

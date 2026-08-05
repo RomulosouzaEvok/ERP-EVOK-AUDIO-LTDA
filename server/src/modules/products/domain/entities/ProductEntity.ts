@@ -8,6 +8,32 @@ const PRODUCT_TYPES = ['finished', 'semi_finished', 'component', 'raw_material']
 /** Status suportados (mesmo ENUM do model Sequelize `Product.status`). */
 const PRODUCT_STATUSES = ['active', 'inactive'];
 
+/** Props aceitas pelo construtor de {@link ProductEntity}. */
+interface ProductEntityProps {
+  id?: number | string | null;
+  name: string;
+  code: string;
+  description?: string;
+  category_id?: number | null;
+  price: number | string;
+  cost_price?: number | string;
+  quantity?: number | string;
+  min_quantity?: number | string;
+  status?: string;
+  location?: string;
+  product_type?: string;
+  ncm?: string;
+  cest?: string | null;
+  weight?: number | string | null;
+  unit?: string;
+  lead_time?: number | null;
+  drawing_number?: string | null;
+  revision?: string;
+  tsParams?: Record<string, unknown>;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+}
+
 /**
  * Entidade de domínio Produto: representa um item de catálogo da fábrica de
  * alto-falantes (produto acabado, semi-acabado, componente ou matéria-prima),
@@ -44,7 +70,27 @@ class ProductEntity extends Entity {
    * @param {Date|string} [props.updatedAt]
    * @throws {ValidationError} Se alguma regra de validação de campo for violada.
    */
-  constructor(props) {
+  name: string;
+  code: string;
+  description: string;
+  category_id: number | null;
+  price: number;
+  cost_price: number;
+  quantity: number;
+  min_quantity: number;
+  status: string;
+  location: string;
+  product_type: string;
+  ncm: string;
+  cest: string | null;
+  weight: number;
+  unit: string;
+  lead_time: number | null;
+  drawing_number: string | null;
+  revision: string;
+  tsParams: InstanceType<typeof ThieleSmallParams>;
+
+  constructor(props: ProductEntityProps) {
     super({ id: props.id, createdAt: props.createdAt, updatedAt: props.updatedAt });
 
     this.name = props.name;
@@ -111,7 +157,7 @@ class ProductEntity extends Entity {
    * @returns {{ oldRevision: string, newRevision: string }} Par de revisões, útil para auditoria.
    * @throws {ValidationError} Se `newRevision` for vazia ou igual à atual.
    */
-  applyRevision(newRevision) {
+  applyRevision(newRevision: string) {
     if (!newRevision || String(newRevision).trim() === '') {
       throw new ValidationError('Nova revisão é obrigatória.');
     }
@@ -134,7 +180,7 @@ class ProductEntity extends Entity {
    * @returns {void}
    * @throws {ValidationError} Se `newStatus` não for um valor suportado.
    */
-  changeStatus(newStatus) {
+  changeStatus(newStatus: string) {
     if (!PRODUCT_STATUSES.includes(newStatus)) {
       throw new ValidationError(`Status inválido. Valores aceitos: ${PRODUCT_STATUSES.join(', ')}.`);
     }

@@ -15,7 +15,7 @@ class GetBOMTreeUseCase extends UseCase {
    * @returns {Promise<{ bom: Object, tree: Object[] }>} Árvore estruturada.
    * @throws {Error} Com `statusCode: 404` se a BOM não existir (propagado por `BomService.getBOMTree`).
    */
-  async execute({ id }) {
+  async execute({ id }: { id: number }) {
     return BomService.getBOMTree(id);
   }
 }

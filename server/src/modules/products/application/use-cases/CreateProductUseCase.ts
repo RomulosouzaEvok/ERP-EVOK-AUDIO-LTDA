@@ -1,16 +1,41 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { ConflictError, ValidationError } = require('../../../../errors');
 const ProductEntity = require('../../domain/entities/ProductEntity');
+import type { IProductRepository } from '../../domain/repositories/ProductRepository';
+
+/** Payload de entrada aceito por {@link CreateProductUseCase.execute} (equivalente ao `req.body` de `POST /api/products`). */
+interface CreateProductInput {
+  name: string;
+  code: string;
+  description?: string;
+  category_id?: number;
+  price: number | string;
+  cost_price?: number | string;
+  quantity?: number | string;
+  min_quantity?: number | string;
+  product_type?: string;
+  ncm?: string;
+  cest?: string;
+  weight?: number | string;
+  unit?: string;
+  lead_time?: number;
+  drawing_number?: string;
+  revision?: string;
+  location?: string;
+  tsParams?: Record<string, unknown>;
+}
 
 /**
  * Cria um novo produto, validando as regras de domínio via `ProductEntity`
  * e garantindo unicidade de código a nível de repositório.
  */
 class CreateProductUseCase extends UseCase {
+  private productRepository: IProductRepository;
+
   /**
-   * @param {import('../../domain/repositories/ProductRepository')} productRepository
+   * @param {IProductRepository} productRepository
    */
-  constructor(productRepository) {
+  constructor(productRepository: IProductRepository) {
     super();
     this.productRepository = productRepository;
   }
@@ -21,7 +46,7 @@ class CreateProductUseCase extends UseCase {
    * @throws {ValidationError} Se dados obrigatórios estiverem ausentes ou inválidos.
    * @throws {ConflictError} Se já existir um produto com o mesmo código.
    */
-  async execute(input) {
+  async execute(input: CreateProductInput) {
     if (!input.name || !input.code || input.price === undefined || input.price === null) {
       throw new ValidationError('Nome, código e preço são obrigatórios');
     }
@@ -34,8 +59,8 @@ class CreateProductUseCase extends UseCase {
       code: input.code,
       description: input.description,
       category_id: input.category_id,
-      price: parseFloat(input.price),
-      cost_price: input.cost_price !== undefined ? parseFloat(input.cost_price) : 0,
+      price: parseFloat(String(input.price)),
+      cost_price: input.cost_price !== undefined ? parseFloat(String(input.cost_price)) : 0,
       quantity: input.quantity || 0,
       min_quantity: input.min_quantity || 5,
       product_type: input.product_type || 'finished',

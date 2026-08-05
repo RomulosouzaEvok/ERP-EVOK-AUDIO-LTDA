@@ -25,7 +25,7 @@ class SaleEntity extends Entity {
    * @param {string} [props.notes]
    * @throws {ValidationError} Se `customer_id` ausente, `items` vazio/ausente, algum item inválido, `installments < 1` ou `discount < 0`.
    */
-  constructor(props) {
+  constructor(props: any) {
     super({ id: props.id });
     this.customer_id = props.customer_id;
     this.items = props.items;

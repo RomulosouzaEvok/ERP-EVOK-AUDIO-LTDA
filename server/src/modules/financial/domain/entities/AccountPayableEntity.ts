@@ -1,6 +1,19 @@
 const Entity = require('../../../../shared/domain/Entity');
 const { ValidationError } = require('../../../../errors');
 
+/** Dados de entrada aceitos pelo construtor de `AccountPayableEntity`. */
+interface AccountPayableProps {
+  id?: number;
+  description: string;
+  amount: number | string;
+  due_date: string | Date;
+  category?: string;
+  supplier_id?: number;
+  purchase_id?: number;
+  invoice_type?: 'nfe' | 'nfse';
+  notes?: string;
+}
+
 /**
  * Entidade de domínio leve que representa uma Conta a Pagar
  * (`AccountPayable`) na criação.
@@ -25,7 +38,7 @@ class AccountPayableEntity extends Entity {
    * @param {string} [props.notes]
    * @throws {ValidationError} Se `description`, `amount` ou `due_date` estiverem ausentes, ou `amount` não for maior que zero.
    */
-  constructor(props) {
+  constructor(props: AccountPayableProps) {
     super({ id: props.id });
     this.description = props.description;
     this.amount = props.amount;

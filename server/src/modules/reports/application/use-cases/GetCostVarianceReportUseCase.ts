@@ -1,5 +1,46 @@
-const UseCase = require('../../../../shared/application/UseCase');
+import UseCase from '../../../../shared/application/UseCase';
+import ReportsRepository = require('../../domain/repositories/ReportsRepository');
+import type { CostVarianceRow, PurchasePriceVarianceRow } from '../../domain/reportTypes';
+import type { ReportPeriodInput, ResolvedReportPeriod } from './reportPeriod';
+
 const { resolveReportPeriod, safeRate } = require('./reportPeriod');
+
+/** Linha de variação de custo por produto, já normalizada/calculada para o relatório. */
+interface CostVarianceByProduct {
+  product_id: number;
+  code: string;
+  name: string;
+  standard_cost: number;
+  avg_real_cost: number;
+  entries_count: number;
+  total_quantity: number;
+  variance_abs: number;
+  variance_rate: number;
+}
+
+/** Linha de variação de preço de compra por produto x fornecedor, já normalizada. */
+interface PurchasePriceVarianceByProductSupplier {
+  product_id: number;
+  code: string;
+  name: string;
+  supplier_id: number;
+  company_name: string;
+  catalog_price: number | null;
+  avg_paid_price: number;
+  total_quantity: number;
+  variance_abs: number | null;
+  variance_rate: number | null;
+}
+
+/** Saída de `GetCostVarianceReportUseCase`. */
+interface GetCostVarianceReportOutput {
+  report_type: 'cost_variance';
+  generated_at: Date;
+  period: ResolvedReportPeriod['period'];
+  by_product: CostVarianceByProduct[];
+  purchase_price_variance: PurchasePriceVarianceByProductSupplier[];
+  totals: { products_with_variance: number; avg_variance_rate: number };
+}
 
 /**
  * Variação de custo (`GET /api/reports/cost-variance`): compara o custo
@@ -8,26 +49,28 @@ const { resolveReportPeriod, safeRate } = require('./reportPeriod');
  * variação entre preço de catálogo por fornecedor (`item_suppliers.unit_price`)
  * e o preço médio efetivamente pago em pedidos de compra.
  */
-class GetCostVarianceReportUseCase extends UseCase {
-  /** @param {import('../../domain/repositories/ReportsRepository')} reportsRepository */
-  constructor(reportsRepository) {
+class GetCostVarianceReportUseCase extends UseCase<ReportPeriodInput, GetCostVarianceReportOutput> {
+  private readonly reportsRepository: ReportsRepository;
+
+  /** @param reportsRepository - Repositório de relatórios. */
+  constructor(reportsRepository: ReportsRepository) {
     super();
     this.reportsRepository = reportsRepository;
   }
 
   /**
-   * @param {Object} input - `{ start_date?, end_date? }` (YYYY-MM-DD; default últimos 30 dias).
-   * @returns {Promise<Object>}
+   * @param input - `{ start_date?, end_date? }` (YYYY-MM-DD; default últimos 30 dias).
+   * @returns Relatório de variação de custo por produto e de preço de compra por fornecedor.
    */
-  async execute(input = {}) {
+  async execute(input: ReportPeriodInput = {}): Promise<GetCostVarianceReportOutput> {
     const { start, end, period } = resolveReportPeriod(input);
 
-    const [byProductRows, priceVarianceRows] = await Promise.all([
+    const [byProductRows, priceVarianceRows]: [CostVarianceRow[], PurchasePriceVarianceRow[]] = await Promise.all([
       this.reportsRepository.findCostVarianceByProduct(start, end),
       this.reportsRepository.findPurchasePriceVarianceByProductSupplier(start, end),
     ]);
 
-    const byProduct = (byProductRows || [])
+    const byProduct: CostVarianceByProduct[] = (byProductRows || [])
       .map((row) => {
         const standardCost = Number(row.standard_cost ?? 0);
         const avgRealCost = Number(row.avg_real_cost ?? 0);
@@ -46,14 +89,14 @@ class GetCostVarianceReportUseCase extends UseCase {
       })
       .sort((a, b) => Math.abs(b.variance_rate) - Math.abs(a.variance_rate));
 
-    const purchasePriceVariance = (priceVarianceRows || []).map((row) => {
+    const purchasePriceVariance: PurchasePriceVarianceByProductSupplier[] = (priceVarianceRows || []).map((row) => {
       const catalogPrice = row.catalog_price === null || row.catalog_price === undefined
         ? null
         : Number(row.catalog_price);
       const avgPaidPrice = Number(row.avg_paid_price ?? 0);
       const hasCatalog = catalogPrice !== null;
       const varianceAbs = hasCatalog ? Math.round((avgPaidPrice - catalogPrice) * 10000) / 10000 : null;
-      const varianceRate = hasCatalog ? safeRate(varianceAbs, catalogPrice) : null;
+      const varianceRate = hasCatalog ? safeRate(varianceAbs as number, catalogPrice as number) : null;
 
       return {
         product_id: Number(row.product_id),
@@ -89,4 +132,4 @@ class GetCostVarianceReportUseCase extends UseCase {
   }
 }
 
-module.exports = GetCostVarianceReportUseCase;
+export = GetCostVarianceReportUseCase;

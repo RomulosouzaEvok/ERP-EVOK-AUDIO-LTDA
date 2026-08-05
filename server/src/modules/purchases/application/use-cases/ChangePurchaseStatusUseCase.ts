@@ -1,10 +1,13 @@
+import type { Transaction } from 'sequelize';
+import type PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
 
 /**
  * Maquina de estados de status do pedido de compra.
  */
-const VALID_TRANSITIONS = {
+const VALID_TRANSITIONS: Record<string, string[]> = {
   pending: ['approved', 'canceled'],
   approved: ['sent', 'canceled'],
   sent: ['partial', 'received', 'canceled'],
@@ -13,11 +16,20 @@ const VALID_TRANSITIONS = {
   canceled: []
 };
 
+interface ChangePurchaseStatusInput {
+  id: number | string;
+  status: string;
+  userId: number;
+  transaction: Transaction;
+}
+
 class ChangePurchaseStatusUseCase extends UseCase {
+  private purchaseRepository: PurchaseRepository;
+
   /**
    * @param {import('../../domain/repositories/PurchaseRepository')} purchaseRepository
    */
-  constructor(purchaseRepository) {
+  constructor(purchaseRepository: PurchaseRepository) {
     super();
     this.purchaseRepository = purchaseRepository;
   }
@@ -30,7 +42,7 @@ class ChangePurchaseStatusUseCase extends UseCase {
    * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
    */
-  async execute({ id, status, userId, transaction }) {
+  async execute({ id, status, userId, transaction }: ChangePurchaseStatusInput) {
     if (!status) {
       throw new ValidationError('Status e obrigatorio');
     }
@@ -61,7 +73,7 @@ class ChangePurchaseStatusUseCase extends UseCase {
     return { purchase, previousStatus };
   }
 
-  async _createPurchasePayable(purchase, userId, transaction) {
+  async _createPurchasePayable(purchase: any, userId: number, transaction: Transaction) {
     if (!purchase.supplier_id) return;
 
     const totalPayable = parseFloat(purchase.total_amount) || 0;

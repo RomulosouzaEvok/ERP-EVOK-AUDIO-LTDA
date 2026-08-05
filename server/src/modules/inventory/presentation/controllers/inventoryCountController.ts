@@ -1,3 +1,5 @@
+import type { Request, Response, NextFunction } from 'express';
+
 const { logAction } = require('../../../../services/auditLogService');
 const { createInventoryCountSchema, handleZodError } = require('../validators/inventoryValidators');
 const SequelizeInventoryCountRepository = require('../../infrastructure/sequelize/SequelizeInventoryCountRepository');
@@ -30,7 +32,7 @@ const inventoryCountRepository = new SequelizeInventoryCountRepository();
  * @param {import('express').NextFunction} next
  * @returns {void}
  */
-function handleError(error, res, next) {
+function handleError(error: any, res: Response, next: NextFunction) {
   if (error.statusCode && !error.code) {
     return res.status(error.statusCode).json({ success: false, error: error.message });
   }
@@ -50,7 +52,7 @@ function handleError(error, res, next) {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.create = async (req, res, next) => {
+exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createInventoryCountSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
@@ -58,7 +60,7 @@ exports.create = async (req, res, next) => {
 
     const useCase = new CreateInventoryCountUseCase(inventoryCountRepository);
     const { count, items } = await useCase.execute({
-      count_type, warehouse_id, location, notes, product_ids, item_ids, created_by: req.user.id
+      count_type, warehouse_id, location, notes, product_ids, item_ids, created_by: (req as any).user.id
     });
 
     logAction(req, {
@@ -82,7 +84,7 @@ exports.create = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.list = async (req, res, next) => {
+exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, status, count_type } = req.query;
     const useCase = new ListInventoryCountsUseCase(inventoryCountRepository);
@@ -99,7 +101,7 @@ exports.list = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.getById = async (req, res, next) => {
+exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetInventoryCountByIdUseCase(inventoryCountRepository);
     const count = await useCase.execute({ id: req.params.id });
@@ -115,7 +117,7 @@ exports.getById = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.start = async (req, res, next) => {
+exports.start = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new StartInventoryCountUseCase(inventoryCountRepository);
     const count = await useCase.execute({ id: req.params.id });
@@ -142,7 +144,7 @@ exports.start = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.countItem = async (req, res, next) => {
+exports.countItem = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { counted_quantity, notes } = req.body;
     const useCase = new CountInventoryItemUseCase(inventoryCountRepository);
@@ -151,7 +153,7 @@ exports.countItem = async (req, res, next) => {
       itemId: req.params.itemId,
       counted_quantity,
       notes,
-      userId: req.user.id
+      userId: (req as any).user.id
     });
 
     logAction(req, {
@@ -176,7 +178,7 @@ exports.countItem = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.submit = async (req, res, next) => {
+exports.submit = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new SubmitInventoryCountUseCase(inventoryCountRepository);
     const count = await useCase.execute({ id: req.params.id });
@@ -204,10 +206,10 @@ exports.submit = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.approve = async (req, res, next) => {
+exports.approve = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ApproveInventoryCountUseCase(inventoryCountRepository);
-    const { count, adjustments } = await useCase.execute({ id: req.params.id, approverId: req.user.id });
+    const { count, adjustments } = await useCase.execute({ id: req.params.id, approverId: (req as any).user.id });
 
     logAction(req, {
       action: 'approve',
@@ -231,11 +233,11 @@ exports.approve = async (req, res, next) => {
  * @param {import('express').NextFunction} next
  * @returns {Promise<void>}
  */
-exports.reject = async (req, res, next) => {
+exports.reject = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { reason } = req.body;
     const useCase = new RejectInventoryCountUseCase(inventoryCountRepository);
-    const count = await useCase.execute({ id: req.params.id, approverId: req.user.id, reason });
+    const count = await useCase.execute({ id: req.params.id, approverId: (req as any).user.id, reason });
 
     logAction(req, {
       action: 'update',

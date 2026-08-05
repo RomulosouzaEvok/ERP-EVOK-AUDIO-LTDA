@@ -13,7 +13,7 @@ class RevokeUserSessionsUseCase extends UseCase {
   /**
    * @param {import('../../domain/repositories/UsersRepository')} usersRepository
    */
-  constructor(usersRepository) {
+  constructor(usersRepository: any) {
     super();
     this.usersRepository = usersRepository;
   }
@@ -25,7 +25,7 @@ class RevokeUserSessionsUseCase extends UseCase {
    * @returns {Promise<{ message: string }>}
    * @throws {NotFoundError} Se o id não existir.
    */
-  async execute({ id, req }) {
+  async execute({ id, req }: { id: number; req: any }) {
     const user = await this.usersRepository.findById(id);
     if (!user) {
       throw new NotFoundError('Usuário não encontrado');
