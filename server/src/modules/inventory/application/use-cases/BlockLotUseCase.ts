@@ -10,10 +10,8 @@
  * referencia um lote existente.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { LotControl } = require('../../../../models/index');
-
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { NotFoundError, BusinessRuleError, ValidationError } from '../../../../errors';
 
 const BLOCKABLE_STATUSES = ['quarantine', 'available'];
@@ -24,6 +22,14 @@ interface BlockLotInput {
 }
 
 class BlockLotUseCase extends UseCase<BlockLotInput, any> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Id do lote e motivo do bloqueio (mínimo 3 caracteres).
    * @returns Lote atualizado (`status = 'blocked'`).
@@ -38,7 +44,7 @@ class BlockLotUseCase extends UseCase<BlockLotInput, any> {
       throw new ValidationError('reason é obrigatório e deve ter no mínimo 3 caracteres.');
     }
 
-    const lot = await LotControl.findByPk(id);
+    const lot = await this.inventoryRepository.findLotById(id);
     if (!lot) {
       throw new NotFoundError('Lote não encontrado.');
     }

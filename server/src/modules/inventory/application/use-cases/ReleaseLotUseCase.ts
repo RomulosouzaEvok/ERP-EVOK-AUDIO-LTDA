@@ -10,10 +10,8 @@
  *   lote — a decisão de liberar é sempre manual, via este endpoint).
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { LotControl } = require('../../../../models/index');
-
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { NotFoundError, BusinessRuleError } from '../../../../errors';
 
 const RELEASABLE_STATUSES = ['quarantine', 'blocked'];
@@ -24,6 +22,14 @@ interface ReleaseLotInput {
 }
 
 class ReleaseLotUseCase extends UseCase<ReleaseLotInput, any> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Id do lote e observação opcional da liberação.
    * @returns Lote atualizado (`status = 'available'`).
@@ -32,7 +38,7 @@ class ReleaseLotUseCase extends UseCase<ReleaseLotInput, any> {
    *   `details: { lot_id, current_status, allowed_statuses }`.
    */
   public async execute({ id, notes }: ReleaseLotInput): Promise<any> {
-    const lot = await LotControl.findByPk(id);
+    const lot = await this.inventoryRepository.findLotById(id);
     if (!lot) {
       throw new NotFoundError('Lote não encontrado.');
     }

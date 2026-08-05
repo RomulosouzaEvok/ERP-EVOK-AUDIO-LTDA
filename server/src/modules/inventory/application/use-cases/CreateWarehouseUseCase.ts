@@ -9,10 +9,8 @@
  * normalizado para uppercase antes de persistir.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Warehouse } = require('../../../../models/index');
-
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { ValidationError, ConflictError } from '../../../../errors';
 
 interface CreateWarehouseInput {
@@ -23,6 +21,14 @@ interface CreateWarehouseInput {
 }
 
 class CreateWarehouseUseCase extends UseCase<CreateWarehouseInput, any> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Dados do novo depósito.
    * @returns Depósito criado.
@@ -40,12 +46,12 @@ class CreateWarehouseUseCase extends UseCase<CreateWarehouseInput, any> {
       throw new ValidationError('name é obrigatório para criar um depósito.');
     }
 
-    const existing = await Warehouse.findOne({ where: { code } });
+    const existing = await this.inventoryRepository.findWarehouseByCode(code);
     if (existing) {
       throw new ConflictError(`Já existe um depósito com o código "${code}".`);
     }
 
-    const warehouse = await Warehouse.create({
+    const warehouse = await this.inventoryRepository.createWarehouse({
       code,
       name,
       description: input.description ?? null,

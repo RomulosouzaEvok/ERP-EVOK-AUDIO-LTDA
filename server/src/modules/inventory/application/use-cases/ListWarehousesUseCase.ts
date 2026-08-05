@@ -6,20 +6,23 @@
  * Cobre `GET /api/inventory/warehouses`.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Warehouse } = require('../../../../models/index');
-
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 
 class ListWarehousesUseCase extends UseCase<void, any[]> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @returns Lista de depósitos ativos, ordenados por código.
    */
   public async execute(): Promise<any[]> {
-    return Warehouse.findAll({
-      where: { active: true },
-      order: [['code', 'ASC']],
-    });
+    return this.inventoryRepository.listActiveWarehouses();
   }
 }
 

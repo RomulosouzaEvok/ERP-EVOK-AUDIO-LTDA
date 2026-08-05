@@ -68,6 +68,20 @@ class UsersRepository {
   async incrementPasswordVersion(id: number | string) { // eslint-disable-line no-unused-vars
     throw new Error('UsersRepository.incrementPasswordVersion não implementado.');
   }
+
+  /**
+   * Busca um perfil de acesso pelo id (leitura auxiliar cross-module — o
+   * model `AccessProfile` pertence ao módulo `accessProfiles`, não a
+   * `users`; usado apenas para validar a existência/status do perfil antes
+   * de atribuí-lo a um usuário, UC-33).
+   *
+   * @abstract
+   * @param {number} id
+   * @returns {Promise<Object|null>}
+   */
+  async findAccessProfileById(id: number | string) { // eslint-disable-line no-unused-vars
+    throw new Error('UsersRepository.findAccessProfileById não implementado.');
+  }
 }
 
 module.exports = UsersRepository;

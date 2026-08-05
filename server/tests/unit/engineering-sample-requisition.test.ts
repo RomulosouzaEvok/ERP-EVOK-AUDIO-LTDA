@@ -28,11 +28,6 @@ const ENGINEERING_SAMPLE_ORIGIN = 'engenharia_amostra';
 const engineeringProjectFindByPkMock = jest.fn();
 const employeeFindOneMock = jest.fn(async () => null);
 
-jest.mock('../../src/models/index', () => ({
-  EngineeringProject: { findByPk: (...args: any[]) => engineeringProjectFindByPkMock(...args) },
-  Employee: { findOne: (...args: any[]) => employeeFindOneMock(...args) },
-}));
-
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const CreatePurchaseRequisitionUseCase = require('../../src/modules/purchaseRequisitions/application/use-cases/CreatePurchaseRequisitionUseCase');
 
@@ -50,6 +45,8 @@ describe('CreatePurchaseRequisitionUseCase — amostra de engenharia', () => {
       createRequisition: jest.fn(async (data: any) => ({ id: 42, requisition_number: data.requisition_number, status: data.status, origin: data.origin })),
       createRequisitionItem: jest.fn(async (data: any) => data),
       findRequisitionById: jest.fn(async (id: number) => ({ id, requisition_number: 'RQ-AMOSTRA', items: [{ item_id: 'item-1' }] })),
+      findEngineeringProjectById: jest.fn(async (...args: any[]) => engineeringProjectFindByPkMock(...args)),
+      findEmployeeByUserId: jest.fn(async (...args: any[]) => employeeFindOneMock(...args)),
     };
     const itemRepository = {
       findById: jest.fn(async (id: string) => (id === 'item-1' ? { id } : null)),
@@ -100,7 +97,7 @@ describe('CreatePurchaseRequisitionUseCase — amostra de engenharia', () => {
       items: [{ item_id: 'item-1', quantity: 3 }],
     });
 
-    expect(engineeringProjectFindByPk).toHaveBeenCalledWith(7, expect.any(Object));
+    expect(engineeringProjectFindByPk).toHaveBeenCalledWith(7, undefined);
     expect(requisitionRepository.createRequisition).toHaveBeenCalledWith(
       expect.objectContaining({
         origin: ENGINEERING_SAMPLE_ORIGIN,
@@ -201,15 +198,6 @@ describe('Cadeia completa: amostra aprovada -> convertida em pedido -> recebida 
     jest.doMock('../../src/services/warehouseStockService', () => WarehouseStockService);
     jest.doMock('../../src/services/costingService', () => ({ registerWeightedAverageCost: jest.fn(async () => ({})) }));
 
-    const PurchaseRequisitionFindByPk = jest.fn(async (id: number) => (
-      id === 55 ? { id: 55, origin: ENGINEERING_SAMPLE_ORIGIN } : null
-    ));
-    jest.doMock('../../src/models/index', () => ({
-      LotControl: { findOne: jest.fn(async () => null), create: jest.fn(async () => ({ id: 1 })) },
-      PurchaseReceipt: { create: jest.fn(async () => ({ id: 1 })) },
-      PurchaseRequisition: { findByPk: PurchaseRequisitionFindByPk },
-    }));
-
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ReceivePurchaseItemsUseCase = require('../../src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase');
 
@@ -223,10 +211,17 @@ describe('Cadeia completa: amostra aprovada -> convertida em pedido -> recebida 
       items: [{ id: 9001, product_id: 501, quantity: 1, received_quantity: 0, unit_price: 100 }],
       save: jest.fn(async () => ({})),
     };
+    const findRequisitionOriginById = jest.fn(async (id: number) => (
+      id === 55 ? { id: 55, origin: ENGINEERING_SAMPLE_ORIGIN } : null
+    ));
     const receivePurchaseRepository = {
       findPurchaseWithItemsForUpdate: jest.fn(async () => purchaseAggregate),
       updatePurchaseItem: jest.fn(async () => ({})),
       findPurchaseItemsForUpdate: jest.fn(async () => ([{ id: 9001, status: 'received' }])),
+      createPurchaseReceipt: jest.fn(async () => ({ id: 1 })),
+      findRequisitionOriginById,
+      findLotForReceipt: jest.fn(async () => null),
+      createLot: jest.fn(async () => ({ id: 1 })),
     };
 
     const receiveUseCase = new ReceivePurchaseItemsUseCase(receivePurchaseRepository);
@@ -240,7 +235,7 @@ describe('Cadeia completa: amostra aprovada -> convertida em pedido -> recebida 
       transaction,
     });
 
-    expect(PurchaseRequisitionFindByPk).toHaveBeenCalledWith(55, expect.objectContaining({ transaction }));
+    expect(findRequisitionOriginById).toHaveBeenCalledWith(55, transaction);
     expect(WarehouseStockService.getWarehouseByCode).toHaveBeenCalledWith('LABORATORIO', transaction);
     expect(WarehouseStockService.addToWarehouse).toHaveBeenCalledWith(501, 3, 1, transaction);
   });

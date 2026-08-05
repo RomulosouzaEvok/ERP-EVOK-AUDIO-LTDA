@@ -3,7 +3,7 @@ import type { Transaction } from 'sequelize';
 const { Op, QueryTypes } = require('sequelize');
 const PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
 const { sequelize } = require('../../../../config/database');
-const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item, PurchaseRequisition } = require('../../../../models/index');
+const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item, PurchaseRequisition, PurchaseReceipt, LotControl } = require('../../../../models/index');
 
 class SequelizePurchaseRepository extends PurchaseRepository {
   async listPurchases(filters: any = {}, pagination: any = {}) {
@@ -202,6 +202,33 @@ class SequelizePurchaseRepository extends PurchaseRepository {
       arriving_this_week: arrivingRow?.count ?? 0,
       overdue: overdueRow?.count ?? 0
     };
+  }
+
+  /** @inheritdoc */
+  async createPurchaseReceipt(data: Record<string, unknown>, transaction: Transaction) {
+    return PurchaseReceipt.create(data, { transaction });
+  }
+
+  /** @inheritdoc */
+  async findRequisitionOriginById(requisitionId: number | string, transaction: Transaction) {
+    return PurchaseRequisition.findByPk(requisitionId, {
+      attributes: ['id', 'origin'],
+      transaction,
+    });
+  }
+
+  /** @inheritdoc */
+  async findLotForReceipt(where: Record<string, unknown>, transaction: Transaction) {
+    return LotControl.findOne({
+      where,
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+  }
+
+  /** @inheritdoc */
+  async createLot(data: Record<string, unknown>, transaction: Transaction) {
+    return LotControl.create(data, { transaction });
   }
 }
 

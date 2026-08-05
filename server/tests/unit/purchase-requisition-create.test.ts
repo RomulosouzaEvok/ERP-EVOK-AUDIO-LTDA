@@ -6,6 +6,8 @@ describe('CreatePurchaseRequisitionUseCase', () => {
       createRequisition: jest.fn(async (data: any) => ({ id: 7, requisition_number: data.requisition_number, status: data.status, origin: data.origin })),
       createRequisitionItem: jest.fn(async (data: any) => data),
       findRequisitionById: jest.fn(async (id: number) => ({ id, requisition_number: 'RQ-123', items: [{ item_id: 'item-1' }] })),
+      findEngineeringProjectById: jest.fn(async () => null),
+      findEmployeeByUserId: jest.fn(async () => null),
     };
 
     const itemRepository = {

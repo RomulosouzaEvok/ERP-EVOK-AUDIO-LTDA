@@ -7,6 +7,8 @@ const {
   SaleItem,
   BillOfMaterial,
   BillOfMaterialItem,
+  Warehouse,
+  ProductWarehouseStock,
 } = require('../../../../models/index');
 const Validators = require('../../../../utils/validators');
 
@@ -89,6 +91,22 @@ class SequelizeProductRepository extends ProductRepository {
     ]);
 
     return activeAsParent + activeAsComponent;
+  }
+
+  async getWarehouseStockSummary(productId: number | string) {
+    const [warehouses, stocks] = await Promise.all([
+      Warehouse.findAll({ where: { active: true }, order: [['code', 'ASC']] }),
+      ProductWarehouseStock.findAll({ where: { product_id: productId } }),
+    ]);
+
+    const stockByWarehouseId = new Map(stocks.map((s: any) => [s.warehouse_id, Number(s.quantity)]));
+
+    return warehouses.map((w: any) => ({
+      warehouse_id: w.id,
+      warehouse_code: w.code,
+      warehouse_name: w.name,
+      quantity: stockByWarehouseId.get(w.id) ?? 0,
+    }));
   }
 }
 

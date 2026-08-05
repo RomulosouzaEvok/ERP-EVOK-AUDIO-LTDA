@@ -5,7 +5,6 @@ const UseCase = require('../../../../shared/application/UseCase');
 const InventoryService = require('../../../../services/inventoryService');
 const WarehouseStockService = require('../../../../services/warehouseStockService');
 const CostingService = require('../../../../services/costingService');
-const { LotControl, PurchaseReceipt, PurchaseRequisition } = require('../../../../models/index');
 const { NotFoundError, ValidationError, BusinessRuleError, ConflictError } = require('../../../../errors');
 
 const UNIQUE_VIOLATION = 'SequelizeUniqueConstraintError';
@@ -79,12 +78,12 @@ class ReceivePurchaseItemsUseCase extends UseCase {
     // vezes contra o mesmo pedido (cada lancamento de recebimento exige
     // uma NF diferente).
     try {
-      await PurchaseReceipt.create({
+      await this.purchaseRepository.createPurchaseReceipt({
         purchase_id: purchase.id,
         invoice_number: String(invoiceNumber).trim(),
         received_by: userId,
         received_at: new Date(),
-      }, { transaction });
+      }, transaction);
     } catch (error) {
       if (error instanceof Error && error.name === UNIQUE_VIOLATION) {
         throw new ConflictError(`NF ${invoiceNumber} ja foi registrada para o pedido ${purchase.order_number}.`);
@@ -105,10 +104,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
     // unica vez para todo o recebimento.
     let defaultWarehouseCode = 'INSUMOS';
     if (!warehouseCode && purchase.requisition_id) {
-      const requisition = await PurchaseRequisition.findByPk(purchase.requisition_id, {
-        attributes: ['id', 'origin'],
-        transaction,
-      });
+      const requisition = await this.purchaseRepository.findRequisitionOriginById(purchase.requisition_id, transaction);
       if (requisition?.origin === ENGINEERING_SAMPLE_ORIGIN) {
         defaultWarehouseCode = 'LABORATORIO';
       }
@@ -160,15 +156,11 @@ class ReceivePurchaseItemsUseCase extends UseCase {
         sequence: generatedLotSequence
       });
 
-      const existingLot = await LotControl.findOne({
-        where: {
-          product_id: item.product_id,
-          purchase_id: purchase.id,
-          lot_number: lotNumber
-        },
-        transaction,
-        lock: transaction.LOCK.UPDATE
-      });
+      const existingLot = await this.purchaseRepository.findLotForReceipt({
+        product_id: item.product_id,
+        purchase_id: purchase.id,
+        lot_number: lotNumber
+      }, transaction);
 
       // Lotes de recebimento de compra nascem/permanecem em quarentena
       // ('quarantine'): o estoque fisico (products.quantity) e incrementado
@@ -194,7 +186,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
           notes: received.lot_notes || existingLot.notes || `Recebimento PO ${purchase.order_number}`
         }, { transaction });
       } else {
-        await LotControl.create({
+        await this.purchaseRepository.createLot({
           product_id: item.product_id,
           supplier_id: purchase.supplier_id,
           purchase_id: purchase.id,
@@ -208,7 +200,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
           expires_at: received.expires_at || null,
           created_by: userId,
           notes: received.lot_notes || `Recebimento PO ${purchase.order_number}`
-        }, { transaction });
+        }, transaction);
       }
 
       await CostingService.registerWeightedAverageCost({

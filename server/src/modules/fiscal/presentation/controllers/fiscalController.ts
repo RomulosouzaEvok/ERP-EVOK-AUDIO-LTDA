@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 
 const { logAction } = require('../../../../services/auditLogService');
+const SequelizeFiscalRepository = require('../../infrastructure/sequelize/SequelizeFiscalRepository');
 const IssueSaleNfeUseCase = require('../../application/use-cases/IssueSaleNfeUseCase');
 const GetSaleNfeStatusUseCase = require('../../application/use-cases/GetSaleNfeStatusUseCase');
 const CancelSaleNfeUseCase = require('../../application/use-cases/CancelSaleNfeUseCase');
@@ -15,11 +16,12 @@ const { cancelNfeSchema, registerIncomingNfeSchema, upsertCompanyFiscalConfigSch
  * (não introduz um novo prefixo top-level), já que semanticamente
  * pertencem ao ciclo de vida de venda/compra.
  */
+const fiscalRepository = new SequelizeFiscalRepository();
 
 /** `POST /api/sales/:id/nfe` — emite a NF-e da venda. */
 exports.issueSaleNfe = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new IssueSaleNfeUseCase();
+    const useCase = new IssueSaleNfeUseCase(fiscalRepository);
     const sale = await useCase.execute({ saleId: req.params.id });
 
     logAction(req, {
@@ -38,7 +40,7 @@ exports.issueSaleNfe = async (req: Request, res: Response, next: NextFunction) =
 /** `GET /api/sales/:id/nfe` — consulta/reconcilia o status da NF-e da venda. */
 exports.getSaleNfeStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new GetSaleNfeStatusUseCase();
+    const useCase = new GetSaleNfeStatusUseCase(fiscalRepository);
     const sale = await useCase.execute({ saleId: req.params.id });
     res.json({ success: true, data: sale });
   } catch (error) { next(error); }
@@ -50,7 +52,7 @@ exports.cancelSaleNfe = async (req: Request, res: Response, next: NextFunction) 
     const parsed = cancelNfeSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
 
-    const useCase = new CancelSaleNfeUseCase();
+    const useCase = new CancelSaleNfeUseCase(fiscalRepository);
     const sale = await useCase.execute({ saleId: req.params.id, reason: parsed.data.reason });
 
     logAction(req, {
@@ -72,7 +74,7 @@ exports.registerIncomingNfe = async (req: Request, res: Response, next: NextFunc
     const parsed = registerIncomingNfeSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
 
-    const useCase = new RegisterIncomingNfeUseCase();
+    const useCase = new RegisterIncomingNfeUseCase(fiscalRepository);
     const purchase = await useCase.execute({
       purchaseId: req.params.id,
       nfeKey: parsed.data.nfe_key,
@@ -98,7 +100,7 @@ exports.registerIncomingNfe = async (req: Request, res: Response, next: NextFunc
 /** `GET /api/fiscal/config` — retorna a configuração fiscal da empresa. */
 exports.getCompanyFiscalConfig = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new GetCompanyFiscalConfigUseCase();
+    const useCase = new GetCompanyFiscalConfigUseCase(fiscalRepository);
     const config = await useCase.execute();
     res.json({ success: true, data: config });
   } catch (error) { next(error); }
@@ -110,7 +112,7 @@ exports.upsertCompanyFiscalConfig = async (req: Request, res: Response, next: Ne
     const parsed = upsertCompanyFiscalConfigSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
 
-    const useCase = new UpsertCompanyFiscalConfigUseCase();
+    const useCase = new UpsertCompanyFiscalConfigUseCase(fiscalRepository);
     const config = await useCase.execute(parsed.data);
 
     logAction(req, {

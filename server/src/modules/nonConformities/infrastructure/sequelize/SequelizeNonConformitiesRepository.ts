@@ -5,7 +5,7 @@
  */
 
 import NonConformitiesRepository from '../../domain/repositories/NonConformitiesRepository';
-const { NonConformity, Product, ProductionOrder, Supplier, User }: any = require('../../../../models/index');
+const { NonConformity, Product, ProductionOrder, Supplier, User, LotControl }: any = require('../../../../models/index');
 
 class SequelizeNonConformitiesRepository extends NonConformitiesRepository {
   /** @inheritdoc */
@@ -50,6 +50,33 @@ class SequelizeNonConformitiesRepository extends NonConformitiesRepository {
   public async update(id: number | string, data: Record<string, unknown>, transaction?: any): Promise<number> {
     const [updated] = await NonConformity.update(data, { where: { id }, ...(transaction ? { transaction } : {}) });
     return updated;
+  }
+
+  /** @inheritdoc */
+  public async findLotForNonConformity(productId: number, lotNumber: string, transaction: any): Promise<any | null> {
+    return LotControl.findOne({
+      where: { product_id: productId, lot_number: lotNumber },
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+  }
+
+  /** @inheritdoc */
+  public async countLotsBySupplier(supplierId: number, transaction: any): Promise<number> {
+    return LotControl.count({ where: { supplier_id: supplierId }, transaction });
+  }
+
+  /** @inheritdoc */
+  public async countNonConformitiesBySupplier(supplierId: number, transaction: any): Promise<number> {
+    return NonConformity.count({ where: { supplier_id: supplierId }, transaction });
+  }
+
+  /** @inheritdoc */
+  public async updateSupplierQualityScore(supplierId: number, qualityScore: number, transaction: any): Promise<void> {
+    await Supplier.update(
+      { quality_score: qualityScore },
+      { where: { id: supplierId }, transaction }
+    );
   }
 }
 

@@ -255,22 +255,24 @@ describe('Devolução ao fornecedor — Bloco B', () => {
 
   describe('CreateNonConformityUseCase — score de qualidade do fornecedor', () => {
     it('recalcula suppliers.quality_score quando a RNC de devolução referencia lote com fornecedor', async () => {
-      const { LotControl, Supplier, NonConformity } = require('../../src/models/index');
+      const { Supplier } = require('../../src/models/index');
 
       const nonConformitiesRepository = {
         create: jest.fn(async (data: any) => ({ id: 120, supplier_id: data.supplier_id, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 40,
+          lot_number: 'LOT-RET-001',
+          status: 'quarantine',
+          supplier_id: 77,
+          notes: null,
+          update: jest.fn(async () => ({})),
+        })),
+        countLotsBySupplier: jest.fn(async () => 8),
+        countNonConformitiesBySupplier: jest.fn(async () => 2),
+        updateSupplierQualityScore: jest.fn(async (supplierId: number, qualityScore: number) => {
+          await Supplier.update({ quality_score: qualityScore }, { where: { id: supplierId } });
+        }),
       };
-
-      LotControl.findOne.mockResolvedValue({
-        id: 40,
-        lot_number: 'LOT-RET-001',
-        status: 'quarantine',
-        supplier_id: 77,
-        notes: null,
-        update: jest.fn(async () => ({})),
-      });
-      LotControl.count.mockResolvedValue(8);
-      NonConformity.count.mockResolvedValue(2);
 
       PurchaseItem.findByPk.mockResolvedValue({
         id: 14,

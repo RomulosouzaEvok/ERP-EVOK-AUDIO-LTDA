@@ -13,6 +13,8 @@
 describe('CreateWarehouseUseCase', () => {
   let Warehouse: any;
   let CreateWarehouseUseCase: any;
+  let SequelizeInventoryRepository: any;
+  let repository: any;
   let ValidationError: any;
   let ConflictError: any;
 
@@ -35,13 +37,17 @@ describe('CreateWarehouseUseCase', () => {
     jest.doMock('../../src/models/index', () => ({ Warehouse }));
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
+    SequelizeInventoryRepository = require('../../src/modules/inventory/infrastructure/sequelize/SequelizeInventoryRepository');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     CreateWarehouseUseCase = require('../../src/modules/inventory/application/use-cases/CreateWarehouseUseCase');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     ({ ValidationError, ConflictError } = require('../../src/errors'));
+
+    repository = new SequelizeInventoryRepository();
   });
 
   it('cria deposito com sucesso, normalizando code para uppercase', async () => {
-    const useCase = new CreateWarehouseUseCase();
+    const useCase = new CreateWarehouseUseCase(repository);
     const warehouse = await useCase.execute({ code: 'expedicao', name: 'Deposito Expedicao' });
 
     expect(warehouse.id).toBe(99);
@@ -54,7 +60,7 @@ describe('CreateWarehouseUseCase', () => {
   });
 
   it('rejeita code duplicado (case-insensitive) com ConflictError', async () => {
-    const useCase = new CreateWarehouseUseCase();
+    const useCase = new CreateWarehouseUseCase(repository);
 
     await expect(
       useCase.execute({ code: 'insumos', name: 'Outro nome' })
@@ -64,7 +70,7 @@ describe('CreateWarehouseUseCase', () => {
   });
 
   it('rejeita code ausente/vazio com ValidationError', async () => {
-    const useCase = new CreateWarehouseUseCase();
+    const useCase = new CreateWarehouseUseCase(repository);
 
     await expect(
       useCase.execute({ code: '', name: 'Deposito sem codigo' })
@@ -78,7 +84,7 @@ describe('CreateWarehouseUseCase', () => {
   });
 
   it('rejeita name ausente/vazio com ValidationError', async () => {
-    const useCase = new CreateWarehouseUseCase();
+    const useCase = new CreateWarehouseUseCase(repository);
 
     await expect(
       useCase.execute({ code: 'NOVO', name: '' })
@@ -91,6 +97,8 @@ describe('CreateWarehouseUseCase', () => {
 describe('UpdateWarehouseUseCase', () => {
   let Warehouse: any;
   let UpdateWarehouseUseCase: any;
+  let SequelizeInventoryRepository: any;
+  let repository: any;
   let NotFoundError: any;
   let warehouseRow: any;
 
@@ -116,13 +124,17 @@ describe('UpdateWarehouseUseCase', () => {
     jest.doMock('../../src/models/index', () => ({ Warehouse }));
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
+    SequelizeInventoryRepository = require('../../src/modules/inventory/infrastructure/sequelize/SequelizeInventoryRepository');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     UpdateWarehouseUseCase = require('../../src/modules/inventory/application/use-cases/UpdateWarehouseUseCase');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     ({ NotFoundError } = require('../../src/errors'));
+
+    repository = new SequelizeInventoryRepository();
   });
 
   it('edita name/description/active de um deposito existente', async () => {
-    const useCase = new UpdateWarehouseUseCase();
+    const useCase = new UpdateWarehouseUseCase(repository);
     const { before, warehouse } = await useCase.execute({
       id: 1,
       name: 'Deposito Insumos Renomeado',
@@ -142,7 +154,7 @@ describe('UpdateWarehouseUseCase', () => {
   });
 
   it('lanca NotFoundError (404) para id inexistente', async () => {
-    const useCase = new UpdateWarehouseUseCase();
+    const useCase = new UpdateWarehouseUseCase(repository);
 
     await expect(
       useCase.execute({ id: 999, name: 'Qualquer' })
@@ -152,7 +164,7 @@ describe('UpdateWarehouseUseCase', () => {
   });
 
   it('nunca altera o code, mesmo que nao seja passado no input (nao existe campo para isso)', async () => {
-    const useCase = new UpdateWarehouseUseCase();
+    const useCase = new UpdateWarehouseUseCase(repository);
     const { warehouse } = await useCase.execute({ id: 1, name: 'Novo nome' });
 
     // O use case nunca inclui "code" no objeto de updates enviado ao model.

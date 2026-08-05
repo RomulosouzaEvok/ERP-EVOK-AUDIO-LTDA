@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Registra manualmente a NF-e de entrada (nota do fornecedor) contra um
  * pedido de compra já recebido.
  *
@@ -11,9 +11,10 @@
  * @module modules/fiscal/application/use-cases/RegisterIncomingNfeUseCase
  */
 
+import type FiscalRepository = require('../../domain/repositories/FiscalRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
-const { Purchase } = require('../../../../models/index');
 const { isValidNfeAccessKey } = require('../../domain/services/NfeAccessKeyValidator');
 
 interface RegisterIncomingNfeInput {
@@ -26,6 +27,14 @@ interface RegisterIncomingNfeInput {
 }
 
 class RegisterIncomingNfeUseCase extends UseCase {
+  private fiscalRepository: FiscalRepository;
+
+  /** @param {import('../../domain/repositories/FiscalRepository')} fiscalRepository */
+  constructor(fiscalRepository: FiscalRepository) {
+    super();
+    this.fiscalRepository = fiscalRepository;
+  }
+
   /**
    * @param {Object} input
    * @param {number} input.purchaseId
@@ -41,7 +50,7 @@ class RegisterIncomingNfeUseCase extends UseCase {
       throw new ValidationError('Chave de acesso da NF-e inválida (44 dígitos com dígito verificador correto).');
     }
 
-    const purchase = await Purchase.findByPk(purchaseId);
+    const purchase = await this.fiscalRepository.findPurchaseById(purchaseId);
     if (!purchase) throw new NotFoundError('Pedido de compra não encontrado.');
 
     if (!['partial', 'received'].includes(purchase.status)) {

@@ -12,11 +12,10 @@
  * docs/business/BUSINESS_RULES.md §12 itens 4, 6 e 8).
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { WarehouseTransfer, InventoryMovement } = require('../../../../models/index');
 const WarehouseStockService: any = require('../../../../services/warehouseStockService');
 
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { NotFoundError, BusinessRuleError } from '../../../../errors';
 import { Transaction } from 'sequelize';
 
@@ -27,6 +26,14 @@ interface ApproveWarehouseTransferInput {
 }
 
 class ApproveWarehouseTransferUseCase extends UseCase<ApproveWarehouseTransferInput, any> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Id da transferência, id do aprovador e transação ativa.
    * @returns Transferência atualizada (`status = 'approved'`).
@@ -34,10 +41,7 @@ class ApproveWarehouseTransferUseCase extends UseCase<ApproveWarehouseTransferIn
    * @throws {BusinessRuleError} Se a transferência não estiver `pending`, ou se o saldo de origem for insuficiente NO MOMENTO da aprovação.
    */
   public async execute(input: ApproveWarehouseTransferInput): Promise<any> {
-    const transfer = await WarehouseTransfer.findByPk(input.id, {
-      transaction: input.transaction,
-      lock: Transaction.LOCK.UPDATE,
-    });
+    const transfer = await this.inventoryRepository.findWarehouseTransferForUpdate(input.id, input.transaction);
 
     if (!transfer) {
       throw new NotFoundError('Transferência entre depósitos não encontrada.');
@@ -56,7 +60,7 @@ class ApproveWarehouseTransferUseCase extends UseCase<ApproveWarehouseTransferIn
     // Crédito do destino — soma total do produto permanece invariante.
     await WarehouseStockService.addToWarehouse(transfer.product_id, transfer.to_warehouse_id, quantity, input.transaction);
 
-    await InventoryMovement.create({
+    await this.inventoryRepository.createInventoryMovement({
       product_id: transfer.product_id,
       user_id: input.approverId,
       warehouse_id: transfer.from_warehouse_id,
@@ -65,9 +69,9 @@ class ApproveWarehouseTransferUseCase extends UseCase<ApproveWarehouseTransferIn
       description: `Transferência #${transfer.id} - saída (${transfer.reason})`,
       reference_id: transfer.id,
       reference_type: 'transfer',
-    }, { transaction: input.transaction });
+    }, input.transaction);
 
-    await InventoryMovement.create({
+    await this.inventoryRepository.createInventoryMovement({
       product_id: transfer.product_id,
       user_id: input.approverId,
       warehouse_id: transfer.to_warehouse_id,
@@ -76,7 +80,7 @@ class ApproveWarehouseTransferUseCase extends UseCase<ApproveWarehouseTransferIn
       description: `Transferência #${transfer.id} - entrada (${transfer.reason})`,
       reference_id: transfer.id,
       reference_type: 'transfer',
-    }, { transaction: input.transaction });
+    }, input.transaction);
 
     await transfer.update({
       status: 'approved',

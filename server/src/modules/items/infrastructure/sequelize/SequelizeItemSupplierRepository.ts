@@ -99,6 +99,11 @@ class SequelizeItemSupplierRepository extends ItemSupplierRepository {
 
     return rows;
   }
+
+  /** @inheritdoc */
+  public async findSupplierById(supplierId: number): Promise<any | null> {
+    return Supplier.findByPk(supplierId);
+  }
 }
 
 export = SequelizeItemSupplierRepository;

@@ -18,11 +18,6 @@
 
 const employeeFindOneMock = jest.fn();
 
-jest.mock('../../src/models/index', () => ({
-  EngineeringProject: { findByPk: jest.fn() },
-  Employee: { findOne: (...args: any[]) => employeeFindOneMock(...args) },
-}));
-
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const CreatePurchaseRequisitionUseCase = require('../../src/modules/purchaseRequisitions/application/use-cases/CreatePurchaseRequisitionUseCase');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -38,6 +33,8 @@ describe('CreatePurchaseRequisitionUseCase — department_id derivado do usuario
       createRequisition: jest.fn(async (data: any) => ({ id: 10, requisition_number: data.requisition_number, status: data.status, origin: data.origin, department_id: data.department_id })),
       createRequisitionItem: jest.fn(async (data: any) => data),
       findRequisitionById: jest.fn(async (id: number) => ({ id, requisition_number: 'RQ-DEPTO' })),
+      findEngineeringProjectById: jest.fn(async () => null),
+      findEmployeeByUserId: jest.fn(async (...args: any[]) => employeeFindOneMock(...args)),
     };
     const itemRepository = {
       findById: jest.fn(async (id: string) => (id === 'item-1' ? { id } : null)),
@@ -55,9 +52,7 @@ describe('CreatePurchaseRequisitionUseCase — department_id derivado do usuario
       items: [{ item_id: 'item-1', quantity: 1 }],
     });
 
-    expect(employeeFindOneMock).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { user_id: 123 } }),
-    );
+    expect(requisitionRepository.findEmployeeByUserId).toHaveBeenCalledWith(123, undefined);
     expect(requisitionRepository.createRequisition).toHaveBeenCalledWith(
       expect.objectContaining({ department_id: 4 }),
       undefined,

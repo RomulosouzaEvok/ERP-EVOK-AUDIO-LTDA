@@ -2,7 +2,6 @@ import type { Request } from 'express';
 const { UseCase } = require('../../../../shared/application/UseCase');
 const { NotFoundError, BusinessRuleError } = require('../../../../errors');
 const { logAction } = require('../../../../services/auditLogService');
-const { AccessProfile } = require('../../../../models/index');
 
 interface AssignAccessProfileInput {
   id: number;
@@ -55,7 +54,7 @@ class AssignAccessProfileUseCase extends UseCase {
     }
 
     if (accessProfileId !== null && accessProfileId !== undefined) {
-      const profile = await AccessProfile.findByPk(accessProfileId);
+      const profile = await this.usersRepository.findAccessProfileById(accessProfileId);
       if (!profile) {
         throw new NotFoundError('Perfil de acesso não encontrado.');
       }

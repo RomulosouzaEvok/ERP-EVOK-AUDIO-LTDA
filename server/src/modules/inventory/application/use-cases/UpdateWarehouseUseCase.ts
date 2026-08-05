@@ -10,10 +10,8 @@
  * em todo o sistema (recebimento, produção, vendas, laboratório, transferências).
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Warehouse } = require('../../../../models/index');
-
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { NotFoundError } from '../../../../errors';
 
 interface UpdateWarehouseInput {
@@ -24,13 +22,21 @@ interface UpdateWarehouseInput {
 }
 
 class UpdateWarehouseUseCase extends UseCase<UpdateWarehouseInput, any> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Id do depósito e campos a atualizar (`name`, `description`, `active`).
    * @returns Objeto com `before` (valores antes da edição) e `warehouse` (registro atualizado).
    * @throws {NotFoundError} Se o depósito não existir.
    */
   public async execute(input: UpdateWarehouseInput): Promise<{ before: any; warehouse: any }> {
-    const warehouse = await Warehouse.findByPk(input.id);
+    const warehouse = await this.inventoryRepository.findWarehouseById(input.id);
     if (!warehouse) {
       throw new NotFoundError(`Depósito ID ${input.id} não encontrado.`);
     }

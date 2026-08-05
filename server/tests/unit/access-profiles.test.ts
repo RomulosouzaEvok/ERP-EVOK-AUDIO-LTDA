@@ -8,11 +8,6 @@ jest.mock('../../src/services/auditLogService', () => ({
   logAction: jest.fn(),
 }));
 
-const mockAccessProfileFindByPk = jest.fn();
-jest.mock('../../src/models/index', () => ({
-  AccessProfile: { findByPk: (...args: unknown[]) => mockAccessProfileFindByPk(...args) },
-}));
-
 import { authorizeModule } from '../../src/middlewares/auth';
 import { logAction } from '../../src/services/auditLogService';
 import { ConflictError, NotFoundError, ValidationError, BusinessRuleError } from '../../src/errors';
@@ -367,16 +362,11 @@ describe('DeactivateAccessProfileUseCase (UC-32)', () => {
 // -----------------------------------------------------------------------
 
 describe('AssignAccessProfileUseCase (UC-33)', () => {
-  beforeEach(() => {
-    mockAccessProfileFindByPk.mockReset();
-  });
-
   it('audita atribuicao com valor anterior e novo valor', async () => {
-    mockAccessProfileFindByPk.mockResolvedValue({ id: 9, nome: 'Laboratório', active: true });
-
     const usersRepository = {
       findById: jest.fn(async () => ({ id: 1, email: 'usuario@evokaudio.com', accessProfileId: 5 })),
       update: jest.fn(async () => 1),
+      findAccessProfileById: jest.fn(async () => ({ id: 9, nome: 'Laboratório', active: true })),
     };
 
     const useCase = new AssignAccessProfileUseCase(usersRepository as any);
@@ -396,11 +386,10 @@ describe('AssignAccessProfileUseCase (UC-33)', () => {
   });
 
   it('rejeita atribuicao de perfil inativo com BusinessRuleError (422)', async () => {
-    mockAccessProfileFindByPk.mockResolvedValue({ id: 9, nome: 'Antigo', active: false });
-
     const usersRepository = {
       findById: jest.fn(async () => ({ id: 1, email: 'usuario@evokaudio.com', accessProfileId: null })),
       update: jest.fn(),
+      findAccessProfileById: jest.fn(async () => ({ id: 9, nome: 'Antigo', active: false })),
     };
 
     const useCase = new AssignAccessProfileUseCase(usersRepository as any);
@@ -412,11 +401,10 @@ describe('AssignAccessProfileUseCase (UC-33)', () => {
   });
 
   it('lanca NotFoundError se perfil informado nao existir', async () => {
-    mockAccessProfileFindByPk.mockResolvedValue(null);
-
     const usersRepository = {
       findById: jest.fn(async () => ({ id: 1, email: 'usuario@evokaudio.com', accessProfileId: null })),
       update: jest.fn(),
+      findAccessProfileById: jest.fn(async () => null),
     };
 
     const useCase = new AssignAccessProfileUseCase(usersRepository as any);
@@ -430,6 +418,7 @@ describe('AssignAccessProfileUseCase (UC-33)', () => {
     const usersRepository = {
       findById: jest.fn(async () => ({ id: 1, email: 'usuario@evokaudio.com', accessProfileId: 5 })),
       update: jest.fn(async () => 1),
+      findAccessProfileById: jest.fn(),
     };
 
     const useCase = new AssignAccessProfileUseCase(usersRepository as any);
@@ -437,7 +426,7 @@ describe('AssignAccessProfileUseCase (UC-33)', () => {
 
     expect(result).toEqual({ id: 1, accessProfileId: null });
     expect(usersRepository.update).toHaveBeenCalledWith(1, { accessProfileId: null });
-    expect(mockAccessProfileFindByPk).not.toHaveBeenCalled();
+    expect(usersRepository.findAccessProfileById).not.toHaveBeenCalled();
   });
 });
 

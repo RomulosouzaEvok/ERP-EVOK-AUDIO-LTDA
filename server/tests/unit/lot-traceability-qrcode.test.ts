@@ -29,17 +29,20 @@ jest.mock('../../src/services/qrCodeService', () => ({
 }));
 
 import GetLotByCodeUseCase = require('../../src/modules/inventory/application/use-cases/GetLotByCodeUseCase');
+import SequelizeInventoryRepository = require('../../src/modules/inventory/infrastructure/sequelize/SequelizeInventoryRepository');
 import GenerateEntityQrCodeUseCase = require('../../src/shared/application/GenerateEntityQrCodeUseCase');
 import { NotFoundError, ValidationError, ConflictError } from '../../src/errors';
 
 const { LotControl } = require('../../src/models/index');
 const QRCodeService = require('../../src/services/qrCodeService');
 
+const inventoryRepository = new SequelizeInventoryRepository();
+
 describe('GetLotByCodeUseCase (lookup por lot_number)', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('rejeita lot_number vazio antes de consultar o banco', async () => {
-    const useCase = new GetLotByCodeUseCase();
+    const useCase = new GetLotByCodeUseCase(inventoryRepository);
     await expect(useCase.execute({ lot_number: '  ' })).rejects.toBeInstanceOf(ValidationError);
     expect(LotControl.findAll).not.toHaveBeenCalled();
     expect(LotControl.findOne).not.toHaveBeenCalled();
@@ -48,7 +51,7 @@ describe('GetLotByCodeUseCase (lookup por lot_number)', () => {
   it('resolve o lote quando o codigo e unico (sem product_id)', async () => {
     LotControl.findAll.mockResolvedValue([{ id: 10, lot_number: 'LOT-QR-001', product_id: 5 }]);
 
-    const useCase = new GetLotByCodeUseCase();
+    const useCase = new GetLotByCodeUseCase(inventoryRepository);
     const result = await useCase.execute({ lot_number: 'LOT-QR-001' });
 
     expect(LotControl.findAll).toHaveBeenCalledWith(
@@ -60,7 +63,7 @@ describe('GetLotByCodeUseCase (lookup por lot_number)', () => {
   it('lanca NotFoundError quando nenhum lote corresponde ao codigo', async () => {
     LotControl.findAll.mockResolvedValue([]);
 
-    const useCase = new GetLotByCodeUseCase();
+    const useCase = new GetLotByCodeUseCase(inventoryRepository);
     await expect(useCase.execute({ lot_number: 'LOTE-INEXISTENTE' })).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -70,14 +73,14 @@ describe('GetLotByCodeUseCase (lookup por lot_number)', () => {
       { id: 11, lot_number: 'LOT-DUP', product_id: 8 },
     ]);
 
-    const useCase = new GetLotByCodeUseCase();
+    const useCase = new GetLotByCodeUseCase(inventoryRepository);
     await expect(useCase.execute({ lot_number: 'LOT-DUP' })).rejects.toBeInstanceOf(ConflictError);
   });
 
   it('desambigua por product_id quando informado', async () => {
     LotControl.findOne.mockResolvedValue({ id: 11, lot_number: 'LOT-DUP', product_id: 8 });
 
-    const useCase = new GetLotByCodeUseCase();
+    const useCase = new GetLotByCodeUseCase(inventoryRepository);
     const result = await useCase.execute({ lot_number: 'LOT-DUP', product_id: 8 });
 
     expect(LotControl.findOne).toHaveBeenCalledWith(
@@ -89,12 +92,12 @@ describe('GetLotByCodeUseCase (lookup por lot_number)', () => {
   it('lanca NotFoundError quando product_id informado nao bate com nenhum lote do codigo', async () => {
     LotControl.findOne.mockResolvedValue(null);
 
-    const useCase = new GetLotByCodeUseCase();
+    const useCase = new GetLotByCodeUseCase(inventoryRepository);
     await expect(useCase.execute({ lot_number: 'LOT-DUP', product_id: 999 })).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('rejeita product_id nao numerico', async () => {
-    const useCase = new GetLotByCodeUseCase();
+    const useCase = new GetLotByCodeUseCase(inventoryRepository);
     await expect(useCase.execute({ lot_number: 'LOT-001', product_id: 'abc' })).rejects.toBeInstanceOf(ValidationError);
     expect(LotControl.findOne).not.toHaveBeenCalled();
   });

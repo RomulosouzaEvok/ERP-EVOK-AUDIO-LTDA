@@ -10,11 +10,10 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { LotControl, Product, Supplier } = require('../../../../models/index');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Op } = require('sequelize');
 
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { ValidationError } from '../../../../errors';
 import { calculateHandoffSignal } from '../../../../shared/domain/handoffSignal';
 
@@ -36,6 +35,14 @@ interface ListLotsOutput {
 const VALID_STATUSES = ['available', 'reserved', 'consumed', 'blocked', 'expired', 'quarantine'];
 
 class ListLotsUseCase extends UseCase<ListLotsInput, ListLotsOutput> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Filtros (`status`, `product_id`) e paginação.
    * @returns Lotes encontrados, com `product` e `supplier` incluídos, e dados de paginação.
@@ -69,16 +76,7 @@ class ListLotsUseCase extends UseCase<ListLotsInput, ListLotsOutput> {
       where.quantity_available = { [Op.gt]: 0 };
     }
 
-    const { count, rows } = await LotControl.findAndCountAll({
-      where,
-      include: [
-        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
-        { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] }
-      ],
-      limit,
-      offset,
-      order: [['createdAt', 'ASC']]
-    });
+    const { count, rows } = await this.inventoryRepository.listLots(where, { limit, offset });
 
     // Bloco 3 (UC-40, BUSINESS_RULES.md §10): `handoff_signal` aditivo —
     // fila de Qualidade (Recebimento → Qualidade → Almoxarifado), calculado

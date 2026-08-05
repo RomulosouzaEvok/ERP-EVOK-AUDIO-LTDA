@@ -6,10 +6,8 @@
  * Cobre `GET /api/inventory/transfers?status=`.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { WarehouseTransfer, Product, Warehouse, User } = require('../../../../models/index');
-
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { ValidationError } from '../../../../errors';
 
 interface ListWarehouseTransfersInput {
@@ -19,6 +17,14 @@ interface ListWarehouseTransfersInput {
 const VALID_STATUSES = ['pending', 'approved', 'rejected'];
 
 class ListWarehouseTransfersUseCase extends UseCase<ListWarehouseTransfersInput, any[]> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Filtro opcional de `status`.
    * @returns Lista de transferências com `product`, `fromWarehouse`, `toWarehouse`, `requestedBy` e `approvedBy` incluídos.
@@ -33,17 +39,7 @@ class ListWarehouseTransfersUseCase extends UseCase<ListWarehouseTransfersInput,
       where.status = input.status;
     }
 
-    return WarehouseTransfer.findAll({
-      where,
-      include: [
-        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
-        { model: Warehouse, as: 'fromWarehouse', attributes: ['id', 'code', 'name'] },
-        { model: Warehouse, as: 'toWarehouse', attributes: ['id', 'code', 'name'] },
-        { model: User, as: 'requestedBy', attributes: ['id', 'name', 'email'] },
-        { model: User, as: 'approvedBy', attributes: ['id', 'name', 'email'] },
-      ],
-      order: [['createdAt', 'DESC']],
-    });
+    return this.inventoryRepository.listWarehouseTransfers(where);
   }
 }
 

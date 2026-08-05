@@ -10,8 +10,6 @@ import NonConformitiesRepository from '../../domain/repositories/NonConformities
 import { sequelize } from '../../../../config/database';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { LotControl, Supplier, NonConformity } = require('../../../../models/index');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { applySupplierReturn } = require('../services/SupplierReturnHandler');
 
 const BLOCKABLE_STATUSES = ['available', 'quarantine', 'reserved'];
@@ -106,11 +104,7 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
       // `rncs_count` por fornecedor.
       let lot: any = null;
       if (lot_number && product_id) {
-        lot = await LotControl.findOne({
-          where: { product_id, lot_number: String(lot_number).trim() },
-          transaction: t,
-          lock: t.LOCK.UPDATE
-        });
+        lot = await this.nonConformitiesRepository.findLotForNonConformity(product_id, String(lot_number).trim(), t);
       }
 
       const resolvedSupplierId = supplier_id ?? (lot ? lot.supplier_id : null) ?? undefined;
@@ -180,20 +174,17 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
    * @returns void
    */
   private async recalculateSupplierQualityScore(supplierId: number, transaction: any): Promise<void> {
-    const receiptsCount = await LotControl.count({ where: { supplier_id: supplierId }, transaction });
+    const receiptsCount = await this.nonConformitiesRepository.countLotsBySupplier(supplierId, transaction);
 
     if (receiptsCount === 0) {
       return;
     }
 
-    const rncsCount = await NonConformity.count({ where: { supplier_id: supplierId }, transaction });
+    const rncsCount = await this.nonConformitiesRepository.countNonConformitiesBySupplier(supplierId, transaction);
     const rawScore = 100 - (rncsCount / receiptsCount) * 100;
     const qualityScore = Math.max(0, Math.round(rawScore * 100) / 100);
 
-    await Supplier.update(
-      { quality_score: qualityScore },
-      { where: { id: supplierId }, transaction }
-    );
+    await this.nonConformitiesRepository.updateSupplierQualityScore(supplierId, qualityScore, transaction);
   }
 }
 

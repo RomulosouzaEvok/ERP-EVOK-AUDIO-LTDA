@@ -11,9 +11,13 @@ function sign(body: Record<string, unknown>) {
 
 describe('Use cases de webhooks', () => {
   const originalSecret = process.env.N8N_WEBHOOK_SECRET;
+  const webhookRepository = {
+    findOrCreateEvent: jest.fn(async (_source: string, _eventId: string, defaults: Record<string, unknown>) => [defaults, true]),
+  };
 
   beforeEach(() => {
     process.env.N8N_WEBHOOK_SECRET = SECRET;
+    webhookRepository.findOrCreateEvent.mockClear();
   });
 
   afterAll(() => {
@@ -21,7 +25,7 @@ describe('Use cases de webhooks', () => {
   });
 
   it('rejeita webhook sem assinatura', async () => {
-    const useCase = new ProcessN8nWebhookUseCase();
+    const useCase = new ProcessN8nWebhookUseCase(webhookRepository as any);
 
     await expect(useCase.execute({ signature: undefined, body: { event: 'x', event_id: '1' } })).rejects.toThrow(
       'MISSING_SIGNATURE'
@@ -30,7 +34,7 @@ describe('Use cases de webhooks', () => {
 
   it('rejeita webhook sem N8N_WEBHOOK_SECRET configurado', async () => {
     delete process.env.N8N_WEBHOOK_SECRET;
-    const useCase = new ProcessN8nWebhookUseCase();
+    const useCase = new ProcessN8nWebhookUseCase(webhookRepository as any);
 
     await expect(
       useCase.execute({ signature: 'abc', body: { event: 'x', event_id: '1' } })
@@ -38,7 +42,7 @@ describe('Use cases de webhooks', () => {
   });
 
   it('rejeita assinatura invalida (nao bate com o HMAC do corpo)', async () => {
-    const useCase = new ProcessN8nWebhookUseCase();
+    const useCase = new ProcessN8nWebhookUseCase(webhookRepository as any);
     const body = { event: 'order.created', event_id: 'evt-1' };
     const { rawBody } = sign(body);
 
@@ -48,10 +52,25 @@ describe('Use cases de webhooks', () => {
   });
 
   it('rejeita payload sem event_id', async () => {
-    const useCase = new ProcessN8nWebhookUseCase();
+    const useCase = new ProcessN8nWebhookUseCase(webhookRepository as any);
     const body = { event: 'order.created' };
     const { rawBody, signature } = sign(body);
 
     await expect(useCase.execute({ signature, rawBody, body })).rejects.toThrow('MISSING_EVENT_ID');
+  });
+
+  it('aceita evento valido e delega a persistencia ao repositorio', async () => {
+    const useCase = new ProcessN8nWebhookUseCase(webhookRepository as any);
+    const body = { event: 'order.created', event_id: 'evt-2' };
+    const { rawBody, signature } = sign(body);
+
+    const result = await useCase.execute({ signature, rawBody, body });
+
+    expect(webhookRepository.findOrCreateEvent).toHaveBeenCalledWith(
+      'n8n',
+      'evt-2',
+      expect.objectContaining({ source: 'n8n', event_id: 'evt-2', event_type: 'order.created' })
+    );
+    expect(result.duplicate).toBe(false);
   });
 });

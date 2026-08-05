@@ -1,4 +1,4 @@
-const { User } = require('../../../../models/index');
+const { User, AccessProfile } = require('../../../../models/index');
 const { Op } = require('sequelize');
 const UsersRepository = require('../../domain/repositories/UsersRepository');
 const Validators = require('../../../../utils/validators');
@@ -67,6 +67,14 @@ class SequelizeUsersRepository extends UsersRepository {
    */
   async incrementPasswordVersion(id: number | string) {
     await User.increment('passwordVersion', { where: { id } });
+  }
+
+  /**
+   * @param {number} id
+   * @returns {Promise<Object|null>} Instância do model `AccessProfile`.
+   */
+  async findAccessProfileById(id: number | string) {
+    return AccessProfile.findByPk(id);
   }
 }
 

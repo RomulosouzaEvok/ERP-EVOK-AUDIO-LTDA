@@ -15,11 +15,11 @@
  */
 
 import type { Transaction } from 'sequelize';
+import type FiscalRepository = require('../../domain/repositories/FiscalRepository');
 
 const UseCase = require('../../../../shared/application/UseCase');
 const { sequelize } = require('../../../../config/database');
 const { NotFoundError, BusinessRuleError, ConflictError } = require('../../../../errors');
-const { Sale, SaleItem, Client, Product, CompanyFiscalConfig } = require('../../../../models/index');
 const TaxCalculationService = require('../../domain/services/TaxCalculationService');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
 
@@ -28,6 +28,14 @@ interface IssueSaleNfeInput {
 }
 
 class IssueSaleNfeUseCase extends UseCase {
+  private fiscalRepository: FiscalRepository;
+
+  /** @param {import('../../domain/repositories/FiscalRepository')} fiscalRepository */
+  constructor(fiscalRepository: FiscalRepository) {
+    super();
+    this.fiscalRepository = fiscalRepository;
+  }
+
   /**
    * @param {Object} input
    * @param {number} input.saleId
@@ -35,7 +43,7 @@ class IssueSaleNfeUseCase extends UseCase {
    */
   async execute({ saleId }: IssueSaleNfeInput) {
     const reserved = await sequelize.transaction(async (transaction: Transaction) => {
-      const sale = await Sale.findByPk(saleId, { transaction, lock: transaction.LOCK.UPDATE });
+      const sale = await this.fiscalRepository.findSaleById(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!sale) throw new NotFoundError('Venda não encontrada');
 
       if (sale.status !== 'confirmed') {
@@ -48,13 +56,13 @@ class IssueSaleNfeUseCase extends UseCase {
         throw new ConflictError('Esta venda já possui uma NF-e autorizada.');
       }
 
-      const items = await SaleItem.findAll({ where: { sale_id: saleId }, transaction, lock: transaction.LOCK.UPDATE });
+      const items = await this.fiscalRepository.findSaleItemsBySaleId(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (items.length === 0) throw new BusinessRuleError('Venda sem itens não pode ser faturada.');
 
-      const client = await Client.findByPk(sale.customer_id, { transaction });
+      const client = await this.fiscalRepository.findClientById(sale.customer_id, { transaction });
       if (!client) throw new NotFoundError('Cliente da venda não encontrado.');
 
-      let config = await CompanyFiscalConfig.findByPk(1, { transaction, lock: transaction.LOCK.UPDATE });
+      let config = await this.fiscalRepository.findCompanyFiscalConfig({ transaction, lock: transaction.LOCK.UPDATE });
       if (!config) {
         throw new BusinessRuleError('Configuração fiscal da empresa (CompanyFiscalConfig) não cadastrada. Cadastre os dados do emitente antes de emitir NF-e.');
       }
@@ -67,7 +75,7 @@ class IssueSaleNfeUseCase extends UseCase {
       await config.save({ transaction });
 
       const productIds = items.map((item: any) => item.product_id);
-      const products = await Product.findAll({ where: { id: productIds }, transaction });
+      const products = await this.fiscalRepository.findProductsByIds(productIds, { transaction });
       const productById = new Map<number, any>(products.map((p: any) => [p.id, p]));
 
       const itemsForProvider = [];
@@ -179,7 +187,7 @@ class IssueSaleNfeUseCase extends UseCase {
     }
 
     return sequelize.transaction(async (transaction: Transaction) => {
-      const sale = await Sale.findByPk(saleId, { transaction, lock: transaction.LOCK.UPDATE });
+      const sale = await this.fiscalRepository.findSaleById(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!sale) throw new NotFoundError('Venda não encontrada');
 
       sale.nfe_status = result.status;

@@ -1,6 +1,6 @@
 const { Op } = require('sequelize');
 const PurchaseRequisitionRepository = require('../../domain/repositories/PurchaseRequisitionRepository');
-const { PurchaseRequisition, PurchaseRequisitionItem, Item, User, Department, ProductionOrder, Supplier, EngineeringProject } = require('../../../../models/index');
+const { PurchaseRequisition, PurchaseRequisitionItem, Item, User, Department, ProductionOrder, Supplier, EngineeringProject, Employee } = require('../../../../models/index');
 
 class SequelizePurchaseRequisitionRepository extends PurchaseRequisitionRepository {
   async listRequisitions(filters: any = {}, pagination: any = {}) {
@@ -115,6 +115,18 @@ class SequelizePurchaseRequisitionRepository extends PurchaseRequisitionReposito
 
   async updateRequisitionItem(id: number, data: Record<string, unknown>, transaction?: any) {
     await PurchaseRequisitionItem.update(data, { where: { id }, ...(transaction ? { transaction } : {}) });
+  }
+
+  async findEngineeringProjectById(id: number, transaction?: any) {
+    return EngineeringProject.findByPk(id, { transaction });
+  }
+
+  async findEmployeeByUserId(userId: number, transaction?: any) {
+    return Employee.findOne({
+      where: { user_id: userId },
+      attributes: ['id', 'department_id'],
+      transaction,
+    });
   }
 }
 

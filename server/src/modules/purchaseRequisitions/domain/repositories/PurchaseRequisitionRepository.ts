@@ -44,6 +44,30 @@ class PurchaseRequisitionRepository {
   async updateRequisitionItem(_id: number, _data: Record<string, any>, _transaction?: any): Promise<any> {
     throw new Error('PurchaseRequisitionRepository.updateRequisitionItem nao implementado.');
   }
+
+  /**
+   * Busca um projeto de engenharia pelo id (leitura auxiliar cross-module —
+   * o model `EngineeringProject` pertence ao modulo `engineering`, nao a
+   * `purchaseRequisitions`; usado apenas para validar a existencia do
+   * projeto informado na criacao da requisicao).
+   *
+   * @abstract
+   */
+  async findEngineeringProjectById(_id: number, _transaction?: any): Promise<any | null> {
+    throw new Error('PurchaseRequisitionRepository.findEngineeringProjectById nao implementado.');
+  }
+
+  /**
+   * Busca o funcionario (`Employee`) vinculado a um usuario (leitura
+   * auxiliar cross-module — o model `Employee` pertence ao modulo
+   * `employees`, nao a `purchaseRequisitions`; usado apenas para resolver
+   * `department_id` do requisitante na criacao da requisicao).
+   *
+   * @abstract
+   */
+  async findEmployeeByUserId(_userId: number, _transaction?: any): Promise<any | null> {
+    throw new Error('PurchaseRequisitionRepository.findEmployeeByUserId nao implementado.');
+  }
 }
 
 export = PurchaseRequisitionRepository;

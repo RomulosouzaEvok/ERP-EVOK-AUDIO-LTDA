@@ -174,6 +174,8 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
   let CreateWarehouseTransferUseCase: any;
   let ApproveWarehouseTransferUseCase: any;
   let RejectWarehouseTransferUseCase: any;
+  let SequelizeInventoryRepository: any;
+  let repository: any;
   let ValidationError: any;
   let NotFoundError: any;
   let BusinessRuleError: any;
@@ -229,6 +231,8 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
     jest.doMock('../../src/services/warehouseStockService', () => WarehouseStockService);
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
+    SequelizeInventoryRepository = require('../../src/modules/inventory/infrastructure/sequelize/SequelizeInventoryRepository');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     CreateWarehouseTransferUseCase = require('../../src/modules/inventory/application/use-cases/CreateWarehouseTransferUseCase');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     ApproveWarehouseTransferUseCase = require('../../src/modules/inventory/application/use-cases/ApproveWarehouseTransferUseCase');
@@ -236,10 +240,12 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
     RejectWarehouseTransferUseCase = require('../../src/modules/inventory/application/use-cases/RejectWarehouseTransferUseCase');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     ({ ValidationError, NotFoundError, BusinessRuleError } = require('../../src/errors'));
+
+    repository = new SequelizeInventoryRepository();
   });
 
   it('cria transferencia pending sem alterar nenhum saldo', async () => {
-    const useCase = new CreateWarehouseTransferUseCase();
+    const useCase = new CreateWarehouseTransferUseCase(repository);
     const transfer = await useCase.execute({
       product_id: 10,
       from_warehouse_code: 'INSUMOS',
@@ -262,7 +268,7 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
   });
 
   it('rejeita from_warehouse_code igual a to_warehouse_code (from=to invalido)', async () => {
-    const useCase = new CreateWarehouseTransferUseCase();
+    const useCase = new CreateWarehouseTransferUseCase(repository);
 
     await expect(
       useCase.execute({
@@ -279,7 +285,7 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
   });
 
   it('rejeita quantity <= 0 e reason vazio', async () => {
-    const useCase = new CreateWarehouseTransferUseCase();
+    const useCase = new CreateWarehouseTransferUseCase(repository);
 
     await expect(
       useCase.execute({ product_id: 10, from_warehouse_code: 'INSUMOS', to_warehouse_code: 'ACABADOS', quantity: 0, reason: 'x', userId: 3 })
@@ -291,7 +297,7 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
   });
 
   it('aprova transferencia: debita origem, credita destino, gera 2 movimentos e nao altera products.quantity', async () => {
-    const useCase = new ApproveWarehouseTransferUseCase();
+    const useCase = new ApproveWarehouseTransferUseCase(repository);
     const transfer = await useCase.execute({ id: 55, approverId: 9, transaction });
 
     expect(WarehouseStockService.removeFromWarehouse).toHaveBeenCalledWith(10, 1, 7, transaction);
@@ -318,7 +324,7 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
       })
     );
 
-    const useCase = new ApproveWarehouseTransferUseCase();
+    const useCase = new ApproveWarehouseTransferUseCase(repository);
     await expect(useCase.execute({ id: 55, approverId: 9, transaction })).rejects.toBeInstanceOf(BusinessRuleError);
 
     // Nao deve ter creditado o destino nem persistido approved caso a origem falhe.
@@ -328,7 +334,7 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
 
   it('rejeita aprovar transferencia que nao esta pending', async () => {
     WarehouseTransfer.__row.status = 'approved';
-    const useCase = new ApproveWarehouseTransferUseCase();
+    const useCase = new ApproveWarehouseTransferUseCase(repository);
 
     await expect(useCase.execute({ id: 55, approverId: 9, transaction })).rejects.toBeInstanceOf(BusinessRuleError);
     expect(WarehouseStockService.removeFromWarehouse).not.toHaveBeenCalled();
@@ -336,13 +342,13 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
 
   it('aprovacao de transferencia inexistente lanca NotFoundError', async () => {
     WarehouseTransfer.findByPk.mockResolvedValueOnce(null);
-    const useCase = new ApproveWarehouseTransferUseCase();
+    const useCase = new ApproveWarehouseTransferUseCase(repository);
 
     await expect(useCase.execute({ id: 999, approverId: 9, transaction })).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('rejeita transferencia pending sem alterar nenhum saldo', async () => {
-    const useCase = new RejectWarehouseTransferUseCase();
+    const useCase = new RejectWarehouseTransferUseCase(repository);
     const transfer = await useCase.execute({ id: 55, approverId: 9, reason: 'Sem disponibilidade real' });
 
     expect(transfer.status).toBe('rejected');
@@ -352,7 +358,7 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
   });
 
   it('rejeita rejeicao sem motivo (reason obrigatorio)', async () => {
-    const useCase = new RejectWarehouseTransferUseCase();
+    const useCase = new RejectWarehouseTransferUseCase(repository);
 
     await expect(
       useCase.execute({ id: 55, approverId: 9, reason: '' })
@@ -361,7 +367,7 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
 
   it('rejeita rejeitar transferencia que nao esta pending', async () => {
     WarehouseTransfer.__row.status = 'rejected';
-    const useCase = new RejectWarehouseTransferUseCase();
+    const useCase = new RejectWarehouseTransferUseCase(repository);
 
     await expect(
       useCase.execute({ id: 55, approverId: 9, reason: 'Motivo' })
@@ -385,10 +391,6 @@ describe('Integracao dual-write: ReceivePurchaseItemsUseCase e ChangeProductionO
     };
     jest.doMock('../../src/services/warehouseStockService', () => WarehouseStockService);
     jest.doMock('../../src/services/costingService', () => ({ registerWeightedAverageCost: jest.fn(async () => ({})) }));
-    jest.doMock('../../src/models/index', () => ({
-      LotControl: { findOne: jest.fn(async () => null), create: jest.fn(async () => ({ id: 1 })) },
-      PurchaseReceipt: { create: jest.fn(async () => ({ id: 1 })) },
-    }));
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ReceivePurchaseItemsUseCase = require('../../src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase');
@@ -402,6 +404,9 @@ describe('Integracao dual-write: ReceivePurchaseItemsUseCase e ChangeProductionO
       findPurchaseWithItemsForUpdate: jest.fn(async () => purchase),
       updatePurchaseItem: jest.fn(async () => ({})),
       findPurchaseItemsForUpdate: jest.fn(async () => ([{ id: 81, status: 'received' }])),
+      createPurchaseReceipt: jest.fn(async () => ({ id: 1 })),
+      findLotForReceipt: jest.fn(async () => null),
+      createLot: jest.fn(async () => ({ id: 1 })),
     };
 
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
@@ -421,10 +426,6 @@ describe('Integracao dual-write: ReceivePurchaseItemsUseCase e ChangeProductionO
       removeFromWarehouse: jest.fn(async () => ({})),
     }));
     jest.doMock('../../src/services/costingService', () => ({ registerWeightedAverageCost: jest.fn(async () => ({})) }));
-    jest.doMock('../../src/models/index', () => ({
-      LotControl: { findOne: jest.fn(async () => null), create: jest.fn(async () => ({ id: 1 })) },
-      PurchaseReceipt: { create: jest.fn(async () => ({ id: 1 })) },
-    }));
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ReceivePurchaseItemsUseCase = require('../../src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase');
@@ -440,6 +441,9 @@ describe('Integracao dual-write: ReceivePurchaseItemsUseCase e ChangeProductionO
       findPurchaseWithItemsForUpdate: jest.fn(async () => purchase),
       updatePurchaseItem: jest.fn(async () => ({})),
       findPurchaseItemsForUpdate: jest.fn(async () => ([{ id: 81, status: 'received' }])),
+      createPurchaseReceipt: jest.fn(async () => ({ id: 1 })),
+      findLotForReceipt: jest.fn(async () => null),
+      createLot: jest.fn(async () => ({ id: 1 })),
     };
 
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
@@ -463,10 +467,6 @@ describe('Integracao dual-write: ReceivePurchaseItemsUseCase e ChangeProductionO
     };
     jest.doMock('../../src/services/warehouseStockService', () => WarehouseStockService);
     jest.doMock('../../src/services/costingService', () => ({ registerWeightedAverageCost: jest.fn(async () => ({})) }));
-    jest.doMock('../../src/models/index', () => ({
-      LotControl: { findOne: jest.fn(async () => null), create: jest.fn(async () => ({ id: 1 })) },
-      PurchaseReceipt: { create: jest.fn(async () => ({ id: 1 })) },
-    }));
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ReceivePurchaseItemsUseCase = require('../../src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase');
@@ -480,6 +480,9 @@ describe('Integracao dual-write: ReceivePurchaseItemsUseCase e ChangeProductionO
       findPurchaseWithItemsForUpdate: jest.fn(async () => purchase),
       updatePurchaseItem: jest.fn(async () => ({})),
       findPurchaseItemsForUpdate: jest.fn(async () => ([{ id: 91, status: 'received' }])),
+      createPurchaseReceipt: jest.fn(async () => ({ id: 1 })),
+      findLotForReceipt: jest.fn(async () => null),
+      createLot: jest.fn(async () => ({ id: 1 })),
     };
 
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
@@ -916,27 +919,17 @@ describe('Integracao dual-write: CreateSaleUseCase (venda confirmada na criacao 
 });
 
 describe('GetProductStockByWarehouseUseCase (GET /api/products/:id/stock-by-warehouse)', () => {
-  let Warehouse: any;
-  let ProductWarehouseStock: any;
   let GetProductStockByWarehouseUseCase: any;
   let NotFoundError: any;
 
-  const activeWarehouses = [
-    { id: 1, code: 'INSUMOS', name: 'Deposito INSUMOS', active: true },
-    { id: 2, code: 'ACABADOS', name: 'Deposito ACABADOS', active: true },
-    { id: 3, code: 'LABORATORIO', name: 'Deposito LABORATORIO', active: true },
+  const activeWarehouseSummary = [
+    { warehouse_id: 1, warehouse_code: 'INSUMOS', warehouse_name: 'Deposito INSUMOS', quantity: 0 },
+    { warehouse_id: 2, warehouse_code: 'ACABADOS', warehouse_name: 'Deposito ACABADOS', quantity: 0 },
+    { warehouse_id: 3, warehouse_code: 'LABORATORIO', warehouse_name: 'Deposito LABORATORIO', quantity: 0 },
   ];
 
   beforeEach(() => {
     jest.resetModules();
-
-    Warehouse = {
-      findAll: jest.fn(async () => activeWarehouses),
-    };
-    ProductWarehouseStock = {
-      findAll: jest.fn(async () => []),
-    };
-    jest.doMock('../../src/models/index', () => ({ Warehouse, ProductWarehouseStock }));
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     GetProductStockByWarehouseUseCase = require('../../src/modules/products/application/use-cases/GetProductStockByWarehouseUseCase');
@@ -944,43 +937,40 @@ describe('GetProductStockByWarehouseUseCase (GET /api/products/:id/stock-by-ware
     ({ NotFoundError } = require('../../src/errors'));
   });
 
-  function buildProductRepository(product: any) {
+  function buildProductRepository(product: any, warehouseStockSummary: any[]) {
     return {
       findById: jest.fn(async (id: number, opts: any) => {
         expect(opts).toEqual({ withCategory: false });
         return id === product.id ? product : null;
+      }),
+      getWarehouseStockSummary: jest.fn(async (productId: number) => {
+        expect(productId).toBe(product.id);
+        return warehouseStockSummary;
       }),
     };
   }
 
   it('retorna o saldo do produto em todos os depositos ativos quando ha saldo em multiplos depositos', async () => {
     const product = { id: 10, code: 'PROD-10', name: 'Produto 10', quantity: 17 };
-    ProductWarehouseStock.findAll = jest.fn(async ({ where }: any) => {
-      expect(where).toEqual({ product_id: 10 });
-      return [
-        { warehouse_id: 1, quantity: '12.000' },
-        { warehouse_id: 2, quantity: '5.000' },
-      ];
-    });
+    const warehouseStockSummary = [
+      { warehouse_id: 1, warehouse_code: 'INSUMOS', warehouse_name: 'Deposito INSUMOS', quantity: 12 },
+      { warehouse_id: 2, warehouse_code: 'ACABADOS', warehouse_name: 'Deposito ACABADOS', quantity: 5 },
+      { warehouse_id: 3, warehouse_code: 'LABORATORIO', warehouse_name: 'Deposito LABORATORIO', quantity: 0 },
+    ];
 
-    const productRepository = buildProductRepository(product);
+    const productRepository = buildProductRepository(product, warehouseStockSummary);
     const useCase = new GetProductStockByWarehouseUseCase(productRepository);
 
     const result = await useCase.execute({ id: 10 });
 
     expect(result.product).toEqual({ id: 10, code: 'PROD-10', name: 'Produto 10', quantity: 17 });
-    expect(result.warehouses).toEqual([
-      { warehouse_id: 1, warehouse_code: 'INSUMOS', warehouse_name: 'Deposito INSUMOS', quantity: 12 },
-      { warehouse_id: 2, warehouse_code: 'ACABADOS', warehouse_name: 'Deposito ACABADOS', quantity: 5 },
-      { warehouse_id: 3, warehouse_code: 'LABORATORIO', warehouse_name: 'Deposito LABORATORIO', quantity: 0 },
-    ]);
+    expect(result.warehouses).toEqual(warehouseStockSummary);
   });
 
   it('retorna todos os depositos ativos com quantity: 0 quando o produto nao tem saldo em nenhum deles', async () => {
     const product = { id: 20, code: 'PROD-20', name: 'Produto 20', quantity: 0 };
-    ProductWarehouseStock.findAll = jest.fn(async () => []);
 
-    const productRepository = buildProductRepository(product);
+    const productRepository = buildProductRepository(product, activeWarehouseSummary);
     const useCase = new GetProductStockByWarehouseUseCase(productRepository);
 
     const result = await useCase.execute({ id: 20 });
@@ -993,10 +983,11 @@ describe('GetProductStockByWarehouseUseCase (GET /api/products/:id/stock-by-ware
   it('lanca NotFoundError (404) quando o produto nao existe', async () => {
     const productRepository = {
       findById: jest.fn(async () => null),
+      getWarehouseStockSummary: jest.fn(),
     };
     const useCase = new GetProductStockByWarehouseUseCase(productRepository);
 
     await expect(useCase.execute({ id: 999 })).rejects.toBeInstanceOf(NotFoundError);
-    expect(ProductWarehouseStock.findAll).not.toHaveBeenCalled();
+    expect(productRepository.getWarehouseStockSummary).not.toHaveBeenCalled();
   });
 });

@@ -10,11 +10,11 @@
  */
 
 import type { Transaction } from 'sequelize';
+import type FiscalRepository = require('../../domain/repositories/FiscalRepository');
 
 const UseCase = require('../../../../shared/application/UseCase');
 const { sequelize } = require('../../../../config/database');
 const { NotFoundError, BusinessRuleError } = require('../../../../errors');
-const { Sale, CompanyFiscalConfig } = require('../../../../models/index');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
 
 interface GetSaleNfeStatusInput {
@@ -22,13 +22,21 @@ interface GetSaleNfeStatusInput {
 }
 
 class GetSaleNfeStatusUseCase extends UseCase {
+  private fiscalRepository: FiscalRepository;
+
+  /** @param {import('../../domain/repositories/FiscalRepository')} fiscalRepository */
+  constructor(fiscalRepository: FiscalRepository) {
+    super();
+    this.fiscalRepository = fiscalRepository;
+  }
+
   /**
    * @param {Object} input
    * @param {number} input.saleId
    * @returns {Promise<Object>} A venda com o status de NF-e reconciliado.
    */
   async execute({ saleId }: GetSaleNfeStatusInput) {
-    const sale = await Sale.findByPk(saleId);
+    const sale = await this.fiscalRepository.findSaleById(saleId);
     if (!sale) throw new NotFoundError('Venda não encontrada');
 
     if (!sale.nfe_provider_ref) {
@@ -42,14 +50,14 @@ class GetSaleNfeStatusUseCase extends UseCase {
       return sale;
     }
 
-    const config = await CompanyFiscalConfig.findByPk(1);
+    const config = await this.fiscalRepository.findCompanyFiscalConfig();
     if (!config) throw new BusinessRuleError('Configuração fiscal da empresa não cadastrada.');
 
     const provider = createNfeProvider(config.nfe_provider);
     const result = await provider.queryStatus(sale.nfe_provider_ref);
 
     return sequelize.transaction(async (transaction: Transaction) => {
-      const locked = await Sale.findByPk(saleId, { transaction, lock: transaction.LOCK.UPDATE });
+      const locked = await this.fiscalRepository.findSaleById(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!locked) throw new NotFoundError('Venda não encontrada');
 
       locked.nfe_status = result.status;

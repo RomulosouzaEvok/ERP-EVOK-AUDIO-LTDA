@@ -223,6 +223,64 @@ class PurchaseRepository {
   async getCockpitMetrics() {
     throw new Error('PurchaseRepository.getCockpitMetrics não implementado.');
   }
+
+  /**
+   * Cria o registro de recebimento (`PurchaseReceipt`) de uma NF do
+   * fornecedor contra o pedido — a constraint única
+   * `(purchase_id, invoice_number)` no banco garante idempotência mesmo sob
+   * concorrência (ver `ReceivePurchaseItemsUseCase`).
+   *
+   * @abstract
+   * @param {Object} data
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Object>}
+   */
+  async createPurchaseReceipt(data: Record<string, unknown>, transaction: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.createPurchaseReceipt não implementado.');
+  }
+
+  /**
+   * Busca a origem (`origin`) de uma requisição de compra (leitura
+   * cross-module pontual — `PurchaseRequisition` pertence ao próprio módulo
+   * `purchases`, mas este método é usado apenas para resolver o depósito
+   * padrão de recebimento, ver `ReceivePurchaseItemsUseCase`).
+   *
+   * @abstract
+   * @param {number|string} requisitionId
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Object|null>}
+   */
+  async findRequisitionOriginById(requisitionId: number | string, transaction: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findRequisitionOriginById não implementado.');
+  }
+
+  /**
+   * Busca um lote (`LotControl`) por produto, pedido de compra e número de
+   * lote, com lock pessimista (leitura/escrita cross-module pontual —
+   * `LotControl` pertence ao módulo de estoque/inventário; usado aqui para
+   * consolidar recebimentos parciais do mesmo lote).
+   *
+   * @abstract
+   * @param {Object} where - `{ product_id, purchase_id, lot_number }`.
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Object|null>}
+   */
+  async findLotForReceipt(where: Record<string, unknown>, transaction: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findLotForReceipt não implementado.');
+  }
+
+  /**
+   * Cria um lote (`LotControl`) para um recebimento de compra (leitura/escrita
+   * cross-module pontual — mesmo raciocínio de {@link findLotForReceipt}).
+   *
+   * @abstract
+   * @param {Object} data
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Object>}
+   */
+  async createLot(data: Record<string, unknown>, transaction: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.createLot não implementado.');
+  }
 }
 
 export = PurchaseRepository;

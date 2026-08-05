@@ -13,8 +13,7 @@
 
 import crypto from 'crypto';
 import UseCase from '../../../../shared/application/UseCase';
-
-const { WebhookEvent } = require('../../../../models/index');
+import WebhookRepository from '../../domain/repositories/WebhookRepository';
 
 interface ProcessN8nWebhookInput {
   signature?: string | null;
@@ -29,6 +28,14 @@ interface ProcessN8nWebhookOutput {
 }
 
 class ProcessN8nWebhookUseCase extends UseCase<ProcessN8nWebhookInput, ProcessN8nWebhookOutput> {
+  private readonly webhookRepository: WebhookRepository;
+
+  /** @param webhookRepository - Repositorio de eventos de webhook. */
+  public constructor(webhookRepository: WebhookRepository) {
+    super();
+    this.webhookRepository = webhookRepository;
+  }
+
   /**
    * @param input - Assinatura, corpo bruto e corpo parseado da requisição.
    * @returns Confirmação de aceite do evento (`duplicate: true` se já processado antes).
@@ -63,15 +70,12 @@ class ProcessN8nWebhookUseCase extends UseCase<ProcessN8nWebhookInput, ProcessN8
       throw new Error('MISSING_EVENT_ID');
     }
 
-    const [record, created] = await WebhookEvent.findOrCreate({
-      where: { source: 'n8n', event_id: eventId },
-      defaults: {
-        source: 'n8n',
-        event_id: eventId,
-        event_type: typeof body?.event === 'string' ? body.event : null,
-        payload: body ?? null,
-        received_at: new Date(),
-      },
+    const [record, created] = await this.webhookRepository.findOrCreateEvent('n8n', eventId, {
+      source: 'n8n',
+      event_id: eventId,
+      event_type: typeof body?.event === 'string' ? body.event : null,
+      payload: body ?? null,
+      received_at: new Date(),
     });
 
     return { accepted: true, event: record.event_type, duplicate: !created };

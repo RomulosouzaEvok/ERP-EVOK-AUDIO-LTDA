@@ -1,5 +1,6 @@
+import type FiscalRepository = require('../../domain/repositories/FiscalRepository');
+
 const UseCase = require('../../../../shared/application/UseCase');
-const { CompanyFiscalConfig } = require('../../../../models/index');
 
 const ALLOWED_FIELDS = [
   'legal_name', 'trade_name', 'cnpj', 'ie', 'im', 'crt', 'cnae',
@@ -14,20 +15,21 @@ const ALLOWED_FIELDS = [
  * acidental de numeração.
  */
 class UpsertCompanyFiscalConfigUseCase extends UseCase {
+  private fiscalRepository: FiscalRepository;
+
+  /** @param {import('../../domain/repositories/FiscalRepository')} fiscalRepository */
+  constructor(fiscalRepository: FiscalRepository) {
+    super();
+    this.fiscalRepository = fiscalRepository;
+  }
+
   async execute(input: Record<string, unknown>) {
     const data: Record<string, unknown> = {};
     for (const field of ALLOWED_FIELDS) {
       if (input[field] !== undefined) data[field] = input[field];
     }
 
-    const existing = await CompanyFiscalConfig.findByPk(1);
-    if (existing) {
-      Object.assign(existing, data);
-      await existing.save();
-      return existing;
-    }
-
-    return CompanyFiscalConfig.create({ id: 1, ...data });
+    return this.fiscalRepository.upsertCompanyFiscalConfig(data);
   }
 }
 

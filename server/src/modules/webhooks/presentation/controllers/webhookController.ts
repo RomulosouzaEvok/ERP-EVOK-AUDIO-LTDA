@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 
+const SequelizeWebhookRepository = require('../../infrastructure/sequelize/SequelizeWebhookRepository');
 const ProcessN8nWebhookUseCase = require('../../application/use-cases/ProcessN8nWebhookUseCase');
 const HandleNfeStatusWebhookUseCase = require('../../../fiscal/application/use-cases/HandleNfeStatusWebhookUseCase');
 
@@ -10,9 +11,11 @@ const HandleNfeStatusWebhookUseCase = require('../../../fiscal/application/use-c
  * externo (n8n), protegido por assinatura criptográfica.
  */
 
+const webhookRepository = new SequelizeWebhookRepository();
+
 /** `POST /api/webhooks/n8n` — recebe eventos do n8n. */
 exports.n8n = async (req: Request, res: Response) => {
-  const useCase = new ProcessN8nWebhookUseCase();
+  const useCase = new ProcessN8nWebhookUseCase(webhookRepository);
   try {
     const signature = req.header('X-Evok-Signature');
     const result = await useCase.execute({ signature, rawBody: (req as any).rawBody, body: req.body });

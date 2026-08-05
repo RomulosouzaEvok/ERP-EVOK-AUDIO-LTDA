@@ -18,10 +18,8 @@
  * `product_id` para desambiguar.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { LotControl, Product, Supplier, Warehouse } = require('../../../../models/index');
-
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { NotFoundError, ValidationError, ConflictError } from '../../../../errors';
 
 interface GetLotByCodeInput {
@@ -30,6 +28,14 @@ interface GetLotByCodeInput {
 }
 
 class GetLotByCodeUseCase extends UseCase<GetLotByCodeInput, any> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Código do lote lido (`lot_number`) e `product_id` opcional para desambiguar.
    * @returns Lote encontrado, com `product`, `supplier` e `warehouse` incluídos.
@@ -52,21 +58,15 @@ class GetLotByCodeUseCase extends UseCase<GetLotByCodeInput, any> {
       where.product_id = parsedProductId;
     }
 
-    const include = [
-      { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
-      { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] },
-      { model: Warehouse, as: 'warehouse', attributes: ['id', 'code', 'name'] }
-    ];
-
     if (product_id !== undefined) {
-      const lot = await LotControl.findOne({ where, include, order: [['createdAt', 'ASC']] });
+      const lot = await this.inventoryRepository.findLotByCodeForProduct(where);
       if (!lot) {
         throw new NotFoundError(`Nenhum lote encontrado com o código '${code}' para o produto informado.`);
       }
       return lot;
     }
 
-    const matches = await LotControl.findAll({ where, include, order: [['createdAt', 'ASC']], limit: 2 });
+    const matches = await this.inventoryRepository.findLotsByCode(where);
     if (matches.length === 0) {
       throw new NotFoundError(`Nenhum lote encontrado com o código '${code}'.`);
     }

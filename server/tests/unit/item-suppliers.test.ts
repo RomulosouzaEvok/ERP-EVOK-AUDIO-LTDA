@@ -13,9 +13,6 @@ const mockTransaction = {
 };
 
 jest.mock('../../src/models/index', () => ({
-  Supplier: {
-    findByPk: jest.fn(async (id: number) => (id === 1 ? { id: 1, company_name: 'Fornecedor Teste' } : null)),
-  },
   sequelize: {
     transaction: jest.fn(async () => mockTransaction),
   },
@@ -36,6 +33,7 @@ describe('CreateItemSupplierUseCase', () => {
 
   it('cria vinculo item-fornecedor com sucesso', async () => {
     const itemSupplierRepository = {
+      findSupplierById: jest.fn(async (id: number) => (id === 1 ? { id: 1, company_name: 'Fornecedor Teste' } : null)),
       findByItemAndSupplier: jest.fn(async () => null),
       create: jest.fn(async (data: any) => ({ id: 10, ...data })),
       clearPreferredForItem: jest.fn(async () => {}),
@@ -52,6 +50,7 @@ describe('CreateItemSupplierUseCase', () => {
 
   it('zera preferred dos demais vinculos quando preferred=true', async () => {
     const itemSupplierRepository = {
+      findSupplierById: jest.fn(async (id: number) => (id === 1 ? { id: 1, company_name: 'Fornecedor Teste' } : null)),
       findByItemAndSupplier: jest.fn(async () => null),
       create: jest.fn(async (data: any) => ({ id: 11, ...data })),
       clearPreferredForItem: jest.fn(async () => {}),
@@ -66,6 +65,7 @@ describe('CreateItemSupplierUseCase', () => {
 
   it('lanca ConflictError (409) se o vinculo ja existir', async () => {
     const itemSupplierRepository = {
+      findSupplierById: jest.fn(async (id: number) => (id === 1 ? { id: 1, company_name: 'Fornecedor Teste' } : null)),
       findByItemAndSupplier: jest.fn(async () => ({ id: 1, item_id: 'item-1', supplier_id: 1 })),
       create: jest.fn(),
       clearPreferredForItem: jest.fn(),
@@ -83,6 +83,7 @@ describe('CreateItemSupplierUseCase', () => {
 
   it('lanca NotFoundError se o item nao existir', async () => {
     const itemSupplierRepository = {
+      findSupplierById: jest.fn(),
       findByItemAndSupplier: jest.fn(),
       create: jest.fn(),
       clearPreferredForItem: jest.fn(),
@@ -98,6 +99,7 @@ describe('CreateItemSupplierUseCase', () => {
 
   it('lanca NotFoundError se o fornecedor nao existir', async () => {
     const itemSupplierRepository = {
+      findSupplierById: jest.fn(async (id: number) => (id === 1 ? { id: 1, company_name: 'Fornecedor Teste' } : null)),
       findByItemAndSupplier: jest.fn(),
       create: jest.fn(),
       clearPreferredForItem: jest.fn(),

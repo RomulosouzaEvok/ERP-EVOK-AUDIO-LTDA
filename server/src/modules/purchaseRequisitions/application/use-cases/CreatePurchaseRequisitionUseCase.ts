@@ -3,9 +3,6 @@ import { NotFoundError, BusinessRuleError } from '../../../../errors';
 import ItemRepository from '../../../items/domain/repositories/ItemRepository';
 import PurchaseRequisitionRepository from '../../domain/repositories/PurchaseRequisitionRepository';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { EngineeringProject, Employee } = require('../../../../models/index');
-
 /**
  * Bloco 2 (UC-39, BUSINESS_RULES.md §9): origem de amostra da engenharia.
  * Ver `RequisitionsPage.tsx` (client) — mesma convenção compartilhada.
@@ -61,20 +58,17 @@ class CreatePurchaseRequisitionUseCase extends UseCase<Record<string, any>, any>
     }
 
     if (input.engineering_project_id) {
-      const project = await EngineeringProject.findByPk(input.engineering_project_id, {
-        transaction: input.transaction,
-      });
+      const project = await this.requisitionRepository.findEngineeringProjectById(
+        input.engineering_project_id,
+        input.transaction,
+      );
       if (!project) {
         throw new NotFoundError(`Projeto de engenharia ${input.engineering_project_id} nao encontrado.`);
       }
     }
 
     const requesterEmployee = input.requester_id
-      ? await Employee.findOne({
-        where: { user_id: input.requester_id },
-        attributes: ['id', 'department_id'],
-        transaction: input.transaction,
-      })
+      ? await this.requisitionRepository.findEmployeeByUserId(input.requester_id, input.transaction)
       : null;
 
     const requisition = await this.requisitionRepository.createRequisition({

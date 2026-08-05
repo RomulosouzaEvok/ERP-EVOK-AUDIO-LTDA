@@ -6522,3 +6522,372 @@ do TypeScript strict mode, no módulo `inventory` (`server/src/modules/inventory
   por dependerem de Postgres/servidor rodando (`hasIntegrationPrerequisites()`
   → skip local); recomenda-se rodá-los no pipeline/CI ou localmente com
   Docker Compose antes do próximo Go-Live check.
+
+---
+
+## Retrofit Clean Architecture — Isolamento de repository (fatia 1/3: items, purchaseRequisitions, users, webhooks)
+
+**Data**: 2026-08-05
+**Escopo**: Um dos 22 use cases identificados que ainda importavam
+`models/index` diretamente (bypass do padrão `repository` injetado). Esta
+sessão cobriu a fatia de 4 use cases em 4 módulos (`items`,
+`purchaseRequisitions`, `users`, `webhooks`); outras duas fatias (mais 18
+use cases, em outros módulos) foram trabalhadas em paralelo por outros
+agentes na mesma sessão — ver `git log`/diff para o conjunto completo.
+**Status**: ✅ Concluído (zero mudança de comportamento; typecheck e testes
+unitários relacionados passando)
+
+### Motivação
+Use cases da camada `application/` devem depender apenas de interfaces
+`domain/repositories/*`, nunca de models Sequelize (`models/index`)
+diretamente — isso é o que permite testar regra de negócio com mocks
+simples, sem tocar banco. 22 use cases no projeto ainda violavam essa
+regra. Esta é a fatia de 4 desses use cases.
+
+### O que foi feito, por módulo
+
+1. **`items` — `CreateItemSupplierUseCase`**
+   - Estendido `ItemSupplierRepository` (domain) com
+     `findSupplierById(supplierId)` — leitura auxiliar cross-module (o
+     model `Supplier` pertence ao módulo `suppliers`, não a `items`; nome
+     escolhido para deixar essa fronteira explícita).
+   - Implementado em `SequelizeItemSupplierRepository.findSupplierById` —
+     mesma query (`Supplier.findByPk`).
+   - Use case trocou `Supplier.findByPk(...)` (import direto de
+     `models/index`) por `this.itemSupplierRepository.findSupplierById(...)`.
+     Controle de transação Sequelize (`sequelize.transaction()`) preservado
+     sem alteração — `sequelize` continua importado de `models/index` só
+     para isso, como já era.
+   - Controller (`itemController.ts`) não precisou de alteração — já
+     injetava `itemSupplierRepository` no construtor do use case.
+
+2. **`purchaseRequisitions` — `CreatePurchaseRequisitionUseCase`**
+   - Estendido `PurchaseRequisitionRepository` (domain) com
+     `findEngineeringProjectById(id, transaction)` e
+     `findEmployeeByUserId(userId, transaction)` — leituras auxiliares
+     cross-module (`EngineeringProject` pertence a `engineering`,
+     `Employee` a `employees`).
+   - Implementado em `SequelizePurchaseRequisitionRepository` — mesmas
+     queries (`EngineeringProject.findByPk`, `Employee.findOne` com
+     `attributes: ['id', 'department_id']`).
+   - Use case trocou os dois `require('../../../../models/index')` por
+     chamadas ao `this.requisitionRepository`. Controller já injetava
+     `requisitionRepository` — sem alteração.
+
+3. **`users` — `AssignAccessProfileUseCase`**
+   - Estendido `UsersRepository` (domain) com
+     `findAccessProfileById(id)` — leitura auxiliar cross-module (model
+     `AccessProfile` pertence ao módulo `accessProfiles`).
+   - Implementado em `SequelizeUsersRepository.findAccessProfileById`
+     (`AccessProfile.findByPk`).
+   - Use case trocou `AccessProfile.findByPk(...)` por
+     `this.usersRepository.findAccessProfileById(...)`. Controller já
+     injetava `usersRepository` — sem alteração.
+
+4. **`webhooks` — `ProcessN8nWebhookUseCase`**
+   - Módulo não tinha `domain/repositories/` ainda — criado o primeiro:
+     `server/src/modules/webhooks/domain/repositories/WebhookRepository.ts`
+     (método `findOrCreateEvent(source, eventId, defaults)`) e
+     `server/src/modules/webhooks/infrastructure/sequelize/SequelizeWebhookRepository.ts`
+     (implementação com `WebhookEvent.findOrCreate`, mesma query de antes).
+   - Use case passou a receber `webhookRepository` no construtor (antes não
+     tinha construtor, instanciava `WebhookEvent.findOrCreate` direto).
+   - `webhookController.ts` (`n8n`) atualizado para instanciar
+     `new SequelizeWebhookRepository()` uma vez no topo do módulo e injetar
+     no `new ProcessN8nWebhookUseCase(webhookRepository)`. A rota
+     `focus-nfe` (outro use case, fora do escopo) não foi tocada.
+
+### Documentações atualizadas
+- JSDoc dos métodos novos em `ItemSupplierRepository.ts`,
+  `PurchaseRequisitionRepository.ts`, `UsersRepository.ts` e no novo
+  `WebhookRepository.ts` (contrato) — cada método deixa explícito que é
+  leitura auxiliar cross-module e qual módulo é o dono real do model.
+- Este handoff (`docs/HANDOFF_CODEX.md`).
+- Sem mudança de schema/model/migration ⇒ `docs/DATABASE.md` não precisou
+  de atualização.
+- Sem mudança de regra de negócio/validação/gatilho ⇒
+  `docs/projeto/04-USE_CASES.md` não precisou de atualização (comportamento
+  idêntico ao anterior, apenas a camada de acesso a dados mudou).
+
+### Testes executados
+- `npx tsc --noEmit` (a partir de `server/`) — limpo, sem erros, inclusive
+  após mudanças concorrentes de outros dois grupos paralelos no mesmo
+  repositório.
+- `npx jest tests/unit/item-suppliers.test.ts tests/unit/access-profiles.test.ts
+  tests/unit/webhooks-use-cases.test.ts tests/unit/purchase-requisition-create.test.ts
+  tests/unit/purchase-requisition-department.test.ts tests/unit/purchase-requisition-status.test.ts`
+  — 6 suites, 45 testes, todos passando.
+- `npx jest tests/unit/engineering-sample-requisition.test.ts -t "CreatePurchaseRequisitionUseCase"`
+  — 4/4 passando (a suite completa tem 1 teste adicional, "Cadeia completa:
+  amostra aprovada -> convertida em pedido -> recebida no Deposito do
+  Laboratorio", que falha — ver riscos residuais abaixo, não é desta fatia).
+- Mocks de `jest.mock('../../src/models/index', ...)` que apontavam
+  `Supplier`, `EngineeringProject`, `Employee`, `AccessProfile` foram
+  trocados por mocks diretos nos objetos `repository` injetados nos testes
+  (`tests/unit/item-suppliers.test.ts`, `tests/unit/access-profiles.test.ts`,
+  `tests/unit/engineering-sample-requisition.test.ts`,
+  `tests/unit/purchase-requisition-department.test.ts`,
+  `tests/unit/purchase-requisition-create.test.ts`), preservando a mesma
+  cobertura de cada cenário (sucesso, 404, 422/409, anti-spoofing).
+  `tests/unit/webhooks-use-cases.test.ts` ganhou 1 teste novo (evento
+  válido delega ao repository) para cobrir o `findOrCreateEvent` recém
+  extraído.
+
+### Riscos residuais / bugs encontrados (não corrigidos, fora do escopo)
+- `tests/unit/engineering-sample-requisition.test.ts` → teste "Cadeia
+  completa: amostra aprovada -> convertida em pedido -> recebida no
+  Deposito do Laboratorio" está falhando com
+  `TypeError: this.purchaseRepository.createPurchaseReceipt is not a
+  function`, dentro de `server/src/modules/purchases/application/use-cases/
+  ReceivePurchaseItemsUseCase.ts` — módulo `purchases`, fora do escopo desta
+  tarefa (não é um dos 4 módulos atribuídos: `items`, `purchaseRequisitions`,
+  `users`, `webhooks`). Confirmado via `git stash`/`git status` que esse
+  arquivo (e outros de `purchases`, `inventory`, `fiscal`) estavam sendo
+  modificados concorrentemente por outro grupo paralelo na mesma sessão —
+  não é uma regressão introduzida por esta fatia. Recomenda-se que o grupo
+  responsável por `purchases` ajuste o mock de
+  `receivePurchaseRepository` em `engineering-sample-requisition.test.ts`
+  (adicionar `createPurchaseReceipt`) ao concluir sua refatoração.
+- Nenhum bug de comportamento real foi encontrado nos 4 use cases desta
+  fatia — todas as queries reproduzidas nos repositories são idênticas às
+  chamadas diretas anteriores (mesmo `where`, `attributes`, `transaction`).
+
+## Retrofit Clean Architecture — Isolamento de repository (fatia 2/3: fiscal, purchases, nonConformities, products)
+
+### Resumo da feature
+Continuação do retrofit de Clean Architecture iniciado na fatia 1/3 (ver seção
+acima): mais 6 use cases que acessavam models Sequelize diretamente
+(`require('../../../../models/index')`) passaram a receber um repository
+injetado no construtor, sem NENHUMA mudança de comportamento (mesma query,
+mesmo `where`/`attributes`/`transaction`, mesmos erros).
+
+1. **`fiscal` — módulo NÃO tinha `domain/repositories/` ainda (criado do
+   zero, usando `purchases/domain/repositories/PurchaseRepository.ts` como
+   referência de estilo):**
+   - Criado `server/src/modules/fiscal/domain/repositories/FiscalRepository.ts`
+     com `findCompanyFiscalConfig()`, `upsertCompanyFiscalConfig(data)` e
+     `findPurchaseById(purchaseId)` (leitura cross-module pontual — `Purchase`
+     é dono do módulo `purchases`, `FiscalRepository` não assume posse dele).
+   - Criado `server/src/modules/fiscal/infrastructure/sequelize/SequelizeFiscalRepository.ts`
+     — mesmas queries (`CompanyFiscalConfig.findByPk(1)`,
+     find-or-create/save em `upsertCompanyFiscalConfig`, `Purchase.findByPk`).
+   - `GetCompanyFiscalConfigUseCase.ts`, `UpsertCompanyFiscalConfigUseCase.ts`
+     (mantém o filtro `ALLOWED_FIELDS` no use case — é regra de negócio, não
+     persistência — e delega só a gravação ao repository) e
+     `RegisterIncomingNfeUseCase.ts` (troca `Purchase.findByPk` direto por
+     `fiscalRepository.findPurchaseById`) passaram a receber
+     `fiscalRepository` no construtor.
+   - `fiscalController.ts`: instancia `new SequelizeFiscalRepository()` uma
+     vez no topo do módulo e injeta nos 3 use cases.
+
+2. **`purchases` — `ReceivePurchaseItemsUseCase`:**
+   - Estendido `PurchaseRepository` (domain) + `SequelizePurchaseRepository`
+     com `createPurchaseReceipt(data, transaction)` (dono natural —
+     `PurchaseReceipt` pertence a `purchases`), e mais 3 métodos cross-module
+     pontuais: `findRequisitionOriginById(requisitionId, transaction)`
+     (`PurchaseRequisition.findByPk` com `attributes: ['id','origin']`),
+     `findLotForReceipt(where, transaction)` e `createLot(data, transaction)`
+     (`LotControl.findOne`/`.create`, model do domínio de
+     estoque/inventário).
+   - Use case trocou os 4 acessos diretos a `models/index` por chamadas ao
+     `this.purchaseRepository`. Controller (`purchaseController.ts`) já
+     injetava `purchaseRepository` — sem alteração.
+
+3. **`nonConformities` — `CreateNonConformityUseCase`:**
+   - Estendido `NonConformitiesRepository` (domain) +
+     `SequelizeNonConformitiesRepository` com 4 métodos cross-module
+     pontuais: `findLotForNonConformity(productId, lotNumber, transaction)`
+     (`LotControl.findOne` com lock), `countLotsBySupplier(supplierId, tx)`,
+     `countNonConformitiesBySupplier(supplierId, tx)` e
+     `updateSupplierQualityScore(supplierId, qualityScore, tx)`
+     (`Supplier.update`, model do módulo `purchases`).
+   - Use case trocou os acessos diretos a `LotControl`/`Supplier`/
+     `NonConformity` (este último dono natural, mas usado só via `.count`)
+     por chamadas ao `this.nonConformitiesRepository`, incluindo dentro do
+     método privado `recalculateSupplierQualityScore`. Controller já
+     injetava `nonConformitiesRepository` — sem alteração.
+
+4. **`products` — `GetProductStockByWarehouseUseCase`:**
+   - Estendido `ProductRepository`/`IProductRepository` (domain) +
+     `SequelizeProductRepository` com `getWarehouseStockSummary(productId)`
+     — encapsula as duas queries cross-module (`Warehouse.findAll({where:
+     {active:true}})` + `ProductWarehouseStock.findAll({where:
+     {product_id}})`, models do domínio de estoque/depósito) e a combinação
+     em memória (todos os depósitos ativos, saldo `0` quando não há linha)
+     que antes vivia no use case.
+   - Use case trocou os dois acessos diretos + lógica de combinação por uma
+     única chamada a `this.productRepository.getWarehouseStockSummary(product.id)`.
+     Controller (`productController.ts`) já injetava `productRepository` —
+     sem alteração.
+
+### Documentações atualizadas
+- JSDoc de todos os métodos novos nos 4 repositories (contratos abstratos
+  em `domain/repositories/*.ts` e implementações em
+  `infrastructure/sequelize/*.ts`), deixando explícito quando um método é
+  leitura/escrita cross-module pontual e qual módulo é o dono real do model.
+- Este handoff (`docs/HANDOFF_CODEX.md`).
+- Sem mudança de schema/model/migration ⇒ `docs/DATABASE.md` não precisou
+  de atualização.
+- Sem mudança de regra de negócio/validação/gatilho ⇒
+  `docs/projeto/04-USE_CASES.md` não precisou de atualização (comportamento
+  idêntico ao anterior, apenas a camada de acesso a dados mudou).
+
+### Testes executados
+- `npx tsc --noEmit` (a partir de `server/`) — limpo após cada um dos 4
+  blocos de produção e novamente ao final, inclusive com as mudanças
+  concorrentes dos outros 2 grupos paralelos (`inventory`, `items`,
+  `purchaseRequisitions`, `users`, `webhooks`) no mesmo repositório.
+- `npx jest tests/unit` (suíte unitária completa) — **69 suites, 492 testes,
+  todos passando**.
+- Suites tocadas diretamente por esta fatia, todas passando:
+  `tests/unit/nonConformities-use-cases.test.ts` (5/5, sem alteração
+  necessária — já mockava o repository),
+  `tests/unit/non-conformity-supplier-return.test.ts` (10/10),
+  `tests/unit/quality-lot-lifecycle.test.ts` (21/21 — inclui os blocos
+  `ReleaseLotUseCase`/`BlockLotUseCase` do grupo paralelo de `inventory`,
+  que terminaram sua refatoração durante esta sessão),
+  `tests/unit/warehouse-stock.test.ts` (7/7 nos blocos
+  `ReceivePurchaseItemsUseCase`/`GetProductStockByWarehouseUseCase`; os
+  outros 26 testes do arquivo, de `CreateWarehouseTransferUseCase`/
+  `ApproveWarehouseTransferUseCase`/`RejectWarehouseTransferUseCase`, são do
+  módulo `inventory`, fora do escopo),
+  `tests/unit/engineering-sample-requisition.test.ts` (5/5 — corrigido o
+  mock de `receivePurchaseRepository` que o grupo 1/3 já havia identificado
+  como pendência, ver seção anterior),
+  `tests/unit/integrity-transaction-guards.test.ts` (19/19),
+  `tests/unit/laboratory-tests.test.ts` (não precisou de alteração —
+  `jest.mock` inteiro de `CreateNonConformityUseCase`).
+- Mocks de `jest.mock('../../src/models/index', ...)` que apontavam
+  `LotControl`, `Supplier`, `NonConformity`, `PurchaseReceipt`,
+  `PurchaseRequisition`, `Warehouse`, `ProductWarehouseStock` diretamente
+  foram trocados por métodos mockados nos objetos `repository` injetados
+  (`nonConformitiesRepository.findLotForNonConformity/countLotsBySupplier/
+  countNonConformitiesBySupplier/updateSupplierQualityScore`,
+  `purchaseRepository.createPurchaseReceipt/findRequisitionOriginById/
+  findLotForReceipt/createLot`, `productRepository.getWarehouseStockSummary`),
+  preservando a mesma cobertura de cada cenário.
+
+### Riscos residuais / bugs encontrados (não corrigidos, fora do escopo)
+- Nenhum bug de comportamento real foi encontrado nos 6 use cases desta
+  fatia — todas as queries reproduzidas nos repositories são idênticas às
+  chamadas diretas anteriores (mesmo `where`/`attributes`/`transaction`,
+  mesma ordem de validação e mesmos erros lançados).
+- O módulo `fiscal` não tinha nenhum teste unitário mapeado para
+  `GetCompanyFiscalConfigUseCase`/`UpsertCompanyFiscalConfigUseCase`/
+  `RegisterIncomingNfeUseCase` antes desta fatia (confirmado por grep em
+  `server/tests/`); nenhum teste novo foi criado para não expandir escopo
+  além do que foi pedido (retrofit de arquitetura, não cobertura nova) —
+  fica como sugestão para um próximo incremento.
+
+---
+
+## Retrofit Clean Architecture — Fechamento do módulo `fiscal` (3 use cases de NF-e de venda que ficaram de fora da fatia 2/3)
+
+### Resumo da feature
+A fatia 2/3 (seção acima) migrou 3 dos 6 use cases de `fiscal` que
+acessavam models Sequelize direto (`GetCompanyFiscalConfigUseCase`,
+`UpsertCompanyFiscalConfigUseCase`, `RegisterIncomingNfeUseCase`), mas por
+um erro de categorização no script de varredura os outros 3 use cases do
+mesmo módulo (todos relacionados a NF-e de **venda**, não de compra) não
+foram corrigidos junto: `CancelSaleNfeUseCase.ts`, `GetSaleNfeStatusUseCase.ts`
+e `IssueSaleNfeUseCase.ts`, que acessavam `Sale`, `SaleItem`, `Client` e
+`Product` diretamente via `require('../../../../models/index')`. Esta
+rodada fecha o módulo `fiscal` por completo, com ZERO mudança de
+comportamento (mesma query, `where`, `transaction`/`lock`, mesmos erros).
+
+- Estendido `server/src/modules/fiscal/domain/repositories/FiscalRepository.ts`
+  com 4 métodos novos, todos cross-module (os models pertencem a `sales`/
+  `products`, não a `fiscal`) e todos aceitando `options?: { transaction,
+  lock }` para preservar exatamente o mesmo comportamento de lock
+  pessimista que os 3 use cases já tinham dentro de seus blocos
+  `sequelize.transaction(...)`:
+  - `findSaleById(saleId, options?)` → `Sale.findByPk(saleId, options)`
+  - `findSaleItemsBySaleId(saleId, options?)` → `SaleItem.findAll({ where: { sale_id: saleId }, ...options })`
+  - `findClientById(clientId, options?)` → `Client.findByPk(clientId, options)`
+  - `findProductsByIds(productIds, options?)` → `Product.findAll({ where: { id: productIds }, ...options })`
+  - `findCompanyFiscalConfig()` (já existia) foi estendido para aceitar o
+    mesmo `options?` opcional — chamada sem argumento continua idêntica
+    (`CompanyFiscalConfig.findByPk(1)`), e `IssueSaleNfeUseCase` passou a
+    chamá-lo com `{ transaction, lock: transaction.LOCK.UPDATE }` (mesmo
+    lock que já usava antes, direto no model).
+- `server/src/modules/fiscal/infrastructure/sequelize/SequelizeFiscalRepository.ts`
+  implementa os 4 métodos com exatamente as mesmas chamadas Sequelize que
+  existiam nos use cases (nenhuma query nova, nenhum filtro alterado).
+- `CancelSaleNfeUseCase.ts`, `GetSaleNfeStatusUseCase.ts` e
+  `IssueSaleNfeUseCase.ts` passaram a receber `fiscalRepository` no
+  construtor (mesmo padrão de `GetCompanyFiscalConfigUseCase`) e trocaram
+  todo acesso direto a `Sale`/`SaleItem`/`Client`/`Product`/
+  `CompanyFiscalConfig` por chamadas a `this.fiscalRepository.*`. O
+  `sequelize.transaction(...)` e a lógica de negócio (validações, ordem de
+  operações, cálculo de tributos via `TaxCalculationService`, chamada ao
+  provedor de NF-e) permanecem 100% intactos dentro dos próprios use
+  cases — apenas o acesso a dados foi extraído.
+- `fiscalController.ts`: os 3 pontos de instanciação
+  (`new IssueSaleNfeUseCase()`, `new GetSaleNfeStatusUseCase()`,
+  `new CancelSaleNfeUseCase()`) passaram a injetar a mesma instância
+  `fiscalRepository` (`SequelizeFiscalRepository`) já usada pelos outros 3
+  use cases do módulo.
+- **Achado durante a refatoração (não fazia parte da lista original, mas
+  está dentro do módulo `fiscal`):**
+  `HandleNfeStatusWebhookUseCase.ts` instanciava
+  `new GetSaleNfeStatusUseCase()` sem argumento — como o construtor passou
+  a exigir `fiscalRepository`, isso quebraria em runtime (webhook de
+  notificação assíncrona do provedor de NF-e, `modules/webhooks/
+  presentation/controllers/webhookController.ts`). Corrigido criando uma
+  instância própria de `SequelizeFiscalRepository` dentro do próprio
+  `HandleNfeStatusWebhookUseCase.ts` (módulo `fiscal`, escopo permitido) e
+  injetando-a — a assinatura pública `new HandleNfeStatusWebhookUseCase()`
+  (sem argumento), usada por `webhookController.ts` fora de `fiscal`, não
+  mudou, então nenhum arquivo fora de `server/src/modules/fiscal/` foi
+  tocado.
+
+### Documentações atualizadas
+- JSDoc de todos os métodos novos em `FiscalRepository.ts` (contrato
+  abstrato) e `SequelizeFiscalRepository.ts` (implementação), explicitando
+  que `Sale`/`SaleItem`/`Client`/`Product` são cross-module (donos reais:
+  `sales`, `products`).
+- Este handoff (`docs/HANDOFF_CODEX.md`).
+- Sem mudança de schema/model/migration ⇒ `docs/DATABASE.md` não precisou
+  de atualização.
+- Sem mudança de regra de negócio/validação/gatilho ⇒
+  `docs/projeto/04-USE_CASES.md` não precisou de atualização (mesmo
+  comportamento observável, apenas a camada de acesso a dados mudou).
+- `docs/governance/TODO.md` não tinha item aberto rastreando especificamente
+  este retrofit (é continuação direta da fatia 2/3 documentada acima, sem
+  um item próprio no TODO) — nada para marcar.
+
+### Instruções de teste
+1. `cd server && npx tsc --noEmit` — 0 erros (rodado após cada arquivo e
+   novamente ao final, projeto inteiro).
+2. `npx jest tests/unit` — **69 suites, 492 testes, todos passando**,
+   incluindo `tests/unit/sales-nfe-rbac.test.ts` (3/3 — ajustado para
+   injetar `new SequelizeFiscalRepository()` real nos 2 use cases que
+   instancia diretamente, `IssueSaleNfeUseCase`/`CancelSaleNfeUseCase`, em
+   vez de passar sem argumento; o `jest.mock('../../src/models/index', ...)`
+   já existente no arquivo não precisou mudar, porque
+   `SequelizeFiscalRepository` é quem consome esses models por baixo —
+   mesma cobertura de antes).
+3. `npx jest` (suíte completa) — **70 suites/493 testes passando, 28
+   suites/77 testes skipped** (integração, sem prerequisitos de banco
+   neste ambiente — inclui `tests/integration/sale-nfe-issuance.test.ts`,
+   que cobre emissão/consulta/cancelamento de NF-e ponta a ponta contra um
+   banco real; deve ser rodado manualmente com `TEST_PRODUCT_ID` e um
+   Postgres de teste disponível antes do próximo Go-Live gate).
+4. Próximo agente/humano: validar manualmente (ou via suíte de integração
+   com banco disponível) o fluxo completo `POST /api/sales/:id/nfe` →
+   `GET /api/sales/:id/nfe` → `POST /api/sales/:id/nfe/cancel`, e também o
+   webhook de notificação (`HandleNfeStatusWebhookUseCase`, rota em
+   `modules/webhooks`) para confirmar que a reconciliação de status
+   continua funcionando após a injeção do repository.
+
+### Riscos residuais / bugs encontrados (não corrigidos, fora do escopo)
+- Nenhum bug de comportamento real foi encontrado nos 3 use cases desta
+  rodada — todas as queries reproduzidas no repository são idênticas às
+  chamadas diretas anteriores (mesmo `where`, mesma transação/lock, mesma
+  ordem de validação, mesmos erros lançados).
+- `HandleNfeStatusWebhookUseCase.ts` não tinha nenhum teste unitário
+  mapeado antes desta rodada (confirmado por grep em `server/tests/`);
+  nenhum teste novo foi criado para não expandir escopo além do pedido —
+  fica como sugestão para um próximo incremento, especialmente porque essa
+  correção pontual (instanciar `SequelizeFiscalRepository` localmente) não
+  tem cobertura automatizada hoje.

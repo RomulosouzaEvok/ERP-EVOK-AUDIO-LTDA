@@ -221,7 +221,7 @@ exports.listLowStock = async (req: Request, res: Response, next: NextFunction) =
 exports.listLots = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { product_id, status, page, limit } = req.query;
-    const useCase = new ListLotsUseCase();
+    const useCase = new ListLotsUseCase(inventoryRepository);
     const { rows, total, page: p, limit: l, totalPages } = await useCase.execute({ product_id, status, page, limit });
     res.json({ success: true, data: rows, pagination: { total, page: p, limit: l, totalPages } });
   } catch (error) { next(error); }
@@ -243,7 +243,7 @@ exports.listLots = async (req: Request, res: Response, next: NextFunction) => {
  */
 exports.getLotByCode = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new GetLotByCodeUseCase();
+    const useCase = new GetLotByCodeUseCase(inventoryRepository);
     const lot = await useCase.execute({ lot_number: req.params.lot_number, product_id: req.query.product_id });
     res.json({ success: true, data: lot });
   } catch (error) { next(error); }
@@ -301,7 +301,7 @@ exports.getLotQrCode = async (req: Request, res: Response, next: NextFunction) =
  */
 exports.releaseLot = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new ReleaseLotUseCase();
+    const useCase = new ReleaseLotUseCase(inventoryRepository);
     const lot = await useCase.execute({ id: req.params.id, notes: req.body?.notes });
 
     logAction(req, {
@@ -331,7 +331,7 @@ exports.releaseLot = async (req: Request, res: Response, next: NextFunction) => 
  */
 exports.blockLot = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new BlockLotUseCase();
+    const useCase = new BlockLotUseCase(inventoryRepository);
     const lot = await useCase.execute({ id: req.params.id, reason: req.body?.reason });
 
     logAction(req, {
@@ -364,7 +364,7 @@ exports.createTransfer = async (req: Request, res: Response, next: NextFunction)
     if (!parsed.success) handleZodError(parsed.error);
     const { product_id, from_warehouse_code, to_warehouse_code, quantity, reason } = parsed.data;
 
-    const useCase = new CreateWarehouseTransferUseCase();
+    const useCase = new CreateWarehouseTransferUseCase(inventoryRepository);
     const transfer = await useCase.execute({
       product_id, from_warehouse_code, to_warehouse_code, quantity, reason,
       userId: (req as any).user.id
@@ -397,7 +397,7 @@ exports.createTransfer = async (req: Request, res: Response, next: NextFunction)
 exports.approveTransfer = async (req: Request, res: Response, next: NextFunction) => {
   const t = await sequelize.transaction();
   try {
-    const useCase = new ApproveWarehouseTransferUseCase();
+    const useCase = new ApproveWarehouseTransferUseCase(inventoryRepository);
     const transfer = await useCase.execute({ id: req.params.id, approverId: (req as any).user.id, transaction: t });
 
     await t.commit();
@@ -435,7 +435,7 @@ exports.rejectTransfer = async (req: Request, res: Response, next: NextFunction)
     if (!parsed.success) handleZodError(parsed.error);
     const { reason } = parsed.data;
 
-    const useCase = new RejectWarehouseTransferUseCase();
+    const useCase = new RejectWarehouseTransferUseCase(inventoryRepository);
     const transfer = await useCase.execute({ id: req.params.id, approverId: (req as any).user.id, reason, transaction: t });
 
     await t.commit();
@@ -467,7 +467,7 @@ exports.rejectTransfer = async (req: Request, res: Response, next: NextFunction)
  */
 exports.listTransfers = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new ListWarehouseTransfersUseCase();
+    const useCase = new ListWarehouseTransfersUseCase(inventoryRepository);
     const transfers = await useCase.execute({ status: req.query.status });
     res.json({ success: true, data: transfers });
   } catch (error) { next(error); }
@@ -485,7 +485,7 @@ exports.listTransfers = async (req: Request, res: Response, next: NextFunction) 
 exports.listWarehouseStock = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { product_id, warehouse_code, page, limit } = req.query;
-    const useCase = new ListWarehouseStockUseCase();
+    const useCase = new ListWarehouseStockUseCase(inventoryRepository);
     const { rows, total, page: p, limit: l, totalPages } = await useCase.execute({ product_id, warehouse_code, page, limit });
     res.json({ success: true, data: rows, pagination: { total, page: p, limit: l, totalPages } });
   } catch (error) { next(error); }
@@ -501,7 +501,7 @@ exports.listWarehouseStock = async (req: Request, res: Response, next: NextFunct
  */
 exports.listWarehouses = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new ListWarehousesUseCase();
+    const useCase = new ListWarehousesUseCase(inventoryRepository);
     const warehouses = await useCase.execute();
     res.json({ success: true, data: warehouses });
   } catch (error) { next(error); }
@@ -523,7 +523,7 @@ exports.createWarehouse = async (req: Request, res: Response, next: NextFunction
     if (!parsed.success) handleZodError(parsed.error);
     const { code, name, description, active } = parsed.data;
 
-    const useCase = new CreateWarehouseUseCase();
+    const useCase = new CreateWarehouseUseCase(inventoryRepository);
     const warehouse = await useCase.execute({ code, name, description, active });
 
     logAction(req, {
@@ -559,7 +559,7 @@ exports.updateWarehouse = async (req: Request, res: Response, next: NextFunction
     if (!parsed.success) handleZodError(parsed.error);
     const { name, description, active } = parsed.data;
 
-    const useCase = new UpdateWarehouseUseCase();
+    const useCase = new UpdateWarehouseUseCase(inventoryRepository);
     const { before, warehouse } = await useCase.execute({ id: parsedId.data, name, description, active });
 
     logAction(req, {

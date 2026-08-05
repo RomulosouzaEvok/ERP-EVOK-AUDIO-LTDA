@@ -6,10 +6,8 @@
  * Cobre `GET /api/inventory/warehouse-stock?product_id=&warehouse_code=&page=&limit=`.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { ProductWarehouseStock, Product, Warehouse } = require('../../../../models/index');
-
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { ValidationError } from '../../../../errors';
 
 interface ListWarehouseStockInput {
@@ -28,6 +26,14 @@ interface ListWarehouseStockOutput {
 }
 
 class ListWarehouseStockUseCase extends UseCase<ListWarehouseStockInput, ListWarehouseStockOutput> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Filtros (`product_id`, `warehouse_code`) e paginação.
    * @returns Linhas produto×depósito, com `product` e `warehouse` incluídos, e dados de paginação.
@@ -52,16 +58,7 @@ class ListWarehouseStockUseCase extends UseCase<ListWarehouseStockInput, ListWar
       warehouseWhere.code = String(input.warehouse_code).trim().toUpperCase();
     }
 
-    const { count, rows } = await ProductWarehouseStock.findAndCountAll({
-      where,
-      include: [
-        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
-        { model: Warehouse, as: 'warehouse', attributes: ['id', 'code', 'name'], where: warehouseWhere },
-      ],
-      limit,
-      offset,
-      order: [['product_id', 'ASC']],
-    });
+    const { count, rows } = await this.inventoryRepository.listWarehouseStock(where, warehouseWhere, { limit, offset });
 
     return { rows, total: count, page, limit, totalPages: Math.ceil(count / limit) || 0 };
   }

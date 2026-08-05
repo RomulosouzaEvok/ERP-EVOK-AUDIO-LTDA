@@ -10,10 +10,8 @@
  * são eventos distintos, ambos auditados).
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { WarehouseTransfer } = require('../../../../models/index');
-
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { NotFoundError, BusinessRuleError, ValidationError } from '../../../../errors';
 import { Transaction } from 'sequelize';
 
@@ -25,6 +23,14 @@ interface RejectWarehouseTransferInput {
 }
 
 class RejectWarehouseTransferUseCase extends UseCase<RejectWarehouseTransferInput, any> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Id da transferência, id do aprovador e motivo da rejeição.
    * @returns Transferência atualizada (`status = 'rejected'`).
@@ -38,10 +44,7 @@ class RejectWarehouseTransferUseCase extends UseCase<RejectWarehouseTransferInpu
       throw new ValidationError('reason (motivo da rejeição) é obrigatório.');
     }
 
-    const transfer = await WarehouseTransfer.findByPk(input.id, {
-      transaction: input.transaction,
-      lock: Transaction.LOCK.UPDATE,
-    });
+    const transfer = await this.inventoryRepository.findWarehouseTransferForUpdate(input.id, input.transaction);
     if (!transfer) {
       throw new NotFoundError('Transferência entre depósitos não encontrada.');
     }

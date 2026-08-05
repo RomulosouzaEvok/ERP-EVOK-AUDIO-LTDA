@@ -194,6 +194,8 @@ describe('Invariante 2 — quarentena/bloqueio/liberacao de lote (BlockLotUseCas
   let ProductWarehouseStock: any;
   let BlockLotUseCase: any;
   let ReleaseLotUseCase: any;
+  let SequelizeInventoryRepository: any;
+  let repository: any;
 
   beforeEach(() => {
     jest.resetModules();
@@ -225,13 +227,17 @@ describe('Invariante 2 — quarentena/bloqueio/liberacao de lote (BlockLotUseCas
     jest.doMock('../../src/models/index', () => ({ LotControl, ProductWarehouseStock }));
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
+    SequelizeInventoryRepository = require('../../src/modules/inventory/infrastructure/sequelize/SequelizeInventoryRepository');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     BlockLotUseCase = require('../../src/modules/inventory/application/use-cases/BlockLotUseCase');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     ReleaseLotUseCase = require('../../src/modules/inventory/application/use-cases/ReleaseLotUseCase');
+
+    repository = new SequelizeInventoryRepository();
   });
 
   it('BlockLotUseCase muda apenas LotControl.status/notes, sem tocar warehouse_id nem ProductWarehouseStock', async () => {
-    const useCase = new BlockLotUseCase();
+    const useCase = new BlockLotUseCase(repository);
     const warehouseIdBefore = LotControl.__row.warehouse_id;
 
     const updated = await useCase.execute({ id: 77, reason: 'Suspeita de nao conformidade' });
@@ -252,7 +258,7 @@ describe('Invariante 2 — quarentena/bloqueio/liberacao de lote (BlockLotUseCas
   });
 
   it('ReleaseLotUseCase (quarantine -> available) muda apenas status/notes, sem tocar warehouse_id nem ProductWarehouseStock', async () => {
-    const useCase = new ReleaseLotUseCase();
+    const useCase = new ReleaseLotUseCase(repository);
     const warehouseIdBefore = LotControl.__row.warehouse_id;
 
     const updated = await useCase.execute({ id: 77, notes: 'Inspecao aprovada' });
@@ -270,7 +276,7 @@ describe('Invariante 2 — quarentena/bloqueio/liberacao de lote (BlockLotUseCas
 
   it('ReleaseLotUseCase (blocked -> available, pos-tratativa de RNC) tambem nao move o lote de deposito', async () => {
     LotControl.__row.status = 'blocked';
-    const useCase = new ReleaseLotUseCase();
+    const useCase = new ReleaseLotUseCase(repository);
     const warehouseIdBefore = LotControl.__row.warehouse_id;
 
     const updated = await useCase.execute({ id: 77, notes: 'RNC tratada' });

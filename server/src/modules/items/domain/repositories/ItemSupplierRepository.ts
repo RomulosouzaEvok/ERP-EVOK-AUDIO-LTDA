@@ -49,6 +49,15 @@ class ItemSupplierRepository {
   public async getPurchaseHistoryByItem(_itemId: string): Promise<any[]> {
     throw new Error('ItemSupplierRepository.getPurchaseHistoryByItem nao implementado.');
   }
+
+  /**
+   * Busca um fornecedor pelo id (leitura auxiliar cross-module — o model
+   * `Supplier` pertence ao modulo `suppliers`, nao a `items`; usado apenas
+   * para validar a existencia do fornecedor antes de criar o vinculo).
+   */
+  public async findSupplierById(_supplierId: number): Promise<any | null> {
+    throw new Error('ItemSupplierRepository.findSupplierById nao implementado.');
+  }
 }
 
 export = ItemSupplierRepository;

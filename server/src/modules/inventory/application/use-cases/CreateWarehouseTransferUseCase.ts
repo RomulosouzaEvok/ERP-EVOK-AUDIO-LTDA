@@ -10,11 +10,10 @@
  * docs/business/01-USE_CASES.md UC-42 Fluxo F).
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { WarehouseTransfer, Product } = require('../../../../models/index');
 const WarehouseStockService: any = require('../../../../services/warehouseStockService');
 
 import UseCase from '../../../../shared/application/UseCase';
+import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { ValidationError, NotFoundError } from '../../../../errors';
 
 interface CreateWarehouseTransferInput {
@@ -27,6 +26,14 @@ interface CreateWarehouseTransferInput {
 }
 
 class CreateWarehouseTransferUseCase extends UseCase<CreateWarehouseTransferInput, any> {
+  private readonly inventoryRepository: InventoryRepository;
+
+  /** @param inventoryRepository - Repositório de estoque. */
+  constructor(inventoryRepository: InventoryRepository) {
+    super();
+    this.inventoryRepository = inventoryRepository;
+  }
+
   /**
    * @param input - Dados da solicitação de transferência.
    * @returns Transferência criada (`status = 'pending'`).
@@ -48,7 +55,7 @@ class CreateWarehouseTransferUseCase extends UseCase<CreateWarehouseTransferInpu
       throw new ValidationError('Depósito de origem e destino não podem ser o mesmo.');
     }
 
-    const product = await Product.findByPk(input.product_id);
+    const product = await this.inventoryRepository.findProductById(input.product_id);
     if (!product) {
       throw new NotFoundError(`Produto ID ${input.product_id} não encontrado.`);
     }
@@ -56,7 +63,7 @@ class CreateWarehouseTransferUseCase extends UseCase<CreateWarehouseTransferInpu
     const fromWarehouse = await WarehouseStockService.getWarehouseByCode(input.from_warehouse_code);
     const toWarehouse = await WarehouseStockService.getWarehouseByCode(input.to_warehouse_code);
 
-    const transfer = await WarehouseTransfer.create({
+    const transfer = await this.inventoryRepository.createWarehouseTransfer({
       product_id: input.product_id,
       from_warehouse_id: fromWarehouse.id,
       to_warehouse_id: toWarehouse.id,

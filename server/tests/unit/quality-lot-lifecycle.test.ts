@@ -44,11 +44,14 @@ jest.mock('../../src/models/index', () => ({
 
 import ReleaseLotUseCase = require('../../src/modules/inventory/application/use-cases/ReleaseLotUseCase');
 import BlockLotUseCase = require('../../src/modules/inventory/application/use-cases/BlockLotUseCase');
+import SequelizeInventoryRepository = require('../../src/modules/inventory/infrastructure/sequelize/SequelizeInventoryRepository');
 import CreateNonConformityUseCase = require('../../src/modules/nonConformities/application/use-cases/CreateNonConformityUseCase');
 import { ValidationError, NotFoundError, BusinessRuleError } from '../../src/errors';
 
 const { sequelize } = require('../../src/config/database');
 const { LotControl, Supplier, NonConformity } = require('../../src/models/index');
+
+const inventoryRepository = new SequelizeInventoryRepository();
 
 describe('Quality Lot Lifecycle (item 8)', () => {
   beforeEach(() => {
@@ -66,7 +69,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         update,
       });
 
-      const useCase = new ReleaseLotUseCase();
+      const useCase = new ReleaseLotUseCase(inventoryRepository);
       await useCase.execute({ id: 1, notes: 'Inspecao aprovada' });
 
       expect(update).toHaveBeenCalledWith(
@@ -84,7 +87,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         update,
       });
 
-      const useCase = new ReleaseLotUseCase();
+      const useCase = new ReleaseLotUseCase(inventoryRepository);
       await useCase.execute({ id: 2 });
 
       expect(update).toHaveBeenCalledWith(
@@ -101,7 +104,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         update: jest.fn(),
       });
 
-      const useCase = new ReleaseLotUseCase();
+      const useCase = new ReleaseLotUseCase(inventoryRepository);
 
       await expect(useCase.execute({ id: 3 })).rejects.toMatchObject({
         constructor: BusinessRuleError,
@@ -116,7 +119,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
     it('lanca NotFoundError quando lote nao existe', async () => {
       LotControl.findByPk.mockResolvedValue(null);
 
-      const useCase = new ReleaseLotUseCase();
+      const useCase = new ReleaseLotUseCase(inventoryRepository);
 
       await expect(useCase.execute({ id: 999 })).rejects.toBeInstanceOf(NotFoundError);
     });
@@ -129,7 +132,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
       const lot = { id: 6, lot_number: 'LOT-006', status: 'blocked', notes: null, update };
       LotControl.findByPk.mockResolvedValue(lot);
 
-      const useCase = new ReleaseLotUseCase();
+      const useCase = new ReleaseLotUseCase(inventoryRepository);
 
       // 1a tentativa: lote em status nao permitido teria sido bloqueado se
       // estivesse em 'available' — aqui simulamos a leitura do estado real
@@ -163,7 +166,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         update,
       });
 
-      const useCase = new BlockLotUseCase();
+      const useCase = new BlockLotUseCase(inventoryRepository);
       await useCase.execute({ id: 1, reason: 'Defeito visual detectado na inspecao' });
 
       expect(update).toHaveBeenCalledWith(
@@ -181,7 +184,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         update,
       });
 
-      const useCase = new BlockLotUseCase();
+      const useCase = new BlockLotUseCase(inventoryRepository);
       await useCase.execute({ id: 4, reason: 'RNC aberta' });
 
       expect(update).toHaveBeenCalledWith(
@@ -190,7 +193,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
     });
 
     it('rejeita bloqueio sem reason (ou reason curto demais)', async () => {
-      const useCase = new BlockLotUseCase();
+      const useCase = new BlockLotUseCase(inventoryRepository);
 
       await expect(useCase.execute({ id: 1, reason: '' })).rejects.toBeInstanceOf(ValidationError);
       await expect(useCase.execute({ id: 1, reason: 'ab' })).rejects.toBeInstanceOf(ValidationError);
@@ -206,7 +209,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         update: jest.fn(),
       });
 
-      const useCase = new BlockLotUseCase();
+      const useCase = new BlockLotUseCase(inventoryRepository);
 
       await expect(
         useCase.execute({ id: 5, reason: 'Motivo valido' })
@@ -223,7 +226,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
     it('lanca NotFoundError quando lote nao existe', async () => {
       LotControl.findByPk.mockResolvedValue(null);
 
-      const useCase = new BlockLotUseCase();
+      const useCase = new BlockLotUseCase(inventoryRepository);
 
       await expect(
         useCase.execute({ id: 999, reason: 'Motivo valido' })
@@ -233,18 +236,17 @@ describe('Quality Lot Lifecycle (item 8)', () => {
 
   describe('CreateNonConformityUseCase — bloqueio de lote na mesma transacao', () => {
     it('bloqueia o lote referenciado (available -> blocked) na mesma transacao da RNC', async () => {
+      const lotUpdate = jest.fn(async () => ({}));
       const nonConformitiesRepository = {
         create: jest.fn(async () => ({ id: 42, description: 'Defeito', status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 7,
+          lot_number: 'LOT-007',
+          status: 'available',
+          notes: null,
+          update: lotUpdate,
+        })),
       };
-
-      const lotUpdate = jest.fn(async () => ({}));
-      LotControl.findOne.mockResolvedValue({
-        id: 7,
-        lot_number: 'LOT-007',
-        status: 'available',
-        notes: null,
-        update: lotUpdate,
-      });
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
 
@@ -259,8 +261,8 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         expect.objectContaining({ description: 'Defeito visual no produto acabado' }),
         expect.anything()
       );
-      expect(LotControl.findOne).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { product_id: 55, lot_number: 'LOT-007' } })
+      expect(nonConformitiesRepository.findLotForNonConformity).toHaveBeenCalledWith(
+        55, 'LOT-007', expect.anything()
       );
       expect(lotUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -274,18 +276,17 @@ describe('Quality Lot Lifecycle (item 8)', () => {
     });
 
     it('bloqueia lote em quarantine referenciado pela RNC', async () => {
+      const lotUpdate = jest.fn(async () => ({}));
       const nonConformitiesRepository = {
         create: jest.fn(async () => ({ id: 43, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 8,
+          lot_number: 'LOT-008',
+          status: 'quarantine',
+          notes: 'Recebimento PO 100',
+          update: lotUpdate,
+        })),
       };
-
-      const lotUpdate = jest.fn(async () => ({}));
-      LotControl.findOne.mockResolvedValue({
-        id: 8,
-        lot_number: 'LOT-008',
-        status: 'quarantine',
-        notes: 'Recebimento PO 100',
-        update: lotUpdate,
-      });
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
 
@@ -306,9 +307,8 @@ describe('Quality Lot Lifecycle (item 8)', () => {
     it('cria a RNC normalmente sem erro quando o lote referenciado nao e encontrado', async () => {
       const nonConformitiesRepository = {
         create: jest.fn(async () => ({ id: 44, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => null),
       };
-
-      LotControl.findOne.mockResolvedValue(null);
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
 
@@ -326,6 +326,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
     it('nao bloqueia lote quando payload nao informa lot_number', async () => {
       const nonConformitiesRepository = {
         create: jest.fn(async () => ({ id: 45, status: 'open' })),
+        findLotForNonConformity: jest.fn(),
       };
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
@@ -336,7 +337,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         reportedBy: 4,
       });
 
-      expect(LotControl.findOne).not.toHaveBeenCalled();
+      expect(nonConformitiesRepository.findLotForNonConformity).not.toHaveBeenCalled();
     });
 
     it('rejeita criacao sem description antes de abrir transacao', async () => {
@@ -353,21 +354,21 @@ describe('Quality Lot Lifecycle (item 8)', () => {
     it('RNC referenciando lote de fornecedor X reduz o quality_score de X corretamente', async () => {
       const nonConformitiesRepository = {
         create: jest.fn(async (data: any) => ({ id: 50, supplier_id: data.supplier_id, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 9,
+          lot_number: 'LOT-009',
+          status: 'available',
+          supplier_id: 77,
+          notes: null,
+          update: jest.fn(async () => ({})),
+        })),
+        // 10 recebimentos historicos do fornecedor 77, e esta e a 3a RNC dele
+        // (as 2 anteriores + a que acabou de ser criada na mesma transacao,
+        // ja contabilizada porque a RNC e criada ANTES do recalculo).
+        countLotsBySupplier: jest.fn(async () => 10),
+        countNonConformitiesBySupplier: jest.fn(async () => 3),
+        updateSupplierQualityScore: jest.fn(async () => undefined),
       };
-
-      LotControl.findOne.mockResolvedValue({
-        id: 9,
-        lot_number: 'LOT-009',
-        status: 'available',
-        supplier_id: 77,
-        notes: null,
-        update: jest.fn(async () => ({})),
-      });
-      // 10 recebimentos historicos do fornecedor 77, e esta e a 3a RNC dele
-      // (as 2 anteriores + a que acabou de ser criada na mesma transacao,
-      // ja contabilizada porque a RNC e criada ANTES do recalculo).
-      LotControl.count.mockResolvedValue(10);
-      NonConformity.count.mockResolvedValue(3);
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
       await useCase.execute({
@@ -378,34 +379,27 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         reportedBy: 5,
       });
 
-      expect(LotControl.count).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { supplier_id: 77 } })
-      );
-      expect(NonConformity.count).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { supplier_id: 77 } })
-      );
+      expect(nonConformitiesRepository.countLotsBySupplier).toHaveBeenCalledWith(77, expect.anything());
+      expect(nonConformitiesRepository.countNonConformitiesBySupplier).toHaveBeenCalledWith(77, expect.anything());
       // 100 - (3/10 * 100) = 70
-      expect(Supplier.update).toHaveBeenCalledWith(
-        { quality_score: 70 },
-        expect.objectContaining({ where: { id: 77 } })
-      );
+      expect(nonConformitiesRepository.updateSupplierQualityScore).toHaveBeenCalledWith(77, 70, expect.anything());
     });
 
     it('nunca deixa o quality_score negativo (floor em 0) quando rncs_count > receipts_count', async () => {
       const nonConformitiesRepository = {
         create: jest.fn(async (data: any) => ({ id: 51, supplier_id: data.supplier_id, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 10,
+          lot_number: 'LOT-010',
+          status: 'available',
+          supplier_id: 88,
+          notes: null,
+          update: jest.fn(async () => ({})),
+        })),
+        countLotsBySupplier: jest.fn(async () => 2),
+        countNonConformitiesBySupplier: jest.fn(async () => 5),
+        updateSupplierQualityScore: jest.fn(async () => undefined),
       };
-
-      LotControl.findOne.mockResolvedValue({
-        id: 10,
-        lot_number: 'LOT-010',
-        status: 'available',
-        supplier_id: 88,
-        notes: null,
-        update: jest.fn(async () => ({})),
-      });
-      LotControl.count.mockResolvedValue(2);
-      NonConformity.count.mockResolvedValue(5);
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
       await useCase.execute({
@@ -415,15 +409,16 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         reportedBy: 6,
       });
 
-      expect(Supplier.update).toHaveBeenCalledWith(
-        { quality_score: 0 },
-        expect.objectContaining({ where: { id: 88 } })
-      );
+      expect(nonConformitiesRepository.updateSupplierQualityScore).toHaveBeenCalledWith(88, 0, expect.anything());
     });
 
     it('nao recalcula nem afeta rating de ninguem quando a RNC nao referencia lote', async () => {
       const nonConformitiesRepository = {
         create: jest.fn(async () => ({ id: 52, status: 'open' })),
+        findLotForNonConformity: jest.fn(),
+        countLotsBySupplier: jest.fn(),
+        countNonConformitiesBySupplier: jest.fn(),
+        updateSupplierQualityScore: jest.fn(),
       };
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
@@ -433,24 +428,24 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         reportedBy: 7,
       });
 
-      expect(LotControl.count).not.toHaveBeenCalled();
-      expect(NonConformity.count).not.toHaveBeenCalled();
-      expect(Supplier.update).not.toHaveBeenCalled();
+      expect(nonConformitiesRepository.countLotsBySupplier).not.toHaveBeenCalled();
+      expect(nonConformitiesRepository.countNonConformitiesBySupplier).not.toHaveBeenCalled();
+      expect(nonConformitiesRepository.updateSupplierQualityScore).not.toHaveBeenCalled();
     });
 
     it('nao recalcula quando o lote referenciado nao tem fornecedor (ex.: lote de producao interna)', async () => {
       const nonConformitiesRepository = {
         create: jest.fn(async (data: any) => ({ id: 53, supplier_id: data.supplier_id, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 11,
+          lot_number: 'LOT-INTERNO-001',
+          status: 'available',
+          supplier_id: null,
+          notes: null,
+          update: jest.fn(async () => ({})),
+        })),
+        updateSupplierQualityScore: jest.fn(),
       };
-
-      LotControl.findOne.mockResolvedValue({
-        id: 11,
-        lot_number: 'LOT-INTERNO-001',
-        status: 'available',
-        supplier_id: null,
-        notes: null,
-        update: jest.fn(async () => ({})),
-      });
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
       await useCase.execute({
@@ -460,23 +455,24 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         reportedBy: 8,
       });
 
-      expect(Supplier.update).not.toHaveBeenCalled();
+      expect(nonConformitiesRepository.updateSupplierQualityScore).not.toHaveBeenCalled();
     });
 
     it('mantem o default neutro (nao emite UPDATE) quando o fornecedor ainda nao tem nenhum recebimento', async () => {
       const nonConformitiesRepository = {
         create: jest.fn(async (data: any) => ({ id: 54, supplier_id: data.supplier_id, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 12,
+          lot_number: 'LOT-012',
+          status: 'available',
+          supplier_id: 99,
+          notes: null,
+          update: jest.fn(async () => ({})),
+        })),
+        countLotsBySupplier: jest.fn(async () => 0),
+        countNonConformitiesBySupplier: jest.fn(),
+        updateSupplierQualityScore: jest.fn(),
       };
-
-      LotControl.findOne.mockResolvedValue({
-        id: 12,
-        lot_number: 'LOT-012',
-        status: 'available',
-        supplier_id: 99,
-        notes: null,
-        update: jest.fn(async () => ({})),
-      });
-      LotControl.count.mockResolvedValue(0);
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
       await useCase.execute({
@@ -486,28 +482,26 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         reportedBy: 9,
       });
 
-      expect(LotControl.count).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { supplier_id: 99 } })
-      );
-      expect(NonConformity.count).not.toHaveBeenCalled();
-      expect(Supplier.update).not.toHaveBeenCalled();
+      expect(nonConformitiesRepository.countLotsBySupplier).toHaveBeenCalledWith(99, expect.anything());
+      expect(nonConformitiesRepository.countNonConformitiesBySupplier).not.toHaveBeenCalled();
+      expect(nonConformitiesRepository.updateSupplierQualityScore).not.toHaveBeenCalled();
     });
 
     it('cria a RNC com supplier_id herdado do lote quando o payload nao informa supplier_id', async () => {
       const nonConformitiesRepository = {
         create: jest.fn(async (data: any) => ({ id: 55, supplier_id: data.supplier_id, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 13,
+          lot_number: 'LOT-013',
+          status: 'available',
+          supplier_id: 42,
+          notes: null,
+          update: jest.fn(async () => ({})),
+        })),
+        countLotsBySupplier: jest.fn(async () => 4),
+        countNonConformitiesBySupplier: jest.fn(async () => 1),
+        updateSupplierQualityScore: jest.fn(async () => undefined),
       };
-
-      LotControl.findOne.mockResolvedValue({
-        id: 13,
-        lot_number: 'LOT-013',
-        status: 'available',
-        supplier_id: 42,
-        notes: null,
-        update: jest.fn(async () => ({})),
-      });
-      LotControl.count.mockResolvedValue(4);
-      NonConformity.count.mockResolvedValue(1);
 
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
       await useCase.execute({

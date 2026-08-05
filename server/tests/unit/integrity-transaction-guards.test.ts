@@ -52,7 +52,6 @@ import { ValidationError, BusinessRuleError } from '../../src/errors';
 const { sequelize } = require('../../src/config/database');
 const InventoryService = require('../../src/services/inventoryService');
 const CostingService = require('../../src/services/costingService');
-const { LotControl } = require('../../src/models/index');
 
 describe('Integrity transaction guards', () => {
   beforeEach(() => {
@@ -249,6 +248,9 @@ describe('Integrity transaction guards', () => {
       findPurchaseItemsForUpdate: jest.fn(async () => ([
         { id: 81, status: 'partial' },
       ])),
+      createPurchaseReceipt: jest.fn(async () => ({ id: 1 })),
+      findLotForReceipt: jest.fn(async () => null),
+      createLot: jest.fn(async () => ({ id: 1 })),
     };
 
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
@@ -264,15 +266,15 @@ describe('Integrity transaction guards', () => {
     expect(purchaseRepository.findPurchaseWithItemsForUpdate).toHaveBeenCalledWith(8, transaction);
     expect(purchaseRepository.findPurchaseItemsForUpdate).toHaveBeenCalledWith(8, transaction);
     expect(InventoryService.receive).toHaveBeenCalledTimes(1);
-    expect(LotControl.create).toHaveBeenCalledTimes(1);
+    expect(purchaseRepository.createLot).toHaveBeenCalledTimes(1);
     // Item 8 do levantamento (qualidade fecha o loop): lotes de recebimento
     // de compra nascem em 'quarantine' (nao mais 'available'), bloqueando o
     // CONSUMO por lote ate a inspecao liberar via POST /lots/:id/release. O
     // estoque fisico (products.quantity) continua entrando normalmente via
     // InventoryService.receive, ja verificado acima.
-    expect(LotControl.create).toHaveBeenCalledWith(
+    expect(purchaseRepository.createLot).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'quarantine' }),
-      expect.anything()
+      transaction
     );
     expect(CostingService.registerWeightedAverageCost).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith({ transaction });

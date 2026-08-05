@@ -76,6 +76,9 @@ import { logAction } from '../../src/services/auditLogService';
 
 import IssueSaleNfeUseCase = require('../../src/modules/fiscal/application/use-cases/IssueSaleNfeUseCase');
 import CancelSaleNfeUseCase = require('../../src/modules/fiscal/application/use-cases/CancelSaleNfeUseCase');
+import SequelizeFiscalRepository = require('../../src/modules/fiscal/infrastructure/sequelize/SequelizeFiscalRepository');
+
+const fiscalRepository = new SequelizeFiscalRepository();
 
 function mockRes() {
   const res: any = {};
@@ -185,7 +188,7 @@ describe('RBAC de NF-e no modulo Vendas (UC-41, Bloco 5)', () => {
       error_message: null,
     });
 
-    const useCase = new IssueSaleNfeUseCase();
+    const useCase = new IssueSaleNfeUseCase(fiscalRepository);
     const result = await useCase.execute({ saleId: 55 });
 
     expect(mockProviderIssue).toHaveBeenCalledTimes(1);
@@ -221,7 +224,7 @@ describe('RBAC de NF-e no modulo Vendas (UC-41, Bloco 5)', () => {
     mockCompanyFiscalConfigFindByPk.mockResolvedValue({ id: 1, nfe_provider: 'mock' });
     mockProviderCancel.mockResolvedValue({ status: 'cancelled' });
 
-    const useCase = new CancelSaleNfeUseCase();
+    const useCase = new CancelSaleNfeUseCase(fiscalRepository);
     const result = await useCase.execute({ saleId: 77, reason: 'Cancelamento solicitado pelo cliente apos embarque' });
 
     expect(mockProviderCancel).toHaveBeenCalledWith('ref-77', 'Cancelamento solicitado pelo cliente apos embarque');

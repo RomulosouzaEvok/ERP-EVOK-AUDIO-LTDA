@@ -1,6 +1,19 @@
-const { Op, col } = require('sequelize');
+import type { Transaction } from 'sequelize';
+
+const { Op, col, Transaction: SequelizeTransaction } = require('sequelize');
 const InventoryRepository = require('../../domain/repositories/InventoryRepository');
-const { InventoryMovement, Product, User, Category, Item } = require('../../../../models/index');
+const {
+  InventoryMovement,
+  Product,
+  User,
+  Category,
+  Item,
+  Warehouse,
+  WarehouseTransfer,
+  ProductWarehouseStock,
+  LotControl,
+  Supplier
+} = require('../../../../models/index');
 
 /**
  * Implementação Sequelize/PostgreSQL do contrato `InventoryRepository`.
@@ -94,6 +107,129 @@ class SequelizeInventoryRepository extends InventoryRepository {
       include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }],
       order: [['name', 'ASC']]
     });
+  }
+
+  /** @inheritdoc */
+  async findProductById(id: number | string) {
+    return Product.findByPk(id);
+  }
+
+  /** @inheritdoc */
+  async createInventoryMovement(data: Record<string, unknown>, transaction?: Transaction) {
+    return InventoryMovement.create(data, { transaction });
+  }
+
+  /** @inheritdoc */
+  async findWarehouseByCode(code: string) {
+    return Warehouse.findOne({ where: { code } });
+  }
+
+  /** @inheritdoc */
+  async findWarehouseById(id: number | string) {
+    return Warehouse.findByPk(id);
+  }
+
+  /** @inheritdoc */
+  async listActiveWarehouses() {
+    return Warehouse.findAll({
+      where: { active: true },
+      order: [['code', 'ASC']]
+    });
+  }
+
+  /** @inheritdoc */
+  async createWarehouse(data: Record<string, unknown>) {
+    return Warehouse.create(data);
+  }
+
+  /** @inheritdoc */
+  async findWarehouseTransferForUpdate(id: number | string, transaction: Transaction) {
+    return WarehouseTransfer.findByPk(id, {
+      transaction,
+      lock: SequelizeTransaction.LOCK.UPDATE
+    });
+  }
+
+  /** @inheritdoc */
+  async createWarehouseTransfer(data: Record<string, unknown>) {
+    return WarehouseTransfer.create(data);
+  }
+
+  /** @inheritdoc */
+  async listWarehouseTransfers(where: Record<string, unknown> = {}) {
+    return WarehouseTransfer.findAll({
+      where,
+      include: [
+        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+        { model: Warehouse, as: 'fromWarehouse', attributes: ['id', 'code', 'name'] },
+        { model: Warehouse, as: 'toWarehouse', attributes: ['id', 'code', 'name'] },
+        { model: User, as: 'requestedBy', attributes: ['id', 'name', 'email'] },
+        { model: User, as: 'approvedBy', attributes: ['id', 'name', 'email'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+  }
+
+  /** @inheritdoc */
+  async listWarehouseStock(where: Record<string, unknown> = {}, warehouseWhere: Record<string, unknown> = {}, pagination: any = {}) {
+    const { count, rows } = await ProductWarehouseStock.findAndCountAll({
+      where,
+      include: [
+        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+        { model: Warehouse, as: 'warehouse', attributes: ['id', 'code', 'name'], where: warehouseWhere }
+      ],
+      limit: pagination.limit,
+      offset: pagination.offset,
+      order: [['product_id', 'ASC']]
+    });
+    return { rows, count };
+  }
+
+  /** @inheritdoc */
+  async findLotById(id: number | string) {
+    return LotControl.findByPk(id);
+  }
+
+  /** @inheritdoc */
+  async findLotByCodeForProduct(where: Record<string, unknown>) {
+    return LotControl.findOne({
+      where,
+      include: [
+        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+        { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] },
+        { model: Warehouse, as: 'warehouse', attributes: ['id', 'code', 'name'] }
+      ],
+      order: [['createdAt', 'ASC']]
+    });
+  }
+
+  /** @inheritdoc */
+  async findLotsByCode(where: Record<string, unknown>) {
+    return LotControl.findAll({
+      where,
+      include: [
+        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+        { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] },
+        { model: Warehouse, as: 'warehouse', attributes: ['id', 'code', 'name'] }
+      ],
+      order: [['createdAt', 'ASC']],
+      limit: 2
+    });
+  }
+
+  /** @inheritdoc */
+  async listLots(where: Record<string, unknown> = {}, pagination: any = {}) {
+    const { count, rows } = await LotControl.findAndCountAll({
+      where,
+      include: [
+        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+        { model: Supplier, as: 'supplier', attributes: ['id', 'company_name'] }
+      ],
+      limit: pagination.limit,
+      offset: pagination.offset,
+      order: [['createdAt', 'ASC']]
+    });
+    return { rows, count };
   }
 }
 

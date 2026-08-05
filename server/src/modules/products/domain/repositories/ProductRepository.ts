@@ -24,6 +24,14 @@ export interface ProductListPagination {
  * `Sale`, `SaleItem`, `BillOfMaterial`), cuja forma real só é conhecida em
  * runtime.
  */
+/** Saldo de um produto em um depósito, retornado por {@link IProductRepository.getWarehouseStockSummary}. */
+export interface ProductWarehouseStockRow {
+  warehouse_id: number;
+  warehouse_code: string;
+  warehouse_name: string;
+  quantity: number;
+}
+
 export interface IProductRepository {
   list(filters: ProductListFilters, pagination: ProductListPagination): Promise<{ rows: any[]; count: number }>;
   findById(id: number | string, options?: Record<string, unknown>): Promise<any | null>;
@@ -32,6 +40,7 @@ export interface IProductRepository {
   update(id: number | string, data: Record<string, unknown>): Promise<any | null>;
   countActiveSales(productId: number | string): Promise<number>;
   countActiveBomLinks(productId: number | string): Promise<number>;
+  getWarehouseStockSummary(productId: number | string): Promise<ProductWarehouseStockRow[]>;
 }
 
 class ProductRepository {
@@ -61,6 +70,21 @@ class ProductRepository {
 
   async countActiveBomLinks(productId: number | string): Promise<number> { // eslint-disable-line no-unused-vars
     throw new Error('ProductRepository.countActiveBomLinks não implementado.');
+  }
+
+  /**
+   * Saldo de um produto em TODOS os depósitos ativos (leitura cross-module
+   * pontual — `Warehouse`/`ProductWarehouseStock` pertencem ao domínio de
+   * estoque/depósito, mas o use case pertence a `products`). Inclui
+   * depósitos sem nenhuma linha em `ProductWarehouseStock` para o produto
+   * (saldo tratado como `0`).
+   *
+   * @abstract
+   * @param {number|string} productId
+   * @returns {Promise<Array<{warehouse_id:number, warehouse_code:string, warehouse_name:string, quantity:number}>>}
+   */
+  async getWarehouseStockSummary(productId: number | string): Promise<any[]> { // eslint-disable-line no-unused-vars
+    throw new Error('ProductRepository.getWarehouseStockSummary não implementado.');
   }
 }
 

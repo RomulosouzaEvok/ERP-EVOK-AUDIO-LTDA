@@ -8,7 +8,7 @@ import UseCase from '../../../../shared/application/UseCase';
 import { ConflictError, NotFoundError } from '../../../../errors';
 import ItemRepository from '../../domain/repositories/ItemRepository';
 import ItemSupplierRepository from '../../domain/repositories/ItemSupplierRepository';
-const { Supplier, sequelize } = require('../../../../models/index');
+const { sequelize } = require('../../../../models/index');
 
 interface CreateItemSupplierInput {
   itemId: string;
@@ -46,7 +46,7 @@ class CreateItemSupplierUseCase extends UseCase<CreateItemSupplierInput, any> {
       throw new NotFoundError('Item nao encontrado.');
     }
 
-    const supplier = await Supplier.findByPk(input.supplier_id);
+    const supplier = await this.itemSupplierRepository.findSupplierById(input.supplier_id);
     if (!supplier) {
       throw new NotFoundError('Fornecedor nao encontrado.');
     }

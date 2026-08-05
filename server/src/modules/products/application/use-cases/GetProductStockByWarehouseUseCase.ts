@@ -1,7 +1,5 @@
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError } = require('../../../../errors');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Warehouse, ProductWarehouseStock } = require('../../../../models/index');
 import type { IProductRepository } from '../../domain/repositories/ProductRepository';
 
 /**
@@ -47,23 +45,11 @@ class GetProductStockByWarehouseUseCase extends UseCase {
     const product = await this.productRepository.findById(id, { withCategory: false });
     if (!product) throw new NotFoundError('Produto não encontrado');
 
-    const [warehouses, stocks] = await Promise.all([
-      Warehouse.findAll({ where: { active: true }, order: [['code', 'ASC']] }),
-      ProductWarehouseStock.findAll({ where: { product_id: product.id } }),
-    ]);
-
-    const stockByWarehouseId = new Map(stocks.map((s: any) => [s.warehouse_id, Number(s.quantity)]));
-
-    const result = warehouses.map((w: any) => ({
-      warehouse_id: w.id,
-      warehouse_code: w.code,
-      warehouse_name: w.name,
-      quantity: stockByWarehouseId.get(w.id) ?? 0,
-    }));
+    const warehouses = await this.productRepository.getWarehouseStockSummary(product.id);
 
     return {
       product: { id: product.id, code: product.code, name: product.name, quantity: product.quantity },
-      warehouses: result,
+      warehouses,
     };
   }
 }
