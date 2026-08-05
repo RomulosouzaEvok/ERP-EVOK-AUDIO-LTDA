@@ -4,46 +4,17 @@
  * @module tests/integration/traceability.test
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { hasIntegrationPrerequisites } = require('../helpers/testApi');
+import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
 describeIntegration('Traceability Integration Tests', () => {
-  let authToken: string | undefined;
-
-  beforeAll(async () => {
-
-    const request = require('supertest'); // eslint-disable-line @typescript-eslint/no-var-requires
-    const expressApp = require('../../app'); // eslint-disable-line @typescript-eslint/no-var-requires
-
-    const adminSeedPassword = process.env.ADMIN_SEED_PASSWORD;
-    const jwtSecret = process.env.JWT_SECRET;
-
-    if (!adminSeedPassword) throw new Error('[integration:traceability] ADMIN_SEED_PASSWORD ausente.');
-    if (!jwtSecret || jwtSecret.length < 32) throw new Error('[integration:traceability] JWT_SECRET ausente ou muito curto.');
-
-    const loginResponse = await request(expressApp)
-      .post('/api/auth/login')
-      .send({ email: 'admin@evokaudio.com.br', password: adminSeedPassword });
-
-    const tokenFromBody = loginResponse.body?.data?.token ?? loginResponse.body?.token;
-    if (!tokenFromBody) {
-      throw new Error(`[integration:traceability] Falha no login. Response: ${JSON.stringify(loginResponse.body)}`);
-    }
-
-    authToken = tokenFromBody;
-  });
-
   it('GET /api/traceability/items/:id - id invalido deve retornar 400', async () => {
-    if (!authToken) return;
+    const token = authToken();
 
-    const request = require('supertest'); // eslint-disable-line @typescript-eslint/no-var-requires
-    const expressApp = require('../../app'); // eslint-disable-line @typescript-eslint/no-var-requires
-
-    const response = await request(expressApp)
+    const response = await api()
       .get('/api/traceability/items/invalid-id')
-      .set('Authorization', `Bearer ${authToken}`);
+      .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(400);
     expect(response.body?.success).toBe(false);

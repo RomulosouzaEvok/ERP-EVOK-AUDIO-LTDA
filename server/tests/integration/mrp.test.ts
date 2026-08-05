@@ -4,44 +4,17 @@
  * @module tests/integration/mrp.test
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const request = require('supertest'); // CommonJS for Jest/SWC compatibility
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const expressApp = require('../../app');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { hasIntegrationPrerequisites } = require('../helpers/testApi');
+import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
 describeIntegration('MRP Integration Tests', () => {
-  let authToken: string | undefined;
-
-  beforeAll(async () => {
-
-    const adminSeedPassword = process.env.ADMIN_SEED_PASSWORD;
-    const jwtSecret = process.env.JWT_SECRET;
-
-    if (!adminSeedPassword) throw new Error('[integration:mrp] ADMIN_SEED_PASSWORD ausente.');
-    if (!jwtSecret || jwtSecret.length < 32) throw new Error('[integration:mrp] JWT_SECRET ausente ou muito curto.');
-
-    const loginResponse = await request(expressApp)
-      .post('/api/auth/login')
-      .send({ email: 'admin@evokaudio.com.br', password: adminSeedPassword });
-
-    const tokenFromBody = loginResponse.body?.data?.token ?? loginResponse.body?.token;
-    if (!tokenFromBody) {
-      throw new Error(`[integration:mrp] Falha no login. Response: ${JSON.stringify(loginResponse.body)}`);
-    }
-
-    authToken = tokenFromBody;
-  });
-
   it('POST /api/mrp/plan - deve gerar ordens planejadas', async () => {
-    if (!authToken) return;
+    const token = authToken();
 
-    const response = await request(expressApp)
+    const response = await api()
       .post('/api/mrp/plan')
-      .set('Authorization', `Bearer ${authToken}`)
+      .set('Authorization', `Bearer ${token}`)
       .send({
         demands: [
           {

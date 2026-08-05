@@ -106,7 +106,7 @@ function waitForReady(url, timeoutMs) {
 
 async function ensureFixtures() {
   const models = require(path.join(serverDir, 'dist', 'src', 'models', 'index.js'));
-  const { sequelize, User, Supplier, Product, BillOfMaterial, CompanyFiscalConfig, Warehouse, ProductWarehouseStock } = models;
+  const { sequelize, User, Supplier, Product, BillOfMaterial, CompanyFiscalConfig, Warehouse, ProductWarehouseStock, Item } = models;
 
   try {
     await sequelize.authenticate();
@@ -292,6 +292,32 @@ async function ensureFixtures() {
         nfe_next_number: 1,
         nfe_environment: 'homologacao',
         nfe_provider: 'mock',
+      },
+    });
+
+    // `purchase-requisitions.test.ts` consome `GET /api/items` esperando
+    // pelo menos 1 registro — o schema novo (`Item`, Fase 4) nunca tinha
+    // fixture nesta suite (só o legado `Product` acima), entao o teste
+    // sempre recebia lista vazia e falhava em `expect(itemId).toBeTruthy()`
+    // (achado em 2026-08-05 ao rodar a suite de integracao pela primeira
+    // vez contra um banco de teste isolado). `GET /api/items` nao faz
+    // JOIN com `ItemDetalheComercial`/`ItemEspecificacaoTecnica`
+    // (confirmado em SequelizeItemRepository.list — sem `include`), entao
+    // um `Item` puro basta.
+    await Item.findOrCreate({
+      where: { codigo: 'CI-ITEM-001' },
+      defaults: {
+        codigo: 'CI-ITEM-001',
+        descricao: 'Item CI (fixture automatizada de testes API)',
+        tipo: 'MATERIA_PRIMA',
+        unidade: 'un',
+        status: 'ATIVO',
+        estoque_atual: 100,
+        estoque_reservado: 0,
+        estoque_seguranca: 0,
+        lote_minimo: 1,
+        lead_time_dias: 1,
+        custo_padrao: 5,
       },
     });
 
