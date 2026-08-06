@@ -196,13 +196,19 @@ export interface InventoryCount {
   items?: InventoryCountItem[];
 }
 
-/** `GET /api/inventory-counts`. */
+/**
+ * `GET /api/inventory-counts`. O backend também aceita `count_type` como
+ * filtro de listagem (`ListInventoryCountsUseCase`), mas nenhum consumidor
+ * atual — nem este painel web, nem o app mobile (`mobile/src/api/inventoryCounts.ts`,
+ * que só filtra por `status`/`assigned_to`/`unassigned`) — o utiliza; por
+ * isso o parâmetro foi removido daqui. Reintroduza apenas quando uma tela
+ * realmente precisar filtrar por tipo de contagem (cíclica/geral/pontual).
+ */
 export async function listInventoryCounts(
   params: {
     page?: number;
     limit?: number;
     status?: InventoryCountStatus;
-    count_type?: InventoryCountType;
     /** Filtra por funcionário atribuído. Aceita o `id` do usuário ou o atalho `'me'` (usuário autenticado). */
     assigned_to?: number | 'me';
     /** Quando `true`, retorna apenas contagens do "pool" (sem responsável). Tem prioridade sobre `assigned_to`. */

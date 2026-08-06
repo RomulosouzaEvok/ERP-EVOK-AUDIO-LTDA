@@ -75,8 +75,6 @@ export default function HomeScreen() {
           setErrorMessage('Produto não encontrado para o código informado.');
         } else if (error.status === 403) {
           setErrorMessage('Seu perfil não tem permissão para movimentar estoque. Fale com o administrador.');
-        } else if (error.status === 400 || error.status === 422) {
-          setErrorMessage(error.message);
         } else {
           setErrorMessage(error.message);
         }

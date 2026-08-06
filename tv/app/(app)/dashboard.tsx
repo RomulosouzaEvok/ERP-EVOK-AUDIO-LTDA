@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import DepartmentCard from '../../src/components/DepartmentCard';
+import FocusablePressable from '../../src/components/FocusablePressable';
 import { useAuth } from '../../src/context/AuthContext';
 import { useDepartmentDemands } from '../../src/api/useDepartmentDemands';
 
@@ -23,10 +24,8 @@ function formatRelativeTime(timestampMs: number, nowMs: number): string {
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
-  const { data, isInitialLoading, isRefreshing, lastUpdatedAt, lastError } = useDepartmentDemands(
-    true,
-    logout
-  );
+  const { data, isInitialLoading, isRefreshing, lastUpdatedAt, lastError, isForbidden } =
+    useDepartmentDemands(true, logout);
 
   // Re-renderiza a cada segundo só para manter o texto "há Xs" vivo no rodapé.
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -34,6 +33,23 @@ export default function DashboardScreen() {
     const tick = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
+
+  // Rodapé discreto de logout (canto da tela) — cobre o caso de a TV ter
+  // sido logada com o usuário errado. Fica escondido atrás de uma
+  // confirmação simples para não ser disparado sem querer no D-pad.
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleConfirmLogout = useCallback(async () => {
+    setShowLogoutConfirm(false);
+    await logout();
+  }, [logout]);
+
+  // Saída dedicada da tela de "sem permissão" — decisão já é explícita
+  // (o usuário está olhando para uma tela inteira dizendo que precisa
+  // trocar de usuário), então não pede confirmação extra.
+  const handleSwitchUser = useCallback(async () => {
+    await logout();
+  }, [logout]);
 
   const renderStatus = useCallback(() => {
     if (lastError) {
@@ -62,6 +78,27 @@ export default function DashboardScreen() {
     );
   }
 
+  // 403: o usuário logado neste aparelho não tem permissão para o módulo
+  // `dashboard`. Não adianta ficar retentando sozinho — mostra uma saída
+  // clara e persistente em vez do loop eterno de "erro ao atualizar".
+  if (isForbidden) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.forbiddenTitle}>
+          Este usuário não tem permissão para ver o painel
+        </Text>
+        <Text style={styles.forbiddenSubtitle}>Entre com outro usuário para continuar.</Text>
+        <FocusablePressable
+          onPress={handleSwitchUser}
+          style={styles.forbiddenButton}
+          hasTVPreferredFocus
+        >
+          <Text style={styles.forbiddenButtonText}>Trocar usuário</Text>
+        </FocusablePressable>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -80,6 +117,30 @@ export default function DashboardScreen() {
           <Text style={styles.emptyText}>Nenhum departamento cadastrado.</Text>
         ) : null}
       </ScrollView>
+
+      <View style={styles.footer}>
+        {showLogoutConfirm ? (
+          <View style={styles.logoutConfirmRow}>
+            <Text style={styles.logoutConfirmText}>Sair do painel?</Text>
+            <FocusablePressable onPress={handleConfirmLogout} style={styles.footerConfirmButton}>
+              <Text style={styles.footerConfirmButtonText}>Confirmar</Text>
+            </FocusablePressable>
+            <FocusablePressable
+              onPress={() => setShowLogoutConfirm(false)}
+              style={styles.footerCancelButton}
+            >
+              <Text style={styles.footerCancelButtonText}>Cancelar</Text>
+            </FocusablePressable>
+          </View>
+        ) : (
+          <FocusablePressable
+            onPress={() => setShowLogoutConfirm(true)}
+            style={styles.footerLogoutButton}
+          >
+            <Text style={styles.footerLogoutButtonText}>Sair</Text>
+          </FocusablePressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -139,5 +200,78 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#64748B',
     fontSize: 16,
+  },
+  forbiddenTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    textAlign: 'center',
+    paddingHorizontal: 48,
+  },
+  forbiddenSubtitle: {
+    fontSize: 16,
+    color: '#94A3B8',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  forbiddenButton: {
+    marginTop: 32,
+    backgroundColor: '#38BDF8',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+  },
+  forbiddenButtonText: {
+    color: '#0F172A',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  // Rodapé discreto: não deve competir visualmente com o painel de demandas.
+  footer: {
+    alignItems: 'flex-end',
+    paddingVertical: 10,
+  },
+  footerLogoutButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  footerLogoutButtonText: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  logoutConfirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoutConfirmText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginRight: 4,
+  },
+  footerConfirmButton: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  footerConfirmButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  footerCancelButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  footerCancelButtonText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

@@ -7023,3 +7023,17 @@ HTTP 409.
 ### Riscos residuais
 - A lógica de "corrida" (dois usuários tentando iniciar a MESMA contagem do pool simultaneamente) foi validada com lock pessimista dentro de transação e coberta por teste unitário com repositório mockado — **não há teste de integração contra PostgreSQL real** exercitando a concorrência de fato (exigiria dois clients simultâneos contra um banco real). Recomenda-se um teste de integração dedicado antes do Go-Live se esse fluxo for crítico em produção.
 - Nenhuma tela de frontend (web ou mobile) foi criada ou alterada — os novos filtros/campo só existem na API até que `PromadorFonteEnd` (web) ou o time do app mobile os consumam.
+
+> **Nota de atualização (2026-08-06, mesmo dia da entrega acima):** a
+> observação "nenhuma tela de frontend foi criada ou alterada" ficou
+> desatualizada ainda no mesmo dia — **não é uma reescrita do registro
+> original**, apenas o registro de que o consumo aconteceu logo em
+> seguida. Web: `client/src/pages/products/InventoryCountsPage.tsx`
+> ganhou o campo "Atribuir a" na criação da contagem e um filtro por
+> atribuição na listagem. Mobile: `mobile/app/(app)/counts/` (tela de
+> lista + detalhe de contagem) passou a consumir o pool/atribuição e o
+> claim atômico descritos acima. Ver a entrada 2026-08-06 de
+> `docs/DIARIO_BORDO_GO_LIVE_G6.md` para o relato completo (apps
+> `mobile/`/`tv/` novos + esta feature de atribuição, incluindo um bug P0
+> real encontrado nesse mesmo consumo do campo "Atribuir a" na web e
+> corrigido no mesmo dia).

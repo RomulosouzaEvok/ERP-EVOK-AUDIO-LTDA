@@ -7,6 +7,7 @@ import { Plus, TrendingUp, TrendingDown, Scale, AlarmClock, AlertTriangle, Walle
 
 import * as financialApi from '@/api/financial';
 import { extractApiErrorMessage } from '@/api/httpClient';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -61,6 +62,11 @@ type PayableFormData = z.infer<typeof payableSchema>;
 
 /** `FE5`: contas a pagar/receber e fluxo de caixa agregado por período. */
 export default function FinancialPage() {
+  const { hasRole } = useAuth();
+  // Perfil `financial` é somente-leitura no módulo Financeiro (CLAUDE.md §4 —
+  // "financial (leitura financeira)"); mesmo padrão `canWrite` de
+  // `SuppliersPage`/`ClientsPage`, aqui restrito a admin/operator.
+  const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
@@ -121,63 +127,69 @@ export default function FinancialPage() {
       <Card className="border-l-4 border-l-brand/40">
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>Contas a pagar</CardTitle>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus /> Nova conta a pagar
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Nova conta a pagar</DialogTitle>
-              </DialogHeader>
-              <form
-                className="flex flex-col gap-3"
-                onSubmit={handleSubmit((values) =>
-                  createMutation.mutate({ ...values, invoice_type: values.invoice_type || undefined }),
-                )}
-                noValidate
-              >
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="description">Descrição</Label>
-                  <Input id="description" {...register('description')} />
-                  {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+          {canWrite ? (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus /> Nova conta a pagar
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Nova conta a pagar</DialogTitle>
+                </DialogHeader>
+                <form
+                  className="flex flex-col gap-3"
+                  onSubmit={handleSubmit((values) =>
+                    createMutation.mutate({ ...values, invoice_type: values.invoice_type || undefined }),
+                  )}
+                  noValidate
+                >
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="amount">Valor</Label>
-                    <Input id="amount" type="number" step="any" {...register('amount')} />
-                    {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
+                    <Label htmlFor="description">Descrição</Label>
+                    <Input id="description" {...register('description')} />
+                    {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="amount">Valor</Label>
+                      <Input id="amount" type="number" step="any" {...register('amount')} />
+                      {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="due_date">Vencimento</Label>
+                      <Input id="due_date" type="date" {...register('due_date')} />
+                      {errors.due_date && <p className="text-sm text-destructive">{errors.due_date.message}</p>}
+                    </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="due_date">Vencimento</Label>
-                    <Input id="due_date" type="date" {...register('due_date')} />
-                    {errors.due_date && <p className="text-sm text-destructive">{errors.due_date.message}</p>}
+                    <Label htmlFor="invoice_type">Tipo de nota</Label>
+                    <SelectNative id="invoice_type" defaultValue="" {...register('invoice_type')}>
+                      <option value="">Não informado</option>
+                      {Object.entries(INVOICE_TYPE_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </SelectNative>
+                    <p className="text-xs text-muted-foreground">
+                      NF-e para mercadoria/matéria-prima; NFS-e para serviço ou licença digital recebida de fornecedor.
+                    </p>
                   </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="invoice_type">Tipo de nota</Label>
-                  <SelectNative id="invoice_type" defaultValue="" {...register('invoice_type')}>
-                    <option value="">Não informado</option>
-                    {Object.entries(INVOICE_TYPE_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </SelectNative>
-                  <p className="text-xs text-muted-foreground">
-                    NF-e para mercadoria/matéria-prima; NFS-e para serviço ou licença digital recebida de fornecedor.
-                  </p>
-                </div>
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
-                <DialogFooter>
-                  <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
-                    {isSubmitting ? 'Salvando...' : 'Criar conta'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  {formError && <p className="text-sm text-destructive">{formError}</p>}
+                  <DialogFooter>
+                    <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
+                      {isSubmitting ? 'Salvando...' : 'Criar conta'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Criação de contas restrita aos perfis com escrita no módulo Financeiro.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <Table>
@@ -220,18 +232,21 @@ export default function FinancialPage() {
                       <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
                     </TableCell>
                     <TableCell>
-                      {(account.status === 'pending' || account.status === 'partial' || account.status === 'overdue') && (
-                        <Button
-                          size="sm"
-                          disabled={payMutation.isPending}
-                          onClick={() => {
-                            const amount = promptPaymentAmount(remaining);
-                            if (amount !== undefined) payMutation.mutate({ id: account.id, amount });
-                          }}
-                        >
-                          Registrar pagamento
-                        </Button>
-                      )}
+                      {(account.status === 'pending' || account.status === 'partial' || account.status === 'overdue') &&
+                        (canWrite ? (
+                          <Button
+                            size="sm"
+                            disabled={payMutation.isPending}
+                            onClick={() => {
+                              const amount = promptPaymentAmount(remaining);
+                              if (amount !== undefined) payMutation.mutate({ id: account.id, amount });
+                            }}
+                          >
+                            Registrar pagamento
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Somente leitura</span>
+                        ))}
                     </TableCell>
                   </TableRow>
                 );
@@ -288,18 +303,21 @@ export default function FinancialPage() {
                       <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
                     </TableCell>
                     <TableCell>
-                      {(account.status === 'pending' || account.status === 'partial' || account.status === 'overdue') && (
-                        <Button
-                          size="sm"
-                          disabled={receiveMutation.isPending}
-                          onClick={() => {
-                            const amount = promptPaymentAmount(remaining);
-                            if (amount !== undefined) receiveMutation.mutate({ id: account.id, amount });
-                          }}
-                        >
-                          Registrar recebimento
-                        </Button>
-                      )}
+                      {(account.status === 'pending' || account.status === 'partial' || account.status === 'overdue') &&
+                        (canWrite ? (
+                          <Button
+                            size="sm"
+                            disabled={receiveMutation.isPending}
+                            onClick={() => {
+                              const amount = promptPaymentAmount(remaining);
+                              if (amount !== undefined) receiveMutation.mutate({ id: account.id, amount });
+                            }}
+                          >
+                            Registrar recebimento
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Somente leitura</span>
+                        ))}
                     </TableCell>
                   </TableRow>
                 );

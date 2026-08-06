@@ -25,7 +25,7 @@ export interface DepartmentDemandItem {
   reference: string;
   status: string;
   due_date: string | null;
-  label: string;
+  label: string | null;
 }
 
 export interface DepartmentDemandGroup {

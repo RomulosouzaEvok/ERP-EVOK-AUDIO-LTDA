@@ -1129,8 +1129,16 @@ Rejeita uma transferência pendente (`authorizeModule('estoque', 'approve')`), c
 
 Base URL: `/api/inventory-counts`. Todas as rotas exigem JWT válido
 (`authenticate`) e `authorizeModule('contagens', ...)` — leituras exigem
-`view` implícito, escritas comuns exigem `operate`, aprovar/rejeitar exigem
-`approve`.
+`view` implícito, escritas comuns exigem `operate`, aprovar/rejeitar/reatribuir
+exigem `approve`.
+
+O app mobile (`mobile/`, construído em paralelo em outro time — mesma
+lógica de paridade do app Android TV citado na seção 14) é o consumidor
+principal do fluxo de contagem cíclica no chão de fábrica: lista/filtra
+contagens (`GET /api/inventory-counts?assigned_to=me`/`unassigned=true`),
+inicia (`POST /:id/start`) e registra as quantidades contadas
+(`POST /:id/items/:itemId/count`). O painel web é usado para criar
+contagens, aprovar/rejeitar e reatribuir.
 
 Workflow de status: `draft` → `counting` → `pending_approval` → `approved`
 → `adjusted` (ou `pending_approval` → `rejected`).
@@ -1144,6 +1152,9 @@ Toda contagem tem um campo opcional `assigned_to` (id de usuário):
 - **Pool:** `assigned_to` ausente/`null` na criação — qualquer funcionário
   autorizado (`operate` em `contagens`, mesmo depósito) pode "pegar" a
   contagem chamando `POST /:id/start`.
+- Em criação e reatribuição, `assigned_to` (quando informado e não-`null`)
+  precisa apontar para um usuário que existe e está ATIVO — caso
+  contrário, **422** `BUSINESS_RULE_VIOLATION` com mensagem didática.
 
 ### POST /api/inventory-counts
 Cria uma contagem (`status='draft'`) (`authorizeModule('contagens', 'operate')`).
@@ -1191,10 +1202,49 @@ Resolve a atribuição de forma atômica:
 - Contagem no pool (`assigned_to IS NULL`): faz o **claim** — `assigned_to`
   passa a ser o usuário logado. Em corrida entre dois usuários, apenas um
   vence (lock pessimista `SELECT ... FOR UPDATE` dentro de transação).
-- Contagem já atribuída a **outro** usuário: rejeita com **409
-  Conflict** — `{ "success": false, "error": { "code": "CONFLICT", "message": "Esta contagem já foi atribuída a outro funcionário." } }`.
+- Contagem já atribuída a **outro** usuário e quem inicia **não é
+  `admin`**: rejeita com **409 Conflict** — `{ "success": false, "error": { "code": "CONFLICT", "message": "Esta contagem já foi atribuída a outro funcionário." } }`.
+- Contagem já atribuída a **outro** usuário e quem inicia **é `admin`**:
+  **override permitido** (achado de auditoria 2026-08-06, item 1b) — a
+  contagem passa a ser do admin, sem erro. Auditado (`AuditLog`) com
+  `oldValues.assigned_to` (responsável anterior) e
+  `newValues.assigned_to` (admin) para rastreabilidade.
 - Contagem já atribuída ao **próprio** usuário: segue normalmente
   (idempotente, nenhuma reatribuição).
+
+### PUT /api/inventory-counts/:id/reassign
+Reatribui a contagem a outro funcionário, ou devolve ao pool
+(`authorizeModule('contagens', 'approve')`, exclusivo de gestor/admin —
+achado de auditoria 2026-08-06, item 1a). Corrige o cenário em que uma
+contagem atribuída a um funcionário de férias/desligado ficava presa em
+`draft` para sempre, sem nenhuma via oficial de recuperação além de
+`UPDATE` manual no banco.
+
+**Request:**
+```json
+{ "assigned_to": 42 }
+```
+`assigned_to` é **obrigatório** no payload (pode ser `null` para devolver
+ao pool — a intenção precisa ser explícita, o campo não pode ser
+omitido). Quando não-`null`, precisa ser um usuário ativo (ver acima).
+
+Só permitido com a contagem em `draft` ou `counting` — **422**
+`BUSINESS_RULE_VIOLATION` caso contrário, com `details`:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BUSINESS_RULE_VIOLATION",
+    "message": "Apenas contagens em status 'draft' ou 'counting' podem ser reatribuídas. Status atual: 'pending_approval'.",
+    "details": { "current_status": "pending_approval", "allowed_statuses": ["draft", "counting"] }
+  }
+}
+```
+
+**Response:** `200 OK`, mesmo formato de `GET /api/inventory-counts/:id`
+(contagem atualizada, com `assigned_to`/`assignedTo` refletindo a nova
+atribuição). Auditado com `oldValues.assigned_to` (anterior) e
+`newValues.assigned_to` (novo).
 
 ### POST /api/inventory-counts/:id/items/:itemId/count
 Registra a quantidade contada de um item (`authorizeModule('contagens', 'operate')`).

@@ -1,8 +1,28 @@
 # 📦 Deploy PostgreSQL em Docker Compose — Ubuntu 24.04
 
-**Data:** 2 de agosto de 2026  
-**Ambiente:** PostgreSQL 16 (Alpine) + API Node.js  
+**Data:** 2 de agosto de 2026 (revisado 2026-08-06)
+**Ambiente:** PostgreSQL 16 (Alpine) + API Node.js
 **SSOT:** Este arquivo é o guia de deploy e operação no Ubuntu
+
+---
+
+> ⚠️ **AVISO — SCHEMA É APLICADO VIA MIGRATIONS, NÃO VIA SQL MANUAL**
+>
+> O schema do banco de dados **não deve ser aplicado com `psql -f
+> server/database/postgresql/01_schema.sql`** (ou os demais `.sql` legados
+> nessa pasta). Esses arquivos estão **incompletos** frente ao schema atual
+> (faltam requisições de compra, work centers e várias foreign keys
+> críticas) e estão marcados **HISTÓRICO/DEPRECATED**. O mecanismo real e
+> suportado é rodar as **53 migrations versionadas** do Sequelize:
+>
+> ```bash
+> cd server
+> npm ci
+> npm run migration:up
+> ```
+>
+> Provisionar um servidor novo com os SQL manuais resulta em schema
+> quebrado. Veja também [docs/DATABASE_SETUP.md](../DATABASE_SETUP.md).
 
 ---
 
@@ -160,22 +180,25 @@ docker volume ls | grep postgres_data
 - [ ] `docker compose config` não tem erros
 - [ ] Banco sobe e fica healthcheck green
 - [ ] API conecta ao banco (`/health/ready` retorna true)
-- [ ] Schema SQL foi rodado (tabelas existem)
+- [ ] Schema aplicado via `npm run migration:up` (tabelas existem, todas as 53 migrations status `up`)
 - [ ] Backup local foi testado (restore funciona)
 - [ ] Logs estão sendo rotacionados (max-size: 10m)
 - [ ] Rede PostgreSQL isolada (127.0.0.1:5432 apenas)
-- [ ] TZ=America/Sao_Paulo está configurado
+- [ ] TZ=America/Sao_Paulo está configurado (Postgres e API)
 
 ---
 
 ## 🎯 Próximos Passos
 
-1. **Rodar Migrações SQL:**
+1. **Aplicar o schema (migrations versionadas, mecanismo canônico):**
    ```bash
-   docker exec -i evok-postgres psql -U evok_admin -d erp_evok_audio < server/database/postgresql/01_schema.sql
-   docker exec -i evok-postgres psql -U evok_admin -d erp_evok_audio < server/database/postgresql/02_indexes.sql
-   # ... etc para cada arquivo de migração
+   cd server
+   npm ci
+   npm run migration:status   # ver o que falta aplicar
+   npm run migration:up
    ```
+   > ⚠️ Não use `psql -f server/database/postgresql/01_schema.sql` (ou
+   > demais `.sql` legados) — ver aviso no topo deste documento.
 
 2. **Teste de Integridade:**
    ```bash
@@ -188,6 +211,36 @@ docker volume ls | grep postgres_data
    watch -n 2 'docker compose ps'
    # Roda a cada 2 segundos, monitora STATUS do container
    ```
+
+---
+
+## ✅ Checklist de prontidão — antes do Go-Live no servidor de produção
+
+Itens levantados na auditoria de infraestrutura de 2026-08-06. Marcar cada um
+antes de aprovar o Go-Live no VPS/servidor físico definitivo:
+
+- [ ] **Reverse proxy + TLS** (nginx ou Caddy) na frente da API, com
+      certificado Let's Encrypt válido e renovação automática configurada;
+      porta da API (`5000`) vinculada a `127.0.0.1:5000:5000` no
+      `docker-compose.yml` de produção (não exposta em `0.0.0.0` direto na
+      internet).
+- [ ] **Volume/backup de uploads**: volume nomeado `app_uploads` (fotos/
+      desenhos de produto) incluído na rotina de backup, junto com o dump do
+      Postgres — testar restore de ambos.
+- [ ] **`docker-compose.prod.yml`** dedicado com `NODE_ENV=production` e
+      `DB_SSL=true` validado de ponta a ponta (conexão real com certificado,
+      sem depender de `ALLOW_LOCAL_DB_NO_SSL`).
+- [ ] **Cron de backup ativado** (`scripts/schedule-backup-*`) rodando no
+      servidor de produção, com verificação de que os arquivos de backup
+      estão sendo gerados e são íntegros.
+- [ ] **Logs estruturados** (Winston ou equivalente) — pendente, item P1 do
+      roadmap; validar que ao menos os logs de erro/acesso estão sendo
+      persistidos e rotacionados no servidor definitivo.
+- [ ] Schema aplicado via `npm run migration:up` (não via SQL manual legado)
+      e validado com `npm run migration:status`.
+- [ ] `.env` de produção com `DB_PASSWORD`, `JWT_SECRET`,
+      `ADMIN_SEED_PASSWORD` fortes e únicos (nunca reaproveitar valores de
+      dev/staging).
 
 ---
 

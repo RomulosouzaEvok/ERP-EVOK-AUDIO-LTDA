@@ -1108,8 +1108,29 @@ tivesse acesso" — agora a contagem pode ser reservada a um funcionário.
   contagem: em corrida entre dois usuários tentando pegar a MESMA
   contagem, a segunda transação espera a primeira commitar e então lê
   `assigned_to` já preenchido — só uma vence. Se a contagem já estiver
-  atribuída a **outro** usuário, rejeita com `ConflictError` (HTTP 409).
-  Se já for do próprio usuário, segue normalmente (idempotente).
+  atribuída a **outro** usuário e quem inicia **não for `admin`**, rejeita
+  com `ConflictError` (HTTP 409). Se quem inicia **for `admin`**, o
+  override é permitido (achado de auditoria 2026-08-06, item 1b) — a
+  contagem passa a ser do admin, auditado com `oldValues`/`newValues`
+  diferenciados. Se já for do próprio usuário, segue normalmente
+  (idempotente).
+- **Reatribuição** (`ReassignInventoryCountUseCase`, `PUT
+  /:id/reassign`, achado de auditoria 2026-08-06, item 1a): endpoint de
+  gestor (`authorizeModule('contagens', 'approve')`) para mover
+  `assigned_to` para outro usuário ou devolver ao pool (`assigned_to:
+  null`), sem depender do fluxo de `start`. Único remédio antes deste
+  endpoint para uma contagem "presa" com um funcionário de
+  férias/desligado era `UPDATE` manual no banco. Só permitido com a
+  contagem em `draft` ou `counting` (422 `BusinessRuleError` caso
+  contrário, com `details.current_status`/`details.allowed_statuses`).
+  Mesmo lock pessimista de `start`/`approve`/`reject`.
+- **Validação do usuário-alvo** (achado de auditoria 2026-08-06, item 2):
+  tanto na criação quanto na reatribuição, `assigned_to` (quando
+  informado e não-`null`) precisa apontar para um usuário que existe e
+  está ATIVO (`users.active = true`) — `BusinessRuleError` (422) caso
+  contrário. Não valida o perfil de acesso (`AccessProfile`) do
+  usuário-alvo, apenas existência + `active` (decisão documentada no
+  JSDoc de `InventoryCountRepository.findActiveUserById`).
 - **Listagem** (`ListInventoryCountsUseCase`, `GET /api/inventory-counts`):
   novos filtros `assigned_to` (aceita o atalho `me`, resolvido pelo
   controller para o id do usuário autenticado) e `unassigned=true`
@@ -1120,8 +1141,41 @@ tivesse acesso" — agora a contagem pode ser reservada a um funcionário.
   `RESTRICT`): se o funcionário atribuído for removido, a contagem volta
   ao pool em vez de bloquear a exclusão do usuário.
 - Associação Sequelize: `InventoryCount.belongsTo(User, { foreignKey: 'assigned_to', as: 'assignedTo' })` / `User.hasMany(InventoryCount, { foreignKey: 'assigned_to', as: 'assigned_inventory_counts' })`.
-- Validação Zod da API: `createInventoryCountSchema` (`assigned_to` opcional, inteiro positivo ou `null`) em
+- Validação Zod da API: `createInventoryCountSchema` (`assigned_to` opcional, inteiro positivo ou `null`) e `reassignInventoryCountSchema` (`assigned_to` obrigatório na FORMA, aceita inteiro positivo ou `null`) em
   `server/src/modules/inventory/presentation/validators/inventoryValidators.ts`.
+
+### Bug real corrigido: `product_id` NOT NULL bloqueava contagem via `item_ids` (migration `20260806-000002`)
+
+**Migration:** `server/migrations/20260806-000002-make-product-id-nullable-inventory-count-items.cjs`
+
+`CreateInventoryCountUseCase` já aceitava `item_ids` (caminho novo,
+dual-read, PREFERIDO segundo o próprio código) e gravava `product_id:
+null` / `item_id: <uuid>` nesse caso — mas `inventory_count_items.product_id`
+continuava `NOT NULL` no banco (e no model Sequelize), então **toda**
+contagem criada via `item_ids` falhava com erro 500 (`null value in
+column "product_id" violates not-null constraint`). Só funcionava pelo
+caminho legado `product_ids`. Encontrado em teste manual do fluxo de
+atribuição de contagens (2026-08-06).
+
+| Coluna/Constraint | Antes | Depois |
+|---|---|---|
+| `inventory_count_items.product_id` | `INTEGER NOT NULL` | `INTEGER` nullable |
+| `chk_inventory_count_items_product_or_item` (CHECK, novo) | — | `product_id IS NOT NULL OR item_id IS NOT NULL` |
+
+**Fix:** `product_id` passa a ser nullable (mesmo padrão dual-read já usado
+em `item_id`), com um CHECK constraint garantindo que pelo menos um dos
+dois esteja preenchido — mantém a integridade que o `allowNull: false`
+antigo tentava garantir, sem bloquear o caminho novo.
+
+**Risco de rollback (documentado no cabeçalho da migration):** o `down()`
+executa `changeColumn(..., { allowNull: false })` em `product_id`, o que
+é **irreversível em produção** assim que a primeira contagem for criada
+via `item_ids` — essas linhas nascem com `product_id IS NULL` por design,
+e o Postgres rejeita `SET NOT NULL` enquanto existir qualquer linha nessa
+condição. O `down()` faz uma checagem explícita
+(`SELECT count(*) ... WHERE product_id IS NULL`) e aborta com
+`throw new Error(...)` de mensagem clara em vez de deixar o Postgres
+estourar um erro genérico de constraint no meio do downgrade.
 
 ### Coluna nova: `production_orders.department_id` e `inventory_counts.department_id` (migration `20260806-000003`)
 
@@ -1166,6 +1220,42 @@ dados fabricados. Todas as linhas existentes de ambas as tabelas ficam
   inativo (`departments.active = false`) ficam fora do painel até o
   departamento ser reativado.
 - Associações Sequelize (`server/src/models/index.ts`): `ProductionOrder.belongsTo(Department, { foreignKey: 'department_id', as: 'department' })` / `Department.hasMany(ProductionOrder, { foreignKey: 'department_id', as: 'production_orders' })`; `InventoryCount.belongsTo(Department, { foreignKey: 'department_id', as: 'department' })` / `Department.hasMany(InventoryCount, { foreignKey: 'department_id', as: 'inventory_counts' })` — mesmo padrão já usado por `PurchaseRequisition.belongsTo(Department, ...)`.
+
+### Índices faltantes — status/item_id (migration `20260806-000004`)
+
+**Migration:** `server/migrations/20260806-000004-add-missing-indexes-status-item-id.cjs`
+
+Achados de índice do DBA na auditoria multi-agente de 2026-08-06:
+
+1. **`production_orders.status` sem índice simples.** O painel de TV de
+   demandas por departamento (`SequelizeDashboardRepository.getDepartmentDemands`,
+   `SELECT ... WHERE po.status IN (...)`) e o dashboard cockpit
+   (`ProductionOrder.count({ where: { status: { [Op.in]: [...] } } })`)
+   filtram só por status, sem `item_id`. Os índices compostos existentes
+   (`idx_production_orders_item_id_status`, `idx_production_orders_item_id_created_at`)
+   exigem `item_id` como primeira coluna e não ajudam essas queries.
+2. **`item_id` sem índice em 4 tabelas do expand-contract** Product → Item
+   (dual-read em andamento): `bill_of_material_items`,
+   `inventory_count_items`, `lot_controls`, `production_lot_consumptions`.
+   Toda leitura pelo caminho novo (`item_id`) fazia sequential scan.
+3. **Índice duplicado** em `inventory_counts(created_by)`:
+   `idx_inventory_counts_created_by_fk` era idêntico ao pré-existente
+   `inventory_counts_created_by` (mesma coluna, mesmo tipo btree,
+   confirmado via `\d inventory_counts` antes da migration). Removido o
+   duplicado, mantido o pré-existente.
+
+| Tabela | Índice novo | Coluna(s) |
+|---|---|---|
+| `production_orders` | `idx_production_orders_status` | `status` |
+| `bill_of_material_items` | `idx_bill_of_material_items_item_id` | `item_id` |
+| `inventory_count_items` | `idx_inventory_count_items_item_id` | `item_id` |
+| `lot_controls` | `idx_lot_controls_item_id` | `item_id` |
+| `production_lot_consumptions` | `idx_production_lot_consumptions_item_id` | `item_id` |
+| `inventory_counts` | `idx_inventory_counts_created_by_fk` (REMOVIDO, duplicado) | `created_by` |
+
+Idempotente via `showIndex` (mesmo padrão de `20260806-000003`); `down()`
+reverte tudo simetricamente (inclusive recriando o índice duplicado
+removido, para simetria completa do rollback).
 
 ## Custeio de Produção — Mão-de-Obra e Overhead (roadmap pós-Go-Live, item 7/9)
 

@@ -1,14 +1,30 @@
 # Configuração de Banco de Dados — ERP EVOK AUDIO
 
-**Data**: 2026-07-30  
-**Responsável**: Backend Engineer (Gilwagno)  
+**Data**: 2026-07-30 (revisado 2026-08-06)
+**Responsável**: Backend Engineer (Gilwagno)
 **Status**: ✅ Configuração padrão definida
+
+---
+
+> ⚠️ **AVISO — MECANISMO CANÔNICO DE SCHEMA MUDOU**
+>
+> O schema do banco **não é mais aplicado manualmente via `psql -f server/database/postgresql/01_schema.sql`**.
+> O mecanismo real e suportado são as **53 migrations versionadas** rodadas com
+> `npm run migration:up` (ver [Fluxo de Setup](#fluxo-de-setup) abaixo).
+>
+> Os arquivos SQL legados em `server/database/postgresql/` (`01_schema.sql`,
+> `02a_extend_item_estruturas.sql`, etc.) estão **incompletos** frente ao
+> schema atual — faltam tabelas de requisição de compra, work centers e
+> várias foreign keys críticas adicionadas depois. Quem provisionar um
+> servidor novo seguindo os comandos `psql -f ...` manuais (marcados como
+> **HISTÓRICO/DEPRECATED** abaixo) vai subir com um schema quebrado.
+> Use sempre `npm run migration:up`.
 
 ---
 
 ## Resumo Executivo
 
-O projeto usa **PostgreSQL 16** como banco de dados canônico. A configuração foi unificada em um arquivo `.env` que pode ser replicado entre ambientes (local, staging, produção).
+O projeto usa **PostgreSQL 16** como banco de dados canônico. A configuração foi unificada em um arquivo `.env` que pode ser replicado entre ambientes (local, staging, produção). O schema é provisionado via **migrations versionadas do Sequelize** (`npm run migration:up`) — não via SQL manual.
 
 ### Credenciais Padrão (Desenvolvimento Local)
 
@@ -24,9 +40,9 @@ SSL:      Não (false)
 ### Arquivos de Configuração
 
 - **`.env`** — Variáveis de ambiente (criado a partir de `.env.example`)
-- **`server/database/postgresql/01_schema.sql`** — Schema canônico (tabelas, tipos, índices)
-- **`server/database/postgresql/02a_extend_item_estruturas.sql`** — Extensão Fase 2A (item_estruturas + migração)
+- **`server/database/migrations/`** — 53 migrations versionadas, mecanismo canônico de schema (`npm run migration:up`)
 - **`docker-compose.yml`** — Orchestração Docker Postgres (dev local)
+- **`server/database/postgresql/01_schema.sql`, `02a_extend_item_estruturas.sql`** — ⚠️ HISTÓRICO/DEPRECATED, ver aviso no topo deste documento. Não usar para provisionar banco novo.
 
 ---
 
@@ -50,20 +66,17 @@ cp server/.env.example server/.env
 # 4. Subir PostgreSQL via Docker
 docker compose up -d
 
-# 5. Aplicar schema canônico
-psql -h localhost -U evok_admin -d erp_evok_audio -f server/database/postgresql/01_schema.sql
-
-# 6. Aplicar extensão Fase 2A
-psql -h localhost -U evok_admin -d erp_evok_audio -f server/database/postgresql/02a_extend_item_estruturas.sql
-
-# 7. Instalar dependências Node
+# 5. Instalar dependências Node
 cd server
 npm install
 
-# 8. Compilar TypeScript
+# 6. Aplicar schema via migrations versionadas (mecanismo canônico)
+npm run migration:up
+
+# 7. Compilar TypeScript
 npm run build
 
-# 9. (Opcional) Seed de dados de teste
+# 8. (Opcional) Seed de dados de teste
 # npm run seed  (em desenvolvimento futura)
 ```
 
@@ -80,13 +93,12 @@ DB_USER=evok_admin  (ou usuário do servidor remoto)
 DB_PASSWORD=sua-senha-segura  (NUNCA versionar, só no .env local)
 DB_SSL=true  (recomendado para servidor remoto)
 
-# 2. Aplicar schemas via psql remoto
-psql -h seu-servidor.hostinger.com -U evok_admin -d erp_evok_audio -f server/database/postgresql/01_schema.sql
+# 2. Instalar dependências e aplicar schema via migrations (mecanismo canônico)
+cd server
+npm install
+npm run migration:up
 
-# 3. Aplicar extensão
-psql -h seu-servidor.hostinger.com -U evok_admin -d erp_evok_audio -f server/database/postgresql/02a_extend_item_estruturas.sql
-
-# 4. Resto igual à Opção 1 (npm install, build, etc)
+# 3. Resto igual à Opção 1 (build, etc)
 ```
 
 ---
@@ -106,7 +118,13 @@ psql -h seu-servidor.hostinger.com -U evok_admin -d erp_evok_audio -f server/dat
 
 ---
 
-## Tabelas Criadas (01_schema.sql)
+## Tabelas Criadas (referência histórica de `01_schema.sql`)
+
+> ⚠️ Lista descritiva mantida por referência. O schema real em produção é o
+> resultado cumulativo das **53 migrations versionadas** (`npm run
+> migration:up`), que supera e estende o que `01_schema.sql` descrevia
+> originalmente (inclui, por exemplo, requisições de compra, work centers e
+> FKs adicionadas depois). Não use `01_schema.sql` para provisionar banco novo.
 
 **Canônicas (Portuguese naming)**:
 - `usuarios` — Usuários do ERP
@@ -171,32 +189,31 @@ psql -h seu-servidor.com -U evok_admin -d erp_evok_audio -c "SELECT version();"
 
 ### Erro: "relation 'X' does not exist"
 
-Schemas ainda não foram aplicados:
+Migrations ainda não foram aplicadas:
 ```bash
-psql -h localhost -U evok_admin -d erp_evok_audio -f server/database/postgresql/01_schema.sql
-psql -h localhost -U evok_admin -d erp_evok_audio -f server/database/postgresql/02a_extend_item_estruturas.sql
+cd server
+npm run migration:status   # ver o que falta aplicar
+npm run migration:up
 ```
 
-### Erro: "CREATE TYPE IF NOT EXISTS" (PostgreSQL 16)
+### Tabelas ausentes / schema desatualizado
 
-Versão antiga do SQL. Use o 02a_extend_item_estruturas.sql que já foi corrigido com `DO $$ ... $$`:
-```bash
-# Versão corrigida
-psql -h localhost -U evok_admin -d erp_evok_audio -f server/database/postgresql/02a_extend_item_estruturas.sql
-```
-
-### Tabelas legadas não existem
-
-Falta aplicar a baseline e as migrations versionadas:
+Falta aplicar as migrations versionadas:
 ```bash
 cd server
 npm run migration:up
 ```
 
-Se a baseline falhar, revisar:
+Se falhar, revisar:
 - build atual em `dist/`
 - configuração em `server/config/sequelize-cli.config.cjs`
 - conexão PostgreSQL do `.env`
+
+> ⚠️ **Não** tente resolver rodando `psql -f server/database/postgresql/01_schema.sql`
+> ou `02a_extend_item_estruturas.sql` manualmente — esses arquivos são
+> HISTÓRICO/DEPRECATED (ver aviso no topo deste documento) e vão deixar o
+> banco com schema incompleto (sem requisições de compra, work centers e
+> FKs adicionadas depois).
 
 ---
 

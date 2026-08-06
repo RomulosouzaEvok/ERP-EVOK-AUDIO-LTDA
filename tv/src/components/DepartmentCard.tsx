@@ -7,6 +7,7 @@
  */
 
 import { StyleSheet, Text, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import type { DepartmentDemand } from '../api/types';
 
@@ -16,14 +17,22 @@ interface MetricConfig {
     'open_production_orders' | 'open_purchase_requisitions' | 'open_inventory_counts'
   >;
   label: string;
-  icon: string;
+  // Nome do glyph em `@expo/vector-icons` (MaterialCommunityIcons). Emojis
+  // renderizam de forma inconsistente entre fabricantes de TV (fonte
+  // ausente/glyph quebrado); ícone vetorial é uniforme em qualquer aparelho.
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
   color: string;
 }
 
 const METRICS: MetricConfig[] = [
-  { key: 'open_production_orders', label: 'Ordens de Produção', icon: '⚙️', color: '#38BDF8' },
-  { key: 'open_purchase_requisitions', label: 'Requisições de Compra', icon: '📦', color: '#FBBF24' },
-  { key: 'open_inventory_counts', label: 'Contagens de Inventário', icon: '🔢', color: '#34D399' },
+  { key: 'open_production_orders', label: 'Ordens de Produção', icon: 'cog-outline', color: '#38BDF8' },
+  {
+    key: 'open_purchase_requisitions',
+    label: 'Requisições de Compra',
+    icon: 'package-variant-closed',
+    color: '#FBBF24',
+  },
+  { key: 'open_inventory_counts', label: 'Contagens de Inventário', icon: 'counter', color: '#34D399' },
 ];
 
 interface DepartmentCardProps {
@@ -46,16 +55,13 @@ export default function DepartmentCard({ demand }: DepartmentCardProps) {
       <View style={styles.metricsRow}>
         {METRICS.map((metric) => {
           const group = demand[metric.key];
+          const metricColor = hasDemand && group.count > 0 ? metric.color : '#64748B';
           return (
             <View key={metric.key} style={styles.metricBlock}>
-              <Text
-                style={[
-                  styles.metricValue,
-                  { color: hasDemand && group.count > 0 ? metric.color : '#64748B' },
-                ]}
-              >
-                {metric.icon} {group.count}
-              </Text>
+              <View style={styles.metricValueRow}>
+                <MaterialCommunityIcons name={metric.icon} size={24} color={metricColor} />
+                <Text style={[styles.metricValue, { color: metricColor }]}>{group.count}</Text>
+              </View>
               <Text style={[styles.metricLabel, !hasDemand && styles.textIdle]} numberOfLines={2}>
                 {metric.label}
               </Text>
@@ -64,6 +70,7 @@ export default function DepartmentCard({ demand }: DepartmentCardProps) {
                   {group.items.slice(0, 3).map((item) => (
                     <Text key={item.id} style={styles.itemPreviewText} numberOfLines={1}>
                       {item.reference}
+                      {item.label ? ` · ${item.label}` : ''}
                       {item.due_date ? ` · ${item.due_date}` : ''}
                     </Text>
                   ))}
@@ -111,6 +118,11 @@ const styles = StyleSheet.create({
   metricBlock: {
     flex: 1,
     alignItems: 'flex-start',
+  },
+  metricValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   metricValue: {
     fontSize: 32,

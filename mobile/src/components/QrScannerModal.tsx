@@ -9,7 +9,12 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import {
+  CameraView,
+  useCameraPermissions,
+  type BarcodeScanningResult,
+  type CameraMountError,
+} from 'expo-camera';
 
 interface QrScannerModalProps {
   visible: boolean;
@@ -35,6 +40,14 @@ export default function QrScannerModal({ visible, onClose, onScanned }: QrScanne
   );
 
   const [permissionRequested, setPermissionRequested] = useState(false);
+  // Câmera pode falhar ao montar mesmo com permissão concedida — caso comum
+  // em chão de fábrica: outro app (ex.: leitor de câmera dedicado) já está
+  // usando o hardware da câmera. Sem esse tratamento a tela fica preta.
+  const [mountError, setMountError] = useState<string | null>(null);
+
+  const handleMountError = useCallback((error: CameraMountError) => {
+    setMountError(error?.message ?? 'Falha desconhecida ao acessar a câmera.');
+  }, []);
 
   return (
     <Modal
@@ -42,6 +55,7 @@ export default function QrScannerModal({ visible, onClose, onScanned }: QrScanne
       animationType="slide"
       onShow={() => {
         hasScannedRef.current = false;
+        setMountError(null);
         if (!permission?.granted && !permissionRequested) {
           setPermissionRequested(true);
           requestPermission();
@@ -50,12 +64,23 @@ export default function QrScannerModal({ visible, onClose, onScanned }: QrScanne
       onRequestClose={onClose}
     >
       <View style={styles.container}>
-        {permission?.granted ? (
+        {mountError ? (
+          <View style={styles.permissionContainer}>
+            <Text style={styles.permissionText}>
+              Não foi possível acessar a câmera — feche outros apps que estejam usando-a e tente
+              novamente.
+            </Text>
+            <Pressable style={styles.permissionButton} onPress={() => setMountError(null)}>
+              <Text style={styles.permissionButtonText}>Tentar novamente</Text>
+            </Pressable>
+          </View>
+        ) : permission?.granted ? (
           <CameraView
             style={styles.camera}
             facing="back"
             barcodeScannerSettings={{ barcodeTypes: [...SCANNED_BARCODE_TYPES] }}
             onBarcodeScanned={handleBarcodeScanned}
+            onMountError={handleMountError}
           >
             <View style={styles.overlay}>
               <View style={styles.frame} />

@@ -2,7 +2,7 @@ import UseCase from '../../../../shared/application/UseCase';
 import InventoryCountRepository = require('../../domain/repositories/InventoryCountRepository');
 
 const InventoryCountEntity = require('../../domain/entities/InventoryCountEntity');
-const { NotFoundError } = require('../../../../errors');
+const { NotFoundError, BusinessRuleError } = require('../../../../errors');
 const { sequelize } = require('../../../../config/database');
 const SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
 
@@ -53,6 +53,14 @@ interface CreateInventoryCountInput {
  * único depósito — `inventory_count_items` herda o depósito do cabeçalho,
  * não tem coluna própria). `InventoryCountEntity.validate()` lança
  * `ValidationError` (400) se ausente.
+ *
+ * Validação de `assigned_to` (achado de auditoria 2026-08-06, item 2):
+ * quando informado, o usuário-alvo precisa existir e estar ATIVO
+ * (`users.active = true`) — caso contrário, `BusinessRuleError` (422) com
+ * `details` didático (regra de negócio, não de forma/shape do payload —
+ * por isso `BusinessRuleError`, não `ValidationError`/400). Não valida
+ * perfil de acesso do usuário-alvo (ver JSDoc de
+ * `InventoryCountRepository.findActiveUserById` para a decisão).
  */
 class CreateInventoryCountUseCase extends UseCase {
   private readonly inventoryCountRepository: InventoryCountRepository;
@@ -76,6 +84,7 @@ class CreateInventoryCountUseCase extends UseCase {
    * @param {number} [input.department_id] - Id do departamento dono da contagem (opcional; usado pelo painel de TV).
    * @returns {Promise<{ count: Object, items: Object[] }>}
    * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos (inclusive `warehouse_id` ausente).
+   * @throws {BusinessRuleError} Se `assigned_to` for informado e não corresponder a um usuário ativo (422).
    * @throws {NotFoundError} Se algum id em `product_ids` ou `item_ids` não corresponder a um item/produto existente.
    */
   async execute({ count_type, warehouse_id, location, notes, product_ids, item_ids, created_by, assigned_to, department_id }: CreateInventoryCountInput) {
@@ -83,6 +92,20 @@ class CreateInventoryCountUseCase extends UseCase {
 
     const t = await sequelize.transaction();
     try {
+      if (entity.assigned_to !== null) {
+        // Achado de auditoria 2026-08-06 (item 2): `assigned_to` precisa
+        // apontar para um usuário que existe e está ativo — caso contrário
+        // a contagem nasceria "presa" para sempre a um funcionário
+        // desligado/inexistente (mesma classe de problema do achado 1).
+        const assignedUser = await this.inventoryCountRepository.findActiveUserById(entity.assigned_to, t);
+        if (!assignedUser) {
+          throw new BusinessRuleError(
+            `Usuário responsável (assigned_to=${entity.assigned_to}) não encontrado ou inativo. Verifique o id informado.`,
+            { field: 'assigned_to', value: entity.assigned_to }
+          );
+        }
+      }
+
       const year = new Date().getFullYear();
       const yearPrefix = `CC-${year}`;
       const existing = await this.inventoryCountRepository.countByCountNumberPrefix(yearPrefix, t);

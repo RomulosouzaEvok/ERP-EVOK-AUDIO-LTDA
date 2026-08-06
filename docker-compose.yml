@@ -42,6 +42,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 5000
+      TZ: America/Sao_Paulo
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: erp_evok_audio
@@ -56,7 +57,21 @@ services:
       ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-dev-only-change-me-please}
       N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
     ports:
+      # Exposto em 0.0.0.0:5000 propositalmente em dev: os apps mobile/TV da
+      # rede local acessam a API pelo IP da maquina (ex.: 172.16.0.164:5000).
+      # Bind em 127.0.0.1 quebraria esse fluxo de dev.
+      # EM PRODUCAO: troque para "127.0.0.1:5000:5000" e coloque um reverse
+      # proxy TLS (nginx/Caddy) na frente, terminando HTTPS e repassando
+      # para 127.0.0.1:5000 — nunca exponha a API em 0.0.0.0 diretamente
+      # na internet.
       - "5000:5000"
+    volumes:
+      # Uploads (fotos/desenhos de produto) gravados pela API precisam
+      # sobreviver a `docker compose up --build` / recreate do container.
+      # Sem volume nomeado aqui, todo arquivo enviado via multer some no
+      # próximo rebuild da imagem. Este diretório DEVE entrar na rotina de
+      # backup junto com o dump do Postgres (ver docs/infra/DEPLOY_UBUNTU.md).
+      - app_uploads:/app/uploads
     healthcheck:
       test: ["CMD", "node", "-e", "const http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));"]
       interval: 15s
@@ -71,3 +86,8 @@ services:
 
 volumes:
   postgres_data:
+  # Persistencia de uploads (fotos/desenhos de produto enviados via multer).
+  # Sem isso, dados sao perdidos a cada `docker compose up --build` ou
+  # recreate do container `api`. Inclua no backup junto com o dump do
+  # Postgres (ver checklist em docs/infra/DEPLOY_UBUNTU.md).
+  app_uploads:

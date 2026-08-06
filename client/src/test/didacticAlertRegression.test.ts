@@ -28,6 +28,7 @@ const SCREENS_UNDER_REGRESSION = [
   '/src/pages/logistics/ShippingPage.tsx',
   '/src/pages/quality/InspectionTab.tsx',
   '/src/pages/quality/NonConformitiesTab.tsx',
+  '/src/pages/products/InventoryCountsPage.tsx',
 ];
 
 const rawSources = import.meta.glob('/src/pages/**/*.tsx', { query: '?raw', import: 'default', eager: true }) as Record<

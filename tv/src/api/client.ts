@@ -85,6 +85,14 @@ const FRIENDLY_MESSAGES: Record<number, string> = {
 };
 
 /**
+ * Tempo máximo de espera por uma resposta antes de abortar a requisição.
+ * Necessário em rede industrial instável (Wi-Fi de chão de fábrica, VPN,
+ * túnel reverso) para evitar que o painel fique "pendurado" aguardando um
+ * ciclo de refresh que nunca completa.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/**
  * Executa uma requisição autenticada contra a API do ERP.
  *
  * @throws {ApiError} Erro tratado com `status`, `code` opcional e `message` amigável.
@@ -102,18 +110,27 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     headers.Authorization = `Bearer ${authToken}`;
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   let response: Response;
   try {
     response = await fetch(buildUrl(path, query), {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
-  } catch {
+  } catch (networkError) {
+    if (networkError instanceof Error && networkError.name === 'AbortError') {
+      throw new ApiError('Tempo de conexão esgotado — verifique a rede.', 0);
+    }
     throw new ApiError(
       'Não foi possível conectar ao servidor. Verifique a rede e se o endereço da API (EXPO_PUBLIC_API_URL) está correto.',
       0
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   let payload: unknown = null;

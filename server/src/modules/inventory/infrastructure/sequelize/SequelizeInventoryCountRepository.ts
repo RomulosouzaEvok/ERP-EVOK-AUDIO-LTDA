@@ -143,6 +143,17 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
   async findProductById(id: number | string, transaction?: Transaction) {
     return Product.findByPk(id, { transaction });
   }
+
+  /**
+   * Busca um usuário ATIVO por id (`users.active = true`). Ver JSDoc do
+   * contrato (`InventoryCountRepository.findActiveUserById`) para a decisão
+   * de não checar perfil de acesso do usuário-alvo aqui.
+   *
+   * @inheritdoc
+   */
+  async findActiveUserById(id: number | string, transaction?: Transaction) {
+    return User.findOne({ where: { id, active: true }, attributes: ['id', 'name', 'active'], transaction });
+  }
 }
 
 module.exports = SequelizeInventoryCountRepository;

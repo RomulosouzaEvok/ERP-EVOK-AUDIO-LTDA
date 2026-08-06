@@ -775,3 +775,225 @@ cd client && npx vitest run
 (nova seção "Custeio real de mão-de-obra/overhead + rastreabilidade por
 lote/QR — 2026-08-04"), `docs/LEVANTAMENTO_ERP_2026-08-02.md` (itens 6 e
 7 marcados `feito`), `docs/HANDOFF_CODEX.md` (seção nova), este diário.
+
+---
+
+## 2026-08-05 — Menu por departamento, `Item.type` USO_E_CONSUMO/ATIVO_IMOBILIZADO, devolução ao fornecedor com estorno, toggle MRP auto-convert, refactor Clean Architecture (22 use-cases), fix de bootstrap de banco novo, telas órfãs cabeadas
+
+**Contexto:** dia inteiro de entregas (8 commits), todas já mergeadas em
+`main` sem passar por esta sessão de governança em tempo real — esta
+entrada consolida retroativamente, por leitura de `git log --stat` e dos
+diffs reais, o que foi commitado em 2026-08-05 (nenhuma entrada de diário
+havia sido registrada até agora para essa data).
+
+**1. Reorganização do menu por departamento (Blocos A–F)** — navegação
+lateral (`AppLayout.tsx`) reagrupada por blocos de área de negócio em vez
+da lista plana anterior, alinhando o menu à estrutura organizacional de
+21 departamentos já documentada em `docs/00-ESTRUTURA_ORGANIZACIONAL.md`.
+
+**2. `Item.type` ganha `USO_E_CONSUMO`/`ATIVO_IMOBILIZADO`** — novo par de
+valores no enum de tipo de item (migration `20260805-000001-add-item-tipo-uso-consumo-ativo.cjs`),
+permitindo cadastrar itens que não são matéria-prima/produto/subconjunto
+(ex.: material de escritório, ferramental capitalizável). Migrations
+complementares no mesmo dia: `20260805-000002-add-asset-type-license.cjs`,
+`20260805-000003-add-asset-license-and-purchase-item.cjs` (licença como
+tipo de ativo + vínculo do ativo ao item do pedido de compra que o
+originou), `20260805-000004-add-invoice-type-payable-and-purchase.cjs`
+(tipo de nota fiscal em contas a pagar/compra),
+`20260805-000005-add-asset-id-non-conformities.cjs` (RNC pode referenciar
+um ativo, não só um lote), `20260805-000006-add-asset-status-returned-to-supplier.cjs`
+(novo status de ativo para devolução ao fornecedor).
+
+**3. Devolução ao fornecedor com estorno** — fluxo novo de devolução de
+ativo/item ao fornecedor, com estorno financeiro associado (usa o status
+`returned_to_supplier` da migration `-000006` acima).
+
+**4. Toggle de MRP auto-convert via PATCH + UI** — a pendência residual
+registrada em 2026-08-04 ("não existe endpoint/UI para ligar
+`items.conversao_automatica` por item — só via UPDATE direto no banco")
+foi fechada: `client/src/api/items.ts` + `ProductsPage.tsx` ganharam a
+chamada e o controle de UI para ligar/desligar a conversão automática do
+MRP por item, consumindo um `PATCH` já exposto no backend.
+
+**5. Refactor de 22 use-cases para Clean Architecture (commit `e4104fb`)**
+— módulos `fiscal`, `inventory` (warehouses/lots/transfers), `products`,
+`purchase-requisitions`, `purchases`, `users`, `webhooks` desacoplados de
+acesso direto ao Sequelize nos use-cases, passando a depender de
+interfaces de repositório (`domain/repositories/*Repository.ts`) com
+implementação em `infrastructure/sequelize/Sequelize*Repository.ts`. 62
+arquivos alterados, cobertura de teste unitário existente mantida verde
+(ajustes em ~15 arquivos de teste para os novos mocks de repositório).
+
+**6. Fix real de bootstrap de banco novo + bug de dual-read na contagem
+cíclica (commit `f9f03ea`)** — `20260731-000001-baseline-schema.cjs`
+tinha uma coluna `NOT NULL` indevida que quebrava a criação de banco do
+zero (ambiente novo, sem histórico de migrations incrementais);
+corrigido. Bug real também corrigido em
+`CreateInventoryCountUseCase.ts`/`SequelizeItemRepository.ts`: dual-read
+de contagem cíclica lia o campo errado em certos casos. Teste de
+invariante novo: `server/tests/unit/warehouse-invariants.test.ts`.
+
+**7. `@types/express` alinhado ao runtime real v4 (commit `a386ca2`)** —
+o pacote de tipos estava na major errada frente ao Express 4.18
+efetivamente instalado; corrigido `server/package.json`/`package-lock.json`.
+
+**8. Fixture de Item para CI + remoção de padrão perigoso de login com
+admin real em teste (commit `06851db`)** — `server/scripts/run-api-suite.cjs`
+ganhou fixture de Item para os testes de integração de MRP/rastreabilidade;
+`mrp.test.ts`/`traceability.test.ts` pararam de logar com as credenciais
+reais do admin seed, usando um usuário de teste dedicado.
+
+**9. 3 telas órfãs cabeadas no frontend (commit `da27101`)** — RH,
+Configuração Fiscal e Auditor Inteligente ganharam entrada de menu/rota em
+`App.tsx`/`AppLayout.tsx` (backend já existia, sem UI acessível até este
+commit).
+
+**10. Atualização do doc de auditoria (commit `0c68b65`)** — status real
+dos 15 achados ALTO de `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`
+atualizado.
+
+**Documentos atualizados nesta consolidação retroativa:** este diário
+(entrada nova, único registro de 2026-08-05 até agora).
+
+---
+
+## 2026-08-06 — Apps mobile (Expo) e Android TV novos, atribuição de contagem cíclica (pool/claim), `department_id` em OP/contagens, auditoria multi-agente de 7 frentes, remediação imediata de 4 frentes
+
+**Contexto:** sessão longa com dois grandes blocos de trabalho: (I) entrega
+de dois aplicativos novos + feature de atribuição de contagens no backend/
+web, todos testados ao vivo contra Postgres real; (II) auditoria
+multi-agente completa (7 agentes em paralelo) seguida de remediação
+imediata (4 agentes em paralelo) dos achados mais graves. Checkpoint
+principal: commit `8ba775f`. Correções subsequentes da remediação seguem
+em andamento no working tree no momento desta entrada (ver `git status`
+no fechamento desta sessão).
+
+### I. Entregas de produto
+
+**1. App mobile novo (`mobile/`, Expo/React Native + Expo Router)** —
+login JWT reaproveitando o backend existente, scan de estoque QR
+(`expo-camera`, `CameraView`), histórico de movimentações, execução de
+contagens cíclicas (pool de contagens disponíveis + contagens já
+atribuídas ao usuário logado). **Validado apenas por typecheck
+(`npx tsc --noEmit`)/bundle (`npx expo export`) nesta entrega — nenhum
+teste em dispositivo/emulador real ainda** (câmera, leitor físico,
+D-pad n/a aqui, rede real da fábrica). Detalhe completo em
+`mobile/README.md` §5 e `docs/HANDOFF_CODEX.md`.
+
+**2. App Android TV novo (`tv/`, react-native-tvos)** — painel de demandas
+por departamento (recebimento pendente, requisições aguardando aprovação,
+expedição pronta, qualidade em quarentena/RNCs abertas), auto-refresh a
+cada 60s, navegação por D-pad (`FocusablePressable`). **Mesma ressalva:
+validado só por typecheck/bundle, sem teste em hardware de TV real** (D-pad
+físico, resolução de banner 320×180, controle remoto). Detalhe em
+`tv/README.md` §5.
+
+**3. Feature de atribuição de contagem cíclica (pool/atribuída) — full
+stack** — migration `20260806-000001-add-assigned-to-inventory-counts.cjs`
+(`inventory_counts.assigned_to`, FK `users`, nullable); claim atômico no
+`start` da contagem (lock pessimista `SELECT ... FOR UPDATE` dentro de
+transação — dois funcionários competindo pela mesma contagem do pool
+resolvem via 409 `CONFLICT` para o perdedor da corrida); filtros de
+listagem `assigned_to=me`/`unassigned=true`. Tela web do supervisor
+(`InventoryCountsPage.tsx`) ganhou campo "Atribuir a" na criação + filtro
+na listagem; app mobile (`(app)/counts/`) consome o mesmo contrato.
+Detalhe completo do contrato em `docs/API.md` §8.2 e
+`docs/HANDOFF_CODEX.md`.
+
+**4. Bug real corrigido — caminho `item_ids` de contagens dava 500** —
+`product_id NOT NULL` em `inventory_count_items` quebrava a criação de
+contagem quando informada por lista de itens (não por depósito completo);
+migration `20260806-000002-make-product-id-nullable-inventory-count-items.cjs`
+(nullable + `CHECK`). **Testado ao vivo.**
+
+**5. `department_id` em `production_orders`/`inventory_counts` + painel de
+demandas por departamento** — migration
+`20260806-000003-add-department-id-to-production-orders-and-inventory-counts.cjs`
+(nullable, **sem backfill por design** — dado histórico não tem
+departamento de origem confiável para inferir). Endpoint novo
+`GET /api/dashboard/department-demands` (consumido pelo painel de TV do
+item 2 acima). **Testado ao vivo contra Postgres real.**
+
+**6. Teste manual completo do fluxo de contagem via API real** — criar
+(pool) → claim → conflito 409 (segundo usuário) → contar itens → submit
+bloqueado com pendências (422) → submit válido → aprovação com ajuste
+real de saldo de estoque. Dados de teste limpos ao final.
+
+**7. Limpeza de `.claude/agents/evok-production-remediation.md`** —
+removidas ~90 linhas de texto estranho coladas por acidente em uma
+entrega anterior (não relacionado a código de produto).
+
+### II. Auditoria multi-agente (7 agentes em paralelo) — todos os relatórios entregues
+
+- **Auditor geral:** veredito **PARCIALMENTE APROVADO** — sólido
+  tecnicamente, 2 achados P1 de fluxo de exceção.
+- **Segurança:** zero crítico/alto — apto para G6 do ponto de vista de
+  segurança pura.
+- **DBA:** schema saudável, 53 migrations sincronizadas (no momento da
+  auditoria, antes da `-000004` de remediação abaixo), índices faltantes
+  detectados.
+- **Infra:** 4 achados altos — uploads sem volume persistente no
+  `docker-compose.yml`, docs de deploy (`docs/infra/DEPLOY_UBUNTU.md`)
+  ainda citando SQL legado em vez de migrations, ausência de TLS
+  documentado, `docker-compose.prod.yml` nunca exercitado de fato.
+- **Frontend:** 1 bug P0 real, introduzido no próprio diff do dia — o
+  campo "Atribuir a" (item I.3 acima) quebrava o caso "pool" (sem
+  atribuição) com falha silenciosa.
+- **Mobile/TV:** timeout de rede ausente nos dois apps, TV entrando em
+  loop de erro 403 sem tratamento diferenciado, TTL de JWT de 7 dias
+  incompatível com um painel de TV "sempre ligado" (sem fluxo de
+  relogin/refresh).
+- **Documentação:** este relatório de consolidação (a auditoria em si).
+
+### III. Remediação imediata (4 agentes em paralelo) — concluída em 2026-08-06
+
+- **Bug P0 do pool (frontend):** corrigido + teste de componente novo
+  (`client/src/pages/products/InventoryCountsPage.test.tsx`) — suíte
+  vitest do client em **49/49** após a correção.
+- **Mobile/TV:** timeout de 15s adicionado às chamadas HTTP dos dois apps;
+  tratamento diferenciado de 403 (não confunde com 401/relogin); logout
+  explícito disponível na TV; ícones vetoriais substituindo emoji/texto
+  cru; lixo de template do `create-expo-app` removido do `mobile/`
+  (`mobile/CLAUDE.md`, `mobile/AGENTS.md`, `mobile/LICENSE` — não tinham
+  relação com o projeto, eram gerados pelo scaffold do Expo).
+- **Infra:** `docker-compose.yml` ganhou volume dedicado para uploads +
+  variável de timezone (`TZ`); `ALLOW_LOCAL_DB_NO_SSL` documentada;
+  `docs/infra/DEPLOY_UBUNTU.md` corrigido para referenciar o fluxo real de
+  migrations (não mais o SQL legado).
+- **Backend (em finalização no momento desta entrada, ainda não
+  commitado):** endpoint novo `PUT /api/inventory-counts/:id/reassign`
+  (`ReassignInventoryCountUseCase.ts`), admin-override no `start` (admin
+  pode iniciar uma contagem de qualquer atribuição), validação de
+  `assigned_to` ativo na atribuição, migration
+  `20260806-000004-add-missing-indexes-status-item-id.cjs` (índices em
+  `production_orders.status` + `item_id` em 4 tabelas, drop de índice
+  duplicado encontrado na auditoria do DBA), `down()` da migration
+  `-000002` protegido com mensagem de erro clara (evita reverter uma
+  coluna que já tem dados não nulos sem aviso).
+
+### Pendências registradas (decisão consciente de não resolver hoje)
+
+- **JWT de 7 dias × painel de TV "sempre ligado"** — exige decisão de
+  produto (refresh token dedicado, TTL específico para o app de TV, ou
+  runbook operacional de relogin periódico). Registrado como decisão
+  pendente, não como bug.
+- **Validação em hardware real dos 2 apps** — listas detalhadas em
+  `mobile/README.md` §5 e `tv/README.md` §5 (build APK/EAS, D-pad físico,
+  câmera/leitor físico de QR, rede real da fábrica, banner de TV
+  320×180).
+- **Teste de integração de concorrência real do claim** — dois clientes
+  simultâneos contra Postgres real (hoje coberto só por teste unitário
+  com repositório mockado).
+- **Paginação da lista de contagens no app mobile** — limite fixo de 100
+  itens, sem paginação real.
+- **Infra de produção** — reverse proxy/TLS, `docker-compose.prod.yml`
+  exercitado de fato, cron de backup — todos aguardando a compra do
+  servidor de produção (checklist em `docs/infra/DEPLOY_UBUNTU.md`).
+
+**Documentos atualizados nesta consolidação de governança:**
+`docs/governance/TODO.md` (nova seção "2026-08-06" com as pendências
+acima), `CLAUDE.md` (status/data, contagem de migrations/FKs, árvore de
+pastas com `mobile/`/`tv/`, roadmap), `docs/HANDOFF_CODEX.md` (nota de
+atualização na seção de atribuição de contagens), `docs/GO_LIVE_G6_CHECKLIST.md`
+(resumo executivo/datas, seções Kubernetes/Datadog marcadas não
+aplicáveis), este diário.

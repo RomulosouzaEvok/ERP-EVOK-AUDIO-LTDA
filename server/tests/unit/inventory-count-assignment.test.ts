@@ -15,6 +15,16 @@
  *    (atalho `me` resolvido pelo controller antes de chegar aqui) e
  *    `unassigned` (pool) ao repositório.
  *
+ * Achados de auditoria 2026-08-06 (contagem atribuída "presa" sem
+ * recuperação, `assigned_to` sem validação do usuário-alvo), também
+ * cobertos aqui:
+ * 7. Criação com `assigned_to` inexistente/inativo -> `ValidationError` (422).
+ * 8. `start` por `admin` de uma contagem atribuída a OUTRO funcionário ->
+ *    override permitido (admin assume a contagem).
+ * 9. `ReassignInventoryCountUseCase`: reatribuição feliz, devolução ao pool
+ *    (`assigned_to: null`), status inválido (422) e usuário-alvo
+ *    inexistente/inativo (422).
+ *
  * @group unit
  * @ticket inventory-count-assignment-2026-08-06
  */
@@ -54,6 +64,8 @@ const CreateInventoryCountUseCase = require('../../src/modules/inventory/applica
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const StartInventoryCountUseCase = require('../../src/modules/inventory/application/use-cases/StartInventoryCountUseCase');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const ReassignInventoryCountUseCase = require('../../src/modules/inventory/application/use-cases/ReassignInventoryCountUseCase');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const ListInventoryCountsUseCase = require('../../src/modules/inventory/application/use-cases/ListInventoryCountsUseCase');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const InventoryCountEntity = require('../../src/modules/inventory/domain/entities/InventoryCountEntity');
@@ -64,6 +76,9 @@ function buildCreateRepository() {
     countByCountNumberPrefix: jest.fn(async () => 0),
     bulkCreateItems: jest.fn(async (items: any[]) => items),
     findProductById: jest.fn(async () => null),
+    // Por padrão, qualquer id informado em `assigned_to` "existe e está
+    // ativo" — testes de validação (item 7) sobrescrevem este mock.
+    findActiveUserById: jest.fn(async (id: number) => ({ id, active: true })),
   };
 }
 
@@ -96,6 +111,22 @@ describe('CreateInventoryCountUseCase — assigned_to (atribuição específica 
       expect.objectContaining({ assigned_to: null }),
       expect.anything()
     );
+  });
+
+  it('rejeita criação com assigned_to inexistente/inativo (422/ValidationError, sem side-effect)', async () => {
+    const repository = buildCreateRepository();
+    repository.findActiveUserById = jest.fn(async () => null);
+    const useCase = new CreateInventoryCountUseCase(repository);
+
+    await expect(
+      useCase.execute({ count_type: 'cycle', warehouse_id: 2, created_by: 7, assigned_to: 999 })
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      message: expect.stringContaining('não encontrado ou inativo'),
+    });
+
+    expect(repository.findActiveUserById).toHaveBeenCalledWith(999, expect.anything());
+    expect(repository.create).not.toHaveBeenCalled();
   });
 
   it('InventoryCountEntity.toRepositoryInput expõe assigned_to (null por padrão)', () => {
@@ -166,6 +197,106 @@ describe('StartInventoryCountUseCase — claim atômico do pool / trava de atrib
     const useCase = new StartInventoryCountUseCase(repository);
 
     await expect(useCase.execute({ id: 4, userId: 33 })).rejects.toMatchObject({ statusCode: 422 });
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('admin assume (override) contagem já atribuída a OUTRO funcionário, em vez de 409 (achado de auditoria 2026-08-06, item 1b)', async () => {
+    const count = { id: 5, status: 'draft', assigned_to: 99 };
+    const repository = buildStartRepository(count);
+    const useCase = new StartInventoryCountUseCase(repository);
+
+    const result = await useCase.execute({ id: 5, userId: 33, role: 'admin' });
+
+    expect(repository.update).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({ status: 'counting', assigned_to: 33 }),
+      expect.anything()
+    );
+    expect(result.adminOverride).toBe(true);
+    expect(result.previousAssignedTo).toBe(99);
+  });
+
+  it('não marca adminOverride quando o próprio admin já é o responsável (idempotente)', async () => {
+    const count = { id: 6, status: 'draft', assigned_to: 33 };
+    const repository = buildStartRepository(count);
+    const useCase = new StartInventoryCountUseCase(repository);
+
+    const result = await useCase.execute({ id: 6, userId: 33, role: 'admin' });
+
+    expect(result.adminOverride).toBe(false);
+    const updateCallData = repository.update.mock.calls[0][1];
+    expect(updateCallData).not.toHaveProperty('assigned_to');
+  });
+});
+
+describe('ReassignInventoryCountUseCase — reatribuição por gestor (achado de auditoria 2026-08-06, item 1a)', () => {
+  function buildReassignRepository(count: any, overrides: Record<string, any> = {}) {
+    return {
+      findRawByIdForUpdate: jest.fn(async () => count),
+      update: jest.fn(async () => 1),
+      findById: jest.fn(async () => ({ ...count, assigned_to: overrides.newAssignedTo ?? count.assigned_to })),
+      findActiveUserById: jest.fn(async (id: number) => ({ id, active: true })),
+      ...overrides.repository,
+    };
+  }
+
+  it('reatribui contagem em draft para outro funcionário (gestor)', async () => {
+    const count = { id: 10, status: 'draft', assigned_to: 5 };
+    const repository = buildReassignRepository(count, { newAssignedTo: 42 });
+    const useCase = new ReassignInventoryCountUseCase(repository);
+
+    const { count: updated, previousAssignedTo } = await useCase.execute({ id: 10, assigned_to: 42 });
+
+    expect(repository.update).toHaveBeenCalledWith(10, { assigned_to: 42 }, expect.anything());
+    expect(previousAssignedTo).toBe(5);
+    expect(updated.assigned_to).toBe(42);
+  });
+
+  it('reatribui contagem em counting para null (devolve ao pool)', async () => {
+    const count = { id: 11, status: 'counting', assigned_to: 5 };
+    const repository = buildReassignRepository(count, { newAssignedTo: null });
+    const useCase = new ReassignInventoryCountUseCase(repository);
+
+    const { previousAssignedTo } = await useCase.execute({ id: 11, assigned_to: null });
+
+    expect(repository.update).toHaveBeenCalledWith(11, { assigned_to: null }, expect.anything());
+    expect(previousAssignedTo).toBe(5);
+    // Não deve validar usuário quando o destino é o pool (null).
+    expect(repository.findActiveUserById).not.toHaveBeenCalled();
+  });
+
+  it('rejeita reatribuição de contagem em status inválido (422/BusinessRuleError, com details didático)', async () => {
+    const count = { id: 12, status: 'pending_approval', assigned_to: 5 };
+    const repository = buildReassignRepository(count);
+    const useCase = new ReassignInventoryCountUseCase(repository);
+
+    await expect(useCase.execute({ id: 12, assigned_to: 42 })).rejects.toMatchObject({
+      statusCode: 422,
+      details: { current_status: 'pending_approval', allowed_statuses: ['draft', 'counting'] },
+    });
+
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejeita reatribuição para usuário inexistente/inativo (422/ValidationError, sem side-effect)', async () => {
+    const count = { id: 13, status: 'draft', assigned_to: 5 };
+    const repository = buildReassignRepository(count);
+    repository.findActiveUserById = jest.fn(async () => null);
+    const useCase = new ReassignInventoryCountUseCase(repository);
+
+    await expect(useCase.execute({ id: 13, assigned_to: 999 })).rejects.toMatchObject({
+      statusCode: 422,
+      message: expect.stringContaining('não encontrado ou inativo'),
+    });
+
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('lança NotFoundError (404) quando a contagem não existe', async () => {
+    const repository = buildReassignRepository(null);
+    const useCase = new ReassignInventoryCountUseCase(repository);
+
+    await expect(useCase.execute({ id: 999, assigned_to: 42 })).rejects.toMatchObject({ statusCode: 404 });
     expect(repository.update).not.toHaveBeenCalled();
   });
 });

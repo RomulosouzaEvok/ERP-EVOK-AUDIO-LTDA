@@ -42,8 +42,16 @@ exports.handoffs = async (req: Request, res: Response, next: NextFunction) => {
 /**
  * `GET /api/dashboard/department-demands` — painel de TV: demandas em
  * aberto (OPs, requisições de compra e contagens de inventário) agrupadas
- * por departamento, para acompanhamento sem login (app Android TV,
- * consumido em `tv/`, construído em paralelo por outro time).
+ * por departamento, consumido pelo app Android TV (`tv/`, construído em
+ * paralelo por outro time) para acompanhamento nas telas do chão de
+ * fábrica.
+ *
+ * "Sem login" aqui se refere apenas a NÃO exigir que um funcionário abra o
+ * navegador/sistema web para acompanhar as demandas — a rota EXIGE
+ * autenticação normal (`authenticate` + `authorizeModule('dashboard')`,
+ * ver `server/src/modules/dashboard/presentation/routes/dashboard.ts`). O
+ * app `tv/` autentica com uma conta de serviço dedicada (token JWT próprio)
+ * para chamar este endpoint, exatamente como qualquer outro cliente da API.
  */
 exports.departmentDemands = async (req: Request, res: Response, next: NextFunction) => {
   try {

@@ -9,7 +9,6 @@ import * as inventoryApi from '@/api/inventory';
 import * as productsApi from '@/api/products';
 import * as warehousesApi from '@/api/warehouses';
 import * as usersApi from '@/api/users';
-import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -35,10 +34,33 @@ const STATUS_LABEL: Record<inventoryApi.InventoryCountStatus, string> = {
 const createCountSchema = z.object({
   warehouse_id: z.coerce.number({ message: 'Selecione o depósito.' }).int().positive('Selecione o depósito.'),
   location: z.string().trim().max(100).optional(),
-  assigned_to: z.coerce.number().int().positive().optional(),
+  /**
+   * Mantido como STRING (não `z.coerce.number()...optional()`) e convertido
+   * só no submit via `toOptionalNumber` (mesmo padrão de `ProductsPage.tsx`).
+   * `z.coerce.number()` sozinho converteria `''` (opção "pool" do select, o
+   * caso mais comum) em `0`, que falha em `.positive()` mesmo com
+   * `.optional()` encadeado — bug real da auditoria. `z.preprocess` resolve
+   * a coerção, mas quebra a inferência de tipos do `zodResolver` sob
+   * `tsc -b`/`npm run build` (project references): o tipo de ENTRADA do
+   * campo pré-processado vira `unknown`, incompatível com
+   * `useForm<CreateCountFormData>`.
+   */
+  assigned_to: z
+    .string()
+    .optional()
+    .refine((value) => value === undefined || value === '' || /^\d+$/.test(value), {
+      message: 'Selecione um funcionário válido.',
+    }),
 });
 
 type CreateCountFormData = z.infer<typeof createCountSchema>;
+
+/** Converte o campo `assigned_to` (string do `<select>`, `''` = pool) para `number | undefined`. */
+function toOptionalAssignedTo(value: string | undefined): number | undefined {
+  if (value === '' || value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
 
 /**
  * Resolve `code — name` de um depósito a partir do `id` (a listagem/detalhe
@@ -64,6 +86,9 @@ export default function InventoryCountsPage() {
   const [page, setPage] = React.useState(1);
   const [createFormError, setCreateFormError] = React.useState<DidacticError | null>(null);
   const [approveError, setApproveError] = React.useState<DidacticError | null>(null);
+  const [startError, setStartError] = React.useState<DidacticError | null>(null);
+  const [submitError, setSubmitError] = React.useState<DidacticError | null>(null);
+  const [rejectError, setRejectError] = React.useState<DidacticError | null>(null);
   /** Filtro de responsável: `''` (todas), `'unassigned'` (pool) ou o `id` do usuário. */
   const [assignmentFilter, setAssignmentFilter] = React.useState<string>('');
 
@@ -79,10 +104,18 @@ export default function InventoryCountsPage() {
   });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
   const { data: warehouses } = useQuery({ queryKey: ['warehouses'], queryFn: warehousesApi.listWarehouses });
-  const { data: users } = useQuery({ queryKey: ['users-all-active'], queryFn: () => usersApi.listUsers({ limit: 200, active: true }) });
+  /**
+   * `GET /api/users` é admin-only no backend (`usersApi.listUsers`) — um
+   * `operator` autenticado recebe 403 aqui. Trata via `isError` em vez de
+   * deixar o dropdown de atribuição silenciosamente só com "pool" (ver
+   * `usersError` abaixo).
+   */
+  const { data: users, isError: usersError } = useQuery({
+    queryKey: ['users-all-active'],
+    queryFn: () => usersApi.listUsers({ limit: 200, active: true }),
+  });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['inventory-counts'] });
-  const onError = (error: unknown) => window.alert(extractApiErrorMessage(error));
 
   const {
     register,
@@ -100,7 +133,7 @@ export default function InventoryCountsPage() {
         warehouse_id: values.warehouse_id,
         location: values.location?.trim() || undefined,
         product_ids: selectedProductIds,
-        assigned_to: values.assigned_to || undefined,
+        assigned_to: toOptionalAssignedTo(values.assigned_to),
       }),
     onSuccess: () => {
       invalidate();
@@ -111,8 +144,22 @@ export default function InventoryCountsPage() {
     },
     onError: (error) => setCreateFormError(translateApiError(error, 'Não foi possível criar a contagem de inventário')),
   });
-  const startMutation = useMutation({ mutationFn: inventoryApi.startInventoryCount, onSuccess: invalidate, onError });
-  const submitMutation = useMutation({ mutationFn: inventoryApi.submitInventoryCount, onSuccess: invalidate, onError });
+  const startMutation = useMutation({
+    mutationFn: inventoryApi.startInventoryCount,
+    onSuccess: () => {
+      invalidate();
+      setStartError(null);
+    },
+    onError: (error) => setStartError(translateApiError(error, 'Não foi possível iniciar a contagem')),
+  });
+  const submitMutation = useMutation({
+    mutationFn: inventoryApi.submitInventoryCount,
+    onSuccess: () => {
+      invalidate();
+      setSubmitError(null);
+    },
+    onError: (error) => setSubmitError(translateApiError(error, 'Não foi possível enviar a contagem para aprovação')),
+  });
   const approveMutation = useMutation({
     mutationFn: inventoryApi.approveInventoryCount,
     onSuccess: () => {
@@ -130,7 +177,14 @@ export default function InventoryCountsPage() {
         ),
       ),
   });
-  const rejectMutation = useMutation({ mutationFn: (id: number) => inventoryApi.rejectInventoryCount(id), onSuccess: invalidate, onError });
+  const rejectMutation = useMutation({
+    mutationFn: (id: number) => inventoryApi.rejectInventoryCount(id),
+    onSuccess: () => {
+      invalidate();
+      setRejectError(null);
+    },
+    onError: (error) => setRejectError(translateApiError(error, 'Não foi possível rejeitar a contagem')),
+  });
 
   function toggleProduct(id: number) {
     setSelectedProductIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -203,18 +257,27 @@ export default function InventoryCountsPage() {
 
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="count-assigned-to">Atribuir a (opcional)</Label>
-                  <SelectNative id="count-assigned-to" defaultValue="" {...register('assigned_to')}>
-                    <option value="">Deixar disponível (pool) — qualquer funcionário pode pegar</option>
-                    {users?.data.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name}
-                      </option>
-                    ))}
-                  </SelectNative>
-                  <p className="text-xs text-muted-foreground">
-                    Se não for atribuída a ninguém, a contagem fica disponível no app mobile para qualquer funcionário
-                    autorizado pegar ("pool"). Se um funcionário for selecionado, apenas ele poderá iniciá-la.
-                  </p>
+                  {usersError ? (
+                    <p className="text-sm text-muted-foreground">
+                      Atribuição por nome disponível apenas para administradores — a contagem irá para o pool.
+                    </p>
+                  ) : (
+                    <>
+                      <SelectNative id="count-assigned-to" defaultValue="" {...register('assigned_to')}>
+                        <option value="">Deixar disponível (pool) — qualquer funcionário pode pegar</option>
+                        {users?.data.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name}
+                          </option>
+                        ))}
+                      </SelectNative>
+                      <p className="text-xs text-muted-foreground">
+                        Se não for atribuída a ninguém, a contagem fica disponível no app mobile para qualquer funcionário
+                        autorizado pegar ("pool"). Se um funcionário for selecionado, apenas ele poderá iniciá-la.
+                      </p>
+                    </>
+                  )}
+                  {errors.assigned_to && <p className="text-sm text-destructive">{errors.assigned_to.message}</p>}
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -253,6 +316,9 @@ export default function InventoryCountsPage() {
       </div>
 
       {approveError && <DidacticAlert error={approveError} />}
+      {startError && <DidacticAlert error={startError} />}
+      {submitError && <DidacticAlert error={submitError} />}
+      {rejectError && <DidacticAlert error={rejectError} />}
 
       <div className="flex flex-col gap-1.5 sm:w-72">
         <Label htmlFor="count-assignment-filter">Filtrar por responsável</Label>
@@ -266,12 +332,18 @@ export default function InventoryCountsPage() {
         >
           <option value="">Todas as contagens</option>
           <option value="unassigned">Sem responsável (pool)</option>
-          {users?.data.map((user) => (
-            <option key={user.id} value={user.id}>
-              Atribuídas a {user.name}
-            </option>
-          ))}
+          {!usersError &&
+            users?.data.map((user) => (
+              <option key={user.id} value={user.id}>
+                Atribuídas a {user.name}
+              </option>
+            ))}
         </SelectNative>
+        {usersError && (
+          <p className="text-xs text-muted-foreground">
+            Filtro por funcionário específico disponível apenas para administradores.
+          </p>
+        )}
       </div>
 
       <Table>
@@ -368,6 +440,7 @@ function CountItemsDialog({
 }) {
   const queryClient = useQueryClient();
   const [values, setValues] = React.useState<Record<number, string>>({});
+  const [countError, setCountError] = React.useState<DidacticError | null>(null);
   const { data: warehouses } = useQuery({ queryKey: ['warehouses'], queryFn: warehousesApi.listWarehouses });
 
   const { data: count } = useQuery({
@@ -379,8 +452,11 @@ function CountItemsDialog({
   const countMutation = useMutation({
     mutationFn: ({ itemId, quantity }: { itemId: number; quantity: number }) =>
       inventoryApi.countInventoryItem(countId!, itemId, quantity),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inventory-count', countId] }),
-    onError: (error) => window.alert(extractApiErrorMessage(error)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory-count', countId] });
+      setCountError(null);
+    },
+    onError: (error) => setCountError(translateApiError(error, 'Não foi possível registrar a contagem do item')),
   });
 
   const allCounted = count?.items?.every((item) => item.status !== 'pending') ?? false;
@@ -437,6 +513,7 @@ function CountItemsDialog({
             </div>
           ))}
         </div>
+        {countError && <DidacticAlert error={countError} />}
         <DialogFooter>
           <Button
             disabled={!allCounted}

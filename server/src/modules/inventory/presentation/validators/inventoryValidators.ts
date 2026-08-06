@@ -86,6 +86,15 @@ export const createInventoryCountSchema = z.object({
   department_id: z.coerce.number().int().positive().nullable().optional(),
 }).strict();
 
+// Reatribuição de contagem de inventário (achado de auditoria 2026-08-06,
+// item 1a — `PUT /api/inventory-counts/:id/reassign`). `assigned_to: null`
+// devolve a contagem ao "pool"; ausente é rejeitado explicitamente (`.strict()`
+// + campo obrigatório na forma, mesmo que aceite `null`) para forçar o
+// cliente a ser explícito sobre a intenção.
+export const reassignInventoryCountSchema = z.object({
+  assigned_to: z.coerce.number().int().positive().nullable(),
+}).strict();
+
 const schemas = {
   createInventoryMovementSchema,
   createWarehouseTransferSchema,
@@ -93,7 +102,8 @@ const schemas = {
   createWarehouseSchema,
   updateWarehouseSchema,
   idParamSchema,
-  createInventoryCountSchema
+  createInventoryCountSchema,
+  reassignInventoryCountSchema
 };
 
 module.exports = schemas;

@@ -183,6 +183,34 @@ class InventoryCountRepository {
   async findProductById(id: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
     throw new Error('InventoryCountRepository.findProductById não implementado.');
   }
+
+  /**
+   * Busca um usuário ATIVO (`users.active = true`) por id — usado para
+   * validar `assigned_to` antes de criar (`CreateInventoryCountUseCase`) ou
+   * reatribuir (`ReassignInventoryCountUseCase`) uma contagem. Retorna
+   * `null` tanto se o usuário não existir quanto se estiver inativo (o
+   * chamador não precisa nem deve distinguir os dois casos na mensagem de
+   * erro ao usuário final).
+   *
+   * Decisão de design (documentada aqui e nos use cases que chamam este
+   * método): valida SOMENTE existência + `active`, nunca o perfil de acesso
+   * (`AccessProfile`) do usuário-alvo. Checar se o alvo tem permissão no
+   * módulo `contagens` acoplaria este fluxo de atribuição à matriz de
+   * permissões de outro módulo (RBAC), e um gestor já tem contexto de quem
+   * pode contar estoque na prática — a UI de atribuição lista apenas
+   * funcionários relevantes. Adicionar essa checagem aqui seria rigidez
+   * excessiva sem ganho real de segurança (a ação em si — iniciar/contar —
+   * já é protegida por `authorizeModule('contagens', ...)` nas rotas
+   * correspondentes).
+   *
+   * @abstract
+   * @param {number} id
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object|null>}
+   */
+  async findActiveUserById(id: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('InventoryCountRepository.findActiveUserById não implementado.');
+  }
 }
 
 export = InventoryCountRepository;

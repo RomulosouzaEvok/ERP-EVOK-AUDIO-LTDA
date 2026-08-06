@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 
 const { logAction } = require('../../../../services/auditLogService');
-const { createInventoryCountSchema, handleZodError } = require('../validators/inventoryValidators');
+const { createInventoryCountSchema, reassignInventoryCountSchema, handleZodError } = require('../validators/inventoryValidators');
 const SequelizeInventoryCountRepository = require('../../infrastructure/sequelize/SequelizeInventoryCountRepository');
 const CreateInventoryCountUseCase = require('../../application/use-cases/CreateInventoryCountUseCase');
 const StartInventoryCountUseCase = require('../../application/use-cases/StartInventoryCountUseCase');
@@ -9,6 +9,7 @@ const CountInventoryItemUseCase = require('../../application/use-cases/CountInve
 const SubmitInventoryCountUseCase = require('../../application/use-cases/SubmitInventoryCountUseCase');
 const ApproveInventoryCountUseCase = require('../../application/use-cases/ApproveInventoryCountUseCase');
 const RejectInventoryCountUseCase = require('../../application/use-cases/RejectInventoryCountUseCase');
+const ReassignInventoryCountUseCase = require('../../application/use-cases/ReassignInventoryCountUseCase');
 const ListInventoryCountsUseCase = require('../../application/use-cases/ListInventoryCountsUseCase');
 const GetInventoryCountByIdUseCase = require('../../application/use-cases/GetInventoryCountByIdUseCase');
 
@@ -135,8 +136,10 @@ exports.getById = async (req: Request, res: Response, next: NextFunction) => {
  *
  * Também resolve a atribuição (`assigned_to`): se a contagem estiver no
  * "pool", faz o claim atômico para o usuário logado; se já estiver
- * atribuída a OUTRO funcionário, retorna 409 (`ConflictError`); se já for
- * do próprio usuário, segue normalmente (ver `StartInventoryCountUseCase`).
+ * atribuída a OUTRO funcionário e quem inicia não for `admin`, retorna 409
+ * (`ConflictError`); se quem inicia FOR `admin`, assume a contagem (override
+ * — auditado com `oldValues`/`newValues` diferenciados); se já for do
+ * próprio usuário, segue normalmente (ver `StartInventoryCountUseCase`).
  *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -146,15 +149,62 @@ exports.getById = async (req: Request, res: Response, next: NextFunction) => {
 exports.start = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new StartInventoryCountUseCase(inventoryCountRepository);
-    const count = await useCase.execute({ id: req.params.id, userId: (req as any).user.id });
+    const { count, adminOverride, previousAssignedTo } = await useCase.execute({
+      id: req.params.id,
+      userId: (req as any).user.id,
+      role: (req as any).user.role
+    });
 
     logAction(req, {
       action: 'update',
       entityType: 'InventoryCount',
       entityId: count.id,
       entityDescription: count.count_number,
-      newValues: { status: 'counting' },
-      description: `Contagem de inventário ${count.count_number} iniciada`
+      oldValues: adminOverride ? { assigned_to: previousAssignedTo } : undefined,
+      newValues: adminOverride
+        ? { status: 'counting', assigned_to: count.assigned_to }
+        : { status: 'counting' },
+      description: adminOverride
+        ? `Contagem de inventário ${count.count_number} assumida por administrador (estava atribuída a outro funcionário) e iniciada`
+        : `Contagem de inventário ${count.count_number} iniciada`
+    });
+
+    res.json({ success: true, data: count });
+  } catch (error) { handleError(error, res, next); }
+};
+
+/**
+ * `PUT /api/inventory-counts/:id/reassign` — reatribui a contagem a outro
+ * funcionário (ou devolve ao "pool" com `assigned_to: null`). Ação de
+ * gestor da área (`authorizeModule('contagens', 'approve')`), corrigindo o
+ * achado de auditoria 2026-08-06 (item 1a): antes deste endpoint, uma
+ * contagem atribuída a um funcionário de férias/desligado ficava presa em
+ * `draft` para sempre.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.reassign = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = reassignInventoryCountSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { assigned_to } = parsed.data;
+
+    const useCase = new ReassignInventoryCountUseCase(inventoryCountRepository);
+    const { count, previousAssignedTo } = await useCase.execute({ id: req.params.id, assigned_to });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'InventoryCount',
+      entityId: count.id,
+      entityDescription: count.count_number,
+      oldValues: { assigned_to: previousAssignedTo },
+      newValues: { assigned_to: count.assigned_to },
+      description: count.assigned_to
+        ? `Contagem de inventário ${count.count_number} reatribuída (assigned_to=${count.assigned_to})`
+        : `Contagem de inventário ${count.count_number} devolvida ao pool (sem responsável)`
     });
 
     res.json({ success: true, data: count });
