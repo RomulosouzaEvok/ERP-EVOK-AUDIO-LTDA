@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload, CheckCircle2, XCircle, Undo2 } from 'lucide-react';
 
 import * as financialApi from '@/api/financial';
-import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -49,6 +48,7 @@ export function ReconciliationTab() {
   const queryClient = useQueryClient();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = React.useState<DidacticError | null>(null);
+  const [entryActionError, setEntryActionError] = React.useState<DidacticError | null>(null);
   const [selectedStatementId, setSelectedStatementId] = React.useState<number | null>(null);
   const [entryStatusFilter, setEntryStatusFilter] = React.useState<financialApi.BankStatementEntryStatus | undefined>(undefined);
 
@@ -96,20 +96,29 @@ export function ReconciliationTab() {
   const matchMutation = useMutation({
     mutationFn: ({ entryId, candidate }: { entryId: number; candidate: financialApi.MatchSuggestionCandidate }) =>
       financialApi.matchBankStatementEntry(entryId, candidate.type === 'payable' ? { payableId: candidate.id } : { receivableId: candidate.id }),
-    onSuccess: invalidateEntryQueries,
-    onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível conciliar o lançamento.')),
+    onSuccess: () => {
+      setEntryActionError(null);
+      invalidateEntryQueries();
+    },
+    onError: (error) => setEntryActionError(translateApiError(error, 'Não foi possível conciliar o lançamento')),
   });
 
   const ignoreMutation = useMutation({
     mutationFn: (entryId: number) => financialApi.ignoreBankStatementEntry(entryId),
-    onSuccess: invalidateEntryQueries,
-    onError: () => window.alert('Não foi possível ignorar o lançamento.'),
+    onSuccess: () => {
+      setEntryActionError(null);
+      invalidateEntryQueries();
+    },
+    onError: (error) => setEntryActionError(translateApiError(error, 'Não foi possível ignorar o lançamento')),
   });
 
   const unmatchMutation = useMutation({
     mutationFn: (entryId: number) => financialApi.unmatchBankStatementEntry(entryId),
-    onSuccess: invalidateEntryQueries,
-    onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível desfazer a conciliação.')),
+    onSuccess: () => {
+      setEntryActionError(null);
+      invalidateEntryQueries();
+    },
+    onError: (error) => setEntryActionError(translateApiError(error, 'Não foi possível desfazer a conciliação')),
   });
 
   return (
@@ -206,7 +215,8 @@ export function ReconciliationTab() {
               ))}
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-3">
+            {entryActionError && <DidacticAlert error={entryActionError} />}
             <Table>
               <TableHeader>
                 <TableRow>

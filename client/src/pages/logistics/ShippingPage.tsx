@@ -4,7 +4,6 @@ import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { Eye, Send, AlertTriangle, Truck } from 'lucide-react';
 
 import * as salesApi from '@/api/sales';
-import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { HandoffDot } from '@/components/HandoffDot';
@@ -214,7 +213,7 @@ export default function ShippingPage() {
 
 function ShippingItemsDialog({ sale, onClose }: { sale: salesApi.Sale | null; onClose: () => void }) {
   const [fullSale, setFullSale] = React.useState<salesApi.Sale | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<DidacticError | null>(null);
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
@@ -231,7 +230,7 @@ function ShippingItemsDialog({ sale, onClose }: { sale: salesApi.Sale | null; on
         if (!cancelled) setFullSale(data);
       })
       .catch((err) => {
-        if (!cancelled) setError(extractApiErrorMessage(err, 'Não foi possível carregar os itens da venda.'));
+        if (!cancelled) setError(translateApiError(err, 'Não foi possível carregar os itens da venda'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -259,7 +258,7 @@ function ShippingItemsDialog({ sale, onClose }: { sale: salesApi.Sale | null; on
           </div>
 
           {loading && <p className="text-sm text-muted-foreground">Carregando itens...</p>}
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <DidacticAlert error={error} />}
 
           {!loading && !error && (
             <Table>

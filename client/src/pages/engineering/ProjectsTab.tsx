@@ -7,7 +7,8 @@ import { Plus, Pencil } from 'lucide-react';
 
 import * as engineeringApi from '@/api/engineering';
 import * as productsApi from '@/api/products';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -108,7 +109,7 @@ export function ProjectsTab() {
   const [page, setPage] = React.useState(1);
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<engineeringApi.EngineeringProject | null>(null);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['engineering-projects', page, statusFilter, stageFilter],
@@ -158,7 +159,7 @@ export function ProjectsTab() {
       invalidate();
       closeDialog();
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error, 'Não foi possível criar o projeto.')),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível criar o projeto')),
   });
 
   const updateMutation = useMutation({
@@ -181,7 +182,7 @@ export function ProjectsTab() {
       invalidate();
       closeDialog();
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error, 'Não foi possível atualizar o projeto.')),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível atualizar o projeto')),
   });
 
   function closeDialog() {
@@ -460,7 +461,7 @@ export function ProjectsTab() {
               />
             </div>
 
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
+            {formError && <DidacticAlert error={formError} />}
             <DialogFooter>
               <Button type="submit" disabled={isSubmitting || createMutation.isPending || updateMutation.isPending}>
                 {isSubmitting || createMutation.isPending || updateMutation.isPending

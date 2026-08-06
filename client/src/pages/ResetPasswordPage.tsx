@@ -8,7 +8,8 @@ import { KeyRound } from 'lucide-react';
 import evokLogo from '@/assets/brand/evok-logo.png';
 
 import * as authApi from '@/api/auth';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,7 +36,7 @@ export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
-  const [apiError, setApiError] = React.useState<string | null>(null);
+  const [apiError, setApiError] = React.useState<DidacticError | null>(null);
   const [success, setSuccess] = React.useState(false);
 
   const {
@@ -52,7 +53,9 @@ export default function ResetPasswordPage() {
       setSuccess(true);
       setTimeout(() => navigate('/login', { replace: true }), 2000);
     } catch (error) {
-      setApiError(extractApiErrorMessage(error, 'Token inválido ou expirado. Solicite um novo link.'));
+      setApiError(
+        translateApiError(error, 'Não foi possível redefinir a senha', undefined, 'Token inválido ou expirado. Solicite um novo link.'),
+      );
     }
   }
 
@@ -116,7 +119,7 @@ export default function ResetPasswordPage() {
                     <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
                   )}
                 </div>
-                {apiError && <p className="text-sm text-destructive">{apiError}</p>}
+                {apiError && <DidacticAlert error={apiError} />}
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? 'Salvando...' : 'Redefinir senha'}
                 </Button>

@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { Plus, Building2 } from 'lucide-react';
 
 import * as suppliersApi from '@/api/suppliers';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +35,7 @@ export default function SuppliersPage() {
   const [search, setSearch] = React.useState('');
   const [page, setPage] = React.useState(1);
   const [open, setOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['suppliers', search, page],
@@ -56,7 +57,7 @@ export default function SuppliersPage() {
       reset();
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível criar o fornecedor')),
   });
 
   return (
@@ -108,7 +109,7 @@ export default function SuppliersPage() {
                     {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
                   </div>
                 </div>
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar fornecedor'}

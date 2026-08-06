@@ -53,6 +53,17 @@ const mockSaleItemFindAll = jest.fn();
 const mockClientFindByPk = jest.fn();
 const mockCompanyFiscalConfigFindByPk = jest.fn();
 const mockProductFindAll = jest.fn();
+// Histórico multi-NF-e (2026-08-06): `SaleInvoice` fake em memória, mesmo
+// padrão dos demais mocks deste arquivo (o repository real usa
+// `models/index`, que este teste substitui por completo).
+const mockSaleInvoices: any[] = [];
+const mockSaleInvoiceCreate = jest.fn(async (data: any) => {
+  const invoice = { ...data, id: mockSaleInvoices.length + 1, save: jest.fn(async function (this: any) { return this; }) };
+  mockSaleInvoices.push(invoice);
+  return invoice;
+});
+const mockSaleInvoiceFindOne = jest.fn(async ({ where }: any) => mockSaleInvoices.find((invoice) => invoice.nfe_provider_ref === where.nfe_provider_ref) || null);
+const mockSaleInvoiceFindAll = jest.fn(async () => mockSaleInvoices);
 
 jest.mock('../../src/models/index', () => ({
   Sale: { findByPk: (...args: unknown[]) => mockSaleFindByPk(...args) },
@@ -60,6 +71,11 @@ jest.mock('../../src/models/index', () => ({
   Client: { findByPk: (...args: unknown[]) => mockClientFindByPk(...args) },
   Product: { findAll: (...args: unknown[]) => mockProductFindAll(...args) },
   CompanyFiscalConfig: { findByPk: (...args: unknown[]) => mockCompanyFiscalConfigFindByPk(...args) },
+  SaleInvoice: {
+    create: (...args: unknown[]) => mockSaleInvoiceCreate(...(args as [any])),
+    findOne: (...args: unknown[]) => mockSaleInvoiceFindOne(...(args as [any])),
+    findAll: (...args: unknown[]) => mockSaleInvoiceFindAll(),
+  },
 }));
 
 const mockProviderIssue = jest.fn();
@@ -94,6 +110,7 @@ function mockReq(user?: any) {
 describe('RBAC de NF-e no modulo Vendas (UC-41, Bloco 5)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSaleInvoices.length = 0;
   });
 
   it('operador de Vendas (nivel operate) tenta emitir NF-e -> 403 APPROVAL_LEVEL_REQUIRED', () => {

@@ -9,7 +9,8 @@ import * as productsApi from '@/api/products';
 import * as inventoryApi from '@/api/inventory';
 import * as lotsApi from '@/api/lots';
 import * as warehousesApi from '@/api/warehouses';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -293,7 +294,7 @@ type MovementFormData = z.infer<typeof movementSchema>;
  */
 function StockMovementDialog({ product, onClose }: { product: productsApi.Product | null; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
 
   const { data: warehouses } = useQuery({
     queryKey: ['warehouses'],
@@ -329,7 +330,7 @@ function StockMovementDialog({ product, onClose }: { product: productsApi.Produc
       setFormError(null);
       onClose();
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível movimentar o estoque')),
   });
 
   React.useEffect(() => {
@@ -374,7 +375,7 @@ function StockMovementDialog({ product, onClose }: { product: productsApi.Produc
             <Label htmlFor="description">Motivo (opcional)</Label>
             <Input id="description" {...register('description')} />
           </div>
-          {formError && <p className="text-sm text-destructive">{formError}</p>}
+          {formError && <DidacticAlert error={formError} />}
           <DialogFooter>
             <Button type="submit" disabled={isSubmitting || !product || mutation.isPending}>
               {isSubmitting ? 'Salvando...' : 'Confirmar movimentação'}

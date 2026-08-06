@@ -75,6 +75,12 @@ import ProductionDowntime = require('./ProductionDowntime');
 import CustomerPriceList = require('./CustomerPriceList');
 import ImportProcess = require('./ImportProcess');
 import ImportProcessItem = require('./ImportProcessItem');
+import SaleInvoice = require('./SaleInvoice');
+import CompanyBankingConfig = require('./CompanyBankingConfig');
+import CnabRemittance = require('./CnabRemittance');
+import CnabRemittanceItem = require('./CnabRemittanceItem');
+import CnabReturnFile = require('./CnabReturnFile');
+import CnabReturnOccurrence = require('./CnabReturnOccurrence');
 
 // ============================================
 // RELACIONAMENTOS
@@ -167,6 +173,11 @@ SaleItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 // Item ↔ SaleItem (Fase 4.3 expand-contract)
 Item.hasMany(SaleItem, { foreignKey: 'item_id', as: 'sale_items' });
 SaleItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
+// Sale ↔ SaleInvoice (histórico multi-NF-e por pedido, 2026-08-06 —
+// `docs/governance/TODO.md`; ver JSDoc de `models/SaleInvoice.ts`)
+Sale.hasMany(SaleInvoice, { foreignKey: 'sale_id', as: 'invoices' });
+SaleInvoice.belongsTo(Sale, { foreignKey: 'sale_id', as: 'sale' });
 
 // Sale ↔ AccountReceivable
 Sale.hasMany(AccountReceivable, { foreignKey: 'sale_id', as: 'accounts_receivable' });
@@ -692,6 +703,38 @@ ImportProcessItem.belongsTo(ImportProcess, { foreignKey: 'import_process_id', as
 Item.hasMany(ImportProcessItem, { foreignKey: 'item_id', as: 'import_process_items' });
 ImportProcessItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
 
+// ============================================
+// RELACIONAMENTOS - COBRANCA CNAB 240 (remessa/retorno)
+// ============================================
+
+// CostCenter ↔ Department (de-para opcional usado na AP automática de compras)
+CostCenter.hasMany(Department, { foreignKey: 'cost_center_id', as: 'departments' });
+Department.belongsTo(CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter' });
+
+// User ↔ CnabRemittance (quem gerou a remessa)
+User.hasMany(CnabRemittance, { foreignKey: 'generated_by', as: 'cnab_remittances' });
+CnabRemittance.belongsTo(User, { foreignKey: 'generated_by', as: 'generatedBy' });
+
+// CnabRemittance ↔ CnabRemittanceItem
+CnabRemittance.hasMany(CnabRemittanceItem, { foreignKey: 'remittance_id', as: 'items', onDelete: 'CASCADE' });
+CnabRemittanceItem.belongsTo(CnabRemittance, { foreignKey: 'remittance_id', as: 'remittance', onDelete: 'CASCADE' });
+
+// AccountReceivable ↔ CnabRemittanceItem
+AccountReceivable.hasMany(CnabRemittanceItem, { foreignKey: 'receivable_id', as: 'cnab_remittance_items' });
+CnabRemittanceItem.belongsTo(AccountReceivable, { foreignKey: 'receivable_id', as: 'receivable' });
+
+// User ↔ CnabReturnFile (quem processou o retorno)
+User.hasMany(CnabReturnFile, { foreignKey: 'processed_by', as: 'cnab_return_files' });
+CnabReturnFile.belongsTo(User, { foreignKey: 'processed_by', as: 'processedBy' });
+
+// CnabReturnFile ↔ CnabReturnOccurrence
+CnabReturnFile.hasMany(CnabReturnOccurrence, { foreignKey: 'return_file_id', as: 'occurrences', onDelete: 'CASCADE' });
+CnabReturnOccurrence.belongsTo(CnabReturnFile, { foreignKey: 'return_file_id', as: 'returnFile', onDelete: 'CASCADE' });
+
+// CnabRemittanceItem ↔ CnabReturnOccurrence (NULL = nosso_numero do retorno não corresponde a nenhuma remessa gerada por este sistema)
+CnabRemittanceItem.hasMany(CnabReturnOccurrence, { foreignKey: 'remittance_item_id', as: 'return_occurrences' });
+CnabReturnOccurrence.belongsTo(CnabRemittanceItem, { foreignKey: 'remittance_item_id', as: 'remittanceItem' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -716,5 +759,8 @@ export {
   ProductionDowntime,
   CustomerPriceList,
   BankStatement, BankStatementEntry,
-  ImportProcess, ImportProcessItem
+  ImportProcess, ImportProcessItem,
+  SaleInvoice,
+  CompanyBankingConfig,
+  CnabRemittance, CnabRemittanceItem, CnabReturnFile, CnabReturnOccurrence
 };

@@ -8,7 +8,8 @@ import { Eye, EyeOff } from 'lucide-react';
 import evokLogo from '@/assets/brand/evok-logo.png';
 
 import { useAuth } from '@/context/AuthContext';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,7 +33,7 @@ export default function LoginPage() {
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [apiError, setApiError] = React.useState<string | null>(null);
+  const [apiError, setApiError] = React.useState<DidacticError | null>(null);
   const [showPassword, setShowPassword] = React.useState(false);
 
   const {
@@ -52,7 +53,9 @@ export default function LoginPage() {
       await login(values.email, values.password);
       navigate('/', { replace: true });
     } catch (error) {
-      setApiError(extractApiErrorMessage(error, 'Não foi possível entrar. Verifique suas credenciais.'));
+      setApiError(
+        translateApiError(error, 'Não foi possível entrar', undefined, 'Verifique suas credenciais e tente novamente.'),
+      );
     }
   }
 
@@ -120,11 +123,7 @@ export default function LoginPage() {
                 </div>
                 {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
               </div>
-              {apiError && (
-                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {apiError}
-                </p>
-              )}
+              {apiError && <DidacticAlert error={apiError} />}
               <Button type="submit" disabled={isSubmitting} className="mt-2">
                 {isSubmitting ? 'Entrando...' : 'Entrar'}
               </Button>

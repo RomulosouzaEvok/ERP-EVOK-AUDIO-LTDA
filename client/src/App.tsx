@@ -12,6 +12,8 @@ import DashboardPage from '@/pages/DashboardPage';
 // inicial, que so precisa do essencial para renderizar o login/dashboard.
 const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
 const ProductsPage = lazy(() => import('@/pages/products/ProductsPage'));
+const ItemMasterPage = lazy(() => import('@/pages/products/ItemMasterPage'));
+const ItemMasterDetailPage = lazy(() => import('@/pages/products/ItemMasterDetailPage'));
 const InventoryCountsPage = lazy(() => import('@/pages/products/InventoryCountsPage'));
 const InventoryPage = lazy(() => import('@/pages/logistics/InventoryPage'));
 const ReceivingPage = lazy(() => import('@/pages/logistics/ReceivingPage'));
@@ -106,6 +108,22 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <InventoryCountsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/products/items"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ItemMasterPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/products/items/:codigo"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ItemMasterDetailPage />
                 </Suspense>
               }
             />

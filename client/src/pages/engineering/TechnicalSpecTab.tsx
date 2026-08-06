@@ -6,7 +6,8 @@ import { z } from 'zod';
 
 import * as engineeringApi from '@/api/engineering';
 import * as itemsApi from '@/api/items';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { useAuth } from '@/context/AuthContext';
 import { ItemSearchSelect } from '@/components/ItemSearchSelect';
 import { Button } from '@/components/ui/button';
@@ -83,7 +84,7 @@ export function TechnicalSpecTab() {
   const queryClient = useQueryClient();
 
   const [selectedItem, setSelectedItem] = React.useState<itemsApi.Item | null>(null);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [saved, setSaved] = React.useState(false);
 
   const { data: spec, isLoading, isError } = useQuery({
@@ -150,7 +151,7 @@ export function TechnicalSpecTab() {
       setFormError(null);
       queryClient.invalidateQueries({ queryKey: ['item-technical-spec', selectedItem?.id] });
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error, 'Não foi possível salvar a ficha técnica.')),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível salvar a ficha técnica')),
   });
 
   return (
@@ -203,7 +204,7 @@ export function TechnicalSpecTab() {
                 ))}
               </div>
 
-              {formError && <p className="text-sm text-destructive">{formError}</p>}
+              {formError && <DidacticAlert error={formError} />}
               {saved && !formError && (
                 <p className="text-sm font-medium text-success">Ficha técnica salva com sucesso.</p>
               )}

@@ -9,7 +9,6 @@ import { Plus, Trash2, Eye, FileSpreadsheet, Send, Trophy } from 'lucide-react';
 import * as rfqApi from '@/api/rfq';
 import * as requisitionsApi from '@/api/purchaseRequisitions';
 import * as suppliersApi from '@/api/suppliers';
-import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -78,7 +77,7 @@ export default function RfqPage() {
   const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [statusFilter, setStatusFilter] = React.useState<rfqApi.RfqStatus | ''>('');
   const [page, setPage] = React.useState(1);
   const [detailRfqId, setDetailRfqId] = React.useState<number | null>(null);
@@ -130,7 +129,7 @@ export default function RfqPage() {
       reset({ source: 'ad_hoc', requisition_id: '', response_deadline: '', notes: '', items: [{ item_id: '', quantity: 1, unit: '' }] });
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível criar a cotação')),
   });
 
   return (
@@ -224,7 +223,7 @@ export default function RfqPage() {
                   </div>
                 </div>
 
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar cotação'}

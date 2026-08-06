@@ -9,7 +9,6 @@ import { Plus, Trash2, Eye, ShoppingCart, ClipboardList } from 'lucide-react';
 import * as requisitionsApi from '@/api/purchaseRequisitions';
 import * as suppliersApi from '@/api/suppliers';
 import * as engineeringApi from '@/api/engineering';
-import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { HandoffDot } from '@/components/HandoffDot';
@@ -95,7 +94,7 @@ export default function RequisitionsPage() {
   const isAdmin = hasRole('admin');
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [statusFilter, setStatusFilter] = React.useState<requisitionsApi.RequisitionStatus | ''>('');
   const [detailsRequisition, setDetailsRequisition] = React.useState<requisitionsApi.PurchaseRequisition | null>(null);
   const [convertingRequisition, setConvertingRequisition] = React.useState<requisitionsApi.PurchaseRequisition | null>(null);
@@ -158,7 +157,7 @@ export default function RequisitionsPage() {
       });
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível criar a requisição')),
   });
 
   const statusMutation = useMutation({
@@ -281,7 +280,7 @@ export default function RequisitionsPage() {
                   </Button>
                 </div>
 
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar requisição'}

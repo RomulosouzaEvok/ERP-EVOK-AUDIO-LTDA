@@ -8127,3 +8127,167 @@ usado nos departamentos com múltiplos atalhos.
   departamento ganhar uma ação de criação óbvia no futuro, alguém precisa
   lembrar de adicionar a entrada aqui (não há geração automática a partir
   de `NAV_SECTIONS`).
+
+---
+
+## 2026-08-06 (rodada Vendas/NF-e) — Histórico multi-NF-e por pedido (`sale_invoices`) + reconciliação assíncrona de faturamento parcial
+
+**Origem:** duas pendências registradas em `docs/governance/TODO.md`
+("Histórico multi-NF-e por pedido" e "Reconciliação de status assíncrono de
+provedores reais de NF-e com faturamento parcial"), decorrentes do
+faturamento parcial entregue na terceira rodada de 2026-08-06.
+
+### Resumo da feature
+
+1. **Histórico multi-NF-e (`sale_invoices`).** `Sale.nfe_*` só guardava a
+   NF-e mais recente — múltiplas emissões parciais sobrescreviam
+   chave/protocolo/XML uma da outra. Nova tabela `sale_invoices` (model
+   `SaleInvoice`) guarda **1 registro por emissão** (1 venda : N notas),
+   com snapshot de `items` (quantidade/tributos exatamente como calculados
+   naquela emissão específica). Padrão **expand-contract**: `Sale.nfe_*`
+   **não foi removido** — continua em dual-write com a emissão mais
+   recente, para não quebrar telas/relatórios existentes que já leem
+   direto de `Sale`. Uma futura rodada de "contract" pode aposentar
+   `Sale.nfe_*` depois que todo consumidor migrar para
+   `GET /api/sales/:id/invoices`.
+2. **Reconciliação assíncrona.** `GetSaleNfeStatusUseCase` (caminho de
+   provedores reais — `focus_nfe`/`enotas`, assíncrono) só finalizava
+   `confirmed -> invoiced`, sem incrementar `invoiced_quantity` nem aplicar
+   `partially_invoiced`. Corrigido reaproveitando a mesma lógica do
+   caminho síncrono (`IssueSaleNfeUseCase`), extraída para
+   `SaleInvoiceAccumulator` — possível agora porque o snapshot de
+   itens/quantidades de cada emissão sobrevive em `sale_invoices.items`
+   mesmo depois que o processo que iniciou a emissão já terminou.
+
+### Contratos novos (para docs/frontend)
+
+- **Model novo:** `server/src/models/SaleInvoice.ts` (tabela
+  `sale_invoices`). Campos: `id`, `sale_id` (FK `sales.id`, `ON DELETE
+  CASCADE`), `items` (JSONB — array de `{ sale_item_id, product_id,
+  quantity, unit_price, total_price, cfop, icms_*, ipi_*, pis_*, cofins_*
+  }`), `total_amount`, `nfe_number`, `nfe_series`, `nfe_environment`
+  (`homologacao`/`producao`), `nfe_provider` (`mock`/`focus_nfe`/`enotas`),
+  `nfe_status` (`processing`/`authorized`/`denied`/`cancelled` — POR
+  EMISSÃO, diferente de `Sale.nfe_status` que é só a mais recente),
+  `nfe_key`, `nfe_protocol`, `nfe_provider_ref` (único, formato
+  `sale-{saleId}-{series}-{number}`), `nfe_xml_url`, `nfe_danfe_url`,
+  `nfe_error_message`, `nfe_issued_at`, timestamps.
+- **Endpoint novo:** `GET /api/sales/:id/invoices` — lista o histórico de
+  emissões da venda, mais recente primeiro (`{ success: true, data:
+  SaleInvoice[] }`). RBAC igual a `GET /api/sales/:id/nfe`
+  (`authorizeModule('vendas')`, sem exigir nível `approve`). 404 se a
+  venda não existir.
+- **`IssueSaleNfeUseCase`:** cria o registro em `sale_invoices` (status
+  `processing`) já na transação de reserva de número (mesma transação que
+  bloqueia a venda e calcula os tributos), e atualiza esse mesmo registro
+  na transação final (resultado do provedor). `Sale.nfe_*` continua
+  atualizado normalmente (dual-write).
+- **`GetSaleNfeStatusUseCase`:** ao receber `authorized` do provedor real,
+  localiza o `SaleInvoice` correspondente por `nfe_provider_ref`, lê o
+  snapshot `items` para reconstruir quais `SaleItem`/quantidades pertencem
+  a esta emissão, e aplica `SaleInvoiceAccumulator` (mesma lógica do
+  caminho síncrono) para incrementar `invoiced_quantity` e resolver
+  `partially_invoiced`/`invoiced`. Idempotente — não reaplica se o
+  `SaleInvoice` já está em estado terminal (`authorized`/`denied`/
+  `cancelled`). Sem `SaleInvoice` correspondente (ex.: venda antiga,
+  pré-migração, sem granularidade retroativa), cai no fallback anterior
+  (`confirmed -> invoiced`, sem tocar `invoiced_quantity`).
+- **`CancelSaleNfeUseCase`:** propaga o cancelamento ao `SaleInvoice`
+  correspondente (`nfe_status = 'cancelled'`), além de `Sale.nfe_status`.
+- **Lógica compartilhada nova:**
+  `server/src/modules/fiscal/domain/services/SaleInvoiceAccumulator.ts` —
+  `applyInvoicedQuantities(items, qtyToInvoiceByItemId)` e
+  `resolveSaleStatus(currentStatus, anyRemaining)`, puras (sem I/O),
+  reutilizadas pelos dois use cases acima.
+- **Repository:** `FiscalRepository`/`SequelizeFiscalRepository` ganharam
+  `createSaleInvoice`, `findSaleInvoiceByProviderRef`,
+  `findSaleInvoicesBySaleId`.
+
+### Migration e backfill
+
+- `server/migrations/20260806-000100-create-sale-invoices.cjs` — cria
+  `sale_invoices` (idempotente, mesmo padrão de
+  `20260806-000070-create-bank-statements.cjs`) + índices (`sale_id`,
+  `nfe_provider_ref` único, `nfe_status`).
+- **Backfill:** 1 registro consolidado por venda que já tinha
+  `nfe_provider_ref` preenchido, reconstruindo `items` a partir do estado
+  ATUAL de `sale_items.invoiced_quantity` (soma de todas as emissões
+  passadas daquela venda). **Limitação documentada no cabeçalho da
+  migration:** para vendas que já tiveram múltiplas emissões parciais
+  ANTES desta migration, o histórico granular anterior é irrecuperável —
+  só um registro "consolidado" nasce retroativamente; toda emissão NOVA a
+  partir de agora já é granular. `nfe_provider` do backfill usa o provider
+  atual de `company_fiscal_configs` (não há histórico do provider usado em
+  cada emissão passada).
+- Aplicada com sucesso no banco de dev local (`npm run migration:up`) e
+  validada via `npm run test:integration:strict` (que roda
+  `migration:up` contra o banco de teste isolado antes da suíte).
+
+### Documentações atualizadas
+
+- `docs/governance/TODO.md` — 2 itens marcados `[x]` com evidência (seção
+  "2026-08-06 — Pendencias da auditoria multi-agente..."), mais nota de
+  fechamento no item "Conciliação bancária + downtime — teste de
+  integração real" (a 3ª feature pendente, faturamento parcial, agora
+  também tem teste de integração real).
+- `docs/HANDOFF_CODEX.md` — esta seção.
+- **Não tocado nesta rodada (fora do território combinado):**
+  `docs/API.md`, `docs/DATABASE.md`, `docs/projeto/04-USE_CASES.md` — a
+  tarefa restringiu docs a `TODO.md`/`HANDOFF_CODEX.md` porque outros
+  agentes rodavam em paralelo sobre os mesmos arquivos; uma rodada de docs
+  dedicada deve incorporar `sale_invoices` em `docs/DATABASE.md` (nova
+  tabela) e o endpoint `GET /api/sales/:id/invoices` em `docs/API.md`.
+
+### Testes
+
+- **Unitários (novos):**
+  - `server/tests/unit/sale-invoice-accumulator.test.ts` (9 casos) —
+    lógica pura de `SaleInvoiceAccumulator`.
+  - `server/tests/unit/get-sale-nfe-status-reconciliation.test.ts` (6
+    casos) — autorização assíncrona parcial/total, acúmulo entre 2
+    emissões, `denied` não toca quantidade, idempotência, sem
+    `provider_ref`.
+- **Unitários (atualizados, mocks estendidos com `SaleInvoice`):**
+  `server/tests/unit/issue-sale-nfe-partial.test.ts`,
+  `server/tests/unit/sales-nfe-rbac.test.ts`.
+- **Integração real (Postgres, novo):**
+  `server/tests/integration/sale-invoice-history.test.ts` (2 casos) — emite
+  2 NF-e parciais reais (6 + 4 de 10 unidades) contra o banco de teste,
+  confirma 2 registros distintos em `sale_invoices` (chaves/protocolos/refs
+  diferentes, snapshot de quantidade por emissão), acúmulo de
+  `invoiced_quantity` até 10, transição `confirmed -> partially_invoiced ->
+  invoiced`, e 404 ao listar histórico de venda inexistente.
+
+### Instruções de teste (para o próximo agente/humano)
+
+1. `cd server && npm run typecheck` — 0 erros.
+2. `npx jest --runInBand tests/unit` — 711/711 (baseline + novos).
+3. `npm run test:integration:strict` — roda a suíte completa de
+   integração contra Postgres real (aplica migrations no banco de teste
+   isolado automaticamente). Confirmar `sale-invoice-history.test.ts`
+   2/2 passando (uma falha pré-existente e não relacionada em
+   `entity-photo-qrcode.test.ts` — upload/QR de ativo — pode aparecer;
+   não é desta entrega).
+4. `npm run migration:status` — confirmar
+   `20260806-000100-create-sale-invoices.cjs` como `up`.
+5. Manual (opcional): `curl http://localhost:5000/health/ready` depois do
+   watch recarregar; emitir uma NF-e parcial via
+   `POST /api/sales/:id/nfe` com `{ items: [...] }` e conferir
+   `GET /api/sales/:id/invoices` retornando o histórico crescente.
+
+### Riscos residuais
+
+- Backfill de vendas pré-migração com múltiplas emissões parciais antigas
+  perde a granularidade histórica anterior a esta migration (documentado
+  no cabeçalho da migration e no item do TODO) — decisão consciente, não é
+  regressão de dado (o dado consolidado, soma de `invoiced_quantity`,
+  continua correto).
+- A reconciliação assíncrona só recupera `invoiced_quantity` corretamente
+  para emissões que já passam pelo novo fluxo (com `SaleInvoice` criado em
+  `IssueSaleNfeUseCase`); não há teste de integração real contra os
+  provedores `focus_nfe`/`enotas` de verdade (só o mock, que é síncrono) —
+  seria necessário um ambiente de homologação desses provedores reais para
+  validar isso ponta a ponta, fora do alcance desta rodada.
+- `docs/API.md`/`docs/DATABASE.md` ainda não descrevem `sale_invoices`/
+  `GET /api/sales/:id/invoices` (deliberadamente fora do território desta
+  rodada — ver nota acima).

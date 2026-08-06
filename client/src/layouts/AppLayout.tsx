@@ -33,6 +33,7 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   Container,
+  Layers,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -89,6 +90,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Logística',
     items: [
       { label: 'Produtos', to: '/products', icon: Package, module: 'produtos' },
+      { label: 'Item Mestre', to: '/products/items', icon: Layers, module: 'produtos' },
       { label: 'Estoque', to: '/logistics/estoque', icon: Warehouse, module: 'estoque' },
       { label: 'Depósitos', to: '/logistics/warehouses', icon: Settings2, module: 'estoque' },
       { label: 'Recebimento', to: '/logistics/recebimento', icon: PackageCheck, module: 'recebimento', badgeKey: 'recebimento' },
@@ -212,6 +214,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/change-password': ['Início', 'Trocar senha'],
   '/products': ['Logística', 'Produtos'],
   '/products/inventory-counts': ['Logística', 'Produtos', 'Contagem de inventário'],
+  '/products/items': ['Logística', 'Item Mestre'],
   '/logistics/estoque': ['Logística', 'Estoque'],
   '/logistics/recebimento': ['Logística', 'Recebimento'],
   '/logistics/expedicao': ['Logística', 'Expedição'],

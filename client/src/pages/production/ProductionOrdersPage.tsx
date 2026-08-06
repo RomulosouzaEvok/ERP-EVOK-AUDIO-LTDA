@@ -8,7 +8,6 @@ import { Plus, Eye, Factory } from 'lucide-react';
 import * as productionApi from '@/api/production';
 import * as bomApi from '@/api/bom';
 import * as productsApi from '@/api/products';
-import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -74,7 +73,7 @@ export default function ProductionOrdersPage() {
   const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [completingOrder, setCompletingOrder] = React.useState<productionApi.ProductionOrder | null>(null);
   const [detailsOrder, setDetailsOrder] = React.useState<productionApi.ProductionOrder | null>(null);
   const [page, setPage] = React.useState(1);
@@ -103,7 +102,7 @@ export default function ProductionOrdersPage() {
       reset();
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível criar a ordem de produção')),
   });
 
   const statusMutation = useMutation({
@@ -182,7 +181,7 @@ export default function ProductionOrdersPage() {
                     <option value="urgent">Urgente</option>
                   </SelectNative>
                 </div>
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar ordem'}

@@ -55,9 +55,21 @@ class CancelSaleNfeUseCase extends UseCase {
       const locked = await this.fiscalRepository.findSaleById(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!locked) throw new NotFoundError('Venda não encontrada');
 
+      // Histórico multi-NF-e (2026-08-06): propaga o cancelamento também
+      // para o registro da emissão em `sale_invoices` (dual-write, mesma
+      // referência de `Sale.nfe_provider_ref`).
+      const saleInvoice = locked.nfe_provider_ref
+        ? await this.fiscalRepository.findSaleInvoiceByProviderRef(locked.nfe_provider_ref, { transaction, lock: transaction.LOCK.UPDATE })
+        : null;
+
       if (result.status === 'cancelled') {
         locked.nfe_status = 'cancelled';
         locked.nfe_error_message = null;
+        if (saleInvoice) {
+          saleInvoice.nfe_status = 'cancelled';
+          saleInvoice.nfe_error_message = null;
+          await saleInvoice.save({ transaction });
+        }
       } else {
         locked.nfe_error_message = result.error_message;
         throw new BusinessRuleError(result.error_message || 'Falha ao cancelar NF-e no provedor.');

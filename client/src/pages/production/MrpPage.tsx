@@ -7,7 +7,6 @@ import { Link } from 'react-router';
 import { Plus, Trash2, ShoppingCart, ClipboardList } from 'lucide-react';
 
 import * as mrpApi from '@/api/mrp';
-import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,7 +69,7 @@ type PlanFormData = z.infer<typeof planSchema>;
 /** MRP: planejamento de necessidades de materiais contra o estoque real (não congelado). */
 export default function MrpPage() {
   const queryClient = useQueryClient();
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [convertDialogOpen, setConvertDialogOpen] = React.useState(false);
   const [convertNotes, setConvertNotes] = React.useState('');
@@ -117,7 +116,7 @@ export default function MrpPage() {
       reset({ demands: [{ item_id: '', quantidade: 1, data_necessidade: '', origem: 'MANUAL' }] });
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível planejar o MRP')),
   });
 
   const convertMutation = useMutation({
@@ -232,7 +231,7 @@ export default function MrpPage() {
             </Button>
           </div>
 
-          {formError && <p className="text-sm text-destructive">{formError}</p>}
+          {formError && <DidacticAlert error={formError} />}
           <Button type="submit" className="w-fit" disabled={isSubmitting || planMutation.isPending}>
             {planMutation.isPending ? 'Gerando...' : 'Gerar plano'}
           </Button>

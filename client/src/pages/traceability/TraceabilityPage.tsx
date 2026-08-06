@@ -3,7 +3,8 @@ import { useMutation } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 
 import * as traceabilityApi from '@/api/traceability';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,11 +14,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 /** `FE6`: consulta de rastreabilidade por item (histórico de movimentos/lotes). */
 export default function TraceabilityPage() {
   const [itemId, setItemId] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<DidacticError | null>(null);
 
   const mutation = useMutation({
     mutationFn: (id: number) => traceabilityApi.getItemTraceability(id),
-    onError: (err) => setError(extractApiErrorMessage(err, 'Item inválido ou sem histórico.')),
+    onError: (err) =>
+      setError(translateApiError(err, 'Não foi possível consultar a rastreabilidade', undefined, 'Item inválido ou sem histórico.')),
   });
 
   function handleSearch(event: React.FormEvent) {
@@ -25,7 +27,7 @@ export default function TraceabilityPage() {
     setError(null);
     const id = Number(itemId);
     if (!id || id <= 0) {
-      setError('Informe um ID de item válido.');
+      setError({ title: 'Não foi possível consultar a rastreabilidade', reasons: ['Informe um ID de item válido.'] });
       return;
     }
     mutation.mutate(id);
@@ -57,7 +59,7 @@ export default function TraceabilityPage() {
               {mutation.isPending ? 'Buscando...' : 'Buscar'}
             </Button>
           </form>
-          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+          {error && <DidacticAlert error={error} className="mt-2" />}
         </CardContent>
       </Card>
 

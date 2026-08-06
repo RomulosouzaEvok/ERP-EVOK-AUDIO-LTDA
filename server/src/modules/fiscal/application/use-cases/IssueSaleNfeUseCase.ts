@@ -25,18 +25,14 @@
  * inteiro de todos os itens — que na primeira emissão é a quantidade cheia
  * da venda).
  *
- * LIMITAÇÃO CONHECIDA (residual, documentada no handoff): os campos
- * `nfe_*` ficam em `Sale` (uma única NF-e "atual" por venda) e os campos
- * fiscais (CST/alíquotas/valores) ficam em `SaleItem` (uma linha por
- * produto). Múltiplas emissões parciais para a mesma venda sobrescrevem
- * esses campos a cada chamada — o histórico completo de cada NF-e parcial
- * (chave, protocolo, XML/DANFE de cada emissão) NÃO é preservado
- * individualmente; apenas a última emissão fica visível em `Sale`, e
- * `SaleItem.invoiced_quantity` é o único registro cumulativo confiável do
- * saldo faturado. Uma tabela dedicada `sale_invoices`/`sale_invoice_items`
- * seria necessária para um histórico completo por emissão — fora do
- * escopo desta entrega (embarque parcial também está fora do escopo, por
- * decisão explícita da tarefa).
+ * HISTÓRICO MULTI-NF-E (`sale_invoices`, 2026-08-06 —
+ * `docs/governance/TODO.md`): a limitação acima descrita (múltiplas
+ * emissões parciais sobrescrevendo os campos `nfe_*` de `Sale`) foi
+ * resolvida com a tabela dedicada `sale_invoices` (model `SaleInvoice`),
+ * que guarda 1 registro por emissão (chave/protocolo/XML/itens/status
+ * individuais). `Sale.nfe_*` continua sendo atualizado em dual-write com a
+ * emissão mais recente (padrão expand-contract — ver JSDoc de
+ * `models/SaleInvoice.ts`), para não quebrar leituras existentes.
  *
  * @module modules/fiscal/application/use-cases/IssueSaleNfeUseCase
  */
@@ -49,6 +45,7 @@ const { sequelize } = require('../../../../config/database');
 const { NotFoundError, BusinessRuleError, ConflictError, ValidationError } = require('../../../../errors');
 const TaxCalculationService = require('../../domain/services/TaxCalculationService');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
+const SaleInvoiceAccumulator = require('../../domain/services/SaleInvoiceAccumulator');
 
 interface IssueSaleNfeItemInput {
   sale_item_id: number;
@@ -152,6 +149,12 @@ class IssueSaleNfeUseCase extends UseCase {
       const productById = new Map<number, any>(products.map((p: any) => [p.id, p]));
 
       const itemsForProvider = [];
+      // Snapshot persistido em `sale_invoices.items` (histórico multi-NF-e,
+      // 2026-08-06) — diferente de `itemsForProvider` (payload do provedor,
+      // sem `sale_item_id`), este array identifica cada linha para permitir
+      // reconstruir `qtyToInvoiceByItemId` mais tarde (reconciliação
+      // assíncrona em `GetSaleNfeStatusUseCase`).
+      const invoiceItemsSnapshot: Record<string, unknown>[] = [];
       let totalAmount = 0;
       for (const item of items) {
         const product = productById.get(item.product_id);
@@ -191,6 +194,15 @@ class IssueSaleNfeUseCase extends UseCase {
           total_price: invoiceTotal,
           ...tax,
         });
+
+        invoiceItemsSnapshot.push({
+          sale_item_id: item.id,
+          product_id: item.product_id,
+          quantity: invoiceQty,
+          unit_price: unitPrice,
+          total_price: invoiceTotal,
+          ...tax,
+        });
       }
 
       const ref = `sale-${sale.id}-${config.nfe_series}-${reservedNumber}`;
@@ -201,6 +213,23 @@ class IssueSaleNfeUseCase extends UseCase {
       sale.nfe_provider_ref = ref;
       sale.nfe_error_message = null;
       await sale.save({ transaction });
+
+      // Histórico multi-NF-e (2026-08-06): cria o registro desta emissão em
+      // `sale_invoices` já na transação de reserva (status 'processing'),
+      // para que o snapshot de itens/quantidades fique disponível mesmo se
+      // a autorização vier de forma assíncrona (provedor real) bem depois
+      // desta chamada retornar (ver `GetSaleNfeStatusUseCase`).
+      await this.fiscalRepository.createSaleInvoice({
+        sale_id: sale.id,
+        items: invoiceItemsSnapshot,
+        total_amount: totalAmount,
+        nfe_number: String(reservedNumber),
+        nfe_series: config.nfe_series,
+        nfe_environment: config.nfe_environment,
+        nfe_provider: config.nfe_provider,
+        nfe_status: 'processing',
+        nfe_provider_ref: ref,
+      }, { transaction });
 
       return {
         ref,
@@ -277,6 +306,12 @@ class IssueSaleNfeUseCase extends UseCase {
       const sale = await this.fiscalRepository.findSaleById(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!sale) throw new NotFoundError('Venda não encontrada');
 
+      // Histórico multi-NF-e (2026-08-06): registro desta emissão
+      // específica, criado na transação de reserva — grava o resultado
+      // (autorizada/negada) nele, além do dual-write em `Sale.nfe_*`
+      // (ver JSDoc de `models/SaleInvoice.ts`).
+      const saleInvoice = await this.fiscalRepository.findSaleInvoiceByProviderRef(reserved.ref, { transaction, lock: transaction.LOCK.UPDATE });
+
       sale.nfe_status = result.status;
       sale.nfe_key = result.key || sale.nfe_key;
       sale.nfe_protocol = result.protocol || sale.nfe_protocol;
@@ -284,30 +319,35 @@ class IssueSaleNfeUseCase extends UseCase {
       sale.nfe_danfe_url = result.danfe_url || sale.nfe_danfe_url;
       sale.nfe_error_message = result.error_message;
 
+      if (saleInvoice) {
+        saleInvoice.nfe_status = result.status;
+        saleInvoice.nfe_key = result.key || saleInvoice.nfe_key;
+        saleInvoice.nfe_protocol = result.protocol || saleInvoice.nfe_protocol;
+        saleInvoice.nfe_xml_url = result.xml_url || saleInvoice.nfe_xml_url;
+        saleInvoice.nfe_danfe_url = result.danfe_url || saleInvoice.nfe_danfe_url;
+        saleInvoice.nfe_error_message = result.error_message;
+      }
+
       if (result.status === 'authorized') {
         sale.nfe_issued_at = new Date();
+        if (saleInvoice) saleInvoice.nfe_issued_at = sale.nfe_issued_at;
 
         // Faturamento parcial (gap 3/3): incrementa invoiced_quantity de
         // cada item envolvido nesta emissão e recalcula o status da venda
         // com base no saldo pendente TOTAL (não apenas nesta emissão).
+        // Lógica compartilhada com `GetSaleNfeStatusUseCase` (caminho
+        // assíncrono) — ver `SaleInvoiceAccumulator`.
         const allItems = await this.fiscalRepository.findSaleItemsBySaleId(saleId, { transaction, lock: transaction.LOCK.UPDATE });
-        let anyRemaining = false;
-        for (const item of allItems) {
-          const invoiceQty = reserved.qtyToInvoiceByItemId.get(item.id);
-          if (invoiceQty) {
-            item.invoiced_quantity = parseFloat(item.invoiced_quantity || 0) + invoiceQty;
-            await item.save({ transaction });
-          }
-          if (parseFloat(item.quantity) - parseFloat(item.invoiced_quantity || 0) > 1e-9) {
-            anyRemaining = true;
-          }
+        const { updates, anyRemaining } = SaleInvoiceAccumulator.applyInvoicedQuantities(allItems, reserved.qtyToInvoiceByItemId);
+        for (const { item, newInvoicedQuantity } of updates) {
+          item.invoiced_quantity = newInvoicedQuantity;
+          await item.save({ transaction });
         }
 
-        if (sale.status === 'confirmed' || sale.status === 'partially_invoiced') {
-          sale.status = anyRemaining ? 'partially_invoiced' : 'invoiced';
-        }
+        sale.status = SaleInvoiceAccumulator.resolveSaleStatus(sale.status, anyRemaining);
       }
 
+      if (saleInvoice) await saleInvoice.save({ transaction });
       await sale.save({ transaction });
       return sale;
     });

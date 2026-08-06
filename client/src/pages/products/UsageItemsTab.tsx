@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { Plus } from 'lucide-react';
 
 import * as itemsApi from '@/api/items';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,7 +55,7 @@ export function UsageItemsTab() {
   const [typeFilter, setTypeFilter] = React.useState<(typeof USAGE_ITEM_TYPES)[number] | ''>('');
   const [page, setPage] = React.useState(1);
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['items', 'usage', typeFilter, search, page],
@@ -92,7 +93,7 @@ export function UsageItemsTab() {
       reset({ tipo: 'USO_E_CONSUMO' });
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível criar o item')),
   });
 
   // Filtra client-side pelos dois tipos de uso/ativo — a listagem geral de
@@ -201,7 +202,7 @@ export function UsageItemsTab() {
                     <Input id="usage-custo" type="number" step="any" {...register('custo_padrao')} />
                   </div>
                 </div>
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar item'}

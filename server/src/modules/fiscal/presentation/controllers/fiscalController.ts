@@ -5,6 +5,7 @@ const SequelizeFiscalRepository = require('../../infrastructure/sequelize/Sequel
 const IssueSaleNfeUseCase = require('../../application/use-cases/IssueSaleNfeUseCase');
 const GetSaleNfeStatusUseCase = require('../../application/use-cases/GetSaleNfeStatusUseCase');
 const CancelSaleNfeUseCase = require('../../application/use-cases/CancelSaleNfeUseCase');
+const ListSaleInvoicesUseCase = require('../../application/use-cases/ListSaleInvoicesUseCase');
 const RegisterIncomingNfeUseCase = require('../../application/use-cases/RegisterIncomingNfeUseCase');
 const GetCompanyFiscalConfigUseCase = require('../../application/use-cases/GetCompanyFiscalConfigUseCase');
 const UpsertCompanyFiscalConfigUseCase = require('../../application/use-cases/UpsertCompanyFiscalConfigUseCase');
@@ -74,6 +75,19 @@ exports.cancelSaleNfe = async (req: Request, res: Response, next: NextFunction) 
     });
 
     res.json({ success: true, data: sale });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/sales/:id/invoices` — lista o histórico de emissões de NF-e da
+ * venda (`sale_invoices`, mais recente primeiro), gap "Histórico multi-NF-e
+ * por pedido" de `docs/governance/TODO.md`.
+ */
+exports.listSaleInvoices = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const useCase = new ListSaleInvoicesUseCase(fiscalRepository);
+    const invoices = await useCase.execute({ saleId: req.params.id });
+    res.json({ success: true, data: invoices });
   } catch (error) { next(error); }
 };
 

@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { KeyRound } from 'lucide-react';
 
 import * as authApi from '@/api/auth';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +33,7 @@ type FormData = z.infer<typeof changePasswordSchema>;
  */
 export default function ChangePasswordPage() {
   const { logout } = useAuth();
-  const [apiError, setApiError] = React.useState<string | null>(null);
+  const [apiError, setApiError] = React.useState<DidacticError | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
 
   const {
@@ -50,7 +51,7 @@ export default function ChangePasswordPage() {
       reset();
       setTimeout(() => logout(), 1500);
     } catch (error) {
-      setApiError(extractApiErrorMessage(error));
+      setApiError(translateApiError(error, 'Não foi possível trocar a senha'));
     }
   }
 
@@ -88,7 +89,7 @@ export default function ChangePasswordPage() {
               <Input id="confirmPassword" type="password" autoComplete="new-password" {...register('confirmPassword')} />
               {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>}
             </div>
-            {apiError && <p className="text-sm text-destructive">{apiError}</p>}
+            {apiError && <DidacticAlert error={apiError} />}
             {success && <p className="text-sm text-success">{success}</p>}
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Salvando...' : 'Trocar senha'}

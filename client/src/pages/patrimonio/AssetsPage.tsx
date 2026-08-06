@@ -6,7 +6,9 @@ import { z } from 'zod';
 import { Plus, Camera, QrCode, Boxes, AlertTriangle } from 'lucide-react';
 
 import * as assetsApi from '@/api/assets';
-import { extractApiErrorMessage, getUploadUrl } from '@/api/httpClient';
+import { getUploadUrl } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

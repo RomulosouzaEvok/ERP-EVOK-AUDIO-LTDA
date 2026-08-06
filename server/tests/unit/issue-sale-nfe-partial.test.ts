@@ -68,9 +68,16 @@ function buildRepository({ saleStatus = 'confirmed', items = [buildSaleItem()] }
     save: jest.fn(async function (this: any) { return this; }),
   };
 
+  // Histórico multi-NF-e (2026-08-06): `sale_invoices` fake em memória —
+  // `createSaleInvoice` grava, `findSaleInvoiceByProviderRef` devolve o
+  // registro (com `.save()` stub), reproduzindo o comportamento real o
+  // suficiente para o fluxo de IssueSaleNfeUseCase.
+  const saleInvoices: any[] = [];
+
   return {
     __sale: sale,
     __items: items,
+    __saleInvoices: saleInvoices,
     findSaleById: jest.fn(async () => sale),
     findSaleItemsBySaleId: jest.fn(async () => items),
     findClientById: jest.fn(async () => ({ id: 1, name: 'Cliente A', state: 'SP', tax_regime: 'simples', ind_ie: '9' })),
@@ -80,6 +87,13 @@ function buildRepository({ saleStatus = 'confirmed', items = [buildSaleItem()] }
       save: jest.fn(async function (this: any) { return this; }),
     })),
     findProductsByIds: jest.fn(async (ids: number[]) => ids.map((id) => ({ id, code: `P${id}`, name: `Produto ${id}`, unit: 'UN', product_type: 'finished', ncm: '85182100' }))),
+    createSaleInvoice: jest.fn(async (data: any) => {
+      const invoice = { ...data, id: saleInvoices.length + 1, save: jest.fn(async function (this: any) { return this; }) };
+      saleInvoices.push(invoice);
+      return invoice;
+    }),
+    findSaleInvoiceByProviderRef: jest.fn(async (ref: string) => saleInvoices.find((invoice) => invoice.nfe_provider_ref === ref) || null),
+    findSaleInvoicesBySaleId: jest.fn(async () => saleInvoices),
   };
 }
 

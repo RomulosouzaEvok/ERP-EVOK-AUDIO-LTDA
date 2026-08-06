@@ -8,7 +8,8 @@ import { KeyRound } from 'lucide-react';
 import evokLogo from '@/assets/brand/evok-logo.png';
 
 import * as authApi from '@/api/auth';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,7 +28,7 @@ type FormData = z.infer<typeof forgotPasswordSchema>;
  */
 export default function ForgotPasswordPage() {
   const [message, setMessage] = React.useState<string | null>(null);
-  const [apiError, setApiError] = React.useState<string | null>(null);
+  const [apiError, setApiError] = React.useState<DidacticError | null>(null);
 
   const {
     register,
@@ -41,7 +42,7 @@ export default function ForgotPasswordPage() {
       const result = await authApi.forgotPassword(values.email);
       setMessage(result);
     } catch (error) {
-      setApiError(extractApiErrorMessage(error));
+      setApiError(translateApiError(error, 'Não foi possível solicitar a recuperação de senha'));
     }
   }
 
@@ -91,7 +92,7 @@ export default function ForgotPasswordPage() {
                   <Input id="email" type="email" autoComplete="username" {...register('email')} />
                   {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
                 </div>
-                {apiError && <p className="text-sm text-destructive">{apiError}</p>}
+                {apiError && <DidacticAlert error={apiError} />}
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? 'Enviando...' : 'Enviar link de recuperação'}
                 </Button>

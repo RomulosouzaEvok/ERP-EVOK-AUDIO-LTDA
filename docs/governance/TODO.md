@@ -1716,24 +1716,112 @@ resolver na mesma rodada.
 - [ ] **[PENDENTE] CNAB (boleto/remessa/retorno).** Conciliação bancária
   v1 (2026-08-06, terceira rodada) cobriu apenas importação de extrato
   OFX. CNAB é uma frente separada, sem data definida.
-- [ ] **[PENDENTE] Histórico multi-NF-e por pedido (`sale_invoices`).**
-  `Sale.nfe_*` guarda apenas a NF-e mais recente — múltiplas emissões
-  parciais (faturamento parcial, 2026-08-06 terceira rodada) sobrescrevem
-  chave/protocolo/XML uma da outra, sem histórico por emissão. Não
-  bloqueante para uso mock/dev; necessário para produção real com
-  múltiplas NF-e por pedido. Requer nova tabela `sale_invoices` (1 venda :
-  N NF-e) e migração dos campos hoje em `Sale.nfe_*`.
-- [ ] **[PENDENTE] Reconciliação de status assíncrono de provedores reais
-  de NF-e com faturamento parcial.** `GetSaleNfeStatusUseCase` (path
-  assíncrono de provedores reais — `focus_nfe`/`enotas`, não o mock usado
-  em dev) não atualiza `invoiced_quantity`/`partially_invoiced`, só
-  finaliza `confirmed → invoiced`. Afeta apenas ambientes com provider
-  real configurado.
-- [ ] **[PENDENTE] Teste de integração real das 3 features de maior risco
-  da terceira rodada de 2026-08-06.** Conciliação bancária, downtime
-  (índice único parcial `uq_production_downtimes_open_per_work_center`) e
-  faturamento parcial — hoje só cobertos por testes unitários com
-  repositório mockado, sem teste de integração contra PostgreSQL real.
+- [x] **[IMPLEMENTADO 2026-08-06, rodada Vendas/NF-e] Histórico multi-NF-e
+  por pedido (`sale_invoices`).** Nova tabela `sale_invoices` (model
+  `SaleInvoice`, migration `server/migrations/20260806-000100-create-sale-invoices.cjs`,
+  com backfill best-effort dos dados existentes em `Sale.nfe_*` — 1
+  registro consolidado por venda que já tinha NF-e) guarda 1 registro por
+  EMISSÃO (chave/protocolo/XML/`items` individuais, não mais
+  sobrescritos). Padrão expand-contract: `Sale.nfe_*` **não** foi removido
+  — continua em dual-write com a emissão mais recente (ver JSDoc de
+  `server/src/models/SaleInvoice.ts`). `IssueSaleNfeUseCase` cria o
+  registro na transação de reserva e atualiza na transação de resultado;
+  `CancelSaleNfeUseCase` propaga o cancelamento ao registro correspondente.
+  Endpoint novo: `GET /api/sales/:id/invoices` (mesmo RBAC de leitura de
+  `GET .../nfe`, `authorizeModule('vendas')`). Evidência: unit
+  `server/tests/unit/sale-invoice-accumulator.test.ts`,
+  `server/tests/unit/get-sale-nfe-status-reconciliation.test.ts`, testes
+  atualizados de `issue-sale-nfe-partial.test.ts`/`sales-nfe-rbac.test.ts`
+  (711 unit passando); integração real (Postgres) em
+  `server/tests/integration/sale-invoice-history.test.ts` (2/2 passando via
+  `npm run test:integration:strict` — fecha a lacuna de faturamento parcial
+  deixada aberta pelo item logo abaixo, "Conciliação bancária + downtime").
+- [x] **[IMPLEMENTADO 2026-08-06, rodada Vendas/NF-e] Reconciliação de
+  status assíncrono de provedores reais de NF-e com faturamento parcial.**
+  `GetSaleNfeStatusUseCase` (path assíncrono — `focus_nfe`/`enotas`) agora
+  reutiliza a mesma lógica de acúmulo de `invoiced_quantity`/transição de
+  status do path síncrono, extraída para
+  `server/src/modules/fiscal/domain/services/SaleInvoiceAccumulator.ts`
+  (sem duplicação). A quantidade/itens de cada emissão pendente vêm do
+  snapshot em `sale_invoices.items` (só possível depois da tabela acima);
+  sem o registro de emissão correspondente (ex.: venda pré-migração sem
+  granularidade retroativa), cai no fallback anterior
+  (`confirmed -> invoiced`, sem tocar `invoiced_quantity`). Idempotente
+  (não reaplica se a emissão já está em estado terminal). Evidência: 6
+  testes unitários novos em `get-sale-nfe-status-reconciliation.test.ts`
+  cobrindo autorização parcial/total assíncrona, denied, idempotência e
+  ausência de `provider_ref`.
+- [x] **[IMPLEMENTADO 2026-08-06, rodada de testes de integração]
+  Conciliação bancária + downtime — teste de integração real contra
+  PostgreSQL.** 2 das 3 features de maior risco da terceira rodada agora
+  têm cobertura de integração real (a 3ª, faturamento parcial, ficou
+  deliberadamente fora — o agente de Vendas está refatorando esse fluxo
+  para `sale_invoices` em paralelo e escreverá o teste de integração junto,
+  ver `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (rodada de
+  testes de integração)"). **ATUALIZAÇÃO (rodada Vendas/NF-e):** a 3ª
+  feature (faturamento parcial) agora também tem teste de integração real
+  — `server/tests/integration/sale-invoice-history.test.ts`, ver item
+  "Histórico multi-NF-e por pedido" acima — fechando as 3/3:
+  - `server/tests/integration/bank-reconciliation-ofx-import.test.ts` (6
+    casos): importação OFX 1.x SGML e 2.x XML (mesmo parser, fixtures
+    diferentes), dedup por FITID (reimportar o mesmo arquivo não duplica
+    lançamento, `entries_created=0` na 2ª importação), sugestão automática
+    de match contra uma conta a pagar real criada no teste, baixa efetiva
+    via `POST .../entries/:id/match` (`account.status='paid'`), rejeição
+    didática de arquivo sem tag `<OFX>`.
+  - `server/tests/integration/production-downtime-concurrency.test.ts` (3
+    casos): 2 requisições HTTP verdadeiramente concorrentes
+    (`Promise.all`) abrindo parada no MESMO centro de trabalho — confirma
+    que o índice único parcial `uq_production_downtimes_open_per_work_center`
+    (não só a checagem de aplicação) impede a 2ª parada e que o erro
+    resultante é tratado (409/422 via `SequelizeUniqueConstraintError`
+    mapeado no `errorHandler` global, nunca 500); fechar a 1ª libera nova
+    parada no mesmo centro; centros diferentes coexistem sem conflito.
+  - `server/tests/integration/inventory-count-claim-concurrency.test.ts`
+    (3 casos): 2 clients HTTP simultâneos (2 usuários `operator` distintos,
+    tokens mintados diretamente como em `rbac-module-access-denied.test.ts`
+    para não esbarrar no rate-limit de login) disputando o claim de uma
+    contagem do pool — exatamente 1 vence; contagem atribuída a um
+    funcionário específico não pode ser reivindicada por outro operador
+    (409); admin pode fazer override de uma contagem atribuída a outro
+    funcionário (confirmado no código, `StartInventoryCountUseCase`).
+  - **Achado real durante a escrita do teste (não é bug, é
+    comportamento correto — documentado para não confundir quem ler os
+    testes depois):** a "perdedora" da corrida pelo POOL recebe **422**
+    (`BusinessRuleError`, "Apenas contagens em status 'draft' podem ser
+    iniciadas"), **não 409** — a checagem de `status` em
+    `StartInventoryCountUseCase.execute` vem ANTES da checagem de
+    `assigned_to`, então quando a 2ª transação (que esperou a 1ª
+    commitar via `SELECT ... FOR UPDATE`) lê o registro, o status já é
+    `'counting'`. O `ConflictError` (409) só ocorre no cenário de uma
+    contagem CRIADA já atribuída a outro usuário, não na corrida pelo
+    pool. Nenhuma correção de código foi feita — é o comportamento
+    esperado do lock pessimista, só ajustei a expectativa do teste depois
+    de rodar contra Postgres real e ver o 422.
+  - Evidência de execução real: `node scripts/run-api-suite.cjs
+    integration` — **32/32 suites, 88/88 testes passando** (server real
+    + PostgreSQL real via `erp_evok_audio_test`, migrations aplicadas,
+    servidor subido em `127.0.0.1:3101`). `npx jest tests/unit` — 88/88
+    suites, 711/711 testes passando (sem regressão, nenhum código de
+    produção foi alterado nesta rodada).
+  - **Nota de reprodutibilidade:** numa primeira rodada completa da suíte
+    de integração (antes do ajuste acima), `entity-photo-qrcode.test.ts`
+    (arquivo pré-existente, não desta rodada) falhou 2 casos com 500 em
+    `POST /api/assets/:id/photo`; numa rodada seguinte, com o mesmo código,
+    passou 100%. Não investigado a fundo (fora do território desta
+    rodada — `server/src/` não pode ser tocado aqui) porque não é
+    reproduzível de forma estável e há edição concorrente de outros
+    agentes no mesmo working tree (`git status` mostrava
+    `server/src/models/index.ts`/`Department.ts` e o módulo `fiscal`
+    modificados por outra frente em paralelo no momento desta rodada);
+    mais provável é ruído de build/timing concorrente do que um bug real
+    do módulo de patrimônio. Se o dono observar esse 500 de forma
+    consistente após a rodada de Vendas/CNAB concluir e commitar, vale
+    abrir um item dedicado.
+  - **Não coberto (fora do escopo desta rodada, por instrução
+    explícita):** faturamento parcial de NF-e (`sale_items.invoiced_quantity`
+    / `sale_invoices`) — aguardando a refatoração em andamento do agente
+    de Vendas.
 
 **Documentos atualizados nesta consolidacao:** este arquivo (secao nova),
 `docs/API.md` (RFQ §11.1, financeiro §6, OEE §7, nota breaking change em

@@ -4,6 +4,18 @@
  * @module models/Department
  *
  * Gerencia os departamentos da fábrica com código único e gestor responsável.
+ *
+ * `cost_center_id` (opcional, NOVO): de-para simples departamento → centro
+ * de custo financeiro, usada para preencher automaticamente
+ * `AccountPayable.cost_center_id` quando uma conta a pagar nasce
+ * automaticamente a partir de um pedido de compra rastreável até um
+ * departamento (requisição → pedido → recebimento/aprovação — ver
+ * `ChangePurchaseStatusUseCase._createPurchasePayable`). Não é 1:1
+ * obrigatório: vários departamentos podem apontar para o mesmo centro de
+ * custo, e um departamento pode não ter nenhum (`NULL` = a AP nasce sem
+ * centro de custo, sem erro). Coluna simples em vez de tabela de-para
+ * separada — é a opção mais simples para um mapeamento 1 campo por
+ * departamento (ver migration `20260806-000115-add-cost-center-id-to-departments.cjs`).
  */
 
 import { DataTypes } from 'sequelize';
@@ -17,6 +29,7 @@ interface DepartmentAttributes {
   description: string | null;
   manager_id: number | null;
   active: boolean;
+  cost_center_id: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -28,7 +41,8 @@ const Department = sequelize.define('Department', {
   sigla: { type: DataTypes.STRING(10), allowNull: false, comment: 'Sigla (DIR, RH, ENG, etc.)' },
   description: DataTypes.TEXT,
   manager_id: { type: DataTypes.INTEGER, comment: 'FK → employees.id (gestor)' },
-  active: { type: DataTypes.BOOLEAN, defaultValue: true }
+  active: { type: DataTypes.BOOLEAN, defaultValue: true },
+  cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = departamento sem centro de custo mapeado)' }
 }, {
   tableName: 'departments',
   underscored: true,

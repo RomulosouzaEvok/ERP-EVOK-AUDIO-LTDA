@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { Plus, Trash2, ClipboardList, type LucideIcon } from 'lucide-react';
 
 import * as requisitionsApi from '@/api/purchaseRequisitions';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { useAuth } from '@/context/AuthContext';
 import { useMyDepartment } from '@/hooks/useMyDepartment';
 import { Button } from '@/components/ui/button';
@@ -90,7 +91,7 @@ export function DepartmentRequisitionsPage({
   const { departmentId, departmentName, isLoading: isLoadingDepartment } = useMyDepartment();
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [statusFilter, setStatusFilter] = React.useState<requisitionsApi.RequisitionStatus | ''>('');
   const [page, setPage] = React.useState(1);
 
@@ -137,7 +138,7 @@ export function DepartmentRequisitionsPage({
       reset({ priority: 'normal', notes: '', items: [{ item_id: '', quantity: 1, unit: '' }] });
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível criar a requisição')),
   });
 
   return (
@@ -218,7 +219,7 @@ export function DepartmentRequisitionsPage({
                   </Button>
                 </div>
 
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar requisição'}

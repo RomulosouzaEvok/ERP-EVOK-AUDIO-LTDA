@@ -118,6 +118,48 @@ class FiscalRepository {
   async findProductsByIds(productIds: Array<number | string>, options?: FindOptions): Promise<any[]> { // eslint-disable-line no-unused-vars
     throw new Error('FiscalRepository.findProductsByIds não implementado.');
   }
+
+  /**
+   * Cria um registro de emissão de NF-e (histórico multi-NF-e por pedido,
+   * `sale_invoices` — o model `SaleInvoice` pertence ao módulo `fiscal`,
+   * dono do ciclo de vida de emissão).
+   *
+   * @abstract
+   * @param {Object} data - Campos iniciais da emissão (ver `models/SaleInvoice.ts`).
+   * @param {FindOptions} [options] - Transação opcional.
+   * @returns {Promise<Object>} O registro de emissão criado.
+   */
+  async createSaleInvoice(data: Record<string, unknown>, options?: FindOptions): Promise<any> { // eslint-disable-line no-unused-vars
+    throw new Error('FiscalRepository.createSaleInvoice não implementado.');
+  }
+
+  /**
+   * Busca o registro de uma emissão específica pela referência única
+   * (`nfe_provider_ref`, formato `sale-{saleId}-{series}-{number}`) — usado
+   * para reconciliar o resultado (síncrono ou assíncrono) de volta ao
+   * registro de emissão correto.
+   *
+   * @abstract
+   * @param {string} providerRef
+   * @param {FindOptions} [options] - Transação/lock opcionais.
+   * @returns {Promise<Object|null>}
+   */
+  async findSaleInvoiceByProviderRef(providerRef: string, options?: FindOptions): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('FiscalRepository.findSaleInvoiceByProviderRef não implementado.');
+  }
+
+  /**
+   * Lista o histórico de emissões de NF-e de uma venda, mais recente
+   * primeiro.
+   *
+   * @abstract
+   * @param {number|string} saleId
+   * @param {FindOptions} [options] - Transação opcional.
+   * @returns {Promise<Object[]>}
+   */
+  async findSaleInvoicesBySaleId(saleId: number | string, options?: FindOptions): Promise<any[]> { // eslint-disable-line no-unused-vars
+    throw new Error('FiscalRepository.findSaleInvoicesBySaleId não implementado.');
+  }
 }
 
 export = FiscalRepository;

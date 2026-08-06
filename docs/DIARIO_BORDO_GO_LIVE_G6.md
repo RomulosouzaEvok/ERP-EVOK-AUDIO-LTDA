@@ -2059,3 +2059,76 @@ puramente documentação de banco. Se o `AuditorIntegrador` ou
 entrada é `docs/database/04-DICIONARIO_DADOS.md#importprocesses` /
 `#importprocessitems` e `docs/DATABASE.md` (seção nova, final do
 arquivo).
+
+---
+
+## 2026-08-06 (rodada de testes de integração) — Cobertura de integração real (PostgreSQL) das 3 features de maior risco da terceira rodada
+
+**Origem:** `docs/governance/TODO.md`, item "Teste de integração real das
+3 features de maior risco da terceira rodada de 2026-08-06" (conciliação
+bancária OFX, downtime/índice único parcial de produção, faturamento
+parcial de NF-e), até então cobertas apenas por testes unitários com
+repositório mockado. Território exclusivo desta rodada:
+`server/tests/integration/` (arquivos novos) + `docs/governance/TODO.md`/
+este diário — nenhum arquivo de `server/src/` foi alterado.
+
+**Entregue (2 das 3 features):**
+
+1. `server/tests/integration/bank-reconciliation-ofx-import.test.ts` (6
+   casos) — importação de extrato OFX 1.x (SGML, tags sem fechamento) e
+   2.x (XML, tags com fechamento), dedup por FITID (reimportar o mesmo
+   arquivo não duplica lançamento), sugestão automática de match contra
+   uma conta a pagar real criada no teste (`POST /api/finance/payable`),
+   baixa efetiva via `POST .../entries/:id/match` (confirmado
+   `account.status='paid'`), rejeição didática de arquivo inválido.
+2. `server/tests/integration/production-downtime-concurrency.test.ts` (3
+   casos) — 2 requisições HTTP verdadeiramente concorrentes
+   (`Promise.all`) contra o mesmo centro de trabalho provam que o índice
+   único parcial `uq_production_downtimes_open_per_work_center` (não só a
+   checagem `SELECT ... FOR UPDATE` em aplicação, que só trava linhas
+   EXISTENTES e não impede a corrida de dois INSERTs concorrentes) barra a
+   2ª parada aberta, com erro tratado (409, via `SequelizeUniqueConstraintError`
+   → `errorHandler` global) e nunca 500; reabertura após encerrar a 1ª;
+   centros diferentes coexistem.
+3. `server/tests/integration/inventory-count-claim-concurrency.test.ts`
+   (3 casos, agrupado nesta mesma frente por ser outro caso de lock
+   pessimista de alto risco) — 2 clients HTTP simultâneos disputando o
+   claim de uma contagem do pool (exatamente 1 vence), contagem atribuída
+   a funcionário específico não pode ser roubada por outro operador (409),
+   admin pode fazer override.
+
+**Não coberto nesta rodada (decisão explícita):** faturamento parcial de
+NF-e — o agente de Vendas está refatorando esse fluxo para `sale_invoices`
+em paralelo (`server/tests/integration/sale-invoice-history.test.ts` já
+apareceu no working tree durante esta rodada) e vai escrever o teste de
+integração dele junto, evitando conflito de edição concorrente.
+
+**Achado registrado (comportamento correto, não bug):** a perdedora da
+corrida de claim pelo POOL de uma contagem de inventário recebe **422**
+(`BusinessRuleError`, "não está em status draft"), não 409 — a checagem de
+status em `StartInventoryCountUseCase` vem antes da checagem de
+`assigned_to`. Documentado no teste e no TODO para não confundir leitura
+futura; nenhuma correção de código foi necessária (comportamento correto
+do lock pessimista).
+
+**Evidência de execução real:**
+- `node scripts/run-api-suite.cjs integration` (server real + PostgreSQL
+  real `erp_evok_audio_test`, migrations aplicadas, servidor em
+  `127.0.0.1:3101`): **32/32 suites, 88/88 testes passando** (rodada
+  final, após ajustar a expectativa 409→422 acima).
+- `npx jest tests/unit`: **88/88 suites, 711/711 testes passando** — sem
+  regressão, nenhum código de produção alterado.
+- Nota de reprodutibilidade: numa rodada intermediária,
+  `entity-photo-qrcode.test.ts` (arquivo pré-existente, não desta rodada)
+  falhou 2 casos com 500 em `POST /api/assets/:id/photo`; na rodada final,
+  com o mesmo código, passou 100%. Não investigado a fundo — fora do
+  território desta rodada (não é permitido alterar `server/src/`) e há
+  edição concorrente de outros agentes no mesmo working tree
+  (`fiscal`/`models/index.ts` modificados em paralelo); mais provável é
+  ruído de build/timing concorrente do que um bug real de patrimônio. Ver
+  `docs/governance/TODO.md` para o registro completo, caso o dono queira
+  investigar se o 500 se repetir de forma consistente depois que a rodada
+  de Vendas/CNAB commitar.
+
+**Documentos atualizados:** `docs/governance/TODO.md` (item marcado
+`[x]` com detalhamento completo), este diário (entrada nova).

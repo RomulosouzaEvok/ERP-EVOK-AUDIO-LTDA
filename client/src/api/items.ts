@@ -24,6 +24,15 @@ export interface Item {
   unidade: string;
   estoque_atual: string | number;
   status: string;
+  /** `DECIMAL(18,6)` como string — reservado por OP/venda/lote (ver `CLAUDE.md` §4). */
+  estoque_reservado?: string | number;
+  /** `DECIMAL(18,6)` como string — gatilho de reposição (MRP/estoque baixo). */
+  estoque_seguranca?: string | number;
+  /** `DECIMAL(18,6)` como string — lote mínimo de compra/produção. */
+  lote_minimo?: string | number;
+  lead_time_dias?: number;
+  /** `DECIMAL(18,6)` como string — custo padrão usado no MRP/custeio. */
+  custo_padrao?: string | number;
   /**
    * Opt-in de conversão automática do MRP (roadmap pós-Go-Live item 3,
    * `docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 3): quando `true`, ordens
@@ -54,11 +63,16 @@ export async function listItems(params: ItemListParams = {}) {
   return data;
 }
 
-/** `GET /api/items/:id` — obtém um item mestre pelo id. */
-export async function getItem(id: string) {
-  const { data } = await httpClient.get<ItemResponse<Item>>(`/api/items/${id}`);
-  return data.data;
-}
+/**
+ * Não existe `GET /api/items/:id` no backend (só `GET /api/items` — lista
+ * paginada — está exposto, ver `server/src/modules/items/presentation/routes/items.ts`
+ * e `docs/API.md` §31). Telas que precisam do "detalhe" de um item resolvem
+ * pelo `codigo` (único), com `listItems({ search: codigo })` seguido de um
+ * match exato de `item.codigo === codigo` — mesmo padrão já usado em
+ * `ProductsPage.tsx` (`ProductSuppliersDialog`) e replicado em
+ * `ItemMasterDetailPage.tsx`. Não inventar um `getItem(id)` aqui: a rota não
+ * existe de verdade.
+ */
 
 export interface CreateItemInput {
   codigo: string;
@@ -84,10 +98,15 @@ export async function createItem(input: CreateItemInput) {
   return data.data;
 }
 
-/** Payload parcial aceito por `PATCH /api/items/:id` (`.strict()` no backend). */
+/**
+ * Payload parcial aceito por `PATCH /api/items/:id` (`.strict()` no
+ * backend, `itemValidators.ts`). `codigo`/`tipo`/`unidade` **não** são
+ * editáveis por este endpoint — não incluir aqui (o backend rejeitaria com
+ * 400, campo desconhecido do `.strict()`).
+ */
 export interface UpdateItemInput {
   descricao?: string;
-  unidade?: string;
+  status?: 'ATIVO' | 'INATIVO' | 'BLOQUEADO';
   estoque_seguranca?: number;
   lote_minimo?: number;
   lead_time_dias?: number;
@@ -100,10 +119,61 @@ export interface UpdateItemInput {
 /**
  * `PATCH /api/items/:id` — atualização parcial de um item mestre. Usado
  * hoje para o toggle de `conversao_automatica` (opt-in de compra sem
- * revisão humana no MRP) e para o fornecedor padrão (sugestão do MRP na
- * requisição automática).
+ * revisão humana no MRP), fornecedor padrão (sugestão do MRP na requisição
+ * automática) e, na tela de detalhe do Item Mestre (`ItemMasterDetailPage`),
+ * os demais campos editáveis do cadastro.
  */
 export async function updateItem(id: string, input: UpdateItemInput) {
   const { data } = await httpClient.patch<ItemResponse<Item>>(`/api/items/${id}`, input);
+  return data.data;
+}
+
+/**
+ * `PATCH /api/items/:id/inactivate` — inativa (soft delete, `status →
+ * INATIVO`) um item. Retorna 422 (`BusinessRuleError`, `details` com o(s)
+ * vínculo(s) encontrado(s)) se houver BOM/OP/movimento/lote/MRP ativo
+ * vinculado.
+ */
+export async function deactivateItem(id: string) {
+  const { data } = await httpClient.patch<ItemResponse<Item>>(`/api/items/${id}/inactivate`);
+  return data.data;
+}
+
+/** Ligação de estrutura (BOM do item mestre — `POST /api/items/:id/estrutura`). */
+export interface CreateItemStructureInput {
+  item_componente_id: string;
+  quantidade: number;
+  perda_percentual?: number;
+  nivel?: number;
+}
+
+/** `POST /api/items/:id/estrutura` — cria uma ligação de estrutura (componente do item pai `id`). */
+export async function createItemStructure(itemPaiId: string, input: CreateItemStructureInput) {
+  const { data } = await httpClient.post<ItemResponse<unknown>>(`/api/items/${itemPaiId}/estrutura`, input);
+  return data.data;
+}
+
+/** Linha da explosão de estrutura (`GET /api/items/:id/estrutura/explode`). */
+export interface ExplodedStructureEntry {
+  item_id: string;
+  codigo: string | null;
+  descricao: string | null;
+  quantidade_bruta: number;
+  nivel: number;
+  data_necessidade: string;
+}
+
+/**
+ * `GET /api/items/:id/estrutura/explode?quantity=&due_date=` — explode a
+ * estrutura ativa do item para a quantidade informada (agregada por nível).
+ * Não existe um `GET` de listagem "rasa" (1 nível) da estrutura — este é o
+ * único jeito real de "ver" a BOM cadastrada de um item, além de cadastrar
+ * uma ligação nova via `createItemStructure`.
+ */
+export async function explodeItemStructure(itemId: string, params: { quantity: number; due_date?: string }) {
+  const { data } = await httpClient.get<ItemResponse<ExplodedStructureEntry[]>>(
+    `/api/items/${itemId}/estrutura/explode`,
+    { params },
+  );
   return data.data;
 }

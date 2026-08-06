@@ -54,6 +54,10 @@ router.put('/:id/items', authenticate, authorizeModule('vendas', 'operate'), sal
 router.post('/:id/nfe', authenticate, authorizeModule('vendas', 'approve'), fiscalController.issueSaleNfe);
 router.get('/:id/nfe', authenticate, authorizeModule('vendas'), fiscalController.getSaleNfeStatus);
 router.post('/:id/nfe/cancel', authenticate, authorizeModule('vendas', 'approve'), fiscalController.cancelSaleNfe);
+// Histórico multi-NF-e por pedido (2026-08-06, `docs/governance/TODO.md`):
+// lista todas as emissões (`sale_invoices`) da venda, mais recente
+// primeiro. Mesmo nível de RBAC de `GET .../nfe` (leitura, sem `approve`).
+router.get('/:id/invoices', authenticate, authorizeModule('vendas'), fiscalController.listSaleInvoices);
 
 module.exports = router;
 

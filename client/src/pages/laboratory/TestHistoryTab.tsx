@@ -5,7 +5,8 @@ import { ClipboardList, CheckCircle2, XCircle, Percent } from 'lucide-react';
 
 import * as laboratoryApi from '@/api/laboratory';
 import * as productsApi from '@/api/products';
-import { extractApiErrorMessage } from '@/api/httpClient';
+import { translateApiError } from '@/lib/translateApiError';
+import { DidacticAlert } from '@/components/DidacticAlert';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
@@ -245,8 +246,8 @@ export function TestHistoryTab() {
           {isLoading && <TableSkeletonRows columns={8} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-destructive">
-                {extractApiErrorMessage(error, 'Não foi possível carregar o histórico de testes.')}
+              <TableCell colSpan={8}>
+                <DidacticAlert error={translateApiError(error, 'Não foi possível carregar o histórico de testes')} />
               </TableCell>
             </TableRow>
           )}
