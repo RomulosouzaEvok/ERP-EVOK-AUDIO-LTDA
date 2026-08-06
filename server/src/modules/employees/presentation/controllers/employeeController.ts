@@ -15,22 +15,36 @@ const DeactivateEmployeeUseCase = require('../../application/use-cases/Deactivat
  */
 const employeesRepository = new SequelizeEmployeesRepository();
 
-/** `GET /api/employees` — lista funcionários (busca/filtro/paginação). */
+/**
+ * `GET /api/employees` — lista funcionários (busca/filtro/paginação).
+ *
+ * Acessível a qualquer usuário autenticado; campos sensíveis (salário, CPF,
+ * dados bancários, endereço, telefone — BR-RH-020) só são incluídos na
+ * resposta para `role === 'admin'` ou perfis com o módulo `rh` atribuído
+ * (ver `employeeSensitiveFields.hasFullEmployeeAccess`).
+ */
 exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ListEmployeesUseCase(employeesRepository);
-    const { rows, total, page, limit, totalPages } = await useCase.execute(req.query);
+    const { rows, total, page, limit, totalPages } = await useCase.execute({
+      ...req.query,
+      requestingUser: (req as any).user,
+    });
     res.json({ success: true, data: rows, pagination: { total, page, limit, totalPages } });
   } catch (error) {
     next(error);
   }
 };
 
-/** `GET /api/employees/:id` — busca um funcionário pelo id. */
+/**
+ * `GET /api/employees/:id` — busca um funcionário pelo id.
+ *
+ * Mesma segregação de campos sensíveis de `list` (BR-RH-020).
+ */
 exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetEmployeeByIdUseCase(employeesRepository);
-    const employee = await useCase.execute({ id: req.params.id });
+    const employee = await useCase.execute({ id: req.params.id, requestingUser: (req as any).user });
     res.json({ success: true, data: employee });
   } catch (error) {
     next(error);

@@ -65,6 +65,15 @@ function formatCpf(cpf: string): string {
 }
 
 /**
+ * 🔒 BR-RH-020 (LGPD): `employee.cpf` fica ausente na resposta da API para
+ * usuários sem acesso de RH (ver `client/src/api/employees.ts`). Exibe
+ * "•••" nesse caso em vez de quebrar a formatação.
+ */
+function displayCpf(cpf: string | undefined): string {
+  return cpf ? formatCpf(cpf) : '•••';
+}
+
+/**
  * Aba "Funcionários" de `/hr` — CRUD com busca (nome/CPF), filtro por
  * departamento/situação e paginação server-side (`GET /api/employees`, o
  * único endpoint RH que pagina). Criação/edição/desligamento exigem role
@@ -193,7 +202,7 @@ export function EmployeesTab() {
           {data?.data.map((employee) => (
             <TableRow key={employee.id}>
               <TableCell>{employee.name}</TableCell>
-              <TableCell className="font-mono text-xs">{formatCpf(employee.cpf)}</TableCell>
+              <TableCell className="font-mono text-xs">{displayCpf(employee.cpf)}</TableCell>
               <TableCell>{employee.position || '-'}</TableCell>
               <TableCell>{employee.department?.name ?? '-'}</TableCell>
               <TableCell>{SHIFT_LABEL[employee.shift]}</TableCell>
@@ -365,15 +374,19 @@ function EmployeeDialog({
   React.useEffect(() => {
     if (!open) return;
     if (mode === 'edit' && employee) {
+      // Nota (BR-RH-020): esta edição só abre para role `admin` (`canManage`
+      // acima), que sempre recebe os campos sensíveis completos do backend —
+      // os fallbacks abaixo são apenas defensivos para o tipo `Employee`
+      // (campos opcionais por causa da segregação de RH).
       reset({
         name: employee.name,
-        cpf: employee.cpf,
+        cpf: employee.cpf ?? '',
         department_id: employee.department_id,
         position: employee.position ?? '',
         phone: employee.phone ?? '',
         email: employee.email ?? '',
         salary: employee.salary !== undefined && employee.salary !== null ? Number(employee.salary) : undefined,
-        salary_type: employee.salary_type,
+        salary_type: employee.salary_type ?? 'mensal',
         shift: employee.shift,
         work_regime: employee.work_regime,
         hire_date: '',

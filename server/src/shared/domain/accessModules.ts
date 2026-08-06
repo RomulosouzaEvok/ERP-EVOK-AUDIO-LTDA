@@ -20,6 +20,20 @@
  * Bloco D sobre `maintenance.ts`/`serviceOrders.ts`. `comex` foi adicionado
  * em 2026-08-06 (UC-19) para o módulo de Importação/COMEX
  * (`Suprimentos > Importação`), com o Analista de Comex como ator dedicado.
+ * `rh` foi adicionado em 2026-08-06 (BR-RH-020,
+ * `docs/business/briefs/BRIEF_RH_2026-08-06.md`) para segregar o acesso a
+ * dados sensíveis de funcionários (salário, CPF, dados bancários, endereço,
+ * telefone pessoal) — LGPD arts. 5º/6º/46. Diferente dos demais módulos,
+ * `rh` NÃO é usado com `authorizeModule` para bloquear rotas inteiras (a
+ * listagem básica de `GET /api/employees` continua acessível a qualquer
+ * autenticado, como já era usado por outras telas — ex.: seletor de
+ * operador do apontamento e resolução de departamento do usuário logado);
+ * ele é lido diretamente de `req.user.permissions.rh` dentro dos use cases
+ * do módulo `employees` para decidir se os campos sensíveis do funcionário
+ * devem ser incluídos na resposta (ver
+ * `server/src/modules/employees/domain/services/employeeSensitiveFields.ts`).
+ * `role === 'admin'` sempre vê os campos completos (mesmo padrão dos demais
+ * módulos).
  *
  * @module shared/domain/accessModules
  */
@@ -49,6 +63,7 @@ export type AccessModuleKey =
   | 'patrimonio'
   | 'manutencao'
   | 'garantia'
+  | 'rh'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'
@@ -94,6 +109,7 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   { key: 'patrimonio', label: 'Patrimônio' },
   { key: 'manutencao', label: 'Manutenção' },
   { key: 'garantia', label: 'Garantia/Assistência Técnica' },
+  { key: 'rh', label: 'Recursos Humanos (dados sensíveis)' },
   { key: 'rastreabilidade', label: 'Rastreabilidade' },
   { key: 'financeiro', label: 'Financeiro' },
   { key: 'relatorios.producao', label: 'Relatórios de Produção' },

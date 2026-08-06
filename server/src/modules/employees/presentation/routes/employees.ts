@@ -5,9 +5,15 @@ const employeeController = require('../controllers/employeeController');
 
 /**
  * Rotas do módulo `employees` (Clean Architecture), montadas sob
- * `/api/employees` em `server/app.ts`. Mantém exatamente o mesmo RBAC do
- * roteador legado (`server/src/routes/employees.ts`). Dados de RH (salário,
- * admissão etc.) - escrita restrita a admin.
+ * `/api/employees` em `server/app.ts`. Escrita (`POST`/`PUT`/`DELETE`)
+ * restrita a `admin`. Leitura (`GET`) exige apenas sessão autenticada — a
+ * segregação de campos sensíveis de RH (salário, CPF, dados bancários,
+ * endereço, telefone — BR-RH-020) acontece dentro dos use cases
+ * (`ListEmployeesUseCase`/`GetEmployeeByIdUseCase`, via
+ * `employeeSensitiveFields.hasFullEmployeeAccess`), não no roteamento: a
+ * rota continua liberada para consumidores legítimos que só precisam de
+ * nome/departamento/cargo (ex.: seletor de operador do apontamento,
+ * resolução de departamento do usuário logado).
  */
 
 router.get('/', authenticate, employeeController.list);

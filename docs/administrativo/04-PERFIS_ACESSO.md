@@ -40,7 +40,7 @@ Um Perfil de Acesso representa uma "área/departamento" de permissões (ex.:
   novos usuários (bloqueado se ainda houver usuário ativo vinculado, ver
   abaixo);
 - `permissions[]` — a matriz módulo × nível, cada linha com:
-  - `module`: uma das 29 chaves fixas de `AccessModuleKey` (ver tabela
+  - `module`: uma das 30 chaves fixas de `AccessModuleKey` (ver tabela
     abaixo), validada contra `ACCESS_MODULE_KEYS`;
   - `level`: `'operate'` ou `'approve'`. `approve` inclui as permissões de
     `operate` no mesmo módulo; `operate` isolado nunca autoriza uma ação que
@@ -49,7 +49,7 @@ Um Perfil de Acesso representa uma "área/departamento" de permissões (ex.:
 ## Catálogo de módulos atribuíveis
 
 Lista completa retornada por `GET /api/access-profiles/modules`
-(`ACCESS_MODULES` em `accessModules.ts`, 29 chaves — `usuarios` e
+(`ACCESS_MODULES` em `accessModules.ts`, 30 chaves — `usuarios` e
 `audit_logs` são exclusivos do `role='admin'` e nunca aparecem aqui):
 
 | Chave (`module`) | Rótulo pt-BR |
@@ -77,12 +77,37 @@ Lista completa retornada por `GET /api/access-profiles/modules`
 | `patrimonio` | Patrimônio |
 | `manutencao` | Manutenção |
 | `garantia` | Garantia/Assistência Técnica |
+| `rh` | Recursos Humanos (dados sensíveis) |
 | `rastreabilidade` | Rastreabilidade |
 | `financeiro` | Financeiro |
 | `relatorios.producao` | Relatórios de Produção |
 | `relatorios.compras` | Relatórios de Compras |
 | `relatorios.custos` | Relatórios de Custos |
 | `relatorios.financeiro` | Relatórios Financeiros |
+
+### Caso especial: módulo `rh` (BR-RH-020, segregação de campo, não de rota)
+
+Diferente dos demais 29 módulos do catálogo, `rh` **não** é usado com
+`authorizeModule` para bloquear uma rota inteira. `GET /api/employees` e
+`GET /api/employees/:id` continuam liberados para qualquer usuário
+autenticado (mantendo consumidores legítimos que só precisam de
+nome/departamento/cargo, ex.: seletor de operador do apontamento
+`ShopFloorPage`, resolução de departamento via `useMyDepartment`). O que o
+módulo `rh` controla é o **conteúdo** da resposta: os use cases
+`ListEmployeesUseCase`/`GetEmployeeByIdUseCase`
+(`server/src/modules/employees/`) leem `req.user.permissions.rh`
+diretamente (via
+`server/src/modules/employees/domain/services/employeeSensitiveFields.ts`,
+`hasFullEmployeeAccess`) e removem do payload os campos sensíveis de LGPD
+(`salary`, `salary_type`, `cpf`, `rg`, `pis_pasep`, `ctps`, `bank_name`,
+`bank_agency`, `bank_account`, `bank_account_type`, `pix_key`, `address`,
+`phone`) sempre que o requisitante não é `role='admin'` nem tem `rh`
+atribuído (em qualquer nível — `operate` e `approve` têm o mesmo efeito
+aqui, não há distinção gestor/operador para este dado). Decisão registrada
+em `docs/business/briefs/BRIEF_RH_2026-08-06.md` (BR-RH-020).
+
+Escrita (`POST`/`PUT`/`DELETE /api/employees`) continua exigindo
+`role='admin'` (`authorize('admin')`) — não foi alterada por este bloco.
 
 ## Como criar um Perfil de Acesso (fluxo administrativo)
 
@@ -133,8 +158,13 @@ transição `active: true → false`. Tentativas de acesso negadas por
 ## Estado de implementação (2026-08-06)
 
 - [IMPLEMENTADO] CRUD completo de Perfis de Acesso (`/api/access-profiles`),
-  catálogo de 29 módulos, atribuição a usuário, endpoint de permissões do
-  usuário logado (`/api/auth/me/permissions`).
+  catálogo de 30 módulos (inclui `rh`, adicionado neste bloco), atribuição a
+  usuário, endpoint de permissões do usuário logado
+  (`/api/auth/me/permissions`).
+- [IMPLEMENTADO] BR-RH-020 (LGPD) — segregação de campos sensíveis de
+  `Employee` (salário, CPF, dados bancários, endereço, telefone) por módulo
+  `rh`/`role='admin'`, ver seção "Caso especial: módulo `rh`" acima. Testado
+  em `server/tests/unit/employees-use-cases.test.ts`.
 - [IMPLEMENTADO] `authorizeModule` aplicado como piloto em dois módulos
   (`laboratory`, `engineering`).
 - [PENDENTE] Retrofit de `authorizeModule` nos demais módulos (vendas,
@@ -156,6 +186,8 @@ transição `active: true → false`. Tentativas de acesso negadas por
 - `docs/arquitetura/API.md` § "1.2 Perfis de Acesso (Access Profiles)" — exemplos de request/response.
 - `docs/business/BUSINESS_RULES.md` §1, §4, §12 — matriz de módulos e regras de aprovação.
 - `docs/business/01-USE_CASES.md` UC-30 a UC-34.
+- `docs/business/briefs/BRIEF_RH_2026-08-06.md` — BR-RH-020 (origem da
+  decisão do módulo `rh`).
 
 ---
 

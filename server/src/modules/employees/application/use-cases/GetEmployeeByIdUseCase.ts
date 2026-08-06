@@ -7,8 +7,23 @@
 import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError } from '../../../../errors';
 import EmployeesRepository from '../../domain/repositories/EmployeesRepository';
+import {
+  hasFullEmployeeAccess,
+  sanitizeEmployee,
+  RequestingUserContext,
+} from '../../domain/services/employeeSensitiveFields';
 
-class GetEmployeeByIdUseCase extends UseCase<{ id: number | string }, any> {
+interface GetEmployeeByIdInput {
+  id: number | string;
+  /**
+   * Usuário autenticado que fez a requisição (`req.user`), usado apenas
+   * para decidir se os campos sensíveis de RH (BR-RH-020) entram na
+   * resposta.
+   */
+  requestingUser?: RequestingUserContext;
+}
+
+class GetEmployeeByIdUseCase extends UseCase<GetEmployeeByIdInput, any> {
   private readonly employeesRepository: EmployeesRepository;
 
   /** @param employeesRepository - Repositorio de funcionários. */
@@ -18,16 +33,17 @@ class GetEmployeeByIdUseCase extends UseCase<{ id: number | string }, any> {
   }
 
   /**
-   * @param input - Id do funcionário.
-   * @returns Funcionário encontrado.
+   * @param input - Id do funcionário e usuário requisitante.
+   * @returns Funcionário encontrado (sem campos sensíveis quando o
+   *   requisitante não tem acesso de RH, BR-RH-020).
    * @throws {NotFoundError} Se o funcionário não existir.
    */
-  public async execute({ id }: { id: number | string }): Promise<any> {
+  public async execute({ id, requestingUser }: GetEmployeeByIdInput): Promise<any> {
     const employee = await this.employeesRepository.findById(id);
     if (!employee) {
       throw new NotFoundError('Funcionário não encontrado');
     }
-    return employee;
+    return sanitizeEmployee(employee, hasFullEmployeeAccess(requestingUser));
   }
 }
 

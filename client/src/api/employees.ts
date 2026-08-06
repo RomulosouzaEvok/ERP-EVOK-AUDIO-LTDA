@@ -11,6 +11,15 @@ import type { Department } from './departments';
  * Também consumido por `client/src/pages/production/ShopFloorPage.tsx`
  * (`listEmployees({ limit: 200 })`, para o seletor de operador do
  * apontamento) — manter a assinatura de `listEmployees` retrocompatível.
+ *
+ * 🔒 BR-RH-020 (LGPD): o backend remove campos sensíveis (salário, CPF,
+ * RG/PIS/CTPS, dados bancários, endereço, telefone) da resposta de
+ * `GET /api/employees` e `GET /api/employees/:id` quando o usuário logado
+ * não é `admin` nem tem o módulo `rh` no seu perfil de acesso (ver
+ * `server/src/modules/employees/domain/services/employeeSensitiveFields.ts`).
+ * Por isso esses campos são opcionais no tipo `Employee` abaixo — telas que
+ * os exibem devem tratar a ausência (ex.: `formatCpf`/render condicional em
+ * `EmployeesTab.tsx`).
  */
 
 export type EmployeeStatus = 'active' | 'inactive' | 'fired' | 'vacation' | 'license';
@@ -24,27 +33,40 @@ export interface Employee {
   user_id: number | null;
   department_id: number;
   name: string;
-  cpf: string;
-  rg: string | null;
-  pis_pasep: string | null;
-  ctps: string | null;
-  phone: string | null;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  cpf?: string;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  rg?: string | null;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  pis_pasep?: string | null;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  ctps?: string | null;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  phone?: string | null;
   email: string | null;
-  address: string | null;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  address?: string | null;
   position: string | null;
-  salary: string | number;
-  salary_type: EmployeeSalaryType;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  salary?: string | number;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  salary_type?: EmployeeSalaryType;
   hire_date: string;
   dismissal_date: string | null;
   status: EmployeeStatus;
   shift: EmployeeShift;
   work_regime: EmployeeWorkRegime;
   work_hours_weekly: number;
-  bank_name: string | null;
-  bank_agency: string | null;
-  bank_account: string | null;
-  bank_account_type: EmployeeBankAccountType;
-  pix_key: string | null;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  bank_name?: string | null;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  bank_agency?: string | null;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  bank_account?: string | null;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  bank_account_type?: EmployeeBankAccountType;
+  /** 🔒 BR-RH-020 — ausente na resposta para usuários sem acesso de RH. */
+  pix_key?: string | null;
   notes: string | null;
   department?: Pick<Department, 'id' | 'name'> | null;
   createdAt?: string;

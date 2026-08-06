@@ -8511,3 +8511,151 @@ painel executivo completo).
   `financeiro-resumo`/`kpis-executivos` continuarão ocultos para ele
   mesmo tendo o módulo `financeiro`/`dashboard`; ajustar a lista `roles`
   quando esse perfil existir.
+
+---
+
+## Bloco 0 — BR-RH-020: segregação de dados sensíveis de RH (Concluído)
+
+**Data**: 2026-08-06
+**Escopo**: P0 de segurança/LGPD — `GET /api/employees` e
+`GET /api/employees/:id` vazavam salário, CPF e dados bancários de
+**todos** os funcionários para **qualquer** usuário autenticado (achado de
+`docs/business/briefs/BRIEF_RH_2026-08-06.md`, BR-RH-020).
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+Segregação de campos sensíveis (LGPD) na resposta de `GET /api/employees` e
+`GET /api/employees/:id`, sem quebrar a listagem básica (nome, cargo,
+departamento, turno, situação) que outras telas já consomem:
+- `role='admin'` ou perfil de acesso com o novo módulo `rh` → resposta
+  completa (inclui `salary`, `salary_type`, `cpf`, `rg`, `pis_pasep`,
+  `ctps`, `bank_name`, `bank_agency`, `bank_account`, `bank_account_type`,
+  `pix_key`, `address`, `phone`).
+- Qualquer outro usuário autenticado → mesma rota, mesmo payload, **sem**
+  essas 13 chaves (removidas, não mascaradas com `null`/`***` — o
+  frontend precisa tratar a ausência da chave).
+
+### Decisão de arquitetura (RBAC): módulo `rh` + filtragem no use case, não `authorizeModule` na rota
+
+Duas opções foram avaliadas:
+1. Bloquear `GET /api/employees` inteiro com `authorizeModule('rh')` —
+   **descartada**: quebraria consumidores legítimos que só precisam do
+   básico (`ShopFloorPage` seletor de operador, `useMyDepartment` para
+   requisições por departamento) para usuários sem perfil de RH.
+2. **Escolhida**: adicionar `rh` ao catálogo de 29→30 módulos
+   (`server/src/shared/domain/accessModules.ts`), mas usá-lo apenas para
+   ler `req.user.permissions.rh` **dentro dos use cases**
+   (`ListEmployeesUseCase`/`GetEmployeeByIdUseCase`) e decidir se os
+   campos sensíveis entram no payload — a rota continua liberada a
+   `authenticate` puro, como já era.
+
+Isso segue o padrão RBAC existente (perfil configurável, mesma matriz
+`AccessProfilePermission`) mas aplicado a nível de **campo**, não de
+**rota** — documentado como caso especial em
+`docs/administrativo/04-PERFIS_ACESSO.md` §"Caso especial: módulo `rh`".
+
+### Arquivos modificados
+
+#### Criados
+- `server/src/modules/employees/domain/services/employeeSensitiveFields.ts`
+  — `SENSITIVE_EMPLOYEE_FIELDS`, `hasFullEmployeeAccess(user)`,
+  `sanitizeEmployee(employee, canViewSensitive)`,
+  `sanitizeEmployeeList(employees, canViewSensitive)`.
+
+#### Modificados
+- `server/src/shared/domain/accessModules.ts` — novo `AccessModuleKey`
+  `'rh'` (catálogo 29→30 chaves), com nota de arquitetura no JSDoc do
+  módulo explicando por que não usa `authorizeModule` para bloquear rota.
+- `server/src/modules/employees/application/use-cases/ListEmployeesUseCase.ts`
+  — aceita `requestingUser` no input; sanitiza `rows` via
+  `sanitizeEmployeeList`.
+- `server/src/modules/employees/application/use-cases/GetEmployeeByIdUseCase.ts`
+  — aceita `requestingUser` no input; sanitiza o resultado via
+  `sanitizeEmployee`.
+- `server/src/modules/employees/presentation/controllers/employeeController.ts`
+  — passa `(req as any).user` como `requestingUser` para os dois use cases
+  acima (`list`, `getById`).
+- `server/src/modules/employees/presentation/routes/employees.ts` — JSDoc
+  atualizado (rota continua só `authenticate`, segregação é nos use cases).
+- `client/src/api/employees.ts` — campos sensíveis do tipo `Employee`
+  marcados opcionais (`cpf?`, `salary?`, `bank_name?` etc.) com JSDoc
+  🔒 BR-RH-020, já que podem estar ausentes na resposta.
+- `client/src/pages/hr/EmployeesTab.tsx` — `formatCpf` só é chamado
+  quando `employee.cpf` existe (`displayCpf`, mostra "•••" quando
+  ausente); formulário de edição (só abre para `role='admin'`, que sempre
+  recebe dados completos) usa fallbacks defensivos (`?? ''`, `?? 'mensal'`)
+  só para satisfazer o tipo agora opcional.
+
+### Documentações atualizadas
+- `docs/administrativo/04-PERFIS_ACESSO.md` — catálogo 29→30 módulos,
+  linha `rh` na tabela, nova seção "Caso especial: módulo `rh`" e entrada
+  em "Estado de implementação (2026-08-06)".
+- `docs/business/briefs/BRIEF_RH_2026-08-06.md` — BR-RH-020 marcado
+  `✅ REMEDIADO em 2026-08-06` (tabela de regras de negócio §(d) e tabela
+  de priorização §(g)).
+- JSDoc completo em todos os arquivos novos/alterados listados acima
+  (classe, métodos, parâmetros e retornos).
+- `docs/database/DATABASE.md`/`docs/projeto/04-USE_CASES.md` — **não
+  alterados**: nenhuma coluna, tabela ou caso de uso de negócio mudou;
+  `rh` é uma chave de catálogo de RBAC (`AccessModuleKey`), não uma
+  entidade de banco, e o comportamento de negócio de `GET /api/employees`
+  (quem pode ler funcionários) não mudou — só o conteúdo do payload.
+
+### Instruções de teste
+
+1. **Automatizado**:
+   - `cd server && npm run typecheck` → 0 erros (validado).
+   - `cd client && npx tsc -p tsconfig.app.json --noEmit` → 0 erros (validado).
+   - `cd server && npx jest tests/unit/employees-use-cases.test.ts --runInBand`
+     → 11/11 passando (validado), incluindo os 6 testes novos de
+     `Segregação de campos sensíveis de RH (BR-RH-020)`:
+     - `retorna todos os campos, incluindo sensíveis, para role admin`
+     - `retorna todos os campos para usuário com módulo "rh" no perfil de acesso`
+     - `NÃO retorna salário/CPF/dados bancários/endereço/telefone para usuário autenticado comum` (asserta `not.toHaveProperty` para cada campo sensível)
+     - `NÃO retorna campos sensíveis quando não há requestingUser (defesa em profundidade)`
+     - `lista continua funcionando (nome/departamento) e oculta campos sensíveis para usuário comum`
+     - `lista retorna campos sensíveis completos para admin`
+   - `cd server && npm run test:unit` → 717/717 passando (baseline completo, sem regressão).
+2. **Manual (próximo agente/humano)**:
+   - Criar (ou usar) um `AccessProfile` com o módulo `rh` em `operate`,
+     atribuir a um usuário `operator`; logar com esse usuário e confirmar
+     que `GET /api/employees` retorna `salary`/`cpf`/dados bancários.
+   - Logar com um usuário `operator` **sem** módulo `rh` no perfil;
+     confirmar que a mesma rota retorna 200 (não 403) mas sem essas
+     chaves no JSON (inspecionar payload via devtools/network, não só a
+     tela — a tela `/hr` só renderiza CPF/nome/cargo hoje).
+   - Na tela `/hr` (aba Funcionários), confirmar que a coluna CPF mostra
+     "•••" para o usuário sem módulo `rh` e o CPF formatado para
+     `admin`/usuário com `rh`.
+   - Confirmar que `ShopFloorPage` (seletor de operador do apontamento) e
+     `useMyDepartment` (resolução de departamento do usuário logado)
+     continuam funcionando normalmente para qualquer usuário autenticado
+     (não dependem de campos sensíveis).
+   - Escrita (`POST`/`PUT`/`DELETE /api/employees`) não foi alterada:
+     continua exigindo `role='admin'`.
+
+### Riscos residuais
+
+- Não existe ainda um `AccessProfile` seedado com o módulo `rh` — até que
+  o dono do produto crie/atribua um perfil "RH" (via
+  `POST /api/access-profiles` + `PUT /api/users/:id/access-profile`),
+  **apenas `role='admin'`** vê os dados completos. Isso é intencional
+  (fail-safe: nenhum usuário ganha acesso sensível por omissão), mas RH
+  operacional (não-admin) ficará sem ver salário/CPF até essa atribuição
+  manual.
+- O campo `email` de `Employee` **não** foi tratado como sensível (mantido
+  visível a todos) — decisão de escopo: o brief cita CPF, salário e banco
+  explicitamente e o e-mail cadastrado tende a ser corporativo; se o RH
+  confirmar que `email` costuma ser pessoal, adicionar a
+  `SENSITIVE_EMPLOYEE_FIELDS`.
+- Não foi criado teste de integração HTTP (`supertest`) end-to-end para
+  este bloco — a cobertura é em nível de use case (unit), que já exercita
+  a lógica de decisão real (`hasFullEmployeeAccess`) sem mock do
+  Sequelize; suficiente para o escopo cirúrgico pedido, mas um teste de
+  integração cobrindo `authorizeModule`/`AccessProfile` real (seed de
+  perfil "rh" em banco de teste) é um bom complemento futuro.
+- `EmployeeDocument`, `JobPosition`, `EmployeeJobHistory` e outras
+  entidades futuras do brief (P4–P17) ainda não existem — quando forem
+  criadas, revisar se também carregam campos 🔒 que precisam do mesmo
+  tratamento de `hasFullEmployeeAccess`.
