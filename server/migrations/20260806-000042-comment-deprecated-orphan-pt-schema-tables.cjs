@@ -2,7 +2,7 @@
 
 /**
  * Onda 2 (2026-08-06) — passo de "contract" da unificacao legado/novo
- * (item 10 do roadmap, `docs/LEVANTAMENTO_ERP_2026-08-02.md`).
+ * (item 10 do roadmap, `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`).
  *
  * Diagnostico (banco real, 2026-08-06): as 12 tabelas abaixo vieram do
  * `01_schema.sql` (baseline `20260731-000001`) — um schema-fantasma em
@@ -51,7 +51,7 @@ const ORPHAN_TABLES = [
 const DEPRECATED_COMMENT =
   'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. ' +
   '0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. ' +
-  'Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e ' +
+  'Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e ' +
   'server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 module.exports = {

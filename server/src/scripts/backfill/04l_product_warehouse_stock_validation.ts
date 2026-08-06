@@ -12,7 +12,7 @@
  * no console via `psql`, mas não long fazem o processo falhar sozinhos.
  *
  * INVARIANTE VALIDADA (`docs/business/BUSINESS_RULES.md` §12 item 3,
- * `docs/DATABASE.md`): para todo produto,
+ * `docs/database/DATABASE.md`): para todo produto,
  *   SOMA(product_warehouse_stock.quantity) = products.quantity
  * Isso cobre tanto o snapshot do backfill original (migration
  * `20260804-...` — todo saldo `products.quantity > 0` foi migrado 1:1 para

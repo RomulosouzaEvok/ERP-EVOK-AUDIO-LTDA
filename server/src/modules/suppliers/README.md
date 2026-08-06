@@ -130,7 +130,7 @@ Base URL: `/api/suppliers`.
 | PUT | `/api/suppliers/:id` | `authenticate` | Atualiza dados cadastrais |
 | DELETE | `/api/suppliers/:id` | `authenticate` | Inativa (soft delete) um fornecedor |
 
-Ver `docs/API.md` (seção "12. Fornecedores") para exemplos completos de
+Ver `docs/arquitetura/API.md` (seção "12. Fornecedores") para exemplos completos de
 request/response.
 
 ## Permissões

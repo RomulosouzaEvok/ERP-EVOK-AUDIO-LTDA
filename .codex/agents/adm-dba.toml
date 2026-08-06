@@ -48,8 +48,8 @@ O projeto utiliza Sequelize como ORM, com um wrapper próprio sobre o `sequelize
 
 ## 🤝 DOCUMENTAÇÃO E HANDOFF
 Após rodar qualquer migration com sucesso:
-1. Atualize OBRIGATORIAMENTE `docs/database/02-MODELO_LOGICO.md`, `04-DICIONARIO_DADOS.md` e, se aplicável, `05-ACESSOS_E_ISOLAMENTO.md`/`06-ESTRUTURAS_PROGRAMAVEIS.md` detalhando as novas tabelas, colunas, tipos e relacionamentos. `docs/DATABASE.md` (raiz de `docs/`) é só o changelog histórico curto que aponta para essa pasta — não duplique conteúdo lá.
-2. Atualize o `docs/HANDOFF_CODEX.md` avisando ao Agente Programador ou QA que o schema do banco mudou, listando as novas colunas para que ele possa atualizar o código.
+1. Atualize OBRIGATORIAMENTE `docs/database/02-MODELO_LOGICO.md`, `04-DICIONARIO_DADOS.md` e, se aplicável, `05-ACESSOS_E_ISOLAMENTO.md`/`06-ESTRUTURAS_PROGRAMAVEIS.md` detalhando as novas tabelas, colunas, tipos e relacionamentos. `docs/database/DATABASE.md` (raiz de `docs/`) é só o changelog histórico curto que aponta para essa pasta — não duplique conteúdo lá.
+2. Atualize o `docs/governance/HANDOFF_CODEX.md` avisando ao Agente Programador ou QA que o schema do banco mudou, listando as novas colunas para que ele possa atualizar o código.
 3. Se a mudança afetar um Requisito Funcional existente ou um endpoint de API, sinalize para o `AuditorIntegrador` validar a rastreabilidade Requisito → Banco → API.
 
 Aguarde as instruções de modelagem de dados."""

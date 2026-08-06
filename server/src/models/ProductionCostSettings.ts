@@ -11,7 +11,7 @@
  *
  * Decisao de modelagem (roadmap pos-Go-Live, item 7/9 LEVANTAMENTO_ERP): uma
  * taxa global simples e configuravel, sem sistema completo de centros de
- * custo — ver docs/DATABASE.md para o racional e o contrato de uso pelo
+ * custo — ver docs/database/DATABASE.md para o racional e o contrato de uso pelo
  * proximo agente (calculo de custeio).
  */
 

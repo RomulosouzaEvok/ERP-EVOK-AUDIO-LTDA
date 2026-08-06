@@ -3,7 +3,7 @@
 /**
  * Correcao de bomba de schema (achada ao implementar o roadmap pos-Go-Live
  * item 3, "MRP fecha o ciclo -> Ordem de Producao", ver
- * docs/LEVANTAMENTO_ERP_2026-08-02.md, secao 3): a baseline migration
+ * docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md, secao 3): a baseline migration
  * (20260731-000001-baseline-schema.cjs) cria `production_orders` a partir
  * do model Sequelize via `attribute.allowNull` — e varios campos legitimamente
  * opcionais no model (`start_date`, `completion_date`, `sales_order_id`,

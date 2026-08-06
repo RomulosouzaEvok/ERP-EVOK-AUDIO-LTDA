@@ -12,7 +12,7 @@ import type { IProductRepository } from '../../domain/repositories/ProductReposi
  * paginação) com uma rota aninhada dedicada, mais natural para a tela de
  * detalhe de um produto.
  *
- * DECISÃO DE PRODUTO (documentada aqui e em `docs/API.md`): a resposta
+ * DECISÃO DE PRODUTO (documentada aqui e em `docs/arquitetura/API.md`): a resposta
  * inclui TODOS os depósitos ativos, mesmo aqueles em que o produto não tem
  * nenhuma linha em `ProductWarehouseStock` (saldo tratado como `0`) — ao
  * contrário do backfill (que só cria linha para saldo > 0). Isso favorece a

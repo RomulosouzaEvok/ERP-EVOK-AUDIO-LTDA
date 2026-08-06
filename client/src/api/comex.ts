@@ -6,7 +6,7 @@ import type { ItemResponse, ListResponse } from './types';
  * `draft -> shipped -> arrived -> customs_cleared -> received | cancelled`
  * (cancelamento permitido em qualquer estado anterior a `received`).
  * Contratos espelham `server/src/modules/comex/presentation/` — ver
- * `docs/HANDOFF_CODEX.md`, seção "UC-19 — Importação/COMEX".
+ * `docs/governance/HANDOFF_CODEX.md`, seção "UC-19 — Importação/COMEX".
  */
 export type ImportProcessStatus = 'draft' | 'shipped' | 'arrived' | 'customs_cleared' | 'received' | 'cancelled';
 

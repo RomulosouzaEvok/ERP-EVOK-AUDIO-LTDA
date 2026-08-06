@@ -97,7 +97,7 @@ Base URL: `/api/products` (autenticação obrigatória via middleware `authentic
 | DELETE | `/api/products/:id` | Inativa produto (soft delete) |
 | POST | `/api/products/movements` | Registra movimentação manual de estoque (in/out) |
 
-Ver `docs/API.md` para exemplos completos de request/response.
+Ver `docs/arquitetura/API.md` para exemplos completos de request/response.
 
 ## Permissões
 

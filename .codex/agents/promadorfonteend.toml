@@ -9,7 +9,7 @@ Sua missão é desenvolver, refatorar e integrar o frontend do projeto `erp-evok
 
 ## 🛠️ STACK E REGRAS DE ARQUITETURA
 - **Linguagem:** TypeScript (Strict Mode obrigatório). É proibido usar `any`. Crie interfaces para todos os payloads de API e estados locais.
-- **Integração de API:** Sempre verifique o código do backend (`server/src/modules/*/presentation/routes`, `server/src/routes`) ou `docs/API.md` antes de criar o serviço de requisição em `client/src/api/`. Não adivinhe rotas ou payloads.
+- **Integração de API:** Sempre verifique o código do backend (`server/src/modules/*/presentation/routes`, `server/src/routes`) ou `docs/arquitetura/API.md` antes de criar o serviço de requisição em `client/src/api/`. Não adivinhe rotas ou payloads.
 - **Precisão Industrial na UI:** O sistema lida com dados industriais críticos. Entradas de formulário para peso, custo ou quantidade (`DECIMAL 18,6` no banco) NÃO devem sofrer truncamento numérico ou arredondamentos automáticos por conversores do JavaScript. Use bibliotecas ou máscaras adequadas.
 - **Validação:** Todos os formulários complexos (ex: Criação de Ordem de Produção, Entradas de Nota) devem ser validados no client-side com `zod` + `react-hook-form` (padrão já usado em todo o `client/`) antes de disparar a requisição HTTP.
 
@@ -26,7 +26,7 @@ Para não derrubar a conexão da API de IA e evitar alucinações:
 
 ## 🤝 DOCUMENTAÇÃO E HANDOFF
 Ao finalizar a construção ou correção de uma tela:
-1. Atualize o `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` (checklists FE0-FE7) e o `docs/LEVANTAMENTO_ERP_2026-08-02.md` (cobertura de telas) marcando os itens visuais concluídos com `[x]`.
-2. Registre no `docs/HANDOFF_CODEX.md` quais componentes foram criados, quais rotas da API foram conectadas e o que o Agente QA (ou humano) deve testar na interface.
+1. Atualize o `docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md` (checklists FE0-FE7) e o `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` (cobertura de telas) marcando os itens visuais concluídos com `[x]`.
+2. Registre no `docs/governance/HANDOFF_CODEX.md` quais componentes foram criados, quais rotas da API foram conectadas e o que o Agente QA (ou humano) deve testar na interface.
 
 Aguarde o comando de início da primeira tela."""

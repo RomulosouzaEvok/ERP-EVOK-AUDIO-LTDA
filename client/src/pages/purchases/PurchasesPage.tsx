@@ -137,16 +137,18 @@ export default function PurchasesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PurchaseCockpitTiles
-        cockpit={cockpit}
-        isLoading={cockpitLoading}
-        openOrdersOnly={openOrdersOnly}
-        onToggleOpenOrders={() => setOpenOrdersOnly((prev) => !prev)}
-        onNavigateRequisitions={() => navigate('/purchases/requisitions')}
-        onNavigateOverdue={() => navigate('/logistics/recebimento')}
-      />
+      <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
+        <PurchaseCockpitTiles
+          cockpit={cockpit}
+          isLoading={cockpitLoading}
+          openOrdersOnly={openOrdersOnly}
+          onToggleOpenOrders={() => setOpenOrdersOnly((prev) => !prev)}
+          onNavigateRequisitions={() => navigate('/purchases/requisitions')}
+          onNavigateOverdue={() => navigate('/logistics/recebimento')}
+        />
+      </div>
 
-      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+      <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
         <div className="flex items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
             <Truck className="size-5" />
@@ -226,7 +228,7 @@ export default function PurchasesPage() {
 
       {statusError && <DidacticAlert error={statusError} />}
 
-      <Table>
+      <Table className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
         <TableHeader>
           <TableRow>
             <TableHead className="w-6" />
@@ -296,8 +298,18 @@ export default function PurchasesPage() {
           })}
           {!isLoading && !isError && visiblePurchases.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                {openOrdersOnly ? 'Nenhum pedido em aberto nesta página.' : 'Nenhum pedido registrado.'}
+              <TableCell colSpan={6} className="py-10 text-center">
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <Truck className="size-8 text-muted-foreground/50" />
+                  <p className="text-sm">
+                    {openOrdersOnly ? 'Nenhum pedido em aberto nesta página.' : 'Nenhum pedido registrado.'}
+                  </p>
+                  {canWrite && !openOrdersOnly && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
+                      <Plus className="size-3" /> Novo pedido
+                    </Button>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
           )}

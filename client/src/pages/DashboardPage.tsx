@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ShoppingCart, Truck, Factory, Wallet } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, Truck, Factory, Wallet, LayoutDashboard } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
 import * as inventoryApi from '@/api/inventory';
@@ -12,9 +12,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 
-/** Página inicial pós-login: KPIs reais consolidados dos módulos operacionais. */
-export default function DashboardPage() {
-  const { user, hasRole, hasModuleAccess, permissionsFetchFailed } = useAuth();
+/**
+ * Painel executivo (KPIs consolidados + estoque baixo + atalhos). Extraído
+ * como componente próprio (Home por Perfil, `docs/governance/HANDOFF_CODEX.md`) para
+ * ser reaproveitado tanto na rota dedicada `/dashboard` (link direto, sem
+ * saudação duplicada) quanto como widget `kpis-executivos` da Home
+ * (`client/src/pages/home/widgetRegistry.tsx`), restrito a admin/financial.
+ * Nenhuma classe visual foi alterada — apenas o corpo abaixo da saudação foi
+ * movido para cá.
+ */
+export function ExecutiveKpiPanel() {
+  const { hasRole, hasModuleAccess, permissionsFetchFailed } = useAuth();
 
   // Interseção "cards existentes ∩ módulos com acesso" (Bloco 1.3, UC-38):
   // mesmo padrão de fallback usado em `AppLayout.itemVisible` — admin e
@@ -55,11 +63,6 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
-        <h1 className="text-2xl font-semibold">Olá, {user?.name?.split(' ')[0]}</h1>
-        <p className="text-muted-foreground">Visão geral do ERP EVOK ÁUDIO.</p>
-      </div>
-
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {canSeeProdutos && (
           <KpiCard
@@ -100,7 +103,7 @@ export default function DashboardPage() {
       </div>
 
       {canSeeProdutos && lowStock && lowStock.length > 0 && (
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="size-4 text-destructive" />
@@ -113,8 +116,8 @@ export default function DashboardPage() {
                 <TableRow>
                   <TableHead>Código</TableHead>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Estoque</TableHead>
-                  <TableHead>Mínimo</TableHead>
+                  <TableHead className="text-right">Estoque</TableHead>
+                  <TableHead className="text-right">Mínimo</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -122,10 +125,13 @@ export default function DashboardPage() {
                   <TableRow key={product.id}>
                     <TableCell className="font-mono text-xs">{product.code}</TableCell>
                     <TableCell>{product.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="destructive">{Number(product.quantity)}</Badge>
+                    <TableCell className="text-right">
+                      <Badge variant="destructive" className="gap-1">
+                        <AlertTriangle className="size-3" />
+                        {Number(product.quantity)}
+                      </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{Number(product.min_quantity)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{Number(product.min_quantity)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -135,7 +141,7 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader>
             <CardTitle>Atalhos</CardTitle>
           </CardHeader>
@@ -146,6 +152,32 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Página `/dashboard` (link direto, ex.: favoritos/atalhos): mesma
+ * saudação + painel executivo de antes da Home por Perfil. A rota `/` agora
+ * renderiza `HomePage` (`client/src/pages/home/HomePage.tsx`), que monta o
+ * painel executivo como widget `kpis-executivos` (admin/financial).
+ */
+export default function DashboardPage() {
+  const { user } = useAuth();
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <LayoutDashboard className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Olá, {user?.name?.split(' ')[0]}</h1>
+          <p className="text-sm text-muted-foreground">Visão geral do ERP EVOK ÁUDIO.</p>
+        </div>
+      </div>
+
+      <ExecutiveKpiPanel />
     </div>
   );
 }
@@ -162,7 +194,7 @@ function ShortcutLink({
   return (
     <Link
       to={to}
-      className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:border-brand hover:bg-brand/10 hover:text-brand"
+      className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 text-sm font-medium transition-all duration-150 hover:border-brand hover:bg-brand/10 hover:text-brand hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
     >
       <Icon className="size-4" />
       {label}
@@ -195,15 +227,15 @@ function KpiCard({
         ? 'bg-muted text-muted-foreground'
         : 'bg-brand/10 text-brand';
   return (
-    <Link to={to}>
-      <Card className="border-l-4 border-l-transparent transition-all hover:-translate-y-0.5 hover:border-l-brand hover:shadow-md">
+    <Link to={to} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 rounded-xl block">
+      <Card className="border-l-4 border-l-transparent shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-l-brand hover:shadow-lg">
         <CardContent className="flex items-center gap-3 pt-6">
-          <div className={`flex size-11 shrink-0 items-center justify-center rounded-lg ${badgeToneClass}`}>
+          <div className={`flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors ${badgeToneClass}`}>
             <Icon className="size-5" />
           </div>
-          <div>
-            <p className={`text-2xl font-semibold leading-tight ${valueToneClass}`}>{value}</p>
-            <p className="text-xs text-muted-foreground">
+          <div className="min-w-0">
+            <p className={`text-3xl font-semibold leading-tight tabular-nums ${valueToneClass}`}>{value}</p>
+            <p className="truncate text-xs text-muted-foreground">
               {tone === 'error' ? `${label} (falha ao carregar)` : label}
             </p>
           </div>

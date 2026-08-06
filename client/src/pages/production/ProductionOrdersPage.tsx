@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Eye, Factory } from 'lucide-react';
+import { Plus, Eye, Factory, AlertTriangle } from 'lucide-react';
 
 import * as productionApi from '@/api/production';
 import * as bomApi from '@/api/bom';
 import * as productsApi from '@/api/products';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -124,7 +125,7 @@ export default function ProductionOrdersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+      <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
         <div className="flex items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
             <Factory className="size-5" />
@@ -195,12 +196,12 @@ export default function ProductionOrdersPage() {
 
       {statusError && <DidacticAlert error={statusError} />}
 
-      <Table>
+      <Table className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
         <TableHeader>
           <TableRow>
             <TableHead>Ordem</TableHead>
             <TableHead>Produto</TableHead>
-            <TableHead>Quantidade</TableHead>
+            <TableHead className="text-right">Quantidade</TableHead>
             <TableHead>Prevista</TableHead>
             <TableHead>Status</TableHead>
             {canWrite && <TableHead>Ações</TableHead>}
@@ -218,10 +219,14 @@ export default function ProductionOrdersPage() {
           {data?.data.map((order) => {
             const next = NEXT_STATUS[order.status];
             return (
-              <TableRow key={order.id} className="cursor-pointer hover:bg-accent/50" onClick={() => setDetailsOrder(order)}>
+              <TableRow
+                key={order.id}
+                className="cursor-pointer border-l-4 border-l-transparent transition-colors hover:border-l-brand hover:bg-brand/5"
+                onClick={() => setDetailsOrder(order)}
+              >
                 <TableCell className="font-medium">{order.order_number ?? order.id}</TableCell>
                 <TableCell>{order.product?.name ?? order.product_id}</TableCell>
-                <TableCell>{order.quantity}</TableCell>
+                <TableCell className="text-right tabular-nums">{Number(order.quantity)}</TableCell>
                 <TableCell>{new Date(order.due_date).toLocaleDateString('pt-BR')}</TableCell>
                 <TableCell>
                   <Badge className={STATUS_BADGE_CLASS[order.status]}>{STATUS_LABEL[order.status]}</Badge>
@@ -275,8 +280,16 @@ export default function ProductionOrdersPage() {
           })}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                Nenhuma ordem registrada.
+              <TableCell colSpan={6} className="py-10 text-center">
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <Factory className="size-8 text-muted-foreground/50" />
+                  <p className="text-sm">Nenhuma ordem registrada.</p>
+                  {canWrite && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
+                      <Plus className="size-3" /> Nova ordem
+                    </Button>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
           )}
@@ -348,9 +361,9 @@ function ProductionOrderDetailSheet({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Componente</TableHead>
-                      <TableHead>Necessário</TableHead>
-                      <TableHead>Em estoque</TableHead>
-                      <TableHead>Custo</TableHead>
+                      <TableHead className="text-right">Necessário</TableHead>
+                      <TableHead className="text-right">Em estoque</TableHead>
+                      <TableHead className="text-right">Custo</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -361,12 +374,20 @@ function ProductionOrderDetailSheet({
                           <TableCell>
                             {component.component_code} — {component.component_name}
                           </TableCell>
-                          <TableCell>{component.quantity}</TableCell>
-                          <TableCell className={insufficient ? 'text-destructive font-medium' : ''}>
-                            {component.stock_available}
-                            {insufficient && ' (insuficiente)'}
+                          <TableCell className="text-right tabular-nums">{component.quantity}</TableCell>
+                          <TableCell
+                            className={cn(
+                              'text-right tabular-nums',
+                              insufficient && 'font-medium text-destructive',
+                            )}
+                          >
+                            <span className="inline-flex items-center justify-end gap-1">
+                              {insufficient && <AlertTriangle className="size-3.5" />}
+                              {component.stock_available}
+                              {insufficient && ' (insuficiente)'}
+                            </span>
                           </TableCell>
-                          <TableCell>R$ {Number(component.total_cost).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums">R$ {Number(component.total_cost).toFixed(2)}</TableCell>
                         </TableRow>
                       );
                     })}

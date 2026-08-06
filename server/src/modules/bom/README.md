@@ -151,7 +151,7 @@ Base URL: `/api/engineering/bom` (autenticação obrigatória via middleware `au
 | GET | `/api/engineering/bom/:id/tree` | Retorna a árvore hierárquica da BOM |
 | GET | `/api/engineering/bom/:id/items` | Lista os itens de uma BOM |
 
-Ver `docs/API.md` para exemplos completos de request/response.
+Ver `docs/arquitetura/API.md` para exemplos completos de request/response.
 
 ## Permissões
 

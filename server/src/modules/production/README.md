@@ -173,7 +173,7 @@ Base URL: `/api/production-orders` (autenticação obrigatória via middleware `
 | PUT | `/api/production-orders/:id/status` | qualquer usuário autenticado | Muda status (máquina de estados; consome BOM e dá entrada em estoque quando `status === 'completed'`) |
 | DELETE | `/api/production-orders/:id` | `admin` | Remove a OP (apenas se não estiver `in_progress`/`completed`) |
 
-Ver `docs/API.md` para exemplos completos de request/response.
+Ver `docs/arquitetura/API.md` para exemplos completos de request/response.
 
 ## Permissões
 

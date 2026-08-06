@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -44,6 +46,16 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.5 0.12 152 / 50%);
+  /*
+   * Paleta categórica para gráficos (recharts/shadcn chart). O primeiro é o
+   * verde de marca; os demais são matizes vizinhos/complementares escolhidos
+   * para se distinguirem entre si em dashboards densos.
+   */
+  --chart-1: var(--brand);
+  --chart-2: oklch(0.55 0.13 230);
+  --chart-3: oklch(0.65 0.15 70);
+  --chart-4: oklch(0.55 0.14 300);
+  --chart-5: oklch(0.6 0.16 20);
 }
 
 .dark {
@@ -53,14 +65,20 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  /*
+   * No escuro o verde de marca precisa clarear para manter contraste AA
+   * contra o fundo; o primary continua sendo o verde EVOK (não cinza).
+   */
+  --brand: oklch(0.62 0.14 152);
+  --brand-vivid: oklch(0.7 0.18 145);
+  --primary: var(--brand);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent: oklch(0.28 0.04 152);
+  --accent-foreground: oklch(0.9 0.06 152);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
   /* Mais claro que no tema claro (mesmo princípio de `--destructive` acima), para se manter legível contra o fundo escuro. */
@@ -68,7 +86,13 @@
   --success-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.62 0.14 152 / 50%);
+  /* Versões mais claras para legibilidade sobre fundo escuro. */
+  --chart-1: var(--brand);
+  --chart-2: oklch(0.65 0.13 230);
+  --chart-3: oklch(0.75 0.15 70);
+  --chart-4: oklch(0.65 0.14 300);
+  --chart-5: oklch(0.7 0.16 20);
 }
 
 @theme inline {
@@ -97,6 +121,11 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -111,5 +140,11 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font: 15px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  font: 15px/1.5 'Inter Variable', system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv11'; /* Inter: "a" de haste simples, mais legível em UI densa */
+}
+
+/* Números tabulares por padrão em tabelas — valores DECIMAL alinham em coluna. */
+table {
+  font-variant-numeric: tabular-nums;
 }

@@ -21,7 +21,7 @@ disponiveis:
   classe, metodo ou rota deve ter cabeçalhos JSDoc explicando o que faz,
   parametros com tipos e o que retorna.
 - Banco de dados e schema: se voce alterar um model do Sequelize ou criar uma
-  migration, atualize a documentacao do banco em `docs/DATABASE.md`,
+  migration, atualize a documentacao do banco em `docs/database/DATABASE.md`,
   documentando tabela, colunas, tipos e relacionamentos.
 - Casos de uso: se a regra de negocio mudar, atualize
   `docs/projeto/04-USE_CASES.md` refletindo validacoes, gatilhos e respostas.
@@ -53,7 +53,7 @@ Para evitar falhas de conexao de rede ou perda de contexto:
 ## 4. O checklist de encerramento
 
 Ao finalizar qualquer implementacao, sua ultima acao deve ser gerar ou atualizar
-`docs/HANDOFF_CODEX.md` com a seguinte estrutura:
+`docs/governance/HANDOFF_CODEX.md` com a seguinte estrutura:
 
 - Resumo da feature: o que foi codificado.
 - Documentacoes atualizadas: quais arquivos `.md` e JSDocs foram revisados.

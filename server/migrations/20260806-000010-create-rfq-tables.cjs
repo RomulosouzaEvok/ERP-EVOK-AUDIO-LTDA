@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Cotacao/RFQ multi-fornecedor (docs/LEVANTAMENTO_ERP_2026-08-02.md, secao 2).
+ * Cotacao/RFQ multi-fornecedor (docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md, secao 2).
  *
  * Cria 4 tabelas:
  * - `rfqs`: cabecalho da cotacao (numero `RFQ-<ano>-XXXX`, status, origem

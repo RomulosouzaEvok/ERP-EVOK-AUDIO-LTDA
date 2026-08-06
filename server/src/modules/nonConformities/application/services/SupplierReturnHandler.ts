@@ -47,7 +47,7 @@ interface SupplierReturnResult {
  * - `asset_id` presente (RNC referenciando um `ATIVO_IMOBILIZADO`, ex.:
  *   equipamento com defeito de fábrica comprado): atualiza
  *   `Asset.status = 'returned_to_supplier'` (decisão documentada em
- *   `docs/HANDOFF_CODEX.md` — não reaproveita `lost`, que é semanticamente
+ *   `docs/governance/HANDOFF_CODEX.md` — não reaproveita `lost`, que é semanticamente
  *   incorreto para um ativo com fornecedor/processo de RMA conhecidos).
  * - Nem `purchase_item_id` nem `asset_id` informados: no-op silencioso —
  *   a RNC pode referenciar `return_supplier` apenas como intenção

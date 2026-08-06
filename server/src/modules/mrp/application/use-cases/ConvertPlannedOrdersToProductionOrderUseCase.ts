@@ -15,7 +15,7 @@
  * - O item deve ter um produto legado correspondente (`products`, casamento
  *   por codigo/SKU — mesma ponte dual-read de `listMrpInventoryPositions`),
  *   ativo e do tipo `finished`/`semi_finished` (422 caso contrario: bomba
- *   latente de schema documentada em docs/LEVANTAMENTO_ERP_2026-08-02.md,
+ *   latente de schema documentada em docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md,
  *   sec. 3 — `production_orders.product_id` ainda e a FK obrigatoria de
  *   criacao, `item_id` e dual-write).
  * - Uma OP e criada por ordem planejada convertida (1:1, ao contrario da

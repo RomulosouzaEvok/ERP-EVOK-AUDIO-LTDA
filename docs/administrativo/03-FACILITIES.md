@@ -1,5 +1,13 @@
 # Facilities - Módulo Administrativo
 
+> **[PENDENTE]** As tabelas `fleet_vehicles`, `fuel_records`,
+> `cleaning_schedule` e `facility_areas` abaixo são planejamento — não
+> existem no schema real (ver `docs/database/DATABASE.md`). O que **é real hoje**: o
+> departamento Facilities (código `17` em `departments`,
+> `server/src/config/seeds.ts`) e o módulo de Patrimônio (`assets`, ver
+> `docs/patrimonio/00-README.md`) para controle de máquinas/equipamentos/
+> veículos como ativos.
+
 ## Departamento de Facilities (FAC)
 
 | Cargo | Qtd | Função |
@@ -84,3 +92,8 @@ CREATE TABLE facility_areas (
     notes TEXT,
     created_at DATETIME
 );
+```
+
+---
+
+**Última atualização:** 2026-08-06

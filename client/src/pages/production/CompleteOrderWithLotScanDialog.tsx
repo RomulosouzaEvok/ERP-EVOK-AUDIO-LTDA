@@ -26,7 +26,7 @@ interface ScannedConsumption {
 
 /**
  * Conclusão de OP no chão de fábrica com leitura/digitação de código de lote
- * (item 6 do roadmap, `docs/LEVANTAMENTO_ERP_2026-08-02.md` — rastreabilidade
+ * (item 6 do roadmap, `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — rastreabilidade
  * por lote/QR). Diferente de `CompleteProductionOrderDialog`
  * (`/production/orders`, seleção por dropdown), aqui o operador digita ou lê
  * (leitor físico) o código do lote consumido — o componente resolve

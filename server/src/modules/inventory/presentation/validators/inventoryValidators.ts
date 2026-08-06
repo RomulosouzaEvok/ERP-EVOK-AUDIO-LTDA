@@ -65,7 +65,7 @@ export const updateWarehouseSchema = z.object({
 export const idParamSchema = z.coerce.number().int().positive();
 
 // Criação de contagem de inventário cíclico (Bloco 4, migration
-// `20260804-000006`, docs/DATABASE.md). `warehouse_id` é OBRIGATÓRIO — a
+// `20260804-000006`, docs/database/DATABASE.md). `warehouse_id` é OBRIGATÓRIO — a
 // contagem inteira (cabeçalho + todos os `inventory_count_items`) é
 // escopada a um único depósito por vez. Aceita `product_ids` (legado) OU
 // `item_ids` (novo, dual-read, ver `CreateInventoryCountUseCase`).

@@ -1,13 +1,13 @@
 'use strict';
 
 /**
- * Item 8 do levantamento (docs/LEVANTAMENTO_ERP_2026-08-02.md) — pendencia
+ * Item 8 do levantamento (docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md) — pendencia
  * "realimentacao de rating de fornecedor" deixada em aberto na entrega de
  * 2026-08-03 (RNC ja bloqueia lote na mesma transacao, mas nao existia
  * nenhum campo calculado de avaliacao).
  *
  * `suppliers.rating` ja existia, mas e um inteiro (1-5) digitado a mao no
- * cadastro (ver `docs/LEVANTAMENTO_ERP_2026-08-02.md` linha 64: "Rating de
+ * cadastro (ver `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` linha 64: "Rating de
  * fornecedor calculado (OTD, RNCs) — hoje e um inteiro digitado a mao").
  * Este campo NAO deve ser reaproveitado para o calculo automatico, porque:
  * (1) e editavel manualmente pelo usuario no CRUD de fornecedores hoje

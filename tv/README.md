@@ -10,7 +10,7 @@ controle remoto (D-pad), texto grande, "10-foot UI", sem toque.
 Consome o mesmo backend Node.js/Express do ERP (`server/`) — **não altera o
 backend**. Endpoints usados:
 - `POST /api/auth/login` (mesmo contrato JWT do app mobile)
-- `GET /api/dashboard/department-demands` (ver `docs/API.md`, seção "14. Dashboard / Painel de TV")
+- `GET /api/dashboard/department-demands` (ver `docs/arquitetura/API.md`, seção "14. Dashboard / Painel de TV")
 
 ---
 

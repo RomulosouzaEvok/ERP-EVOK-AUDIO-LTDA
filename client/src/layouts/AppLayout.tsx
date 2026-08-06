@@ -42,6 +42,7 @@ import type { AccessModuleKey } from '@/api/accessProfiles';
 import { getDashboardHandoffs } from '@/api/dashboard';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AccessDeniedPage } from '@/pages/AccessDeniedPage';
 
 interface NavItem {
@@ -311,17 +312,22 @@ export default function AppLayout() {
 
   const badgeCount = (key?: NavItem['badgeKey']): number | undefined => {
     if (!key || !handoffs) return undefined;
+    // Optional chaining em toda a cadeia: se a API (ex.: build antigo em
+    // produção) responder sem alguma dessas chaves, o badge some — o menu
+    // nunca pode quebrar por causa de um contador.
     switch (key) {
       case 'recebimento':
-        return handoffs.recebimento.pending;
+        return handoffs.recebimento?.pending;
       case 'requisicoes':
-        return handoffs.requisicoes.awaiting_approval;
+        return handoffs.requisicoes?.awaiting_approval;
       case 'expedicao':
-        return handoffs.expedicao.ready_to_ship;
-      case 'qualidade':
-        return handoffs.qualidade.quarantine + handoffs.qualidade.open_rncs;
+        return handoffs.expedicao?.ready_to_ship;
+      case 'qualidade': {
+        const q = handoffs.qualidade;
+        return q ? (q.quarantine ?? 0) + (q.open_rncs ?? 0) : undefined;
+      }
       case 'compras_devolucoes':
-        return handoffs.compras.pending_returns;
+        return handoffs.compras?.pending_returns;
       default:
         return undefined;
     }
@@ -372,10 +378,10 @@ export default function AppLayout() {
 
   return (
     <div className="flex min-h-svh flex-col">
-      <header className="flex flex-col border-b bg-brand-dark">
+      <header className="flex flex-col border-b bg-brand-dark shadow-md">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <Link to="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-[0_0_16px_color-mix(in_oklch,var(--brand)_55%,transparent)]">
+          <Link to="/" className="group flex items-center gap-2.5">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-[0_0_16px_color-mix(in_oklch,var(--brand)_55%,transparent)] transition-transform duration-200 group-hover:scale-105">
               <Zap className="size-5" fill="currentColor" />
             </div>
             <div className="min-w-0">
@@ -386,14 +392,23 @@ export default function AppLayout() {
             </div>
           </Link>
           <div className="flex items-center gap-3">
-            <div className="text-right text-sm">
+            <div className="hidden text-right text-sm sm:block">
               <p className="font-medium leading-tight text-white">{user?.name}</p>
               <p className="text-xs text-white/50">{roleLabel(user?.role)}</p>
             </div>
-            <div className="flex size-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-brand-foreground">
-              {initials(user?.name)}
-            </div>
-            <Button asChild variant="ghost" size="icon" title="Trocar senha" className="text-white hover:bg-white/10 hover:text-white">
+            <Avatar className="size-9 ring-2 ring-white/10 transition-shadow duration-200 hover:ring-brand/60">
+              <AvatarFallback className="bg-brand text-sm font-semibold text-brand-foreground">
+                {initials(user?.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="mx-1 hidden h-6 w-px bg-white/10 sm:block" aria-hidden />
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              title="Trocar senha"
+              className="text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            >
               <Link to="/change-password">
                 <KeyRound className="size-4" />
               </Link>
@@ -403,7 +418,7 @@ export default function AppLayout() {
               size="icon"
               title="Sair"
               onClick={logout}
-              className="text-white hover:bg-white/10 hover:text-white"
+              className="text-white/70 transition-colors hover:bg-destructive/20 hover:text-white"
             >
               <LogOut className="size-4" />
             </Button>
@@ -433,7 +448,7 @@ export default function AppLayout() {
                   key={section.label || 'inicio'}
                   to={target}
                   className={cn(
-                    'shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-brand-dark',
+                    'shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-white/60 transition-all duration-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-brand-dark',
                     isActiveSection && 'border-brand text-white',
                   )}
                 >
@@ -452,11 +467,14 @@ export default function AppLayout() {
             visível quando há seção ativa — inclusive Início/Vendas, que têm
             1 página só (2026-08-06). */}
         {showSidebar && activeSection && (
-          <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r bg-card p-2 py-3 md:flex">
+          <aside
+            key={activeSection.label}
+            className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 hidden w-56 shrink-0 flex-col overflow-y-auto border-r bg-card p-2 py-3 md:flex"
+          >
             <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               {activeSection.label || activeSection.items[0]?.label}
             </p>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-0.5">
               {activeSection.items.map((item) => {
                 const { label, to, icon: Icon, badgeKey } = item;
                 const count = badgeCount(badgeKey);
@@ -467,16 +485,16 @@ export default function AppLayout() {
                     end={to === '/'}
                     className={({ isActive }) =>
                       cn(
-                        'flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
-                        isActive && 'border-brand bg-brand/10 text-brand',
+                        'flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-foreground/80 transition-all duration-150 hover:border-brand/30 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
+                        isActive && 'border-brand bg-brand/10 font-semibold text-brand shadow-sm',
                       )
                     }
                   >
-                    <Icon className="size-4" />
-                    <span className="flex-1">{label}</span>
+                    <Icon className="size-4 shrink-0" />
+                    <span className="flex-1 truncate">{label}</span>
                     {Boolean(count) && (
                       <span
-                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground"
+                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground shadow-sm"
                         title={`${count} pendente(s)`}
                       >
                         {count}
@@ -497,7 +515,7 @@ export default function AppLayout() {
                     <Link
                       key={`${action.to}-${action.label}`}
                       to={action.to}
-                      className="flex items-center gap-2 rounded-md border border-dashed border-brand/30 bg-brand/5 px-3 py-2 text-sm font-medium text-brand transition-colors hover:border-brand hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                      className="flex items-center gap-2 rounded-md border border-dashed border-brand/30 bg-brand/5 px-3 py-2 text-sm font-medium text-brand transition-all duration-150 hover:border-brand hover:bg-brand/10 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
                     >
                       <Plus className="size-3.5 shrink-0" />
                       <span className="flex-1">{action.label}</span>
@@ -550,11 +568,11 @@ export default function AppLayout() {
             </nav>
           )}
 
-          <div className="border-b bg-card px-4 py-3">
+          <div className="border-b bg-card/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80">
             <Breadcrumbs />
           </div>
 
-          <main className="flex-1 overflow-auto p-6">
+          <main className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 flex-1 overflow-auto bg-muted/20 p-6">
             {hasNoProfileConfigured ? <AccessDeniedPage variant="noProfile" /> : <Outlet />}
           </main>
         </div>

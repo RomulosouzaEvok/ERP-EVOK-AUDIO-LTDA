@@ -2,7 +2,7 @@
  * Test: módulo Financeiro — Centros de Custo + Projeção de Fluxo de Caixa Diária
  *
  * Cobre (gap "fluxo projetado, centros de custo" de
- * docs/LEVANTAMENTO_ERP_2026-08-02.md):
+ * docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md):
  * - CreateCostCenterUseCase / UpdateCostCenterUseCase: CRUD com normalização
  *   de `code` e 409 (ConflictError) em código duplicado.
  * - UpdatePayableCostCenterUseCase / UpdateReceivableCostCenterUseCase:

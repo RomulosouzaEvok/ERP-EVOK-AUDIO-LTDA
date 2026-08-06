@@ -101,7 +101,7 @@ class ChangePurchaseStatusUseCase extends UseCase {
       cost_center: null,
       // TODO(financeiro): a AP automática nasce sem centro de custo
       // (cost_center_id null = "Sem centro de custo" no relatório de
-      // docs/LEVANTAMENTO_ERP_2026-08-02.md). Quando a requisição de origem
+      // docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md). Quando a requisição de origem
       // (purchase.requisition_id -> purchase_requisitions.department_id)
       // estiver disponível aqui, mapear departamento -> centro de custo
       // (ainda sem correspondência 1:1 definida entre as duas dimensões;

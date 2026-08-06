@@ -24,7 +24,7 @@ export default function InventoryPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+      <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
           <Boxes className="size-5" />
         </div>
@@ -54,11 +54,13 @@ export default function InventoryPage() {
         </TabButton>
       </div>
 
-      {tab === 'balances' && <BalancesTab />}
-      {tab === 'extract' && <ExtractTab />}
-      {tab === 'lots' && <LotsTab />}
-      {tab === 'counts' && <CountsTab />}
-      {tab === 'transfers' && <TransfersTab />}
+      <div key={tab} className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
+        {tab === 'balances' && <BalancesTab />}
+        {tab === 'extract' && <ExtractTab />}
+        {tab === 'lots' && <LotsTab />}
+        {tab === 'counts' && <CountsTab />}
+        {tab === 'transfers' && <TransfersTab />}
+      </div>
     </div>
   );
 }
@@ -79,8 +81,9 @@ function TabButton({
       type="button"
       variant="ghost"
       onClick={onClick}
+      aria-selected={active}
       className={cn(
-        'rounded-none border-b-2 border-transparent px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-brand/5 hover:text-brand',
+        'rounded-none border-b-2 border-transparent px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-brand/5 hover:text-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
         active && 'border-brand text-brand',
       )}
     >

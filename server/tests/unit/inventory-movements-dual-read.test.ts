@@ -3,7 +3,7 @@
  * em `GET /api/inventory/movements` e `POST /api/inventory/movements`.
  *
  * Cobre dois bugs reais encontrados durante a ativação do TypeScript strict
- * mode (ver `docs/HANDOFF_CODEX.md`):
+ * mode (ver `docs/governance/HANDOFF_CODEX.md`):
  *
  * 1. `ListInventoryMovementsUseCase.execute` recebia `item_id` no input mas
  *    nunca o repassava a `inventoryRepository.listMovements` — o filtro era

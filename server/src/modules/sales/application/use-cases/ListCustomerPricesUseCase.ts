@@ -3,7 +3,7 @@ const { NotFoundError } = require('../../../../errors');
 
 /**
  * Lista os preços cadastrados na tabela de preços de um cliente (gap 1/3 do
- * módulo `sales` — `docs/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`),
+ * módulo `sales` — `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`),
  * cobrindo `GET /api/sales/customers/:id/prices`.
  */
 class ListCustomerPricesUseCase extends UseCase {

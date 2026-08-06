@@ -35,7 +35,7 @@ export interface Item {
   custo_padrao?: string | number;
   /**
    * Opt-in de conversão automática do MRP (roadmap pós-Go-Live item 3,
-   * `docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 3): quando `true`, ordens
+   * `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` seção 3): quando `true`, ordens
    * planejadas geradas pelo MRP para este item são convertidas
    * automaticamente em requisição de compra, sem revisão humana. Default
    * `false`/`undefined` (conversão manual). Ver
@@ -66,7 +66,7 @@ export async function listItems(params: ItemListParams = {}) {
 /**
  * Não existe `GET /api/items/:id` no backend (só `GET /api/items` — lista
  * paginada — está exposto, ver `server/src/modules/items/presentation/routes/items.ts`
- * e `docs/API.md` §31). Telas que precisam do "detalhe" de um item resolvem
+ * e `docs/arquitetura/API.md` §31). Telas que precisam do "detalhe" de um item resolvem
  * pelo `codigo` (único), com `listItems({ search: codigo })` seguido de um
  * match exato de `item.codigo === codigo` — mesmo padrão já usado em
  * `ProductsPage.tsx` (`ProductSuppliersDialog`) e replicado em
@@ -91,7 +91,7 @@ export interface CreateItemInput {
  * consumo"/"ativo imobilizado" em `ProductsPage` (Bloco E) — itens
  * produtivos (`MATERIA_PRIMA`/`SUBCONJUNTO`/`PRODUTO_ACABADO`) continuam
  * sendo cadastrados via `POST /api/products` (modelo `Product`, dual-read
- * com `Item`, ver `docs/HANDOFF_CODEX.md`).
+ * com `Item`, ver `docs/governance/HANDOFF_CODEX.md`).
  */
 export async function createItem(input: CreateItemInput) {
   const { data } = await httpClient.post<ItemResponse<Item>>('/api/items', input);

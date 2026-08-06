@@ -5,7 +5,7 @@
  * @module modules/inventory/application/use-cases/GetLotByCodeUseCase
  *
  * Cobre `GET /api/inventory/lots/by-code/:lot_number`. Item 6 do roadmap
- * (`docs/LEVANTAMENTO_ERP_2026-08-02.md`) — rastreabilidade por lote/QR no
+ * (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`) — rastreabilidade por lote/QR no
  * chão de fábrica: conecta o código já existente em `LotControl.lot_number`
  * ao fluxo de apontamento/consumo, sem exigir o `id` numérico interno.
  *

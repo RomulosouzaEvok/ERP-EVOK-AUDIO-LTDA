@@ -18,7 +18,7 @@ export interface LoginResponseData {
 
 /**
  * Contratos de `GET /api/dashboard/department-demands` — ver
- * `docs/API.md` seção "14. Dashboard / Painel de TV".
+ * `docs/arquitetura/API.md` seção "14. Dashboard / Painel de TV".
  */
 export interface DepartmentDemandItem {
   id: number;

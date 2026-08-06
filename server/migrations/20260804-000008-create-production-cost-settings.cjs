@@ -7,7 +7,7 @@ module.exports = {
     // configuracao global de rateio de overhead (despesas indiretas de
     // fabrica) usada no custeio real de producao. Escolha deliberada de
     // manter simples (uma taxa global, sem centros de custo) — ver decisao
-    // documentada em docs/DATABASE.md.
+    // documentada em docs/database/DATABASE.md.
     await queryInterface.createTable('production_cost_settings', {
       id: {
         type: Sequelize.INTEGER,

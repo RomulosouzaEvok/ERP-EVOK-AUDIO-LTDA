@@ -216,8 +216,11 @@ export function BalancesTab() {
               })}
               {!isLoading && !isError && data?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={canWrite ? 7 : 6} className="text-center text-muted-foreground">
-                    Nenhum produto encontrado.
+                  <TableCell colSpan={canWrite ? 7 : 6} className="py-10 text-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Boxes className="size-8 text-muted-foreground/50" />
+                      <p className="text-sm">Nenhum produto encontrado.</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               )}
@@ -258,8 +261,11 @@ export function BalancesTab() {
               ))}
               {!isWarehouseStockLoading && !isWarehouseStockError && warehouseStock?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    Nenhum saldo encontrado para este depósito.
+                  <TableCell colSpan={4} className="py-10 text-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Boxes className="size-8 text-muted-foreground/50" />
+                      <p className="text-sm">Nenhum saldo encontrado para este depósito.</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               )}

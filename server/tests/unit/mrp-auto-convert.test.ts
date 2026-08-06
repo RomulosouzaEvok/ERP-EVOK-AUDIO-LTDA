@@ -2,7 +2,7 @@
  * Test: fechamento automatico do ciclo MRP (plano -> requisicao) para
  * itens com o opt-in `items.conversao_automatica = true`.
  *
- * Roadmap pos-Go-Live item 3 (docs/LEVANTAMENTO_ERP_2026-08-02.md, sec. 3).
+ * Roadmap pos-Go-Live item 3 (docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md, sec. 3).
  * Cobre: (1) caso feliz — item com a flag gera requisicao automaticamente
  * sem intervencao do planejador; (2) caso padrao — item sem a flag
  * preserva o comportamento manual existente (nenhuma requisicao criada,

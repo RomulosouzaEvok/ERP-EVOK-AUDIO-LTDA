@@ -27,7 +27,7 @@ router.get('/stock-report', authenticate, authorizeModule('estoque'), inventoryC
 router.get('/low-stock', authenticate, authorizeModule('estoque'), inventoryController.listLowStock);
 router.get('/lots', authenticate, authorizeModule('estoque'), inventoryController.listLots);
 // Rastreabilidade por lote/QR no chão de fábrica (item 6 do roadmap,
-// docs/LEVANTAMENTO_ERP_2026-08-02.md): lookup por código legível e geração
+// docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md): lookup por código legível e geração
 // de QR para etiqueta física. Declaradas antes de `/lots/:id/*` para não
 // colidir com o parâmetro posicional `:id`.
 router.get('/lots/by-code/:lot_number', authenticate, authorizeModule('estoque'), inventoryController.getLotByCode);

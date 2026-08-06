@@ -18,7 +18,7 @@
  *      resta saldo em algum item).
  *
  * FATURAMENTO PARCIAL (gap 3/3 do módulo `sales` —
- * `docs/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`): quando o chamador
+ * `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`): quando o chamador
  * informa `items: [{ sale_item_id, quantity }]`, só essas quantidades
  * (limitadas ao saldo pendente de cada item) entram nesta NF-e; quando
  * omitido, preserva o comportamento anterior (fatura o saldo pendente

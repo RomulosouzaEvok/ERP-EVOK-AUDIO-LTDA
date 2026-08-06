@@ -2,7 +2,7 @@
 
 /**
  * Onda 2 (2026-08-06) — desarme das "bombas latentes" documentadas em
- * `docs/LEVANTAMENTO_ERP_2026-08-02.md` (secao "Bombas latentes conhecidas"):
+ * `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` (secao "Bombas latentes conhecidas"):
  * colunas UUID referenciando usuario em tabelas do schema-fantasma em
  * portugues criado pelo `01_schema.sql` (baseline `20260731-000001`), que
  * nunca ganhou model Sequelize nem uso em codigo vivo — o app real usa as

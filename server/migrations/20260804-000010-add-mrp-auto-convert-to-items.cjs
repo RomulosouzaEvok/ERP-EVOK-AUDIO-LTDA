@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Roadmap pos-Go-Live item 3 (docs/LEVANTAMENTO_ERP_2026-08-02.md, secao 3):
+ * Roadmap pos-Go-Live item 3 (docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md, secao 3):
  * "Fechar o ciclo MRP - plano -> requisicao/OP automatico".
  *
  * Decisao de design (ver GenerateMrpPlanUseCase.ts e

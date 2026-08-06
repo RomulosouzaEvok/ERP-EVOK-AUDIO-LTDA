@@ -1,8 +1,8 @@
 # docker-compose.prod.yml — ESQUELETO para o servidor de producao.
 #
 # STATUS: nao exercitado ainda (servidor de producao/VPS ainda nao foi
-# adquirido — ver docs/GO_LIVE_G6_CHECKLIST.md e
-# docs/DIARIO_BORDO_GO_LIVE_G6.md). Este arquivo existe para ficar PRONTO
+# adquirido — ver docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md e
+# docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md). Este arquivo existe para ficar PRONTO
 # quando a infra existir, nao para ser aplicado agora. Baseado no
 # docker-compose.yml de desenvolvimento, com as diferencas de producao
 # comentadas abaixo.

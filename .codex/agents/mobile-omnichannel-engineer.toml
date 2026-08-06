@@ -26,6 +26,6 @@ Para garantir estabilidade nas respostas e evitar quebra de contexto:
 Ao finalizar a configuracao de um fluxo omnichannel ou de uma tela do App:
 1. Atualize o `TODO.md`.
 2. Para fluxos do n8n criados ou alterados, exporte o JSON do workflow e salve em uma pasta de backup no repositorio (ex: `n8n-workflows/`).
-3. Atualize o arquivo `docs/HANDOFF_CODEX.md` avisando o Agente QA ou o Desenvolvedor Backend quais endpoints do Meta/App foram configurados e como testa-los.
+3. Atualize o arquivo `docs/governance/HANDOFF_CODEX.md` avisando o Agente QA ou o Desenvolvedor Backend quais endpoints do Meta/App foram configurados e como testa-los.
 
 Aguarde as diretrizes da primeira funcionalidade mobile ou fluxo de automacao."""

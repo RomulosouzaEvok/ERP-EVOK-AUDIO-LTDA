@@ -1,6 +1,6 @@
 /**
  * Client do painel de TV — `GET /api/dashboard/department-demands`.
- * Ver `docs/API.md` seção "14. Dashboard / Painel de TV" para o contrato completo.
+ * Ver `docs/arquitetura/API.md` seção "14. Dashboard / Painel de TV" para o contrato completo.
  */
 
 import { apiRequest } from './client';

@@ -52,7 +52,7 @@ vez do `{ success: false, error: "mensagem em string" }` usado pelo
 controller anterior. O `statusCode` HTTP é o mesmo em quase todos os casos
 (400, 404, 409), com **uma exceção documentada abaixo** (auto-inativação).
 Erros inesperados (5xx) mantêm o fallback genérico do `errorHandler`, igual
-ao anterior. `docs/API.md` (seção "1.1 Usuários (Gestão)") foi atualizado
+ao anterior. `docs/arquitetura/API.md` (seção "1.1 Usuários (Gestão)") foi atualizado
 para refletir o novo formato dos erros.
 
 ### Desvio 1:1 documentado: status HTTP da auto-inativação
@@ -134,7 +134,7 @@ Base URL: `/api/users`.
 | DELETE | `/api/users/:id` | `authenticate`, `authorize('admin')` | Inativa (soft delete) um usuário |
 | PUT | `/api/users/:id/access-profile` | `authenticate`, `authorize('admin')` | Atribui/remove o Perfil de Acesso de área do usuário (UC-33, Bloco 1.2) |
 
-Ver `docs/API.md` (seção "1.1 Usuários (Gestão)") para exemplos completos
+Ver `docs/arquitetura/API.md` (seção "1.1 Usuários (Gestão)") para exemplos completos
 de request/response.
 
 ## Permissões

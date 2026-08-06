@@ -149,7 +149,7 @@ Base URL: `/api/clients`.
 | PUT | `/api/clients/:id` | `authenticate` | Atualiza dados cadastrais |
 | DELETE | `/api/clients/:id` | `authenticate` | Inativa (soft delete) um cliente |
 
-Ver `docs/API.md` (seção "2. Clientes") para exemplos completos de
+Ver `docs/arquitetura/API.md` (seção "2. Clientes") para exemplos completos de
 request/response.
 
 ## Permissões

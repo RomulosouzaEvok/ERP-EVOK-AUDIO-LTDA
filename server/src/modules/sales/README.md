@@ -164,7 +164,7 @@ Base URL: `/api/sales` (autenticação obrigatória via middleware `authenticate
 | POST | `/api/sales` | Cria venda com itens — transacional; com `status: 'confirmed'` (default) debita estoque e gera parcelas na hora; com `status: 'quote'` não debita estoque nem gera parcelas (F22) |
 | PUT | `/api/sales/:id/status` | Altera status (máquina de estados) — transacional; ao confirmar um orçamento (`quote → confirmed`) debita estoque e gera parcelas; ao cancelar, restaura estoque e cancela parcelas pendentes; `invoiced → shipped` marca a expedição (sem efeito colateral em estoque/parcelas); cancelamento de venda `shipped` é bloqueado (422) |
 
-Ver `docs/API.md` para exemplos completos de request/response.
+Ver `docs/arquitetura/API.md` para exemplos completos de request/response.
 
 ## Permissões
 

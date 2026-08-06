@@ -49,7 +49,7 @@ NOTA DE ALINHAMENTO COM O REPOSITÓRIO: já existe um registro de casos de uso i
 ## 🤝 HANDOFF (PASSAGEM DE BASTÃO)
 Ao finalizar o detalhamento de uma funcionalidade:
 1. Revise se o documento foi salvo corretamente na pasta `docs/`.
-2. Atualize o arquivo `docs/HANDOFF_CODEX.md` informando ao Agente Programador, `AdmDBA` ou `ArquitetoSoftwareAPI` que "Os requisitos da Funcionalidade X estão prontos" e indique os links/nomes dos arquivos `.md` que eles devem ler para começar a codificar.
+2. Atualize o arquivo `docs/governance/HANDOFF_CODEX.md` informando ao Agente Programador, `AdmDBA` ou `ArquitetoSoftwareAPI` que "Os requisitos da Funcionalidade X estão prontos" e indique os links/nomes dos arquivos `.md` que eles devem ler para começar a codificar.
 3. Se o requisito tiver impacto em schema/API já existentes, sinalize para o `AuditorIntegrador` rodar a rastreabilidade Requisito → Banco → API antes de considerar o ciclo fechado.
 
 Aguarde o usuário informar a primeira ideia ou necessidade de negócio, ou o nome do módulo a documentar."""

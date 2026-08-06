@@ -2,7 +2,7 @@
 
 /**
  * Tabela de preços por cliente (`customer_price_lists`) — gap 1/3 do módulo
- * `sales` (ver `docs/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`).
+ * `sales` (ver `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`).
  *
  * Cada linha registra um preço unitário negociado para um par
  * cliente×produto, com vigência opcional (`valid_from`/`valid_until`,

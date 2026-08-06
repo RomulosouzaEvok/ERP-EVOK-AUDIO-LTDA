@@ -107,7 +107,7 @@ Base URL: `/api/access-profiles`. Todas as rotas exigem `authenticate` +
 | PUT | `/api/access-profiles/:id` | Edita um perfil, substitui a matriz (UC-31) |
 | DELETE | `/api/access-profiles/:id` | Desativa (soft delete), bloqueado se houver usuário ativo (UC-32) |
 
-Ver `docs/API.md` seção "1.2 Perfis de Acesso (Access Profiles)" para
+Ver `docs/arquitetura/API.md` seção "1.2 Perfis de Acesso (Access Profiles)" para
 exemplos completos de request/response, e "1. Autenticação" para
 `GET /api/auth/me/permissions` e `PUT /api/users/:id/access-profile`.
 

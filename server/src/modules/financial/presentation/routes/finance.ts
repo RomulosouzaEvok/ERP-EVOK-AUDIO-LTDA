@@ -36,10 +36,10 @@ router.put('/payable/:id/cost-center', authenticate, authorizeModule('financeiro
 router.get('/cash-flow', authenticate, authorizeModule('financeiro'), financialController.cashFlow);
 router.get('/cash-flow-projection', authenticate, authorizeModule('financeiro', 'operate'), financialController.cashFlowProjection);
 // Projeção diária (série dia a dia, horizonte 30/60/90) — gap "fluxo
-// projetado" de docs/LEVANTAMENTO_ERP_2026-08-02.md.
+// projetado" de docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md.
 router.get('/cashflow/projection', authenticate, authorizeModule('financeiro'), financialController.dailyCashFlowProjection);
 
-// Centros de Custo — gap "centros de custo" de docs/LEVANTAMENTO_ERP_2026-08-02.md.
+// Centros de Custo — gap "centros de custo" de docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md.
 // Rotas estáticas (`/report`) montadas ANTES de `/:id` para evitar conflito
 // de roteamento do Express (mesmo cuidado de outros módulos com sub-rotas
 // estáticas e `:id` no mesmo prefixo).

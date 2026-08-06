@@ -36,7 +36,7 @@ const TABS: Array<{ key: DetailTab; label: string }> = [
 /**
  * `/products/items/:codigo` — detalhe do Item Mestre.
  *
- * Não existe `GET /api/items/:id` no backend (ver `docs/API.md` §31) —
+ * Não existe `GET /api/items/:id` no backend (ver `docs/arquitetura/API.md` §31) —
  * resolve o item pelo `codigo` (único) via `GET /api/items?search=codigo`
  * seguido de um match exato, mesmo padrão já usado em
  * `ProductsPage.tsx`/`ProductSuppliersDialog`. Isso também torna a rota

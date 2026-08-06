@@ -160,7 +160,7 @@ Base URL: `/api/purchases` (autenticação obrigatória via middleware `authenti
 | PUT | `/api/purchases/:id/status` | Altera status (máquina de estados) — transacional; gera `AccountPayable` na aprovação |
 | POST | `/api/purchases/:id/receive` | Registra recebimento de itens — transacional, lock pessimista via `InventoryService` |
 
-Ver `docs/API.md` para exemplos completos de request/response.
+Ver `docs/arquitetura/API.md` para exemplos completos de request/response.
 
 ## Permissões
 

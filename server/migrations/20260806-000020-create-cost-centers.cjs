@@ -2,7 +2,7 @@
 
 /**
  * Bloco Financeiro — Centros de Custo (gap "fluxo projetado, centros de
- * custo" de `docs/LEVANTAMENTO_ERP_2026-08-02.md`).
+ * custo" de `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`).
  *
  * Cria a tabela `cost_centers` (código único, nome, descrição, `active`) e
  * adiciona a coluna opcional `cost_center_id` (nullable, FK `ON DELETE

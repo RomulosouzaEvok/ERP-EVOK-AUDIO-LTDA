@@ -44,7 +44,7 @@ class UpdateMaintenanceOrderUseCase extends UseCase<UpdateMaintenanceOrderInput,
    * @throws {NotFoundError} Se a ordem não existir.
    *
    * Sincronização `Asset.status` (gatilho escolhido — ver
-   * `docs/HANDOFF_CODEX.md`): a criação da OM (`CreateMaintenanceOrderUseCase`)
+   * `docs/governance/HANDOFF_CODEX.md`): a criação da OM (`CreateMaintenanceOrderUseCase`)
    * sempre nasce com `status: 'open'` (aguardando início), então ela não é o
    * gatilho correto para tirar o ativo de operação. O gatilho real é a
    * transição para `in_progress` aqui neste use case — é quando o técnico

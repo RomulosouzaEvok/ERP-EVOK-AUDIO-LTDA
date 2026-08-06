@@ -7,6 +7,7 @@ import LoginPage from '@/pages/LoginPage';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import DashboardPage from '@/pages/DashboardPage';
+import HomePage from '@/pages/home/HomePage';
 
 // Paginas internas carregadas sob demanda (code-splitting): reduz o bundle
 // inicial, que so precisa do essencial para renderizar o login/dashboard.
@@ -69,7 +70,15 @@ export default function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/" element={<HomePage />} />
+          <Route
+            path="/dashboard"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <DashboardPage />
+              </Suspense>
+            }
+          />
           <Route
             path="/change-password"
             element={

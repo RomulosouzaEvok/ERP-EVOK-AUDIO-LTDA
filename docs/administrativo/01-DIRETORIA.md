@@ -1,5 +1,15 @@
 # Diretoria - Módulo Administrativo
 
+> **[PENDENTE]** Este documento descreve o desenho de negócio (governança,
+> comitês, KPIs) e um esquema de tabelas **de planejamento** para o módulo de
+> Diretoria. Nenhuma das tabelas SQL abaixo (`strategic_planning`,
+> `meeting_minutes`, `business_risks`) existe hoje no schema real do
+> PostgreSQL — ver `docs/database/DATABASE.md` para o schema efetivamente
+> implementado. O que já existe e é real hoje: o departamento **Diretoria
+> (código `01`)** em `departments` (`server/src/config/seeds.ts`) e o
+> controle de usuários `role='admin'` com acesso irrestrito ao sistema (ver
+> `docs/administrativo/04-PERFIS_ACESSO.md`).
+
 ## Departamento de Diretoria (DIR)
 
 ### Estrutura da Diretoria
@@ -104,5 +114,8 @@ CREATE TABLE business_risks (
     created_at DATETIME,
     updated_at DATETIME
 );
-</content>
+```
 
+---
+
+**Última atualização:** 2026-08-06

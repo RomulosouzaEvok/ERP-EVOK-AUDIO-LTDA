@@ -18,7 +18,7 @@ arquivos mestre existentes.
 
 ## Estrutura e responsabilidades dos arquivos mestre
 
-### 1. O coracao do progresso: `AGENTS.md`, `docs/governance/TODO.md` e `docs/DIARIO_BORDO_GO_LIVE_G6.md`
+### 1. O coracao do progresso: `AGENTS.md`, `docs/governance/TODO.md` e `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`
 
 - Funcao: `AGENTS.md` (raiz) e o SSOT geral do projeto e deve ser lido
   primeiro em toda sessao — status vigente do Go-Live vive la. `TODO.md` e
@@ -27,7 +27,7 @@ arquivos mestre existentes.
 - Acao obrigatoria: se voce rodar uma auditoria e achar um erro, nao crie um
   novo arquivo de auditoria solto. Leve a pendencia para `docs/governance/TODO.md`
   e, se houver contexto de execucao do Go-Live, registre tambem uma entrada
-  nova (com data) em `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nunca reescreva
+  nova (com data) em `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — nunca reescreva
   entradas antigas desse diario.
 
 ### 2. A verdade do negocio: `docs/projeto/04-USE_CASES.md`
@@ -38,7 +38,7 @@ arquivos mestre existentes.
   regra de negocio evoluiu. Ajuste o codigo ou atualize o caso de uso. Eles
   nunca podem divergir.
 
-### 3. O mapa do tesouro: `docs/DATABASE.md`
+### 3. O mapa do tesouro: `docs/database/DATABASE.md`
 
 - Funcao: o unico lugar que descreve o esquema real do PostgreSQL.
 - Acao obrigatoria: qualquer migration ou alteracao de model deve ser refletida
@@ -67,10 +67,10 @@ Quando solicitado para organizar as documentacoes atuais, voce deve:
 2. Consolidar as pendencias ativas desses relatorios para o `docs/governance/TODO.md`
    usando as tags de estado.
 3. Mesclar documentacao espalhada para os arquivos mestre corretos: casos de
-   uso, `docs/DATABASE.md` e indices centrais (`AGENTS.md`).
+   uso, `docs/database/DATABASE.md` e indices centrais (`AGENTS.md`).
 4. Remover ou aposentar relatorios soltos, logs antigos de chat salvos como
    `.md` e arquivos redundantes apos a consolidacao.
-5. Atualizar o `docs/HANDOFF_CODEX.md` registrando como a estrutura ficou e qual
+5. Atualizar o `docs/governance/HANDOFF_CODEX.md` registrando como a estrutura ficou e qual
    e a situacao atual do projeto.
 
 ## Regras de execucao

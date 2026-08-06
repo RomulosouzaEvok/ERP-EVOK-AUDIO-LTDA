@@ -18,7 +18,7 @@ interface GetCashFlowReportOutput {
 /**
  * Calcula o fluxo de caixa agregado (vendas - compras) no período, cobrindo
  * `GET /api/reports/cash-flow`. Mesma limitação já documentada em
- * `docs/CRONOGRAMA_FRONTEND_2026-07-31.md`: agrega totais por período, sem
+ * `docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md`: agrega totais por período, sem
  * série diária.
  */
 class GetCashFlowReportUseCase extends UseCase<GetCashFlowReportInput, GetCashFlowReportOutput> {

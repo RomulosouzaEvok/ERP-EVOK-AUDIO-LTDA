@@ -117,7 +117,7 @@ Base URL: `/api/inventory` (autenticação obrigatória via middleware `authenti
 | POST | `/api/inventory/lots/:id/release` | **RBAC:** `admin`, `operator`. Libera lote (`quarantine\|blocked` → `available`). Body opcional `{ notes }`. 422 se status atual não permitir a transição. |
 | POST | `/api/inventory/lots/:id/block` | **RBAC:** `admin`, `operator`. Bloqueia lote (`quarantine\|available` → `blocked`). Body `{ reason }` obrigatório (mín. 3 chars). 422 se status atual não permitir a transição. |
 
-Ver `docs/API.md` para exemplos completos de request/response. Os endpoints de
+Ver `docs/arquitetura/API.md` para exemplos completos de request/response. Os endpoints de
 **Inventário Cíclico (F09)**, sob o prefixo `/api/inventory-counts`, estão
 documentados na seção dedicada abaixo.
 
@@ -157,7 +157,7 @@ produção (`ChangeProductionOrderStatusUseCase`) já filtra apenas
 fora do consumo automático sem nenhuma mudança no motor de produção. Lotes
 de produto acabado (`createFinishedLot`) continuam nascendo em `available`.
 Ver detalhamento completo do enum `status` e do fluxo de RNC em
-`docs/DATABASE.md` (seção "Tabela `lot_controls`") e
+`docs/database/DATABASE.md` (seção "Tabela `lot_controls`") e
 `docs/projeto/04-USE_CASES.md` (UC-16, UC-17, UC-17B).
 
 ## Testes existentes
@@ -236,7 +236,7 @@ message } }` (erros `AppError`/`ValidationError`/`NotFoundError`/
 
 ### Dual-read `item_id` em `POST/GET /api/inventory/movements`
 
-Corrigido (ver `docs/HANDOFF_CODEX.md`): `createInventoryMovementSchema`
+Corrigido (ver `docs/governance/HANDOFF_CODEX.md`): `createInventoryMovementSchema`
 (Zod) aceita `product_id` (legado, INTEGER) OU `item_id` (novo, UUID,
 PREFERIDO) — exatamente um dos dois (`.refine()` XOR), nunca os dois, nunca
 nenhum. Mesma regra vale para o filtro `item_id` em `GET .../movements`

@@ -99,7 +99,7 @@ export default function AssetsPage() {
   const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<DidacticError | null>(null);
   const [photoAssetId, setPhotoAssetId] = React.useState<number | null>(null);
   const [qrCodeAsset, setQrCodeAsset] = React.useState<assetsApi.Asset | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -129,7 +129,7 @@ export default function AssetsPage() {
       reset();
       setFormError(null);
     },
-    onError: (error) => setFormError(extractApiErrorMessage(error)),
+    onError: (error) => setFormError(translateApiError(error, 'Não foi possível criar o ativo')),
   });
 
   const uploadPhotoMutation = useMutation({
@@ -138,7 +138,10 @@ export default function AssetsPage() {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       setPhotoAssetId(null);
     },
-    onError: (error) => window.alert(extractApiErrorMessage(error)),
+    onError: (error) => {
+      const didactic = translateApiError(error, 'Não foi possível enviar a foto do ativo');
+      window.alert([didactic.title, ...didactic.reasons].join('\n'));
+    },
   });
 
   const handlePhotoButtonClick = (assetId: number) => {
@@ -243,7 +246,7 @@ export default function AssetsPage() {
                   <Label htmlFor="notes">Observações</Label>
                   <Input id="notes" {...register('notes')} />
                 </div>
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
                     {isSubmitting ? 'Salvando...' : 'Criar ativo'}

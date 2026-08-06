@@ -9,7 +9,7 @@
  * frete, seguro, despesas), mesmo que o ultimo acompanhamento nao tenha
  * trazido atualizacao monetaria.
  *
- * Decisao deliberada (documentada em `docs/HANDOFF_CODEX.md`): a entrada de
+ * Decisao deliberada (documentada em `docs/governance/HANDOFF_CODEX.md`): a entrada de
  * estoque reutiliza a infraestrutura ja testada de `InventoryService.receive`
  * (incrementa `Product.quantity` legado e cria `InventoryMovement`) e de
  * `CostingService.registerWeightedAverageCost` (atualiza `Product.cost_price`

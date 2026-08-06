@@ -81,10 +81,10 @@ export default function LoginPage() {
         }}
       />
 
-      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-6">
+      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-6 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-500">
         <BrandMark />
 
-        <Card className="w-full border-white/10 bg-card/95 shadow-2xl backdrop-blur">
+        <Card className="w-full border-white/10 bg-card/95 shadow-2xl backdrop-blur motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-500">
           <CardHeader className="gap-1 text-center">
             <p className="text-lg font-semibold">Acessar o sistema</p>
             <p className="text-sm text-muted-foreground">Entre com seu e-mail e senha para continuar.</p>
@@ -93,13 +93,20 @@ export default function LoginPage() {
             <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)} noValidate>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="email">E-mail</Label>
-                <Input id="email" type="email" autoComplete="username" placeholder="voce@evokaudio.com" {...register('email')} />
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="username"
+                  placeholder="voce@evokaudio.com"
+                  className="transition-shadow duration-150 focus-visible:ring-brand/50"
+                  {...register('email')}
+                />
                 {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
               </div>
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Senha</Label>
-                  <Link to="/forgot-password" className="text-xs text-muted-foreground hover:text-brand hover:underline">
+                  <Link to="/forgot-password" className="text-xs text-muted-foreground transition-colors hover:text-brand hover:underline">
                     Esqueci minha senha
                   </Link>
                 </div>
@@ -108,13 +115,13 @@ export default function LoginPage() {
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
-                    className="pr-9"
+                    className="pr-9 transition-shadow duration-150 focus-visible:ring-brand/50"
                     {...register('password')}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((value) => !value)}
-                    className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground"
+                    className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 rounded-md"
                     aria-label={showPassword ? 'Ocultar caracteres digitados' : 'Mostrar caracteres digitados'}
                     tabIndex={-1}
                   >
@@ -123,8 +130,16 @@ export default function LoginPage() {
                 </div>
                 {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
               </div>
-              {apiError && <DidacticAlert error={apiError} />}
-              <Button type="submit" disabled={isSubmitting} className="mt-2">
+              {apiError && (
+                <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
+                  <DidacticAlert error={apiError} />
+                </div>
+              )}
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="mt-2 shadow-md shadow-brand/20 transition-all duration-150 hover:shadow-lg hover:shadow-brand/30 active:scale-[0.99]"
+              >
                 {isSubmitting ? 'Entrando...' : 'Entrar'}
               </Button>
             </form>
@@ -141,7 +156,7 @@ function BrandMark() {
   return (
     <div className="flex flex-col items-center gap-3 text-center">
       {/* Fundo branco: o wordmark "VOK AUDIO" do logo oficial é preto e sumiria sobre o fundo escuro */}
-      <div className="rounded-2xl bg-white px-6 py-4 shadow-[0_0_40px_color-mix(in_oklch,var(--brand-vivid)_50%,transparent)]">
+      <div className="rounded-2xl bg-white px-6 py-4 shadow-[0_0_40px_color-mix(in_oklch,var(--brand-vivid)_50%,transparent)] transition-shadow duration-300 hover:shadow-[0_0_56px_color-mix(in_oklch,var(--brand-vivid)_60%,transparent)]">
         <img src={evokLogo} alt="EVOK ÁUDIO" className="h-14 w-auto" />
       </div>
       <p className="text-xs uppercase tracking-[0.2em] text-white/50">Gestão integrada</p>

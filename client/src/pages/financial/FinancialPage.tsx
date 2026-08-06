@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, TrendingUp, TrendingDown, Scale, AlarmClock, AlertTriangle, Wallet } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Scale, AlarmClock, AlertTriangle, Wallet, Receipt, Layers, CalendarRange, GitCompareArrows } from 'lucide-react';
 
 import * as financialApi from '@/api/financial';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -77,7 +78,7 @@ export default function FinancialPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+      <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
           <Wallet className="size-5" />
         </div>
@@ -87,50 +88,55 @@ export default function FinancialPage() {
         </div>
       </div>
 
-      <div className="flex gap-2 border-b">
-        <button
-          type="button"
-          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-            view === 'accounts' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-          onClick={() => setView('accounts')}
-        >
+      <div className="flex flex-wrap gap-1 border-b">
+        <FinancialTabButton active={view === 'accounts'} icon={Receipt} onClick={() => setView('accounts')}>
           Contas a pagar/receber
-        </button>
-        <button
-          type="button"
-          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-            view === 'cost-centers' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-          onClick={() => setView('cost-centers')}
-        >
+        </FinancialTabButton>
+        <FinancialTabButton active={view === 'cost-centers'} icon={Layers} onClick={() => setView('cost-centers')}>
           Centros de custo
-        </button>
-        <button
-          type="button"
-          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-            view === 'cash-flow-daily' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-          onClick={() => setView('cash-flow-daily')}
-        >
+        </FinancialTabButton>
+        <FinancialTabButton active={view === 'cash-flow-daily'} icon={CalendarRange} onClick={() => setView('cash-flow-daily')}>
           Projeção de caixa
-        </button>
-        <button
-          type="button"
-          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-            view === 'reconciliation' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-          onClick={() => setView('reconciliation')}
-        >
+        </FinancialTabButton>
+        <FinancialTabButton active={view === 'reconciliation'} icon={GitCompareArrows} onClick={() => setView('reconciliation')}>
           Conciliação
-        </button>
+        </FinancialTabButton>
       </div>
 
-      {view === 'cost-centers' && <CostCentersTab />}
-      {view === 'cash-flow-daily' && <DailyCashFlowProjectionTab />}
-      {view === 'reconciliation' && <ReconciliationTab />}
-      {view === 'accounts' && <AccountsTab canWrite={canWrite} />}
+      <div key={view} className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
+        {view === 'cost-centers' && <CostCentersTab />}
+        {view === 'cash-flow-daily' && <DailyCashFlowProjectionTab />}
+        {view === 'reconciliation' && <ReconciliationTab />}
+        {view === 'accounts' && <AccountsTab canWrite={canWrite} />}
+      </div>
     </div>
+  );
+}
+
+function FinancialTabButton({
+  active,
+  onClick,
+  icon: Icon,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-brand/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
+        active && 'border-brand text-brand',
+      )}
+    >
+      <Icon className="size-4" />
+      {children}
+    </button>
   );
 }
 
@@ -378,8 +384,11 @@ function AccountsTab({ canWrite }: { canWrite: boolean }) {
               })}
               {!loadingPayables && !errorPayables && payables?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
-                    Nenhuma conta a pagar.
+                  <TableCell colSpan={8} className="py-10 text-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Wallet className="size-8 text-muted-foreground/50" />
+                      <p className="text-sm">Nenhuma conta a pagar.</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               )}
@@ -477,8 +486,11 @@ function AccountsTab({ canWrite }: { canWrite: boolean }) {
               })}
               {!loadingReceivables && !errorReceivables && receivables?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    Nenhuma conta a receber.
+                  <TableCell colSpan={7} className="py-10 text-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Wallet className="size-8 text-muted-foreground/50" />
+                      <p className="text-sm">Nenhuma conta a receber.</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               )}
@@ -552,7 +564,7 @@ function CashFlowProjectionSection() {
         {!isLoading && !isError && data && (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <Card>
+              <Card className="transition-shadow hover:shadow-md">
                 <CardContent className="flex items-center gap-3 p-4">
                   <TrendingUp className="size-7 text-success" />
                   <div>
@@ -561,7 +573,7 @@ function CashFlowProjectionSection() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="transition-shadow hover:shadow-md">
                 <CardContent className="flex items-center gap-3 p-4">
                   <TrendingDown className="size-7 text-destructive" />
                   <div>
@@ -570,7 +582,7 @@ function CashFlowProjectionSection() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="transition-shadow hover:shadow-md">
                 <CardContent className="flex items-center gap-3 p-4">
                   <Scale className={`size-7 ${netVariant}`} />
                   <div>
@@ -579,7 +591,7 @@ function CashFlowProjectionSection() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="transition-shadow hover:shadow-md">
                 <CardContent className="flex items-center gap-3 p-4">
                   <AlarmClock className="size-7 text-amber-500" />
                   <div>
@@ -590,7 +602,7 @@ function CashFlowProjectionSection() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="transition-shadow hover:shadow-md">
                 <CardContent className="flex items-center gap-3 p-4">
                   <AlertTriangle className="size-7 text-destructive" />
                   <div>

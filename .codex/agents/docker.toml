@@ -52,7 +52,7 @@ Apos subir e validar o banco de dados:
 1. Atualize ou crie `docs/infra/DEPLOY_UBUNTU.md` detalhando exatamente quais
    comandos o usuario deve rodar no Ubuntu caso precise reiniciar o servidor
    fisico.
-2. Atualize `docs/HANDOFF_CODEX.md` avisando que a infraestrutura do banco de
+2. Atualize `docs/governance/HANDOFF_CODEX.md` avisando que a infraestrutura do banco de
    dados esta rodando e pronta para a API se conectar.
 
 ## REGRA FINAL

@@ -1,6 +1,6 @@
 /**
  * Test: Rastreabilidade por lote/QR no chão de fábrica (item 6 do roadmap,
- * docs/LEVANTAMENTO_ERP_2026-08-02.md).
+ * docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md).
  *
  * Cobre:
  * - `GetLotByCodeUseCase`: lookup de `LotControl` por `lot_number`

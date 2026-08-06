@@ -121,7 +121,7 @@ Base URL: `/api/finance` (autenticação obrigatória via middleware `authentica
 | GET | `/api/finance/cash-flow` | Fluxo de caixa agregado por status, em um período | — |
 | GET | `/api/finance/cash-flow-projection` | Projeção de fluxo de caixa por semana (títulos em aberto), `?days=7..90` (default 30) | `authorize('admin', 'financial')` |
 
-Ver `docs/API.md` (seção 6 — Financeiro) para exemplos completos de request/response.
+Ver `docs/arquitetura/API.md` (seção 6 — Financeiro) para exemplos completos de request/response.
 
 ## Permissões
 
@@ -178,7 +178,7 @@ integração dos endpoints está prevista na Fase 9 do
   migração para Zod está prevista para a Fase 8.
 - `cashFlow` não gera série temporal diária (`daily_flow`); apenas
   agregados por status no período — mesmo comportamento do anterior. A
-  documentação anterior em `docs/API.md` descrevia um formato de resposta
+  documentação anterior em `docs/arquitetura/API.md` descrevia um formato de resposta
   (`daily_flow`) que nunca correspondeu à implementação real; foi
   corrigida nesta migração para refletir o comportamento efetivo, sem
   alterar código.

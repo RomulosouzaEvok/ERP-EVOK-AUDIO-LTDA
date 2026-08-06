@@ -13,10 +13,10 @@ Corrigir o ERP EVOK AUDIO para producao seguindo o SSOT vigente. Os documentos
 use sempre:
 
 - `AGENTS.md` (raiz) — status atual do Go-Live, sempre o primeiro a ler.
-- `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` — auditoria vigente (P0 e P1
+- `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` — auditoria vigente (P0 e P1
   ja remediados no commit `d1d3aff`).
-- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — roadmap P1/P2/P3 pos-Go-Live.
-- `docs/GO_LIVE_G6_CHECKLIST.md` e `docs/DIARIO_BORDO_GO_LIVE_G6.md` — gate
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — roadmap P1/P2/P3 pos-Go-Live.
+- `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md` e `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — gate
   de Go-Live atual (UAT → aprovacao formal G6).
 - `docs/governance/TODO.md` — pendencia granular por modulo/bloco.
 
@@ -52,7 +52,7 @@ Docker/CI) **ja estao implementados na baseline** (4 P0 + 2 P1 remediados
 em 2026-08-02). Trate-os como checklist de regressao, nao como trabalho a
 fazer do zero. O gate ativo hoje e o **G6**: UAT completo → aprovacao
 formal → Go-Live. Depois do Go-Live, o trabalho vira roadmap
-P1/P2/P3 (`docs/LEVANTAMENTO_ERP_2026-08-02.md`).
+P1/P2/P3 (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`).
 
 ## Ordem obrigatoria (referencia de regressao, G0-G5 ja concluidos)
 

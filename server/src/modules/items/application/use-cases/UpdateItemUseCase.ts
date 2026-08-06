@@ -3,7 +3,7 @@
  *
  * Escopo inicial restrito ao opt-in de conversao automatica do MRP
  * (`conversao_automatica`) — roadmap pos-Go-Live item 3
- * (`docs/LEVANTAMENTO_ERP_2026-08-02.md`). Demais campos aceitos pelo
+ * (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`). Demais campos aceitos pelo
  * `updateItemSchema` (ver `itemValidators.ts`) sao propagados sem filtro
  * adicional; apenas os campos presentes no payload sao alterados.
  *

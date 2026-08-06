@@ -47,7 +47,7 @@ cliente como `{ success: false, error: { code, message } }` em vez do
 `{ success: false, error: "mensagem em string" }` usado pelo controller
 anterior. O `statusCode` HTTP retornado é o mesmo em todos os casos (400,
 401, 403, 409). Erros inesperados (5xx) mantêm o fallback genérico do
-`errorHandler`, igual ao anterior. `docs/API.md` foi atualizado para refletir
+`errorHandler`, igual ao anterior. `docs/arquitetura/API.md` foi atualizado para refletir
 o novo formato do erro 401 de `/login`.
 
 **Regra de segurança preservada 1:1 (não alterada por esta migração):** a
@@ -115,7 +115,7 @@ Base URL: `/api/auth`.
 | POST | `/api/auth/register` | `authenticate`, `authorize('admin')` | Cria um novo usuário |
 | GET | `/api/auth/me` | `authenticate` | Retorna o usuário autenticado |
 
-Ver `docs/API.md` (seção "1. Autenticação") para exemplos completos de
+Ver `docs/arquitetura/API.md` (seção "1. Autenticação") para exemplos completos de
 request/response.
 
 ## Permissões

@@ -131,7 +131,7 @@ export default function SalesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+      <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 flex items-center justify-between gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
         <div className="flex items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
             <ShoppingCart className="size-5" />
@@ -226,7 +226,7 @@ export default function SalesPage() {
         )}
       </div>
 
-      <Table>
+      <Table className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
         <TableHeader>
           <TableRow>
             <TableHead>#</TableHead>
@@ -283,8 +283,16 @@ export default function SalesPage() {
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                Nenhuma venda registrada.
+              <TableCell colSpan={6} className="py-10 text-center">
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <ShoppingCart className="size-8 text-muted-foreground/50" />
+                  <p className="text-sm">Nenhuma venda registrada.</p>
+                  {canWrite && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
+                      <Plus className="size-3" /> Nova venda
+                    </Button>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
           )}

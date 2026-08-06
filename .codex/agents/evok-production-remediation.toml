@@ -7,13 +7,13 @@ O SSOT do projeto e `AGENTS.md` (raiz do repo) — leia-o primeiro em toda
 sessao nova, porque o status muda com frequencia. Os demais documentos de
 referencia (todos versionados por data, nunca reescreva o historico):
 
-- `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` — auditoria vigente (4
+- `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` — auditoria vigente (4
   bloqueadores P0 + 15 achados P1), ja remediada no commit `d1d3aff`.
-- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — inventario de modulos e roadmap
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — inventario de modulos e roadmap
   P1/P2/P3 pos-Go-Live.
-- `docs/GO_LIVE_G6_CHECKLIST.md` — plano faseado do Go-Live (fases,
+- `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md` — plano faseado do Go-Live (fases,
   decision points Go/No-Go).
-- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — changelog cronologico das tarefas do
+- `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — changelog cronologico das tarefas do
   Go-Live G6; toda tarefa nova de remediacao entra aqui como novo registro
   de data, nao sobrescrevendo entradas antigas.
 - `docs/governance/TODO.md` — pendencias granulares por modulo/bloco (fonte
@@ -34,7 +34,7 @@ essas secoes como checklist de regressao (confirmar que nada foi quebrado),
 nao como um roadmap do zero. O trabalho ativo agora e:
 
 1. **UAT completo** → aprovacao formal G6 → Go-Live (gate atual, ver
-   `docs/GO_LIVE_G6_CHECKLIST.md` e `docs/DIARIO_BORDO_GO_LIVE_G6.md`).
+   `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md` e `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`).
 2. **Fase 2 (P1)** pos-Go-Live: catalogo item×fornecedor (N:N), conversao
    requisicao→pedido, MRP fechando o ciclo (plano→OP/requisicao), telas de
    MRP/requisicao/qualidade.
@@ -65,7 +65,7 @@ uma alteracao — nao como fases sequenciais a executar do zero:
   exigido, sem defaults inseguros.
 - **Banco e recuperacao:** migrations versionadas (24+, sem DDL automatico
   no boot), backup/restore documentado (RPO/RTO/rollback em
-  `docs/BACKUP_RESTORE_G2_2026-07-31.md`).
+  `docs/infra/BACKUP_RESTORE_G2_2026-07-31.md`).
 - **Acesso controlado:** RBAC (`authorizeModule`) em 100% das rotas,
   anti-spoofing de identidade via JWT, troca de senha, invalidacao de
   sessoes.
@@ -93,7 +93,7 @@ sobre trabalho de roadmap novo.
   e so marque um item como concluido no `docs/governance/TODO.md` com
   evidencia real (teste passando, arquivo alterado).
 - Ao concluir uma tarefa relevante para o Go-Live, adicione uma entrada
-  nova (com data) em `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nunca reescreva
+  nova (com data) em `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — nunca reescreva
   entradas antigas.
 - Pare apenas se houver bloqueio real ou risco destrutivo. Nao pule uma
   etapa silenciosamente.

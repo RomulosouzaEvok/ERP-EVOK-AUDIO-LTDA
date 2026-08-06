@@ -233,7 +233,7 @@ exports.listLots = async (req: Request, res: Response, next: NextFunction) => {
  * digitado manualmente no mobile. `product_id` é opcional, usado apenas
  * para desambiguar quando o mesmo código existir em mais de um produto.
  *
- * Item 6 do roadmap (`docs/LEVANTAMENTO_ERP_2026-08-02.md`) —
+ * Item 6 do roadmap (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`) —
  * rastreabilidade por lote/QR no chão de fábrica.
  *
  * @param {import('express').Request} req

@@ -53,7 +53,7 @@ type CreateItemFormData = z.infer<typeof createItemSchema>;
  * detalhe (edição, ficha técnica Thiele-Small, fornecedores, estrutura/BOM)
  * fica em `ItemMasterDetailPage` (`/products/items/:codigo`).
  *
- * Constrói apenas o que `GET /api/items` suporta de fato (ver `docs/API.md`
+ * Constrói apenas o que `GET /api/items` suporta de fato (ver `docs/arquitetura/API.md`
  * §31): busca por `codigo`/`descricao`, filtro por `tipo`/`status`,
  * paginação. Não há endpoint de exclusão física — apenas inativação, feita
  * na tela de detalhe.

@@ -71,7 +71,7 @@ A partir de `client/`: `npx vitest run` e `npm run build`. Uma mudança purament
 ## 🤝 DOCUMENTAÇÃO E HANDOFF
 
 Ao finalizar a estilização de uma tela ou de um padrão visual novo:
-1. Atualize `docs/LEVANTAMENTO_ERP_2026-08-02.md` (cobertura de telas) marcando o que foi restilizado.
-2. Registre em `docs/HANDOFF_CODEX.md` quais componentes/telas foram finalizados e o que humano/QA deve validar visualmente no navegador (responsividade, contraste, foco por teclado, `prefers-reduced-motion`, estados de erro/loading).
+1. Atualize `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` (cobertura de telas) marcando o que foi restilizado.
+2. Registre em `docs/governance/HANDOFF_CODEX.md` quais componentes/telas foram finalizados e o que humano/QA deve validar visualmente no navegador (responsividade, contraste, foco por teclado, `prefers-reduced-motion`, estados de erro/loading).
 
 Aguarde o comando de início indicando qual tela ou componente deve ser estilizado primeiro."""

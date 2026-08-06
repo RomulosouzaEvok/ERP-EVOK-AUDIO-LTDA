@@ -1,6 +1,6 @@
 /**
  * Teste de guarda (anti-regressão) da Onda 2 de desarme de "bombas
- * latentes" (`docs/LEVANTAMENTO_ERP_2026-08-02.md`, seção "Bombas latentes
+ * latentes" (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, seção "Bombas latentes
  * conhecidas" / item 10 do roadmap — fase "contract" da unificação
  * legado/novo).
  *

@@ -62,7 +62,7 @@ interface GetOeeReportOutput {
 
 /**
  * Relatório de OEE — Overall Equipment Effectiveness (`GET /api/reports/oee`),
- * item 7/9 do `docs/LEVANTAMENTO_ERP_2026-08-02.md` ("OEE completo ainda não
+ * item 7/9 do `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` ("OEE completo ainda não
  * implementado"). Calcula os 3 eixos clássicos por centro de trabalho
  * (`work_centers`) e um agregado geral, no período informado:
  *

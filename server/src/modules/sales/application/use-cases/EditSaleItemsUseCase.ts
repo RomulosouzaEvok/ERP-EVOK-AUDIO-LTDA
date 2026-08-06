@@ -15,7 +15,7 @@ interface EditItemInput {
 
 /**
  * Substitui o conjunto de itens de uma venda (gap 2/3 do módulo `sales` —
- * `docs/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`: "Alteração de
+ * `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`: "Alteração de
  * pedido"), cobrindo `PUT /api/sales/:id/items`.
  *
  * Regra de negócio: uma venda `quote` pode ser editada livremente (nada foi

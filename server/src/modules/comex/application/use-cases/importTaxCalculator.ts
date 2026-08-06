@@ -3,7 +3,7 @@
  * tributos de importacao (II, IPI, PIS, COFINS, ICMS)") e do custo unitario
  * nacionalizado final (UC-19, passo 6).
  *
- * Decisao deliberada (documentada em `docs/HANDOFF_CODEX.md`): as aliquotas
+ * Decisao deliberada (documentada em `docs/governance/HANDOFF_CODEX.md`): as aliquotas
  * de II/IPI/PIS/COFINS/ICMS sao informadas manualmente pelo Analista de
  * Comex por item (`ImportProcessItem.*_rate`) — NAO ha integracao com
  * Siscomex/tabela NCM para resolve-las automaticamente, pois o UC-19 nao
