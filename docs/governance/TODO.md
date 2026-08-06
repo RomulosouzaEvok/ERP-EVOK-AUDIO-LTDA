@@ -1660,3 +1660,66 @@ entrada 2026-08-06), `CLAUDE.md` (status/data, migrations/FKs, arvore de
 pastas, roadmap), `docs/HANDOFF_CODEX.md` (nota de atualizacao),
 `docs/GO_LIVE_G6_CHECKLIST.md` (resumo executivo/datas, secoes
 Kubernetes/Datadog marcadas nao aplicaveis).
+
+---
+
+## 2026-08-06 (segunda rodada do dia) — Pendencias das 4 frentes de roadmap (RFQ, financeiro, OEE, bombas latentes)
+
+**Origem:** segunda rodada de entregas de 2026-08-06 (Onda 1 commitada:
+RFQ multi-fornecedor, centros de custo + projecao de caixa diaria, OEE
+completo; Onda 2 no working tree: desarme de 7 bombas latentes UUID x
+INTEGER + marcacao DEPRECATED de 12 tabelas orfas). Detalhe completo de
+cada entrega em `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06
+(segunda rodada — 4 frentes do roadmap)". Os itens abaixo sao os riscos
+residuais e trabalho futuro registrados por decisao consciente de nao
+resolver na mesma rodada.
+
+- [ ] **[PENDENTE] Conciliacao bancaria/CNAB.** Modulo financeiro ganhou
+  centros de custo e projecao diaria de fluxo de caixa nesta rodada, mas
+  conciliacao bancaria (importacao de extrato/CNAB, baixa automatica de
+  titulos) continua sem nenhuma implementacao. Sem data definida.
+- [ ] **[PENDENTE] Mapeamento automatico departamento -> centro de custo
+  na criacao automatica de `AccountPayable`.** Hoje `cost_center_id` so e
+  atribuido manualmente (`PUT /api/finance/payable/:id/cost-center` ou no
+  payload de `POST /api/finance/payable`) — quando uma conta a pagar e
+  criada automaticamente (ex.: ao aprovar um pedido de compra), nasce sem
+  centro de custo. Precisa de regra de negocio (provavelmente por
+  `department_id` de quem originou a compra) antes de implementar.
+- [ ] **[PENDENTE] Campo de downtime/parada de maquina para OEE preciso.**
+  `GET /api/reports/oee` calcula Disponibilidade por aproximacao de
+  calendario de turnos (tempo apontado vs. tempo disponivel do centro) —
+  o schema (`production_order_tracking`) nao tem um registro explicito de
+  inicio/fim de parada real (so o status `paused`, sem timestamp). Se o
+  negocio precisar de OEE com desconto de paradas reais, e necessario
+  desenhar esse campo/tabela antes de ajustar a formula em
+  `GetOeeReportUseCase.ts`.
+- [ ] **[PENDENTE] Decisao futura — `DROP TABLE` definitivo das 12
+  tabelas orfas do schema-fantasma em portugues.** Marcadas `DEPRECATED`
+  via `COMMENT ON TABLE` nesta rodada (migration `20260806-000042`), mas
+  nao removidas (decisao consciente de preservar historico/possivel
+  relevancia de auditoria fiscal). Avaliar em uma janela dedicada, com
+  confirmacao formal de que nao ha dependencia de compliance sobre esse
+  schema, antes de dropar. Ver `docs/DATABASE.md`, secao "Tabelas orfas do
+  schema-fantasma em portugues".
+- [ ] **[PENDENTE] Tela de reatribuicao de contagem ciclica.** O endpoint
+  `PUT /api/inventory-counts/:id/reassign` (`ReassignInventoryCountUseCase.ts`,
+  entregue na remediacao de 2026-08-06 registrada na entrada anterior
+  deste arquivo) nao tem UI — hoje so e acionavel via chamada direta a
+  API. Precisa de um botao/dialog em `client/src/pages/products/InventoryCountsPage.tsx`
+  (ou equivalente) para o gestor reatribuir uma contagem sem depender de
+  suporte tecnico.
+- [ ] **[PENDENTE] Tela de `fornecedor_padrao_id` no cadastro de item.**
+  O campo existe no backend (`Item.fornecedor_padrao_id`, corrigido de
+  UUID para INTEGER nesta rodada, `POST`/`PATCH /api/items`), mas o Item
+  Mestre canonico continua sem nenhuma tela de cadastro completa (ver
+  `docs/LEVANTAMENTO_ERP_2026-08-02.md`, lista de "9 modulos do backend
+  SEM NENHUMA TELA" — `items` e um deles). Quando a tela de cadastro do
+  Item Mestre for construida, incluir um seletor de fornecedor padrao
+  (`supplier_id` inteiro, nao mais UUID) como parte do formulario.
+
+**Documentos atualizados nesta consolidacao:** este arquivo (secao nova),
+`docs/API.md` (RFQ §11.1, financeiro §6, OEE §7, nota breaking change em
+§3), `docs/DATABASE.md` (tabelas RFQ, `cost_centers`, correcao das 7
+colunas-bomba, `DEPRECATED` nas 12 tabelas orfas), `docs/LEVANTAMENTO_ERP_2026-08-02.md`,
+`docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `docs/HANDOFF_CODEX.md`
+(secao nova), `CLAUDE.md` (contagem de migrations, roadmap).

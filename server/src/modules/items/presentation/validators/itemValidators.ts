@@ -17,7 +17,10 @@ export const createItemSchema = z.object({
   lote_minimo: z.coerce.number().min(0).optional(),
   lead_time_dias: z.coerce.number().int().min(0).optional(),
   custo_padrao: z.coerce.number().min(0).optional(),
-  fornecedor_padrao_id: z.string().uuid().nullable().optional(),
+  // FK -> suppliers.id (INTEGER). Corrigido em 20260806-000040 (era uuid,
+  // referenciando a tabela orfa `fornecedores` — nunca era possivel
+  // preencher com um fornecedor real, cujo id sempre foi inteiro).
+  fornecedor_padrao_id: z.coerce.number().int().positive().nullable().optional(),
   /**
    * Opt-in do ciclo automatico do MRP (roadmap pos-Go-Live item 3): quando
    * `true`, ordens planejadas deste item sao convertidas em Requisicao de
@@ -38,7 +41,8 @@ export const updateItemSchema = z.object({
   lote_minimo: z.coerce.number().min(0).optional(),
   lead_time_dias: z.coerce.number().int().min(0).optional(),
   custo_padrao: z.coerce.number().min(0).optional(),
-  fornecedor_padrao_id: z.string().uuid().nullable().optional(),
+  // FK -> suppliers.id (INTEGER). Corrigido em 20260806-000040 (era uuid).
+  fornecedor_padrao_id: z.coerce.number().int().positive().nullable().optional(),
   /**
    * Opt-in do ciclo automatico do MRP (roadmap pos-Go-Live item 3): quando
    * `true`, ordens planejadas deste item sao convertidas em Requisicao de

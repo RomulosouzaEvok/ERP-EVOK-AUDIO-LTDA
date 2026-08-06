@@ -7037,3 +7037,185 @@ HTTP 409.
 > `mobile/`/`tv/` novos + esta feature de atribuição, incluindo um bug P0
 > real encontrado nesse mesmo consumo do campo "Atribuir a" na web e
 > corrigido no mesmo dia).
+
+---
+
+## Segunda rodada de 2026-08-06 — RFQ multi-fornecedor, financeiro (centros de custo + projeção diária), OEE completo, e desarme de bombas latentes UUID×INTEGER
+
+**Data:** 2026-08-06 (segunda rodada do dia, distinta da consolidação de
+auditoria multi-agente registrada na seção anterior). Duas ondas:
+**Onda 1 commitada** (commit `feat: RFQ multi-fornecedor, centros de custo
++ projecao de caixa diaria, e relatorio OEE completo`); **Onda 2 no
+working tree**, ainda não commitada no momento desta entrada. Consolida 4
+frentes do roadmap de `docs/LEVANTAMENTO_ERP_2026-08-02.md`. Detalhe
+narrativo completo (decisões, riscos residuais, números de validação) em
+`docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (segunda rodada — 4
+frentes do roadmap)"; contrato de API completo em `docs/API.md` (RFQ §11.1,
+financeiro §6, OEE §7); schema completo em `docs/DATABASE.md`.
+
+### Onda 1 — RFQ, financeiro, OEE
+
+1. **RFQ/Cotação multi-fornecedor** — módulo novo `server/src/modules/rfq/`
+   (Clean Architecture: `domain/repositories/RfqRepository.ts`,
+   `infrastructure/sequelize/SequelizeRfqRepository.ts`, 7 use cases,
+   `presentation/{routes,controllers,validators}`). Tabelas
+   `rfqs`/`rfq_items`/`rfq_suppliers`/`rfq_quotes` (migration
+   `20260806-000010-create-rfq-tables.cjs`). Fluxo:
+   `POST /api/rfqs` (avulsa por `items[]` OU a partir de `requisition_id`,
+   XOR) → `POST /:id/suppliers` (convite, transiciona `draft→sent`) →
+   `POST /:id/quotes` (resposta por fornecedor, upsert por par
+   item×fornecedor) → `GET /:id/comparison` (mapa comparativo com melhor
+   preço/prazo destacados por item) → `POST /:id/award` (adjudicação por
+   item, podendo dividir entre fornecedores; gera 1 pedido de compra por
+   fornecedor vencedor, congela `awarded_supplier_id`/`awarded_unit_price`,
+   faz upsert em `item_suppliers` com o preço/prazo do vencedor, marca a
+   RFQ `awarded`). RFQ travada via `SELECT ... FOR UPDATE` durante a
+   adjudicação (evita adjudicação concorrente duplicada). Frontend: página
+   `/purchases/rfqs` + item de menu em Compras. Testado ao vivo ponta a
+   ponta contra o Postgres do Docker local.
+2. **Financeiro — centros de custo + projeção diária de fluxo de caixa** —
+   tabela `cost_centers` + coluna `cost_center_id` (nullable, `ON DELETE
+   SET NULL`) em `accounts_payable`/`accounts_receivable` (migration
+   `20260806-000020-create-cost-centers.cjs`, idempotente — checa
+   `showAllTables()`/`describeTable()` antes de criar, pois um banco novo
+   já nasce com essas tabelas via baseline). Endpoints novos sob
+   `/api/finance`: CRUD de centro de custo, `GET /cost-centers/report?from=&to=`
+   (agrupado, com grupo `"Sem centro de custo"` sempre presente),
+   `GET /cashflow/projection?days=30|60|90&opening_balance=` (série diária
+   com saldo acumulado, `day_index` 0..days, vencidos somados no dia 0,
+   `summary.lowest_balance` com data+valor do menor saldo do horizonte),
+   `PUT /payable/:id/cost-center` / `PUT /receivable/:id/cost-center`
+   (atribuir/remover), `POST /payable` aceitando `cost_center_id` opcional.
+   UI: 3 abas na tela financeira (Contas / Centros de Custo / Projeção de
+   Caixa). **Bug real corrigido no caminho:** parse de `due_date`
+   (`DATEONLY`) via `new Date('YYYY-MM-DD')`/`toISOString()` deslocava a
+   série em 1 dia em fusos negativos (`America/Sao_Paulo`, UTC-3) —
+   corrigido em `GetDailyCashFlowProjectionUseCase.ts` para reconstruir a
+   data por componentes de calendário (nunca via parse direto de string
+   ISO nem via getters UTC). **Fora de escopo, registrado em
+   `docs/governance/TODO.md`:** conciliação bancária/CNAB; mapeamento
+   automático departamento→centro de custo na criação automática de
+   `AccountPayable` (hoje só manual).
+3. **OEE completo** — `GET /api/reports/oee?start_date&end_date&work_center_id`
+   (`GetOeeReportUseCase.ts`, `authorizeModule('relatorios.producao')`,
+   mesma sub-permissão de `GET /api/reports/production`). Três eixos:
+   Disponibilidade (horas produzindo de `production_order_tracking` /
+   horas disponíveis do calendário de turnos `work_center_shifts`,
+   fallback `capacity_hours_per_day`), Performance (tempo padrão ×
+   unidades processadas / tempo real apontado, capado a 100%), Qualidade
+   (boas/(boas+refugo)); OEE = D×P×Q, só calculado com os 3 eixos
+   não-nulos. Eixos `null` (nunca `0` enganoso) com `no_data_reason`
+   textual quando o denominador é zero. Agregado geral soma as bases
+   brutas de todos os centros e recalcula os eixos sobre os totais (não é
+   média das taxas — evita distorção quando os centros têm volumes muito
+   diferentes). Sem migration nova. Frontend: aba OEE em `/reports`
+   (thresholds visuais 85%/60%). **Bug de runtime corrigido no caminho**
+   (não relacionado à lógica de OEE, mas encontrado durante esta frente):
+   um arquivo TS misturando `export interface` com `export =` quebrava o
+   `tsx` e derrubava o dev server inteiro. **LIMITAÇÃO DOCUMENTADA e
+   assumida conscientemente, não é gap silencioso:** o schema não tem
+   campo de downtime/parada de máquina explícito
+   (`production_order_tracking` só tem `started_at`/`finished_at`/
+   `status`, incluindo `paused` mas sem timestamp de início/fim de pausa)
+   — a Disponibilidade é uma aproximação por calendário de turnos, sem
+   desconto de paradas reais registradas. Registrado como item futuro em
+   `docs/governance/TODO.md`.
+
+### Onda 2 — Desarme de 7 "bombas latentes" UUID×INTEGER + DEPRECATED de 12 tabelas órfãs
+
+Continuação do padrão de bug já corrigido em `item_estruturas` (migration
+`20260802-000005`), fechando a seção "Bombas latentes conhecidas" de
+`docs/LEVANTAMENTO_ERP_2026-08-02.md`. Migrations
+`20260806-000040/041/042.cjs`, todas aplicadas no banco local.
+
+- **`items.fornecedor_padrao_id` (bomba REAL em tabela viva, não só no
+  schema-fantasma):** era `UUID` com FK para `fornecedores.id` (tabela
+  órfã, também UUID), mas o código (`models/index.ts`) sempre associou o
+  campo ao model `Supplier` real, cuja PK (`suppliers.id`) é `INTEGER`. O
+  campo era estruturalmente impossível de preencher via API
+  (`itemValidators.ts` exigia `z.string().uuid()`, nunca aceitando um
+  `supplier_id` real) e qualquer `include` de `fornecedorPadrao` quebrava
+  em runtime (`operator does not exist: uuid = integer`). Diagnóstico
+  antes do fix: `items` tinha 13 linhas em produção, campo 100% `NULL`
+  (0/13) — correção segura, sem perda de dado. Corrigido: `UUID → INTEGER`
+  + FK real para `suppliers(id)` (`ON DELETE SET NULL`); `Item.ts` e
+  `itemValidators.ts` (`z.coerce.number().int().positive().nullable().optional()`)
+  atualizados no mesmo commit da migration
+  (`20260806-000040-fix-items-fornecedor-padrao-id-type.cjs`).
+  **⚠️ BREAKING CHANGE DE API para quem consumir `POST`/`PATCH /api/items`:
+  `fornecedor_padrao_id` agora é um inteiro (`supplier_id`), não mais um
+  UUID.** Qualquer client (frontend, script, integração) que hoje envie um
+  UUID nesse campo passa a receber 400/422 de validação. Nenhuma tela de
+  cadastro do Item Mestre consome este campo ainda (ver
+  `docs/governance/TODO.md`, item "Tela de `fornecedor_padrao_id` no
+  cadastro de item").
+- **6 colunas em tabelas órfãs (0 uso em código vivo), mesmo padrão de
+  UUID→usuário INTEGER:** as 4 já documentadas em
+  `docs/LEVANTAMENTO_ERP_2026-08-02.md`
+  (`requisicoes_compra.aprovado_por`, `ordens_producao.criado_por`,
+  `movimentos_estoque.usuario_id`, `auditoria_eventos.usuario_id`) + 2
+  novas encontradas nesta rodada por auditoria completa
+  (`requisicoes_compra.solicitante_id`, `entradas_nf.recebido_por`).
+  Todas convertidas `UUID → INTEGER` com FK real para `users(id)` (`ON
+  DELETE SET NULL`) — mesmo padrão preventivo do item anterior: se esse
+  schema-fantasma for reaproveitado por engano no futuro, o tipo já aponta
+  para a fonte de verdade real. Migration verifica `0` linhas não nulas em
+  cada coluna antes de alterar o tipo (aborta com erro explícito caso
+  contrário) — guarda de segurança contra dado incompatível
+  (`20260806-000041-fix-orphan-pt-schema-user-columns.cjs`).
+- **12 tabelas órfãs marcadas `DEPRECATED`, não removidas:** `usuarios`,
+  `fornecedores`, `lotes`, `numeros_serie`, `requisicoes_compra`,
+  `requisicao_compra_items`, `entradas_nf`, `entradas_nf_items`,
+  `ordens_producao`, `movimentos_estoque`, `webhooks_eventos`,
+  `auditoria_eventos` — todas do `01_schema.sql`/baseline
+  (`20260731-000001`), 0 linhas, 0 models Sequelize, 0 referências em
+  `server/src` fora de comentários genéricos, confirmado por auditoria
+  completa. Cada uma recebeu `COMMENT ON TABLE` explicando o motivo e
+  apontando o equivalente ativo em inglês
+  (`20260806-000042-comment-deprecated-orphan-pt-schema-tables.cjs`).
+  **Decisão consciente de não dropar:** preservar histórico/possível
+  relevância de auditoria fiscal futura — `DROP TABLE` definitivo fica
+  como decisão futura em aberto (`docs/governance/TODO.md`).
+- **Teste de guarda novo:** `server/tests/unit/no-orphan-pt-schema-tables.test.ts`
+  (14 casos) — falha se qualquer arquivo novo em `server/src` referenciar
+  uma das 12 tabelas órfãs (nome de tabela em query raw, `sequelize.define`,
+  `tableName` de model, etc.). **Limitação registrada:** cobre apenas
+  `server/src`, não varre `server/migrations/*.cjs` (que legitimamente
+  referenciam essas tabelas nas migrations que as criaram/alteraram).
+
+### Números de validação desta rodada
+
+```
+Server: 585/585 testes unitários
+Server: typecheck — 0 erros
+Server: migration:status — limpo (59 migrations no total)
+Client: 49/49 testes
+Client: build — ok
+```
+Smoke test ao vivo dos 3 módulos da Onda 1 (RFQ ponta a ponta, financeiro,
+OEE) contra dados reais no Postgres do Docker local.
+
+### Riscos residuais registrados (não resolvidos nesta rodada, decisão consciente)
+
+- Conciliação bancária/CNAB (financeiro).
+- Mapeamento automático departamento→centro de custo na AP automática.
+- Campo de downtime/parada de máquina real para OEE preciso (hoje é
+  aproximação por calendário de turnos).
+- Decisão futura de `DROP TABLE` definitivo das 12 tabelas órfãs.
+- Tela de reatribuição de contagem cíclica (endpoint `PUT
+  /api/inventory-counts/:id/reassign` já existe, sem UI).
+- Tela de cadastro do Item Mestre com o campo `fornecedor_padrao_id`
+  (o campo existe e funciona no backend, mas nenhuma UI o consome ainda).
+- `rfq_number` gerado por `COUNT(*)` do ano (`RFQ-<ano>-XXXX`) — mesma
+  tolerância a corrida já aceita em outros geradores de número sequencial
+  do projeto; mitigado por `UNIQUE(rfq_number)` (falha explícita em vez de
+  duplicata silenciosa), sem retry automático.
+
+**Documentos atualizados nesta consolidação:** `docs/API.md` (RFQ §11.1,
+financeiro §6, OEE §7, nota de breaking change em §3), `docs/DATABASE.md`
+(tabelas RFQ, `cost_centers`, correção das 7 colunas-bomba, `DEPRECATED`
+nas 12 tabelas órfãs), `docs/LEVANTAMENTO_ERP_2026-08-02.md` (seção 2,
+tabela de módulos, item 9, seção "Bombas latentes conhecidas"),
+`docs/governance/TODO.md` (itens novos de risco residual),
+`docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md` (contagem de
+migrations, roadmap), este arquivo (esta seção).

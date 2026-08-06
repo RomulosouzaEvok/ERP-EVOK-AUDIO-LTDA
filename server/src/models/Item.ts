@@ -23,7 +23,8 @@ interface ItemAttributes {
   lote_minimo: string;
   lead_time_dias: number;
   custo_padrao: string;
-  fornecedor_padrao_id: string | null;
+  /** FK -> suppliers.id (INTEGER). Corrigido em 20260806-000040 (era uuid). */
+  fornecedor_padrao_id: number | null;
   /**
    * Opt-in do ciclo automatico do MRP (roadmap pos-Go-Live item 3): quando
    * `true`, ordens planejadas `RASCUNHO` deste item sao convertidas em
@@ -103,7 +104,7 @@ const Item: ModelDefined<ItemAttributes, ItemCreationAttributes> = sequelize.def
     defaultValue: 0,
   },
   fornecedor_padrao_id: {
-    type: DataTypes.UUID,
+    type: DataTypes.INTEGER,
     allowNull: true,
   },
   conversao_automatica: {

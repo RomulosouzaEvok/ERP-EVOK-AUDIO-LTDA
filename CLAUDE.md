@@ -23,7 +23,7 @@
 
 ### Status Atual
 - ✅ Backend: Node.js + Express + Sequelize (30+ módulos, Clean Architecture — use-cases desacoplados do Sequelize direto em 22+ módulos desde 2026-08-05)
-- ✅ Database: PostgreSQL 16 (54 migrations versionadas, 148+ foreign keys)
+- ✅ Database: PostgreSQL 16 (59 migrations versionadas, 159+ foreign keys — RFQ + centros de custo, 2026-08-06)
 - ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, configuração fiscal e auditor inteligente foram cabeados entre 2026-08-02 e 2026-08-05); as únicas exceções por desenho são o inventário mobile (QR, propositalmente mobile-only) e os endpoints de webhook (sem UI, são integração backend-to-backend)
 - ✅ **App mobile novo** (`mobile/`, Expo/React Native): login JWT, scan de estoque QR, histórico de movimentações, execução de contagens cíclicas (pool/atribuídas) — entregue em 2026-08-06, validado só por typecheck/bundle, **sem teste em dispositivo real ainda**
 - ✅ **App Android TV novo** (`tv/`, react-native-tvos): painel de demandas por departamento (recebimento, requisições, expedição, qualidade), auto-refresh 60s — entregue em 2026-08-06, mesma ressalva de validação (sem hardware real testado)
@@ -134,6 +134,7 @@ erp-evok-audio/
 
 ### Compras & Suprimentos
 - **Requisição de Compra (NOVO):** Origem da cadeia de suprimentos, rastreabilidade 100% (bloqueador P0)
+- **Cotação / RFQ multi-fornecedor (NOVO, 2026-08-06):** `/api/rfqs`, tela `/purchases/rfqs` — cria cotação avulsa ou a partir de requisição, convida fornecedores, registra cotações (mapa comparativo com melhor preço/prazo destacados), adjudica por item (podendo dividir entre fornecedores), gera pedido(s) de compra por fornecedor vencedor e realimenta o catálogo `item_suppliers`
 - **Pedido de Compra:** Origem em Requisição, status (pending → approved → sent → partial → received)
 - **Fornecedores:** Avaliação, prazos, termos de pagamento
 - **Recebimento:** Entrada no estoque, geração de Contas a Pagar (pós-recebimento, não em aprovação)
@@ -148,8 +149,9 @@ erp-evok-audio/
 ### Vendas & Financeiro
 - **Pedidos:** Itens, descontos, transições de status (quote → confirmed → invoiced)
 - **Contas a Receber:** Origem em vendas, controle de inadimplência
-- **Contas a Pagar:** Manual + automática de compras (no recebimento)
-- **Fluxo de Caixa:** Projeção 30 dias, conciliação
+- **Contas a Pagar:** Manual + automática de compras (no recebimento); `cost_center_id` opcional (NOVO, 2026-08-06)
+- **Centros de Custo (NOVO, 2026-08-06):** CRUD + relatório agrupado (`GET /api/finance/cost-centers/report`), atribuição em contas a pagar/receber existentes
+- **Fluxo de Caixa:** Projeção semanal 30/60/90 dias + **projeção diária (NOVO, 2026-08-06)** com saldo acumulado dia a dia (`GET /api/finance/cashflow/projection`); conciliação bancária/CNAB ainda pendente (ver `docs/governance/TODO.md`)
 - **Relatórios:** Dashboard KPI (vendas hoje/mês/ano), análise cliente
 
 ### Qualidade & Compliance
@@ -176,13 +178,14 @@ Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-
 
 ### Roadmap
 1. **Fase 1 (P0):** ✅ Concluída em 2026-08-02 → **próximo: UAT → Go-Live G6**
-2. **Fase 2 (P1):** ✅ Majoritariamente entregue entre 2026-08-04 e 2026-08-06 — catálogo item×fornecedor (N:N), conversão requisição→pedido, MRP fecha ciclo (plano→OP e plano→requisição), telas de MRP/requisição/qualidade, custeio real de mão-de-obra/overhead, rastreabilidade por lote/QR, perfis de acesso configuráveis (RBAC completo), múltiplos depósitos, apps mobile e Android TV. **O que realmente falta desta fase:**
+2. **Fase 2 (P1):** ✅ Majoritariamente entregue entre 2026-08-04 e 2026-08-06 — catálogo item×fornecedor (N:N), **Cotação/RFQ multi-fornecedor (NOVO)**, conversão requisição→pedido, MRP fecha ciclo (plano→OP e plano→requisição), telas de MRP/requisição/qualidade, custeio real de mão-de-obra/overhead, rastreabilidade por lote/QR, perfis de acesso configuráveis (RBAC completo), múltiplos depósitos, **centros de custo + projeção diária de fluxo de caixa (NOVO)**, **OEE completo (NOVO)**, apps mobile e Android TV. **O que realmente falta desta fase:**
    - Validação em hardware real dos apps `mobile/`/`tv/` (checklist em `mobile/README.md` §5 e `tv/README.md` §5)
    - Decisão de produto sobre JWT de 7 dias × painel de TV sempre ligado (ver `docs/governance/TODO.md`, seção 2026-08-06)
    - Teste de integração de concorrência real do claim de contagem cíclica (2 clients simultâneos contra Postgres)
    - Backfill retroativo de custo de mão-de-obra/overhead em OPs concluídas antes de 2026-08-04 (decisão consciente de não fazer, registrada como risco residual)
-3. **Fase 3 (P2):** Capacidade finita/centros de trabalho, custo real vs padrão, TypeScript strict
-4. **Fase 4 (P3):** Relatórios de manufatura (OEE, refugo), CI/CD, unificação schema legado/novo
+   - Conciliação bancária/CNAB, mapeamento departamento→centro de custo na AP automática, campo de downtime real para OEE preciso (ver `docs/governance/TODO.md`, seção 2026-08-06 segunda rodada)
+3. **Fase 3 (P2):** Capacidade finita/centros de trabalho, TypeScript strict
+4. **Fase 4 (P3):** Refugo detalhado por etapa, CI/CD, unificação schema legado/novo (decisão futura de `DROP TABLE` das 12 tabelas órfãs do schema-fantasma em português, marcadas `DEPRECATED` em 2026-08-06 — ver `docs/DATABASE.md`)
 5. **Infra de produção (bloqueia deploy, independente das fases acima):** servidor de produção (VPS/on-premise) ainda não adquirido; reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato e cron de backup aguardando essa compra — ver `docs/infra/DEPLOY_UBUNTU.md` e `docs/GO_LIVE_G6_CHECKLIST.md`
 
 ---
@@ -268,7 +271,7 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 **Tradeoff:** Menos previsível (não há "MRP run" com hora específica), mas mais preciso.
 
 ### Foreign Keys Obrigatórias
-**Decisão:** Integridade referencial obrigatória — 148+ FKs aplicadas via migrations versionadas (base de 133 em 2026-08-02, expandida por schema novo desde então), com `ON DELETE RESTRICT` (padrão) ou `CASCADE`/`SET NULL` (quando apropriado).
+**Decisão:** Integridade referencial obrigatória — 159+ FKs aplicadas via migrations versionadas (base de 133 em 2026-08-02, expandida por schema novo desde então, incluindo RFQ + centros de custo em 2026-08-06), com `ON DELETE RESTRICT` (padrão) ou `CASCADE`/`SET NULL` (quando apropriado).
 
 **Por quê:** Integridade referencial, sem órfãos, auditoria
 **Tradeoff:** Mais rígido (ex: não pode deletar fornecedor com compras abertas), mas banco garante consistência

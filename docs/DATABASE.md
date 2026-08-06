@@ -2,7 +2,7 @@
 
 ## Tecnologia
 - **ORM:** Sequelize 6.x
-- **Banco:** PostgreSQL 16 (único suportado; 24+ migrations versionadas, 133 FKs)
+- **Banco:** PostgreSQL 16 (único suportado; 59 migrations versionadas em 2026-08-06, 133+ FKs)
 - **Migrações:** `sequelize-cli` com migrations versionadas em todos os ambientes
 
 ---
@@ -1488,3 +1488,238 @@ simples, sem efeitos colaterais em outras tabelas).
 - Testes de invariante: `server/tests/unit/warehouse-invariants.test.ts`,
   describe "Invariante 3 — contagem ciclica...".
 
+---
+
+## Cotação / RFQ Multi-Fornecedor (`rfqs`, `rfq_items`, `rfq_suppliers`, `rfq_quotes`) — 2026-08-06
+
+Fecha o gap "Cotação/RFQ multi-fornecedor" (item 1,
+`docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 2). Módulo
+`server/src/modules/rfq/`. Contrato completo dos endpoints em
+`docs/API.md` §11.1.
+
+### Tabela: `rfqs` (Cabeçalho da Cotação)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| rfq_number | VARCHAR(60) | UNIQUE, NOT NULL | Número da cotação, formato `RFQ-<ano>-XXXX` |
+| requisition_id | INT | FK → purchase_requisitions.id, ON DELETE RESTRICT, NULL | Origem opcional (RFQ pode nascer de requisição ou ser avulsa) |
+| status | ENUM('draft','sent','quoted','awarded','cancelled') | NOT NULL, DEFAULT 'draft' | Máquina de status: `draft → sent → quoted → awarded` (`cancelled` reservado, sem transição implementada ainda) |
+| created_by | INT | FK → users.id, ON DELETE RESTRICT, NOT NULL | Comprador que criou a cotação |
+| response_deadline | DATE | - | Prazo de resposta dos fornecedores convidados |
+| notes | TEXT | - | Observações |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria (snake_case, `underscored: true`) |
+
+**Índices:** `requisition_id`, `status`, `created_by`.
+
+### Tabela: `rfq_items` (Itens Cotados)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| rfq_id | INT | FK → rfqs.id, ON DELETE CASCADE, NOT NULL | Cotação dona do item |
+| item_id | UUID | FK → items.id, ON DELETE RESTRICT, NOT NULL | Item industrial cotado |
+| quantity | DECIMAL(18,6) | NOT NULL | Quantidade a cotar |
+| unit | VARCHAR(12) | - | Unidade |
+| awarded_supplier_id | INT | FK → suppliers.id, ON DELETE RESTRICT, NULL | Preenchido em `POST /api/rfqs/:id/award` — fornecedor vencedor deste item |
+| awarded_unit_price | DECIMAL(18,6) | - | Preço unitário cotado do vencedor, **congelado** no momento da adjudicação (auditoria/exibição sem recalcular o mapa comparativo) |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+**Índices:** `rfq_id`, `item_id`, `awarded_supplier_id`.
+
+### Tabela: `rfq_suppliers` (Fornecedores Convidados)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| rfq_id | INT | FK → rfqs.id, ON DELETE CASCADE, NOT NULL | Cotação |
+| supplier_id | INT | FK → suppliers.id, ON DELETE RESTRICT, NOT NULL | Fornecedor convidado |
+| status | ENUM('invited','responded','declined') | NOT NULL, DEFAULT 'invited' | Status do convite |
+| invited_at | TIMESTAMP | NOT NULL, DEFAULT NOW() | Data do convite |
+| responded_at | TIMESTAMP | - | Data da resposta |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+**Constraints:** `UNIQUE(rfq_id, supplier_id)` (`uq_rfq_suppliers_rfq_supplier`).
+**Índices:** `rfq_id`, `supplier_id`, `status`.
+
+### Tabela: `rfq_quotes` (Resposta de Cotação por Item × Fornecedor)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| rfq_item_id | INT | FK → rfq_items.id, ON DELETE CASCADE, NOT NULL | Item cotado |
+| supplier_id | INT | FK → suppliers.id, ON DELETE RESTRICT, NOT NULL | Fornecedor que respondeu |
+| unit_price | DECIMAL(18,6) | NOT NULL | Preço unitário cotado |
+| lead_time_days | INT | - | Prazo de entrega cotado |
+| moq | DECIMAL(18,6) | - | Quantidade mínima de compra cotada |
+| validity_date | DATE | - | Validade da cotação, informada pelo fornecedor |
+| notes | TEXT | - | Observações |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+**Constraints:** `UNIQUE(rfq_item_id, supplier_id)` (`uq_rfq_quotes_item_supplier`)
+— upsert por par item × fornecedor (reenviar substitui a cotação anterior).
+**Índices:** `rfq_item_id`, `supplier_id`.
+
+**Migration:** `server/migrations/20260806-000010-create-rfq-tables.cjs`
+(schema estático, sem backfill — módulo novo).
+
+**Efeitos colaterais da adjudicação (`POST /api/rfqs/:id/award`), fora
+destas 4 tabelas, todos na mesma transação:** gera um `purchase_order` por
+fornecedor vencedor; faz upsert em `item_suppliers` (catálogo item ×
+fornecedor) com o preço/prazo/MOQ do vencedor. RFQ travada via `SELECT
+... FOR UPDATE` durante a operação (impede adjudicações concorrentes
+duplicadas).
+
+---
+
+## Financeiro — Centros de Custo (`cost_centers`) — 2026-08-06
+
+Fecha o gap "centros de custo" (`docs/LEVANTAMENTO_ERP_2026-08-02.md`,
+linha `financial`). Módulo `server/src/modules/financial/`. Contrato
+completo dos endpoints em `docs/API.md` §6.
+
+### Tabela: `cost_centers` (Centros de Custo)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| code | VARCHAR(30) | UNIQUE, NOT NULL | Código do centro de custo |
+| name | VARCHAR(100) | NOT NULL | Nome |
+| description | TEXT | - | Descrição livre |
+| active | BOOLEAN | NOT NULL, DEFAULT true | Soft delete |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+### Alteração em `accounts_payable` e `accounts_receivable`
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| cost_center_id | INT | FK → cost_centers.id, ON DELETE SET NULL, NULL | Centro de custo do lançamento. **Coexiste** com a coluna legada `accounts_payable.cost_center` (VARCHAR(100), texto livre, não normalizado) — a nova coluna é a fonte estruturada usada pelo relatório `GET /api/finance/cost-centers/report`; a legada não foi removida nem migrada automaticamente |
+
+**Índices:** `idx_accounts_payable_cost_center_id`, `idx_accounts_receivable_cost_center_id`.
+
+**Migration:** `server/migrations/20260806-000020-create-cost-centers.cjs`
+— idempotente (checa `showAllTables()`/`describeTable()` antes de criar,
+pois a migration baseline `20260731-000001-baseline-schema.cjs` já cria
+tabelas a partir dos models Sequelize atuais — um banco criado do zero
+após este commit já nasce com `cost_centers`/`cost_center_id` prontos).
+**Sem backfill:** todo o histórico existente nasce com `cost_center_id =
+NULL` (agregado como `"Sem centro de custo"` no relatório) — não há
+mapeamento automático seguro de lançamentos antigos para um centro de
+custo específico.
+
+**Risco residual registrado (não implementado nesta entrega):** mapeamento
+automático departamento → centro de custo na criação automática de
+`AccountPayable` (ex.: ao aprovar um pedido de compra) — hoje
+`cost_center_id` só é atribuído manualmente via `PUT
+.../cost-center` ou no payload de `POST /api/finance/payable`. Ver
+`docs/governance/TODO.md`.
+
+---
+
+## Correção de "bombas latentes" UUID × INTEGER (7 colunas) — 2026-08-06
+
+Continuação do mesmo padrão de bug já corrigido em `item_estruturas`
+(migration `20260802-000005-fix-item-estruturas-user-columns`) e listado
+como pendência em `docs/LEVANTAMENTO_ERP_2026-08-02.md`, seção "Bombas
+latentes conhecidas": colunas `UUID` referenciando usuário/fornecedor
+`INTEGER`, tornando o campo estruturalmente impossível de preencher
+corretamente via API (ou quebrando em runtime com `operator does not
+exist: uuid = integer` em qualquer `include`).
+
+### 1. Bomba real em tabela viva: `items.fornecedor_padrao_id`
+| Antes | Depois |
+|-------|--------|
+| `UUID`, FK → `fornecedores.id` (tabela órfã em português, também UUID) | `INTEGER`, FK → `suppliers.id` (`ON DELETE SET NULL`) |
+
+`suppliers.id` sempre foi `INTEGER`, mas `items.fornecedor_padrao_id`
+nasceu `UUID` (herdado por engano do `01_schema.sql`), enquanto o código
+(`models/index.ts`: `Item.belongsTo(Supplier, { foreignKey:
+'fornecedor_padrao_id' })`) sempre associou a coluna ao model `Supplier`
+real. Diagnóstico antes do fix (banco real, 2026-08-06): `items` tinha 13
+linhas, `fornecedor_padrao_id` 100% `NULL` (0/13) — sem dado incompatível
+a migrar, correção segura. Model (`Item.ts`) e validators
+(`itemValidators.ts`, `z.coerce.number().int().positive().nullable().optional()`)
+atualizados no mesmo commit. **BREAKING CHANGE de API:** ver
+`docs/API.md` §3 (nota no topo da seção Produtos).
+
+**Migration:** `server/migrations/20260806-000040-fix-items-fornecedor-padrao-id-type.cjs`.
+
+### 2–7. Bombas em tabelas órfãs do schema-fantasma em português
+As 4 colunas já documentadas em `docs/LEVANTAMENTO_ERP_2026-08-02.md`
+("Bombas latentes conhecidas") + 2 encontradas nesta rodada pelo mesmo
+padrão de auditoria:
+
+| Tabela | Coluna | Antes | Depois |
+|--------|--------|-------|--------|
+| `requisicoes_compra` | `aprovado_por` | UUID → `usuarios.id` | INTEGER → `users.id` (`ON DELETE SET NULL`) |
+| `requisicoes_compra` | `solicitante_id` *(novo nesta rodada)* | UUID → `usuarios.id` | INTEGER → `users.id` (`ON DELETE SET NULL`) |
+| `ordens_producao` | `criado_por` | UUID → `usuarios.id` | INTEGER → `users.id` (`ON DELETE SET NULL`) |
+| `movimentos_estoque` | `usuario_id` | UUID → `usuarios.id` | INTEGER → `users.id` (`ON DELETE SET NULL`) |
+| `auditoria_eventos` | `usuario_id` | UUID → `usuarios.id` | INTEGER → `users.id` (`ON DELETE SET NULL`) |
+| `entradas_nf` | `recebido_por` *(novo nesta rodada)* | UUID → `usuarios.id` | INTEGER → `users.id` (`ON DELETE SET NULL`) |
+
+Todas as 6 colunas estavam 100% vazias (`0` linhas não nulas) em todas as
+tabelas — confirmado por `SELECT count(*)` antes da migration (que aborta
+com erro explícito se encontrar qualquer linha não nula, guarda de
+segurança). As tabelas em si (`requisicoes_compra`, `ordens_producao`,
+`movimentos_estoque`, `auditoria_eventos`, `entradas_nf`) são elas mesmas
+órfãs (ver seção seguinte) — a correção de tipo aqui é preventiva: se esse
+schema-fantasma for reaproveitado por engano no futuro, o tipo já aponta
+para a fonte de verdade real de usuários (`users`, não `usuarios`).
+
+**Migration:** `server/migrations/20260806-000041-fix-orphan-pt-schema-user-columns.cjs`.
+
+---
+
+## Tabelas órfãs do schema-fantasma em português — `[DESCONTINUADO]` (2026-08-06)
+
+12 tabelas criadas pelo `01_schema.sql`/migration baseline
+(`20260731-000001-baseline-schema.cjs`) em um schema em português que
+**nunca foi adotado pelo app real** — confirmado por auditoria completa:
+**0 linhas** em todas, **0 models Sequelize**, **0 referências** em
+`server/src` (controllers, use cases, repositories, migrations
+posteriores) fora de comentários genéricos sem relação com a tabela.
+
+| Tabela órfã (português) | Equivalente ativo (inglês, em uso real) |
+|---|---|
+| `usuarios` | `users` |
+| `fornecedores` | `suppliers` |
+| `lotes` | `lot_controls` |
+| `numeros_serie` | `serial_numbers` |
+| `requisicoes_compra` | `purchase_requisitions` |
+| `requisicao_compra_items` | `purchase_requisition_items` |
+| `entradas_nf` | `purchase_receipts` (dados de recebimento) |
+| `entradas_nf_items` | idem |
+| `ordens_producao` | `production_orders` |
+| `movimentos_estoque` | `inventory_movements` |
+| `webhooks_eventos` | `webhook_events` |
+| `auditoria_eventos` | `audit_logs` |
+
+**Decisão (2026-08-06):** nenhuma tabela foi removida (`DROP TABLE`) —
+princípio de nunca derrubar dado potencialmente fiscal/auditável sem uma
+decisão explícita e uma janela de confirmação maior que uma única rodada
+de trabalho. Cada tabela recebeu apenas `COMMENT ON TABLE` marcando-a
+`DEPRECATED`, visível em `\dt`/pgAdmin/DataGrip/qualquer client SQL:
+
+> "DEPRECATED (2026-08-06): tabela órfã do schema-fantasma em português
+> criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso
+> em código vivo (confirmado por auditoria). NÃO usar em código novo.
+> Equivalente ativo em inglês com PKs INTEGER. Ver
+> docs/LEVANTAMENTO_ERP_2026-08-02.md e
+> server/tests/unit/no-orphan-pt-schema-tables.test.ts."
+
+**Migration:** `server/migrations/20260806-000042-comment-deprecated-orphan-pt-schema-tables.cjs`.
+
+**Fora de escopo desta marcação (schema em português que É o canônico
+vivo, fases 1–4 da unificação Item — NÃO recebeu o comentário):** `items`,
+`item_categorias`, `item_detalhes_comerciais`,
+`item_especificacoes_tecnicas`, `item_estruturas`,
+`mrp_ordens_planejadas` — todas com model Sequelize e uso ativo em
+`server/src`.
+
+**Teste de guarda anti-regressão:**
+`server/tests/unit/no-orphan-pt-schema-tables.test.ts` (14 casos) — falha
+o build se qualquer arquivo novo em `server/src` referenciar uma das 12
+tabelas órfãs listadas acima (nome de tabela em query raw, `sequelize.define`,
+`tableName` de model, etc.). **Limitação registrada:** a guarda cobre
+apenas `server/src`; não varre `server/migrations/*.cjs` (migrations
+antigas legitimamente referenciam essas tabelas para criá-las/alterá-las).
+
+**Decisão futura em aberto:** avaliar `DROP TABLE` definitivo dessas 12
+tabelas em uma janela dedicada, após confirmação formal de que não há
+nenhuma dependência de auditoria/compliance sobre o schema-fantasma — ver
+item registrado em `docs/governance/TODO.md`.

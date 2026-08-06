@@ -628,6 +628,22 @@ zero).
 > apenas a implementacao interna passou a usar entidades de dominio e use
 > cases. Detalhes em `server/src/modules/products/README.md`.
 
+> **BREAKING CHANGE (2026-08-06):** o Item Mestre canônico (`POST`/`PATCH
+> /api/items` — não confundir com `/api/products`, que é o schema legado)
+> tem o campo `fornecedor_padrao_id`. Até 2026-08-06 essa coluna era `UUID`
+> no banco (herdada por engano da tabela órfã `fornecedores`), mas o
+> código sempre associava a FK ao model `Supplier` real (`suppliers.id`,
+> `INTEGER`) — na prática o campo era impossível de preencher via API
+> (`operator does not exist: uuid = integer` em qualquer `include`).
+> Migration `20260806-000040-fix-items-fornecedor-padrao-id-type.cjs`
+> corrigiu a coluna para `INTEGER` com FK real para `suppliers(id)` (`ON
+> DELETE SET NULL`). **A partir de agora, `POST`/`PATCH /api/items` exige
+> um inteiro (`supplier_id`) em `fornecedor_padrao_id`, não mais um UUID**
+> (validator: `z.coerce.number().int().positive().nullable().optional()`
+> em `server/src/modules/items/presentation/validators/itemValidators.ts`).
+> Nenhum dado existente foi perdido — as 13 linhas de `items` em produção
+> tinham o campo 100% `NULL` no momento da correção.
+
 ---
 
 ## 4. Categorias
@@ -917,6 +933,106 @@ Títulos vencidos e não pagos (`due_date < hoje`) entram apenas em
 semana do horizonte futuro. `cumulative_net` acumula o `net` de todas as
 semanas anteriores.
 
+### GET /api/finance/cashflow/projection
+**(Novo, 2026-08-06)** Projeção de fluxo de caixa **diária** (série dia a
+dia com saldo acumulado a partir de um saldo de abertura informado) —
+complementa a projeção semanal acima (`GET /api/finance/cash-flow-projection`),
+que continua existindo sem alteração. `authorizeModule('financeiro')`
+(qualquer nível — leitura).
+
+**Query Params:**
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| days | int | Horizonte: **apenas `30`, `60` ou `90`** (default `30`; outros valores → 400) |
+| opening_balance | number | Saldo de caixa inicial informado pelo usuário (default `0`) |
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "horizon_days": 30,
+    "opening_balance": 10000.00,
+    "overdue": { "receivable": 1200.00, "payable": 300.00 },
+    "series": [
+      {
+        "date": "2026-08-06",
+        "day_index": 0,
+        "receivable": 4000.00,
+        "payable": 2500.00,
+        "net": 1500.00,
+        "balance": 11500.00
+      }
+    ],
+    "summary": {
+      "lowest_balance": { "date": "2026-08-14", "balance": 8200.00 },
+      "final_balance": 15300.00
+    }
+  }
+}
+```
+Regras:
+- A série cobre `[hoje, hoje + days]` inclusive (`days + 1` pontos, `day_index` de `0` a `days`).
+- Títulos **vencidos** (`due_date < hoje`, não pagos) são somados no dia `0` (hoje) da série — já deveriam ter movimentado o caixa — e também expostos separadamente em `overdue` para transparência.
+- `balance` de cada dia = saldo do dia anterior + `net` do dia (o dia `0` parte de `opening_balance`).
+- `summary.lowest_balance` é o menor `balance` de toda a série (calculado sobre saldos **após** a movimentação de cada dia, nunca sobre o `opening_balance` isolado) — é o "dado de decisão do CFO" para antecipar risco de caixa negativo.
+- Correção de fuso aplicada nesta entrega: datas `DATEONLY` (`due_date`) são normalizadas por componentes de calendário (ano/mês/dia), nunca via `new Date('YYYY-MM-DD')`/`toISOString()`, que deslocavam a série em 1 dia em fusos negativos (`America/Sao_Paulo`, UTC-3).
+
+### Centros de Custo (`/api/finance/cost-centers`)
+**(Novo, 2026-08-06)** Gap "centros de custo" de
+`docs/LEVANTAMENTO_ERP_2026-08-02.md`. `cost_center_id` (nullable, `ON
+DELETE SET NULL`) foi adicionado em `accounts_payable`/`accounts_receivable`
+— ver `docs/DATABASE.md`.
+
+| Método | Rota | Nível | Descrição |
+|--------|------|-------|-----------|
+| `GET` | `/api/finance/cost-centers` | leitura | Lista centros de custo (`page`, `limit`, `active`) |
+| `POST` | `/api/finance/cost-centers` | `operate` | Cria `{ code, name, description? }` (`code` único) |
+| `PUT` | `/api/finance/cost-centers/:id` | `operate` | Atualiza `{ code?, name?, description?, active? }` |
+| `GET` | `/api/finance/cost-centers/report?from=&to=` | leitura | Relatório agrupado por centro de custo |
+| `PUT` | `/api/finance/payable/:id/cost-center` | `operate` | Atribui/remove (`cost_center_id: null`) o centro de custo de uma conta a pagar existente |
+| `PUT` | `/api/finance/receivable/:id/cost-center` | `operate` | Idem, para conta a receber |
+| `POST` | `/api/finance/payable` | `operate` | Aceita `cost_center_id` (inteiro, opcional) no payload de criação |
+
+**Response de `GET /api/finance/cost-centers/report?from=2026-08-01&to=2026-08-31`:**
+```json
+{
+  "success": true,
+  "data": {
+    "period": { "from": "2026-08-01", "to": "2026-08-31" },
+    "groups": [
+      {
+        "cost_center_id": 1,
+        "code": "PROD",
+        "name": "Produção",
+        "receivable": { "open": 0, "realized": 0 },
+        "payable": { "open": 4500.00, "realized": 12000.00 }
+      },
+      {
+        "cost_center_id": null,
+        "code": null,
+        "name": "Sem centro de custo",
+        "receivable": { "open": 25000.00, "realized": 13000.00 },
+        "payable": { "open": 500.00, "realized": 0 }
+      }
+    ],
+    "totals": {
+      "receivable": { "open": 25000.00, "realized": 13000.00 },
+      "payable": { "open": 5000.00, "realized": 12000.00 }
+    }
+  }
+}
+```
+O grupo `"Sem centro de custo"` (`cost_center_id: null`) sempre aparece,
+mesmo sem nenhum lançamento no período — cobre 100% do histórico
+pré-existente, que nasce sem `cost_center_id` (sem backfill retroativo,
+decisão registrada na migration `20260806-000020-create-cost-centers.cjs`:
+não há mapeamento automático seguro de lançamentos antigos para um centro
+de custo específico). **Fora de escopo, registrado como próxima etapa do
+módulo:** mapeamento automático departamento→centro de custo na criação
+automática de `AccountPayable` (ex.: ao aprovar um pedido de compra),
+conciliação bancária/CNAB — ver `docs/governance/TODO.md`.
+
 ---
 
 ## 7. Relatórios
@@ -955,6 +1071,110 @@ Relatório de fluxo de caixa.
   }
 }
 ```
+
+### GET /api/reports/oee
+**(Novo, 2026-08-06)** OEE (Overall Equipment Effectiveness) por centro de
+trabalho e agregado geral — fecha o item 7/9 do
+`docs/LEVANTAMENTO_ERP_2026-08-02.md` ("OEE completo"). `authorizeModule
+('relatorios.producao')` (mesma sub-permissão de `GET /api/reports/production`).
+
+**Query Params:**
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| start_date | date | Início do período (default: 30 dias atrás) |
+| end_date | date | Fim do período (default: hoje) |
+| work_center_id | int | Filtra um único centro de trabalho (opcional) |
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "report_type": "oee",
+    "generated_at": "2026-08-06T15:00:00.000Z",
+    "period": { "start_date": "2026-07-07", "end_date": "2026-08-06" },
+    "work_center_id": null,
+    "by_work_center": [
+      {
+        "work_center_id": 1,
+        "code": "CNC-01",
+        "name": "Corte CNC",
+        "has_shifts": true,
+        "available_hours": 176.0,
+        "run_hours": 140.5,
+        "standard_hours": 132.0,
+        "quantity_good": 980,
+        "quantity_scrapped": 20,
+        "tracking_count": 42,
+        "availability": 0.7983,
+        "performance": 0.9395,
+        "quality": 0.98,
+        "oee": 0.7351,
+        "no_data_reason": null
+      }
+    ],
+    "aggregate": {
+      "available_hours": 176.0,
+      "run_hours": 140.5,
+      "standard_hours": 132.0,
+      "quantity_good": 980,
+      "quantity_scrapped": 20,
+      "tracking_count": 42,
+      "availability": 0.7983,
+      "performance": 0.9395,
+      "quality": 0.98,
+      "oee": 0.7351,
+      "no_data_reason": null,
+      "work_centers_count": 1
+    }
+  }
+}
+```
+
+**Fórmulas (os 3 eixos clássicos de OEE):**
+- **Disponibilidade** = horas produzindo (`run_hours`, somadas de
+  `production_order_tracking` — apontamentos `completed` no período) /
+  horas disponíveis (`available_hours`, calculadas do calendário de turnos
+  do centro, `work_center_shifts`, multiplicado pelas ocorrências de cada
+  dia da semana no período × `machines_count` × `efficiency_factor`; sem
+  turnos cadastrados, usa o fallback `capacity_hours_per_day × dias do
+  período × machines_count × efficiency_factor`).
+- **Performance** = (tempo padrão × unidades processadas) / tempo real
+  apontado, ambos agregados por centro. Tempo padrão usa
+  `standard_time_minutes` da etapa de roteiro; "unidades processadas" =
+  boas + refugadas.
+- **Qualidade** = unidades boas / (boas + refugadas), agregado por centro
+  no período.
+- **OEE = Disponibilidade × Performance × Qualidade**, calculado somente
+  quando os 3 eixos são não-nulos.
+- Cada eixo individual é limitado a 100% (`Math.min(rate, 1)`) — valores
+  acima de 100% indicariam horas extras não cadastradas no calendário de
+  turnos, nunca eficiência real acima do ideal; as horas brutas
+  (`available_hours`/`run_hours`/`standard_hours`) permanecem sem cap no
+  payload, para auditoria.
+- `availability`/`performance`/`quality`/`oee` são **`null`** (nunca `0`
+  artificial/enganoso) quando o denominador correspondente é zero;
+  `no_data_reason` explica o motivo em texto (ex.: "sem apontamento
+  concluído no período").
+- `aggregate` **soma as bases brutas de todos os centros e recalcula os 3
+  eixos sobre os totais** — não é a média das taxas por centro (uma média
+  simples distorceria o resultado quando os centros têm volumes de
+  produção muito diferentes).
+
+**LIMITAÇÃO DOCUMENTADA (downtime não modelado):** o schema atual
+(`production_order_tracking`) não tem um campo explícito de parada de
+máquina/downtime — apenas `started_at`/`finished_at`/`status` por etapa
+(incluindo o status `paused`, mas sem timestamp de início/fim de pausa).
+Por isso a **Disponibilidade é uma aproximação por calendário de turnos**
+(tempo apontado vs. tempo disponível do centro), **sem desconto de
+paradas reais registradas**. Se o schema ganhar um registro explícito de
+downtime no futuro, a fórmula deve passar a descontar as paradas do tempo
+disponível em vez de inferir apenas pelo tempo apontado — ver
+`docs/governance/TODO.md`.
+
+Implementado em `server/src/modules/reports/application/use-cases/GetOeeReportUseCase.ts`.
+Sem migration nova (reaproveita `production_order_tracking`, `work_centers`,
+`work_center_shifts`, `production_route_steps`).
 
 ---
 
@@ -1467,6 +1687,170 @@ Cada item não pode exceder a quantidade pendente (`quantity - received_quantity
 > mesmo padrão já adotado em `inventory`/`bom`/`production`). Ver
 > `server/src/modules/purchases/README.md` para detalhes de regras de
 > negócio, a máquina de estados e a correção de atomicidade da aprovação.
+
+---
+
+## 11.1 Cotação / RFQ (Multi-fornecedor)
+
+**(Novo, 2026-08-06)** Módulo `server/src/modules/rfq/` — fecha o gap
+"Cotação/RFQ multi-fornecedor" do item 1 (`docs/LEVANTAMENTO_ERP_2026-08-02.md`
+seção 2). Tabelas `rfqs`/`rfq_items`/`rfq_suppliers`/`rfq_quotes` (migration
+`20260806-000010-create-rfq-tables.cjs`, ver `docs/DATABASE.md`). Todas as
+rotas exigem `authenticate` + `authorizeModule('compras', ...)` — leitura
+para `GET`, `operate` para criação/convite/cotação, **`approve`** (nível
+gestor) para adjudicar. Página web: `/purchases/rfqs`. Testado ao vivo
+ponta a ponta.
+
+**Máquina de status:** `draft → sent → quoted → awarded` (`cancelled`
+reservado, ainda sem transição implementada).
+
+### GET /api/rfqs
+Lista cotações, paginada.
+
+**Query Params:** `page`, `limit` (máx. 100), `status` (`draft`/`sent`/`quoted`/`awarded`/`cancelled`), `requisition_id`
+
+### GET /api/rfqs/:id
+Detalhe completo (itens, fornecedores convidados, cotações recebidas).
+
+### GET /api/rfqs/:id/comparison
+Mapa comparativo item × fornecedor.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "rfq": { "id": 12, "rfq_number": "RFQ-2026-0012", "status": "quoted", "requisition_id": 45 },
+    "items": [
+      {
+        "rfq_item_id": 101,
+        "item_id": "9f2b...uuid",
+        "item": { "id": "9f2b...uuid", "codigo": "BOB-8POL", "descricao": "Bobina 8 polegadas" },
+        "quantity": 500,
+        "unit": "un",
+        "awarded_supplier_id": null,
+        "awarded_unit_price": null,
+        "quotes": [
+          {
+            "quote_id": 1,
+            "supplier_id": 3,
+            "supplier_name": "Fornecedor X",
+            "unit_price": 12.50,
+            "lead_time_days": 10,
+            "moq": 100,
+            "validity_date": "2026-09-01",
+            "notes": null,
+            "line_total": 6250.00,
+            "is_best_price": true,
+            "is_best_lead_time": false
+          }
+        ]
+      }
+    ],
+    "supplier_totals": [
+      { "supplier_id": 3, "supplier_name": "Fornecedor X", "items_quoted_count": 1, "total_amount": 6250.00 }
+    ]
+  }
+}
+```
+`is_best_price`/`is_best_lead_time` são calculados por item, entre os
+fornecedores que efetivamente cotaram aquele item. `supplier_totals` é
+ordenado por `total_amount` crescente.
+
+### POST /api/rfqs
+Cria uma cotação — **avulsa** (`items`) OU **a partir de uma requisição**
+(`requisition_id`), nunca os dois nem nenhum (XOR validado no schema).
+
+**Request (avulsa):**
+```json
+{
+  "items": [
+    { "item_id": "9f2b...uuid", "quantity": 500, "unit": "un" }
+  ],
+  "response_deadline": "2026-08-20",
+  "notes": "Cotação para reposição trimestral"
+}
+```
+**Request (a partir de requisição):**
+```json
+{ "requisition_id": 45 }
+```
+Gera `rfq_number` no formato `RFQ-<ano>-XXXX`, status inicial `draft`.
+
+### POST /api/rfqs/:id/suppliers
+Convida fornecedores a cotar (transiciona `draft → sent` no primeiro convite).
+
+**Request:**
+```json
+{ "supplier_ids": [3, 7, 12] }
+```
+
+### POST /api/rfqs/:id/quotes
+Registra a resposta de cotação de UM fornecedor (preço/prazo/MOQ/validade
+por item; upsert por par item × fornecedor — reenviar substitui a cotação
+anterior do mesmo fornecedor para o mesmo item).
+
+**Request:**
+```json
+{
+  "supplier_id": 3,
+  "items": [
+    {
+      "rfq_item_id": 101,
+      "unit_price": 12.50,
+      "lead_time_days": 10,
+      "moq": 100,
+      "validity_date": "2026-09-01",
+      "notes": "Preço válido para pedido único"
+    }
+  ]
+}
+```
+
+### POST /api/rfqs/:id/award
+**Adjudica** a cotação — escolhe, por item, o fornecedor vencedor entre os
+que cotaram (podendo dividir itens entre fornecedores diferentes). Exige
+`authorizeModule('compras', 'approve')`. RFQ precisa estar `quoted`.
+
+**Request:**
+```json
+{
+  "awards": [
+    { "rfq_item_id": 101, "supplier_id": 3 },
+    { "rfq_item_id": 102, "supplier_id": 7 }
+  ],
+  "notes": "Adjudicado por melhor prazo no item 102"
+}
+```
+**Efeitos, todos na mesma transação:**
+1. Gera **um Pedido de Compra por fornecedor vencedor** (agrupando os
+   itens adjudicados àquele fornecedor).
+2. Congela `rfq_items.awarded_supplier_id`/`awarded_unit_price` (preço
+   vencedor, para auditoria/exibição sem recalcular o mapa comparativo).
+3. Faz **upsert no catálogo `item_suppliers`** com o preço/prazo/MOQ do
+   vencedor (realimenta o catálogo item × fornecedor para as próximas
+   requisições/conversões).
+4. Marca a RFQ `awarded`.
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "purchase_orders": [ { "id": 88, "order_number": "PO-1754...-1", "supplier_id": 3, "total_amount": 6250.00, "items": [ ... ] } ],
+    "rfq_id": 12,
+    "rfq_status": "awarded"
+  }
+}
+```
+**Erros (422, `BusinessRuleError`):** RFQ não está `quoted`; item duplicado
+na adjudicação; `rfq_item_id` não pertence à RFQ; não há cotação
+registrada para o par item/fornecedor informado; item sem produto legado
+correspondente (`items.codigo` sem `products.code`).
+
+**Nota de concorrência:** a RFQ é travada via `SELECT ... FOR UPDATE`
+(repositório) durante a adjudicação, para impedir duas adjudicações
+concorrentes duplicadas na mesma RFQ.
 
 ---
 
