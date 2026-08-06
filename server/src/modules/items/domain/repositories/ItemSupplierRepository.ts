@@ -21,7 +21,7 @@ class ItemSupplierRepository {
   }
 
   /** Busca um vinculo pelo par (item_id, supplier_id), incluindo inativos. */
-  public async findByItemAndSupplier(_itemId: string, _supplierId: number): Promise<any | null> {
+  public async findByItemAndSupplier(_itemId: string, _supplierId: number, _transaction?: any): Promise<any | null> {
     throw new Error('ItemSupplierRepository.findByItemAndSupplier nao implementado.');
   }
 

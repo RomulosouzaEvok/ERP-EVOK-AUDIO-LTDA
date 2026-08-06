@@ -304,23 +304,31 @@ flowchart TD
     end
 
     subgraph SW_ATIVO_M["Atualização do ativo (patrimônio)"]
-        D14 --> D17{"Asset.status é<br/>atualizado automaticamente?"}
-        D17 -->|"NÃO — gap real de código"| D18["[PENDENTE] UpdateMaintenanceOrderUseCase<br/>não altera Asset.status;<br/>enum 'in_maintenance' existe no modelo<br/>mas não é setado por este fluxo hoje —<br/>atualização do ativo é manual, à parte"]
-        D18 --> D19([Fim — ordem de manutenção<br/>encerrada; ativo requer<br/>atualização manual de status])
-        D15 --> D20([Fim — ordem cancelada,<br/>sem alteração de ativo])
+        D9 --> D9B["[IMPLEMENTADO 2026-08-06]<br/>OM entra em in_progress →<br/>Asset.status = 'in_maintenance'<br/>(UpdateMaintenanceOrderUseCase,<br/>na mesma transação)"]
+        D14 --> D17{"Existe outra OM aberta<br/>(open/scheduled/in_progress/<br/>waiting_parts) para o mesmo ativo?"}
+        D17 -->|Não, e ativo ainda<br/>'in_maintenance'| D18["[IMPLEMENTADO] Asset.status = 'active'<br/>(releaseAssetFromMaintenanceIfNoOtherOpenOrders,<br/>UPDATE condicional — nunca ressuscita<br/>decommissioned/lost/returned_to_supplier)"]
+        D17 -->|Sim| D18B["Asset.status permanece<br/>'in_maintenance'<br/>(outra OM ainda em aberto)"]
+        D18 --> D19([Fim — ordem de manutenção<br/>encerrada; Asset.status<br/>sincronizado automaticamente])
+        D18B --> D19
+        D15 --> D17
     end
 ```
 
-**Observações de fidelidade ao código (importante — gap real, não
-suposição):** o modelo `Asset` tem o valor `in_maintenance` no enum
-`status`, mas nenhum use case do módulo `maintenance` (nem
-`CreateMaintenanceOrderUseCase`, nem `UpdateMaintenanceOrderUseCase`) altera
-esse campo automaticamente ao abrir/concluir uma ordem. O vínculo entre
-ordem de manutenção e ativo hoje é apenas via `asset_id` (associação de
-leitura). Isso está registrado como `RF-PAT-05 [PENDENTE]` em
-`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §8 — decisão de negócio a
-tomar: automatizar essa sincronização ou manter como atualização manual
-deliberada.
+**Observações de fidelidade ao código (atualizado 2026-08-06 — sincronização
+automática implementada, gap fechado):** o modelo `Asset` tem o valor
+`in_maintenance` no enum `status`, e agora **é** atribuído automaticamente
+pelo módulo `maintenance`: a transição da OM para `in_progress`
+(`UpdateMaintenanceOrderUseCase`) marca `Asset.status = 'in_maintenance'`;
+a conclusão (`completed`, mesmo use case) ou o cancelamento
+(`CancelMaintenanceOrderUseCase`) tentam devolver `Asset.status = 'active'`,
+mas **somente se** (a) não existir nenhuma outra OM aberta para o mesmo
+ativo, e (b) o ativo ainda estiver `in_maintenance` no momento (o `UPDATE`
+usa `WHERE status = 'in_maintenance'`, então nunca sobrescreve um ativo
+baixado — `decommissioned`/`lost`/`returned_to_supplier` — durante a
+manutenção). Toda a sincronização roda na mesma transação Sequelize da
+mudança de status da OM. Isso está registrado como `RF-PAT-05
+[IMPLEMENTADO]` em `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §8 e
+detalhado em `docs/patrimonio/03-MANUTENCAO.md` §6.
 
 ---
 

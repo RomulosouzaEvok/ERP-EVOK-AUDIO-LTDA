@@ -23,7 +23,17 @@ class DeactivateAssetUseCase extends UseCase<{ id: number | string }, { message:
    * @throws {NotFoundError} Se o ativo não existir.
    */
   public async execute({ id }: { id: number | string }): Promise<{ message: string }> {
-    const updated = await this.assetsRepository.update(id, { status: 'inactive' });
+    // NOTA (auditoria 2026-08-06): o valor anterior aqui era 'inactive', que
+    // NUNCA existiu no ENUM `enum_assets_status` do Postgres (nem em
+    // server/models/Asset.ts, nem em nenhuma migration — ver
+    // server/migrations/20260805-000006-add-asset-status-returned-to-supplier.cjs
+    // para o histórico de valores adicionados ao enum). Todo UPDATE com
+    // status='inactive' era rejeitado pelo Postgres com
+    // "invalid input value for enum enum_assets_status", fazendo
+    // DELETE /api/assets/:id retornar 500 em produção sempre que chamado.
+    // 'decommissioned' ("Baixado" no frontend, client/src/pages/patrimonio/
+    // AssetsPage.tsx) é o valor de enum correto para "ativo desativado/baixado".
+    const updated = await this.assetsRepository.update(id, { status: 'decommissioned' });
     if (!updated) {
       throw new NotFoundError('Ativo não encontrado');
     }

@@ -31,8 +31,11 @@ class SequelizeItemSupplierRepository extends ItemSupplierRepository {
   }
 
   /** @inheritdoc */
-  public async findByItemAndSupplier(itemId: string, supplierId: number): Promise<any | null> {
-    return ItemSupplier.findOne({ where: { item_id: itemId, supplier_id: supplierId } });
+  public async findByItemAndSupplier(itemId: string, supplierId: number, transaction?: any): Promise<any | null> {
+    return ItemSupplier.findOne({
+      where: { item_id: itemId, supplier_id: supplierId },
+      ...(transaction ? { transaction } : {}),
+    });
   }
 
   /** @inheritdoc */

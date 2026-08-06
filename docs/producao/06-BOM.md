@@ -25,7 +25,7 @@ O módulo **BOM (Bill of Materials)** é o coração da Engenharia do Produto. E
    │       ├── Surround de borracha (1 un)
    │       └── Cola especial (30g)
    │
-   ├── 🔄 MRP usa a BOM para calcular (ainda não implementado, ver docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md):
+   ├── 🔄 MRP usa a BOM para calcular (✅ implementado — `[IMPLEMENTADO]`, ver CLAUDE.md §4 e §1, UC-24/UC-24b em `docs/projeto/04-USE_CASES.md`; roda contra estoque real, não congelado, com tela dedicada em `/production/mrp`):
    │       ├── Quanto comprar de cada insumo
    │       ├── Quando comprar (baseado em lead time)
    │       └── Custo real do produto
@@ -327,7 +327,20 @@ Response:
 
 ### Fluxo: Criação de OP com BOM
 
-> Fluxo **alvo**. Hoje só os passos "Cria BOM" e "Explode BOM" (via `GET /explode`) existem no código. O restante (reserva automática de estoque, geração de lista de compras, apontamento de consumo) depende do MRP e do apontamento de produção, ainda não implementados — ver `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md.
+> **Correção (pente-fino 2026-08-06):** esta nota estava desatualizada —
+> ela dizia que o fluxo abaixo era só "alvo" e que MRP/reserva/apontamento
+> "ainda não implementados", citando `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`
+> (arquivo que não existe mais no repositório). Isso diverge do estado
+> real (`CLAUDE.md` §4/§5): hoje o fluxo completo já existe em produção —
+> "Cria BOM"/"Explode BOM" (`GET /explode`), MRP contra estoque real
+> (UC-24, `/production/mrp`), reserva automática de estoque na liberação
+> da OP (`ChangeProductionOrderStatusUseCase.reserveMaterials`), geração
+> de requisição de compra a partir de ordens planejadas do MRP (UC-24/
+> UC-24b, inclusive fechamento automático opt-in por item) e apontamento
+> de consumo/produção no chão de fábrica (UC-13, `/production/shop-floor`)
+> com baixa de estoque e apuração de custo real da OP (custeio de
+> mão-de-obra/overhead incluído desde 2026-08-04). O diagrama abaixo
+> reflete o fluxo real implementado, não mais um "alvo" futuro.
 
 ```mermaid
 flowchart TD

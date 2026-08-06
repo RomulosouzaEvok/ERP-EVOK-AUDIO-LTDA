@@ -8,7 +8,7 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 
 ---
 
-## Índice de tabelas (78)
+## Índice de tabelas (80)
 
 - [`access_profile_permissions`](#accessprofilepermissions)
 - [`access_profiles`](#accessprofiles)
@@ -32,6 +32,8 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 - [`entradas_nf`](#entradasnf) `[DEPRECATED]`
 - [`entradas_nf_items`](#entradasnfitems) `[DEPRECATED]`
 - [`fornecedores`](#fornecedores) `[DEPRECATED]`
+- [`import_process_items`](#importprocessitems)
+- [`import_processes`](#importprocesses)
 - [`inventory_count_items`](#inventorycountitems)
 - [`inventory_counts`](#inventorycounts)
 - [`inventory_movements`](#inventorymovements)
@@ -106,7 +108,7 @@ Matriz módulo × nível (operate/approve) de um perfil de acesso.
 
 ## `access_profiles`
 
-Perfis de acesso configuráveis por área (RBAC granular).
+Perfis de acesso configuráveis por área (RBAC granular). **Achado de nomenclatura (auditoria 2026-08-06):** colunas `nome`/`descricao` em português, único par PT nesta tabela — nome da tabela, demais colunas (`allowed_warehouses`, `active`, `created_at`/`updated_at`) e a tabela filha `access_profile_permissions` (`module`, `level`) são 100% em inglês. Não é bug funcional (aplicação/model já refletem exatamente isso), mas é uma inconsistência de convenção isolada — registrada aqui, sem correção automática nesta rodada (exigiria migration + ajuste de model/frontend, fora do escopo de reconferência).
 
 | Coluna | Tipo | Nulo? | Default | Chave |
 |---|---|---|---|---|
@@ -570,6 +572,56 @@ Projetos de Engenharia/P&D (PDP: concept→design→prototype→testing→homolo
 | `ativo` | BOOLEAN | NÃO | true | - |
 | `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
 | `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
+
+## `import_process_items`
+
+Itens de um Processo de Importação — quantidade, valor FOB unitário em moeda estrangeira, alíquotas de II/IPI/PIS/COFINS/ICMS informadas manualmente pelo Analista de Comex, e os valores calculados (`ImportTaxCalculator`): valor aduaneiro rateado, tributos (II/IPI/PIS/COFINS/ICMS "por dentro") e custo unitário nacionalizado final — usado na entrada de estoque. FK para `items` (núcleo canônico), não para `products` legado.
+
+| Coluna | Tipo | Nulo? | Default | Chave |
+|---|---|---|---|---|
+| `id` | INTEGER | NÃO | auto-increment | **PK** |
+| `import_process_id` | INTEGER | NÃO | - | FK → `import_processes.id` |
+| `item_id` | UUID | NÃO | - | FK → `items.id` |
+| `quantity` | NUMERIC(18,6) | NÃO | - | - |
+| `fob_unit_price` | NUMERIC(18,6) | NÃO | - | - |
+| `ii_rate` | NUMERIC(7,4) | NÃO | 0 | - |
+| `ipi_rate` | NUMERIC(7,4) | NÃO | 0 | - |
+| `pis_rate` | NUMERIC(7,4) | NÃO | 0 | - |
+| `cofins_rate` | NUMERIC(7,4) | NÃO | 0 | - |
+| `icms_rate` | NUMERIC(7,4) | NÃO | 0 | - |
+| `customs_value` | NUMERIC(18,6) | sim | - | - |
+| `ii_value` | NUMERIC(18,6) | sim | - | - |
+| `ipi_value` | NUMERIC(18,6) | sim | - | - |
+| `pis_value` | NUMERIC(18,6) | sim | - | - |
+| `cofins_value` | NUMERIC(18,6) | sim | - | - |
+| `icms_value` | NUMERIC(18,6) | sim | - | - |
+| `nationalized_unit_cost` | NUMERIC(18,6) | sim | - | - |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+
+## `import_processes`
+
+Processo de Importação/COMEX (UC-19) — cabeçalho: número `IMP-<ano>-XXXX`, fornecedor internacional (reutiliza `suppliers`, sem cadastro dedicado), status de acompanhamento (draft→shipped→arrived→customs_cleared→received, ou cancelled), câmbio (`exchange_rate`) e despesas em BRL (frete/seguro/outras) usadas no rateio pro-rata do valor aduaneiro entre os itens. Sem integração Siscomex/NCM (alíquotas informadas manualmente).
+
+| Coluna | Tipo | Nulo? | Default | Chave |
+|---|---|---|---|---|
+| `id` | INTEGER | NÃO | auto-increment | **PK** |
+| `process_number` | VARCHAR(60) | NÃO | - | UQ |
+| `supplier_id` | INTEGER | NÃO | - | FK → `suppliers.id` |
+| `status` | enum_import_processes_status | NÃO | 'draft'::enum_import_processes_status | - |
+| `fob_currency` | VARCHAR(3) | NÃO | 'USD'::character varying | - |
+| `exchange_rate` | NUMERIC(18,6) | NÃO | 1 | - |
+| `freight_value` | NUMERIC(18,6) | NÃO | 0 | - |
+| `insurance_value` | NUMERIC(18,6) | NÃO | 0 | - |
+| `other_expenses_value` | NUMERIC(18,6) | NÃO | 0 | - |
+| `shipped_at` | DATE | sim | - | - |
+| `arrived_at` | DATE | sim | - | - |
+| `customs_cleared_at` | DATE | sim | - | - |
+| `received_at` | DATE | sim | - | - |
+| `notes` | TEXT | sim | - | - |
+| `created_by` | INTEGER | NÃO | - | FK → `users.id` |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
 
 ## `inventory_count_items`
 

@@ -462,7 +462,28 @@ agente `AdmDBA`).
 | `AccessProfile`, `AccessProfilePermission` | `access_profiles`, `access_profile_permissions` | `AccessProfile 1--N AccessProfilePermission`; `User N--1 AccessProfile` |
 | `Warehouse`, `WarehouseTransfer` | `warehouses`, `warehouse_transfers` | `Warehouse 1--N InventoryMovement` (via `warehouse_id`); `WarehouseTransfer` referencia dois `Warehouse` (origem/destino) |
 | `ItemSupplier` | `item_suppliers` | `Item N--N Supplier` (catálogo item×fornecedor, com `preferred` único por item) |
+| `ImportProcess`, `ImportProcessItem` | `import_processes`, `import_process_items` | `ImportProcess 1--N ImportProcessItem` (CASCADE); `ImportProcess N--1 Supplier` (RESTRICT), `N--1 User` (`created_by`, RESTRICT); `ImportProcessItem N--1 Item` (RESTRICT) |
 
 Fonte: `server/src/models/*.ts` (2026-08-06). Consulte `docs/DATABASE.md`
 para o dicionário de dados completo (colunas, tipos, constraints) — esta
 tabela é apenas o mapa de classes/relações, não o dicionário.
+
+### Módulo `comex` (Importação/COMEX, UC-19) — classes de aplicação
+
+Além dos models acima, o módulo novo `server/src/modules/comex/` segue o
+mesmo padrão Clean Architecture dos demais módulos recentes (`rfq/`,
+`maintenance/`):
+
+- **Repositório:** `ComexRepository` (contrato,
+  `domain/repositories/`) → `SequelizeComexRepository`
+  (`infrastructure/sequelize/`).
+- **Use cases** (`application/use-cases/`): `CreateImportProcessUseCase`,
+  `ListImportProcessesUseCase`, `GetImportProcessByIdUseCase`,
+  `RegisterImportTrackingUseCase`, `CancelImportProcessUseCase`,
+  `ReceiveImportProcessUseCase` — mais dois helpers sem classe própria
+  (`importTaxCalculator.ts`, função pura de cálculo tributário, e
+  `recalculateImportProcessTaxes.ts`, compartilhado entre os use cases
+  acima).
+- **Presentation:** `importProcessValidators.ts` (Zod),
+  `importProcessController.ts`, `routes/importProcesses.ts` — montada em
+  `server/app.ts` como `/api/comex/import-processes`.

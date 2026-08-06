@@ -131,7 +131,7 @@ sequenceDiagram
     API->>DB: COMMIT
     API-->>COMP: pedidos de compra criados
 
-    COMP->>API: PATCH /api/purchases/:id/status → 'sent' (pedido emitido ao fornecedor)
+    COMP->>API: PUT /api/purchases/:id/status → 'sent' (pedido emitido ao fornecedor)
 
     ALMOX->>API: POST /api/purchases/:id/receive (confere NF do fornecedor)
     API->>DB: BEGIN TX
@@ -159,7 +159,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant MRP as Verificação MRP/estoque real
 
-    PCP->>API: POST /api/production/orders (product/item, quantity, datas)
+    PCP->>API: POST /api/production-orders (product/item, quantity, datas)
     API->>MRP: verifica disponibilidade de materiais contra estoque REAL (não congelado)
     alt Material insuficiente
         API-->>PCP: alerta "materiais insuficientes" + sugestão de requisição de compra
@@ -168,7 +168,7 @@ sequenceDiagram
         API->>DB: reserva materiais em estoque (BOM explodida)
     end
 
-    OPER->>API: PATCH /api/production/orders/:id (apontamento: qty produzida/refugada)
+    OPER->>API: PUT /api/production-orders/:id/status (apontamento: qty produzida/refugada)
 
     opt Parada de máquina (NOVO 2026-08-06)
         OPER->>API: POST /api/production/downtimes { work_center_id, reason, start }

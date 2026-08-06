@@ -1,13 +1,16 @@
 # Modelo Lógico (DER) — ERP EVOK ÁUDIO
 
 DER técnico: tabelas reais, chaves primárias/estrangeiras e cardinalidade,
-conforme aplicado pelas 64 migrations no PostgreSQL 16 local (introspecção
-real, 2026-08-06). Cobre os módulos principais pedidos (Item, Fornecedor,
+conforme aplicado pelas 66 migrations no PostgreSQL 16 local (introspecção
+real, 2026-08-06, reconferida no mesmo dia após a migration
+`20260806-000090-create-import-processes.cjs`, que adicionou
+`import_processes`/`import_process_items` — módulo COMEX/Importação, UC-19).
+Cobre os módulos principais pedidos (Item, Fornecedor,
 Venda, OP, Requisição/Pedido de Compra, Financeiro, RFQ, Centros de
-Custo) — **não** cobre as 12 tabelas órfãs do schema-fantasma em
-português nem tabelas puramente técnicas de migração (ver
-[04-DICIONARIO_DADOS.md](04-DICIONARIO_DADOS.md) para o catálogo
-completo das 78 tabelas).
+Custo, COMEX/Importação) — **não** cobre as 12 tabelas órfãs do
+schema-fantasma em português nem tabelas puramente técnicas de migração
+(ver [04-DICIONARIO_DADOS.md](04-DICIONARIO_DADOS.md) para o catálogo
+completo das 80 tabelas).
 
 > **Atenção — dualidade Item×Product ainda em migração (Fase 4/expand):**
 > o núcleo canônico novo é `items` (UUID), mas `products` (INTEGER) ainda
@@ -30,6 +33,7 @@ erDiagram
     RFQS }o--o{ SUPPLIERS : "rfq_suppliers (convite)"
     RFQ_ITEMS ||--o{ RFQ_QUOTES : "id"
     SUPPLIERS ||--o{ RFQ_QUOTES : "supplier_id"
+    SUPPLIERS ||--o{ RFQ_ITEMS : "awarded_supplier_id (opcional, adjudicacao)"
 
     SUPPLIERS ||--o{ PURCHASE_ORDERS : "supplier_id"
     USERS ||--o{ PURCHASE_ORDERS : "requester_id"
@@ -56,13 +60,21 @@ erDiagram
         int requisition_id FK "nullable"
         enum status
     }
+    RFQ_ITEMS {
+        int id PK
+        int rfq_id FK
+        uuid item_id FK
+        numeric quantity
+        int awarded_supplier_id FK "nullable, adjudicacao"
+        numeric awarded_unit_price "nullable, adjudicacao"
+    }
     RFQ_QUOTES {
         int id PK
         int rfq_item_id FK
         int supplier_id FK
         numeric unit_price
         int lead_time_days
-        boolean awarded
+        numeric moq "nullable"
     }
     PURCHASE_ORDERS {
         int id PK
@@ -73,6 +85,49 @@ erDiagram
         enum status
     }
 ```
+
+## Compras: Processo de Importação (COMEX)
+
+```mermaid
+erDiagram
+    SUPPLIERS ||--o{ IMPORT_PROCESSES : "supplier_id (fornecedor internacional)"
+    USERS ||--o{ IMPORT_PROCESSES : "created_by"
+    IMPORT_PROCESSES ||--|{ IMPORT_PROCESS_ITEMS : "id"
+    ITEMS ||--o{ IMPORT_PROCESS_ITEMS : "item_id"
+
+    IMPORT_PROCESSES {
+        int id PK
+        varchar process_number UK "IMP-<ano>-XXXX"
+        int supplier_id FK
+        int created_by FK
+        enum status "draft|shipped|arrived|customs_cleared|received|cancelled"
+        varchar fob_currency
+        numeric exchange_rate
+        numeric freight_value
+        numeric insurance_value
+        numeric other_expenses_value
+    }
+    IMPORT_PROCESS_ITEMS {
+        int id PK
+        int import_process_id FK
+        uuid item_id FK
+        numeric quantity
+        numeric fob_unit_price "moeda estrangeira"
+        numeric ii_rate
+        numeric ipi_rate
+        numeric pis_rate
+        numeric cofins_rate
+        numeric icms_rate
+        numeric customs_value "calculado"
+        numeric nationalized_unit_cost "calculado"
+    }
+```
+
+`IMPORT_PROCESS_ITEMS.item_id` referencia o núcleo canônico `ITEMS`
+(UUID), não `PRODUCTS` legado — único ponto do bloco Compras/RFQ que já
+nasceu apontando só para o modelo novo (ao contrário de
+`PURCHASE_REQUISITION_ITEMS`/`PURCHASE_ORDER_ITEMS`, que ainda apontam
+para `PRODUCTS`).
 
 ## Vendas: Cliente → Venda → Faturamento → Contas a Receber
 

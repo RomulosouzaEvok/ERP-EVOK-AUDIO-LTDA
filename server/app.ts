@@ -156,6 +156,7 @@ app.use('/api/sales', require('./src/modules/sales/presentation/routes/sales'));
 app.use('/api/purchases', require('./src/modules/purchases/presentation/routes/purchases'));
 app.use('/api/purchase-requisitions', require('./src/modules/purchaseRequisitions/presentation/routes/purchaseRequisitions'));
 app.use('/api/rfqs', require('./src/modules/rfq/presentation/routes/rfqs'));
+app.use('/api/comex/import-processes', require('./src/modules/comex/presentation/routes/importProcesses'));
 app.use('/api/finance', require('./src/modules/financial/presentation/routes/finance'));
 app.use('/api/fiscal', require('./src/modules/fiscal/presentation/routes/fiscal'));
 

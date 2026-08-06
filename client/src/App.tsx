@@ -24,6 +24,7 @@ const SuppliersPage = lazy(() => import('@/pages/purchases/SuppliersPage'));
 const PurchasesPage = lazy(() => import('@/pages/purchases/PurchasesPage'));
 const RequisitionsPage = lazy(() => import('@/pages/purchases/RequisitionsPage'));
 const RfqPage = lazy(() => import('@/pages/purchases/RfqPage'));
+const ComexPage = lazy(() => import('@/pages/purchases/ComexPage'));
 const BomPage = lazy(() => import('@/pages/production/BomPage'));
 const ProductionOrdersPage = lazy(() => import('@/pages/production/ProductionOrdersPage'));
 const MrpPage = lazy(() => import('@/pages/production/MrpPage'));
@@ -210,6 +211,16 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <RequisitionsPage />
+                </Suspense>
+              }
+            />
+          </Route>
+          <Route element={<ModuleRoute module="comex" />}>
+            <Route
+              path="/purchases/comex"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ComexPage />
                 </Suspense>
               }
             />

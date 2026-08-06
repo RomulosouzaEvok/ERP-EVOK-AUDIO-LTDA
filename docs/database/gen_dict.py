@@ -85,7 +85,7 @@ TABLE_DESC = {
  "maintenance_orders": "Ordens de manutenção de ativos.",
  "assets": "Patrimônio — ativos com QR Code, depreciação, responsável e departamento.",
  "service_orders": "Ordens de serviço (assistência técnica pós-venda).",
- "access_profiles": "Perfis de acesso configuráveis por área (RBAC granular).",
+ "access_profiles": "Perfis de acesso configuráveis por área (RBAC granular). **Achado de nomenclatura (auditoria 2026-08-06):** colunas `nome`/`descricao` em português, único par PT nesta tabela — nome da tabela, demais colunas (`allowed_warehouses`, `active`, `created_at`/`updated_at`) e a tabela filha `access_profile_permissions` (`module`, `level`) são 100% em inglês. Não é bug funcional (aplicação/model já refletem exatamente isso), mas é uma inconsistência de convenção isolada — registrada aqui, sem correção automática nesta rodada (exigiria migration + ajuste de model/frontend, fora do escopo de reconferência).",
  "access_profile_permissions": "Matriz módulo × nível (operate/approve) de um perfil de acesso.",
  "company_fiscal_config": "Configuração fiscal do emitente (singleton) — razão social, CNPJ, dados de NF-e.",
  "audit_logs": "Log de auditoria de alterações em dados sensíveis (schema em uso).",
@@ -97,6 +97,8 @@ TABLE_DESC = {
  "migracao_bom_log": "[ÓRFÃ/DEPRECATED] Log técnico da migração Product→Item, sem uso em código vivo.",
  "migracao_categoria_map": "[ÓRFÃ/DEPRECATED] Mapa de migração de categorias, sem uso em código vivo.",
  "migracao_product_item_map": "[ÓRFÃ/DEPRECATED] Mapa de migração Product→Item, sem uso em código vivo.",
+ "import_processes": "Processo de Importação/COMEX (UC-19) — cabeçalho: número `IMP-<ano>-XXXX`, fornecedor internacional (reutiliza `suppliers`, sem cadastro dedicado), status de acompanhamento (draft→shipped→arrived→customs_cleared→received, ou cancelled), câmbio (`exchange_rate`) e despesas em BRL (frete/seguro/outras) usadas no rateio pro-rata do valor aduaneiro entre os itens. Sem integração Siscomex/NCM (alíquotas informadas manualmente).",
+ "import_process_items": "Itens de um Processo de Importação — quantidade, valor FOB unitário em moeda estrangeira, alíquotas de II/IPI/PIS/COFINS/ICMS informadas manualmente pelo Analista de Comex, e os valores calculados (`ImportTaxCalculator`): valor aduaneiro rateado, tributos (II/IPI/PIS/COFINS/ICMS \"por dentro\") e custo unitário nacionalizado final — usado na entrada de estoque. FK para `items` (núcleo canônico), não para `products` legado.",
 }
 
 DEPRECATED = {t for t, d in TABLE_DESC.items() if "ÓRFÃ/DEPRECATED" in d}

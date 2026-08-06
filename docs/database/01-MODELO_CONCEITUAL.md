@@ -37,6 +37,10 @@ erDiagram
     RECEBIMENTO ||--o{ LOTE : "cria/incrementa"
     PEDIDO_DE_COMPRA ||--o{ CONTA_A_PAGAR : "gera (pos-recebimento)"
 
+    FORNECEDOR ||--o{ PROCESSO_DE_IMPORTACAO : "e o exportador em"
+    PROCESSO_DE_IMPORTACAO ||--|{ ITEM_DE_IMPORTACAO : "contem"
+    PRODUTO_ITEM ||--o{ ITEM_DE_IMPORTACAO : "e importado em"
+
     PRODUTO_ITEM ||--o{ ESTRUTURA_BOM : "e composto por"
     PRODUTO_ITEM ||--o{ ORDEM_DE_PRODUCAO : "e fabricado via"
     ORDEM_DE_PRODUCAO ||--o{ APONTAMENTO : "recebe"
@@ -80,6 +84,7 @@ erDiagram
 | **Cotação/RFQ** | Processo de consultar múltiplos fornecedores antes de decidir a compra. |
 | **Pedido de Compra** | O compromisso formal de compra com um fornecedor, já com preço fechado. |
 | **Recebimento** | O evento físico de receber a mercadoria comprada. |
+| **Processo de Importação (COMEX)** | O acompanhamento de uma compra internacional (embarque → chegada → desembaraço → entrada em estoque), com câmbio, despesas de importação e o cálculo de nacionalização (tributos + custo unitário nacionalizado) de cada item importado. Fornecedor é o exportador estrangeiro, reaproveitando o mesmo cadastro de Fornecedor nacional. |
 | **Lote** | Um grupo rastreável de unidades de um produto — de matéria-prima recebida ou de produto acabado fabricado. |
 | **Ordem de Produção** | A instrução de fabricar uma certa quantidade de um produto. |
 | **Apontamento** | O registro de produção efetivamente realizada (quantidade boa, refugo, operador, tempo). |

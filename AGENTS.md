@@ -85,19 +85,29 @@ erp-evok-audio/
 │   │       ├── 04a_inventory_movements_expand.sql  # Dual-read Phase 4.1
 │   │       └── ...
 │   └── __tests__/                   # Unit, integration, edge tests
-├── client/                          # Frontend React 19 + Vite (páginas, rotas, api client)
+├── client/                          # Frontend web React 19 + Vite (páginas, rotas, api client)
+├── mobile/                          # App mobile Expo/React Native (login, scan QR, contagens cíclicas) — NOVO 2026-08-06
+├── tv/                              # App Android TV react-native-tvos (painel de demandas por departamento) — NOVO 2026-08-06
 ├── docs/
-│   ├── projeto/                     # Plano arquitetura, use-cases
+│   ├── projeto/                     # Plano, arquitetura, use-cases (numeração 00-04)
 │   │   ├── 00-README.md
 │   │   ├── 01-PLANO.md
 │   │   ├── 02-PLANO_INDUSTRIAL.md
 │   │   └── 04-USE_CASES.md
-│   ├── producao/                    # Documentação operacional
-│   │   ├── 06-BOM.md
-│   │   └── ...
+│   ├── arquitetura/                 # Requisitos + diagramas (sequência, infra, BPMN) — NOVO 2026-08-06
+│   ├── database/                    # Modelo de dados estruturado (00-INDICE.md a 07-DISASTER_RECOVERY.md) — NOVO 2026-08-06
+│   ├── business/                    # Casos de uso em draft (UC-30+) + regras de negócio — a consolidar em projeto/04-USE_CASES.md conforme implementado
+│   ├── governance/                  # TODO.md (SSOT de pendências dia a dia) + reorganização de departamentos
+│   ├── manual/                      # Manual do usuário final — NOVO 2026-08-06
+│   ├── infra/                       # Deploy Ubuntu/produção
+│   ├── producao/, administrativo/, comercial/, financeiro/, juridico/,
+│   │   logistica/, patrimonio/, qualidade/, rh/, seguranca_trabalho/,
+│   │   suprimentos/, tributario/    # docs departamentais (00-README.md + NN-TEMA.md cada)
 │   ├── AUDITORIA_PRE_PRODUCAO_2026-08-02.md  # CRÍTICO: Bloqueadores
 │   ├── HANDOFF_CODEX.md             # Product/Item migration (Phase 1–4.1)
-│   ├── DATABASE.md                  # Modelo de dados
+│   ├── DATABASE.md                  # Changelog narrativo do banco (ver docs/database/ para o modelo estruturado atual)
+│   ├── DIARIO_BORDO_GO_LIVE_G6.md   # Diário append-only da execução do Go-Live
+│   ├── GO_LIVE_G6_CHECKLIST.md      # Checklist operacional de Go-Live
 │   └── ...
 ├── package.json
 └── AGENTS.md                        # Este arquivo

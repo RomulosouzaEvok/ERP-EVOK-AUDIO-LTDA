@@ -1624,3 +1624,438 @@ testes) passou após todas as mudanças; `GET /health/ready` respondeu
 - Roles `evok_backup` e de migration dedicada (separadas de
   `evok_admin`) — decisão consciente de não criar nesta rodada, ganho de
   segurança menor que o da role de runtime já implementada.
+
+### 2026-08-06 (auditoria cruzada `AuditorIntegrador`) — Requisitos × Banco × API
+
+**Escopo:** auditoria "pente fino" cruzando
+`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` (RF-*),
+`docs/database/04-DICIONARIO_DADOS.md`/`schema.sql` e `docs/API.md`, mais
+os diagramas de classes/sequência/infraestrutura/BPMN. Não altera
+código, schema ou comportamento — só documentação de documentação.
+
+**Status:** REPROVADO COM RESSALVAS (relatório completo apresentado ao
+solicitante na resposta da sessão; achados reais registrados em
+`docs/governance/TODO.md`, seção "2026-08-06 (auditoria cruzada
+`AuditorIntegrador`)").
+
+**Achado principal:** `docs/API.md` documenta rigorosamente só uma
+fração dos grupos de rota reais montados em `server/app.ts` — pelo menos
+17 dos ~34 grupos de rota (incluindo módulos inteiros marcados
+`[IMPLEMENTADO]` no Documento de Requisitos: requisição de compra,
+qualidade/NC, laboratório, ativos, manutenção, RH, rastreabilidade,
+audit logs, ordens de serviço, config fiscal, inventário mobile,
+webhooks, auditor inteligente, centros de trabalho, e o próprio Item
+Mestre `/api/items`) não têm nenhuma seção própria em `docs/API.md`. O
+Documento de Requisitos e o Dicionário de Dados, por outro lado, estão
+mutuamente consistentes e bem cross-referenciados — a lacuna está
+concentrada especificamente no contrato de API publicado.
+
+**Achados secundários:** 2 rotas com método/caminho HTTP incorretos em
+`docs/arquitetura/DIAGRAMAS_SEQUENCIA.md` (production-orders e
+purchases/:id/status); inconsistência de convenção de caixa
+(snake_case × camelCase) entre request e response do mesmo endpoint
+(`PUT /api/users/:id/access-profile`) e entre módulos diferentes, sem
+nota explicando a regra.
+
+**Sem achados de risco de segurança/isolamento** — `docs/database/05-ACESSOS_E_ISOLAMENTO.md`
+(matriz de privilégios + isolamento de serviços externos) permanece
+consistente com o que `docs/API.md` documenta como superfície pública
+(webhooks autenticados por HMAC/segredo compartilhado, sem credencial de
+banco; nenhum endpoint expõe coluna sensível fora da matriz de
+privilégios).
+
+**Auditoria parcial declarada:** leitura linha a linha completa do corpo
+de `docs/projeto/04-USE_CASES.md` (1217 linhas) e checagem campo a campo
+de 100% dos payloads de `docs/API.md` contra o Dicionário de Dados não
+foram concluídas nesta rodada (ver detalhamento em `docs/governance/TODO.md`).
+
+---
+
+## 2026-08-06 (apêndice 5) — Pente-fino estrutural da árvore de `docs/` (nomenclatura de pastas/arquivos, links quebrados)
+
+**Escopo:** auditoria estrutural (não de conteúdo técnico — essa parte
+coube ao `AuditorIntegrador` em paralelo, ver apêndice anterior) sobre
+`docs/` inteiro: nomes de pasta, convenção de nomenclatura de arquivo,
+links markdown internos, referências cruzadas para arquivos
+renomeados/removidos, encoding e paridade `.claude/agents` ×
+`.codex/agents`.
+
+**Método:** levantamento completo da árvore real (`find docs -type f`,
+19 pastas / ~100 arquivos), extração e resolução programática de **todos**
+os 115 links markdown `[texto](arquivo.md)` de `docs/*.md` +
+`docs/*/*.md` + `CLAUDE.md`/`README.md`/`AGENTS.md` contra o
+filesystem real (case-sensitive, simulando Linux), mais varredura de
+menções em texto corrido (crase, sem sintaxe de link) a caminhos
+`docs/*.md`.
+
+**Resultado dos links markdown formais:** **0 quebrados** — os 115
+links `[texto](arquivo.md)` resolvem exatamente (inclusive checagem
+case-sensitive; nenhum link sobrevive só por o Windows ser
+case-insensitive).
+
+**Achados reais (todos registrados em `docs/governance/TODO.md`, seção
+"2026-08-06 (apêndice 5 — pente-fino estrutural)"):**
+1. Mistura de idioma nos nomes de pasta de `docs/` (maioria em
+   português — `producao/`, `comercial/`, `financeiro/`, `projeto/`,
+   `arquitetura/`, `manual/` etc. — mas `business/`, `database/`,
+   `governance/`, `infra/` em inglês, sem critério documentado).
+2. `docs/business/01-USE_CASES.md` é um draft explícito (UC-30+, o
+   próprio arquivo diz "a consolidar em `docs/projeto/04-USE_CASES.md`")
+   mas a consolidação está **parcial**: UC-35, UC-35-Exceção, UC-36,
+   UC-37, UC-38, UC-42 e UC-43 nunca foram copiados para
+   `docs/projeto/04-USE_CASES.md`, mesmo com os Blocos 1/3/4/5/6
+   correspondentes já `[x]` no TODO.
+3. `docs/patrimonio/03-MANUTENCAO.md` está **vazio (0 bytes)**, apesar
+   de listado com propósito definido ("Manutenção corretiva e
+   preventiva") no próprio `docs/patrimonio/00-README.md`.
+4. 3 referências cruzadas soltas (texto corrido, não link markdown) a
+   arquivos que não existem mais: `docs/HANDOFF_CODEX.md` cita
+   `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` e `docs/DATABASE_DICTIONARY.md`;
+   `docs/producao/06-BOM.md` cita `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`
+   2x (associado a uma afirmação de que o MRP "ainda não foi
+   implementado", que hoje diverge de `CLAUDE.md` §4 — MRP está
+   implementado); `docs/BACKUP_RESTORE_G2_2026-07-31.md` cita
+   `docs/UAT_RELEASE_G6_2026-07-31.md`, que nunca existiu no repositório.
+5. `.codex/agents/` tem 14 arquivos `.toml` contra 15 `.md` em
+   `.claude/agents/` — falta o equivalente de `webdesiner.md`.
+
+**Corrigido diretamente nesta sessão (trivial e inequívoco):**
+- `CLAUDE.md` §3 e `AGENTS.md` §3 (árvore de pastas): atualizada para
+  refletir as pastas reais de `docs/` hoje (`arquitetura/`, `database/`,
+  `business/`, `governance/`, `manual/`, `infra/` + as 12 pastas
+  departamentais), que tinham sido criadas em sessões anteriores sem
+  atualizar a árvore ilustrativa; `AGENTS.md` também ganhou as entradas
+  `mobile/`/`tv/` que já existiam em `CLAUDE.md` mas faltavam ali.
+- `docs/CRONOGRAMA_FRONTEND_2026-07-31.md`: adicionada nota junto à
+  referência a `docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md` e
+  `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` avisando que nenhum dos dois
+  existe mais (mesmo padrão já usado em `.codex/agents/evok-production-remediation.toml`
+  e `.claude/agents/evok-production-remediation.md`), sem alterar o
+  restante do conteúdo histórico do documento.
+
+**Não corrigido (decisão que cabe ao dono/aos agentes de conteúdo, não
+puramente estrutural):** o conteúdo faltante em
+`docs/patrimonio/03-MANUTENCAO.md`; a consolidação completa de
+`docs/business/01-USE_CASES.md` → `docs/projeto/04-USE_CASES.md`; a
+correção da afirmação "MRP ainda não implementado" em
+`docs/producao/06-BOM.md` (é uma alegação de negócio, não um link — fora
+do escopo de uma auditoria puramente estrutural); qual documento (se
+algum) deveria substituir `docs/UAT_RELEASE_G6_2026-07-31.md`; se as
+pastas `docs/business/`, `docs/database/`, `docs/governance/`,
+`docs/infra/` devem ser renomeadas para português por consistência (não
+decidido unilateralmente — ver `docs/governance/TODO.md`); criação do
+`.codex/agents/webdesiner.toml` faltante.
+
+---
+
+## 2026-08-06 (apêndice 6) — `ArquitetoSoftwareAPI`: remediação dos 4
+achados da auditoria cruzada `AuditorIntegrador` em `docs/API.md` e
+`docs/arquitetura/DIAGRAMAS_SEQUENCIA.md`
+
+**Origem:** `docs/governance/TODO.md`, seção "2026-08-06 (auditoria
+cruzada `AuditorIntegrador`)" — reprovação de `docs/API.md` por cobrir só
+~metade das rotas reais montadas em `server/app.ts`, mais 2 erros de rota
+no diagrama de sequência e 2 achados de convenção de casing. Território
+exclusivo desta sessão: `docs/API.md` e
+`docs/arquitetura/DIAGRAMAS_SEQUENCIA.md` — nenhuma alteração de código.
+
+**Método:** para cada grupo de rota apontado como não documentado, leitura
+direta do arquivo de rotas real (`presentation/routes/*.ts`), do
+controller e do validator Zod (quando existir) antes de escrever a seção
+— nenhum campo/payload foi inferido de memória ou copiado de outra seção
+por analogia.
+
+**1. 18 grupos de rota sem seção em `docs/API.md` — todos cobertos.**
+Confirmados contra `server/app.ts` e adicionados como seções novas (15 a
+31) ou encaixados em seções existentes onde fazia sentido temático:
+
+- Seção 1 (Autenticação): `POST /api/auth/forgot-password` e
+  `POST /api/auth/reset-password` (SEC-12), incluindo a nota de que
+  `resetPasswordSchema.newPassword` é uma exceção pontual em camelCase.
+- Seção 8.3 (nova): `/api/inventory/lots*` — listagem, busca por código,
+  QR code, liberação e bloqueio de lote.
+- Seções 15–31 (novas, ao final do documento, para não forçar
+  renumeração de nada existente): Requisição de Compra, Qualidade (RNC),
+  Laboratório, Engenharia (Projetos/Desenhos/Ficha Técnica), Patrimônio,
+  Manutenção, RH (Funcionários), RH (Departamentos), Rastreabilidade,
+  Logs de Auditoria, Ordens de Serviço, Fiscal (config. do emitente),
+  Inventário Mobile, Webhooks, Auditor Inteligente, Centros de Trabalho,
+  Itens (Item Mestre).
+
+Cada seção documenta método/rota, `authorizeModule`/`authorize` real da
+rota (inclusive os casos "aditivo" que compõem duas checagens, ex.
+`engenharia`/`laboratorio`, e os módulos que **não** passaram pelo
+retrofit e ainda usam só `authorize(role)` legado — `employees`,
+`departments`, `audit-logs`, `auditor`, `fiscal`), payload com tipos reais
+do schema Zod (ou do model, quando não há validator dedicado) e códigos de
+erro observados no código.
+
+**Surpresa encontrada no caminho:** nenhuma das 18 rotas apontadas pela
+auditoria era inexistente ou divergente do código — todas bateram
+exatamente com `server/app.ts`. O único ajuste de escopo foi tratar
+`/api/inventory/lots*` como parte da seção 8 (Estoque) em vez de uma
+seção própria numerada — mais coerente tematicamente, já que o restante
+do módulo `inventory` já vive ali.
+
+**2. Achado nº 5 da auditoria confirmado: QR de lote é on-the-fly.**
+`GenerateEntityQrCodeUseCase` + `inventoryController.getLotQrCode` geram o
+PNG/SVG em memória a cada chamada (payload
+`{ lot_number, product_code, product_name }` via `QRCodeService`), sem
+nenhuma coluna de imagem/payload persistida em `lot_controls` — documentado
+explicitamente na nova seção 8.3, junto com o mesmo comportamento (já
+existente) em `GET /api/assets/:id/qrcode`.
+
+**3. 2 erros de rota em `docs/arquitetura/DIAGRAMAS_SEQUENCIA.md`
+corrigidos:**
+- Fluxo 3 (OP → Apontamento): `POST /api/production/orders` e
+  `PATCH /api/production/orders/:id` → `POST /api/production-orders` e
+  `PUT /api/production-orders/:id/status`.
+- Fluxo 2 (Requisição → RFQ → Pedido → Recebimento):
+  `PATCH /api/purchases/:id/status` → `PUT /api/purchases/:id/status`.
+
+**4. Nota de convenção de caixa (casing) adicionada no topo de
+`docs/API.md`.** Confirmado no código que não existe convenção única:
+`underscored: true` (presente em todos os models) só afeta a coluna do
+banco, não a chave JSON — o que aparece na resposta depende de como cada
+model declarou o nome do atributo JS (`Client`/`Sale` em snake_case,
+`User` em camelCase com `field:` explícito, `Item` renomeando os próprios
+timestamps para `criado_em`/`atualizado_em`). O caso citado pela auditoria
+(`PUT /api/users/:id/access-profile` — request `access_profile_id` snake,
+response `accessProfileId` camel) foi confirmado como **comportamento real
+do código**, não erro de digitação da doc — mantido como estava, só
+explicado. Os 2 exemplos que estavam de fato incorretos frente ao
+comportamento real do Sequelize (`GET /api/clients` e `GET /api/sales`
+mostrando `"created_at"`, quando o Sequelize sempre serializa timestamps
+como `createdAt`/`updatedAt`) foram corrigidos.
+
+**Não alterado:** nenhum arquivo fora de `docs/API.md` e
+`docs/arquitetura/DIAGRAMAS_SEQUENCIA.md`; nenhum código em `server/src/`.
+`docs/governance/TODO.md` (seção "2026-08-06 (auditoria cruzada
+`AuditorIntegrador`)") atualizado marcando `[x]` os 4 achados acima, com
+referência às seções novas de `docs/API.md`.
+
+**Sinalizado para o `AuditorIntegrador`:** validar que o conteúdo das 18
+seções novas bate com `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
+(RF-COM, RF-QUA, RF-PAT, RF-RH, RF-REL, RF-AUT, RF-FIN, RF-EST, RF-INT,
+RF-PRD citados no achado original) e com o Dicionário de Dados de
+`AdmDBA` — esta sessão conferiu contra o código real (rotas/controllers/
+validators), não linha a linha contra os dois documentos de requisitos/
+banco.
+
+---
+
+## 2026-08-06 (apêndice 6) — Correção dos 4 achados de conteúdo do pente-fino estrutural (apêndice 5)
+
+**Escopo:** remediação, pelo `documentador`, dos 4 achados de conteúdo
+deixados em aberto no apêndice 5 (achados 2, 3 e 4 acima) — consolidação
+de UCs, preenchimento de `03-MANUTENCAO.md` e correção das referências
+cruzadas soltas. Não tocou em `docs/API.md`,
+`docs/arquitetura/DIAGRAMAS_SEQUENCIA.md`, `docs/database/` nem
+`server/` (fora do território desta tarefa).
+
+**1. Consolidação de UC-35 a UC-43 em `docs/projeto/04-USE_CASES.md`:**
+verificados um a um contra o código real antes de consolidar (não foi
+copiado texto sem checagem):
+- **UC-35, UC-35-Exceção, UC-36, UC-37, UC-38, UC-42** confirmados
+  `[IMPLEMENTADO]` por leitura direta do código (`AccessDeniedPage.tsx`,
+  `ModuleRoute`, `NO_ACCESS_PROFILE`, `authorizeModule`,
+  `quality-releases-receiving-lot.test.ts`, `DashboardPage.tsx canSee`,
+  rotas `relatorios.*`/`rastreabilidade`, `warehouseStockService`,
+  `ChangeSaleStatusUseCase` debitando exclusivamente `ACABADOS`,
+  `CreateAcousticTestUseCase` debitando `LABORATORIO`). Achado relevante:
+  o texto antigo do draft (`docs/business/01-USE_CASES.md`) dizia que os
+  Fluxos D (expedição exclusiva de Acabados) e E (débito automático de
+  teste destrutivo) de UC-42 "ainda não implementados" — isso estava
+  desatualizado; ambos já tinham sido entregues em 2026-08-04 (Bloco
+  4.2/4.4 do `TODO.md`), só o texto do UC não tinha sido atualizado.
+- **UC-43 consolidado como parcial**: Fluxo B (alerta didático de 3
+  partes) `[IMPLEMENTADO]` nas 9 telas priorizadas; Fluxo A
+  (`PrerequisiteChecklist` preventivo) confirmado `[PENDENTE]` — o
+  componente existe (`client/src/components/PrerequisiteChecklist.tsx`)
+  mas `grep` confirmou 0 telas consumindo-o.
+- Nenhum `[x]` indevido foi encontrado nos Blocos 1/3/4/5/6 do `TODO.md`
+  correspondentes a esses UCs — todos já refletiam o estado real
+  corretamente.
+- `docs/governance/TODO.md` (seção "apêndice 5") atualizado: item de
+  consolidação marcado `[x]` com o detalhamento acima.
+
+**2. `docs/patrimonio/03-MANUTENCAO.md` preenchido (estava 0 bytes):**
+conteúdo escrito a partir do código real (`server/src/modules/maintenance/`,
+model `MaintenanceOrder`, telas `client/src/pages/maintenance/`), sem
+duplicar `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md` §5 nem
+`docs/manual/00-MANUAL_DO_USUARIO.md` §10 — o documento novo resume e
+linka para ambos. Inclui, como pedido explicitamente, a ressalva já
+conhecida (`RF-PAT-05 [PENDENTE]` em
+`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §8): `Asset.status` **não**
+é sincronizado automaticamente com ordens de manutenção — o enum
+`in_maintenance` existe no modelo `Asset`, mas nenhum use case do módulo
+`maintenance` o altera; atualização de status do ativo é manual hoje,
+decisão de automação pendente do dono.
+
+**3. Referências cruzadas soltas corrigidas (as 4 do apêndice 5):**
+- `docs/HANDOFF_CODEX.md:418` (`docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`) —
+  nota histórica adicionada (arquivo não existe mais; ordem de execução
+  já foi seguida, Fases 1–4.1 concluídas).
+- `docs/HANDOFF_CODEX.md:1571` (`docs/DATABASE_DICTIONARY.md`) —
+  confirmado como o nome antigo do que hoje é
+  `docs/database/04-DICIONARIO_DADOS.md` (arquivo existe, `Glob`
+  confirmou); referência corrigida para o caminho real.
+- `docs/producao/06-BOM.md:28` e `:330` — a afirmação "MRP ainda não
+  implementado" era de fato `[AUDITORIA-FALHOU]` (divergia de
+  `CLAUDE.md` §4). Texto reescrito para descrever o fluxo real hoje
+  implementado (BOM → MRP contra estoque real → reserva automática na
+  liberação da OP → requisição de compra via UC-24/UC-24b → apontamento/
+  baixa de estoque no chão de fábrica → custo real da OP), com nota de
+  correção explícita e a citação órfã tratada com o mesmo padrão de nota
+  histórica usado em `docs/CRONOGRAMA_FRONTEND_2026-07-31.md`.
+- `docs/BACKUP_RESTORE_G2_2026-07-31.md:336`
+  (`docs/UAT_RELEASE_G6_2026-07-31.md`) — nota adicionada esclarecendo
+  que o arquivo nunca existiu e que a descrição do ensaio de canário já
+  presente no próprio documento é o registro disponível; aponta
+  `docs/GO_LIVE_G6_CHECKLIST.md` como fonte vigente de status de Gate
+  G6/rollback.
+
+**Não corrigido nesta rodada (fora do território/decisão do dono, sem
+mudança de status):** mistura de idioma nos nomes de pasta de `docs/`
+(achado 1 do apêndice 5) e paridade `.claude/agents/` ×
+`.codex/agents/` (achado 5) — ambos continuam `[ ]` no
+`docs/governance/TODO.md`, aguardando decisão/execução fora do escopo
+desta tarefa.
+
+---
+
+### 2026-08-06 (apêndice 8) — Sincronização documental: RF-PAT-05 e UC-19/RF-COM-12 passam a `[IMPLEMENTADO]`
+
+**Origem:** duas features implementadas no backend no mesmo dia por
+outros agentes (`RF-PAT-05` — sincronização automática de `Asset.status`
+com o ciclo de vida da ordem de manutenção; `UC-19`/`RF-COM-12` — módulo
+Importação/COMEX) deixaram as docs de requisitos/arquitetura descrevendo
+o estado antigo. Território desta rodada: `docs/arquitetura/`,
+`docs/projeto/04-USE_CASES.md`, `docs/patrimonio/03-MANUTENCAO.md`,
+`docs/API.md`, `docs/DIAGRAMA_CLASSES.md`, `CLAUDE.md`,
+`docs/governance/TODO.md`. Não tocado: `docs/database/`, `client/`,
+`server/` (outros agentes em paralelo).
+
+**1) RF-PAT-05 (`Asset.status` ↔ ordem de manutenção), confirmado contra
+o código real** (`UpdateMaintenanceOrderUseCase.ts`,
+`CancelMaintenanceOrderUseCase.ts`): OM transiciona para `in_progress` →
+`Asset.status = 'in_maintenance'`; OM `completed`/`canceled` →
+`Asset.status` volta a `'active'` **somente se** o ativo ainda estiver
+`in_maintenance` **e** não houver outra OM aberta para o mesmo ativo.
+Atualizado:
+- `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §8 — RF-PAT-05 de
+  `[PENDENTE]` para `[IMPLEMENTADO]`, com a descrição correta do
+  comportamento (incluindo a condição de não "ressuscitar" ativos
+  baixados); tabela de "Divergências UC × Código" também atualizada com
+  nota `[RESOLVIDO 2026-08-06]`.
+- `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md` §5 — o nó
+  `[PENDENTE]` sobre `Asset.status` foi reescrito para descrever o fluxo
+  automático real (dois novos nós de decisão: transição para
+  `in_progress` marca o ativo, e a existência de outra OM aberta decide
+  se o ativo é liberado ao concluir/cancelar).
+- `docs/patrimonio/03-MANUTENCAO.md` §6 — a ressalva "não é sincronizado
+  automaticamente" (escrita horas antes, na mesma data, antes da
+  implementação) foi substituída pela descrição do comportamento novo,
+  citando os testes de `maintenance-use-cases.test.ts`.
+
+**2) UC-19/RF-COM-12 (Importação/COMEX), backend confirmado contra
+`server/src/modules/comex/` e os validators Zod reais em
+`presentation/validators/importProcessValidators.ts`:**
+- `docs/projeto/04-USE_CASES.md` — UC-19 de `[PENDENTE]` (implícito, sem
+  tag) para `[IMPLEMENTADO]` (backend; tela web pendente), com as
+  decisões de escopo resumidas (fórmula fiscal simplificada, alíquotas
+  manuais sem Siscomex/NCM, sem AP automática de tributos).
+- `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §3 — RF-COM-12 de
+  `[PENDENTE]` para `[IMPLEMENTADO]`; tabela de divergências atualizada.
+- `docs/API.md` — nova seção `§32. Importação / COMEX`, no mesmo formato
+  das seções §15–§31 (método, rota, RBAC `comex`, payloads reais
+  confirmados contra os validators, códigos de erro).
+- `docs/DIAGRAMA_CLASSES.md` — módulo `comex` adicionado à seção de
+  módulos recentes de 2026-08-06 (models `ImportProcess`/
+  `ImportProcessItem` na tabela existente + subseção nova descrevendo
+  repositório/use cases/presentation, seguindo o padrão Clean
+  Architecture já usado por `rfq/`/`maintenance/`).
+- `CLAUDE.md` §1 (Status Atual) e §4 (Compras & Suprimentos) — módulo de
+  importação novo mencionado; contagem de migrations atualizada de 64
+  para **66** (confirmado por contagem real de arquivos em
+  `server/migrations/`); FAQ "Frontend está pronto?" ajustada para citar
+  a exceção real (COMEX ainda sem tela).
+
+**3) `docs/governance/TODO.md`** — os dois achados antigos que ainda
+diziam "UC-19 zero implementação"/"decisão pendente" (apêndice 4, item 1,
+e a lista de achados do apêndice 5) foram marcados `[x]` com nota
+`[IMPLEMENTADO 2026-08-06]` apontando para o apêndice 7 (onde o backend
+já estava registrado como `[x]`/`[IMPLEMENTADO]` desde a rodada de
+implementação) — texto histórico original preservado, apenas anotado.
+Nota de atualização também acrescentada ao achado 2 do apêndice 4/5 (RF-
+PAT-05) confirmando que as docs de arquitetura foram atualizadas nesta
+rodada.
+
+**Não alterado nesta rodada (fora do território):** `docs/HANDOFF_CODEX.md`
+já continha o detalhamento técnico completo de ambas as features (usado
+como fonte primária desta consolidação) e não precisou de correção;
+`docs/database/` já tinha sido regenerado por `AdmDBA` em rodada anterior
+no mesmo dia (ver apêndice 7).
+
+---
+
+## 2026-08-06 (quarta rodada) — Documentação de banco atualizada pós-módulo COMEX/Importação
+
+**Contexto:** migration `server/migrations/20260806-000090-create-import-processes.cjs`
+(módulo COMEX/Importação, UC-19) já aplicada por outro agente antes desta
+tarefa — criou `import_processes`/`import_process_items` (66 migrations
+no total). Território estrito: `docs/database/` + este diário +
+`docs/governance/TODO.md` + `docs/DATABASE.md` (changelog). Não tocou em
+`docs/API.md`, `docs/arquitetura/`, `docs/projeto/`, `client/`, `server/`
+nem criou migration nova.
+
+**O que foi feito:**
+1. `docs/database/gen_dict.py` — adicionadas descrições de negócio
+   curadas para `import_processes`/`import_process_items` no
+   `TABLE_DESC` (lidas da migration + models `ImportProcess.ts`/
+   `ImportProcessItem.ts`: FOB, câmbio, rateio de frete/seguro/despesas,
+   alíquotas II/IPI/PIS/COFINS/ICMS manuais, custo nacionalizado).
+2. `docs/database/04-DICIONARIO_DADOS.md` regenerado por introspecção
+   real (`_columns_raw.psv`/`_constraints_raw.psv` via `psql` +
+   `gen_dict.py`) — agora 80 tabelas (era 78).
+3. `docs/database/schema.sql` regenerado via `pg_dump --schema-only
+   --no-owner --no-privileges` contra `evok-postgres` (10886 linhas).
+4. `docs/database/02-MODELO_LOGICO.md` — novo bloco Mermaid "Compras:
+   Processo de Importação (COMEX)" (`SUPPLIERS`→`IMPORT_PROCESSES`→
+   `IMPORT_PROCESS_ITEMS`→`ITEMS`, confirmado que `item_id` referencia
+   `items` UUID, não `products` legado — único ponto do bloco
+   Compras/RFQ que já nasce apontando só para o modelo novo).
+   `docs/database/01-MODELO_CONCEITUAL.md` — entidade de negócio
+   "Processo de Importação (COMEX)" adicionada ao MER e ao glossário.
+5. Contagens reconferidas por introspecção real e atualizadas em
+   `00-INDICE.md`, `02-MODELO_LOGICO.md`, `03-MODELO_FISICO.md`: 66
+   migrations, 80 tabelas de negócio (65 ativas + 12 órfãs PT + 3 log
+   técnico de migração), 175 foreign keys (era 171, +4 das 2 tabelas
+   novas). `docs/database/07-DISASTER_RECOVERY.md`: números de teste de
+   restore real (§2.1, 79 tabelas/`SequelizeMeta=64`) **preservados como
+   evidência histórica** (não retroativamente alterados — o teste rodou
+   antes desta migration), com nota explícita de defasagem; o "Esperado"
+   documentado (não testado, §2 fora do §2.1) atualizado para 81.
+6. `docs/database/05-ACESSOS_E_ISOLAMENTO.md` §1.1.1 (novo) — confirmado
+   por query real em `information_schema.role_table_grants` que
+   `evok_app` recebeu `SELECT/INSERT/UPDATE/DELETE` nas 2 tabelas novas
+   **automaticamente**, sem GRANT manual, via `ALTER DEFAULT PRIVILEGES`
+   da migration `-000080` — primeira confirmação prática (não só
+   teórica) do mecanismo desde que a role foi criada.
+7. `docs/DATABASE.md` — entrada de changelog nova com o detalhamento
+   coluna-a-coluna das 2 tabelas (padrão já usado para RFQ/centros de
+   custo/conciliação bancária).
+
+**Verificação antes de escrever números:** `npm run migration:status`
+(a partir de `server/`) confirmou as 66 migrations `up`, incluindo
+`20260806-000090-create-import-processes.cjs` como a mais recente.
+Consulta direta a `information_schema.tables`/`table_constraints`
+confirmou 80 tabelas de negócio e 175 foreign keys antes de qualquer
+edição de contagem nos documentos.
+
+**Handoff:** nenhum código de aplicação foi alterado nesta rodada — é
+puramente documentação de banco. Se o `AuditorIntegrador` ou
+`AnalistaNegocios` precisar rastrear UC-19 → banco → API, o ponto de
+entrada é `docs/database/04-DICIONARIO_DADOS.md#importprocesses` /
+`#importprocessitems` e `docs/DATABASE.md` (seção nova, final do
+arquivo).

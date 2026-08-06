@@ -66,6 +66,49 @@ Nunca expõem stack trace nem a mensagem crua da exceção ao cliente, em nenhum
 
 > Nota: controllers devem propagar exceções inesperadas com `next(error)` (nunca montar a resposta de erro manualmente com `error.message`); o `errorHandler` central é responsável por sanitizar e formatar a resposta.
 
+### Convenção de caixa (casing) dos campos JSON
+
+**(Nota adicionada em 2026-08-06, achado da auditoria cruzada `AuditorIntegrador`.)**
+Este projeto **não tem uma convenção única** de `snake_case` vs `camelCase`
+para os campos das respostas/requests — o comportamento real depende de
+como cada model Sequelize e cada handler foi escrito, não de uma
+configuração global. Documentamos a realidade abaixo em vez de fingir uma
+padronização que o código não tem:
+
+- **Todos os models usam `underscored: true`** (mapeamento para colunas
+  `snake_case` no PostgreSQL), mas isso só afeta o nome da **coluna no
+  banco** — não força o nome do atributo exposto em JSON.
+- **Timestamps (`createdAt`/`updatedAt`)** aparecem em **camelCase** em
+  praticamente toda a API — é o nome de atributo padrão do Sequelize e a
+  maioria dos models não o sobrescreve. Exceção conhecida: o model `Item`
+  (módulo `items`, tabela `items`) renomeia os próprios atributos de
+  timestamp para `criado_em`/`atualizado_em` (português, snake_case).
+- **Os demais campos seguem o que o model declarou como nome de atributo
+  JS**, não necessariamente a coluna do banco:
+  - Models que declaram o atributo já em `snake_case` (ex.: `Client.cpf_cnpj`,
+    `Sale.customer_id`, `Asset.purchase_value`) devolvem esse campo em
+    `snake_case` no JSON — é a maioria dos models de domínio deste projeto.
+  - Models que declaram o atributo em `camelCase` com `field: 'coluna_snake'`
+    explícito (ex.: `User.accessProfileId` → coluna `access_profile_id`,
+    `User.passwordVersion` → coluna `password_version`) devolvem esse campo
+    em `camelCase` no JSON.
+- **Requests (bodies)** seguem o schema Zod (ou o parsing manual do
+  controller) de cada endpoint — a grande maioria usa `snake_case`
+  (convenção herdada dos primeiros contratos da API), mas há exceções
+  pontuais em `camelCase` (ex.: `resetPasswordSchema.newPassword` em
+  `POST /api/auth/reset-password`). Não há checagem automática de
+  consistência entre módulos.
+- **Consequência prática mais visível (achado confirmado no código, não
+  erro de digitação da doc):** `PUT /api/users/:id/access-profile` aceita
+  `access_profile_id` (snake) no request e devolve `accessProfileId`
+  (camel) no response — o controller lê `req.body.access_profile_id`
+  manualmente, mas o use case (`AssignAccessProfileUseCase`) devolve o
+  objeto já no shape do model `User` (`accessProfileId`).
+
+**Regra prática para quem consome a API:** não assuma nenhum padrão
+global — sempre confira o exemplo de request/response do endpoint
+específico nesta documentação.
+
 ---
 
 ## 1. Autenticação
@@ -167,6 +210,57 @@ Registra um novo usuário (apenas admin).
   }
 }
 ```
+
+### POST /api/auth/forgot-password
+**(SEC-12)** Inicia o fluxo de recuperação de senha por e-mail. Sem
+`authenticate` (endpoint público). Rate-limit dedicado
+(`passwordRecoveryLimiter`, 10 requisições/15min por e-mail+IP — não
+compartilha cota com `POST /api/auth/login`).
+
+**Request:**
+```json
+{ "email": "usuario@evokaudio.com.br" }
+```
+
+**Response (200) — sempre a mesma mensagem, exista ou não o e-mail (evita
+enumeração de contas):**
+```json
+{
+  "success": true,
+  "data": { "message": "Se o e-mail informado existir, enviaremos instruções de recuperação em instantes." }
+}
+```
+
+Internamente (`ForgotPasswordUseCase`), quando o e-mail existe, gera um
+token de uso único, salva `resetPasswordTokenHash` (SHA-256) e
+`resetPasswordExpiresAt` no usuário. **Erro (400)** — `email` ausente ou
+formato inválido (`ValidationError`).
+
+### POST /api/auth/reset-password
+**(SEC-12)** Conclui a recuperação de senha com o token recebido por
+e-mail. Sem `authenticate` (o próprio token no body é a credencial). Mesmo
+rate-limit de `forgot-password`.
+
+**Request:**
+```json
+{ "token": "<token de 32+ caracteres recebido por e-mail>", "newPassword": "novaSenha123" }
+```
+Note o campo `newPassword` em **camelCase** — exceção à convenção
+predominante `snake_case` dos demais bodies desta API (ver "Convenção de
+caixa" no topo deste documento).
+
+**Response (200):**
+```json
+{ "success": true, "data": { "message": "Senha redefinida com sucesso. Faça login novamente." } }
+```
+
+Efeitos (SEC-10): a troca de senha incrementa `passwordVersion` do
+usuário, **invalidando todos os tokens JWT emitidos anteriormente**
+(sessões antigas passam a receber `401` no próximo request autenticado).
+
+**Erro (400)** — `token`/`newPassword` ausentes ou `newPassword` com menos
+de 6 caracteres (`ValidationError`). **Erro (422)** — token inválido,
+expirado ou já utilizado (`BusinessRuleError`).
 
 ### GET /api/auth/me
 Retorna os dados do usuário autenticado.
@@ -503,7 +597,7 @@ Lista todos os clientes (com paginação e busca).
       "email": "joao@email.com",
       "address": "Rua A, 123",
       "status": "active",
-      "created_at": "2024-01-15T10:00:00.000Z"
+      "createdAt": "2024-01-15T10:00:00.000Z"
     }
   ],
   "pagination": {
@@ -748,7 +842,7 @@ Lista vendas com paginação.
       "status": "confirmed",
       "payment_method": "credit_card",
       "items_count": 3,
-      "created_at": "2024-01-15T10:30:00.000Z"
+      "createdAt": "2024-01-15T10:30:00.000Z"
     }
   ]
 }
@@ -1700,6 +1794,81 @@ Rejeita a contagem, `pending_approval` → `rejected` (`authorizeModule('contage
 
 ---
 
+## 8.3 Lotes (`LotControl`) — Rastreabilidade Física e QR Code
+
+**(Seção adicionada em 2026-08-06 — endpoints já existiam em código, sem
+documentação.)** Base URL: `/api/inventory/lots*`, módulo
+`server/src/modules/inventory/`. `authorizeModule('estoque')` para
+leitura/listagem; liberar (`release`) e bloquear (`block`) um lote exigem
+`authorizeModule('qualidade', 'approve')` — ação de gestão de Qualidade
+sobre um dado que nasce no Recebimento/Estoque (UC-37).
+
+### GET /api/inventory/lots?product_id=&status=&page=&limit=
+Lista lotes (`LotControl`) com filtros e paginação, incluindo `product` e
+`supplier`. Uso duplo:
+- Sem `status` e com `product_id` (uso legado/produção): só lotes
+  `status='available'` com `quantity_available > 0` (consumo em conclusão
+  de OP).
+- Com `status` explícito (ex.: `status=quarantine`): usado pela inspeção
+  de recebimento para listar lotes pendentes de liberação.
+
+### GET /api/inventory/lots/by-code/:lot_number?product_id=
+Resolve um lote a partir do código legível (`lot_number`), lido por
+scanner físico ou digitado manualmente no app mobile. `product_id` é
+opcional, usado só para desambiguar quando o mesmo código existir em mais
+de um produto. Registrada **antes** de `/lots/:id/*` para não colidir com
+o parâmetro posicional `:id`.
+
+### GET /api/inventory/lots/:id/qrcode?format=png|svg
+Gera o QR Code de um lote para impressão em etiqueta física, reaproveitando
+o `GenerateEntityQrCodeUseCase` genérico (o mesmo usado por
+`GET /api/assets/:id/qrcode`).
+
+**IMPORTANTE (achado nº 5 da auditoria cruzada):** o QR é gerado
+**on-the-fly, a cada chamada** — não existe nenhuma coluna no banco (nem em
+`lot_controls`, nem em `assets`/`products`) que armazene a imagem ou o
+payload do QR. `GenerateEntityQrCodeUseCase` busca a entidade
+(`LotControl.findByPk`), monta o payload
+(`{ lot_number, product_code, product_name }`) e chama
+`QRCodeService.generate`/`generateSvg` em memória, devolvendo o resultado
+já codificado na resposta HTTP. Chamar o endpoint duas vezes gera o PNG/SVG
+duas vezes (determinístico para o mesmo payload, mas nunca lido de cache
+ou de disco).
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "format": "png",
+    "qrDataUrl": "data:image/png;base64,iVBORw0K...",
+    "qrCodeData": { "type": "lot", "id": 42, "lot_number": "LOTE-2026-0042", "product_code": "AF-001", "product_name": "Alto-Falante 8\"" }
+  }
+}
+```
+Com `?format=svg`, a resposta troca `qrDataUrl` por `qrSvg` (string SVG
+inline). O QR codifica o **código legível** (`lot_number`), não o `id`
+interno — a leitura no mobile deve extrair `lot_number` e chamar
+`GET /api/inventory/lots/by-code/:lot_number` para resolver o registro
+completo. **Erro (404)** — lote inexistente (`NotFoundError`).
+
+### POST /api/inventory/lots/:id/release
+Libera um lote para consumo (`quarantine`/`blocked` → `available`). Usado
+pela inspeção de recebimento (pós-quarentena) e pela qualidade
+(pós-tratativa de RNC). `authorizeModule('qualidade', 'approve')`.
+
+**Request:** `{ "notes": "Inspecionado, aprovado no lote-piloto" }` (`notes` opcional.)
+
+### POST /api/inventory/lots/:id/block
+Bloqueia um lote (`quarantine`/`available` → `blocked`).
+`authorizeModule('qualidade', 'approve')`. Usado pela inspeção de
+recebimento e, internamente, por `CreateNonConformityUseCase` ao registrar
+uma RNC vinculada a um lote (ver seção "Qualidade — Não Conformidades").
+
+**Request:** `{ "reason": "Dimensional fora de especificação" }` (`reason` obrigatório, mínimo 3 caracteres.)
+
+---
+
 ## 9. Estrutura de Produto (BOM)
 
 Base URL: `/api/engineering/bom`
@@ -2262,6 +2431,961 @@ Inclui sempre um grupo agregado `department_id: null` ("Sem departamento") — c
 ```
 
 Departamentos ativos aparecem em ordem alfabética; o grupo `"Sem departamento"` é sempre o último item da lista. Demandas vinculadas a um departamento inativo (soft delete, `active = false`) não aparecem em nenhum grupo até o departamento ser reativado.
+
+---
+
+## 15. Requisição de Compra
+
+**(Seção adicionada em 2026-08-06 — módulo P0 do Go-Live, sem seção própria
+em `docs/API.md` até então.)** Módulo `server/src/modules/purchaseRequisitions/`,
+base URL `/api/purchase-requisitions`. Origem obrigatória de toda a cadeia
+de suprimentos (`CLAUDE.md` §7, "Requisição de Compra como Origem").
+`authorizeModule('requisicoes', ...)`: leituras exigem `view` implícito,
+escritas comuns `operate`; `PATCH /:id/status` exige nível `approve` **na
+rota** para qualquer transição, mas o controller ainda tem uma checagem
+adicional hard-coded (`role !== 'admin'`) especificamente para a transição
+`→ approved` — risco de convivência documentado no cabeçalho do arquivo de
+rotas e em `docs/governance/TODO.md` (um usuário com perfil "Gestor de
+Requisições", `level='approve'`, passa pela rota mas ainda pode ser barrado
+pelo controller legado).
+
+Máquina de status: `draft → pending → approved → ordered` (`partial`,
+`received`, `canceled` também possíveis conforme o fluxo de conversão/
+recebimento do pedido de compra gerado).
+
+### GET /api/purchase-requisitions
+Lista requisições, paginada.
+
+**Query Params:** `page`, `limit` (máx. 100), `status` (`draft`/`pending`/`approved`/`ordered`/`partial`/`received`/`canceled`), `origin`, `requester_id`, `department_id`, `start_date`, `end_date`.
+
+### GET /api/purchase-requisitions/:id
+Detalhe da requisição, com itens.
+
+### POST /api/purchase-requisitions
+Cria uma requisição (`status` inicial `draft` ou `pending`, se informado).
+`requester_id` **nunca** vem do body — sempre de `req.user.id` (JWT), e
+`department_id` **nunca** é aceito do cliente (schema `.strict()` rejeita)
+— é sempre resolvido a partir do `Employee` vinculado ao usuário
+autenticado (`requester_id → Employee.user_id → Employee.department_id`).
+
+**Request:**
+```json
+{
+  "production_order_id": 12,
+  "engineering_project_id": 4,
+  "request_date": "2026-08-06",
+  "priority": "urgent",
+  "status": "pending",
+  "origin": "manual",
+  "notes": "Reposição de bobinas para OP-2026-0012",
+  "items": [
+    { "item_id": "9f2b...uuid", "quantity": 100, "unit": "un", "required_date": "2026-08-20", "suggested_supplier_id": 7, "unit_price_estimated": 12.5 }
+  ]
+}
+```
+`priority`: `normal`/`urgent`/`emergency` (opcional). `origin` é
+`VARCHAR(80)` livre (não enum) — aceita também `mrp`, `mrp_auto` (gerados
+automaticamente pelo MRP) e `engenharia_amostra` (UC-39; quando usado,
+`notes` passa a ser **obrigatório em runtime**, validado no use case como
+`BusinessRuleError` 422, não no schema Zod). `items` exige ao menos 1 item;
+`item_id` é UUID (`items.id`, não `products.id`).
+
+**Response (201):** requisição criada com `requisition_number` (`RQ-<timestamp>`).
+
+### PATCH /api/purchase-requisitions/:id/status
+Transiciona o status: `draft → pending/canceled`, `pending → approved/canceled`.
+
+**Request:** `{ "status": "approved" }` (enum: `approved`/`canceled`/`pending`).
+
+**Erro (403)** — aprovar (`status: "approved"`) sem nível `approve` em
+`requisicoes` nem `role: admin` (`ForbiddenError`, checagem redundante rota
++ controller, ver nota acima).
+
+### POST /api/purchase-requisitions/:id/convert
+Converte uma requisição **aprovada** em um ou mais Pedidos de Compra (um
+por fornecedor resolvido), transacional com lock pessimista
+(`SELECT...FOR UPDATE`) na requisição.
+
+**Request:** `{ "fallback_supplier_id": 9, "notes": "Urgente cliente XPTO" }`
+(`fallback_supplier_id` opcional, usado só para itens sem
+`suggested_supplier_id` nem fornecedor preferencial ativo em
+`item_suppliers`; `notes` opcional, default
+`"Gerada automaticamente do plano MRP"`).
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "requisition_id": 99,
+    "requisition_status": "ordered",
+    "purchase_orders": [ { "id": 150, "order_number": "PO-1754...-1", "supplier_id": 7, "total_amount": 1250.0 } ]
+  }
+}
+```
+**Erro (404)** — requisição inexistente. **Erro (422)** — requisição não
+está `approved`, ou algum item não tem fornecedor resolvível
+(`BusinessRuleError`).
+
+> Ver também `POST /api/mrp/planned-orders/convert` (seção 13, MRP) — a
+> outra origem de criação de requisições, e `POST /api/rfqs` (seção 11.1)
+> para o caminho alternativo de cotação multi-fornecedor antes de gerar o
+> pedido de compra.
+
+---
+
+## 16. Qualidade — Não Conformidades (RNC)
+
+Módulo `server/src/modules/nonConformities/`, base URL
+`/api/quality/non-conformities`. `authorizeModule('qualidade', ...)`:
+leituras `view` implícito, escritas comuns `operate`, `DELETE` (fechamento)
+exige `approve`.
+
+### GET /api/quality/non-conformities
+Lista RNCs com filtros e paginação (`status`, `origin`, `severity`,
+`product_id`, `production_order_id`, `asset_id`, `page`, `limit`).
+
+### GET /api/quality/non-conformities/:id
+Detalhe de uma RNC.
+
+### POST /api/quality/non-conformities
+Registra uma nova RNC. `reported_by` vem sempre de `req.user.id` (nunca do
+body). Único campo obrigatório em runtime é `description`
+(`ValidationError` 400 se ausente) — os demais têm defaults no model
+(`severity: 'minor'`, `origin: 'in_process'`, `defect_type: 'other'`).
+
+**Request:**
+```json
+{
+  "product_id": 5,
+  "purchase_item_id": 42,
+  "asset_id": null,
+  "production_order_id": null,
+  "supplier_id": 7,
+  "description": "Bobina fora de especificação dimensional",
+  "severity": "major",
+  "origin": "incoming",
+  "defect_type": "dimensional",
+  "quantity_affected": 20,
+  "immediate_action": "return_supplier",
+  "lot_number": "LOTE-2026-0042"
+}
+```
+`severity`: `critical`/`major`/`minor`. `origin`: `incoming`/`in_process`/
+`final`/`audit`/`customer_complaint`/`supplier`. `defect_type`:
+`dimensional`/`visual`/`electrical`/`acoustic`/`material`/`packaging`/
+`other`. `immediate_action`: `rework`/`scrap`/`return_supplier`/
+`use_as_is`/`sorting`/`other`.
+
+**Efeitos, todos na mesma transação:**
+1. Se `lot_number` + `product_id` referenciam um lote existente em status
+   bloqueável (`available`/`quarantine`/`reserved`), o lote é bloqueado
+   (→ `blocked`) — ver `POST /api/inventory/lots/:id/block` (seção 8.3).
+   Lote não encontrado: a RNC ainda é criada (pode referenciar lote
+   externo/legado).
+2. Se o lote referenciado tem `supplier_id` preenchido (veio de um
+   recebimento), `suppliers.quality_score` daquele fornecedor é
+   recalculado de forma síncrona (`MAX(0, 100 - rncs_count/receipts_count*100)`)
+   — ver `GET /api/suppliers` (seção 12) para o campo resultante.
+3. Se `immediate_action = "return_supplier"`, aciona a devolução ao
+   fornecedor (`SupplierReturnHandler`): estorna estoque (via
+   `purchase_item_id`) ou muda `Asset.status` (via `asset_id`). A
+   tratativa comercial (crédito/reposição) não é resolvida aqui — vira
+   item de trabalho na fila de Compras (`GetDashboardHandoffsUseCase`).
+
+**Erro (400)** — `description` ausente (`ValidationError`).
+
+### PUT /api/quality/non-conformities/:id
+Atualiza campos da RNC (análise de causa raiz, ação corretiva, etc.). Se
+o payload fechar a RNC, `closed_by` vem de `req.user.id`.
+
+### DELETE /api/quality/non-conformities/:id
+Fecha (soft delete lógico, `status → closed`) uma RNC.
+`authorizeModule('qualidade', 'approve')`.
+
+---
+
+## 17. Laboratório (Testes Acústicos / Thiele-Small)
+
+Módulo `server/src/modules/laboratory/`, base URL `/api/laboratory`.
+Piloto de `authorizeModule('laboratorio', ...)` **aditivo** — compõe em
+camada com `authorize('admin', 'operator')` legado no `POST /tests`
+(ambos precisam passar), não o substitui. Leituras exigem `view`
+implícito.
+
+### GET /api/laboratory/tests/summary?product_id=&days=
+Agregado (total/passed/failed/pass_rate) por `test_type`, últimos `days`
+dias (default 30, máx. 3650). Registrada **antes** de `GET /tests` para
+não colidir com um futuro `/tests/:id`.
+
+### GET /api/laboratory/tests?product_id=&test_type=&passed=&serial_number=&start_date=&end_date=&page=&limit=
+Lista paginada de testes de laboratório, com `product` e `tester`
+incluídos.
+
+### POST /api/laboratory/tests
+Registra um resultado de teste. `authorizeModule('laboratorio', 'operate')`
+**e** `authorize('admin', 'operator')` (ambos exigidos).
+
+**Request:**
+```json
+{
+  "product_id": 5,
+  "serial_number": "SN-000123",
+  "lot_number": "LOTE-2026-0042",
+  "production_order_id": 12,
+  "test_type": "thiele_small",
+  "parameters": { "fs_hz": 45.2, "qts": 0.35 },
+  "result": 45.2,
+  "unit": "Hz",
+  "specification_min": 40,
+  "specification_max": 50,
+  "curve_data": { "frequencies": [20, 50, 100], "db": [70, 85, 90] },
+  "notes": "Amostra do lote piloto",
+  "create_rnc_on_fail": true,
+  "consumed_quantity": 1
+}
+```
+`test_type` (enum): `impedance`/`frequency_response`/`thd`/`power_rms`/
+`power_peak`/`life`/`polarity`/`noise`/`thiele_small`. `create_rnc_on_fail`
+(opcional): quando `true` e o teste reprova, abre uma RNC automaticamente.
+`consumed_quantity` (opcional, Bloco 4/UC-42-E): quando > 0, debita
+automaticamente o Depósito `LABORATORIO` na mesma transação (teste
+destrutivo); ausente/0 = teste não-destrutivo, sem débito de estoque.
+
+**Response (201):** teste criado, com `tester_id` = `req.user.id`.
+
+---
+
+## 18. Engenharia — Projetos P&D, Desenhos Técnicos e Ficha Técnica
+
+Módulo `server/src/modules/engineering/`, base URL `/api/engineering`
+(**exceto** `/api/engineering/bom/*`, que é o módulo `bom` — seção 9,
+registrado ANTES deste em `app.ts` para não ser capturado). Piloto de
+`authorizeModule('engenharia', ...)` **aditivo**, compõe com
+`authorize('admin', 'operator')` legado nos endpoints de escrita comuns.
+Liberar (`release`)/obsoletar (`obsolete`) um desenho exigem
+`authorizeModule('engenharia', 'approve')` **e** `authorize('admin')`.
+
+### Projetos de Engenharia (P&D)
+
+| Método | Rota | RBAC | Descrição |
+|--------|------|------|-----------|
+| `GET` | `/api/engineering/projects?status=&stage=&page=&limit=` | view | Lista paginada |
+| `GET` | `/api/engineering/projects/:id` | view | Detalhe |
+| `POST` | `/api/engineering/projects` | operate + `admin`/`operator` | Cria (409 se `project_code` duplicado) |
+| `PUT` | `/api/engineering/projects/:id` | operate + `admin`/`operator` | Atualiza |
+
+**Request (`POST`):**
+```json
+{
+  "project_code": "PD-2026-001",
+  "name": "Alto-falante 15\" Pro Series",
+  "description": "Novo modelo para linha profissional",
+  "project_type": "new_product",
+  "product_id": 8,
+  "project_manager_id": 3,
+  "start_date": "2026-08-10",
+  "target_date": "2026-12-01",
+  "budget": 150000,
+  "priority": "high",
+  "notes": "Prioridade do trimestre"
+}
+```
+`project_type`: `new_product`/`improvement`/`customization`/`research`.
+`priority`: `low`/`normal`/`high`/`critical`. `PUT` aceita adicionalmente
+`stage` (`concept`/`design`/`prototype`/`testing`/`homologation`/
+`production`), `status` (`active`/`paused`/`completed`/`canceled`),
+`completion_date`, `actual_cost`.
+
+### Desenhos Técnicos
+
+| Método | Rota | RBAC | Descrição |
+|--------|------|------|-----------|
+| `GET` | `/api/engineering/drawings?product_id=&status=&page=&limit=` | view | Lista paginada |
+| `POST` | `/api/engineering/drawings` | operate + `admin`/`operator` | Cria (409 se número+revisão duplicados) |
+| `PUT` | `/api/engineering/drawings/:id` | operate + `admin`/`operator` | Atualiza |
+| `POST` | `/api/engineering/drawings/:id/release` | **approve** + `admin` | Libera (`draft → released`) |
+| `POST` | `/api/engineering/drawings/:id/obsolete` | **approve** + `admin` | Torna obsoleto (`released → obsolete`) |
+
+**Request (`POST`):**
+```json
+{
+  "product_id": 8,
+  "drawing_number": "DWG-15POL-001",
+  "revision": "A",
+  "title": "Vista explodida — Alto-falante 15\"",
+  "drawing_type": "exploded",
+  "file_path": "/uploads/drawings/dwg-15pol-001-a.pdf",
+  "material_spec": "Aço SAE 1020",
+  "dimensions": "Ø 380mm x 150mm",
+  "tolerances": "±0.5mm",
+  "notes": "Revisão inicial"
+}
+```
+`drawing_type`: `assembly`/`detail`/`exploded`/`schematic`/`bom`.
+`release`/`obsolete` não recebem body — `approved_by` vem de `req.user.id`.
+
+### Ficha Técnica Thiele-Small (`ItemEspecificacaoTecnica`)
+
+| Método | Rota | RBAC | Descrição |
+|--------|------|------|-----------|
+| `GET` | `/api/engineering/items/:itemId/technical-spec` | view | Busca a ficha técnica de um item (404 se item não existe) |
+| `PUT` | `/api/engineering/items/:itemId/technical-spec` | operate + `admin`/`operator` | Upsert |
+
+**Request (`PUT`):**
+```json
+{
+  "familia_tecnica": "woofer_15",
+  "atributos": {
+    "fs_hz": 32.5, "qms": 5.2, "qes": 0.42, "qts": 0.39,
+    "vas_l": 85.0, "sd_cm2": 855, "xmax_mm": 6.5,
+    "re_ohms": 6.2, "le_mh": 1.8, "bl_tm": 18.5,
+    "mms_g": 95.0, "cms_mm_n": 0.28, "spl_db": 96.5
+  }
+}
+```
+Os 13 parâmetros Thiele-Small são todos opcionais e numéricos, persistidos
+dentro do JSONB `atributos` (`.catchall` permite campos extras
+número/string/boolean/null além dos 13 nomeados).
+
+---
+
+## 19. Patrimônio (Ativos)
+
+Módulo `server/src/modules/assets/`, base URL `/api/assets`.
+`authorizeModule('patrimonio', ...)`: leituras `view` implícito, escritas
+comuns `operate`, `DELETE` exige `approve`.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/assets` | Lista ativos (filtros e paginação) |
+| `GET` | `/api/assets/:id` | Detalhe |
+| `POST` | `/api/assets` | Cria |
+| `PUT` | `/api/assets/:id` | Atualiza |
+| `DELETE` | `/api/assets/:id` | Inativa (soft delete) |
+| `POST` | `/api/assets/:id/photo` | Envia/substitui a foto (multipart, campo `photo`) |
+| `GET` | `/api/assets/:id/qrcode?format=png\|svg` | Gera QR Code do ativo |
+
+**Request (`POST`):**
+```json
+{
+  "tag": "AT-0042",
+  "name": "Torno CNC Romi",
+  "description": "Torno CNC para usinagem de componentes",
+  "department_id": 3,
+  "responsible_id": 5,
+  "location": "Setor de Usinagem",
+  "asset_type": "machine",
+  "brand": "Romi",
+  "model": "GL 240M",
+  "serial_number": "SN-ROMI-2020",
+  "purchase_date": "2020-03-15",
+  "purchase_value": 250000.0,
+  "useful_life_months": 120,
+  "notes": "Adquirido em leilão de ativos usados"
+}
+```
+`asset_type`: `machine`/`equipment`/`tool`/`furniture`/`vehicle`/`it`/
+`other`/`license`. `status` (não aceito na criação, default `active`):
+`active`/`in_maintenance`/`decommissioned`/`lost`/`returned_to_supplier`
+(este último setado automaticamente por
+`SupplierReturnHandler.applySupplierReturn`, ver seção 16). `tag` é único.
+
+**QR Code — mesma observação da seção 8.3 (Lotes):** gerado **on-the-fly**
+a cada chamada via `GenerateEntityQrCodeUseCase`/`QRCodeService`, sem
+nenhuma coluna de imagem persistida (`assets.qr_code` guarda apenas um
+identificador de texto legado, não a imagem). Payload do QR:
+`{ tag, name }`.
+
+---
+
+## 20. Manutenção
+
+Módulo `server/src/modules/maintenance/`, base URL `/api/maintenance`.
+`authorizeModule('manutencao', ...)`: leituras `view` implícito, escritas
+comuns `operate`, `DELETE` (cancelamento) exige `approve`.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/maintenance` | Lista ordens de manutenção (filtros e paginação) |
+| `GET` | `/api/maintenance/:id` | Detalhe |
+| `POST` | `/api/maintenance` | Cria |
+| `PUT` | `/api/maintenance/:id` | Atualiza |
+| `DELETE` | `/api/maintenance/:id` | Cancela |
+
+**Request (`POST`):**
+```json
+{
+  "asset_id": 42,
+  "maintenance_type": "corrective",
+  "priority": "high",
+  "problem_description": "Ruído anormal no eixo principal"
+}
+```
+`reported_by` vem de `req.user.id`. `maintenance_type`: `preventive`/
+`corrective`/`predictive`/`emergency`/`overhaul`. `priority`: `low`/
+`normal`/`high`/`emergency`. `order_number` (`MO-<timestamp>` ou
+equivalente) é gerado no backend. Campos de acompanhamento (diagnóstico,
+serviço executado, custos, `status`) são atualizados via `PUT`. `status`
+(enum): `open`/`scheduled`/`in_progress`/`waiting_parts`/`completed`/
+`canceled`.
+
+---
+
+## 21. RH — Funcionários
+
+Módulo `server/src/modules/employees/`, base URL `/api/employees`.
+**Mantém o RBAC legado** (não passou pelo retrofit `authorizeModule`):
+leitura exige apenas `authenticate`; escrita (`POST`/`PUT`/`DELETE`) exige
+`authorize('admin')` — dados de RH (salário, admissão) restritos ao
+administrador global.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/employees` | Lista funcionários (busca/filtro/paginação) |
+| `GET` | `/api/employees/:id` | Detalhe |
+| `POST` | `/api/employees` | Cria (role `admin`) |
+| `PUT` | `/api/employees/:id` | Atualiza (role `admin`) |
+| `DELETE` | `/api/employees/:id` | Desliga (soft delete, role `admin`) |
+
+**Request (`POST`):**
+```json
+{
+  "department_id": 3,
+  "name": "Maria Oliveira",
+  "cpf": "12345678900",
+  "position": "Operadora de Produção",
+  "salary": 2200.0,
+  "salary_type": "mensal",
+  "hire_date": "2026-08-10",
+  "shift": "morning",
+  "work_regime": "clt",
+  "work_hours_weekly": 44
+}
+```
+`salary_type`: `mensal`/`horista`/`comissionado`. `shift`: `morning`/
+`afternoon`/`night`/`commercial`/`rotating`. `work_regime`: `clt`/`pj`/
+`estagiario`/`aprendiz`. `status` (default `active`, não aceito na
+criação): `active`/`inactive`/`fired`/`vacation`/`license`. `cpf` é único.
+
+---
+
+## 22. RH — Departamentos
+
+Módulo `server/src/modules/departments/`, base URL `/api/departments`.
+Mesmo padrão de RBAC legado de Funcionários: leitura só `authenticate`,
+escrita exige `authorize('admin')`.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/departments` | Lista departamentos ativos |
+| `GET` | `/api/departments/:id` | Detalhe |
+| `POST` | `/api/departments` | Cria (role `admin`) |
+| `PUT` | `/api/departments/:id` | Atualiza (role `admin`) |
+| `DELETE` | `/api/departments/:id` | Inativa (soft delete, role `admin`) |
+
+**Request (`POST`):**
+```json
+{ "code": "PROD", "name": "Produção", "sigla": "PRD", "description": "Chão de fábrica", "manager_id": 12 }
+```
+`code` e `sigla` são únicos (índices únicos no banco). `manager_id` (FK →
+`employees.id`) é opcional.
+
+---
+
+## 23. Rastreabilidade
+
+Módulo `server/src/modules/traceability/`, base URL `/api/traceability`.
+`authorizeModule('rastreabilidade')` (`view` implícito, qualquer nível
+presente) em todas as rotas — módulo somente leitura, concedido
+explicitamente aos perfis que precisam rastrear ponta a ponta
+(`docs/business/BUSINESS_RULES.md` §6.3).
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/traceability/items/:id` | Histórico de movimentações de um item (id inteiro; **404** se nenhum movimento encontrado) |
+| `GET` | `/api/traceability/lots/:id` | Histórico completo de um lote (id inteiro; **404** se nenhum movimento) |
+| `GET` | `/api/traceability/production-orders/:id` | Detalhes da OP com todos os insumos consumidos (**404** se OP não existe) |
+
+`:id` é validado como inteiro positivo em todas as 3 rotas
+(`traceabilityIdParamSchema`) — **400** `ValidationError` caso contrário.
+
+---
+
+## 24. Logs de Auditoria
+
+Módulo `server/src/modules/auditLogs/`, base URL `/api/audit-logs`.
+**RBAC legado**, exclusivo de `authorize('admin')` em ambas as rotas —
+não passou pelo retrofit `authorizeModule` (log de auditoria é
+informação sensível de todo o sistema, não de um módulo/área específica).
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/audit-logs` | Lista logs com filtros e paginação (role `admin`) |
+| `GET` | `/api/audit-logs/:id` | Detalhe de um log (role `admin`) |
+
+Cada log inclui `action`, `entityType`, `entityId`, `entityDescription`,
+`oldValues`/`newValues` (quando aplicável), `userId`, `description` e
+timestamp — gerado internamente por `logAction()` (`server/src/services/auditLogService.ts`),
+chamado pelos controllers/use cases de escrita da maioria dos módulos (ver
+nota de exceção em `/api/suppliers`, seção 12, que **não** gera auditoria).
+
+---
+
+## 25. Ordens de Serviço (Garantia / Assistência Técnica)
+
+Módulo `server/src/modules/serviceOrders/`, base URL `/api/service-orders`.
+`authorizeModule('garantia', ...)`: leituras `view` implícito, escritas
+comuns `operate`, `DELETE` (cancelamento) exige `approve`.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/service-orders` | Lista OS (filtros e paginação) |
+| `GET` | `/api/service-orders/:id` | Detalhe |
+| `POST` | `/api/service-orders` | Cria |
+| `PUT` | `/api/service-orders/:id` | Atualiza |
+| `DELETE` | `/api/service-orders/:id` | Cancela |
+
+**Request (`POST`):**
+```json
+{
+  "client_id": 10,
+  "product_id": 5,
+  "equipment_description": "Caixa acústica ativa 15\"",
+  "reported_issue": "Sem áudio em um dos canais",
+  "priority": "normal"
+}
+```
+`priority`: `low`/`normal`/`high`/`urgent`. `status` (default `open`, não
+aceito na criação): `open`/`diagnosing`/`in_progress`/`waiting_parts`/
+`completed`/`delivered`/`canceled`. `warranty_days` (default 90) e
+`order_number` (`OS-<timestamp>` ou equivalente) são geridos no backend.
+
+---
+
+## 26. Fiscal — Configuração do Emitente
+
+Módulo `server/src/modules/fiscal/`, base URL `/api/fiscal`. **Só a
+configuração fiscal da empresa emitente vive aqui** — os endpoints de NF-e
+por venda/compra ficam em `/api/sales/:id/nfe*` (seção 5) e
+`/api/purchases/:id/nfe` (seção 11), pois pertencem ao ciclo de vida de
+venda/compra. Ambas as rotas abaixo exigem `authorize('admin')` (dado
+sensível — não passou pelo retrofit `authorizeModule`).
+
+### GET /api/fiscal/config
+Retorna a configuração fiscal atual (ou `null`/vazio se nunca configurada).
+
+### PUT /api/fiscal/config
+Cria/atualiza (upsert) a configuração fiscal.
+
+**Request:**
+```json
+{
+  "legal_name": "Evok Audio Industria e Comercio LTDA",
+  "trade_name": "Evok Audio",
+  "cnpj": "12345678000199",
+  "ie": "1234567890",
+  "crt": "3",
+  "cep": "01310-100",
+  "street": "Av. Paulista",
+  "number": "1000",
+  "city": "São Paulo",
+  "city_ibge_code": "3550308",
+  "state": "SP",
+  "nfe_series": 1,
+  "nfe_environment": "homologacao",
+  "nfe_provider": "mock"
+}
+```
+`crt` (Código de Regime Tributário, enum string): `"1"` (Simples
+Nacional), `"2"` (Simples — excesso), `"3"` (Regime Normal). `nfe_environment`:
+`homologacao`/`producao`. `nfe_provider`: `mock`/`focus_nfe`/`enotas` —
+determina se `POST /api/sales/:id/nfe` (seção 5) simula a emissão (`mock`,
+usado em dev) ou integra com um provedor real.
+
+---
+
+## 27. Inventário Mobile (Scanner)
+
+Módulo `server/src/modules/mobileInventory/`, base URL `/api/mobile-inventory`.
+Consumido pelo app `mobile/` (scan de estoque). `authorizeModule('estoque', ...)`
+— mesmo módulo de permissão de `/api/inventory/movements`: leitura `view`
+implícito, escritas `operate`.
+
+### POST /api/mobile-inventory/scan
+Registra uma movimentação de estoque (entrada/saída) a partir de um único
+código escaneado. Transacional (lock pessimista via
+`InventoryService.adjust`, reaproveitado de `/api/inventory/movements`).
+
+**Request:**
+```json
+{ "product_code": "AF-001", "quantity": 10, "type": "in", "description": "Recebimento manual via mobile" }
+```
+`type`: `in`/`out`. **Erro (400)** — campo obrigatório ausente, quantidade
+`<= 0`, ou `type` inválido (`ValidationError`). **Erro (404)** — produto
+não encontrado pelo código. **Erro (400/422)** — estoque insuficiente para
+`type: "out"`.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "product": { "id": 1, "name": "Alto-Falante 8\"", "code": "AF-001" },
+    "movement": { "movementId": 501, "quantityAfter": 110 },
+    "new_quantity": 110
+  }
+}
+```
+
+### POST /api/mobile-inventory/batch
+Igual ao `scan`, mas processa uma lista de itens numa única transação —
+se qualquer item da lista falhar (produto não encontrado, quantidade
+inválida, estoque insuficiente), **toda a transação é revertida** (nenhum
+item é aplicado parcialmente).
+
+**Request:**
+```json
+{
+  "items": [
+    { "product_code": "AF-001", "quantity": 10, "type": "in" },
+    { "product_code": "CAB-P10-5M", "quantity": 5, "type": "out", "description": "Uso em montagem" }
+  ]
+}
+```
+
+**Response (200):** `{ "success": true, "data": { "items_processed": 2, "results": [ { "product_code": "AF-001", "product_name": "...", "type": "in", "quantity": 10, "movement_id": 501 } ] } }`
+
+### GET /api/mobile-inventory/movements
+Lista movimentações de estoque (paginação) — mesma fonte de dados de
+`GET /api/inventory/movements` (seção 8), exposta também aqui para o app
+mobile.
+
+---
+
+## 28. Webhooks (Integrações Externas)
+
+Módulo `server/src/modules/webhooks/`, base URL `/api/webhooks`. **Sem
+`authenticate`/`authorize`** — são endpoints de sistema externo
+(automação n8n, provedor de NF-e), protegidos por segredo compartilhado ou
+assinatura HMAC, nunca por JWT de usuário. Consistente com o princípio de
+desacoplamento do ERP: sistemas externos (n8n, Meta/WhatsApp via n8n)
+entram **apenas** por este webhook autenticado por segredo — nunca com
+acesso direto a use case/repository/banco.
+
+### POST /api/webhooks/n8n
+Recebe eventos de automação do n8n. Protegido por **assinatura HMAC** no
+header `X-Evok-Signature`, validada contra `req.rawBody` (corpo bruto
+capturado antes do parse JSON, ver `server/app.ts`).
+
+**Response (202):** `{ "success": true, "accepted": true, "event": "...", "duplicate": false }`
+(`duplicate: true` quando o `event_id` já foi processado antes — idempotência).
+
+**Erros:**
+| Status | Condição |
+|--------|----------|
+| 400 | Assinatura ausente (`MISSING_SIGNATURE`) ou payload sem `event_id` (`MISSING_EVENT_ID`) |
+| 401 | Assinatura inválida (`INVALID_SIGNATURE`) |
+| 503 | Webhook não configurado no ambiente (`WEBHOOK_SECRET_NOT_CONFIGURED`) |
+| 500 | Erro inesperado ao processar |
+
+### POST /api/webhooks/focus-nfe
+Notificação assíncrona de mudança de status de NF-e do provedor Focus NFe.
+Protegido por segredo compartilhado no header `X-Webhook-Secret`
+(`FOCUS_NFE_WEBHOOK_SECRET`), **não** por HMAC (a Focus NFe não assina o
+corpo por padrão). O payload recebido só extrai a referência (`ref`) — o
+status real da NF-e é **sempre reconsultado diretamente na API do
+provedor**, nunca aplicado cegamente do corpo do webhook.
+
+**Erros:** `401` (segredo inválido/ausente no header), `503` (secret não
+configurado no ambiente), `500`/`error.statusCode` (erro ao reconsultar).
+
+---
+
+## 29. Auditor Inteligente
+
+Módulo `server/src/modules/intelligentAuditor/`, base URL `/api/auditor`.
+**RBAC legado**, exclusivo de `authorize('admin')` nas 4 rotas — auditoria
+de consistência de dados de todo o sistema, não escopado a um módulo/área.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/auditor/stock` | Audita consistência de estoque (ex.: saldo negativo, produto sem movimentação recente com saldo alto) |
+| `GET` | `/api/auditor/sales` | Audita consistência de vendas |
+| `GET` | `/api/auditor/purchases` | Audita compras paradas (sem movimento há muito tempo) |
+| `GET` | `/api/auditor/financial` | Audita consistência financeira |
+
+Todas retornam `{ success: true, data: { ... } }`, sem paginação — cada
+`AuditXUseCase` agrega achados num objeto único (formato específico por
+domínio; ver `server/src/modules/intelligentAuditor/README.md`).
+
+---
+
+## 30. Centros de Trabalho
+
+Módulo `server/src/modules/workCenters/`, base URL `/api/work-centers`.
+`authorizeModule('centros_de_trabalho', ...)`: leituras `view` implícito,
+escritas `operate`. Base do cálculo de OEE (seção 7) e do MRP de
+capacidade finita (roadmap P2).
+
+### GET /api/work-centers/load?days=
+**Registrada ANTES de `GET /:id`** para não ser capturada pelo parâmetro
+posicional. Relatório de carga-máquina por centro de trabalho ativo, para
+os próximos `days` dias (1 a 60, default 7).
+
+### GET /api/work-centers?active=&page=&limit=
+Lista paginada, com turnos (`work_center_shifts`) incluídos.
+
+### GET /api/work-centers/:id
+Detalhe, com turnos incluídos.
+
+### POST /api/work-centers
+Cria um centro de trabalho (409 se `code` duplicado).
+
+**Request:**
+```json
+{
+  "code": "CNC-02",
+  "name": "Corte CNC 2",
+  "description": "Segunda máquina de corte CNC",
+  "machines_count": 1,
+  "capacity_hours_per_day": 16,
+  "efficiency_factor": 0.9
+}
+```
+`capacity_hours_per_day` (0 a 24) e `efficiency_factor` (0 a 1) alimentam
+diretamente o fallback de cálculo de `available_hours` do OEE (seção 7)
+quando o centro não tem turnos cadastrados.
+
+### PUT /api/work-centers/:id
+Atualiza campos (todos opcionais, incluindo `active`).
+
+### PUT /api/work-centers/:id/shifts
+Substitui integralmente os turnos do centro (transacional).
+
+**Request:**
+```json
+{
+  "shifts": [
+    { "weekday": 1, "start_time": "07:00", "end_time": "17:00" },
+    { "weekday": 2, "start_time": "07:00", "end_time": "17:00" }
+  ]
+}
+```
+`weekday`: 0 (domingo) a 6 (sábado). `start_time`/`end_time`: formato
+`HH:MM` (24h). Enviar `shifts: []` remove todos os turnos do centro (volta
+a usar o fallback `capacity_hours_per_day` no cálculo de OEE).
+
+---
+
+## 31. Itens (Item Mestre Industrial)
+
+Módulo `server/src/modules/items/`, base URL `/api/items`. É o cadastro
+mestre canônico usado por BOM/MRP/rastreabilidade (`CLAUDE.md` §4, "Item
+Core Intocado + Extensões"), **distinto** de `/api/products` (schema
+legado, seção 3) — os dois convivem durante a migração Product→Item (ver
+`docs/HANDOFF_CODEX.md`). `authorizeModule('produtos', ...)`: leituras
+`view` implícito, escritas `operate`. Todos os campos numéricos de
+estoque/custo são `DECIMAL(18,6)`, expostos como **string** no JSON (não
+`number` — evita perda de precisão de ponto flutuante em quantidades
+industriais), ex.: `"estoque_atual": "100.000000"`.
+
+### GET /api/items?page=&limit=&search=&tipo=&status=
+Lista paginada. `tipo`: `MATERIA_PRIMA`/`SUBCONJUNTO`/`PRODUTO_ACABADO`/
+`USO_E_CONSUMO`/`ATIVO_IMOBILIZADO`. `status`: `ATIVO`/`INATIVO`/
+`BLOQUEADO`.
+
+### POST /api/items
+Cria um item.
+
+**Request:**
+```json
+{
+  "codigo": "BOB-8POL",
+  "descricao": "Bobina 8 polegadas",
+  "tipo": "MATERIA_PRIMA",
+  "unidade": "un",
+  "estoque_seguranca": 50,
+  "lote_minimo": 100,
+  "lead_time_dias": 15,
+  "custo_padrao": 12.5,
+  "fornecedor_padrao_id": 7,
+  "conversao_automatica": false
+}
+```
+`codigo` é único. `fornecedor_padrao_id` (FK → `suppliers.id`, INTEGER —
+ver nota de BREAKING CHANGE 2026-08-06 na seção 3, Produtos) é opcional e
+aceita `null`. `conversao_automatica` (opcional, default `false`):
+opt-in do fechamento automático de ciclo do MRP (seção 13, UC-24b).
+
+### PATCH /api/items/:id
+Atualiza parcialmente o cadastro (todos os campos opcionais, exceto
+`codigo`/`tipo`/`unidade`, que não são editáveis por este endpoint).
+
+### PATCH /api/items/:id/inactivate (e alias DELETE /api/items/:id)
+Inativa (soft delete, `status → INATIVO`) um item, com verificação de
+vínculos ativos (BOM, OP, movimentos, lotes, MRP). **Erro (422)** — item
+tem dependência ativa que impede a inativação (`BusinessRuleError`, com
+`details` listando o(s) vínculo(s) encontrado(s)).
+
+### POST /api/items/:id/estrutura
+Cria uma ligação de estrutura (BOM do item mestre — distinto de
+`/api/engineering/bom`, seção 9, que opera sobre `products`).
+
+**Request:** `{ "item_componente_id": "uuid", "quantidade": 2, "perda_percentual": 5, "nivel": 1 }`
+(`item_pai_id` vem sempre de `:id` da rota; `criado_por` vem de `req.user.id`.)
+
+### GET /api/items/:id/estrutura/explode?quantity=&due_date=
+Explode a estrutura do item para a quantidade informada.
+
+### Catálogo Item × Fornecedor (`/api/items/:id/suppliers`)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/items/:id/suppliers` | Lista fornecedores vinculados ao item (catálogo N:N) |
+| `POST` | `/api/items/:id/suppliers` | Cria vínculo item×fornecedor |
+| `PUT` | `/api/items/:id/suppliers/:linkId` | Atualiza campos comerciais do vínculo |
+| `DELETE` | `/api/items/:id/suppliers/:linkId` | Desativa (soft delete) o vínculo |
+| `GET` | `/api/items/:id/purchase-history` | Histórico de compras do item, agregado por fornecedor |
+
+**Request (`POST /suppliers`):**
+```json
+{
+  "supplier_id": 7,
+  "unit_price": 12.5,
+  "currency": "BRL",
+  "lead_time_days": 15,
+  "moq": 100,
+  "supplier_item_code": "FX-BOB8",
+  "preferred": true,
+  "notes": "Fornecedor homologado desde 2024"
+}
+```
+Se `preferred: true`, zera o preferencial dos demais vínculos ativos do
+mesmo item (transacional) — só pode haver 1 fornecedor preferencial por
+item, usado como sugestão automática em `POST /api/mrp/planned-orders/convert`
+(seção 13) e em `POST /api/purchase-requisitions/:id/convert` (seção 15).
+
+---
+
+## 32. Importação / COMEX
+
+**(Seção adicionada em 2026-08-06 — módulo novo, UC-19.)** Módulo
+`server/src/modules/comex/`, base URL `/api/comex/import-processes`.
+`authorizeModule('comex', ...)`: leituras aceitam qualquer nível
+atribuído ao módulo, escritas exigem `operate` — **sem etapa de
+`approve`** (diferente da adjudicação de RFQ, seção 11.1): o UC-19 define
+um único ator (Analista de Comex). Reaproveita o cadastro de `Supplier`
+existente (sem campo dedicado de "fornecedor estrangeiro"). Todos os
+valores monetários calculados (`customs_value`, `ii_value`, `ipi_value`,
+`pis_value`, `cofins_value`, `icms_value`, `nationalized_unit_cost`) são
+`DECIMAL(18,6)`. **Sem tela web ainda** — próxima rodada de frontend.
+
+Máquina de status: `draft → shipped → arrived → customs_cleared →
+received | cancelled` (marcos de acompanhamento gravados em
+`shipped_at`/`arrived_at`/`customs_cleared_at`/`received_at`).
+
+### GET /api/comex/import-processes
+Lista paginada.
+
+**Query Params:** `page`, `limit` (máx. 100), `status`
+(`draft`/`shipped`/`arrived`/`customs_cleared`/`received`/`cancelled`),
+`supplier_id`. Cada item retorna `items` (com `item: { codigo, descricao
+}`), `supplier`, `createdBy`.
+
+### GET /api/comex/import-processes/:id
+Detalhe completo — todos os itens com tributos calculados.
+
+### POST /api/comex/import-processes
+Cria o processo (`status` nasce `draft`); tributos de cada item já são
+calculados na criação (estimativa inicial, pode mudar se câmbio/frete
+forem atualizados depois via `/tracking`).
+
+**Request:**
+```json
+{
+  "supplier_id": 12,
+  "fob_currency": "USD",
+  "exchange_rate": 5.35,
+  "freight_value": 1500.00,
+  "insurance_value": 200.00,
+  "other_expenses_value": 0,
+  "notes": "opcional",
+  "items": [
+    {
+      "item_id": "uuid-do-item",
+      "quantity": 1000,
+      "fob_unit_price": 4.20,
+      "ii_rate": 60,
+      "ipi_rate": 8,
+      "pis_rate": 2.1,
+      "cofins_rate": 9.65,
+      "icms_rate": 18
+    }
+  ]
+}
+```
+`supplier_id` inteiro positivo obrigatório. `fob_currency` 3 letras
+maiúsculas (default `USD`). `exchange_rate` positivo (default `1`).
+`freight_value`/`insurance_value`/`other_expenses_value` não-negativos
+(default `0`). `items` exige ao menos 1 item; `item_id` é UUID
+(`items.id`); `quantity`/`fob_unit_price` não-negativos; `ii_rate`/
+`ipi_rate`/`pis_rate`/`cofins_rate`/`icms_rate` percentuais 0–100
+(default `0`), informados manualmente — **sem resolução automática via
+Siscomex/NCM**.
+
+**Response (201):** processo criado com `process_number`
+(`IMP-<ano>-XXXX`, sequencial por ano) e itens já com `customs_value`/
+`*_value`/`nationalized_unit_cost` calculados.
+
+### POST /api/comex/import-processes/:id/tracking
+Registra o próximo marco do acompanhamento — precisa ser exatamente o
+próximo da sequência `shipped → arrived → customs_cleared`; pular etapa
+ou repetir dá `422`.
+
+**Request:**
+```json
+{
+  "event": "shipped",
+  "event_date": "2026-08-10",
+  "exchange_rate": 5.40,
+  "freight_value": 1600.00,
+  "insurance_value": 200.00,
+  "other_expenses_value": 50.00,
+  "notes": "opcional"
+}
+```
+`event` obrigatório (`shipped`/`arrived`/`customs_cleared`); `event_date`
+opcional (`YYYY-MM-DD`). Campos monetários opcionais — se informados, o
+cabeçalho é atualizado e **todos os itens são recalculados** na mesma
+chamada.
+
+### POST /api/comex/import-processes/:id/receive
+Sem body — o backend recalcula tudo fresco antes de dar entrada. Exige
+status `customs_cleared`.
+
+**Erro (422)** — algum item não tem um `Product` legado correspondente
+(`items.codigo` sem `products.code` — mesma exigência de
+`AwardRfqUseCase`/`ReceivePurchaseItemsUseCase`; o frontend deve orientar
+o cadastro do produto correspondente antes).
+
+**Sucesso:** `status → received`, `received_at` preenchido, entrada no
+estoque via `InventoryService.receive` (incrementa `Product.quantity`
+legado + cria `InventoryMovement` com `reference_type`/`source_type` =
+`'purchase'`, rastreabilidade específica via `reference_id`/`source_id` =
+`import_processes.id`) e custo médio via
+`CostingService.registerWeightedAverageCost`.
+
+### POST /api/comex/import-processes/:id/cancel
+Cancela o processo.
+
+**Request:** `{ "reason": "motivo com pelo menos 3 caracteres" }`.
+
+**Erro (422)** — processo já `received` (bloqueado).
+
+> Ver `docs/HANDOFF_CODEX.md`, seção "UC-19 — Importação/COMEX", para o
+> detalhamento completo das decisões de escopo (fórmula fiscal
+> simplificada, sem AP automática de tributos, sem integração Siscomex).
 
 ---
 

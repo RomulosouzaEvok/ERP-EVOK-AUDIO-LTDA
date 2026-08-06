@@ -415,7 +415,7 @@ Fase 4 migra 15 tabelas com `product_id INTEGER` para suportar `item_id UUID` em
 As próximas 14 tabelas (Fase 4.2–4.15) seguem o mesmo padrão 4 sub-passos (a/b/c/d):
 - `purchase_order_items`, `sale_items`, `production_orders`, `production_lot_consumptions`, `bill_of_material_items` (em Fase 5 será removida), `lot_controls`, `serial_numbers`, `non_conformities`, `service_orders`, `assets`, `product_cost_ledgers`, `inventory_count_items` (antes de outros repositórios que a usam).
 
-Cada tabela é sua própria micro-entrega + commit, executadas na ordem de risco documentada em `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` (Suppliers → Purchases → Inventory → Sales → Production → ...).
+Cada tabela é sua própria micro-entrega + commit, executadas na ordem de risco (Suppliers → Purchases → Inventory → Sales → Production → ...) que estava documentada em `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` — **nota de pente-fino 2026-08-06:** esse arquivo não existe mais no repositório; a ordem de execução em si já foi seguida (Fases 1–4.1 concluídas, ver seções acima), este é apenas um registro histórico da referência original.
 
 Só após todas as 15 tabelas expandidas (Fase 4 "expand" finalizada) é que módulos de aplicação serão migrados (Fase 5, com dual-read em repositories e use-cases) e `product_id` será removido das tabelas (Fase 4 "contract" final).
 
@@ -1568,7 +1568,7 @@ models/migrations (já existentes: `WorkCenter`, `WorkCenterShift`,
 - Não há teste de integração HTTP (supertest) dedicado às rotas — apenas
   cobertura unitária dos use cases (mesmo padrão dos demais módulos
   recentes deste handoff, ex.: `cost-variance`, `purchase-requisitions`).
-- Não foram tocados `docs/DATABASE_DICTIONARY.md`/`docs/DATABASE.md` nem
+- Não foram tocados `docs/database/04-DICIONARIO_DADOS.md`/`docs/DATABASE.md` nem
   `docs/projeto/04-USE_CASES.md`: os models `WorkCenter`/`WorkCenterShift`
   e a coluna `production_route_steps.work_center_id` já estavam prontos e
   documentados por outro agente antes desta tarefa (instrução explícita
@@ -7423,3 +7423,593 @@ refresh §1, vendas §5, financeiro §6, relatórios §7 — OEE com downtime +
 `docs/governance/TODO.md` (itens marcados `[x]`, novos `[ ]` de risco
 residual), `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md`
 (contagem de migrations, módulos/telas novas), este arquivo (esta seção).
+
+---
+
+## Patrimônio × Manutenção — sincronização automática de `Asset.status`
+
+**Data**: 2026-08-06
+**Escopo**: `server/src/modules/maintenance/`
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+Até esta entrega, `Asset.status` só era alterado manualmente — uma ordem
+de manutenção (OM) aberta/em andamento **não** tirava o ativo de operação
+na tela de Patrimônio; um ativo `in_maintenance` continuava aparecendo
+como `active`. O valor `in_maintenance` já existia no enum
+`enum_assets_status` (`server/src/models/Asset.ts`), mas nada no código o
+atribuía. Gap já rastreado como RF-PAT-05 `[PENDENTE]` em
+`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §8 e confirmado em
+`docs/governance/TODO.md` (achado "2) `Asset.status` sem sincronização
+automática").
+
+**Decisão de negócio tomada:** sincronização automática (não manual).
+
+**Gatilhos escolhidos** (documentados em JSDoc nos próprios use cases):
+- **Início do serviço:** a criação da OM
+  (`CreateMaintenanceOrderUseCase`) sempre nasce com `status: 'open'`
+  (aguardando início) — **não** é o gatilho certo para tirar o ativo de
+  operação. O gatilho real é a **transição da OM para `in_progress`**, em
+  `UpdateMaintenanceOrderUseCase` — é quando o técnico efetivamente começa
+  o serviço. Nesse momento: `Asset.status → 'in_maintenance'`.
+- **Fim do serviço:** conclusão (`status: 'completed'`, em
+  `UpdateMaintenanceOrderUseCase`) ou cancelamento (`status: 'canceled'`,
+  em `CancelMaintenanceOrderUseCase`) tentam devolver `Asset.status →
+  'active'`, **mas só se**:
+  1. o ativo ainda estiver `in_maintenance` no momento (o `UPDATE` usa
+     `WHERE status = 'in_maintenance'` — nunca sobrescreve
+     `decommissioned`/`lost`/`returned_to_supplier`; se o ativo foi
+     baixado durante a manutenção, a conclusão da OM não o "ressuscita");
+     e
+  2. **não existir nenhuma outra OM aberta** (`open`/`scheduled`/
+     `in_progress`/`waiting_parts`) para o mesmo ativo — o módulo
+     `maintenance` **permite múltiplas OMs simultâneas por ativo** (sem
+     índice único/checagem de exclusividade em
+     `CreateMaintenanceOrderUseCase`), então esse caso não é trivial e é
+     coberto por teste dedicado.
+
+Toda a sincronização roda **na mesma transação Sequelize** da mudança da
+OM, com `SELECT ... FOR UPDATE` na ordem de manutenção antes de decidir
+(mesmo padrão de `findByIdForUpdate` + `sequelize.transaction()` +
+`commit`/`rollback` já usado em `ChangeProductionOrderStatusUseCase` e
+`FinishProductionDowntimeUseCase`).
+
+### Arquivos alterados
+
+- `server/src/modules/maintenance/domain/repositories/MaintenanceRepository.ts`
+  — contrato ganhou `findByIdForUpdate(id, transaction)`,
+  `update(id, data, transaction?)` (parâmetro `transaction` agora
+  opcional), `markAssetInMaintenance(assetId, transaction)` e
+  `releaseAssetFromMaintenanceIfNoOtherOpenOrders(assetId,
+  excludeOrderId, transaction)` — todos com JSDoc completo.
+- `server/src/modules/maintenance/infrastructure/sequelize/SequelizeMaintenanceRepository.ts`
+  — implementação Sequelize dos 4 métodos novos/alterados. Usa o `Asset`
+  já importado (era usado só em `include`) para os dois `UPDATE`
+  condicionais; `MaintenanceOrder.count(...)` com `Op.ne`/`Op.in` para
+  contar outras OMs abertas do mesmo ativo.
+- `server/src/modules/maintenance/application/use-cases/UpdateMaintenanceOrderUseCase.ts`
+  — passou a rodar dentro de `sequelize.transaction()`, buscando a OM com
+  `findByIdForUpdate` antes de decidir o efeito colateral sobre
+  `Asset.status`. JSDoc do método `execute` documenta a escolha de
+  gatilho.
+- `server/src/modules/maintenance/application/use-cases/CancelMaintenanceOrderUseCase.ts`
+  — mesmo padrão de transação; cancelamento agora também tenta liberar o
+  ativo.
+- `server/src/modules/assets/` — **não foi necessário nenhum método
+  novo**; o repositório de `maintenance` já importava o model `Asset`
+  diretamente (para `include` nas consultas), então os `UPDATE`
+  condicionais de status ficaram na própria infraestrutura do módulo
+  `maintenance`, sem cruzar a fronteira do módulo `assets`.
+- `server/tests/unit/maintenance-use-cases.test.ts` — reescrito: 13
+  casos (eram 4), cobrindo os use cases com repositório mockado (padrão
+  `mockTransaction` igual a `production-downtime.test.ts`) e 3 casos
+  adicionais exercitando a query/condição real de
+  `releaseAssetFromMaintenanceIfNoOtherOpenOrders` no repositório
+  Sequelize (com `jest.doMock` do model, sem Postgres).
+- Sem migration — `in_maintenance` já existia no enum
+  `enum_assets_status`.
+
+### Documentações atualizadas
+
+- `docs/governance/TODO.md` — os 2 achados abertos sobre este gap
+  (`RF-PAT-05`) marcados `[x]` com evidência (arquivos alterados, número
+  de testes, resultado de `typecheck`); nota de atualização adicionada
+  onde o gap era citado como ressalva em `docs/patrimonio/03-MANUTENCAO.md`
+  (arquivo em si **não** editado por este agente — território exclusivo
+  de `server/`; fica para o agente de documentação atualizar a ressalva
+  na próxima rodada).
+- Este arquivo (`docs/HANDOFF_CODEX.md`, esta seção).
+- **Não alterados por este agente** (território de outros agentes em
+  paralelo, conforme instrução): `docs/API.md`, `docs/arquitetura/`
+  (inclui `DOCUMENTO_DE_REQUISITOS.md` §8 e
+  `DIAGRAMA_CASOS_DE_USO_BPMN.md` §5, que citam RF-PAT-05), `docs/projeto/`,
+  `docs/business/`, `docs/patrimonio/`.
+
+### Instruções de teste para o próximo agente/humano
+
+**Automatizado (já validado nesta entrega):**
+```bash
+cd server
+npm run typecheck              # 0 erros
+npx jest tests/unit            # 680/680 (era 671 antes desta entrega)
+npx jest tests/unit/maintenance-use-cases.test.ts   # 13/13
+```
+
+**Manual (tela de Patrimônio + Manutenção, `client/`), a validar por QA
+humano ou pelo próximo agente de frontend:**
+1. Criar um ativo `active` e abrir uma OM para ele
+   (`POST /api/maintenance`) — status da OM nasce `open`; `Asset.status`
+   deve permanecer `active` (criação não é gatilho).
+2. Iniciar a OM (`PUT /api/maintenance/:id` com `status: 'in_progress'`)
+   — `Asset.status` deve virar `in_maintenance` e refletir na tela de
+   Patrimônio (`GET /api/assets/:id` ou listagem).
+3. Concluir a OM (`status: 'completed'`) — `Asset.status` deve voltar
+   para `active`.
+4. Repetir 1–2 com **duas** OMs para o mesmo ativo (ambas `in_progress`).
+   Concluir apenas uma — `Asset.status` deve **permanecer**
+   `in_maintenance` (a outra OM ainda está aberta). Concluir a segunda —
+   aí sim `Asset.status` deve virar `active`.
+5. Cenário de baixa durante manutenção: com uma OM `in_progress` (ativo
+   `in_maintenance`), inativar o ativo por outro caminho (`DELETE
+   /api/assets/:id` → `decommissioned`) e então concluir a OM —
+   `Asset.status` deve **permanecer** `decommissioned` (não voltar para
+   `active`).
+6. Cancelar uma OM `in_progress` sem outra OM aberta
+   (`DELETE /api/maintenance/:id`) — `Asset.status` deve voltar para
+   `active`, mesmo comportamento do item 3.
+
+### Riscos residuais
+
+- Sem teste de integração real contra Postgres (só unitário com mocks)
+  para o `SELECT ... FOR UPDATE` da OM e para os dois `UPDATE`
+  condicionais do `Asset` — recomendado no próximo ciclo de integração
+  real do módulo `maintenance`, mesmo padrão do risco já registrado para
+  conciliação bancária/downtime/faturamento parcial.
+- `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §8 (RF-PAT-05) e
+  `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md` §5 (gap desenhado
+  explicitamente no BPMN de Manutenção) ainda descrevem o comportamento
+  antigo (sem sincronização) — não foram atualizados por este agente
+  (fora do território desta entrega); pendente de atualização pelo
+  agente de documentação/arquitetura.
+- `docs/patrimonio/03-MANUTENCAO.md` também cita a ressalva antiga —
+  mesma pendência de atualização por outro agente.
+
+---
+
+## UC-19 — Importação/COMEX (backend completo, sem tela)
+
+**Data**: 2026-08-06
+**Escopo**: Implementar o backend completo do UC-19 ("Gerenciar Importação
+(COMEX)", `docs/projeto/04-USE_CASES.md`, decisão do dono do ERP:
+implementar o que estava documentado e nunca codificado). Território:
+`server/src/modules/comex/` (novo), `server/src/models/` (2 models novos),
+`server/migrations/20260806-000090-create-import-processes.cjs`,
+`server/app.ts`, `server/tests/`.
+**Status**: ✅ Backend concluído. ✅ **Tela web entregue no mesmo dia** — ver
+seção "UC-19 — Importação/COMEX: tela web (`client/`)" no final deste
+arquivo.
+
+### O que o UC-19 pedia
+
+Ator: Analista de Comex. Pré-condição: fornecedor internacional cadastrado.
+Fluxo principal (6 passos): (1) acessar "Suprimentos > Importação"; (2)
+registrar processo de importação; (3) informar fornecedor, produto,
+quantidade, valor FOB; (4) sistema calcula tributos de importação (II,
+IPI, PIS, COFINS, ICMS); (5) registrar acompanhamento (embarque, chegada,
+desembaraço); (6) após recebimento, dar entrada no estoque com custo
+nacionalizado.
+
+### Decisões tomadas em pontos vagos do UC (documentadas explicitamente)
+
+1. **"Fornecedor internacional cadastrado"** — o UC não pede um cadastro
+   de fornecedor diferenciado. Reaproveitado o `Supplier` (`suppliers`)
+   existente sem nenhuma alteração de schema (sem campo "país"/"fornecedor
+   estrangeiro" dedicado) — qualquer fornecedor cadastrado pode ser usado
+   num processo de importação.
+2. **Alíquotas de tributos** — informadas manualmente pelo Analista de
+   Comex, por item (`ii_rate`, `ipi_rate`, `pis_rate`, `cofins_rate`,
+   `icms_rate`, percentuais `DECIMAL(7,4)`). **Sem integração
+   Siscomex/tabela NCM** para resolvê-las automaticamente — o UC não pede
+   essa integração, então nenhum stub foi criado (instrução explícita do
+   orquestrador desta rodada: não inventar complexidade não pedida).
+3. **Fórmula de cálculo dos tributos** — simplificada mas seguindo a
+   prática fiscal padrão brasileira (não é uma engine de compliance fiscal
+   certificada): valor aduaneiro = FOB do item em BRL (quantidade × preço
+   unitário × câmbio) + frete/seguro do processo, rateados entre os itens
+   proporcionalmente ao FOB de cada um; II = aduaneiro × alíquota; IPI =
+   (aduaneiro + II) × alíquota; PIS/COFINS = aduaneiro × alíquota (base
+   simplificada — a base real de PIS/COFINS-Importação é mais complexa);
+   ICMS = cálculo "por dentro" (gross-up) sobre aduaneiro + II + IPI + PIS
+   + COFINS + despesas rateadas; custo unitário nacionalizado = soma de
+   tudo ÷ quantidade. Implementado em
+   `server/src/modules/comex/application/use-cases/importTaxCalculator.ts`
+   (função pura, comentário extenso no cabeçalho do arquivo, 3 testes
+   unitários dedicados).
+4. **"Registra acompanhamento"** — em vez de uma tabela de eventos
+   separada, implementado como transições sequenciais de `status`
+   (`draft → shipped → arrived → customs_cleared → received | cancelled`)
+   com uma coluna de data por marco (`shipped_at`/`arrived_at`/
+   `customs_cleared_at`/`received_at`). Simplificação deliberada: o UC
+   lista só 3 marcos fixos (embarque/chegada/desembaraço), não pede
+   histórico multi-evento arbitrário; a rastreabilidade de quem/quando
+   registrou cada transição já fica coberta pelo `logAction` (audit log
+   padrão do projeto), sem precisar de tabela extra.
+5. **Entrada em estoque (passo 6)** — reaproveita **integralmente** a
+   infraestrutura já testada de `InventoryService.receive` (incrementa
+   `Product.quantity` legado + cria `InventoryMovement`) e
+   `CostingService.registerWeightedAverageCost` (atualiza `Product.cost_price`
+   por média ponderada), no mesmo padrão de `ReceivePurchaseItemsUseCase`/
+   `AwardRfqUseCase` — inclusive a mesma exigência de existir um `Product`
+   legado com `code = items.codigo` (dual-system Product/Item documentado
+   no `CLAUDE.md`). **`reference_type`/`source_type` gravados como
+   `'purchase'`** (não existe valor `'import'` nos ENUMs
+   `inventory_movements.reference_type`/`product_cost_ledgers.source_type`
+   — criar um exigiria migração em 2 tabelas de altíssimo tráfego
+   compartilhadas por todo o ERP, fora do território exclusivo deste
+   módulo); a rastreabilidade específica da importação fica preservada via
+   `reference_id`/`source_id` = `import_processes.id` e via
+   `description`/`notes` citando o número do processo (`IMP-<ano>-XXXX`).
+6. **Sem Conta a Pagar automática de tributos** — o UC não pede esse
+   gatilho, e `AccountPayable` (`accounts_payable`) não tem suporte a
+   moeda estrangeira nem a "tributo pago via DARF/guia" como categoria
+   nativa. Decisão: não gerar automaticamente; fica registrado como
+   melhoria futura em `docs/governance/TODO.md`.
+
+### Arquivos criados/modificados
+
+#### Criados
+- `server/migrations/20260806-000090-create-import-processes.cjs` — cria
+  `import_processes` e `import_process_items` (ver colunas na seção
+  "Modelo de dados" abaixo). `up`/`down` testados em ciclo real (`up` →
+  `down` → `up`, `migration:status` confirma).
+- `server/src/models/ImportProcess.ts`, `server/src/models/ImportProcessItem.ts`
+- `server/src/modules/comex/domain/repositories/ComexRepository.ts`
+- `server/src/modules/comex/infrastructure/sequelize/SequelizeComexRepository.ts`
+- `server/src/modules/comex/application/use-cases/importTaxCalculator.ts`
+  (função pura, sem `export =`)
+- `server/src/modules/comex/application/use-cases/recalculateImportProcessTaxes.ts`
+  (helper compartilhado, sem `export =`)
+- `server/src/modules/comex/application/use-cases/CreateImportProcessUseCase.ts`
+- `server/src/modules/comex/application/use-cases/ListImportProcessesUseCase.ts`
+- `server/src/modules/comex/application/use-cases/GetImportProcessByIdUseCase.ts`
+- `server/src/modules/comex/application/use-cases/RegisterImportTrackingUseCase.ts`
+- `server/src/modules/comex/application/use-cases/CancelImportProcessUseCase.ts`
+- `server/src/modules/comex/application/use-cases/ReceiveImportProcessUseCase.ts`
+- `server/src/modules/comex/presentation/validators/importProcessValidators.ts`
+- `server/src/modules/comex/presentation/controllers/importProcessController.ts`
+- `server/src/modules/comex/presentation/routes/importProcesses.ts`
+- `server/tests/unit/comex.test.ts` (17 testes)
+
+#### Modificados
+- `server/src/models/index.ts` — imports `ImportProcess`/`ImportProcessItem`
+  + associações (`Supplier↔ImportProcess`, `User↔ImportProcess`,
+  `ImportProcess↔ImportProcessItem` CASCADE, `Item↔ImportProcessItem`) +
+  export.
+- `server/src/shared/domain/accessModules.ts` — chave `'comex'` adicionada
+  ao catálogo `ACCESS_MODULES` (mesmo padrão de `manutencao`/`garantia`,
+  2026-08-05). **Atenção, agente de `accessProfiles`/RH**: perfis de
+  acesso existentes precisam atribuir o módulo `comex` manualmente para
+  que o Analista de Comex consiga usar as rotas (nenhum perfil ganhou essa
+  permissão automaticamente).
+- `server/app.ts` — `app.use('/api/comex/import-processes', ...)`
+  montado logo após `/api/rfqs`.
+- `server/tests/unit/module-authorization-map.test.ts` — `'comex'`
+  adicionado a `MODULES_REQUIRING_AUTHORIZE_MODULE` (guarda anti-regressão
+  já existente, cobre 100% das pastas de `src/modules/`).
+
+### Modelo de dados (não documentado em `docs/DATABASE.md` nesta rodada —
+ver nota de território abaixo; resumo aqui para quem for consolidar)
+
+**`import_processes`** (cabeçalho):
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `process_number` | VARCHAR(60) UNIQUE | `IMP-<ano>-XXXX`, sequencial por ano (mesma limitação de concorrência já documentada para `RfqRepository.countRfqsInYear`) |
+| `supplier_id` | INTEGER FK `suppliers.id` RESTRICT | |
+| `status` | ENUM | `draft`\|`shipped`\|`arrived`\|`customs_cleared`\|`received`\|`cancelled` |
+| `fob_currency` | VARCHAR(3) | default `USD` |
+| `exchange_rate` | DECIMAL(18,6) | câmbio moeda estrangeira → BRL |
+| `freight_value`, `insurance_value`, `other_expenses_value` | DECIMAL(18,6) | em BRL, rateados pro-rata do FOB entre os itens |
+| `shipped_at`, `arrived_at`, `customs_cleared_at`, `received_at` | DATEONLY nullable | um por marco do acompanhamento |
+| `notes` | TEXT nullable | |
+| `created_by` | INTEGER FK `users.id` RESTRICT | |
+
+**`import_process_items`**:
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `import_process_id` | INTEGER FK `import_processes.id` CASCADE | |
+| `item_id` | UUID FK `items.id` RESTRICT | |
+| `quantity`, `fob_unit_price` | DECIMAL(18,6) | FOB na moeda estrangeira do processo |
+| `ii_rate`, `ipi_rate`, `pis_rate`, `cofins_rate`, `icms_rate` | DECIMAL(7,4) | percentual, informado manualmente |
+| `customs_value`, `ii_value`, `ipi_value`, `pis_value`, `cofins_value`, `icms_value`, `nationalized_unit_cost` | DECIMAL(18,6) nullable | calculados por `importTaxCalculator.ts` |
+
+### Rotas e payloads (para o agente de frontend)
+
+Todas sob `/api/comex/import-processes`, exigem header `Authorization:
+Bearer <token>` + `authorizeModule('comex', ...)` (`operate` para escrita,
+qualquer nível para leitura). Respostas no padrão do projeto:
+`{ success: true, data: ... }` / `{ success: true, data: [...], pagination: {...} }`.
+
+**`GET /`** — query params opcionais: `page`, `limit` (max 100), `status`,
+`supplier_id`. Retorna lista com `items` (cada um com `item: { codigo,
+descricao }`), `supplier`, `createdBy`.
+
+**`GET /:id`** — detalhe completo (mesmo shape do item da lista, com todos
+os itens/tributos calculados).
+
+**`POST /`** — cria o processo (status nasce `draft`):
+```json
+{
+  "supplier_id": 12,
+  "fob_currency": "USD",
+  "exchange_rate": 5.35,
+  "freight_value": 1500.00,
+  "insurance_value": 200.00,
+  "other_expenses_value": 0,
+  "notes": "opcional",
+  "items": [
+    {
+      "item_id": "uuid-do-item",
+      "quantity": 1000,
+      "fob_unit_price": 4.20,
+      "ii_rate": 60,
+      "ipi_rate": 8,
+      "pis_rate": 2.1,
+      "cofins_rate": 9.65,
+      "icms_rate": 18
+    }
+  ]
+}
+```
+Retorna 201 com o processo criado, itens já com `customs_value`/`*_value`/
+`nationalized_unit_cost` calculados (estimativa inicial — pode mudar se o
+câmbio/frete forem atualizados depois via `/tracking`).
+
+**`POST /:id/tracking`** — registra o próximo marco (precisa ser
+exatamente o próximo da sequência `shipped → arrived → customs_cleared`;
+pular etapa ou repetir dá `422`):
+```json
+{
+  "event": "shipped",
+  "event_date": "2026-08-10",
+  "exchange_rate": 5.40,
+  "freight_value": 1600.00,
+  "insurance_value": 200.00,
+  "other_expenses_value": 50.00,
+  "notes": "opcional"
+}
+```
+Só `event` é obrigatório; os campos monetários são opcionais — se
+informados, o cabeçalho é atualizado e **todos os itens são recalculados**
+na mesma chamada.
+
+**`POST /:id/receive`** — sem body (o backend recalcula tudo fresco antes
+de dar entrada). Exige status `customs_cleared`; dá `422` se o item não
+tiver um `Product` legado correspondente (`items.codigo` sem
+`products.code` — mesma exigência de `AwardRfqUseCase`, então o frontend
+deve tratar esse erro com uma mensagem clara pedindo para cadastrar o
+produto correspondente antes). Sucesso → status vira `received`,
+`received_at` preenchido, estoque incrementado, custo médio do `Product`
+atualizado.
+
+**`POST /:id/cancel`** — `{ "reason": "motivo com pelo menos 3 caracteres" }`.
+Bloqueado se o processo já estiver `received` (`422`).
+
+### Documentações atualizadas
+
+- Este arquivo (`docs/HANDOFF_CODEX.md`, esta seção).
+- `docs/governance/TODO.md` — nova seção "2026-08-06 (apêndice 7)" com o
+  item UC-19/RF-COM-12 marcado `[x]`/`[IMPLEMENTADO]`.
+- JSDoc completo em todos os arquivos novos (models, repositório,
+  use cases, controller, rotas).
+- **Não alterados por este agente** (território de outros agentes em
+  paralelo, instrução explícita do orquestrador desta rodada):
+  `docs/API.md`, `docs/arquitetura/`, `docs/projeto/` (inclui
+  `04-USE_CASES.md`, onde o UC-19 deveria idealmente ganhar uma nota "✅
+  implementado"), `docs/business/`, `docs/patrimonio/`,
+  `docs/DATABASE.md` (schema resumido nesta seção para quem for
+  consolidar). Fica pendente para o próximo agente de documentação
+  atualizar esses arquivos com o resultado desta entrega.
+
+### Instruções de teste para o próximo agente/humano
+
+**Automatizado (já validado nesta entrega):**
+```bash
+cd server
+npm run typecheck                 # 0 erros
+npx jest tests/unit               # 86 suites / 698 testes, 100% verde
+npx jest tests/unit/comex.test.ts # 17/17
+npm run migration:status          # confirma 20260806-000090 "up"
+```
+
+**Manual/integração (a validar por QA humano ou pelo próximo agente,
+contra Postgres real — esta rodada só validou com repositórios
+mockados):**
+1. Login como usuário com perfil de acesso contendo o módulo `comex`
+   (**lembrete**: nenhum perfil existente tem isso automaticamente — via
+   `PUT/POST /api/access-profiles`, adicionar `{ module: 'comex', level:
+   'operate' }` a um perfil e atribuí-lo a um usuário de teste, ou usar o
+   `admin` global que ignora o sistema de perfis).
+2. `POST /api/comex/import-processes` com um item real (`item_id` de um
+   `Item` existente que tenha um `Product` legado com `code` igual ao
+   `codigo` do item — checar via `GET /api/items` e conferir se existe
+   produto correspondente). Confirmar `process_number` no padrão
+   `IMP-2026-0001`, tributos calculados nos itens.
+3. `POST /:id/tracking` 3 vezes em sequência (`shipped`, `arrived`,
+   `customs_cleared`); tentar pular direto para `customs_cleared` a partir
+   de `draft` deve dar `422`.
+4. `POST /:id/receive` — conferir no `GET /api/inventory/movements?product_id=...`
+   que a movimentação `in` foi criada, e que `Product.quantity`/
+   `Product.cost_price` mudaram como esperado; conferir
+   `product_cost_ledgers` para o registro de custo nacionalizado aplicado.
+5. `POST /:id/cancel` num outro processo `draft`/`shipped`/`arrived` —
+   confirmar bloqueio (`422`) se tentado num processo já `received`.
+6. Tela web: ainda não existe — próximo agente de frontend
+   (`PromadorFonteEnd`) deve construir `Suprimentos > Importação` contra
+   as rotas acima.
+
+### Riscos residuais
+
+- Sem teste de integração real contra Postgres para o fluxo completo
+  create→tracking→receive (transações, locks `SELECT ... FOR UPDATE`,
+  concorrência) — mesmo padrão de risco já registrado para conciliação
+  bancária/downtime/faturamento parcial/manutenção.
+- Fórmula de tributos é uma simplificação fiscal documentada, não uma
+  engine de compliance certificada — se o negócio precisar de precisão
+  fiscal real (ex.: para fins de escrituração), avaliar integração futura
+  com um serviço de cálculo tributário dedicado.
+- `docs/projeto/04-USE_CASES.md` (UC-19) ainda não tem a nota "✅
+  implementado" — pendente do agente de documentação/projeto.
+- Nenhum perfil de acesso existente tem o módulo `comex` atribuído — o
+  Analista de Comex precisa ser configurado manualmente antes do primeiro
+  uso em produção (ver "Instruções de teste", item 1).
+
+---
+
+## UC-19 — Importação/COMEX: tela web (`client/`)
+
+**Data**: 2026-08-06
+**Escopo**: Construir a tela web (`client/`) contra o backend do UC-19
+descrito na seção anterior. Território: `client/` (novo `src/api/comex.ts`,
+nova página `src/pages/purchases/ComexPage.tsx`, rota em `src/App.tsx`, item
+de menu em `src/layouts/AppLayout.tsx`, chave `comex` adicionada a
+`AccessModuleKey` em `src/api/accessProfiles.ts`), mais os 4 arquivos de
+registro (`docs/HANDOFF_CODEX.md`, `docs/governance/TODO.md`,
+`docs/CRONOGRAMA_FRONTEND_2026-07-31.md`,
+`docs/LEVANTAMENTO_ERP_2026-08-02.md`). `server/`, `docs/API.md`,
+`docs/arquitetura/`, `docs/database/`, `docs/projeto/` não foram tocados
+(território de outros agentes em paralelo).
+**Status**: ✅ Concluído — `npx tsc --noEmit` (0 erros), `npx vitest run`
+(51/51, mesma baseline de antes desta entrega) e `npm run build` (sucesso)
+validados a partir de `client/`. Testado manualmente com `curl` contra o
+backend real (porta 5000, login `admin@evokaudio.com.br`): criação de
+processo, `GET`/`GET :id`, transição de tracking válida (`shipped`) e
+inválida (pulando para `customs_cleared`, 422 confirmado) e cancelamento —
+registro de teste cancelado ao final para não sujar o banco de
+desenvolvimento.
+
+### Componentes/arquivos criados
+
+- `client/src/api/comex.ts` — serviço de API com todos os tipos TypeScript
+  estritos dos payloads (`ImportProcess`, `ImportProcessItem`,
+  `CreateImportProcessInput`, `RegisterImportTrackingInput`, etc.) e as 6
+  funções (`listImportProcesses`, `getImportProcessById`,
+  `createImportProcess`, `registerImportTracking`, `receiveImportProcess`,
+  `cancelImportProcess`) espelhando exatamente os contratos documentados na
+  seção anterior deste arquivo (confirmados contra o código real de
+  `server/src/modules/comex/presentation/` antes de escrever qualquer tipo).
+  Valores DECIMAL(18,6) tipados como `string | number` (o backend serializa
+  DECIMAL como string em JSON) — sem conversão/arredondamento client-side
+  além do `Number(...)` de exibição, mesmo padrão já usado em `rfq.ts`.
+- `client/src/pages/purchases/ComexPage.tsx` — tela principal:
+  - Listagem paginada (`Pagination`) com filtro por status (`SelectNative`),
+    badges semânticos por status (`success`=recebido, `warning`=embarcado/
+    chegou, `default`=desembaraçado, `secondary`=rascunho,
+    `destructive`=cancelado — mesma convenção de `RfqPage`/`PurchasesPage`).
+  - Diálogo de criação (`Dialog` central, não `Sheet`) com `react-hook-form`
+    + `zod`: fornecedor (`SelectNative`), moeda FOB, câmbio,
+    frete/seguro/outras despesas, e um `useFieldArray` de itens (busca de
+    item via `ItemSearchSelect`, quantidade, preço FOB unitário e as 5
+    alíquotas II/IPI/PIS/COFINS/ICMS em %). Números com `type="number"
+    step="any"` + `z.coerce.number()`, mesmo padrão de precisão numérica já
+    estabelecido em `RfqPage`/`PurchasesPage` para campos `DECIMAL(18,6)`
+    (sem lib de máscara dedicada no projeto para isso — não introduzida
+    nesta entrega para não divergir do padrão existente).
+  - `ImportProcessDetailDialog` (`Dialog` centralizado, seguindo o padrão
+    recém-adotado pelo Pedido de Compra, não `Sheet` lateral): cabeçalho com
+    `DetailField` (fornecedor, câmbio, frete/seguro/despesas, datas dos 4
+    marcos), tabela de itens com todos os tributos calculados e o custo
+    nacionalizado unitário em destaque (`tabular-nums`, alinhados à
+    direita), e os botões de ação condicionados a `canWrite`
+    (`hasRole('admin','operator')`) e ao `status` atual.
+  - `RegisterTrackingDialog`: registra o próximo marco sequencial
+    (`shipped → arrived → customs_cleared`, calculado por
+    `NEXT_TRACKING_EVENT`); campos monetários opcionais usam **estado local
+    simples (não `react-hook-form`/`zod`)** — a combinação de campos
+    numéricos opcionais com `zodResolver` gerou um conflito de inferência de
+    tipos entre `z.infer` (saída) e o `Resolver<TFieldValues>` esperado por
+    `useForm` (erro só aparece em `tsc -b` do `npm run build`, não em
+    `tsc --noEmit` solto — os dois foram rodados nesta entrega justamente
+    por isso). Mesmo padrão já usado em `ReceiveItemsDialog`
+    (`PurchasesPage.tsx`), que também evita RHF/zod para esse tipo de campo.
+  - `CancelImportProcessDialog`: motivo obrigatório (mín. 3 caracteres,
+    mesma regra do backend), com `Button variant="destructive"`.
+  - Ações críticas (receber, cancelar) usam `window.confirm(...)` antes de
+    disparar a mutation, mesmo padrão de `PurchasesPage.tsx`/
+    `RequisitionsPage.tsx` para cancelamento de pedido/requisição.
+- `client/src/App.tsx` — rota `/purchases/comex` (lazy-loaded), envolvida em
+  `<ModuleRoute module="comex" />` (guard de módulo próprio, não reaproveita
+  `compras` — o backend exige `authorizeModule('comex', ...)` dedicado).
+- `client/src/layouts/AppLayout.tsx` — item "Importação (Comex)" (ícone
+  `Container`, lucide-react) na seção "Compras" do `NAV_SECTIONS`, logo após
+  "Cotação (RFQ)"; entrada correspondente em `PAGE_TITLES` para o
+  breadcrumb. Nenhuma mudança na lógica de `activeSection`/departamentos.
+- `client/src/api/accessProfiles.ts` — chave `'comex'` adicionada ao union
+  type `AccessModuleKey` (client), espelhando
+  `server/src/shared/domain/accessModules.ts` (que já tinha `comex` desde a
+  entrega do backend). **Sem essa mudança o menu/rota não compilariam** —
+  gap que este agente encontrou e fechou (o backend já documentava a
+  necessidade de perfis atribuírem o módulo manualmente, mas não apontava
+  que o catálogo TypeScript do client também precisava da chave nova).
+
+### Decisões de UX
+
+1. **Alíquotas em porcentagem inteira legível (ex.: `60` para 60%)** — mesma
+   convenção do payload documentado pelo backend (`ii_rate: 60`), sem
+   converter para fração decimal na tela.
+2. **Sem filtro de fornecedor na listagem** (só status) — o backend suporta
+   `supplier_id` como filtro, mas o volume esperado de processos de
+   importação é baixo (item cotado como de "baixa prioridade de UX" por
+   analogia à decisão já tomada em `RfqPage`, que também só filtra por
+   status); pode ser adicionado depois sem quebra de contrato.
+3. **Botão de próximo marco sempre no singular e nomeado** (ex.: "Registrar
+   embarque", não um genérico "Avançar status") — mais didático para o
+   Analista de Comex do que expor o nome técnico do evento.
+4. **Aviso permanente sobre a simplificação fiscal** — texto fixo abaixo da
+   tabela de itens no detalhe ("Tributos calculados de forma simplificada
+   [...], sem integração Siscomex/NCM"), para não deixar o usuário achar que
+   os valores calculados têm certificação fiscal (mesmo risco documentado
+   pelo backend).
+
+### O que o Agente QA (ou humano) deve testar na interface
+
+1. Login como `admin` (ignora perfis) **ou** um usuário cujo perfil de
+   acesso tenha `{ module: 'comex', level: 'operate' }` atribuído
+   manualmente via `/users/access-profiles` (nenhum perfil tem isso por
+   padrão — confirmar que o comportamento de "Acesso Negado" aparece para
+   quem não tem o módulo, e que some assim que o módulo é atribuído).
+2. `/purchases/comex`: criar um processo com 1+ itens, conferir que os
+   tributos (`II`/`IPI`/`PIS`/`COFINS`/`ICMS`) e o custo nacionalizado
+   aparecem no detalhe assim que criado (cálculo inicial, sem precisar de
+   `/tracking`).
+3. Registrar os 3 marcos em sequência (embarque → chegada → desembaraço) e
+   confirmar que o botão de próximo marco muda de rótulo a cada etapa, e que
+   informar um novo câmbio/frete no diálogo de acompanhamento recalcula os
+   valores da tabela de itens no detalhe.
+4. Tentar `Receber` antes de `customs_cleared`: o botão não deve aparecer
+   (ação condicionada ao status no client; a validação de verdade é sempre
+   do backend, 422 se forçado via API direta).
+5. Receber um processo cujo item **não tenha** `Product` legado
+   correspondente e confirmar que o erro 422 aparece como alerta didático
+   (`DidacticAlert`), não como stack trace cru.
+6. Cancelar um processo `draft`/`shipped`/`arrived` com motivo — confirmar
+   que o botão de cancelar some para processos `received`/`cancelled`.
+7. Validar responsividade/hierarquia visual fina (cores, espaçamento,
+   alinhamento) — esta entrega priorizou estrutura funcional; um passe do
+   agente `webdesiner` sobre `ComexPage.tsx` é recomendado antes do Go-Live,
+   seguindo o mesmo processo de handoff usado nas demais telas recentes.
+
+### Riscos residuais
+
+- Sem teste E2E real em navegador (Cypress/Playwright não fazem parte do
+  stack do projeto) — validação limitada a `tsc`/`vitest`/`build` +
+  chamadas manuais de `curl` contra o backend real.
+- `docs/API.md` não foi atualizado com os endpoints de COMEX (fora do
+  território deste agente — pendente do próximo agente de documentação/
+  backend, mesma pendência já registrada na seção anterior deste arquivo).
+- Nenhum ajuste fino de polimento visual (`webdesiner`) foi aplicado —
+  `ComexPage.tsx` segue a estrutura de `RfqPage.tsx`/`PurchasesPage.tsx`
+  ponto a ponto, mas não passou por uma revisão dedicada de hierarquia
+  visual/responsividade.

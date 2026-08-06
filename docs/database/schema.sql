@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict MUD2jTcAHC4S8PiEvPhxJHdzdD82wxA4EdcixwxTZX3yIilPJRHEECRa7CYk0Dz
+\restrict k0QgIryDSdXXZo2ZkqKjZHfBiUGjFbMF7UIHQuc8b18l2ltjsotg9Rsf26AG3pe
 
 -- Dumped from database version 16.14
 -- Dumped by pg_dump version 16.14
@@ -391,6 +391,20 @@ CREATE TYPE public.enum_engineering_projects_status AS ENUM (
     'paused',
     'completed',
     'canceled'
+);
+
+
+--
+-- Name: enum_import_processes_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.enum_import_processes_status AS ENUM (
+    'draft',
+    'shipped',
+    'arrived',
+    'customs_cleared',
+    'received',
+    'cancelled'
 );
 
 
@@ -2830,6 +2844,273 @@ CREATE TABLE public.fornecedores (
 --
 
 COMMENT ON TABLE public.fornecedores IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+
+
+--
+-- Name: import_process_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.import_process_items (
+    id integer NOT NULL,
+    import_process_id integer NOT NULL,
+    item_id uuid NOT NULL,
+    quantity numeric(18,6) NOT NULL,
+    fob_unit_price numeric(18,6) NOT NULL,
+    ii_rate numeric(7,4) DEFAULT 0 NOT NULL,
+    ipi_rate numeric(7,4) DEFAULT 0 NOT NULL,
+    pis_rate numeric(7,4) DEFAULT 0 NOT NULL,
+    cofins_rate numeric(7,4) DEFAULT 0 NOT NULL,
+    icms_rate numeric(7,4) DEFAULT 0 NOT NULL,
+    customs_value numeric(18,6),
+    ii_value numeric(18,6),
+    ipi_value numeric(18,6),
+    pis_value numeric(18,6),
+    cofins_value numeric(18,6),
+    icms_value numeric(18,6),
+    nationalized_unit_cost numeric(18,6),
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: COLUMN import_process_items.fob_unit_price; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.fob_unit_price IS 'Preco unitario FOB, na moeda estrangeira (import_processes.fob_currency)';
+
+
+--
+-- Name: COLUMN import_process_items.ii_rate; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.ii_rate IS 'Aliquota do Imposto de Importacao, percentual (ex.: 60.0000 = 60%), informada manualmente';
+
+
+--
+-- Name: COLUMN import_process_items.ipi_rate; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.ipi_rate IS 'Aliquota do IPI, percentual, informada manualmente';
+
+
+--
+-- Name: COLUMN import_process_items.pis_rate; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.pis_rate IS 'Aliquota do PIS-Importacao, percentual, informada manualmente';
+
+
+--
+-- Name: COLUMN import_process_items.cofins_rate; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.cofins_rate IS 'Aliquota da COFINS-Importacao, percentual, informada manualmente';
+
+
+--
+-- Name: COLUMN import_process_items.icms_rate; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.icms_rate IS 'Aliquota do ICMS, percentual, informada manualmente';
+
+
+--
+-- Name: COLUMN import_process_items.customs_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.customs_value IS 'Valor aduaneiro rateado deste item (FOB em BRL + frete + seguro rateados) — calculado';
+
+
+--
+-- Name: COLUMN import_process_items.ii_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.ii_value IS 'II calculado';
+
+
+--
+-- Name: COLUMN import_process_items.ipi_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.ipi_value IS 'IPI calculado';
+
+
+--
+-- Name: COLUMN import_process_items.pis_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.pis_value IS 'PIS-Importacao calculado';
+
+
+--
+-- Name: COLUMN import_process_items.cofins_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.cofins_value IS 'COFINS-Importacao calculado';
+
+
+--
+-- Name: COLUMN import_process_items.icms_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.icms_value IS 'ICMS calculado (formula "por dentro")';
+
+
+--
+-- Name: COLUMN import_process_items.nationalized_unit_cost; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_process_items.nationalized_unit_cost IS 'Custo unitario nacionalizado final — usado na entrada de estoque';
+
+
+--
+-- Name: import_process_items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.import_process_items_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: import_process_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.import_process_items_id_seq OWNED BY public.import_process_items.id;
+
+
+--
+-- Name: import_processes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.import_processes (
+    id integer NOT NULL,
+    process_number character varying(60) NOT NULL,
+    supplier_id integer NOT NULL,
+    status public.enum_import_processes_status DEFAULT 'draft'::public.enum_import_processes_status NOT NULL,
+    fob_currency character varying(3) DEFAULT 'USD'::character varying NOT NULL,
+    exchange_rate numeric(18,6) DEFAULT 1 NOT NULL,
+    freight_value numeric(18,6) DEFAULT 0 NOT NULL,
+    insurance_value numeric(18,6) DEFAULT 0 NOT NULL,
+    other_expenses_value numeric(18,6) DEFAULT 0 NOT NULL,
+    shipped_at date,
+    arrived_at date,
+    customs_cleared_at date,
+    received_at date,
+    notes text,
+    created_by integer NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: COLUMN import_processes.process_number; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.process_number IS 'Numero do processo de importacao, formato IMP-<ano>-XXXX';
+
+
+--
+-- Name: COLUMN import_processes.supplier_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.supplier_id IS 'Fornecedor internacional (reutiliza o cadastro de suppliers — sem campo dedicado de fornecedor estrangeiro, ver decisao no handoff)';
+
+
+--
+-- Name: COLUMN import_processes.status; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.status IS 'draft=registrado, shipped=embarque, arrived=chegada, customs_cleared=desembaracado, received=entrada em estoque, cancelled=cancelado';
+
+
+--
+-- Name: COLUMN import_processes.fob_currency; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.fob_currency IS 'Codigo ISO da moeda do valor FOB (ex.: USD, EUR)';
+
+
+--
+-- Name: COLUMN import_processes.exchange_rate; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.exchange_rate IS 'Cotacao (moeda estrangeira -> BRL) usada para converter o FOB';
+
+
+--
+-- Name: COLUMN import_processes.freight_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.freight_value IS 'Frete internacional em BRL, rateado entre os itens pro-rata do FOB';
+
+
+--
+-- Name: COLUMN import_processes.insurance_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.insurance_value IS 'Seguro internacional em BRL, rateado entre os itens pro-rata do FOB';
+
+
+--
+-- Name: COLUMN import_processes.other_expenses_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.other_expenses_value IS 'Despesas aduaneiras adicionais (armazenagem, capatazia, etc.) em BRL, rateadas pro-rata do FOB';
+
+
+--
+-- Name: COLUMN import_processes.shipped_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.shipped_at IS 'Data de embarque';
+
+
+--
+-- Name: COLUMN import_processes.arrived_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.arrived_at IS 'Data de chegada';
+
+
+--
+-- Name: COLUMN import_processes.customs_cleared_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.customs_cleared_at IS 'Data de desembaraco aduaneiro';
+
+
+--
+-- Name: COLUMN import_processes.received_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.import_processes.received_at IS 'Data de entrada em estoque (nacionalizacao concluida)';
+
+
+--
+-- Name: import_processes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.import_processes_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: import_processes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.import_processes_id_seq OWNED BY public.import_processes.id;
 
 
 --
@@ -6625,6 +6906,20 @@ ALTER TABLE ONLY public.engineering_projects ALTER COLUMN id SET DEFAULT nextval
 
 
 --
+-- Name: import_process_items id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_process_items ALTER COLUMN id SET DEFAULT nextval('public.import_process_items_id_seq'::regclass);
+
+
+--
+-- Name: import_processes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_processes ALTER COLUMN id SET DEFAULT nextval('public.import_processes_id_seq'::regclass);
+
+
+--
 -- Name: inventory_count_items id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -7143,6 +7438,30 @@ ALTER TABLE ONLY public.fornecedores
 
 ALTER TABLE ONLY public.fornecedores
     ADD CONSTRAINT fornecedores_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: import_process_items import_process_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_process_items
+    ADD CONSTRAINT import_process_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: import_processes import_processes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_processes
+    ADD CONSTRAINT import_processes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: import_processes import_processes_process_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_processes
+    ADD CONSTRAINT import_processes_process_number_key UNIQUE (process_number);
 
 
 --
@@ -8093,6 +8412,41 @@ CREATE INDEX idx_engineering_projects_stage ON public.engineering_projects USING
 --
 
 CREATE INDEX idx_engineering_projects_status ON public.engineering_projects USING btree (status);
+
+
+--
+-- Name: idx_import_process_items_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_import_process_items_item_id ON public.import_process_items USING btree (item_id);
+
+
+--
+-- Name: idx_import_process_items_process_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_import_process_items_process_id ON public.import_process_items USING btree (import_process_id);
+
+
+--
+-- Name: idx_import_processes_created_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_import_processes_created_by ON public.import_processes USING btree (created_by);
+
+
+--
+-- Name: idx_import_processes_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_import_processes_status ON public.import_processes USING btree (status);
+
+
+--
+-- Name: idx_import_processes_supplier_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_import_processes_supplier_id ON public.import_processes USING btree (supplier_id);
 
 
 --
@@ -10133,6 +10487,38 @@ ALTER TABLE ONLY public.service_orders
 
 
 --
+-- Name: import_process_items import_process_items_import_process_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_process_items
+    ADD CONSTRAINT import_process_items_import_process_id_fkey FOREIGN KEY (import_process_id) REFERENCES public.import_processes(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: import_process_items import_process_items_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_process_items
+    ADD CONSTRAINT import_process_items_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.items(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: import_processes import_processes_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_processes
+    ADD CONSTRAINT import_processes_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: import_processes import_processes_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.import_processes
+    ADD CONSTRAINT import_processes_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
 -- Name: inventory_counts inventory_counts_assigned_to_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10496,5 +10882,5 @@ ALTER TABLE ONLY public.work_center_shifts
 -- PostgreSQL database dump complete
 --
 
-\unrestrict MUD2jTcAHC4S8PiEvPhxJHdzdD82wxA4EdcixwxTZX3yIilPJRHEECRa7CYk0Dz
+\unrestrict k0QgIryDSdXXZo2ZkqKjZHfBiUGjFbMF7UIHQuc8b18l2ltjsotg9Rsf26AG3pe
 

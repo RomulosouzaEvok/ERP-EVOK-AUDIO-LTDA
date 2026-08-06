@@ -17,7 +17,9 @@
  * de `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`) para cobrir os
  * dois departamentos novos do menu (Manutenção interna de máquina e
  * Ativos & Garantia/Assistência Técnica), desbloqueando o retrofit RBAC do
- * Bloco D sobre `maintenance.ts`/`serviceOrders.ts`.
+ * Bloco D sobre `maintenance.ts`/`serviceOrders.ts`. `comex` foi adicionado
+ * em 2026-08-06 (UC-19) para o módulo de Importação/COMEX
+ * (`Suprimentos > Importação`), com o Analista de Comex como ator dedicado.
  *
  * @module shared/domain/accessModules
  */
@@ -32,6 +34,7 @@ export type AccessModuleKey =
   | 'compras'
   | 'requisicoes'
   | 'fornecedores'
+  | 'comex'
   | 'producao'
   | 'bom'
   | 'mrp'
@@ -76,6 +79,7 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   { key: 'compras', label: 'Compras' },
   { key: 'requisicoes', label: 'Requisições de Compra' },
   { key: 'fornecedores', label: 'Fornecedores' },
+  { key: 'comex', label: 'Importação (Comex)' },
   { key: 'producao', label: 'Produção' },
   { key: 'bom', label: 'Estrutura de Produtos (BOM)' },
   { key: 'mrp', label: 'MRP' },

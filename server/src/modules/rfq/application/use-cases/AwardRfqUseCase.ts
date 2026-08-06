@@ -216,7 +216,11 @@ class AwardRfqUseCase extends UseCase<AwardRfqInput, any> {
         awarded_unit_price: award.unitPrice,
       }, input.transaction);
 
-      const existingLink = await this.itemSupplierRepository.findByItemAndSupplier(award.itemId, award.supplierId);
+      const existingLink = await this.itemSupplierRepository.findByItemAndSupplier(
+        award.itemId,
+        award.supplierId,
+        input.transaction,
+      );
       const catalogData = {
         unit_price: award.unitPrice,
         lead_time_days: award.leadTimeDays,

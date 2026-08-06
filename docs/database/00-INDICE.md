@@ -8,8 +8,14 @@ para `03-MODELO_FISICO.md`/`schema.sql` (regenerar via `pg_dump`) e
 nota no topo desse arquivo).
 
 **Auditoria de origem:** 2026-08-06, introspecção real do PostgreSQL 16
-local (79 tabelas incl. `SequelizeMeta`, 78 tabelas de negócio, 171
-foreign keys, 64 migrations aplicadas) — não apenas leitura de código/models.
+local (81 tabelas incl. `SequelizeMeta`, 80 tabelas de negócio, 175
+foreign keys, 66 migrations aplicadas) — não apenas leitura de código/models.
+**Reconferido no mesmo dia** (rodada pós-módulo COMEX/Importação,
+migration `20260806-000090-create-import-processes.cjs`): schema.sql,
+dicionário e contagem de migrations batem 1:1 com o banco real; achado de
+nomenclatura isolado (`access_profiles.nome`/`descricao`) registrado em
+[04-DICIONARIO_DADOS.md](04-DICIONARIO_DADOS.md#accessprofiles) e
+[03-MODELO_FISICO.md](03-MODELO_FISICO.md).
 
 ## Os 7 documentos
 
@@ -19,12 +25,12 @@ foreign keys, 64 migrations aplicadas) — não apenas leitura de código/models
 2. **[02-MODELO_LOGICO.md](02-MODELO_LOGICO.md)** — DER técnico (Mermaid
    `erDiagram`): tabelas, PKs, FKs, cardinalidade, cobrindo os módulos
    principais (Item, Fornecedor, Venda, OP, Requisição/Pedido de Compra,
-   Financeiro, RFQ, Centros de Custo etc.).
+   Financeiro, RFQ, Centros de Custo, COMEX/Importação etc.).
 3. **[03-MODELO_FISICO.md](03-MODELO_FISICO.md)** — Como o DDL real é
    gerado e mantido; aponta para `schema.sql` (anexo, `pg_dump
    --schema-only` do banco local real).
 4. **[04-DICIONARIO_DADOS.md](04-DICIONARIO_DADOS.md)** — Catálogo
-   coluna-a-coluna de todas as 78 tabelas (tipo, nulabilidade, default,
+   coluna-a-coluna de todas as 80 tabelas (tipo, nulabilidade, default,
    PK/FK/UNIQUE), gerado por introspecção real + descrição de negócio
    curada para as tabelas ativas.
 5. **[05-ACESSOS_E_ISOLAMENTO.md](05-ACESSOS_E_ISOLAMENTO.md)** — Matriz

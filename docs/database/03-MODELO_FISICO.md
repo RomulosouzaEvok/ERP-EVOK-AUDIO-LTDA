@@ -16,8 +16,10 @@ docker exec evok-postgres pg_dump -U evok_admin -d erp_evok_audio \
   > docs/database/schema.sql
 ```
 
-Rodado contra o container local `evok-postgres` em 2026-08-06, com as 64
-migrations já aplicadas (`npm run migration:status` — todas `up`). Isso
+Rodado contra o container local `evok-postgres` em 2026-08-06 (reconferido
+no mesmo dia após a migration `20260806-000090-create-import-processes.cjs`,
+módulo COMEX/Importação), com as 66 migrations já aplicadas
+(`npm run migration:status` — todas `up`). Isso
 garante que o DDL documentado é **exatamente** o que roda, não uma
 reconstrução manual sujeita a divergir do real (o mesmo risco que o
 `server/database/postgresql/01_schema.sql` legado já materializou —
@@ -83,18 +85,32 @@ tabela nova, adicione uma entrada nesse dicionário antes de rodar o
 gerador, senão a tabela aparece com a descrição genérica
 "não catalogada nesta rodada".
 
-## Estatísticas do schema atual (2026-08-06)
+## Estatísticas do schema atual (2026-08-06, pós-COMEX)
 
 | Métrica | Valor |
 |---|---|
-| Tabelas de negócio (excl. `SequelizeMeta`) | 78 |
-| Tabelas ativas (schema em inglês, em uso real) | 66 |
+| Tabelas de negócio (excl. `SequelizeMeta`) | 80 |
+| Tabelas ativas (schema em inglês, em uso real) | 65¹ |
 | Tabelas órfãs `[DEPRECATED]` (schema-fantasma PT) | 12 |
-| Foreign keys | 171 |
-| Migrations aplicadas | 64 |
+| Tabelas técnicas de log de migração (`migracao_*`, sem uso em código vivo, mas não fazem parte do schema-fantasma PT) | 3 |
+| Foreign keys | 175 |
+| Migrations aplicadas | 66 (reconferido 2026-08-06, inclui `20260806-000090-create-import-processes.cjs` — módulo COMEX/Importação, `import_processes`/`import_process_items`) |
 | Extensões PostgreSQL em uso | `pgcrypto` (apenas — `gen_random_uuid()` para PKs UUID de `items` e tabelas relacionadas; nenhuma outra extensão) |
 | Funções/procedures customizadas no banco | 0 (ver [06-ESTRUTURAS_PROGRAMAVEIS.md](06-ESTRUTURAS_PROGRAMAVEIS.md)) |
 | Triggers customizados no banco | 0 |
+
+¹ **Correção de reconferência (2026-08-06):** a versão anterior desta
+tabela somava `66 ativas + 12 órfãs = 78`, mas isso contava as 3 tabelas
+técnicas de log de migração (`migracao_bom_log`, `migracao_categoria_map`,
+`migracao_product_item_map`) como "ativas em uso real" — elas têm 0 uso em
+`server/src` (confirmado por `TABLE_DESC` em `gen_dict.py` e pelo teste de
+guarda `server/tests/unit/no-orphan-pt-schema-tables.test.ts`, que não as
+cobre por não fazerem parte do schema-fantasma PT), então não são
+"ativas" nem "órfãs PT" — são uma terceira categoria (log técnico da
+migração Product→Item, historicamente relevante, não deletado por
+prudência, mas sem uso em código vivo). Números corretos, agora incluindo
+as 2 tabelas novas do módulo COMEX (`import_processes`,
+`import_process_items`, ambas ativas em inglês): `65 + 12 + 3 = 80`.
 
 ## Colunas críticas — precisão decimal obrigatória
 
@@ -117,6 +133,26 @@ recomendamos migrar essas colunas agora (risco/benefício desfavorável tão
 perto do Go-Live, sem bug concreto associado) — registrado aqui como
 observação para uma decisão futura consciente, não como pendência
 automática.
+
+**Achado de nomenclatura (reconferência 2026-08-06):** varredura das 78
+tabelas × todas as colunas (`information_schema.columns`, sem exceção)
+não encontrou nenhuma coluna `camelCase` (todas são `snake_case`, como
+exige `underscored: true`) nem nenhum nome de tabela fora do padrão
+`snake_case`. O subsistema `items`/`item_categorias`/
+`item_detalhes_comerciais`/`item_especificacoes_tecnicas`/
+`item_estruturas` é consistentemente em português (tabela, colunas e até
+`criado_em`/`atualizado_em` em vez de `created_at`/`updated_at`) — desenho
+deliberado do núcleo Item (ver CLAUDE.md §4), não uma inconsistência
+dentro do próprio subsistema. As 12 tabelas órfãs do schema-fantasma PT
+(`fornecedores`, `usuarios`, `lotes`, etc.) também são internamente
+consistentes em português e já estão marcadas `[DEPRECATED]`. O único
+achado real de mistura de idioma **dentro de uma mesma tabela ativa** é
+`access_profiles.nome`/`access_profiles.descricao` (português) ao lado de
+`allowed_warehouses`/`active`/`created_at`/`updated_at` (inglês) e da
+tabela filha `access_profile_permissions` 100% em inglês — ver detalhe em
+[04-DICIONARIO_DADOS.md](04-DICIONARIO_DADOS.md#accessprofiles). Não é um
+bug (model/frontend já refletem exatamente essas colunas), apenas uma
+inconsistência de convenção isolada, registrada para decisão futura.
 
 ## Provisionamento de banco novo (produção)
 

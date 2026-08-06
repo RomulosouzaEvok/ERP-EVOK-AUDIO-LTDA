@@ -31,6 +31,7 @@ import {
   Landmark,
   ShieldCheck,
   FileSpreadsheet,
+  Container,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -105,6 +106,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Compras', to: '/purchases', icon: Truck, module: 'compras', badgeKey: 'compras_devolucoes' },
       { label: 'Fornecedores', to: '/purchases/suppliers', icon: Truck, module: 'compras' },
       { label: 'Cotação (RFQ)', to: '/purchases/rfqs', icon: FileSpreadsheet, module: 'compras' },
+      { label: 'Importação (Comex)', to: '/purchases/comex', icon: Container, module: 'comex' },
       { label: 'Fila de aprovação', to: '/purchases/requisitions', icon: ClipboardList, module: 'requisicoes', badgeKey: 'requisicoes' },
       { label: 'Relatórios de Compras', to: '/reports?tab=purchasing', icon: BarChart3, module: 'relatorios.compras' },
     ],
@@ -184,6 +186,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/purchases': ['Compras'],
   '/purchases/suppliers': ['Compras', 'Fornecedores'],
   '/purchases/rfqs': ['Compras', 'Cotação (RFQ)'],
+  '/purchases/comex': ['Compras', 'Importação (Comex)'],
   '/purchases/requisitions': ['Compras', 'Fila de aprovação'],
   '/production': ['Produção'],
   '/production/bom': ['Produção', 'Estrutura de produto (BOM)'],

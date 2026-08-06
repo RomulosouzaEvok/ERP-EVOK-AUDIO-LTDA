@@ -73,6 +73,8 @@ import BankStatement = require('./BankStatement');
 import BankStatementEntry = require('./BankStatementEntry');
 import ProductionDowntime = require('./ProductionDowntime');
 import CustomerPriceList = require('./CustomerPriceList');
+import ImportProcess = require('./ImportProcess');
+import ImportProcessItem = require('./ImportProcessItem');
 
 // ============================================
 // RELACIONAMENTOS
@@ -670,6 +672,26 @@ BankStatementEntry.belongsTo(AccountReceivable, { foreignKey: 'matched_receivabl
 User.hasMany(BankStatementEntry, { foreignKey: 'matched_by', as: 'matched_bank_statement_entries' });
 BankStatementEntry.belongsTo(User, { foreignKey: 'matched_by', as: 'matchedBy' });
 
+// ============================================
+// RELACIONAMENTOS - IMPORTACAO / COMEX (UC-19)
+// ============================================
+
+// Supplier ↔ ImportProcess (fornecedor internacional)
+Supplier.hasMany(ImportProcess, { foreignKey: 'supplier_id', as: 'import_processes' });
+ImportProcess.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+
+// User ↔ ImportProcess (analista de comex que registrou o processo)
+User.hasMany(ImportProcess, { foreignKey: 'created_by', as: 'created_import_processes' });
+ImportProcess.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
+
+// ImportProcess ↔ ImportProcessItem
+ImportProcess.hasMany(ImportProcessItem, { foreignKey: 'import_process_id', as: 'items', onDelete: 'CASCADE' });
+ImportProcessItem.belongsTo(ImportProcess, { foreignKey: 'import_process_id', as: 'importProcess', onDelete: 'CASCADE' });
+
+// Item ↔ ImportProcessItem
+Item.hasMany(ImportProcessItem, { foreignKey: 'item_id', as: 'import_process_items' });
+ImportProcessItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -693,5 +715,6 @@ export {
   Rfq, RfqItem, RfqSupplier, RfqQuote,
   ProductionDowntime,
   CustomerPriceList,
-  BankStatement, BankStatementEntry
+  BankStatement, BankStatementEntry,
+  ImportProcess, ImportProcessItem
 };

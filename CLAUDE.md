@@ -23,13 +23,14 @@
 
 ### Status Atual
 - ✅ Backend: Node.js + Express + Sequelize (30+ módulos, Clean Architecture — use-cases desacoplados do Sequelize direto em 22+ módulos desde 2026-08-05)
-- ✅ Database: PostgreSQL 16 (64 migrations versionadas, 159+ foreign keys — RFQ, centros de custo, tabela de preços por cliente, downtime de produção e conciliação bancária, 2026-08-06)
-- ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, configuração fiscal e auditor inteligente foram cabeados entre 2026-08-02 e 2026-08-05); as únicas exceções por desenho são o inventário mobile (QR, propositalmente mobile-only) e os endpoints de webhook (sem UI, são integração backend-to-backend)
+- ✅ Database: PostgreSQL 16 (66 migrations versionadas, 159+ foreign keys — RFQ, centros de custo, tabela de preços por cliente, downtime de produção, conciliação bancária e importação/COMEX, 2026-08-06)
+- ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, configuração fiscal e auditor inteligente foram cabeados entre 2026-08-02 e 2026-08-05); as exceções são o inventário mobile (QR, propositalmente mobile-only), os endpoints de webhook (sem UI, integração backend-to-backend) e, temporariamente, o módulo de **Importação/COMEX (NOVO)**, backend completo mas ainda sem tela
 - ✅ **App mobile novo** (`mobile/`, Expo/React Native): login JWT, scan de estoque QR, histórico de movimentações, execução de contagens cíclicas (pool/atribuídas) — entregue em 2026-08-06, validado só por typecheck/bundle, **sem teste em dispositivo real ainda**
 - ✅ **App Android TV novo** (`tv/`, react-native-tvos): painel de demandas por departamento (recebimento, requisições, expedição, qualidade), auto-refresh 60s — entregue em 2026-08-06, mesma ressalva de validação (sem hardware real testado)
 - ✅ **4 bloqueadores P0 + 2 P1 remediados em 2026-08-02** (commit `d1d3aff`) — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
 - ✅ **Auditoria multi-agente de 7 frentes concluída em 2026-08-06** (geral, segurança, DBA, infra, frontend, mobile/TV, documentação) com remediação imediata de 4 frentes no mesmo dia — veja `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06, e pendências residuais em `docs/governance/TODO.md`
 - ✅ **Terceira rodada de entregas em 2026-08-06** (auth refresh deslizante + logging estruturado Winston, paginação/renovação de sessão em `mobile/`/`tv/`, telas web de reatribuição de contagem e fornecedor padrão do item, e 3 gaps de negócio fechados — tabela de preços por cliente, alteração de pedido confirmado, faturamento parcial de NF-e em Vendas; paradas de máquina com OEE preciso em Produção; conciliação bancária OFX em Financeiro) — veja `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "terceira rodada", e `docs/HANDOFF_CODEX.md`
+- ✅ **Quarta rodada de entregas em 2026-08-06** (`Asset.status` passou a sincronizar automaticamente com o ciclo de vida da ordem de manutenção — RF-PAT-05 `[IMPLEMENTADO]`, `docs/patrimonio/03-MANUTENCAO.md` §6; e o módulo **Importação/COMEX** (UC-19, RF-COM-12) foi implementado do zero — backend completo em `server/src/modules/comex/`, `/api/comex/import-processes`, tela web pendente) — veja `docs/DIARIO_BORDO_GO_LIVE_G6.md` e `docs/HANDOFF_CODEX.md`
 
 ---
 
@@ -93,17 +94,25 @@ erp-evok-audio/
 ├── mobile/                          # App mobile Expo/React Native (login, scan QR, contagens cíclicas) — NOVO 2026-08-06
 ├── tv/                              # App Android TV react-native-tvos (painel de demandas por departamento) — NOVO 2026-08-06
 ├── docs/
-│   ├── projeto/                     # Plano arquitetura, use-cases
+│   ├── projeto/                     # Plano, arquitetura, use-cases (numeração 00-04)
 │   │   ├── 00-README.md
 │   │   ├── 01-PLANO.md
 │   │   ├── 02-PLANO_INDUSTRIAL.md
 │   │   └── 04-USE_CASES.md
-│   ├── producao/                    # Documentação operacional
-│   │   ├── 06-BOM.md
-│   │   └── ...
+│   ├── arquitetura/                 # Requisitos + diagramas (sequência, infra, BPMN) — NOVO 2026-08-06
+│   ├── database/                    # Modelo de dados estruturado (00-INDICE.md a 07-DISASTER_RECOVERY.md) — NOVO 2026-08-06
+│   ├── business/                    # Casos de uso em draft (UC-30+) + regras de negócio — a consolidar em projeto/04-USE_CASES.md conforme implementado
+│   ├── governance/                  # TODO.md (SSOT de pendências dia a dia) + reorganização de departamentos
+│   ├── manual/                      # Manual do usuário final — NOVO 2026-08-06
+│   ├── infra/                       # Deploy Ubuntu/produção
+│   ├── producao/, administrativo/, comercial/, financeiro/, juridico/,
+│   │   logistica/, patrimonio/, qualidade/, rh/, seguranca_trabalho/,
+│   │   suprimentos/, tributario/    # docs departamentais (00-README.md + NN-TEMA.md cada)
 │   ├── AUDITORIA_PRE_PRODUCAO_2026-08-02.md  # CRÍTICO: Bloqueadores
 │   ├── HANDOFF_CODEX.md             # Product/Item migration (Phase 1–4.1)
-│   ├── DATABASE.md                  # Modelo de dados
+│   ├── DATABASE.md                  # Changelog narrativo do banco (ver docs/database/ para o modelo estruturado atual)
+│   ├── DIARIO_BORDO_GO_LIVE_G6.md   # Diário append-only da execução do Go-Live
+│   ├── GO_LIVE_G6_CHECKLIST.md      # Checklist operacional de Go-Live
 │   └── ...
 ├── package.json
 └── CLAUDE.md                        # Este arquivo
@@ -141,6 +150,7 @@ erp-evok-audio/
 - **Pedido de Compra:** Origem em Requisição, status (pending → approved → sent → partial → received)
 - **Fornecedores:** Avaliação, prazos, termos de pagamento
 - **Recebimento:** Entrada no estoque, geração de Contas a Pagar (pós-recebimento, não em aprovação)
+- **Importação / COMEX (NOVO, 2026-08-06):** `/api/comex/import-processes` (UC-19) — processo de importação (fornecedor, itens, FOB, câmbio, frete/seguro), cálculo automático de tributos (II/IPI/PIS/COFINS/ICMS, alíquotas informadas manualmente por item — sem integração Siscomex/NCM), acompanhamento sequencial (`shipped → arrived → customs_cleared`), recebimento com entrada em estoque e custo nacionalizado; backend completo, **tela web ainda pendente**; sem AP automática de tributos (ver `docs/API.md` §32, `docs/HANDOFF_CODEX.md`)
 
 ### Estoque & Logística
 - **Inventário:** Entrada/saída/ajuste com rastreamento completo
@@ -185,13 +195,14 @@ Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-
 
 ### Roadmap
 1. **Fase 1 (P0):** ✅ Concluída em 2026-08-02 → **próximo: UAT → Go-Live G6**
-2. **Fase 2 (P1):** ✅ Majoritariamente entregue entre 2026-08-04 e 2026-08-06 — catálogo item×fornecedor (N:N), **Cotação/RFQ multi-fornecedor**, conversão requisição→pedido, MRP fecha ciclo (plano→OP e plano→requisição), telas de MRP/requisição/qualidade, custeio real de mão-de-obra/overhead, rastreabilidade por lote/QR, perfis de acesso configuráveis (RBAC completo), múltiplos depósitos, **centros de custo + projeção diária de fluxo de caixa**, **OEE completo com downtime real (NOVO)**, apps mobile e Android TV com **renovação de sessão via `POST /api/auth/refresh` (NOVO)**, **conciliação bancária OFX (NOVO)**, e em Vendas **alteração de pedido, faturamento parcial e tabela de preços por cliente (NOVO)**. **O que realmente falta desta fase:**
+2. **Fase 2 (P1):** ✅ Majoritariamente entregue entre 2026-08-04 e 2026-08-06 — catálogo item×fornecedor (N:N), **Cotação/RFQ multi-fornecedor**, conversão requisição→pedido, MRP fecha ciclo (plano→OP e plano→requisição), telas de MRP/requisição/qualidade, custeio real de mão-de-obra/overhead, rastreabilidade por lote/QR, perfis de acesso configuráveis (RBAC completo), múltiplos depósitos, **centros de custo + projeção diária de fluxo de caixa**, **OEE completo com downtime real (NOVO)**, apps mobile e Android TV com **renovação de sessão via `POST /api/auth/refresh` (NOVO)**, **conciliação bancária OFX (NOVO)**, em Vendas **alteração de pedido, faturamento parcial e tabela de preços por cliente (NOVO)**, sincronização automática de `Asset.status` com o ciclo de vida da ordem de manutenção (RF-PAT-05, NOVO) e o módulo **Importação/COMEX (NOVO)** — UC-19 fechado, backend completo. **O que realmente falta desta fase:**
    - Validação em hardware real dos apps `mobile/`/`tv/` (checklist em `mobile/README.md` §5 e `tv/README.md` §5)
    - Teste de integração de concorrência real do claim de contagem cíclica (2 clients simultâneos contra Postgres)
    - Backfill retroativo de custo de mão-de-obra/overhead em OPs concluídas antes de 2026-08-04 (decisão consciente de não fazer, registrada como risco residual)
    - Mapeamento departamento→centro de custo na AP automática, CNAB (boleto/remessa/retorno — só OFX foi implementado)
    - Histórico multi-NF-e por pedido (`sale_invoices`) e reconciliação de status assíncrono de provedores reais de NF-e com faturamento parcial
    - Teste de integração real (Postgres) das 3 features de maior risco da terceira rodada de 2026-08-06: conciliação bancária, índice único parcial de downtime, faturamento parcial (ver `docs/governance/TODO.md`, seção 2026-08-06 terceira rodada)
+   - Tela web do módulo Importação/COMEX (backend pronto, `client/` pendente) e teste de integração real (Postgres) do fluxo create→tracking→receive de COMEX e da sincronização `Asset.status`↔ordem de manutenção
 3. **Fase 3 (P2):** Capacidade finita/centros de trabalho, TypeScript strict
 4. **Fase 4 (P3):** Refugo detalhado por etapa, CI/CD, unificação schema legado/novo (decisão futura de `DROP TABLE` das 12 tabelas órfãs do schema-fantasma em português, marcadas `DEPRECATED` em 2026-08-06 — ver `docs/DATABASE.md`)
 5. **Infra de produção (bloqueia deploy, independente das fases acima):** servidor de produção (VPS/on-premise) ainda não adquirido; reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato e cron de backup aguardando essa compra — ver `docs/infra/DEPLOY_UBUNTU.md` e `docs/GO_LIVE_G6_CHECKLIST.md`
@@ -346,7 +357,7 @@ R: Siga `modules/{modulo}/{use-cases,repositories,controllers}/` padrão Clean A
 R: CTO/Tech Lead (plano 30h), CFO (riscos), Gerente Produção (rastreabilidade), Compliance (LGPD/ISO).
 
 **P: Frontend está pronto?**  
-R: Sim, na prática. Web (`client/`, React 19 + Vite, porta 5173) cobre hoje praticamente todos os módulos do backend — login, dashboard, produtos, vendas, compras, requisição de compra, MRP, produção/BOM, qualidade, financeiro, patrimônio, manutenção, RH, relatórios, configuração fiscal, auditor inteligente, usuários/perfis de acesso e rastreabilidade. As únicas exceções por desenho (não por atraso) são o inventário mobile via QR (propositalmente mobile-only) e os endpoints de webhook (integração backend-to-backend, sem UI). Além disso, dois apps novos: `mobile/` (Expo, inventário QR + contagens cíclicas) e `tv/` (Android TV, painel de demandas por departamento) — ambos entregues em 2026-08-06, validados só por typecheck/bundle, **ainda sem teste em hardware real**.
+R: Quase — a única lacuna real hoje é o módulo novo de Importação/COMEX. Web (`client/`, React 19 + Vite, porta 5173) cobre praticamente todos os módulos do backend — login, dashboard, produtos, vendas, compras, requisição de compra, MRP, produção/BOM, qualidade, financeiro, patrimônio, manutenção, RH, relatórios, configuração fiscal, auditor inteligente, usuários/perfis de acesso e rastreabilidade. As exceções por desenho (não por atraso) são o inventário mobile via QR (propositalmente mobile-only) e os endpoints de webhook (integração backend-to-backend, sem UI); a exceção por atraso é a **Importação/COMEX (UC-19, NOVO 2026-08-06)** — backend completo em `/api/comex/import-processes`, tela web ainda pendente para a próxima rodada de frontend. Além disso, dois apps novos: `mobile/` (Expo, inventário QR + contagens cíclicas) e `tv/` (Android TV, painel de demandas por departamento) — ambos entregues em 2026-08-06, validados só por typecheck/bundle, **ainda sem teste em hardware real**.
 
 **P: Posso rodar em MySQL/SQLite?**  
 R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de arquitetura").

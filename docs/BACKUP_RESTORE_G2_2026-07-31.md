@@ -332,6 +332,13 @@ foi executado nesta sessão, pois nenhuma imagem de produção foi implantada.
   sessão (infraestrutura de operação, Gate G5).
 - O passo de reverter a imagem da aplicação (rollback) **foi testado** em
   ensaio de canario local em 2026-07-31 (parar o container candidato e subir
-  a tag anterior aprovada contra o mesmo banco) — ver
-  `docs/UAT_RELEASE_G6_2026-07-31.md`. O que falta é repetir esse mesmo teste
+  a tag anterior aprovada contra o mesmo banco) — a descrição acima é o
+  próprio registro desse ensaio; a citação original a
+  `docs/UAT_RELEASE_G6_2026-07-31.md` **referencia um arquivo que nunca
+  existiu no repositório** (achado no pente-fino estrutural de 2026-08-06,
+  `docs/governance/TODO.md`) — não foi possível confirmar se o relato
+  detalhado desse ensaio chegou a virar um documento próprio ou se ficou
+  apenas nesta nota. Para o status vigente de Gate G6 (incluindo
+  rollback/canário contra o servidor real, ainda pendente), ver
+  `docs/GO_LIVE_G6_CHECKLIST.md`. O que falta é repetir esse mesmo teste
   contra o orquestrador de deploy do servidor real, ainda nao definido.

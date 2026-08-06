@@ -151,6 +151,20 @@ docker exec evok-postgres rm -f /tmp/restore_test.dump
 --no-owner --no-privileges`, e os dados batem exatamente (79/79 tabelas,
 contagem de linhas idêntica) entre o banco de origem e o restaurado.
 
+**Nota de defasagem (registrada, não retroativamente "corrigida"):** este
+teste foi executado antes da migration
+`20260806-000090-create-import-processes.cjs` (módulo COMEX/Importação)
+ser aplicada — os números acima (79 tabelas, `SequelizeMeta=64`) são a
+evidência real daquele teste específico e **não foram alterados** para
+não falsificar o registro. O schema atual (mesmo dia, pós-COMEX) tem 80
+tabelas de negócio + `SequelizeMeta` = 81, com 66 migrations. A mecânica
+de backup/restore não muda com tabelas novas (é um `pg_dump`/`pg_restore`
+do schema inteiro), então este teste continua válido como evidência de
+que o processo funciona — mas o teste em si não foi re-executado contra o
+schema pós-COMEX nesta rodada de documentação. Se for necessário
+evidência atualizada, repetir o procedimento do zero (não apenas editar
+os números aqui).
+
 **O que este teste NÃO cobre (limitações honestas, não escondidas):**
 - Foi executado **no mesmo host/mesma instância Docker** que gerou o
   backup — não simula perda total de servidor/disco (cenário de
@@ -182,7 +196,7 @@ docker exec -i evok-postgres pg_restore -U evok_admin -d erp_evok_audio \
 # 3. Verificar
 docker exec evok-postgres psql -U evok_admin -d erp_evok_audio \
   -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';"
-# Esperado: 78 tabelas de negócio + SequelizeMeta = 79
+# Esperado (schema atual, 2026-08-06 pós-COMEX): 80 tabelas de negócio + SequelizeMeta = 81
 ```
 
 **Nota técnica:** os dumps atuais em `backups/` foram gerados sem `-Fc`
@@ -203,7 +217,7 @@ Passo a passo consolidado a partir de `docs/infra/DEPLOY_UBUNTU.md`:
    reaproveitar valores de dev).
 3. **Não aplicar `server/database/postgresql/01_schema.sql`** (schema
    incompleto/histórico) — usar `docker compose up -d` seguido de
-   `cd server && npm ci && npm run migration:up` (as 65 migrations
+   `cd server && npm ci && npm run migration:up` (as 66 migrations
    recriam o schema do zero corretamente).
 4. Restaurar o dump de dados mais recente (`pg_restore`/`psql -f`,
    conforme formato — ver nota acima) **depois** das migrations

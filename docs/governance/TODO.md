@@ -1854,6 +1854,191 @@ novas, status honesto atualizado), `docs/infra/DEPLOY_UBUNTU.md`
 
 ---
 
+## 2026-08-06 (apêndice 4) — Auditoria de rastreabilidade: confronto UC×código, bug real corrigido em Patrimônio
+
+**Origem:** rodada de auditoria (`auditor-rastreabilidade`) para confirmar
+com evidência de código 3 achados previamente apenas *reportados* (não
+verificados a fundo) por outros agentes/documentação, mais uma varredura
+ponta a ponta de regras de negócio críticas (reserva de estoque, OEE,
+faturamento parcial, adjudicação de RFQ) e confirmação do estado real da
+role `evok_app` vs. `.env`.
+
+**1) UC-19 (Importação/COMEX) — gap confirmado, extensão real mapeada:**
+- [x] **[IMPLEMENTADO 2026-08-06 — ver apêndice 7 abaixo]** Confirmado por
+  busca real no código, à época desta consolidação: zero implementação,
+  backend e frontend. `server/src` não tinha nenhum módulo/rota/model com
+  termos de domínio COMEX (`FOB`, `desembaraço`, `nacionalização`,
+  `II/IPI/PIS/COFINS/ICMS de importação`, `drawback`) — os únicos
+  resultados de busca por "import*" no código eram falsos positivos
+  (statements TypeScript `import`, e o módulo de **conciliação bancária**
+  que "importa" arquivo OFX, sem nenhuma relação com COMEX). `client/src`
+  idem — as únicas ocorrências de "importa*" eram a tela de conciliação
+  OFX (`ReconciliationTab.tsx`). Nenhuma rota `/api/*` relacionada a COMEX
+  estava montada em `server/app.ts`. **Não era um gap subestimado — era
+  exatamente zero, como reportado, sem nenhuma implementação parcial.**
+  Decisão de negócio tomada no mesmo dia: implementar (não descontinuar).
+  Backend completo entregue — ver apêndice 7 ("UC-19/RF-COM-12: módulo
+  Importação/COMEX") mais abaixo neste arquivo para o detalhamento
+  completo; RF-COM-12 passou a `[IMPLEMENTADO]` em
+  `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §3, UC-19 marcado
+  `[IMPLEMENTADO]` (backend; tela web pendente) em
+  `docs/projeto/04-USE_CASES.md`.
+
+**2) `Asset.status` sem sincronização automática — confirmado, e um bug
+real correlato foi encontrado e corrigido nesta rodada:**
+- [x] **[CORRIGIDO 2026-08-06] `Asset.status` agora sincroniza
+  automaticamente com o ciclo de vida da ordem de manutenção (OM) —
+  decisão de negócio tomada: sincronização automática (não manual).**
+  Gatilhos implementados em
+  `server/src/modules/maintenance/application/use-cases/UpdateMaintenanceOrderUseCase.ts`
+  e `CancelMaintenanceOrderUseCase.ts` (a criação da OM continua nascendo
+  como `status: 'open'`, então não é gatilho — ver JSDoc do use case para o
+  raciocínio completo):
+  - Transição da OM para `in_progress` → `Asset.status = 'in_maintenance'`
+    (`MaintenanceRepository.markAssetInMaintenance`).
+  - Conclusão (`completed`) ou cancelamento (`canceled`) da OM →
+    `Asset.status = 'active'`, **somente se** (a) não existir outra OM
+    aberta (`open`/`scheduled`/`in_progress`/`waiting_parts`) para o mesmo
+    ativo, e (b) o ativo ainda estiver `in_maintenance` (o `UPDATE` usa
+    `WHERE status = 'in_maintenance'`, então nunca "ressuscita" um ativo
+    baixado — `decommissioned`/`lost`/`returned_to_supplier` — durante a
+    manutenção) — método
+    `MaintenanceRepository.releaseAssetFromMaintenanceIfNoOtherOpenOrders`.
+  - Toda a sincronização roda na mesma transação Sequelize da mudança da
+    OM, com `SELECT ... FOR UPDATE` na OM antes de decidir (padrão
+    `findByIdForUpdate` + `sequelize.transaction()`, igual ao já usado em
+    `ChangeProductionOrderStatusUseCase`/`FinishProductionDowntimeUseCase`).
+  - **Testes:** `server/tests/unit/maintenance-use-cases.test.ts` (13
+    casos) cobre abertura → `in_maintenance`, conclusão → `active`,
+    conclusão de ativo `decommissioned` → permanece `decommissioned`,
+    conclusão de uma de duas OMs abertas → permanece `in_maintenance`,
+    rollback em erro de sincronização, e a query/condição de UPDATE do
+    repositório Sequelize isoladamente. `npx jest tests/unit` → 680/680
+    passando (era 671 antes desta entrega). `npm run typecheck` → 0 erros.
+  - Sem migration necessária (`in_maintenance` já existia no enum
+    `enum_assets_status`).
+- [x] **[BUG REAL ENCONTRADO E CORRIGIDO nesta rodada, achado colateral da
+  mesma investigação de `Asset.status`]** `[CRITICO]`
+  `server/src/modules/assets/application/use-cases/DeactivateAssetUseCase.ts:26`
+  fazia `assetsRepository.update(id, { status: 'inactive' })`, mas
+  `'inactive'` **nunca existiu** no ENUM Postgres `enum_assets_status`
+  (valores reais: `active`, `in_maintenance`, `decommissioned`, `lost`,
+  `returned_to_supplier` — confirmado em `server/src/models/Asset.ts:58-62`
+  e em todas as migrations que tocam esse enum,
+  `server/migrations/20260805-000006-add-asset-status-returned-to-supplier.cjs`
+  e `20260805-000002-add-asset-type-license.cjs`, nenhuma adiciona
+  `inactive`). **Efeito real:** todo `DELETE /api/assets/:id` (soft
+  delete de ativo/patrimônio) retornava 500 — Postgres rejeita o UPDATE
+  com "invalid input value for enum enum_assets_status: inactive". Sem
+  cobertura de teste (`server/tests` não tem nenhum caso para
+  `DeactivateAssetUseCase`), por isso sobreviveu sem detecção. **Correção
+  aplicada nesta rodada:** trocado o valor gravado para `'decommissioned'`
+  (já usado no frontend com o rótulo "Baixado",
+  `client/src/pages/patrimonio/AssetsPage.tsx:36`), que é o valor de enum
+  correto e já exibido corretamente na tela — mudança local de uma linha,
+  sem migration necessária. **Teste sugerido:** caso de integração
+  `DELETE /api/assets/:id` → 200, `Asset.status === 'decommissioned'`
+  persistido (hoje inexistente). **Atualização:** cobertura unitária
+  (mock de repositório, sem banco real) adicionada no apêndice 6 abaixo —
+  o caso de integração completo com Postgres real segue como melhoria
+  futura, não bloqueante.
+
+**3) Fluxos críticos ponta a ponta — verificados com leitura completa do
+código-fonte, não apenas confirmação de rota:**
+- [x] **Reserva/baixa de estoque por venda** (`CreateSaleUseCase.ts`,
+  `ChangeSaleStatusUseCase.ts`, `EditSaleItemsUseCase.ts`) `[BAIXO/CLEAN]`
+  — baixa atômica via `InventoryService.consume` com `SELECT ... FOR
+  UPDATE` na mesma transação da venda; dual-write correto em
+  `WarehouseStockService` para o depósito `ACABADOS`; orçamento (`quote`)
+  corretamente não debita nada; edição de itens de venda confirmada
+  (`EditSaleItemsUseCase.ts:104-186`) bloqueia redução/troca de produto de
+  item já parcialmente faturado (`invoiced_quantity > 0`), com ajuste de
+  delta de estoque na mesma transação — regra de negócio íntegra.
+- [x] **OEE com desconto de downtime**
+  (`GetOeeReportUseCase.ts:206-243`) `[BAIXO/CLEAN]` — `available_hours =
+  max(calendario - downtime_hours, 0)` (nunca negativo), downtime lido de
+  `production_downtimes` com breakdown por motivo, eixos nunca retornam
+  `0` artificial quando o denominador é zero (`null` + `no_data_reason`
+  explícito) — implementação confere linha a linha com o comportamento
+  documentado em `CLAUDE.md` §4.
+- [x] **Faturamento parcial acumulando `invoiced_quantity`**
+  (`IssueSaleNfeUseCase.ts:79-313`) `[BAIXO/CLEAN]` — duas transações
+  curtas (reserva de número fiscal / gravação do resultado) com a chamada
+  ao provedor de NF-e FORA de transação (evita segurar lock de banco
+  durante I/O externo); saldo pendente calculado por item
+  (`quantity - invoiced_quantity`), rejeita quantidade acima do saldo
+  (`BusinessRuleError` com `remaining` no payload), incrementa
+  `invoiced_quantity` e recalcula `sale.status`
+  (`partially_invoiced`/`invoiced`) só após confirmação de
+  `status === 'authorized'` do provedor — nunca antes. Limitação já
+  documentada no próprio código (sem histórico multi-NF-e por pedido) é a
+  mesma já registrada em `CLAUDE.md` §4, não é novidade.
+- [x] **Adjudicação de RFQ por item** (`AwardRfqUseCase.ts`)
+  `[BAIXO/CLEAN]` com uma ressalva `[MEDIO]` — fluxo transacional com
+  `SELECT ... FOR UPDATE` na RFQ, bloqueia item duplicado/adjudicação a
+  mais de um fornecedor, valida que existe cotação registrada para o par
+  item×fornecedor antes de adjudicar, agrupa por fornecedor vencedor
+  gerando um pedido de compra por grupo, e realimenta `item_suppliers`
+  (upsert) corretamente. **Ressalva `[MEDIO]`:**
+  `AwardRfqUseCase.ts:219` chama
+  `itemSupplierRepository.findByItemAndSupplier(award.itemId,
+  award.supplierId)` **sem passar `input.transaction`** — a única
+  leitura do método que não usa a transação ativa da adjudicação
+  (create/update subsequentes na mesma linha 219-238 já usam
+  `input.transaction` corretamente). Sob concorrência real (duas RFQs
+  distintas adjudicando o mesmo par item×fornecedor pela primeira vez ao
+  mesmo tempo), ambas as leituras fora de transação podem não enxergar a
+  criação uma da outra antes do commit, arriscando um `create` duplicado
+  em `item_suppliers`. **Verificado nesta rodada:** a constraint
+  `UNIQUE(item_id, supplier_id)` **existe**
+  (`uq_item_suppliers_item_supplier`,
+  `server/migrations/20260803-000001-create-item-suppliers.cjs:79-83`),
+  então o pior cenário sob concorrência real não é duplicata silenciosa
+  de catálogo, e sim um erro de violação de unique constraint propagado
+  como 500 na adjudicação concorrente rara do mesmo par item×fornecedor
+  novo — rebaixado de risco de integridade para robustez/UX de erro.
+  **Ação sugerida (não crítica):** passar `input.transaction` para
+  `findByItemAndSupplier` (linha 219) por consistência com o resto do
+  método e para que a violação de concorrência, se ocorrer, seja
+  capturada e tratada com uma mensagem didática em vez de vazar como erro
+  500 genérico. **Atualização:** aplicado no apêndice 6 abaixo.
+- [x] **BOM multinível / ciclo** `[BAIXO/CLEAN]` — `ExplodeBOMUseCase`/
+  `BomService.explodeBOM` usa `MAX_BOM_DEPTH = 10` como teto de segurança
+  contra explosão infinita por referência circular
+  (`server/src/modules/bom/README.md:131`); é uma mitigação por
+  profundidade máxima, não uma detecção/rejeição ativa de ciclo na
+  criação da BOM — suficiente para não travar o sistema, mas não impede
+  cadastrar uma BOM cíclica (só faz a explosão parar no nível 10). Não
+  reclassificado como achado novo por já ser um comportamento
+  documentado e com mitigação real; registrado aqui só para reforço.
+
+**4) `evok_app` (role de mínimo privilégio) vs. `.env` ativo — confirmado
+sem inconsistência** `[BAIXO/CLEAN]`:
+- [x] Migration `20260806-000080-create-app-role-least-privilege.cjs`
+  confere exatamente com o que o apêndice anterior (linhas 1779-1793
+  acima) documenta: `CREATE ROLE evok_app ... NOSUPERUSER NOCREATEDB
+  NOCREATEROLE NOREPLICATION`, GRANT de DML (não DDL) em todas as tabelas
+  de `public` exceto `SequelizeMeta`/`SequelizeData`, `ALTER DEFAULT
+  PRIVILEGES` para tabelas futuras — lida linha a linha, migration
+  correta e idempotente (`DO $$ IF NOT EXISTS ... END $$`).
+  Confirmado por leitura direta (não só do relatório anterior): `.env`
+  real do ambiente (`DB_USER=evok_admin`, linha 7) e `.env.example`
+  (`DB_USER=evok_admin`, linha 16) e `docker-compose.yml`
+  (`DB_USER: evok_admin`, linha 49) **continuam todos no superusuário**,
+  exatamente como o comentário de cabeçalho da própria migration
+  (linhas 18-24) e o apêndice anterior deste documento já registravam.
+  **Nenhuma divergência entre documentação e estado real** — a troca para
+  `evok_app` continua sendo um passo manual pendente e não-bloqueante
+  (já rastreado acima, "[PENDENTE, nao bloqueante] Trocar `DB_USER`...").
+
+**Arquivos alterados nesta rodada:**
+`server/src/modules/assets/application/use-cases/DeactivateAssetUseCase.ts`
+(bug de enum corrigido, 1 linha + comentário explicativo).
+
+**Documentos atualizados nesta rodada:** este arquivo (seção nova).
+
+---
+
 ## 2026-08-06 (apêndice 3 de governança) — Documento de Requisitos, `01-PLANO.md`, BPMN Qualidade/Manutenção, Manual do Usuário
 
 **Origem:** fechamento das 4 pendências deixadas explicitamente pelo Tech
@@ -1876,24 +2061,30 @@ banco.
 **Achados/pendências novas registradas por esta consolidação (não
 inventados — extraídos da leitura real do código):**
 
-- [ ] **UC-19 (Importação/COMEX)** está documentado em
-  `docs/projeto/04-USE_CASES.md` mas não tem nenhuma rota/modelo
-  correspondente no backend (`server/app.ts` não monta nada de
-  importação/COMEX). Decisão de negócio pendente: implementar de fato
-  (Fase futura) ou marcar o UC `[DESCONTINUADO]` no arquivo de origem.
-  Rastreado também como RF-COM-12 `[PENDENTE]` em
-  `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §3.
-- [ ] **`Asset.status` não é atualizado automaticamente por uma ordem de
-  manutenção.** O modelo `Asset` tem o valor `in_maintenance` no enum de
-  status, mas nem `CreateMaintenanceOrderUseCase` nem
-  `UpdateMaintenanceOrderUseCase` (em
-  `server/src/modules/maintenance/application/use-cases/`) alteram esse
-  campo — o vínculo hoje é só via `asset_id` (leitura). Decisão pendente:
-  é um gap real a corrigir (sincronizar `Asset.status` automaticamente ao
-  abrir/concluir a ordem) ou comportamento manual deliberado? Rastreado
-  como RF-PAT-05 `[PENDENTE]` em `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
-  §8 e desenhado explicitamente como gap no diagrama BPMN de Manutenção
-  (seção 5 de `DIAGRAMA_CASOS_DE_USO_BPMN.md`).
+- [x] **[IMPLEMENTADO 2026-08-06] UC-19 (Importação/COMEX)** estava
+  documentado em `docs/projeto/04-USE_CASES.md` sem nenhuma rota/modelo
+  correspondente no backend — decisão de negócio tomada no mesmo dia:
+  implementar (não descontinuar). Backend completo entregue (ver apêndice
+  7 mais abaixo neste arquivo). RF-COM-12 passou a `[IMPLEMENTADO]` em
+  `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §3; UC-19 marcado
+  `[IMPLEMENTADO]` (backend; tela web pendente) em
+  `docs/projeto/04-USE_CASES.md`.
+- [x] **[CORRIGIDO 2026-08-06] `Asset.status` passou a ser atualizado
+  automaticamente pelo ciclo de vida da ordem de manutenção** — ver
+  detalhamento completo no achado "2) `Asset.status` sem sincronização
+  automática" acima (mesmo arquivo). RF-PAT-05 deixa de ser `[PENDENTE]`
+  em `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §8 (atualização de
+  requisitos a cargo do agente de documentação/arquitetura em rodada
+  posterior — fora do território deste agente); o gap desenhado no
+  diagrama BPMN de Manutenção (§5 de `DIAGRAMA_CASOS_DE_USO_BPMN.md`)
+  também precisa de atualização por esse mesmo agente.
+  **[ATUALIZAÇÃO 2026-08-06, rodada de sincronização documental]** — feito:
+  RF-PAT-05 marcado `[IMPLEMENTADO]` em
+  `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §8 (e na tabela de
+  divergências); o nó `[PENDENTE]` do BPMN §5 foi reescrito para refletir
+  a sincronização automática real; `docs/patrimonio/03-MANUTENCAO.md` §6
+  também teve a ressalva antiga substituída pela descrição do
+  comportamento novo.
 - [ ] Certificações de produto/processo (citadas no `01-PLANO.md` histórico
   como "Módulo 13 — Qualidade") nunca ganharam modelo/rota dedicada — mesma
   decisão de negócio: formalizar como UC futuro ou remover do escopo
@@ -1911,3 +2102,600 @@ esquecidas):**
 (seções 4/5 novas), `docs/manual/00-MANUAL_DO_USUARIO.md` (conteúdo
 prático), `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md`
 (link novo em §8), este arquivo.
+
+---
+
+## 2026-08-06 (auditoria cruzada `AuditorIntegrador`) — Requisitos × Banco × API, achado maior: ~55% dos endpoints reais sem documentação em `docs/API.md`
+
+**Origem:** auditoria "pente fino" pedida explicitamente sobre
+`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` ↔ `docs/database/` ↔
+`docs/API.md`/`docs/DIAGRAMA_CLASSES.md`. Não altera código nem schema —
+apenas registra achados de documentação para os donos corrigirem.
+Relatório completo (com a tabela de rastreabilidade RF→tabela→endpoint)
+foi apresentado na resposta ao usuário; aqui ficam só as pendências
+reais, com as tags padrão do projeto.
+
+- [x] **[CORRIGIDO 2026-08-06, `ArquitetoSoftwareAPI`] `docs/API.md` não
+  documenta pelo menos 17 dos ~34 grupos de rota reais montados em
+  `server/app.ts`**, entre eles módulos inteiros citados como
+  `[IMPLEMENTADO]` em `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`:
+  `/api/purchase-requisitions` (RF-COM-01/02/03), `/api/quality/non-conformities`
+  (RF-QUA-01/02), `/api/laboratory` (RF-QUA-04/05), `/api/assets`
+  (RF-PAT-01/02), `/api/maintenance` (RF-PAT-03/04), `/api/employees`
+  (RF-RH-01), `/api/departments` (RF-RH-02), `/api/traceability`
+  (RF-REL-05), `/api/audit-logs` (RF-AUT-09/RF-REL-07),
+  `/api/service-orders` (RF-PAT-06), `/api/fiscal` (RF-FIN-08),
+  `/api/mobile-inventory` (RF-EST-07), `/api/webhooks` (RF-INT-01/02),
+  `/api/auditor` (RF-EST-08/RF-REL-04), `/api/work-centers` (RF-PRD-07),
+  `/api/items` (só citado de passagem numa nota de breaking change,
+  nunca com seção própria de endpoints), e `/api/engineering` (a base,
+  fora da sub-rota `/api/engineering/bom` que tem seção 9). Além disso,
+  `POST /api/auth/forgot-password`/`POST /api/auth/reset-password`
+  (citados em `RF-AUT-03` e usados por rate-limiters dedicados em
+  `server/app.ts`) não tinham entrada na própria seção 1 (Autenticação)
+  do arquivo. **Resolvido:** todas as 18 lacunas cobertas —
+  `docs/API.md` novas seções 15 (Requisição de Compra), 16 (Qualidade —
+  RNC), 17 (Laboratório), 18 (Engenharia — Projetos/Desenhos/Ficha
+  Técnica), 19 (Patrimônio), 20 (Manutenção), 21 (RH — Funcionários), 22
+  (RH — Departamentos), 23 (Rastreabilidade), 24 (Logs de Auditoria), 25
+  (Ordens de Serviço), 26 (Fiscal — Config. do Emitente), 27 (Inventário
+  Mobile), 28 (Webhooks), 29 (Auditor Inteligente), 30 (Centros de
+  Trabalho), 31 (Itens — Item Mestre); `/api/inventory/lots*` (incl.
+  `/qrcode`, `/release`, `/block`) cobertos na nova seção 8.3; forgot/
+  reset-password adicionados dentro da seção 1 existente. Cada seção
+  nova foi conferida diretamente contra o arquivo de rotas +
+  controller/validator real (RBAC via `authorizeModule`, payload Zod,
+  formato de resposta) — não copiada de suposição.
+- [x] **[CORRIGIDO 2026-08-06, `ArquitetoSoftwareAPI`] `docs/arquitetura/DIAGRAMAS_SEQUENCIA.md`
+  tinha 2 endpoints com rota/verbo HTTP incorretos** (não batiam com
+  `server/app.ts` nem com `docs/API.md`, que já estavam corretos e
+  concordavam entre si): fluxo 3 ("Ordem de Produção → Apontamento")
+  usava `POST /api/production/orders` e `PATCH /api/production/orders/:id`
+  — corrigido para `POST /api/production-orders` (hífen, sem `/orders`
+  aninhado) e `PUT /api/production-orders/:id/status`. Fluxo 2
+  ("Requisição → RFQ → Pedido → Recebimento") usava
+  `PATCH /api/purchases/:id/status` — corrigido para `PUT`
+  (`server/src/modules/purchases/presentation/routes/purchases.ts`,
+  confirma `docs/API.md` §11).
+- [x] **[DOCUMENTADO 2026-08-06, `ArquitetoSoftwareAPI`] Inconsistência de
+  convenção de nome de campo entre request e response do mesmo
+  endpoint:** `docs/API.md` §1.1, `PUT /api/users/:id/access-profile` —
+  confirmado no código (`userController.ts`/`AssignAccessProfileUseCase.ts`)
+  que o `Request` de fato usa `{ "access_profile_id": 3 }` (snake_case,
+  lido manualmente do body) e o `Response` de fato usa
+  `{ "id": 12, "accessProfileId": 3 }` (camelCase, shape do use case) —
+  **não era erro de digitação da doc, é o comportamento real**. Mais
+  amplamente, confirmado que `docs/API.md` mistura convenção de saída
+  entre módulos porque cada model Sequelize declara os nomes de atributo
+  JS que quiser (`underscored: true` só afeta a coluna do banco, não a
+  chave JSON) — `Client`/`Sale` declaram atributos como `cpf_cnpj`/
+  `customer_id` (snake, aparecem snake no JSON), `User` declara
+  `accessProfileId`/`passwordVersion` com `field:` explícito (camel no
+  JSON), e `Item` chega a renomear os próprios timestamps para
+  `criado_em`/`atualizado_em`. **Resolvido:** nota "Convenção de caixa
+  (casing) dos campos JSON" adicionada no topo de `docs/API.md`
+  (antes da seção 1) explicando a regra real; e os 2 exemplos que
+  estavam **de fato errados** relativo ao comportamento real do
+  Sequelize (`GET /api/clients` e `GET /api/sales` mostravam
+  `"created_at"`, mas o Sequelize sempre serializa timestamps como
+  `createdAt`/`updatedAt` — nome de atributo padrão, não afetado por
+  `underscored`) foram corrigidos para `createdAt`.
+- [x] **[CONFIRMADO 2026-08-06, `ArquitetoSoftwareAPI`]** Confirmação
+  pendente sobre `/lots/:id/qrcode` (RF-EST-04): confirmado no código
+  (`GenerateEntityQrCodeUseCase` + `inventoryController.getLotQrCode`)
+  que o QR do lote é gerado **on-the-fly a cada chamada** (payload
+  `{ lot_number, product_code, product_name }` codificado em memória via
+  `QRCodeService`), sem nenhuma coluna de imagem/payload persistida em
+  `lot_controls` — está correto por desenho, não é um gap. Documentado
+  explicitamente em `docs/API.md` §8.3 (nova seção).
+- [ ] Nota de rastreabilidade cruzada (não bloqueante, registrar para o
+  ciclo de manutenção do Diagrama de Classes): `docs/DIAGRAMA_CLASSES.md`
+  já se auto-declara parcial desde 2026-08-06 (seção "Módulos entregues
+  após a versão original", que lista `Rfq`/`CostCenter`/`WorkCenter`/
+  `ProductionDowntime`/`BankStatement`/etc. em texto, sem re-renderizar o
+  Mermaid principal) — isso é uma lacuna já assumida pelo próprio
+  documento, não um achado novo desta auditoria; mantido aqui só para
+  registro de que foi conferido e a auto-declaração é precisa (as 11
+  classes novas listadas batem com as tabelas reais do Dicionário de
+  Dados).
+
+**O que esta auditoria cobriu (rastreabilidade completa, não amostrada):**
+todas as ~78 tabelas de `docs/database/04-DICIONARIO_DADOS.md`
+(incluindo as 12 `[DEPRECATED]`), todos os ~34 grupos de rota de
+`server/app.ts`, todos os RFs de `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
+(seções 1 a 11), `docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md` completo,
+`docs/database/00-INDICE.md` a `07-DISASTER_RECOVERY.md`,
+`docs/arquitetura/DIAGRAMAS_SEQUENCIA.md`,
+`docs/arquitetura/DIAGRAMA_ARQUITETURA_INFRAESTRUTURA.md`,
+`docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md`, `docs/DIAGRAMA_CLASSES.md`,
+`docs/DIAGRAMA_CLASSES_CAMADAS.md` e os títulos de UC de
+`docs/projeto/04-USE_CASES.md`/`docs/business/01-USE_CASES.md`.
+
+**O que ficou de fora desta rodada (auditoria parcial nesse recorte,
+registrado para não passar como cobertura 100%):** leitura linha a linha
+completa de `docs/projeto/04-USE_CASES.md` (1217 linhas — só os títulos
+de UC e os UCs citados diretamente pelo Documento de Requisitos foram
+conferidos em detalhe, não o corpo de todos os ~35 casos de uso);
+conferência campo a campo de 100% dos payloads de exemplo de
+`docs/API.md` contra o Dicionário de Dados (feita por amostragem
+dirigida às seções mais prováveis de divergência — Autenticação, Vendas,
+Financeiro, Compras/RFQ, Estoque — não todas as ~34 seções linha a
+linha); `docs/database/07-DISASTER_RECOVERY.md` foi indexado mas não
+lido linha a linha nesta rodada (já auditado por `AdmDBA` em rodada
+anterior do mesmo dia, ver apêndice "quarta rodada" acima).
+
+---
+
+## 2026-08-06 (apêndice 5 — pente-fino estrutural) — Nomenclatura da árvore de `docs/`, links quebrados, referências soltas
+
+**Origem:** pedido explícito de "pente fino" na estrutura de pastas/nomes
+de `docs/` (não no conteúdo técnico — isso é o escopo do
+`AuditorIntegrador`, achado acima). Levantamento completo da árvore real
+(19 pastas, ~100 arquivos) + resolução programática dos 115 links
+markdown internos de `docs/`, `CLAUDE.md`, `README.md`, `AGENTS.md`
+contra o filesystem (case-sensitive) + varredura de menções em texto
+corrido a `docs/*.md`. Detalhe completo da metodologia em
+`docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "apêndice 5".
+
+**Links markdown formais `[texto](arquivo.md)`: 0 quebrados** (115/115
+resolvem, inclusive em checagem case-sensitive). Nenhuma correção
+necessária nessa frente.
+
+- [x] **[CORRIGIDO]** `CLAUDE.md` §3 e `AGENTS.md` §3 (árvore de pastas
+  ilustrativa) estavam desatualizadas — não listavam `docs/arquitetura/`,
+  `docs/database/`, `docs/business/`, `docs/governance/`, `docs/manual/`,
+  `docs/infra/` (criadas em sessões anteriores) nem, no caso de
+  `AGENTS.md`, as pastas `mobile/`/`tv/` da raiz do repo. Ambas as
+  árvores foram atualizadas para refletir a estrutura real.
+- [x] **[CORRIGIDO]** `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` citava em
+  texto corrido `docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md` e
+  `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` sem avisar que não existem
+  mais — adicionada nota (mesmo padrão já usado em
+  `.claude/agents/evok-production-remediation.md`/`.codex/agents/evok-production-remediation.toml`)
+  apontando para `CLAUDE.md` §5 e `docs/GO_LIVE_G6_CHECKLIST.md` como
+  fonte vigente de status.
+- [ ] **[PENDENTE] Mistura de idioma nos nomes de pasta de `docs/`
+  sem critério documentado:** maioria em português
+  (`administrativo/`, `comercial/`, `financeiro/`, `juridico/`,
+  `logistica/`, `patrimonio/`, `producao/`, `projeto/`, `qualidade/`,
+  `rh/`, `seguranca_trabalho/`, `suprimentos/`, `tributario/`,
+  `arquitetura/`, `manual/`) vs. inglês (`business/`, `database/`,
+  `governance/`, `infra/`). Nenhuma quebra funcional (nenhum link
+  aponta errado), mas é uma inconsistência de convenção visível a
+  qualquer novo colaborador. **Decisão do dono necessária antes de
+  qualquer rename** (renomear pasta quebra todo histórico de git blame
+  e exigiria atualizar os poucos links internos apontando para ela):
+  manter como está (aceitar que pastas "transversais"/meta —
+  arquitetura de sistema, banco, governança, infra — são em inglês por
+  serem termos técnicos, e pastas "departamentais" de negócio são em
+  português) ou padronizar tudo em português.
+- [x] **[CORRIGIDO] `docs/business/01-USE_CASES.md` → consolidação
+  completa em `docs/projeto/04-USE_CASES.md` (2026-08-06):** os 7 UCs que
+  faltavam (UC-35, UC-35-Exceção, UC-36, UC-37, UC-38, UC-42, UC-43) foram
+  verificados contra o código real e consolidados. **6 confirmados
+  `[IMPLEMENTADO]`** por leitura direta do código (UC-35 —
+  `AccessDeniedPage`/`ModuleRoute`/`NO_ACCESS_PROFILE`; UC-35-Exceção —
+  `variant="noProfile"`; UC-36 — sem `permission_version`, decisão
+  intencional já em produção; UC-37 —
+  `quality-releases-receiving-lot.test.ts` E2E; UC-38 —
+  `DashboardPage.tsx canSee`/`relatorios.*`/`rastreabilidade` nas rotas
+  reais; UC-42 — Fluxos A–F completos, incluindo D (expedição exclusiva
+  `ACABADOS`, invariante 1) e E (débito automático de teste destrutivo),
+  que já estavam prontos mas o texto antigo do draft dizia
+  "ainda não implementados"). **UC-43 consolidado como parcial**: Fluxo B
+  (alerta didático de 3 partes) `[IMPLEMENTADO]` nas 9 telas priorizadas;
+  Fluxo A (`PrerequisiteChecklist` preventivo) confirmado `[PENDENTE]` —
+  componente existe mas não é consumido em nenhuma tela (`grep` confirmou
+  0 ocorrências fora do próprio arquivo do componente). Nenhum `[x]`
+  indevido encontrado nos Blocos 1/3/4/5/6 correspondentes — todos já
+  refletiam corretamente o estado real (o único `[ ]` genuíno, retrofit
+  das telas não priorizadas em 6.2, permanece `[ ]`, correto).
+- [x] **[CORRIGIDO] `docs/patrimonio/03-MANUTENCAO.md` estava vazio (0
+  bytes) — preenchido (2026-08-06):** conteúdo escrito com base no código
+  real do módulo (`server/src/modules/maintenance/`, model
+  `MaintenanceOrder`, telas `client/src/pages/maintenance/`), sem duplicar
+  o BPMN (`docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md` §5) nem o
+  Manual do Usuário (`docs/manual/00-MANUAL_DO_USUARIO.md` §10) — apenas
+  resume e linka. Inclui a ressalva conhecida (já registrada como
+  `RF-PAT-05 [PENDENTE]` em `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
+  §8): à época do preenchimento, `Asset.status` **não** era sincronizado
+  automaticamente com ordens de manutenção.
+  **[ATUALIZAÇÃO 2026-08-06, rodada posterior]** — essa ressalva foi
+  corrigida no código: `Asset.status` agora sincroniza automaticamente
+  (ver achado "2) `Asset.status` sem sincronização automática" acima,
+  neste mesmo arquivo, para gatilhos/regras/testes). `docs/patrimonio/03-MANUTENCAO.md`
+  em si segue sem edição por este agente (fora do território desta
+  entrega) — o agente de documentação deve atualizar essa ressalva na
+  próxima rodada.
+- [x] **[CORRIGIDO] Referências cruzadas soltas (texto corrido, sem
+  sintaxe de link markdown) a arquivos que não existem mais — todas as 4
+  resolvidas em 2026-08-06:**
+  - `docs/HANDOFF_CODEX.md:418` citava `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`
+    (ordem de risco das micro-entregas de expansão de schema) —
+    **corrigido**: nota histórica adicionada (arquivo não existe mais; a
+    ordem de execução em si já foi seguida, Fases 1–4.1 concluídas).
+  - `docs/HANDOFF_CODEX.md:1571` citava `docs/DATABASE_DICTIONARY.md` —
+    **corrigido**: confirmado (pelo `documentador`, nesta sessão) como o
+    nome antigo do que hoje é `docs/database/04-DICIONARIO_DADOS.md`
+    (arquivo existe, verificado); referência atualizada.
+  - `docs/producao/06-BOM.md:28` e `:330` citavam
+    `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` associado à afirmação de que
+    "MRP ainda não implementado" — **corrigido**: era de fato
+    `[AUDITORIA-FALHOU]`, divergia de `CLAUDE.md` §4 (MRP implementado,
+    roda contra estoque real). Texto reescrito para refletir o fluxo real
+    hoje implementado (BOM → MRP → reserva automática na liberação da OP
+    → requisição de compra via UC-24/UC-24b → apontamento/baixa de
+    estoque no chão de fábrica → custo real), com nota explicando a
+    correção e a citação órfã tratada com o mesmo padrão de nota
+    histórica.
+  - `docs/BACKUP_RESTORE_G2_2026-07-31.md:336` citava
+    `docs/UAT_RELEASE_G6_2026-07-31.md`, referenciado como evidência de
+    um ensaio de canário local de 2026-07-31 — esse arquivo nunca existiu
+    no repositório. **Corrigido**: nota adicionada deixando claro que a
+    descrição do ensaio já presente no próprio documento é o registro
+    disponível (não ficou claro se um arquivo dedicado chegou a existir),
+    e apontando `docs/GO_LIVE_G6_CHECKLIST.md` como fonte vigente de
+    status de Gate G6/rollback.
+- [ ] **[PENDENTE] Paridade `.claude/agents/` × `.codex/agents/`:**
+  `.claude/agents/` tem 15 arquivos `.md`, `.codex/agents/` tem 14
+  `.toml` — falta o equivalente de `.claude/agents/webdesiner.md` em
+  `.codex/agents/webdesiner.toml`. Não corrigido nesta sessão (requer
+  conhecimento do formato/schema `.toml` usado pelos demais agentes
+  Codex do projeto, fora do escopo de uma auditoria puramente
+  estrutural de `docs/`).
+- [x] **Confirmado, sem ação necessária:** `docs/DATABASE.md` (raiz) e a
+  pasta `docs/database/` **não são duplicados divergentes** — o próprio
+  `docs/DATABASE.md` já tem uma nota de topo (2026-08-06) deixando claro
+  que é o changelog histórico narrativo, enquanto `docs/database/`
+  (00-INDICE.md a 07-DISASTER_RECOVERY.md) é a referência estruturada
+  vigente. Nenhum link aponta o caminho errado.
+- [x] **Confirmado, sem ação necessária:** varredura completa de
+  mojibake/encoding corrompido (`Ã©`, `Ã£`, `â€™` etc.) em todo `docs/*.md`
+  e nos 3 arquivos `.md` da raiz não encontrou nenhuma ocorrência real
+  (1 falso positivo em `docs/producao/04-ROTEIROS.md`: "PARÂMETROS" é
+  grafia correta em português, não corrupção). Todos os arquivos de
+  `docs/database/` confirmados como UTF-8 válido via `file`. Nenhum nome
+  de arquivo/pasta com caractere não-ASCII.
+
+---
+
+## 2026-08-06 (apêndice 6) — Correção pós-auditoria: `AwardRfqUseCase` fora de transação + cobertura de teste do bug de `DeactivateAssetUseCase`
+
+**Origem:** fecha as duas pendências deixadas em aberto no apêndice 4
+acima ("Adjudicação de RFQ por item" `[MEDIO]` e o "Teste sugerido...
+hoje inexistente" do bug de `DeactivateAssetUseCase`). Território: apenas
+`server/src/modules/rfq/`, `server/src/modules/items/` (repositório
+compartilhado `ItemSupplierRepository`, só a assinatura), `server/tests/`.
+
+- [x] **`AwardRfqUseCase.ts:219` — leitura fora de transação corrigida.**
+  `itemSupplierRepository.findByItemAndSupplier(...)` agora recebe
+  `input.transaction` como terceiro argumento, igual ao `create`/`update`
+  subsequentes na mesma função (linhas 226/230-237 antes da correção).
+  Adicionado o parâmetro opcional `transaction?: any` à assinatura do
+  método tanto no contrato de domínio
+  (`server/src/modules/items/domain/repositories/ItemSupplierRepository.ts`)
+  quanto na implementação Sequelize
+  (`server/src/modules/items/infrastructure/sequelize/SequelizeItemSupplierRepository.ts`),
+  seguindo o mesmo padrão opcional já usado por `create`/`update`/
+  `clearPreferredForItem` no mesmo arquivo — assinatura compatível com os
+  outros dois call sites existentes (`CreateItemSupplierUseCase.ts`,
+  `ConvertRequisitionToPurchaseOrdersUseCase.ts`, fora do território desta
+  rodada, não alterados). **Tratamento de erro de constraint:** verificado
+  que `middlewares/errorHandler.ts` já converte
+  `Sequelize.UniqueConstraintError` em `409` com mensagem de negócio
+  (`"Já existe um registro com este ..."`), então uma violação
+  remanescente de `uq_item_suppliers_item_supplier` sob concorrência real
+  já não vaza como 500 genérico — nenhuma alteração adicional necessária
+  no use case.
+- [x] **Teste de regressão para o bug de enum de `DeactivateAssetUseCase`.**
+  Adicionados 2 testes unitários em
+  `server/tests/unit/assets-use-cases.test.ts` (bloco
+  `describe('DeactivateAssetUseCase (regressão: bug de 500 em DELETE
+  /api/assets/:id)')`): (a) confirma que o use case grava exatamente
+  `status: 'decommissioned'` e que esse valor pertence à lista real de
+  valores do ENUM lida do próprio model
+  (`Asset.rawAttributes.status.values`, `server/src/models/Asset.ts`) —
+  falha se o enum mudar sem o use case acompanhar; também afirma
+  explicitamente que `'inactive'` (o valor do bug original) **não**
+  pertence ao enum; (b) confirma `NotFoundError` quando o repositório
+  retorna `0` linhas afetadas (ativo inexistente).
+
+**Validação:**
+- `cd server && npm run typecheck` → 0 erros.
+- `cd server && npx jest tests/unit` → 85 suites / **671 testes**
+  passando (baseline anterior: 670; +1 líquido pela adição dos 2 testes de
+  `DeactivateAssetUseCase` neste apêndice — a diferença de baseline não
+  foi investigada por estar fora do território desta rodada, mas a suíte
+  completa está 100% verde).
+- `npx jest tests/unit/rfq.test.ts` → 20/20 (mocks existentes de
+  `findByItemAndSupplier` continuam válidos com a assinatura estendida,
+  já que o terceiro parâmetro é opcional).
+- `npx jest tests/unit/assets-use-cases.test.ts` → 6/6 (4 pré-existentes +
+  2 novos).
+
+**Arquivos alterados nesta rodada:**
+- `server/src/modules/rfq/application/use-cases/AwardRfqUseCase.ts`
+- `server/src/modules/items/domain/repositories/ItemSupplierRepository.ts`
+- `server/src/modules/items/infrastructure/sequelize/SequelizeItemSupplierRepository.ts`
+- `server/tests/unit/assets-use-cases.test.ts`
+
+**Documentos atualizados nesta rodada:** este arquivo (seção nova). Sem
+mudança de contrato de API pública nem de regra de negócio visível ao
+usuário — não houve alteração em `docs/API.md`, `docs/database/` ou
+`docs/projeto/04-USE_CASES.md` (fora do território desta rodada e sem
+necessidade real: nenhum endpoint/comportamento de negócio mudou, só
+robustez interna + cobertura de teste).
+
+---
+
+## 2026-08-06 (apêndice 7) — UC-19/RF-COM-12: módulo Importação/COMEX (backend completo) `[x]` `[IMPLEMENTADO]`
+
+**Origem:** `docs/projeto/04-USE_CASES.md` UC-19 ("Gerenciar Importação
+(COMEX)") tinha caso de uso documentado desde a formalização do projeto,
+mas **zero implementação** (nem model, nem rota, nem tela). Decisão do
+dono do ERP: implementar o backend completo nesta rodada; a tela web
+(`client/`) fica para uma rodada seguinte, de outro agente
+(`PromadorFonteEnd`). Território desta rodada: novo módulo
+`server/src/modules/comex/`, models novos, migration na faixa reservada
+`20260806-000090`-`20260806-000099`, `server/app.ts`, `server/tests/`.
+
+**O que o UC-19 pedia (fluxo principal, 6 passos):** (1) acessar
+"Suprimentos > Importação"; (2) registrar processo de importação; (3)
+informar fornecedor, produto, quantidade, valor FOB; (4) sistema calcula
+tributos de importação (II, IPI, PIS, COFINS, ICMS); (5) registrar
+acompanhamento (embarque, chegada, desembaraço); (6) após recebimento, dar
+entrada no estoque com custo nacionalizado.
+
+**O que foi implementado:**
+
+- [x] **Schema** (migration `20260806-000090-create-import-processes.cjs`,
+  `up`/`down` testados em ciclo real — `migration:up` → `migration:down` →
+  `migration:up`, todos limpos):
+  - `import_processes` (cabeçalho): `process_number` (`IMP-<ano>-XXXX`,
+    único), `supplier_id` (FK `suppliers.id` RESTRICT), `status` ENUM
+    (`draft`→`shipped`→`arrived`→`customs_cleared`→`received` |
+    `cancelled`), `fob_currency`, `exchange_rate`, `freight_value`,
+    `insurance_value`, `other_expenses_value` (estes 3 em BRL, `DECIMAL(18,6)`,
+    usados no rateio pro-rata do valor aduaneiro entre os itens),
+    `shipped_at`/`arrived_at`/`customs_cleared_at`/`received_at`
+    (`DATEONLY`, um por marco do passo 5), `notes`, `created_by` (FK
+    `users.id`).
+  - `import_process_items`: `import_process_id` (FK CASCADE), `item_id`
+    (FK `items.id` UUID, RESTRICT), `quantity`, `fob_unit_price` (moeda
+    estrangeira do processo), `ii_rate`/`ipi_rate`/`pis_rate`/
+    `cofins_rate`/`icms_rate` (`DECIMAL(7,4)`, percentual, informados
+    manualmente pelo Analista de Comex — **sem integração Siscomex/NCM**,
+    decisão explícita: o UC-19 não pede essa integração, então não foi
+    criado stub para ela) e as colunas calculadas
+    `customs_value`/`ii_value`/`ipi_value`/`pis_value`/`cofins_value`/
+    `icms_value`/`nationalized_unit_cost`.
+  - Models `server/src/models/ImportProcess.ts` e
+    `server/src/models/ImportProcessItem.ts`, registrados com associações
+    em `server/src/models/index.ts` (`Supplier↔ImportProcess`,
+    `User↔ImportProcess`, `ImportProcess↔ImportProcessItem` CASCADE,
+    `Item↔ImportProcessItem`).
+- [x] **RBAC:** nova chave `'comex'` adicionada ao catálogo fixo
+  `server/src/shared/domain/accessModules.ts` (`ACCESS_MODULES`), mesmo
+  padrão de `manutencao`/`garantia` (2026-08-05). Todas as rotas usam
+  `authorizeModule('comex', ...)` — leituras aceitam qualquer nível,
+  escritas exigem `operate`. **Decisão:** nenhuma ação exige `approve`
+  (diferente da adjudicação de RFQ), porque o UC-19 define um único ator
+  (Analista de Comex) sem etapa de aprovação por um segundo nível.
+- [x] **Clean Architecture** (mesmo padrão do módulo `rfq/`, usado como
+  referência): `domain/repositories/ComexRepository.ts` (contrato),
+  `infrastructure/sequelize/SequelizeComexRepository.ts`,
+  `application/use-cases/` — `CreateImportProcessUseCase`,
+  `ListImportProcessesUseCase`, `GetImportProcessByIdUseCase`,
+  `RegisterImportTrackingUseCase`, `CancelImportProcessUseCase`,
+  `ReceiveImportProcessUseCase`, mais dois helpers puros sem `export =`
+  (`importTaxCalculator.ts`, `recalculateImportProcessTaxes.ts`, evitando
+  deliberadamente a armadilha de misturar `export interface`/`export type`
+  com `export = X` no mesmo arquivo) — `presentation/validators`
+  (Zod, mesmo padrão de `rfqValidators.ts`), `presentation/controllers`,
+  `presentation/routes/importProcesses.ts`, montada em `server/app.ts` como
+  `app.use('/api/comex/import-processes', ...)`.
+- [x] **Cálculo de tributos** (`importTaxCalculator.ts`, função pura,
+  testada isoladamente): valor aduaneiro do item = FOB em BRL (quantidade ×
+  preço unitário × câmbio) + frete/seguro do processo rateados pro-rata do
+  FOB de cada item; II = aduaneiro × alíquota; IPI = (aduaneiro + II) ×
+  alíquota; PIS/COFINS = aduaneiro × alíquota (base simplificada,
+  documentada no código); ICMS = cálculo "por dentro" (gross-up) sobre
+  aduaneiro + II + IPI + PIS + COFINS + despesas rateadas; custo
+  nacionalizado = soma de tudo ÷ quantidade. Recalculado (a) na criação; (b)
+  no acompanhamento, se dados monetários forem informados; (c) sempre,
+  de forma fresca, imediatamente antes do recebimento.
+- [x] **Recebimento (entrada em estoque com custo nacionalizado, UC-19
+  passo 6):** `ReceiveImportProcessUseCase` exige status `customs_cleared`,
+  resolve o `Product` legado de cada item via
+  `ItemRepository.findLegacyProductByItemId` (método já existente,
+  reaproveitado — mesma resolução `items.codigo = products.code` usada por
+  `AwardRfqUseCase`/`ReceivePurchaseItemsUseCase`), chama
+  `InventoryService.receive` (incrementa estoque + `InventoryMovement`) e
+  `CostingService.registerWeightedAverageCost` (custo médio ponderado do
+  `Product`) — **reaproveitando 100% da infraestrutura já testada**, sem
+  duplicar lógica de estoque. **Decisão registrada explicitamente no
+  código:** `reference_type`/`source_type` gravados como `'purchase'`
+  (não existe valor dedicado `'import'` nos ENUMs
+  `inventory_movements.reference_type`/`product_cost_ledgers.source_type` —
+  criar um exigiria alterar 2 tabelas de altíssimo tráfego, fora do
+  território exclusivo deste módulo); rastreabilidade preservada via
+  `reference_id`/`source_id` = `import_processes.id` e via
+  `description`/`notes` citando o número do processo.
+- [x] **Sem geração automática de Conta a Pagar de tributos** (decisão
+  documentada no código e aqui): `AccountPayable` é BRL-only e o UC-19 não
+  pede esse gatilho explicitamente — fica como melhoria futura (ver
+  "Pendências residuais" abaixo).
+- [x] **Testes unitários:** `server/tests/unit/comex.test.ts` — 17 testes
+  cobrindo a calculadora de tributos (item único, rateio multi-item,
+  gross-up de ICMS), `CreateImportProcessUseCase` (número sequencial,
+  fornecedor/item inexistente, itens vazios), `RegisterImportTrackingUseCase`
+  (sequência correta, evento fora de ordem, recálculo com dado monetário),
+  `CancelImportProcessUseCase` (cancelamento válido e bloqueio pós-`received`)
+  e `ReceiveImportProcessUseCase` (fluxo feliz com mocks de
+  `InventoryService`/`CostingService`, bloqueio pré-`customs_cleared`,
+  produto legado ausente).
+- [x] Guarda anti-regressão `server/tests/unit/module-authorization-map.test.ts`
+  atualizada: `'comex'` adicionado a `MODULES_REQUIRING_AUTHORIZE_MODULE`.
+
+**Rotas criadas (todas sob `/api/comex/import-processes`, `authenticate` +
+`authorizeModule('comex', ...)`):**
+- `GET /` — lista paginada (filtros `status`, `supplier_id`).
+- `GET /:id` — detalhe (itens + fornecedor + criador).
+- `POST /` — cria processo (`operate`).
+- `POST /:id/tracking` — registra embarque/chegada/desembaraço (`operate`).
+- `POST /:id/receive` — nacionaliza e dá entrada em estoque (`operate`).
+- `POST /:id/cancel` — cancela processo não recebido (`operate`).
+
+Payloads/contratos completos (para o agente de frontend que for construir
+a tela) estão documentados em `docs/HANDOFF_CODEX.md`, seção "UC-19 —
+Importação/COMEX".
+
+**Validação:**
+- `cd server && npm run typecheck` → 0 erros.
+- `cd server && npx jest tests/unit` → 86 suites / **698 testes**
+  passando (100% verde; +17 líquidos de `comex.test.ts` + 1 teste de guarda
+  ajustado, sem nenhuma regressão nos 671 pré-existentes + os +10 que já
+  não batiam com o número citado no apêndice 6 — divergência de baseline
+  não investigada por já vir de rodadas anteriores, fora do território
+  desta).
+- `npm run migration:up` → `20260806-000090-create-import-processes`
+  aplicada; `npm run migration:down` → revertida limpo; `npm run
+  migration:up` de novo → reaplicada limpo; `npm run migration:status` →
+  confirma `up`.
+- `curl http://localhost:5000/health/ready` → `{"status":"ready","database":"up",...}`
+  antes e depois de todas as alterações (watch mode do backend dev não
+  quebrou).
+- `curl http://localhost:5000/api/comex/import-processes` (sem token) →
+  `401` (confirma que a rota nova está montada e protegida — não `404`).
+
+**Pendências residuais / fora do escopo desta rodada (não bloqueantes):**
+- ~~Tela web (`client/`) do módulo — próxima rodada, agente
+  `PromadorFonteEnd`.~~ **[RESOLVIDO 2026-08-06]** — ver entrada "UC-19
+  (Importação/COMEX) — tela web entregue" mais abaixo neste arquivo.
+- Sem integração Siscomex/NCM para resolver alíquotas automaticamente —
+  decisão consciente, fora do que o UC-19 pede.
+- Sem geração automática de Conta a Pagar de tributos de importação (DARF/
+  guia) — `AccountPayable` não suporta moeda estrangeira; avaliar em
+  sprint futura se o negócio quiser esse gatilho.
+- Sem teste de integração real (Postgres) do fluxo completo
+  create→tracking→receive — cobertura atual é 100% unitária (repositórios
+  mockados), consistente com o padrão dos demais módulos novos do dia
+  (RFQ, downtime, conciliação bancária) que também citam esse mesmo tipo
+  de pendência em `docs/governance/TODO.md`.
+
+**Arquivos criados/alterados nesta rodada:**
+- `server/migrations/20260806-000090-create-import-processes.cjs`
+- `server/src/models/ImportProcess.ts`, `server/src/models/ImportProcessItem.ts`
+- `server/src/models/index.ts` (imports + associações + export)
+- `server/src/shared/domain/accessModules.ts` (chave `'comex'`)
+- `server/src/modules/comex/**` (módulo novo completo)
+- `server/app.ts` (rota montada)
+- `server/tests/unit/comex.test.ts` (novo)
+- `server/tests/unit/module-authorization-map.test.ts` (`'comex'` adicionado)
+
+**Documentos atualizados nesta rodada:** este arquivo (seção nova) e
+`docs/HANDOFF_CODEX.md` (seção UC-19). Por instrução explícita do
+orquestrador desta rodada, `docs/API.md`, `docs/arquitetura/`,
+`docs/projeto/` (incluindo `04-USE_CASES.md`), `docs/business/` e
+`docs/patrimonio/` **não foram tocados** neste território (outros agentes
+trabalhando em paralelo nesses arquivos) — os detalhes de rota/payload que
+normalmente iriam para `docs/API.md`/`04-USE_CASES.md` foram registrados
+integralmente em `docs/HANDOFF_CODEX.md` para o próximo agente consolidar
+onde for apropriado.
+
+**[ATUALIZAÇÃO 2026-08-06, rodada de sincronização documental]** — as
+pendências acima foram fechadas por outro agente: `docs/API.md` ganhou a
+seção `§32. Importação / COMEX` (payloads reais confirmados contra
+`importProcessValidators.ts`); `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
+§3 (RF-COM-12) e a tabela de divergências passaram para `[IMPLEMENTADO]`;
+`docs/projeto/04-USE_CASES.md` (UC-19) ganhou a marcação
+`[IMPLEMENTADO]` (backend; tela web pendente) com as decisões de escopo
+resumidas; `docs/DIAGRAMA_CLASSES.md` ganhou o módulo `comex` na seção de
+módulos recentes; `CLAUDE.md` §1/§4 e a contagem de migrations (66) foram
+atualizados. Os dois achados `[ ]` acima sobre UC-19 (apêndice 4, item 1,
+e a lista de "Achados/pendências novas" do apêndice 5) foram marcados
+`[x]` com nota de resolução, sem reescrever o texto histórico original.
+
+### 2026-08-06 (rodada seguinte, `AdmDBA`) — documentação de `docs/database/` regenerada `[x]`
+
+Fluxo padrão pós-migration executado por completo para
+`import_processes`/`import_process_items`: `docs/database/gen_dict.py`
+ganhou `TABLE_DESC` curado para as 2 tabelas, `04-DICIONARIO_DADOS.md`
+regenerado por introspecção real (80 tabelas), `schema.sql` regenerado
+via `pg_dump`, `02-MODELO_LOGICO.md`/`01-MODELO_CONCEITUAL.md` ganharam o
+bloco/entidade "Processo de Importação (COMEX)", contagens reconferidas
+(66 migrations, 175 FKs) em `00-INDICE.md`/`02-MODELO_LOGICO.md`/
+`03-MODELO_FISICO.md`, e `05-ACESSOS_E_ISOLAMENTO.md` ganhou confirmação
+real (query em `information_schema.role_table_grants`) de que `evok_app`
+herdou os grants nas tabelas novas automaticamente. Detalhe completo em
+`docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (quarta rodada)".
+Território estrito de `docs/database/` + este registro + changelog em
+`docs/DATABASE.md` — nenhum código (`server/`, `client/`) alterado, e
+nenhuma migration nova criada (a `-000090` já existia e já estava `up`).
+
+### 2026-08-06 (rodada seguinte, `PromadorFonteEnd`) — UC-19 (Importação/COMEX) — tela web entregue `[x]` `[IMPLEMENTADO]`
+
+**Origem:** backend do UC-19 concluído na mesma data (apêndice 7 acima);
+esta rodada fecha a pendência residual "Tela web (`client/`) do módulo".
+Contratos confirmados contra o código real (`server/src/modules/comex/
+presentation/`) antes de escrever qualquer tipo TypeScript, além da leitura
+de `docs/HANDOFF_CODEX.md`, seção "UC-19 — Importação/COMEX".
+
+**O que foi entregue:**
+- `client/src/api/comex.ts` — serviço de API com tipos estritos de todos os
+  payloads/respostas (6 funções: listar, detalhar, criar, registrar
+  acompanhamento, receber, cancelar).
+- `client/src/pages/purchases/ComexPage.tsx` — listagem paginada com filtro
+  por status; diálogo de criação (`react-hook-form` + `zod`, itens via
+  `ItemSearchSelect`); diálogo de detalhe (`Dialog` centralizado, padrão do
+  Pedido de Compra — não `Sheet`) com tributos calculados e custo
+  nacionalizado por item; diálogo de registro de acompanhamento sequencial;
+  diálogo de cancelamento com motivo obrigatório; ações de receber/cancelar
+  com confirmação (`window.confirm`).
+- Rota `/purchases/comex` em `client/src/App.tsx` (`ModuleRoute
+  module="comex"`, guard dedicado — não reaproveita `compras`), item de
+  menu "Importação (Comex)" na seção Compras de `client/src/layouts/
+  AppLayout.tsx`.
+- **Gap fechado nesta rodada:** `client/src/api/accessProfiles.ts` não
+  tinha a chave `'comex'` no union type `AccessModuleKey` (só o catálogo do
+  backend, `server/src/shared/domain/accessModules.ts`, tinha sido
+  atualizado) — sem isso a rota/menu não compilariam. Adicionada.
+
+**Validação:** `cd client && npx tsc --noEmit` (0 erros) e `npm run build`
+(`tsc -b && vite build`, sucesso — encontrou 3 erros de inferência de tipo
+zod/RHF que só aparecem em `tsc -b`, não em `tsc --noEmit` solto, corrigidos
+trocando campos numéricos opcionais problemáticos por estado local simples
+no diálogo de acompanhamento, mesmo padrão já usado em `ReceiveItemsDialog`
+de `PurchasesPage.tsx`); `npx vitest run` (51/51, mesma baseline anterior,
+sem regressão). Testado manualmente com `curl` contra o backend real (porta
+5000): criação de processo com item real, `GET`/`GET :id`, transição de
+tracking válida e inválida (422 confirmado com a mensagem esperada) e
+cancelamento — registro de teste cancelado ao final para não sujar o banco.
+
+**Pendências residuais:**
+- `docs/API.md` não referencia a tela nova (fora do território deste
+  agente; os endpoints em si já estão documentados lá desde a rodada de
+  sincronização documental do mesmo dia).
+- Sem teste E2E em navegador real (Cypress/Playwright não fazem parte do
+  stack do projeto).
+- Sem polimento visual dedicado (`webdesiner`) — a tela segue a estrutura
+  de `RfqPage.tsx`/`PurchasesPage.tsx` ponto a ponto, mas não passou por
+  revisão fina de hierarquia/responsividade.
+- Nenhum perfil de acesso tem o módulo `comex` atribuído (mesma pendência
+  já registrada pelo backend) — a tela se comporta corretamente nesse caso
+  (`AccessDeniedPage`, mesma UX das demais telas), mas um admin precisa
+  atribuir o módulo manualmente antes do primeiro uso real.
+
+**Arquivos criados/alterados nesta rodada:**
+- `client/src/api/comex.ts` (novo)
+- `client/src/pages/purchases/ComexPage.tsx` (novo)
+- `client/src/App.tsx`, `client/src/layouts/AppLayout.tsx`,
+  `client/src/api/accessProfiles.ts` (alterados)
+- `docs/HANDOFF_CODEX.md` (nova seção "UC-19 — Importação/COMEX: tela web"),
+  `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` (FE3), `docs/
+  LEVANTAMENTO_ERP_2026-08-02.md` (seção 1), este arquivo (esta entrada).
+
+**Território:** `client/` apenas, mais os 4 arquivos de registro acima.
+`server/`, `docs/API.md`, `docs/arquitetura/`, `docs/database/`,
+`docs/projeto/` não foram tocados (instrução explícita do escopo desta
+rodada).

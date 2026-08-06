@@ -4,7 +4,10 @@
 **Data-base:** 2026-07-31
 **Status:** ⚠️ HISTÓRICO — o frontend FOI implementado em `client/` (React 19 + Vite, React Router v7.18.2, porta 5173). FE0 está concluído; FE1–FE7 parcialmente. Cobertura real de telas: ver docs/LEVANTAMENTO_ERP_2026-08-02.md
 **Depende de:** API já existente em `server/` (Gates G0-G5 aprovados, ver
-`docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md`)
+`docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md` — **nota de pente-fino
+2026-08-06:** esse arquivo e `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`
+(citado na seção 13 abaixo) **não existem mais no repositório**; para o
+status vigente de Go-Live use `CLAUDE.md` §5 e `docs/GO_LIVE_G6_CHECKLIST.md`)
 
 ## 1. Objetivo
 
@@ -199,6 +202,7 @@ tela funciona.
 - [ ] Listagem de pedidos com filtro por status/fornecedor/período.
 - [x] Conversão de requisição aprovada em pedido(s) de compra (`POST /api/purchase-requisitions/:id/convert`), com dialog de confirmação, fornecedor fallback opcional, agrupamento por fornecedor no resultado e tratamento de erro 422 (itens sem fornecedor resolvível) sem fechar o dialog.
 - [x] Cockpit de compras no topo de `/purchases` (`GET /api/purchases/cockpit`): 4 tiles clicáveis — "Requisições pendentes" (→ `/purchases/requisitions`), "Pedidos em aberto" (N · R$ total; aplica filtro local na tabela pelos status `pending/approved/sent/partial`), "Chegando em 7 dias" (verde), "Atrasados" (vermelho; → `/logistics/recebimento`). Função `getPurchaseCockpit` em `src/api/purchases.ts`.
+- [x] Tela de Importação/Comex (UC-19, `/purchases/comex`, `ComexPage.tsx`): listagem paginada com filtro por status, criação de processo (fornecedor, itens com valor FOB/câmbio/alíquotas de II/IPI/PIS/COFINS/ICMS via `zod`+`react-hook-form`), diálogo de detalhe (padrão `Dialog` centralizado) com tributos calculados e custo nacionalizado por item, registro de acompanhamento sequencial (embarque → chegada → desembaraço), recebimento com confirmação (`window.confirm`, entrada em estoque + custo nacionalizado) e cancelamento com motivo obrigatório. Módulo de acesso `comex` adicionado ao catálogo do client (`AccessModuleKey`); nenhum perfil o tem atribuído ainda — comportamento de acesso negado herdado de `ModuleRoute` (mesma UX das demais telas).
 
 ### Critério de aceite
 

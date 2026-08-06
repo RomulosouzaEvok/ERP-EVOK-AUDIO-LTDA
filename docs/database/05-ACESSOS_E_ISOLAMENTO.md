@@ -162,6 +162,39 @@ testado; os itens restantes ficam registrados em
 `docs/governance/TODO.md` como melhorias futuras opcionais, não como
 achado de risco em aberto.
 
+### 1.1.1 Reconfirmação real (2026-08-06) — tabelas novas do módulo COMEX herdaram os grants automaticamente
+
+Depois da migration `20260806-000090-create-import-processes.cjs` (cria
+`import_processes`/`import_process_items`, rodada com `evok_admin`),
+consulta real contra `information_schema.role_table_grants` confirma que
+o `ALTER DEFAULT PRIVILEGES FOR ROLE evok_admin IN SCHEMA public`
+aplicado pela migration `-000080` funcionou exatamente como projetado —
+**sem nenhum GRANT manual adicional**:
+
+```sql
+SELECT table_name, privilege_type FROM information_schema.role_table_grants
+WHERE grantee='evok_app' AND table_name IN ('import_processes','import_process_items')
+ORDER BY table_name, privilege_type;
+--      table_name       | privilege_type
+-- import_process_items  | DELETE
+-- import_process_items  | INSERT
+-- import_process_items  | SELECT
+-- import_process_items  | UPDATE
+-- import_processes      | DELETE
+-- import_processes      | INSERT
+-- import_processes      | SELECT
+-- import_processes      | UPDATE
+-- (8 rows)
+```
+
+`evok_app` recebeu `SELECT/INSERT/UPDATE/DELETE` nas 2 tabelas novas sem
+nenhuma ação manual, exatamente como documentado em §1.1 — este é o
+primeiro caso real, pós-implementação da role, de uma migration nova
+criando tabelas de negócio, e serve como confirmação prática (não apenas
+teórica) do mecanismo de `ALTER DEFAULT PRIVILEGES`. Nenhum privilégio de
+DDL foi concedido (comportamento esperado, não testado explicitamente
+nesta rodada por já estar coberto pelo teste de §1.1 item 3).
+
 ## 2. Políticas de Isolamento — serviços externos
 
 ### Regra de arquitetura (CLAUDE.md, reforçada aqui)

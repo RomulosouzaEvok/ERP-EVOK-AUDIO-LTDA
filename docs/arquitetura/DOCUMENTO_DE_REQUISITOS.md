@@ -75,7 +75,7 @@ Convenção de tags (igual ao restante da documentação do projeto, ver
 | RF-COM-09 | Catálogo item×fornecedor (N:N), com preço/prazo e fornecedor preferencial | `[IMPLEMENTADO]` | UC-22 |
 | RF-COM-10 | Avaliação de fornecedor (`rating` manual) + `quality_score` automático via NCs vinculadas | `[IMPLEMENTADO]` | tela `/purchases/suppliers` |
 | RF-COM-11 | Cockpit de compras (visão consolidada de pedidos/requisições em aberto) | `[IMPLEMENTADO]` | UC-28, `GET /api/purchases/cockpit` |
-| RF-COM-12 | Importação (COMEX): registro de processo, cálculo de tributos de importação, nacionalização de custo | `[PENDENTE]` | UC-19 descreve o fluxo, **sem rota/módulo correspondente no backend** — divergência UC×código a decidir (implementar ou descontinuar UC-19) |
+| RF-COM-12 | Importação (COMEX): registro de processo, cálculo de tributos de importação, nacionalização de custo | `[IMPLEMENTADO]` (2026-08-06, backend; **sem tela web ainda**) | UC-19, `server/src/modules/comex/`, `/api/comex/import-processes`, `docs/API.md` §32 — fórmula fiscal simplificada e alíquotas manuais (sem integração Siscomex/NCM), sem AP automática de tributos (ver decisões de escopo em `docs/HANDOFF_CODEX.md`) |
 
 ---
 
@@ -153,7 +153,7 @@ Convenção de tags (igual ao restante da documentação do projeto, ver
 | RF-PAT-02 | QR Code do ativo para inventário mobile | `[IMPLEMENTADO]` | modelo `Asset`, serviço de QR |
 | RF-PAT-03 | Ordem de manutenção (preventiva/corretiva/preditiva/emergencial/overhaul), fluxo `open → scheduled → in_progress → waiting_parts → completed/canceled` | `[IMPLEMENTADO]` | UC-18, `/api/maintenance`, tela `/maintenance` (aba Ordens) |
 | RF-PAT-04 | Custo de peças + mão de obra + horas de parada por ordem de manutenção | `[IMPLEMENTADO]` | modelo `MaintenanceOrder` (`parts_cost`, `labor_cost`, `downtime_hours`) |
-| RF-PAT-05 | Atualização automática do status do ativo (`active`↔`in_maintenance`) ao abrir/fechar ordem de manutenção | `[PENDENTE]` | vínculo hoje é só `asset_id` (associação); `UpdateMaintenanceOrderUseCase` não altera `Asset.status` — atualização é manual |
+| RF-PAT-05 | Atualização automática do status do ativo (`active`↔`in_maintenance`) ao abrir/fechar ordem de manutenção | `[IMPLEMENTADO]` (2026-08-06) | `UpdateMaintenanceOrderUseCase` (transição para `in_progress` → `Asset.status='in_maintenance'`) e `CancelMaintenanceOrderUseCase`/conclusão `completed` (→ `Asset.status='active'`, só se não houver outra OM aberta para o ativo e o ativo ainda estiver `in_maintenance`); ver `docs/patrimonio/03-MANUTENCAO.md` §6 |
 | RF-PAT-06 | Ordens de serviço externas (assistência técnica, garantia) | `[IMPLEMENTADO]` | `/api/service-orders`, tela `/service-orders` |
 | RF-PAT-07 | Requisições da área de Manutenção (peças/insumos) | `[IMPLEMENTADO]` | tela `/maintenance/requisitions` |
 
@@ -213,9 +213,9 @@ RF-PRD-02, RF-FIN-06).
 
 | UC | Divergência | Ação recomendada |
 |---|---|---|
-| UC-19 (Importação/COMEX) | Descrito em `docs/projeto/04-USE_CASES.md`, sem nenhuma rota/modelo/tela correspondente | Decisão de negócio: implementar (Fase futura) ou marcar UC-19 `[DESCONTINUADO]` em `docs/projeto/04-USE_CASES.md` — registrado em `docs/governance/TODO.md` |
-| Módulo 13 "Qualidade — Certificações" (`docs/projeto/01-PLANO.md` histórico) | Certificações de produto/processo nunca ganharam modelo/rota dedicada | Mesma decisão: formalizar como UC futuro ou remover da lista de escopo |
-| RF-PAT-05 | `Asset.status` tem valor `in_maintenance`, mas nenhum use case do módulo `maintenance` o define automaticamente ao abrir/concluir uma ordem | Avaliar se é gap real (então `[PENDENTE]`, como registrado) ou decisão consciente de atualização manual — levar para `docs/governance/TODO.md` se for gap |
+| UC-19 (Importação/COMEX) | **[RESOLVIDO 2026-08-06]** Estava descrito em `docs/projeto/04-USE_CASES.md` sem nenhuma rota/modelo/tela correspondente. Decisão de negócio: implementar (não descontinuar) — backend completo entregue (`server/src/modules/comex/`, `/api/comex/import-processes`); tela web ainda pendente | Nenhuma — backend `[IMPLEMENTADO]` (RF-COM-12 acima); tela web fica para próxima rodada de frontend, rastreada em `docs/governance/TODO.md` |
+| Módulo 13 "Qualidade — Certificações" (`docs/projeto/01-PLANO.md` histórico) | Certificações de produto/processo nunca ganharam modelo/rota dedicada | Mesma decisão pendente: formalizar como UC futuro ou remover da lista de escopo |
+| RF-PAT-05 | **[RESOLVIDO 2026-08-06]** `Asset.status` tem valor `in_maintenance`; decisão de negócio tomada: sincronização automática (não manual), implementada em `UpdateMaintenanceOrderUseCase`/`CancelMaintenanceOrderUseCase` | Nenhuma — `[IMPLEMENTADO]` (RF-PAT-05 acima e `docs/patrimonio/03-MANUTENCAO.md` §6) |
 
 ---
 

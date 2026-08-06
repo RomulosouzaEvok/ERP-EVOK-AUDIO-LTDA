@@ -1911,3 +1911,61 @@ Winston (`server/src/config/logger.ts`) integrado em request-logger,
 errorHandler e boot (`server/index.ts`) — JSON em produção, colorido em
 dev, `LOG_FILE` opcional (sem rotação de arquivo — se usado em produção,
 rotação/logrotate deve ser configurada fora da aplicação).
+
+---
+
+### Tabelas: `import_processes` / `import_process_items` (Módulo COMEX/Importação, UC-19)
+
+Migration `server/migrations/20260806-000090-create-import-processes.cjs`
+(aplicada — total agora 66 migrations). Cobre o acompanhamento de um
+processo de importação (embarque → chegada → desembaraço → entrada em
+estoque) e o cálculo de nacionalização de cada item importado, **sem**
+integração Siscomex/NCM — alíquotas de II/IPI/PIS/COFINS/ICMS são
+informadas manualmente pelo Analista de Comex; o cálculo de tributos e
+custo nacionalizado é feito em código (`ImportTaxCalculator`, módulo
+`server/src/modules/comex/`), não no banco.
+
+#### Tabela: `import_processes` (cabeçalho do processo)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| process_number | VARCHAR(60) | NOT NULL, UNIQUE | Formato `IMP-<ano>-XXXX` |
+| supplier_id | INT | FK → suppliers.id, `ON DELETE RESTRICT`, NOT NULL | Fornecedor internacional — reutiliza o cadastro de `suppliers` nacional, sem campo dedicado de fornecedor estrangeiro (decisão consciente, não um bug) |
+| status | ENUM | NOT NULL, DEFAULT 'draft' | `draft`→`shipped`→`arrived`→`customs_cleared`→`received`, ou `cancelled` a qualquer momento antes de `received` |
+| fob_currency | VARCHAR(3) | NOT NULL, DEFAULT 'USD' | Código ISO da moeda do valor FOB |
+| exchange_rate | DECIMAL(18,6) | NOT NULL, DEFAULT 1 | Cotação moeda estrangeira → BRL, usada para converter o FOB |
+| freight_value | DECIMAL(18,6) | NOT NULL, DEFAULT 0 | Frete internacional em BRL, rateado pro-rata do FOB entre os itens |
+| insurance_value | DECIMAL(18,6) | NOT NULL, DEFAULT 0 | Seguro internacional em BRL, rateado pro-rata do FOB |
+| other_expenses_value | DECIMAL(18,6) | NOT NULL, DEFAULT 0 | Despesas aduaneiras adicionais (armazenagem, capatazia etc.) em BRL, rateadas pro-rata do FOB |
+| shipped_at / arrived_at / customs_cleared_at / received_at | DATEONLY | NULL | Datas de acompanhamento do processo |
+| notes | TEXT | NULL | Observações livres |
+| created_by | INT | FK → users.id, `ON DELETE RESTRICT`, NOT NULL | Analista de Comex que registrou o processo |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+**Índices:** `idx_import_processes_supplier_id`, `idx_import_processes_status`, `idx_import_processes_created_by`.
+
+#### Tabela: `import_process_items` (itens importados)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| import_process_id | INT | FK → import_processes.id, `ON DELETE CASCADE`, NOT NULL | Processo de importação dono do item |
+| item_id | UUID | FK → items.id, `ON DELETE RESTRICT`, NOT NULL | Núcleo canônico `items` — **não** `products` legado (único ponto do módulo Compras que já nasceu apontando só para o modelo novo) |
+| quantity | DECIMAL(18,6) | NOT NULL | Quantidade importada |
+| fob_unit_price | DECIMAL(18,6) | NOT NULL | Preço unitário FOB, na moeda estrangeira de `import_processes.fob_currency` |
+| ii_rate / ipi_rate / pis_rate / cofins_rate / icms_rate | DECIMAL(7,4) | NOT NULL, DEFAULT 0 | Alíquotas percentuais informadas manualmente (ex.: `60.0000` = 60%) |
+| customs_value | DECIMAL(18,6) | NULL, calculado | Valor aduaneiro rateado do item (FOB em BRL + frete + seguro + outras despesas, pro-rata) |
+| ii_value / ipi_value / pis_value / cofins_value | DECIMAL(18,6) | NULL, calculado | Tributos calculados sobre `customs_value` |
+| icms_value | DECIMAL(18,6) | NULL, calculado | ICMS calculado pela fórmula "por dentro" |
+| nationalized_unit_cost | DECIMAL(18,6) | NULL, calculado | Custo unitário nacionalizado final — usado na entrada de estoque |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+**Índices:** `idx_import_process_items_process_id`, `idx_import_process_items_item_id`.
+
+**Grants:** `evok_app` recebeu `SELECT/INSERT/UPDATE/DELETE` automaticamente
+nas 2 tabelas via `ALTER DEFAULT PRIVILEGES` da migration `-000080` —
+confirmado por query real em `information_schema.role_table_grants`, ver
+`docs/database/05-ACESSOS_E_ISOLAMENTO.md` §1.1.1.
+
+**Contagens atualizadas (2026-08-06, pós-COMEX):** 66 migrations
+aplicadas, 80 tabelas de negócio, 175 foreign keys. Ver
+`docs/database/03-MODELO_FISICO.md` para o detalhamento completo.

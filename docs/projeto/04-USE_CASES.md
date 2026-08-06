@@ -381,7 +381,7 @@
 
 ---
 
-## UC-19: Gerenciar Importacao (COMEX)
+## UC-19 [IMPLEMENTADO] (backend; tela web pendente): Gerenciar Importacao (COMEX)
 
 **Ator:** Analista de Comex
 **Pre-condicoes:** Fornecedor internacional cadastrado
@@ -392,6 +392,32 @@
 4. Sistema calcula tributos de importacao (II, IPI, PIS, COFINS, ICMS)
 5. Registra acompanhamento (embarque, chegada, desembaraco)
 6. Apos recebimento, da entrada no estoque com custo nacionalizado
+
+**Status real (2026-08-06):** backend completo em
+`server/src/modules/comex/` (`/api/comex/import-processes`, RBAC via
+módulo `comex`), models `ImportProcess`/`ImportProcessItem`, RF-COM-12
+`[IMPLEMENTADO]` (`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §3), API
+documentada em `docs/API.md` §32. **Tela web (`client/`) ainda não existe**
+— próxima rodada de frontend.
+
+**Decisões de escopo tomadas (não pedidas explicitamente pelo UC, mas
+necessárias para implementar; detalhadas em `docs/HANDOFF_CODEX.md`, seção
+"UC-19 — Importação/COMEX"):**
+- Reaproveitado o cadastro de `Supplier` existente — sem campo dedicado de
+  "fornecedor estrangeiro"; qualquer fornecedor cadastrado pode ser usado.
+- Alíquotas de II/IPI/PIS/COFINS/ICMS são **informadas manualmente** por
+  item, por processo — **sem integração Siscomex/tabela NCM** para
+  resolvê-las automaticamente.
+- Fórmula de cálculo dos tributos é uma **simplificação fiscal** que segue
+  a prática padrão brasileira (valor aduaneiro em BRL + rateio de
+  frete/seguro, II/IPI/PIS/COFINS em cascata, ICMS "por dentro"), não uma
+  engine de compliance fiscal certificada.
+- "Registrar acompanhamento" implementado como transições sequenciais de
+  `status` (`draft → shipped → arrived → customs_cleared → received |
+  cancelled`), sem tabela de eventos separada.
+- **Sem geração automática de Conta a Pagar** dos tributos de importação
+  — `AccountPayable` não suporta moeda estrangeira; fica como melhoria
+  futura (`docs/governance/TODO.md`).
 
 ---
 
@@ -1097,14 +1123,157 @@ payload é tarefa do Bloco 1.4 (`docs/governance/TODO.md`), ainda pendente.
 
 ---
 
-> **Nota de consolidação (2026-08-03):** UC-30 a UC-34 acima cobrem apenas
-> o Bloco 1.2 (middleware `authorizeModule` + CRUD de perfis + atribuição
-> + endpoint de permissões), aplicado como piloto nos módulos `laboratory`
-> e `engineering`. A especificação completa de UC-30 a UC-43 (incluindo
-> UC-35 a UC-43, ainda não implementados) permanece em
-> `docs/business/01-USE_CASES.md` e `docs/business/BUSINESS_RULES.md`,
-> que continuam a fonte de verdade normativa até serem integralmente
-> implementados e consolidados aqui.
+## UC-35 [IMPLEMENTADO]: Tentativa de Acesso a Módulo Fora do Perfil (Tela e API)
+
+**Ator:** Operador de Área, Gestor de Área
+**Endpoint:** qualquer rota protegida por `authorizeModule` fora do perfil do usuário
+
+**Fluxo Principal (API):**
+1. Usuário (ou script) chama um endpoint de um módulo fora do seu perfil.
+2. `authorizeModule` intercepta **antes** de qualquer controller/use case:
+   `role = admin`? libera; senão resolve o módulo dono da ação e consulta
+   a permissão do `access_profile_id` do usuário para aquele módulo.
+3. Se a permissão for inexistente (nível `none`, incluindo o caso de
+   usuário sem perfil — UC-35-Exceção), sistema responde `403` **sem
+   revelar dados**, para leitura e escrita (GET/POST/PUT/PATCH/DELETE).
+4. Tentativa é registrada em log de auditoria (`logAction`, ação
+   `access_denied`, fire-and-forget, com `userId`, módulo, método,
+   timestamp).
+
+**Fluxo Principal (Tela):**
+1. Módulo fora do perfil não aparece no menu (UC-34).
+2. Navegação direta por URL é interceptada pelo guard `ModuleRoute`
+   (`client/src/routes/ProtectedRoute.tsx`), aplicado a todos os grupos
+   de rota de módulo em `client/src/App.tsx`, que renderiza
+   `AccessDeniedPage` (`variant="accessDenied"`,
+   `client/src/pages/AccessDeniedPage.tsx`) em vez de tentar carregar
+   dados do módulo.
+
+**Fluxo Alternativo (nível insuficiente dentro do módulo permitido):**
+usuário com nível `operate` tentando uma ação que exige `approve` → `403
+APPROVAL_LEVEL_REQUIRED` (mesma fórmula do UC-37).
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §2/§8, UC-35 em `docs/business/01-USE_CASES.md`.
+
+---
+
+## UC-35-Exceção [IMPLEMENTADO]: Usuário Sem Perfil de Acesso Atribuído
+
+**Ator:** Operador/Gestor de Área sem `access_profile_id` atribuído (ex.:
+usuário recém-criado, ou cujo perfil anterior foi desativado)
+
+**Fluxo Principal:**
+1. Usuário autentica normalmente — a restrição é de autorização, não de
+   autenticação.
+2. `authenticate` resolve `req.user.permissions = {}` (sem perfil);
+   qualquer chamada a módulo de negócio retorna `403 NO_ACCESS_PROFILE`.
+3. Frontend (`AppLayout`) renderiza `AccessDeniedPage variant="noProfile"`
+   no `<main>` quando o mapa de permissões vem vazio (usuário não-admin,
+   sem perfil, sem falha de rede), com o texto oficial "Seu acesso ainda
+   não foi configurado — procure o administrador." — apenas o header
+   (trocar senha/sair) permanece acessível, nenhum item de módulo aparece
+   no menu.
+
+**Regras de Negócio:** bloqueio total, sem perfil provisório (decisão do
+dono, 2026-08-03) — ver `docs/business/BUSINESS_RULES.md`, UC-35-Exceção
+em `docs/business/01-USE_CASES.md`.
+
+---
+
+## UC-36 [IMPLEMENTADO]: Troca de Perfil de Usuário Logado (Vale no Próximo Login)
+
+**Ator:** Administrador Global (ação), usuário afetado (impacto)
+
+**Fluxo Principal:**
+1. Administrador troca o perfil/nível de um usuário (UC-33,
+   `PUT /api/users/:id/access-profile`).
+2. Sistema grava a mudança imediatamente no banco — **não** invalida o
+   token/sessão já emitidos (nenhum campo `permission_version` foi criado
+   nesta entrega, decisão consciente do dono, 2026-08-03).
+3. Como `authorizeModule` consulta o perfil do usuário no banco a cada
+   requisição (sem cache no payload do JWT), a API já reflete o novo
+   perfil na próxima chamada; apenas o **menu renderizado no frontend**
+   pode ficar desatualizado (cacheado) até o próximo login — não é uma
+   brecha de segurança real, a decisão de autorização de fato sempre roda
+   no backend.
+4. Mitigação para revogação urgente: desativar o usuário (`active =
+   false`) — mecanismo já existente (`server/src/middlewares/auth.ts`,
+   checagem `if (!user.active)`) que força `401 — Usuário inativo` na
+   próxima requisição, sem esperar logout voluntário ou expiração do
+   token.
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md`, UC-36 em
+`docs/business/01-USE_CASES.md`. `permission_version`/invalidação forçada
+de sessão continua registrado como melhoria futura opcional, não
+implementada por decisão de escopo.
+
+---
+
+## UC-37 [IMPLEMENTADO]: Ação de Gestor vs Operador Dentro da Área
+
+**Ator:** Operador de Área, Gestor de Área
+
+**Regra central:** uma ação de aprovação só é liberada quando o módulo da
+ação está no perfil do usuário com nível `approve` — não existe campo
+`access_level` separado no usuário (decisão de arquitetura registrada em
+`docs/governance/TODO.md` Bloco 1.2): o "gestor" de uma área é justamente
+quem tem `approve` no módulo daquela área; `operate` isolado nunca
+autoriza uma ação que exija `approve`.
+
+**Fluxo Principal:**
+1. Operador com nível `operate` no módulo executa as ações do dia a dia
+   normalmente (ex.: registrar movimentação de estoque).
+2. Usuário com `approve` no módulo executa as ações de aprovação/gestão
+   daquele módulo (ex.: aprovar requisição, liberar/bloquear lote).
+3. Usuário com apenas `operate` tentando uma ação que exige `approve` →
+   `403 APPROVAL_LEVEL_REQUIRED`.
+4. A permissão avaliada é sempre a do módulo **dono da ação sendo
+   executada**, nunca a do módulo que originou o dado — validado
+   end-to-end no cenário "Qualidade libera lote criado pelo Recebimento"
+   (`server/tests/integration/quality-releases-receiving-lot.test.ts`):
+   um lote criado pelo Recebimento só é liberado por quem tem `approve`
+   no módulo `qualidade`, não `recebimento`.
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §4/§8, UC-37
+em `docs/business/01-USE_CASES.md`.
+
+---
+
+## UC-38 [IMPLEMENTADO]: Endpoints Compartilhados Entre Áreas (Dashboard, Relatórios, Rastreabilidade)
+
+**Ator:** Todos os perfis operacionais
+
+**Fluxo Principal:**
+1. **Dashboard** não aplica bloqueio total — filtra os cards exibidos pela
+   interseção entre os cards existentes e os módulos com nível ≠ `none`
+   no perfil do usuário (`client/src/pages/DashboardPage.tsx`,
+   `canSee`/`hasModuleAccess`, com fallback de segurança que nunca esconde
+   cards por falha de infraestrutura).
+2. **Relatórios** têm sub-módulo próprio por tipo (`relatorios.producao`,
+   `relatorios.compras`, `relatorios.custos`, `relatorios.financeiro`) —
+   um relatório cruzado (ex.: variação de custo, UC-26) exige a
+   sub-permissão própria, não é herdado de `compras`/`producao`
+   isoladamente (`server/src/modules/reports/presentation/routes/reports.ts`).
+3. **Rastreabilidade** é módulo próprio (`rastreabilidade`), concedido
+   explicitamente — não é herdado de `producao`/`qualidade`/`estoque`
+   (`server/src/modules/traceability/presentation/routes/traceability.ts`,
+   `authorizeModule('rastreabilidade')` nas 3 rotas).
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md`, UC-38 em
+`docs/business/01-USE_CASES.md`.
+
+---
+
+> **Nota de consolidação (atualizada 2026-08-06):** UC-30 a UC-38 acima
+> cobrem o Bloco 1 completo (middleware `authorizeModule` + CRUD de
+> perfis + atribuição + menu dinâmico + telas de acesso negado +
+> endpoints compartilhados), com retrofit completo em todos os módulos de
+> rota do backend (não mais restrito aos pilotos `laboratory`/
+> `engineering` — ver `docs/governance/TODO.md` Bloco 1.2). O texto
+> normativo completo (critérios de aceite BDD, tabelas, decisões do dono)
+> permanece em `docs/business/01-USE_CASES.md` e
+> `docs/business/BUSINESS_RULES.md`, que continuam a fonte de verdade
+> detalhada; este arquivo é o resumo consolidado do estado real.
 
 ## UC-39 (parcial — backend): Requisição de Amostra da Engenharia
 
@@ -1211,6 +1380,121 @@ permanecem pendentes — ver `docs/governance/TODO.md` Bloco 3.2.
 `access_level` no usuário — o nível "gestor" é resolvido pelo
 `level='approve'` da permissão do perfil no módulo `vendas` (mesma
 decisão de arquitetura do Bloco 1.2).
+
+---
+
+## UC-42 [IMPLEMENTADO]: Múltiplos Depósitos (Insumos, Acabados, Laboratório)
+
+**Ator:** Almoxarife (Insumos), Recebimento, Expedição, Analista de
+Laboratório, Operador de Produção, Administrador Global (cadastro de
+depósitos)
+**Endpoints:** `GET/POST/PUT /api/inventory/warehouses`,
+`GET /api/inventory/warehouse-stock`,
+`GET /api/products/:id/stock-by-warehouse`,
+`GET/POST /api/inventory/transfers`,
+`PUT /api/inventory/transfers/:id/approve|reject`
+
+**Fluxo Principal (A) — Cadastro de Depósito:** administrador cadastra
+depósitos (`code` único, `name`, `active`) em "Logística > Estoque >
+Depósitos" (`client/src/pages/logistics/WarehousesPage.tsx`). Seed
+inicial: `INSUMOS`, `ACABADOS`, `LABORATORIO`.
+
+**Fluxo Principal (B) — Recebimento Direciona o Depósito Certo:**
+recebimento de compra credita `INSUMOS` por padrão, ou `LABORATORIO`
+quando o pedido de origem vem de uma requisição `origin =
+'engenharia_amostra'` (UC-39) — roteamento automático por origem da
+requisição, sem exigir `warehouse_code` manual (`warehouse_code` explícito
+no payload continua prevalecendo quando informado).
+
+**Fluxo Principal (C) — Conclusão de OP e Consumo de Produção:** consumo de
+componente de OP debita sempre `INSUMOS`; conclusão de OP (produto bom)
+credita sempre `ACABADOS` — via
+`server/src/services/warehouseStockService.ts`
+(`addToWarehouse`/`removeFromWarehouse`, transacional com lock pessimista
+`LOCK.UPDATE`), dual-write que mantém `products.quantity` (fonte de
+verdade do MRP) sempre igual à soma dos saldos por depósito.
+
+**Fluxo Principal (D) — Expedição Embarca Apenas do Depósito de Acabados:**
+`ChangeSaleStatusUseCase` (`quote → confirmed`) debita exclusivamente o
+depósito `ACABADOS`, mesmo que o mesmo produto tenha saldo positivo em
+outro depósito (ex.: uma amostra em `LABORATORIO`) — bloqueado por saldo
+insuficiente em `ACABADOS` sem considerar outros depósitos. Cancelamento
+credita de volta, mesma transação. Validado em
+`server/tests/unit/warehouse-invariants.test.ts` (Invariante 1).
+
+**Fluxo Principal (E) — Laboratório Consome do Seu Próprio Depósito:**
+registro de `AcousticTestResult` marcado como destrutivo
+(`consumed_quantity > 0`) debita automaticamente o depósito `LABORATORIO`
+na mesma transação do registro do teste (`CreateAcousticTestUseCase`), sem
+lançamento manual separado.
+
+**Fluxo Principal (F) — Transferência Entre Depósitos (Aprovação de
+Gestor):** `CreateWarehouseTransferUseCase` cria a transferência em
+`pending` sem alterar saldo; `ApproveWarehouseTransferUseCase`
+(`authorizeModule('estoque', 'approve')`) debita origem/credita destino
+atomicamente e gera 2 `InventoryMovement` (`type='transfer'`) vinculados
+por `reference_type='transfer'`/`reference_id=warehouse_transfers.id`;
+`RejectWarehouseTransferUseCase` não altera saldo. Tela "Transferências"
+em `client/src/pages/logistics/TransfersTab.tsx`.
+
+**Regra explícita:** quarentena/bloqueio (`LotControl.status`) continua
+sendo status do lote, não depósito — as duas dimensões são ortogonais
+(um lote pode estar `quarantine`/`blocked` dentro de qualquer depósito).
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §12, UC-42 em
+`docs/business/01-USE_CASES.md`.
+
+**Nota de escopo:** sem coluna `tipo` (`insumos|acabados|laboratorio|outro`)
+em `warehouses` — o `code` único cumpre esse papel nesta fase (desvio
+deliberado, ver `docs/governance/TODO.md` Bloco 4.1). Filtro de depósito
+em Expedição e no inventário mobile QR ainda não implementado.
+
+---
+
+## UC-43 (parcial): Alertas Didáticos de Pré-Requisitos (Transversal)
+
+**Ator:** Todos os perfis operacionais (qualquer usuário que executa uma
+ação de negócio com pré-requisitos)
+
+**Fluxo Principal (B) — Alerta ao Tentar uma Ação que Falha no Backend
+[IMPLEMENTADO nas 9 telas priorizadas]:** quando o backend retorna `422
+BUSINESS_RULE_VIOLATION`/`400 VALIDATION_ERROR` com `details`
+estruturado, o frontend traduz a resposta em 3 partes (O QUE / POR QUE /
+O QUE FAZER) via `client/src/lib/translateApiError.ts` +
+`client/src/components/DidacticAlert.tsx`, em vez de exibir `error.message`
+cru. Os 9 casos priorizados em `BUSINESS_RULES.md` §13.5 (liberar OP sem
+material/BOM/roteiro, concluir OP com etapa aberta, embarcar venda sem
+NF-e, converter requisição sem fornecedor, receber compra sem NF, registrar
+teste de laboratório sem resultado/faixa, converter ordem MRP já em
+execução, aprovar requisição fora de sequência, liberar/bloquear lote em
+status terminal) já retornam `details` estruturado no backend e já
+consomem o padrão didático no frontend (`ProductionOrdersPage.tsx`,
+`ShopFloorPage.tsx`/`CompleteProductionOrderDialog.tsx`,
+`ShippingPage.tsx`, `RequisitionsPage.tsx`, `ReceivingConferenceDialog.tsx`,
+`RegisterTestTab.tsx`, `MrpPage.tsx`, `InspectionTab.tsx`). Regressão
+travada por `client/src/test/didacticAlertRegression.test.ts` (varre as
+telas novas dos Blocos 1–5 contra `window.alert()` cru).
+
+**Fluxo Principal (A) — Validação Preventiva (checklist antes da
+tentativa) [PENDENTE]:** o componente `PrerequisiteChecklist`
+(`client/src/components/PrerequisiteChecklist.tsx`, `items: { label, ok,
+detail?, action? }`, helper `hasPendingPrerequisite`) existe, mas **não é
+consumido em nenhuma tela** — nenhum checklist preventivo (`✓`/`✗` antes do
+clique, botão desabilitado até todos os pré-requisitos estarem atendidos)
+foi de fato aplicado às 6 telas mapeadas (liberar OP, concluir OP, embarcar
+venda, converter requisição, aprovar requisição, liberar/bloquear lote).
+Decisão técnica de caminho de implementação já registrada
+caso a caso (`docs/governance/TODO.md` Bloco 6.1), mas a aplicação em UI
+ainda não foi feita.
+
+**Pendente adicional:** retrofit das demais ~25 telas do projeto que ainda
+usam `extractApiErrorMessage`/alerta cru fora das 9 priorizadas (inventário
+completo em `docs/governance/TODO.md` Bloco 6.2); `RegisterTestTab.tsx`
+tem conformidade parcial deliberada (alerta não-bloqueante, formulário
+permite submeter mesmo com o aviso visível — decisão de UX, não bug).
+
+**Regras de Negócio:** ver `docs/business/BUSINESS_RULES.md` §13, UC-43 em
+`docs/business/01-USE_CASES.md`.
 
 ---
 
