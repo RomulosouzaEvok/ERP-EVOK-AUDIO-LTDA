@@ -2,8 +2,8 @@
 ## Plano de Execução Faseado com Decisões Go/No-Go
 
 **Data Planejada (original):** 2 de agosto de 2026 — **superada**  
-**Versão:** 1.1 — reconciliada em 2026-08-04  
-**Status:** 🟡 **FASE 1 (bloqueadores P0) CONCLUÍDA** — commit `d1d3aff`, 2026-08-02. Gate atual = **UAT + aprovação formal G6**, ainda **não iniciado**. Deploy (Fase 2) **NÃO autorizado** — falta servidor de produção.  
+**Versão:** 1.2 — reconciliada em 2026-08-06  
+**Status:** 🟡 **FASE 1 (bloqueadores P0) CONCLUÍDA** — commit `d1d3aff`, 2026-08-02. **Fase 2/P1 majoritariamente entregue entre 2026-08-04 e 2026-08-06** (RBAC completo, múltiplos depósitos, custeio real, rastreabilidade por lote/QR, apps mobile e Android TV novos — ver `CLAUDE.md` seção 5 e `docs/DIARIO_BORDO_GO_LIVE_G6.md`). Gate atual continua **inalterado**: **UAT + aprovação formal G6**, ainda **não iniciado**. Deploy (Fase 2 deste checklist — Go-Live Day) **NÃO autorizado** — falta servidor de produção.  
 **Horizonte:** 30h pré-Go-Live (✅ executadas) + Go-Live Day (⏳ aguardando gate) + 48h pós-Go-Live (⏳ não iniciado)  
 **SSOT:** `CLAUDE.md` (seção 5 "Go-Live Readiness") e `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` são a fonte da verdade sobre o status dos bloqueadores. Este documento é o plano operacional/checklist detalhado, reconciliado com essas fontes.
 
@@ -17,13 +17,28 @@
 > serão executados/preenchidos no dia real do deploy, e dependem da compra
 > do servidor de produção (ver pendência (a) abaixo).
 
+> ⚠️ **Nota de reconciliação (2026-08-06 — auditoria de infraestrutura):**
+> confirmado por auditoria dedicada que a infraestrutura real deste projeto
+> **não é** Kubernetes/Datadog/PagerDuty — é **Docker Compose + um único
+> VPS/servidor on-premise** (ainda não adquirido). Todas as menções a
+> `kubectl`, Kubernetes, Datadog, PagerDuty, "3 réplicas"/"blue-green" e
+> ferramentas equivalentes nas seções 2.1, 2.3, 3.1 e 3.3 abaixo são
+> **[NÃO APLICÁVEL]** ao ambiente real de deploy — são resíduos de um
+> template genérico de checklist de Go-Live e devem ser lidos como
+> inspiração de processo (o que observar, quando escalar), não como
+> comandos literais a executar. O runbook real de deploy (Docker Compose,
+> `docker compose up -d`, healthcheck HTTP simples, logs via
+> `docker compose logs`) está em `docs/infra/DEPLOY_UBUNTU.md` e
+> `docs/DEPLOY.md` — usar esses como referência operacional, não as seções
+> de Kubernetes abaixo.
+
 ---
 
 ## 📊 RESUMO EXECUTIVO
 
-| Fase | Duração | Objetivo | Status Real (2026-08-04) | Go/No-Go |
+| Fase | Duração | Objetivo | Status Real (2026-08-06) | Go/No-Go |
 |------|---------|----------|---------------------------|----------|
-| **Fase 1** | 30h | Resolver 4 bloqueadores + UAT | ✅ Bloqueadores resolvidos (d1d3aff, 2026-08-02) \| ⏳ UAT ainda não executado | Decision Point 1 — **aberto** |
+| **Fase 1** | 30h | Resolver 4 bloqueadores + UAT | ✅ Bloqueadores resolvidos (d1d3aff, 2026-08-02) \| ✅ Fase 2/P1 majoritariamente entregue (2026-08-04/06) \| ⏳ UAT ainda não executado | Decision Point 1 — **aberto** |
 | **Fase 2** | 4-6h | Deploy + Smoke Tests | ⏳ Não iniciada — bloqueada por (a) falta de servidor de produção e (b) Decision Point 1 aberto | Decision Point 2 — não alcançável ainda |
 | **Fase 3** | 48h | Monitoramento + Suporte | ⏳ Não iniciada | Decision Point 3 — não alcançável ainda |
 
@@ -38,6 +53,8 @@
 - **(b) [PENDENTE] UAT completo com stakeholders** — nunca executado; é o gate formal da Fase 1 (Decision Point 1).
 - **(c) [x] Risco residual `react-router@7.18.2` — RESOLVIDO em 2026-08-04.** Advisory `GHSA-qwww-vcr4-c8h2` fechado via upgrade real para `react-router@8.3.0` (unificação `react-router-dom` → `react-router` a partir da v8). `npm audit --omit=dev` em `client/` confirma 0 vulnerabilidades. Detalhe em `docs/governance/TODO.md`, seção "Pendências de Segurança / Gate G6", e `docs/DIARIO_BORDO_GO_LIVE_G6.md`, apêndice 2026-08-04.
 - **(d) [PENDENTE] Testes de integração RBAC contra infraestrutura real** — cobertura foi adicionada em `server/tests/integration/legacy-routes-rbac-regression.test.ts` (2026-08-04), mas roda via `describe.skip` por falta de `RUN_INTEGRATION=true` + `TEST_API_URL` + `TEST_AUTH_TOKEN` + PostgreSQL acessível no ambiente de CI/dev atual. Precisa ser executada de fato contra infra real antes do Go-Live.
+- **(e) [PENDENTE] Apps `mobile/` e `tv/` (novos em 2026-08-06) sem validação em hardware real.** Entregues e auditados (7 agentes em paralelo, achados P0/altos já remediados no mesmo dia — ver `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06), mas validados só por typecheck/bundle. Checklist de validação em dispositivo real em `mobile/README.md` §5 e `tv/README.md` §5.
+- **(f) [PENDENTE] Decisão de produto — JWT de 7 dias × painel de TV "sempre ligado".** O app `tv/` roda continuamente em um painel fixo; falta decidir refresh token dedicado, TTL específico, ou runbook de relogin periódico. Registrado em `docs/governance/TODO.md`, seção "2026-08-06".
 
 ---
 
@@ -1060,7 +1077,7 @@ Garantir estabilidade do sistema nos primeiros 2 dias, escalalar incidentes rapi
 
 **Gate:** Todos os 4 bloqueadores resolvidos + aprovações
 
-| Item | Critério GO | Critério NO-GO | Status Real (2026-08-04) |
+| Item | Critério GO | Critério NO-GO | Status Real (2026-08-06) |
 |------|------------|----------------|--------|
 | P0.1: Requisição de Compra | ✅ Criada 100% casos | ❌ < 90% criada | ✅ [IMPLEMENTADO] (d1d3aff) |
 | P0.2: MRP estoque real | ✅ Reflete mudanças | ❌ Ainda congelado | ✅ [IMPLEMENTADO] (d1d3aff); performance em escala não testada |
@@ -1075,9 +1092,10 @@ Garantir estabilidade do sistema nos primeiros 2 dias, escalalar incidentes rapi
 
 **Decisão Final (CTO):**
 ```
-🔴 NO-GO (estado atual, 2026-08-04) — bloqueadores técnicos P0 resolvidos,
-   mas gate de UAT + sign-offs formais ainda não iniciado, e servidor de
-   produção ainda não adquirido (bloqueia Fase 2 independentemente do UAT).
+🔴 NO-GO (estado atual, 2026-08-06) — bloqueadores técnicos P0 resolvidos,
+   Fase 2/P1 majoritariamente entregue, mas gate de UAT + sign-offs formais
+   ainda não iniciado, e servidor de produção ainda não adquirido (bloqueia
+   Fase 2 deste checklist independentemente do UAT).
 🟢 GO — Deploy autorizado, proceder Fase 2 (condicionado a: UAT completo +
    sign-offs + servidor de produção disponível; risco residual react-router
    já resolvido em 2026-08-04, não é mais condicionante)
@@ -1128,7 +1146,7 @@ Garantir estabilidade do sistema nos primeiros 2 dias, escalalar incidentes rapi
 # 📋 CHECKLIST RÁPIDO (PRINT & POST)
 
 ```
-PRÉ-GO-LIVE (30h) — Status real em 2026-08-04
+PRÉ-GO-LIVE (30h) — Status real em 2026-08-06
 ─────────────────
 ☑ P0.1: Requisição de Compra .................... [IMPLEMENTADO] d1d3aff
 ☑ P0.2: MRP estoque real ....................... [IMPLEMENTADO] d1d3aff
@@ -1212,9 +1230,9 @@ PÓS-GO-LIVE (48h)
 
 **Preparado por:** Tech Lead / Product Manager  
 **Data original:** 2 de agosto de 2026  
-**Reconciliado em:** 4 de agosto de 2026
+**Reconciliado em:** 6 de agosto de 2026
 
-**Assinado e Aprovado por:** ⏳ **[PENDENTE]** — nenhuma assinatura formal registrada até 2026-08-04. Sign-off depende da conclusão do UAT (seção 1.3). O risco residual `react-router` (antiga pendência (c)) foi resolvido em 2026-08-04 e não é mais condicionante do sign-off.
+**Assinado e Aprovado por:** ⏳ **[PENDENTE]** — nenhuma assinatura formal registrada até 2026-08-06. Sign-off depende da conclusão do UAT (seção 1.3). O risco residual `react-router` (antiga pendência (c)) foi resolvido em 2026-08-04 e não é mais condicionante do sign-off. Fase 2/P1 majoritariamente entregue (2026-08-04/06) também não é condicionante formal deste sign-off, que se refere apenas ao pacote de bloqueadores P0 original — ver `CLAUDE.md` seção 5 para o escopo completo do que foi entregue desde então.
 
 | Papel | Assinatura | Data |
 |------|-----------|------|
@@ -1227,11 +1245,13 @@ PÓS-GO-LIVE (48h)
 
 **SSOT deste documento:** plano operacional/checklist de Go-Live G6, reconciliado com `CLAUDE.md` (seção 5) e `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`, que são as fontes de verdade sobre o status dos bloqueadores P0.
 
-**Próximo passo real (2026-08-04):**
+**Próximo passo real (2026-08-06):**
 1. Adquirir servidor de produção (VPS/on-premise) — bloqueia Fase 2/F10 independentemente de tudo mais.
 2. Executar UAT completo com stakeholders (seção 1.3).
 3. Executar a suíte de testes de integração RBAC (`legacy-routes-rbac-regression.test.ts`) contra infraestrutura real (Postgres + API viva), hoje `describe.skip`.
+4. Validar os apps `mobile/`/`tv/` (novos em 2026-08-06) em hardware real — checklist em `mobile/README.md` §5 e `tv/README.md` §5 (ver pendência (e) no resumo executivo).
+5. Decidir a estratégia de sessão do app `tv/` (JWT de 7 dias × painel sempre ligado) — ver pendência (f) no resumo executivo e `docs/governance/TODO.md`, seção "2026-08-06".
 
 ~~Decisão formal do gate G6 sobre o risco residual `react-router@7.18.2` / `GHSA-qwww-vcr4-c8h2`~~ — **resolvido em 2026-08-04** (upgrade para `react-router@8.3.0`, ver `docs/governance/TODO.md` e `docs/DIARIO_BORDO_GO_LIVE_G6.md`); removido da lista de próximos passos.
-5. Coletar sign-offs formais (CTO, CFO, Gerente Produção, Compliance) — seção 1.6.
+6. Coletar sign-offs formais (CTO, CFO, Gerente Produção, Compliance) — seção 1.6.
 

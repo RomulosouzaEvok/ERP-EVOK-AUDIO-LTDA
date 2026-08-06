@@ -1,8 +1,8 @@
 # CLAUDE.md — ERP Evok Áudio LTDA
 **Single Source of Truth (SSOT) para o projeto ERP**
 
-**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02) | **Data:** 2 de agosto de 2026  
-**Próximo passo:** UAT completo → aprovação formal G6 → Go-Live
+**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 majoritariamente entregue (2026-08-04/06), incluindo apps mobile e Android TV novos | **Data:** 6 de agosto de 2026  
+**Próximo passo:** UAT completo → aprovação formal G6 → aquisição do servidor de produção → Go-Live
 
 ---
 
@@ -22,10 +22,13 @@
 - **Relatórios & Dashboard:** KPIs, análise de estoque, eficiência de produção, auditor inteligente
 
 ### Status Atual
-- ✅ Backend: Node.js + Express + Sequelize (30+ módulos, 32 rotas montadas)
-- ✅ Database: PostgreSQL 16 (24 migrations versionadas, 133 foreign keys)
-- ✅ Frontend: React 19 + Vite em `client/` (porta 5173) — 9 módulos com UI completa, 8 parciais, 12 sem tela
+- ✅ Backend: Node.js + Express + Sequelize (30+ módulos, Clean Architecture — use-cases desacoplados do Sequelize direto em 22+ módulos desde 2026-08-05)
+- ✅ Database: PostgreSQL 16 (54 migrations versionadas, 148+ foreign keys)
+- ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, configuração fiscal e auditor inteligente foram cabeados entre 2026-08-02 e 2026-08-05); as únicas exceções por desenho são o inventário mobile (QR, propositalmente mobile-only) e os endpoints de webhook (sem UI, são integração backend-to-backend)
+- ✅ **App mobile novo** (`mobile/`, Expo/React Native): login JWT, scan de estoque QR, histórico de movimentações, execução de contagens cíclicas (pool/atribuídas) — entregue em 2026-08-06, validado só por typecheck/bundle, **sem teste em dispositivo real ainda**
+- ✅ **App Android TV novo** (`tv/`, react-native-tvos): painel de demandas por departamento (recebimento, requisições, expedição, qualidade), auto-refresh 60s — entregue em 2026-08-06, mesma ressalva de validação (sem hardware real testado)
 - ✅ **4 bloqueadores P0 + 2 P1 remediados em 2026-08-02** (commit `d1d3aff`) — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
+- ✅ **Auditoria multi-agente de 7 frentes concluída em 2026-08-06** (geral, segurança, DBA, infra, frontend, mobile/TV, documentação) com remediação imediata de 4 frentes no mesmo dia — veja `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06, e pendências residuais em `docs/governance/TODO.md`
 
 ---
 
@@ -85,7 +88,9 @@ erp-evok-audio/
 │   │       ├── 04a_inventory_movements_expand.sql  # Dual-read Phase 4.1
 │   │       └── ...
 │   └── __tests__/                   # Unit, integration, edge tests
-├── client/                          # Frontend React 19 + Vite (páginas, rotas, api client)
+├── client/                          # Frontend web React 19 + Vite (páginas, rotas, api client)
+├── mobile/                          # App mobile Expo/React Native (login, scan QR, contagens cíclicas) — NOVO 2026-08-06
+├── tv/                              # App Android TV react-native-tvos (painel de demandas por departamento) — NOVO 2026-08-06
 ├── docs/
 │   ├── projeto/                     # Plano arquitetura, use-cases
 │   │   ├── 00-README.md
@@ -171,9 +176,14 @@ Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-
 
 ### Roadmap
 1. **Fase 1 (P0):** ✅ Concluída em 2026-08-02 → **próximo: UAT → Go-Live G6**
-2. **Fase 2 (P1):** Catálogo item×fornecedor (N:N), conversão requisição→pedido, MRP fecha ciclo (plano→OP/requisição), telas de MRP/requisição/qualidade — ver LEVANTAMENTO
+2. **Fase 2 (P1):** ✅ Majoritariamente entregue entre 2026-08-04 e 2026-08-06 — catálogo item×fornecedor (N:N), conversão requisição→pedido, MRP fecha ciclo (plano→OP e plano→requisição), telas de MRP/requisição/qualidade, custeio real de mão-de-obra/overhead, rastreabilidade por lote/QR, perfis de acesso configuráveis (RBAC completo), múltiplos depósitos, apps mobile e Android TV. **O que realmente falta desta fase:**
+   - Validação em hardware real dos apps `mobile/`/`tv/` (checklist em `mobile/README.md` §5 e `tv/README.md` §5)
+   - Decisão de produto sobre JWT de 7 dias × painel de TV sempre ligado (ver `docs/governance/TODO.md`, seção 2026-08-06)
+   - Teste de integração de concorrência real do claim de contagem cíclica (2 clients simultâneos contra Postgres)
+   - Backfill retroativo de custo de mão-de-obra/overhead em OPs concluídas antes de 2026-08-04 (decisão consciente de não fazer, registrada como risco residual)
 3. **Fase 3 (P2):** Capacidade finita/centros de trabalho, custo real vs padrão, TypeScript strict
 4. **Fase 4 (P3):** Relatórios de manufatura (OEE, refugo), CI/CD, unificação schema legado/novo
+5. **Infra de produção (bloqueia deploy, independente das fases acima):** servidor de produção (VPS/on-premise) ainda não adquirido; reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato e cron de backup aguardando essa compra — ver `docs/infra/DEPLOY_UBUNTU.md` e `docs/GO_LIVE_G6_CHECKLIST.md`
 
 ---
 
@@ -258,7 +268,7 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 **Tradeoff:** Menos previsível (não há "MRP run" com hora específica), mas mais preciso.
 
 ### Foreign Keys Obrigatórias
-**Decisão:** Integridade referencial obrigatória — 133 FKs aplicadas via migrations versionadas, com `ON DELETE RESTRICT` (padrão) ou `CASCADE`/`SET NULL` (quando apropriado).
+**Decisão:** Integridade referencial obrigatória — 148+ FKs aplicadas via migrations versionadas (base de 133 em 2026-08-02, expandida por schema novo desde então), com `ON DELETE RESTRICT` (padrão) ou `CASCADE`/`SET NULL` (quando apropriado).
 
 **Por quê:** Integridade referencial, sem órfãos, auditoria
 **Tradeoff:** Mais rígido (ex: não pode deletar fornecedor com compras abertas), mas banco garante consistência
@@ -282,6 +292,9 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 
 ### Crítico — Go-Live
 - **[docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)** — 4 bloqueadores P0, 15 altos P1, plano 30h
+- **[docs/GO_LIVE_G6_CHECKLIST.md](docs/GO_LIVE_G6_CHECKLIST.md)** — Plano operacional/checklist de Go-Live, gate atual (UAT + servidor de produção pendente)
+- **[docs/governance/TODO.md](docs/governance/TODO.md)** — Rastreamento dia a dia de tarefas/bugs/achados de auditoria (SSOT de pendências)
+- **[docs/DIARIO_BORDO_GO_LIVE_G6.md](docs/DIARIO_BORDO_GO_LIVE_G6.md)** — Diário de bordo append-only da execução do Go-Live G6
 - **[docs/API.md](docs/API.md)** — Endpoints, payloads, erros
 
 ### Operacional
@@ -308,7 +321,7 @@ R: Siga `modules/{modulo}/{use-cases,repositories,controllers}/` padrão Clean A
 R: CTO/Tech Lead (plano 30h), CFO (riscos), Gerente Produção (rastreabilidade), Compliance (LGPD/ISO).
 
 **P: Frontend está pronto?**  
-R: Parcialmente. Existe em `client/` (React 19 + Vite, porta 5173) com login, dashboard, produtos, vendas, compras, produção/BOM, financeiro, patrimônio, usuários e rastreabilidade. Faltam telas para 12 módulos do backend (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, etc.) — ver docs/LEVANTAMENTO_ERP_2026-08-02.md.
+R: Sim, na prática. Web (`client/`, React 19 + Vite, porta 5173) cobre hoje praticamente todos os módulos do backend — login, dashboard, produtos, vendas, compras, requisição de compra, MRP, produção/BOM, qualidade, financeiro, patrimônio, manutenção, RH, relatórios, configuração fiscal, auditor inteligente, usuários/perfis de acesso e rastreabilidade. As únicas exceções por desenho (não por atraso) são o inventário mobile via QR (propositalmente mobile-only) e os endpoints de webhook (integração backend-to-backend, sem UI). Além disso, dois apps novos: `mobile/` (Expo, inventário QR + contagens cíclicas) e `tv/` (Android TV, painel de demandas por departamento) — ambos entregues em 2026-08-06, validados só por typecheck/bundle, **ainda sem teste em hardware real**.
 
 **P: Posso rodar em MySQL/SQLite?**  
 R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de arquitetura").
@@ -325,8 +338,8 @@ R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de 
 
 ---
 
-**Versão:** 1.0 SSOT  
-**Última atualização:** 2 de agosto de 2026  
+**Versão:** 1.1 SSOT  
+**Última atualização:** 6 de agosto de 2026  
 **Próxima revisão:** Pós-Go-Live (semana 1 de setembro)
 
 Remova referências a análises antigas. Este documento é o guia único de verdade.

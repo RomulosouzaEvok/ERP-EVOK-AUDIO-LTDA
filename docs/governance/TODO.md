@@ -1605,3 +1605,58 @@ apesar de opcionais no model/domínio) via migration
 `20260804-000012-fix-production-orders-nullable-columns.cjs`. Detalhe
 completo em `docs/HANDOFF_CODEX.md`, seção "Backend — Catálogo
 item×fornecedor (confirmação) + MRP fecha o ciclo para OP (Fase 2/P1)".
+
+---
+
+## 2026-08-06 — Pendencias da auditoria multi-agente (apps mobile/TV novos + atribuicao de contagens)
+
+**Origem:** auditoria multi-agente de 7 frentes (auditor geral, seguranca,
+DBA, infra, frontend, mobile/TV, documentacao) rodada em 2026-08-06 sobre
+as entregas do dia (apps `mobile/`/`tv/` novos, atribuicao de contagem
+ciclica pool/atribuida, `department_id` em OP/contagens, painel de
+demandas por departamento). Detalhe completo de cada achado e da
+remediacao imediata (4 frentes) em `docs/DIARIO_BORDO_GO_LIVE_G6.md`,
+entrada "2026-08-06". Os itens abaixo sao as pendencias que ficaram
+registradas por decisao consciente de nao resolver no mesmo dia — o bug
+P0 do campo "Atribuir a" (frontend) e os achados de infra/mobile mais
+simples ja foram corrigidos na propria remediacao de 2026-08-06 (ver
+diario) e nao aparecem aqui.
+
+- [ ] **[PENDENTE] Decisao de produto — JWT de 7 dias x painel de TV
+  "sempre ligado".** O app `tv/` fica logado indefinidamente em uma tela
+  fixa de chao de fabrica; o TTL de 7 dias do JWT (padrao do sistema,
+  pensado para sessao de usuario humano) nao tem hoje um mecanismo de
+  renovacao automatica para esse caso de uso. Precisa de decisao de
+  produto: refresh token dedicado, TTL especifico para o app de TV, ou
+  runbook operacional de relogin periodico (ex.: reiniciar o app
+  semanalmente). Nao e um bug — e uma lacuna de design a decidir antes de
+  instalar o app de TV em producao continuamente.
+- [ ] **[PENDENTE] Validacao em hardware real dos 2 apps novos
+  (`mobile/`, `tv/`).** Hoje validados so por `tsc --noEmit`/bundle
+  Metro — nenhum teste em dispositivo/emulador real. Checklist detalhado
+  em `mobile/README.md` §5 e `tv/README.md` §5: build APK/EAS, camera/
+  leitor fisico de QR (mobile), navegacao por D-pad e resolucao de banner
+  320x180 (TV), comportamento na rede real da fabrica.
+- [ ] **[PENDENTE] Teste de integracao de concorrencia real do claim de
+  contagem.** O claim atomico (`StartInventoryCountUseCase`, lock
+  pessimista) esta coberto por teste unitario com repositorio mockado,
+  mas nao por um teste de integracao com dois clients HTTP simultaneos
+  contra PostgreSQL real. Recomendado antes do Go-Live se o fluxo for
+  critico em producao (ver risco ja registrado em
+  `docs/HANDOFF_CODEX.md`, secao "Inventario Ciclico — Atribuicao de
+  Contagem a Funcionario / Pool").
+- [ ] **[PENDENTE] Paginacao da lista de contagens no app mobile.** Hoje
+  usa limite fixo de 100 itens, sem paginacao real — funciona enquanto o
+  volume de contagens ativas for baixo, mas nao escala.
+- [ ] **[PENDENTE] Infra de producao — reverse proxy/TLS,
+  `docker-compose.prod.yml` exercitado de fato, cron de backup.**
+  Aguardando a compra do servidor de producao (mesma pendencia (a) ja
+  registrada em `docs/GO_LIVE_G6_CHECKLIST.md` e na memoria de sessao do
+  time). Checklist em `docs/infra/DEPLOY_UBUNTU.md`.
+
+**Documentos atualizados nesta consolidacao:** este arquivo (secao nova),
+`docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada 2026-08-05 retroativa +
+entrada 2026-08-06), `CLAUDE.md` (status/data, migrations/FKs, arvore de
+pastas, roadmap), `docs/HANDOFF_CODEX.md` (nota de atualizacao),
+`docs/GO_LIVE_G6_CHECKLIST.md` (resumo executivo/datas, secoes
+Kubernetes/Datadog marcadas nao aplicaveis).
