@@ -1,15 +1,18 @@
 # Diagrama de Casos de Uso e Mapeamento de Processos (BPMN simplificado)
 
-**Status:** 🟢 Novo (2026-08-06). Este documento converte o conteúdo textual
-já existente em `docs/projeto/04-USE_CASES.md` e `docs/business/01-USE_CASES.md`
-(atores × casos de uso formais UC-01 a UC-41) em dois artefatos visuais
-complementares:
+**Status:** 🟢 Atualizado (2026-08-06). Este documento converte o conteúdo
+textual já existente em `docs/projeto/04-USE_CASES.md` e
+`docs/business/01-USE_CASES.md` (atores × casos de uso formais UC-01 a
+UC-41) em artefatos visuais complementares:
 
 1. **Diagrama de Casos de Uso** (Mermaid `flowchart`) — visão atores ×
    funcionalidades, por módulo.
 2. **Mapeamento de Processos (BPMN simplificado)** — fluxo ponta a ponta
    por departamento, mostrando onde a tecnologia (ERP) substitui/otimiza
-   uma etapa que antes seria manual.
+   uma etapa que antes seria manual. Cobre hoje 4 fluxos: Order-to-Cash
+   (Vendas), Purchase-to-Pay (Suprimentos), Qualidade (inspeção → NC →
+   liberação de lote) e Manutenção (solicitação → execução → atualização
+   de ativo).
 
 Não redefine nenhuma regra de negócio nova — é uma representação visual do
 que já está formalizado em texto. Onde um processo cruza módulos ainda sem
@@ -199,6 +202,128 @@ flowchart TD
 
 ---
 
+## 4. Mapeamento de Processos — Qualidade (Inspeção → NC → Liberação de Lote)
+
+Fluxo ponta a ponta de garantia da qualidade, cobrindo tanto a inspeção de
+recebimento (chega do Purchase-to-Pay, seção 3, quando o lote nasce em
+`quarantine`) quanto a inspeção in-process/final ligada a uma Ordem de
+Produção. Baseado no código real de
+`server/src/modules/nonConformities/`, `server/src/modules/inventory/`
+(`ReleaseLotUseCase`/`BlockLotUseCase`) e nas telas
+`client/src/pages/quality/` (`InspectionTab.tsx`, `NonConformitiesTab.tsx`),
+`client/src/pages/laboratory/`.
+
+```mermaid
+flowchart TD
+    subgraph SW_ORIGEM_Q["Origem da inspeção"]
+        C1([Lote chega do Recebimento<br/>status=quarantine]) --> C2{Tipo de<br/>inspeção}
+        C2 -->|Recebimento| C3["UC-17B: Inspeção de recebimento<br/>tela /quality (aba Inspeção)"]
+        C2 -->|In-process/Final| C4["Apontamento de produção sinaliza<br/>refugo/defeito — origin=in_process/final"]
+        C2 -->|Laboratório| C5["UC-LAB-01: Teste acústico/Thiele-Small<br/>/laboratory — opção de teste destrutivo<br/>debita depósito de laboratório"]
+    end
+
+    subgraph SW_DECISAO_Q["Decisão de qualidade"]
+        C3 --> C6{Lote aprovado<br/>na inspeção?}
+        C6 -->|Sim| C7["POST /lots/:id/release<br/>status → available<br/>liberado para consumo/venda"]
+        C6 -->|Não| C8["POST /lots/:id/block<br/>status → blocked<br/>opção openRnc marca abertura<br/>simultânea de NC"]
+        C4 --> C9[Reporta não conformidade]
+        C5 --> C9
+        C8 --> C9
+    end
+
+    subgraph SW_NC["Registro e tratamento da NC (UC-17)"]
+        C9 --> C10["POST /api/quality/non-conformities<br/>nc_number, origin, defect_type,<br/>severity, immediate_action<br/>status=open"]
+        C10 --> C11["status → analysis<br/>root_cause + root_cause_category<br/>(método Ishikawa: material, máquina,<br/>método, mão de obra, medição, ambiente)"]
+        C11 --> C12["status → corrective_action<br/>corrective_action + responsible_id<br/>+ corrective_action_deadline"]
+        C12 --> C13["status → effectiveness_check<br/>effectiveness_check + effectiveness_result<br/>(effective/partially_effective/ineffective)"]
+        C13 --> C14{Ação foi<br/>eficaz?}
+        C14 -->|Sim| C15["status → closed<br/>closed_by/closed_date"]
+        C14 -->|Não| C11
+    end
+
+    subgraph SW_CONSUMO_Q["Impacto em produção/estoque"]
+        C7 --> C16([Fim — lote disponível<br/>para consumo/venda])
+        C15 --> C17{Origem era<br/>fornecedor?}
+        C17 -->|Sim| C18["quality_score do fornecedor<br/>recalculado automaticamente<br/>(purchases/suppliers)"]
+        C17 -->|Não| C19([Fim — ciclo de NC encerrado])
+        C18 --> C19
+    end
+```
+
+**Observações de fidelidade ao código:**
+- O bloqueio de lote (`block`) permite abrir a NC no mesmo ato
+  (`openRnc: boolean` em `InspectionTab.tsx`), mas isso é uma conveniência de
+  UI — a NC continua sendo um recurso independente
+  (`POST /api/quality/non-conformities`), não uma sub-entidade do lote.
+- O ciclo de status da NC (`open → analysis → corrective_action →
+  effectiveness_check → closed`) é o enum real de
+  `server/src/models/NonConformity.ts`; o diagrama não inventa nenhum estado
+  intermediário.
+- `canceled` (estado alternativo do enum) não está desenhado como caminho
+  formal porque nenhum use case dedicado (`Cancel...UseCase`) foi encontrado
+  para NC — a transição, se usada, passa pelo `UpdateNonConformityUseCase`
+  genérico.
+
+---
+
+## 5. Mapeamento de Processos — Manutenção (Solicitação → Execução → Atualização de Ativo)
+
+Fluxo de manutenção de ativos/patrimônio, baseado em
+`server/src/modules/maintenance/` (use cases `CreateMaintenanceOrderUseCase`,
+`UpdateMaintenanceOrderUseCase`, `CancelMaintenanceOrderUseCase`) e nas telas
+`client/src/pages/maintenance/` (`MaintenanceOrdersTab.tsx`,
+`ServiceOrdersTab.tsx`, `MaintenanceRequisitionsPage.tsx`).
+
+```mermaid
+flowchart TD
+    subgraph SW_SOLICITACAO_M["Solicitação"]
+        D1([Operador/gestor identifica<br/>problema em um ativo]) --> D2["UC-18: POST /api/maintenance<br/>asset_id + description obrigatórios<br/>maintenance_type default=corrective<br/>status=open"]
+        D2 --> D3{Precisa de peças/<br/>insumos?}
+        D3 -->|Sim| D4["Requisição da área de Manutenção<br/>tela /maintenance/requisitions"]
+        D3 -->|Não| D5[Segue direto para execução]
+        D4 --> D5
+    end
+
+    subgraph SW_EXECUCAO_M["Execução"]
+        D5 --> D6{Prioridade}
+        D6 -->|emergency| D7["status → in_progress<br/>imediato"]
+        D6 -->|low/normal/high| D8["status → scheduled<br/>agenda técnico (technician_id)"]
+        D8 --> D9["status → in_progress<br/>start_date preenchido<br/>automaticamente pelo use case"]
+        D7 --> D9
+        D9 --> D10{Falta peça<br/>durante execução?}
+        D10 -->|Sim| D11["status → waiting_parts<br/>(pausa até chegar material)"]
+        D11 --> D9
+        D10 -->|Não| D12["Técnico registra parts_cost,<br/>labor_cost, downtime_hours"]
+    end
+
+    subgraph SW_CONCLUSAO_M["Conclusão"]
+        D12 --> D13{Resultado}
+        D13 -->|completed| D14["status → completed<br/>completion_date automático,<br/>result=completed, total_cost calculado"]
+        D13 -->|Cancelada| D15["CancelMaintenanceOrderUseCase<br/>status → canceled"]
+        D13 -->|Parcial/transferida| D16["result=partial/transferred<br/>status permanece até nova decisão"]
+    end
+
+    subgraph SW_ATIVO_M["Atualização do ativo (patrimônio)"]
+        D14 --> D17{"Asset.status é<br/>atualizado automaticamente?"}
+        D17 -->|"NÃO — gap real de código"| D18["[PENDENTE] UpdateMaintenanceOrderUseCase<br/>não altera Asset.status;<br/>enum 'in_maintenance' existe no modelo<br/>mas não é setado por este fluxo hoje —<br/>atualização do ativo é manual, à parte"]
+        D18 --> D19([Fim — ordem de manutenção<br/>encerrada; ativo requer<br/>atualização manual de status])
+        D15 --> D20([Fim — ordem cancelada,<br/>sem alteração de ativo])
+    end
+```
+
+**Observações de fidelidade ao código (importante — gap real, não
+suposição):** o modelo `Asset` tem o valor `in_maintenance` no enum
+`status`, mas nenhum use case do módulo `maintenance` (nem
+`CreateMaintenanceOrderUseCase`, nem `UpdateMaintenanceOrderUseCase`) altera
+esse campo automaticamente ao abrir/concluir uma ordem. O vínculo entre
+ordem de manutenção e ativo hoje é apenas via `asset_id` (associação de
+leitura). Isso está registrado como `RF-PAT-05 [PENDENTE]` em
+`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §8 — decisão de negócio a
+tomar: automatizar essa sincronização ou manter como atualização manual
+deliberada.
+
+---
+
 ## Legenda de convenções BPMN simplificado
 
 - Cada `subgraph` representa uma raia (swimlane) departamental.
@@ -219,3 +344,6 @@ flowchart TD
 - `docs/00-ESTRUTURA_ORGANIZACIONAL.md` — departamentos reais da empresa.
 - `docs/arquitetura/DIAGRAMAS_SEQUENCIA.md` — mesmo conteúdo em nível de
   sequência técnica (API/DB), para os 3 fluxos mais críticos.
+- `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` — requisitos funcionais
+  rastreáveis por módulo (RF-QUA, RF-PAT entre outros), incluindo os gaps
+  anotados nas seções 4 e 5 acima.

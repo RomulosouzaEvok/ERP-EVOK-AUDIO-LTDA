@@ -1766,3 +1766,148 @@ marcados `[x]`/`[ ]` novos nas duas secoes de 2026-08-06 anteriores),
 `docs/LEVANTAMENTO_ERP_2026-08-02.md` (linhas `sales`/`financial`, item 9),
 `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `docs/HANDOFF_CODEX.md`
 (secao nova), `CLAUDE.md` (contagem de migrations, modulos/telas novas).
+
+---
+
+## 2026-08-06 (quarta rodada do dia) — `AdmDBA`: remediacao dos 3 achados de risco do apendice de auditoria (roles, backup/restore, docker-compose.prod.yml)
+
+Origem: apendice "AdmDBA: framework de documentacao de dados completo"
+(mesma data), que reportou 3 riscos sem corrigi-los. Esta rodada trata
+os 3.
+
+- [x] **[IMPLEMENTADO E TESTADO] Role Postgres de privilegio minimo
+  `evok_app`.** Migration
+  `server/migrations/20260806-000080-create-app-role-least-privilege.cjs`
+  aplicada (`npm run migration:up`). `evok_app`: `NOSUPERUSER`,
+  `NOCREATEDB`, `NOCREATEROLE`, sem DDL, `SELECT/INSERT/UPDATE/DELETE`
+  nas tabelas de negocio (exceto `SequelizeMeta`/`SequelizeData`),
+  `ALTER DEFAULT PRIVILEGES` cobre tabelas futuras automaticamente.
+  Testado via TCP com senha (`psql -h 127.0.0.1 -U evok_app`): SELECT
+  funciona, `CREATE TABLE` e leitura de `SequelizeMeta` sao rejeitados
+  (`permission denied`). `npm test` (86 suites/670 testes) passou depois
+  da migration. **Decisao consciente: a credencial ativa do `.env`
+  continua sendo `evok_admin`** — a troca para `DB_USER=evok_app` e um
+  passo manual documentado em
+  `docs/database/05-ACESSOS_E_ISOLAMENTO.md` §1.1, nao aplicado agora
+  para nao reiniciar o backend/frontend que estavam em uso ativo durante
+  esta remediacao.
+- [ ] **[PENDENTE, nao bloqueante] Trocar `DB_USER` do `.env` ativo (dev
+  e depois producao) de `evok_admin` para `evok_app`.** Requer reiniciar
+  a API. Ver passo a passo em
+  `docs/database/05-ACESSOS_E_ISOLAMENTO.md` §1.1 "Como/quando trocar".
+- [ ] **[PENDENTE, nao critico] Roles `evok_backup`
+  (dedicada a `pg_dump`, hoje ainda usa `evok_admin`) e role de migration
+  separada de `evok_admin`.** Ver
+  `docs/database/05-ACESSOS_E_ISOLAMENTO.md` §1.2 (decisao consciente de
+  nao criar nesta rodada — ganho de seguranca menor que o da role de
+  runtime, ja implementada).
+- [x] **[IMPLEMENTADO E TESTADO] Agendamento real de backup ativado
+  neste ambiente.** `scripts/schedule-backup-task.ps1` registrou a
+  tarefa `EvokAudioPostgresBackup` no Agendador de Tarefas do Windows
+  (`NextRunTime` confirmado, escopo do usuario, sem exigir admin).
+  Execucao manual de `scripts/backup-postgres.sh` gerou um dump novo no
+  mesmo dia (`erp_evok_audio_20260806_145213.dump`), quebrando a lacuna
+  de 6 dias sem backup identificada na auditoria. Ver
+  `docs/database/07-DISASTER_RECOVERY.md` §1.1.
+- [ ] **[PENDENTE] Ativar o cron equivalente
+  (`scripts/schedule-backup-cron.sh`) no servidor de producao real**,
+  quando adquirido — o agendamento feito nesta rodada e local
+  (maquina de desenvolvimento), nao o servidor de producao. Ver
+  `docs/infra/DEPLOY_UBUNTU.md`, checklist de prontidao.
+- [x] **[IMPLEMENTADO E TESTADO] Restore ponta a ponta contra o banco
+  local, com evidencia real.** `pg_dump -Fc -Z 9` (script padrao) +
+  `pg_restore --no-owner --no-privileges` em banco descartavel
+  (`erp_evok_audio_restore_test`, removido ao final) — 79/79 tabelas
+  com contagem de linhas identica ao banco de origem (amostra conferida
+  manualmente: `users`, `items`, `suppliers`, `production_orders`,
+  `sale_items`, `inventory_movements`, `SequelizeMeta`). Passo a passo
+  real documentado em `docs/database/07-DISASTER_RECOVERY.md` §2.1.
+- [ ] **[PENDENTE] Teste de restore em servidor/maquina limpa nova**
+  (cenario de catastrofe total — provisionar do zero, `migration:up`,
+  restaurar dump, restaurar `app_uploads`). So sera possivel quando o
+  servidor de producao existir. RPO/RTO formais tambem seguem nao
+  aprovados pelo dono/CFO (`docs/database/07-DISASTER_RECOVERY.md` §3).
+- [ ] **[PENDENTE] Estender o backup para cobrir o volume `app_uploads`**
+  (fotos/desenhos de produto) — hoje so o dump do Postgres e coberto.
+- [x] **[IMPLEMENTADO] `docker-compose.prod.yml` criado.** Esqueleto na
+  raiz do repo, validado por `docker compose -f docker-compose.prod.yml
+  config` (sem erro). `NODE_ENV=production`, `DB_SSL=true` por padrao,
+  Postgres sem porta publicada (`expose` em vez de `ports`), API
+  vinculada a `127.0.0.1:5000`, healthchecks, `restart:
+  unless-stopped`, comentarios explicitos sobre o que falta preencher
+  quando o servidor existir (reverse proxy/TLS, cron de backup externo
+  ao compose). **Nao implantado de verdade** — sem servidor real para
+  testar.
+
+**Nao quebrou nada:** `npm test` a partir de `server/` (86 suites, 670
+testes) passou depois de todas as mudancas acima; `GET /health/ready`
+confirmado respondendo antes e depois (API seguiu autenticando com
+`evok_admin`, sem interrupcao).
+
+**Documentos atualizados nesta rodada:**
+`docs/database/05-ACESSOS_E_ISOLAMENTO.md` (secoes 1.1/1.2 novas, matriz
+atualizada, §3), `docs/database/07-DISASTER_RECOVERY.md` (secoes 1.1/2.1
+novas, status honesto atualizado), `docs/infra/DEPLOY_UBUNTU.md`
+(checklist atualizado, referencia ao `docker-compose.prod.yml`),
+`.env.example` (`APP_DB_ROLE_PASSWORD`), `docs/DIARIO_BORDO_GO_LIVE_G6.md`
+(entrada nova), este arquivo (secao nova).
+
+---
+
+## 2026-08-06 (apêndice 3 de governança) — Documento de Requisitos, `01-PLANO.md`, BPMN Qualidade/Manutenção, Manual do Usuário
+
+**Origem:** fechamento das 4 pendências deixadas explicitamente pelo Tech
+Lead de governança/documentação nos apêndices anteriores desta mesma data
+(`docs/DIARIO_BORDO_GO_LIVE_G6.md`, "2026-08-06 (apêndice 3)"). Trabalho em
+paralelo ao `AdmDBA` — não altera nada de `docs/database/` ou infra de
+banco.
+
+**Entregue nesta rodada:**
+- [x] `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` criado — índice
+  executivo de RFs por módulo, com link para UC/rota real.
+- [x] `docs/projeto/01-PLANO.md` reescrito (não é mais o MVP inicial de 18
+  modelos/"frontend planejado").
+- [x] BPMN de Qualidade e Manutenção adicionados a
+  `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md` (seções 4 e 5).
+- [x] Manual do Usuário com conteúdo prático completo para Vendas, Compras
+  (requisição→RFQ→pedido→recebimento), Estoque/Inventário (incl. app
+  mobile QR) e Produção (apontamento, paradas).
+
+**Achados/pendências novas registradas por esta consolidação (não
+inventados — extraídos da leitura real do código):**
+
+- [ ] **UC-19 (Importação/COMEX)** está documentado em
+  `docs/projeto/04-USE_CASES.md` mas não tem nenhuma rota/modelo
+  correspondente no backend (`server/app.ts` não monta nada de
+  importação/COMEX). Decisão de negócio pendente: implementar de fato
+  (Fase futura) ou marcar o UC `[DESCONTINUADO]` no arquivo de origem.
+  Rastreado também como RF-COM-12 `[PENDENTE]` em
+  `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §3.
+- [ ] **`Asset.status` não é atualizado automaticamente por uma ordem de
+  manutenção.** O modelo `Asset` tem o valor `in_maintenance` no enum de
+  status, mas nem `CreateMaintenanceOrderUseCase` nem
+  `UpdateMaintenanceOrderUseCase` (em
+  `server/src/modules/maintenance/application/use-cases/`) alteram esse
+  campo — o vínculo hoje é só via `asset_id` (leitura). Decisão pendente:
+  é um gap real a corrigir (sincronizar `Asset.status` automaticamente ao
+  abrir/concluir a ordem) ou comportamento manual deliberado? Rastreado
+  como RF-PAT-05 `[PENDENTE]` em `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
+  §8 e desenhado explicitamente como gap no diagrama BPMN de Manutenção
+  (seção 5 de `DIAGRAMA_CASOS_DE_USO_BPMN.md`).
+- [ ] Certificações de produto/processo (citadas no `01-PLANO.md` histórico
+  como "Módulo 13 — Qualidade") nunca ganharam modelo/rota dedicada — mesma
+  decisão de negócio: formalizar como UC futuro ou remover do escopo
+  documentado.
+
+**Pendências que ficam fora desta rodada (fora do escopo pedido, não
+esquecidas):**
+- [ ] Manual do Usuário: capturas de tela, guia de erros comuns, conteúdo
+  prático para Qualidade/Laboratório, Engenharia, Financeiro,
+  Patrimônio/Manutenção, RH, Relatórios, Rastreabilidade, Administração e
+  painel Android TV (hoje esqueleto, rotulado explicitamente no arquivo).
+
+**Documentos atualizados nesta consolidação:** `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
+(novo), `docs/projeto/01-PLANO.md` (reescrito), `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md`
+(seções 4/5 novas), `docs/manual/00-MANUAL_DO_USUARIO.md` (conteúdo
+prático), `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md`
+(link novo em §8), este arquivo.

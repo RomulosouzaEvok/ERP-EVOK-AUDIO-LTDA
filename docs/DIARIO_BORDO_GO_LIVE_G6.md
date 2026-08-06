@@ -1442,3 +1442,185 @@ trabalho — não é tarefa pontual.
   `docs/infra/DEPLOY_UBUNTU.md`, reforçada aqui pela ótica de DR).
 - Estender o backup para cobrir o volume `app_uploads`, não apenas o
   dump do Postgres.
+
+---
+
+## 2026-08-06 (apêndice 3) — Fechamento das pendências de governança/documentação: Documento de Requisitos, `01-PLANO.md` reescrito, BPMN de Qualidade/Manutenção, Manual do Usuário com conteúdo prático
+
+**Escopo:** continuação do trabalho de governança documental (apêndices
+anteriores desta mesma data), tratando explicitamente as 4 pendências que o
+próprio Tech Lead de governança havia deixado registradas como próximo
+passo. Trabalho feito em paralelo ao `AdmDBA` (achados de risco de banco,
+roles, backup, `docker-compose.prod.yml`) — nenhum arquivo de
+`docs/database/` ou infraestrutura de banco foi tocado nesta rodada.
+
+**1. Documento de Requisitos consolidado (NOVO):**
+- Criado `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` — índice executivo de
+  Requisitos Funcionais por módulo (RF-AUT, RF-VEN, RF-COM, RF-EST, RF-PRD,
+  RF-QUA, RF-FIN, RF-PAT, RF-RH, RF-REL, RF-INT), cada linha com link para o
+  UC formal e/ou rota real (`server/app.ts`, `client/src/App.tsx`).
+- Não duplica os UCs (`docs/projeto/04-USE_CASES.md`,
+  `docs/business/01-USE_CASES.md` continuam sendo a fonte detalhada) nem os
+  RNFs (aponta para `REQUISITOS_NAO_FUNCIONAIS.md` em vez de repetir).
+- **Achado relevante durante a extração:** UC-19 (Importação/COMEX) está
+  descrito em `docs/projeto/04-USE_CASES.md` mas não tem nenhuma rota/
+  modelo correspondente no backend — marcado `[PENDENTE]` como RF-COM-12,
+  com nota de divergência UC×código explícita na seção final do documento.
+  Mesma lógica aplicada a RF-PAT-05 (status do `Asset` não é atualizado
+  automaticamente por uma ordem de manutenção — gap real de código, não
+  suposição).
+
+**2. `docs/projeto/01-PLANO.md` reescrito:**
+- A versão anterior descrevia um MVP inicial (18 modelos, "Frontend: React
+  (planejado)", "PostgreSQL 8.0+", 14 módulos numerados de forma solta).
+  Reescrito para refletir o estado real: stack atual (React 19 cabeado,
+  PostgreSQL 16, mobile/TV novos), lista de módulos por domínio real
+  (`server/src/modules/`), e removida qualquer duplicação de roadmap —
+  agora aponta para `CLAUDE.md` §5 como SSOT do roadmap em vez de manter
+  uma segunda lista que poderia divergir.
+- Pendências reais mantidas de forma honesta (COMEX, Payroll/Benefícios,
+  Certificações, CNAB, capacidade finita) em vez de "modelo pendente"
+  genérico do texto antigo.
+
+**3. BPMN de Qualidade e Manutenção (NOVO):**
+- Adicionadas seções 4 e 5 a
+  `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md` (mesmo padrão Mermaid
+  `flowchart` das seções 2/3 já existentes — Order-to-Cash/Purchase-to-Pay):
+  - **Qualidade:** inspeção (recebimento/in-process/final/laboratório) →
+    liberação (`release`) ou bloqueio (`block`) de lote → registro de NC
+    (UC-17, ciclo `open → analysis → corrective_action →
+    effectiveness_check → closed`) → impacto no `quality_score` do
+    fornecedor. Baseado em `server/src/modules/nonConformities/`,
+    `server/src/modules/inventory/` (`ReleaseLotUseCase`/`BlockLotUseCase`)
+    e `client/src/pages/quality/InspectionTab.tsx`.
+  - **Manutenção:** solicitação (UC-18) → execução (`open → scheduled →
+    in_progress → waiting_parts → completed/canceled`) → **gap real
+    documentado explicitamente no diagrama**: `Asset.status` não é
+    atualizado automaticamente pelo módulo de manutenção hoje (atualização
+    manual, à parte) — mesmo achado do item 1 acima, agora também visual.
+
+**4. Manual do Usuário — conteúdo prático (parcial, conforme escopo pedido):**
+- `docs/manual/00-MANUAL_DO_USUARIO.md` ganhou passo a passo prático
+  completo para **Vendas** (§2 — cadastro de cliente, venda, alteração de
+  pedido, NF-e parcial, tabela de preços, expedição), **Compras** (§4 —
+  requisição → RFQ/cotação com adjudicação e split → conversão direta →
+  recebimento com quarentena → avaliação de fornecedor), **Estoque/
+  Inventário** (§5 — movimentação manual, recebimento, expedição, contagem
+  cíclica na tela web **e no app mobile via QR Code**, múltiplos depósitos)
+  e **Produção** (§6 — criação de OP contra estoque real, BOM, MRP com
+  conversão manual/automática, apontamento boa/refugada, parada de máquina
+  com bloqueio de segunda parada simultânea, centros de trabalho).
+- Seções de menor uso diário (Qualidade/Laboratório, Engenharia, Financeiro,
+  Patrimônio/Manutenção, RH, Relatórios, Rastreabilidade, Administração,
+  painel Android TV) permanecem esqueleto — cada cabeçalho agora rotulado
+  explicitamente "— esqueleto" ou "— conteúdo completo" para não deixar
+  ambíguo o que já foi tratado nesta rodada.
+
+**Arquivos tocados:**
+- Criado: `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`.
+- Reescrito: `docs/projeto/01-PLANO.md`.
+- Editado (2 seções novas + referências): `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md`.
+- Editado (conteúdo prático + rótulos de status): `docs/manual/00-MANUAL_DO_USUARIO.md`.
+- Este apêndice em `docs/DIARIO_BORDO_GO_LIVE_G6.md`.
+- `CLAUDE.md` §8 (link novo para `DOCUMENTO_DE_REQUISITOS.md`).
+
+**Pendências que ficam para uma próxima rodada (não fechadas aqui):**
+- Manual do Usuário: capturas de tela, guia de erros comuns, e conteúdo
+  prático (hoje esqueleto) para Qualidade, Engenharia, Financeiro,
+  Patrimônio/Manutenção, RH, Relatórios, Administração e painel Android TV.
+- Decisão de negócio sobre UC-19 (COMEX): implementar de fato ou marcar
+  `[DESCONTINUADO]` em `docs/projeto/04-USE_CASES.md` — registrado em
+  `docs/governance/TODO.md` para não ficar só neste diário.
+- Decisão sobre RF-PAT-05 (sincronização automática `Asset.status` ↔ ordem
+  de manutenção): gap real ou comportamento manual intencional — mesma
+  observação, levar para `docs/governance/TODO.md`.
+
+---
+
+## 2026-08-06 (apêndice 4) — `AdmDBA`: remediação real dos 3 achados de risco reportados no apêndice 2 (segregação de roles, backup/restore, `docker-compose.prod.yml`)
+
+**Escopo:** o dono do produto pediu para tratar de verdade os 3 riscos
+que o apêndice 2 apenas documentou. Nada foi feito "no escuro" — cada
+item abaixo foi testado no ambiente local antes de ser dado como
+concluído.
+
+**1. Role Postgres de privilégio mínimo (`evok_app`) — implementada e
+testada:**
+- Migration
+  `server/migrations/20260806-000080-create-app-role-least-privilege.cjs`
+  criada e aplicada (`npm run migration:up`). Cria `evok_app`
+  (`NOSUPERUSER`/`NOCREATEDB`/`NOCREATEROLE`, sem nenhum DDL) com
+  `SELECT/INSERT/UPDATE/DELETE` em todas as tabelas de negócio, exceto
+  `SequelizeMeta`/`SequelizeData`, mais `ALTER DEFAULT PRIVILEGES` para
+  cobrir tabelas futuras automaticamente (sem exigir GRANT manual a cada
+  migration nova).
+- Testado de verdade: conexão TCP com senha (`psql -h 127.0.0.1 -U
+  evok_app`) consegue `SELECT` em `items`, mas recebe `permission
+  denied` ao tentar `CREATE TABLE` ou ler `SequelizeMeta`. `curl
+  /health/ready` confirmado respondendo antes e depois da migration
+  (API seguiu usando `evok_admin`, sem interrupção). `npm test` (86
+  suites/670 testes) passou depois da mudança.
+- **Decisão consciente e explícita: a credencial ativa do `.env` NÃO foi
+  trocada nesta rodada.** O backend/frontend estavam em uso ativo pelo
+  usuário durante esta remediação; trocar `DB_USER` exige reiniciar a
+  API, o que teria interrompido esse uso. A role existe, está testada e
+  documentada — a troca de `.env` fica registrada como passo manual
+  explícito para quando for apropriado (ver
+  `docs/database/05-ACESSOS_E_ISOLAMENTO.md` §1.1).
+
+**2. Backup: agendamento ativado e restore testado de ponta a ponta:**
+- `scripts/schedule-backup-task.ps1` registrou de fato a tarefa
+  `EvokAudioPostgresBackup` no Agendador de Tarefas do Windows deste
+  ambiente (não exigiu privilégio de administrador; `NextRunTime`
+  confirmado via `Get-ScheduledTaskInfo`).
+- Rodada manual de `scripts/backup-postgres.sh` gerou um dump novo
+  (`erp_evok_audio_20260806_145213.dump`), quebrando a lacuna de 6 dias
+  sem backup identificada no apêndice 2.
+- **Restore testado de verdade**: `pg_restore --no-owner --no-privileges`
+  do dump acima em um banco Postgres descartável
+  (`erp_evok_audio_restore_test`) — resultado: **79/79 tabelas com
+  contagem de linhas idêntica** ao banco de origem (conferido também
+  campo a campo em `users`, `items`, `suppliers`, `production_orders`,
+  `sale_items`, `inventory_movements`, `SequelizeMeta`). Banco de teste
+  removido ao final, sem deixar resíduo.
+- Detalhe completo, incluindo o que esse teste **não** cobre (servidor
+  novo do zero, volume `app_uploads`, RTO cronometrado), em
+  `docs/database/07-DISASTER_RECOVERY.md` §1.1/§2.1.
+
+**3. `docker-compose.prod.yml` — criado:**
+- Esqueleto novo na raiz do repo, baseado no `docker-compose.yml` de
+  dev. Diferenças: `NODE_ENV=production`, `DB_SSL=true` por padrão,
+  Postgres sem porta publicada (`expose`, não `ports`), API vinculada a
+  `127.0.0.1:5000` (reverse proxy fica de fora, decisão de domínio/
+  certificado é do servidor real quando existir), healthchecks,
+  `restart: unless-stopped`, volumes dedicados para uploads e logs,
+  comentários explícitos sobre o que falta preencher.
+- Validado com `docker compose -f docker-compose.prod.yml config` (sem
+  erro). **Não implantado de verdade** — não há servidor de produção
+  ainda (pendência já conhecida, ver `docs/GO_LIVE_G6_CHECKLIST.md`).
+
+**Nada quebrou:** `npm test` a partir de `server/` (86 suites, 670
+testes) passou após todas as mudanças; `GET /health/ready` respondeu
+`{"status":"ready","database":"up"}` durante toda a rodada.
+
+**Arquivos tocados:**
+- Criado: `server/migrations/20260806-000080-create-app-role-least-privilege.cjs`,
+  `docker-compose.prod.yml`.
+- Editado: `docs/database/05-ACESSOS_E_ISOLAMENTO.md` (seções 1.1/1.2
+  novas), `docs/database/07-DISASTER_RECOVERY.md` (seções 1.1/2.1
+  novas), `docs/infra/DEPLOY_UBUNTU.md` (checklist atualizado),
+  `.env.example` (`APP_DB_ROLE_PASSWORD`), `docs/governance/TODO.md`
+  (seção nova), este apêndice.
+
+**Pendências que ficam para uma próxima rodada:**
+- Trocar `DB_USER` do `.env` ativo para `evok_app` (dev e depois
+  produção) — passo manual documentado, não aplicado.
+- Ativar `scripts/schedule-backup-cron.sh` no servidor de produção real,
+  quando adquirido (o agendamento desta rodada é local, não produção).
+- Estender o backup para cobrir o volume `app_uploads`.
+- Testar restore em servidor/máquina limpa nova (cenário de catástrofe
+  total) e formalizar RPO/RTO com o dono/CFO — só possível com servidor
+  real.
+- Roles `evok_backup` e de migration dedicada (separadas de
+  `evok_admin`) — decisão consciente de não criar nesta rodada, ganho de
+  segurança menor que o da role de runtime já implementada.

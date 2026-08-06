@@ -2,7 +2,9 @@
 
 Auditoria real do ambiente em 2026-08-06 — o que está **implementado**
 vs. o que é **aspiracional** (mencionado no CLAUDE.md/checklists, mas
-ainda não exercitado de fato).
+ainda não exercitado de fato). **Atualizado no mesmo dia (rodada de
+remediação)** com a ativação real do agendamento local e um teste de
+restore ponta a ponta contra o banco local — ver §1.1 e §2.1.
 
 ## 1. Rotinas de Backup
 
@@ -41,9 +43,11 @@ ainda não exercitado de fato).
   frase "Backup: PostgreSQL dump diário via cron" do CLAUDE.md descreve o
   plano, não um fato verificado em produção** — não existe ainda um
   servidor de produção onde essa rotina esteja rodando.
-- **`docker-compose.prod.yml` não existe** no repositório (verificado por
-  busca de arquivo) — o checklist de `docs/infra/DEPLOY_UBUNTU.md` já
-  lista isso como pendência de Go-Live.
+- **`docker-compose.prod.yml`** — ✅ **criado em 2026-08-06** (raiz do
+  repo), esqueleto pronto para quando o servidor de produção existir
+  (não implantado de verdade ainda — sem servidor real para testar).
+  Ver `docs/infra/DEPLOY_UBUNTU.md` e §1.1/§2.1 abaixo para o que foi
+  de fato validado nesta rodada de remediação.
 - **Volume `app_uploads`** (fotos/desenhos de produto) não tem nenhum
   script de backup dedicado — os scripts atuais cobrem **apenas o dump
   do Postgres**, não os arquivos enviados via multer. O próprio
@@ -69,9 +73,103 @@ ainda não exercitado de fato).
    mesmo disco do servidor que ele protege, o que não cobre falha total
    de disco/servidor (só cobre erro humano/corrupção lógica).
 
+## 1.1 Remediação implementada (2026-08-06) — agendamento ativado neste ambiente
+
+**O que foi de fato feito e confirmado no ambiente local (Windows):**
+
+1. **Agendamento real registrado** via
+   `scripts/schedule-backup-task.ps1 -Time "03:00" -Retention 14`
+   (Agendador de Tarefas do Windows, escopo do usuário atual — **não
+   exigiu privilégio de administrador**). Confirmado com
+   `Get-ScheduledTask -TaskName 'EvokAudioPostgresBackup' |
+   Get-ScheduledTaskInfo`:
+   ```
+   TaskName    : EvokAudioPostgresBackup
+   State       : Ready
+   NextRunTime : 07/08/2026 03:00:00
+   ```
+   Isto **é o equivalente Windows do cron** mencionado no CLAUDE.md — a
+   tarefa existe e está agendada de verdade neste ambiente, não é mais
+   apenas um script pronto e nunca registrado. Em produção (Ubuntu), o
+   equivalente é `./scripts/schedule-backup-cron.sh --time "0 3 * * *"
+   --retention 14` (crontab, mesmo idempotente).
+2. **Execução manual do script confirmada no mesmo dia**: rodar
+   `scripts/backup-postgres.sh` gerou
+   `backups/erp_evok_audio_20260806_145213.dump` (624 KB, formato
+   `pg_dump -Fc -Z 9`) — quebra a lacuna de 6 dias sem backup identificada
+   na auditoria original (últimos dumps eram todos de 31/07/2026).
+3. **Limitação honesta:** este agendamento vale **apenas para esta
+   máquina de desenvolvimento** (a tarefa roda localmente, contra o
+   `evok-postgres` deste Docker Desktop). Quando o servidor de produção
+   Ubuntu for provisionado, o passo 1 acima (`schedule-backup-cron.sh`)
+   precisa ser executado **naquele** servidor — este item continua
+   listado no checklist de `docs/infra/DEPLOY_UBUNTU.md` como pendência
+   de Go-Live, não como resolvido globalmente.
+
+## 2.1 Teste de restore ponta a ponta (2026-08-06) — executado e confirmado
+
+Diferente do runbook anterior (nunca exercitado), o processo abaixo **foi
+executado de verdade** contra o banco local, com evidência registrada:
+
+```bash
+# 1. Dump fresco gerado pelo script padrão do projeto
+./scripts/backup-postgres.sh
+# → backups/erp_evok_audio_20260806_145213.dump (624 KB)
+
+# 2. Banco de teste descartável, isolado do banco real
+docker exec evok-postgres psql -U evok_admin -d postgres \
+  -c "CREATE DATABASE erp_evok_audio_restore_test OWNER evok_admin;"
+
+# 3. Copia o dump para dentro do container e restaura no banco de teste
+docker cp backups/erp_evok_audio_20260806_145213.dump \
+  evok-postgres:/tmp/restore_test.dump
+docker exec evok-postgres pg_restore -U evok_admin \
+  -d erp_evok_audio_restore_test --no-owner --no-privileges \
+  /tmp/restore_test.dump
+# → concluiu sem nenhum erro
+
+# 4. Verificação: contagem de tabelas e de linhas, banco real vs. restaurado
+docker exec evok-postgres psql -U evok_admin -d erp_evok_audio_restore_test \
+  -tA -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';"
+# → 79 (idêntico ao banco real)
+
+# Comparação de linhas por tabela nas 79 tabelas (query_to_xml + string_agg),
+# banco real vs. banco restaurado
+# → "IDENTICAL - all table row counts match" (as 79 tabelas batem, incluindo
+#    amostras conferidas manualmente: users=306, items=13, suppliers=2,
+#    production_orders=126, sale_items=134, inventory_movements=463,
+#    SequelizeMeta=64)
+
+# 5. Limpeza do banco de teste (sem deixar resíduo no ambiente)
+docker exec evok-postgres psql -U evok_admin -d postgres \
+  -c "DROP DATABASE erp_evok_audio_restore_test;"
+docker exec evok-postgres rm -f /tmp/restore_test.dump
+```
+
+**Resultado: RESTORE VALIDADO** — o dump gerado pelo script atual
+(`pg_dump -Fc -Z 9`) é restaurável de ponta a ponta com `pg_restore
+--no-owner --no-privileges`, e os dados batem exatamente (79/79 tabelas,
+contagem de linhas idêntica) entre o banco de origem e o restaurado.
+
+**O que este teste NÃO cobre (limitações honestas, não escondidas):**
+- Foi executado **no mesmo host/mesma instância Docker** que gerou o
+  backup — não simula perda total de servidor/disco (cenário de
+  catastrophe recovery real, que exigiria restaurar em uma máquina
+  totalmente nova).
+- Não cobre o volume `app_uploads` (fotos/desenhos de produto) — apenas
+  o dump do Postgres. Continua pendente estender o backup para cobrir
+  esse volume (item já registrado abaixo).
+- RTO não foi cronometrado formalmente neste teste (o restore em si foi
+  rápido, poucos segundos, para um banco de ~625 KB — não é
+  representativo do tempo de restore de um banco de produção real, que
+  será ordens de grandeza maior).
+- Não testou o cenário completo de "provisionar servidor novo do zero +
+  rodar migrations + restaurar dump por cima" descrito no runbook da
+  seção 2 abaixo — apenas o `pg_restore` isolado.
+
 ## 2. Processo de Restore
 
-### Comando documentado (não testado em ambiente de restore dedicado nesta auditoria)
+### Comando documentado — variante `--clean --if-exists` (não testada nesta rodada; a variante efetivamente testada foi a de banco novo/vazio, ver §2.1 acima)
 
 ```bash
 # 1. Copiar o dump para dentro do container (ou gerar novo container vazio)
@@ -105,7 +203,7 @@ Passo a passo consolidado a partir de `docs/infra/DEPLOY_UBUNTU.md`:
    reaproveitar valores de dev).
 3. **Não aplicar `server/database/postgresql/01_schema.sql`** (schema
    incompleto/histórico) — usar `docker compose up -d` seguido de
-   `cd server && npm ci && npm run migration:up` (as 64 migrations
+   `cd server && npm ci && npm run migration:up` (as 65 migrations
    recriam o schema do zero corretamente).
 4. Restaurar o dump de dados mais recente (`pg_restore`/`psql -f`,
    conforme formato — ver nota acima) **depois** das migrations
@@ -121,15 +219,21 @@ Passo a passo consolidado a partir de `docs/infra/DEPLOY_UBUNTU.md`:
    pendência §1 item 2).
 6. Validar `GET /health/ready` retorna `{ "database": true }`.
 
-### Status honesto
+### Status honesto (atualizado 2026-08-06, pós-remediação)
 
-**Este processo NUNCA foi exercitado de ponta a ponta em um ambiente
-limpo/servidor novo** (nem em staging, nem em produção — que ainda não
-existe). É um runbook documentado e tecnicamente coerente, mas **não
-testado**. Marcar explicitamente como pendência do checklist de Go-Live:
-`docs/infra/DEPLOY_UBUNTU.md` já lista "Backup local foi testado (restore
-funciona)" como item do checklist — na data desta auditoria, esse item
-segue **não confirmado**.
+**O núcleo do restore (`pg_restore` de um dump gerado por
+`backup-postgres.sh` restaurando corretamente os dados) foi testado e
+confirmado em §2.1** — isso não é mais teórico. O que **continua não
+testado** é o cenário completo de catástrofe total descrito nos 6 passos
+acima: nunca foi exercitado em um **servidor/máquina limpa e nova** (nem
+em staging, nem em produção — que ainda não existe), incluindo os passos
+1 (provisionar Ubuntu do zero), 2 (`.env` novo), 3 (`migration:up` em
+banco vazio) e 5 (restaurar `app_uploads`). `docs/infra/DEPLOY_UBUNTU.md`
+lista "Backup local foi testado (restore funciona)" como item do
+checklist — **esse item específico agora pode ser marcado como
+confirmado** (restore funciona, testado em 2026-08-06), mas o item mais
+amplo "provisionamento completo de servidor novo testado" segue **não
+confirmado**, pendente de servidor de produção real.
 
 ## 3. RPO/RTO — não formalizados
 

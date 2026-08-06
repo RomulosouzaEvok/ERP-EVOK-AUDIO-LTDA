@@ -1,10 +1,25 @@
-# Plano do Projeto - ERP EVOK ÁUDIO
+# Plano do Projeto — ERP EVOK ÁUDIO
+
+**Status:** 🟡 Pré-Go-Live G6 (ver `CLAUDE.md` como SSOT de status vigente).
+Este documento foi reescrito em 2026-08-06 para refletir o estado real do
+projeto — a versão anterior descrevia um MVP inicial (18 modelos, "frontend
+React planejado") que já foi superado em várias rodadas de entrega. Onde este
+plano e `CLAUDE.md` divergirem no futuro, `CLAUDE.md` é a fonte de verdade;
+este documento deve ser atualizado para acompanhar.
+
+---
 
 ## Visão Geral
 
-Sistema ERP completo para **EVOK ÁUDIO** - indústria de alto-falantes e componentes de áudio.
-Backend: Node.ts + Express + Sequelize + PostgreSQL.
-Frontend: React (planejado).
+Sistema ERP completo para a **EVOK ÁUDIO** — indústria de alto-falantes e
+componentes de áudio profissionais, ~100-150 colaboradores, 21 departamentos.
+
+- **Backend:** Node.js + TypeScript + Express + Sequelize + PostgreSQL 16.
+- **Frontend web:** React 19 + Vite (`client/`, porta 5173) — cobre hoje
+  praticamente todos os módulos de backend (ver §3).
+- **Apps móveis novos (2026-08-06):** `mobile/` (Expo/React Native — scan QR
+  de estoque, contagens cíclicas) e `tv/` (Android TV — painel de demandas
+  por departamento).
 
 ---
 
@@ -12,258 +27,248 @@ Frontend: React (planejado).
 
 ```
 erp-evok-audio/
-├── server/                    # Backend Express (MVC)
+├── server/
 │   ├── src/
-│   │   ├── controllers/       # 22 controladores
-│   │   ├── models/            # 18 modelos Sequelize
-│   │   ├── routes/            # 19 arquivos de rotas
-│   │   ├── middlewares/       # auth + errorHandler
-│   │   ├── services/          # dashboard, reports, qrcode, upload
-│   │   └── config/            # database.ts, seeds.ts
-│   ├── config/                # db.ts (conexão PostgreSQL)
-│   └── index.ts               # Entry point
-├── docs/                      # Documentação completa
-│   ├── ANALISE_PROFUNDA.md    # Análise de segurança e lógica
-│   ├── API.md                 # Documentação da API
-│   ├── USE_CASES.md           # Casos de uso
-│   ├── DATABASE.md            # Modelagem de dados
-│   ├── PLANO.md               # Este documento
-│   ├── CRONOGRAMA_FASES_2_3.md
-│   └── [modulos]/             # Docs por módulo
-└── package.json
+│   │   ├── models/               # ~30+ modelos Sequelize (Item, Fornecedor,
+│   │   │                         # OP, NonConformity, MaintenanceOrder,
+│   │   │                         # LotControl, RFQ, CostCenter, etc.)
+│   │   ├── modules/               # Clean Architecture por domínio
+│   │   │   ├── auth/ users/ accessProfiles/
+│   │   │   ├── products/ items/ categories/ bom/
+│   │   │   ├── sales/ clients/
+│   │   │   ├── purchases/ purchaseRequisitions/ rfq/ suppliers/
+│   │   │   ├── inventory/ mobileInventory/
+│   │   │   ├── production/ workCenters/ mrp/
+│   │   │   ├── nonConformities/ laboratory/ engineering/
+│   │   │   ├── maintenance/ assets/ serviceOrders/
+│   │   │   ├── financial/ fiscal/
+│   │   │   ├── reports/ dashboard/ intelligentAuditor/
+│   │   │   ├── traceability/ auditLogs/ webhooks/
+│   │   │   └── employees/ departments/
+│   │   ├── middlewares/          # auth (JWT + RBAC), errorHandler
+│   │   ├── config/                # database.ts, runtimeEnv.ts
+│   │   └── shared/                # UseCase base, handoffSignal, erros
+│   ├── database/postgresql/       # 64 migrations versionadas
+│   └── __tests__/                 # unit, integration, edge cases
+├── client/                        # React 19 + Vite — páginas por módulo
+│   └── src/pages/
+│       ├── sales/ purchases/ logistics/ production/
+│       ├── quality/ laboratory/ engineering/ maintenance/ patrimonio/
+│       ├── financial/ hr/ reports/ users/ settings/ traceability/
+├── mobile/                        # Expo/React Native (login, QR, contagens)
+├── tv/                             # Android TV (react-native-tvos)
+├── docs/
+│   ├── projeto/                   # Plano, arquitetura, use-cases
+│   ├── business/                  # UCs de RBAC, regras de negócio
+│   ├── arquitetura/                # Diagramas, requisitos, BPMN
+│   ├── manual/                     # Manual do usuário
+│   ├── DATABASE.md                 # Modelo de dados
+│   ├── API.md                      # Contrato de endpoints
+│   ├── governance/TODO.md          # SSOT de pendências
+│   └── DIARIO_BORDO_GO_LIVE_G6.md  # Diário de bordo do Go-Live
+└── CLAUDE.md                      # SSOT geral do projeto
 ```
+
+---
 
 ## 2. Stack Tecnológica
 
 | Camada | Tecnologia | Versão | Status |
 |--------|------------|--------|--------|
-| Backend | Node.ts | 18+ | ✅ |
+| Backend | Node.js + TypeScript (`tsx`) | 18+ | ✅ |
 | Framework | Express | 4.18 | ✅ |
 | ORM | Sequelize | 6.37 | ✅ |
-| Banco | PostgreSQL | 8.0+ | ✅ |
-| Autenticação | JWT + bcryptjs | - | ✅ |
-| Upload | Multer | 2.2 | ✅ |
-| QR Code | qrcode | 1.5 | ✅ |
-| Rate Limit | express-rate-limit | 8.6 | ✅ |
-| Validação | express-validator | 7.0 | ✅ |
-| Frontend | React | (pendente) | 🔧 |
+| Banco | **PostgreSQL** (único suportado — sem MySQL/SQLite) | 16 | ✅ |
+| Autenticação | JWT + bcrypt, refresh deslizante | - | ✅ |
+| Upload / QR | Multer / qrcode | 2.2 / 1.5 | ✅ |
+| Rate limit | express-rate-limit | 8.6 | ✅ |
+| Validação | express-validator + Zod (módulos novos) | 7.0 | ✅ |
+| Logging | Winston (JSON em produção, colorido em dev) | - | ✅ |
+| Testes backend | Jest + Supertest | - | ✅ |
+| **Frontend web** | **React 19 + Vite + TypeScript**, React Router 8.3, TanStack Query, Tailwind 4 / shadcn, Vitest | - | ✅ (não é mais "planejado") |
+| **App mobile** | Expo / React Native | - | ✅ (validado por typecheck/bundle; sem hardware real ainda) |
+| **App Android TV** | react-native-tvos | - | ✅ (mesma ressalva de validação) |
 
-## 3. Módulos Implementados
-
-### ✅ Módulo 1: Autenticação e Usuários
-- Login com JWT (com rate limit)
-- Cadastro/registro de usuários
-- 3 perfis: admin, operator, financial
-- Controle de usuários ativos/inativos
-
-### ✅ Módulo 2: Cadastros Base
-- Clientes (com dados fiscais: CPF/CNPJ, IE, IM, regime tributário)
-- Fornecedores (com avaliação e prazos)
-- Produtos (com parâmetros Thiele-Small para alto-falantes)
-- Categorias de produtos (soft delete implementado)
-- Departamentos (com hierarquia e gestor)
-
-### ✅ Módulo 3: Estoque e Inventário
-- Controle de entrada/saída/ajuste
-- Histórico completo de movimentações
-- Alerta de estoque mínimo
-- Inventário mobile com QR Code
-- Leitura em lote (batch scan)
-- Inventário por localização
-
-### ✅ Módulo 4: Vendas
-- Criação de pedidos (itens, descontos, parcelas)
-- Controle de status (quote → confirmed → invoiced → canceled)
-- Baixa automática de estoque
-- Geração automática de contas a receber
-- Validação de transições de status
-- Restauração de estoque ao cancelar
-
-### ✅ Módulo 5: Compras
-- Pedidos de compra com itens
-- Fluxo de aprovação (pending → approved → sent)
-- Recebimento parcial/total de itens
-- Atualização automática de estoque
-- Geração automática de contas a pagar 🔄
-
-### ✅ Módulo 6: Financeiro
-- Contas a receber (originadas de vendas)
-- Contas a pagar (manuais + automáticas de compras)
-- Baixa de contas (receber/pagar)
-- Fluxo de caixa por período
-- Projeção financeira 30 dias
-- Cobrança: controle de inadimplência
-
-### ✅ Módulo 7: Produção
-- Ordens de Produção (OP)
-- Status: planned → released → in_progress → completed
-- Controle de quantidade produzida
-- Vinculação com ordens de venda
-- Relatório de eficiência e pontualidade
-
-### ✅ Módulo 8: Ordens de Serviço
-- OS para assistência técnica
-- Diagnóstico, serviço realizado, peças
-- Cálculo de mão-de-obra + peças
-- Controle de garantia (90 dias default)
-- Relatório de desempenho
-
-### ✅ Módulo 9: Patrimônio (Ativos)
-- Cadastro completo com tag única
-- QR Code para inventário mobile
-- Controle por departamento/responsável
-- Tipos: máquina, equipamento, ferramenta, móvel, veículo, TI
-- Depreciação (valor atual x vida útil) - cálculo pendente
-
-### ✅ Módulo 10: RH
-- Funcionários com dados completos (CTPS, PIS, banco)
-- Departamentos com hierarquia
-- Vínculo com usuário do sistema
-- Controle de turnos e regime de trabalho
-- Folha de pagamento (modelo pendente)
-
-### ✅ Módulo 11: Relatórios e Dashboard
-- Dashboard com KPIs (vendas hoje/mês/ano)
-- Relatórios de vendas, estoque, clientes, fluxo de caixa
-- Relatório de produção e eficiência
-- Serviço de relatórios genérico
-
-### ✅ Módulo 12: Segurança e Auditoria
-- JWT com expiração configurável
-- Proteção Helmet
-- Rate limiting
-- CORS configurável
-- Tratamento centralizado de erros
-- Autorização por perfil (admin/operator/financial)
-
-### ✅ Módulo 13: Qualidade (Pendente)
-- Controle de qualidade (testes acústicos)
-- Não conformidades (NC) - **modelo pendente**
-- Certificações
-- Testes de parâmetros Thiele-Small
-
-### ✅ Módulo 14: Auditor Inteligente
-- Análise de estoque (negativo, zerado, baixo, excessivo)
-- Sugestão de reposição baseada em consumo
-- Curva ABC de estoque
-- Valuação financeira do estoque
-- Relatório de acurácia
-
-## 4. Modelos de Dados (18 implementados)
-
-| Modelo | Tabela | Status |
-|--------|--------|--------|
-| User | users | ✅ |
-| Customer | customers | ✅ |
-| Category | product_categories | ✅ |
-| Product | products | ✅ |
-| Supplier | suppliers | ✅ |
-| Purchase | purchase_orders | ✅ |
-| PurchaseItem | purchase_order_items | ✅ |
-| Sale | sales | ✅ |
-| SaleItem | sale_items | ✅ |
-| AccountReceivable | accounts_receivable | ✅ |
-| AccountPayable | accounts_payable | ✅ |
-| InventoryMovement | inventory_movements | ✅ |
-| Department | departments | ✅ |
-| Employee | employees | ✅ |
-| ProductionOrder | production_orders | ✅ |
-| ServiceOrder | service_orders | ✅ |
-| Asset | assets | ✅ |
-
-### Modelos Pendentes
-
-| Modelo | Prioridade | Módulo |
-|--------|------------|--------|
-| NonConformity | Alta | Qualidade |
-| MaintenanceOrder | Alta | Patrimônio |
-| Payroll | Média | RH |
-| Benefit | Média | RH |
-| AuditLog | Alta | Administrativo/TI |
-| Contract | Média | Jurídico |
-| ShippingOrder | Média | Logística |
-| Commission | Média | Vendas |
-
-## 5. Correções e Melhorias Aplicadas (v2.0.0)
-
-### Segurança
-- ✅ Senha admin movida para variável de ambiente
-- ✅ CORS restrito a localhost como fallback
-- ✅ Validação de JWT_SECRET no startup
-
-### Lógica de Negócio
-- ✅ InventoryMovement com timestamps habilitados
-- ✅ Asset controller usando 'tag' em vez de 'code'
-- ✅ Validação de current_value no Asset
-- ✅ Geração automática de AccountPayable ao receber compra
-- ✅ Consistência payment_method/payment_type
-
-### Modelagem
-- ✅ Category com campo 'active' para soft delete
-- ✅ CategoryController com soft delete em vez de destroy
-- ✅ ClientController bloqueia inativação com vendas ativas
-
-### Qualidade de Código
-- ✅ DashboardService: imports não utilizados removidos
-- ✅ Documentação atualizada (API.md, DATABASE.md, PLANO.md)
-- ✅ Análise profunda documentada
-
-## 6. Pendências e Roadmap
-
-### Fase 2 - Prioridade Alta
-- [ ] Modelo NonConformity (NC) para controle de qualidade
-- [ ] Modelo MaintenanceOrder para manutenção de ativos
-- [ ] Validação de dígitos de CPF/CNPJ
-- [ ] Modelo AuditLog para rastreamento de alterações
-- [ ] Notificações de estoque baixo (email/sistema)
-- [ ] Workflow de aprovação de compras com níveis
-
-### Fase 2 - Prioridade Média
-- [ ] Cálculo de depreciação automática de ativos
-- [ ] Comissão de vendas
-- [ ] Módulo de folha de pagamento (Payroll)
-- [ ] Exportação de relatórios (PDF/Excel)
-- [ ] Logging estruturado (Winston)
-
-### Fase 2 - Prioridade Baixa
-- [ ] Frontend React
-- [ ] Testes automatizados (Jest + Supertest)
-- [ ] Remover dependência dependencia removida não utilizada
-- [ ] Cursor-based pagination
-- [ ] CI/CD pipeline
-
-## 7. Segurança
-
-### Implementado
-- ✅ JWT com expiração (7 dias configurável)
-- ✅ Bcrypt (10 rounds) para hash de senha
-- ✅ Helmet para headers de segurança
-- ✅ Rate limiting (login: 10/15min, API: 100/15min)
-- ✅ CORS configurável por ambiente
-- ✅ Tratamento de erros sem vazamento de informação
-- ✅ Separação de perfis (admin/operator/financial)
-- ✅ Proteção contra XSS via express-validator
-
-### Recomendado
-- 🔄 Implementar refresh tokens
-- 🔄 Adicionar 2FA (opcional)
-- 🔄 Rate limiting por endpoint específico
-- 🔄 Auditoria de operações sensíveis (preço, salário, exclusão)
-
-## 8. Performance
-
-### Boas Práticas
-- ✅ Paginação em todas as listagens
-- ✅ Índices nas foreign keys
-- ✅ Pool de conexões PostgreSQL (max: 10/20)
-- ✅ Transações em operações críticas (vendas, compras, produção)
-
-### Pontos de Atenção
-- ⚠️ Relatório de clientes faz N+1 queries (otimizar com GROUP BY)
-- ⚠️ Uploads não têm limpeza automática
-- ⚠️ Logging apenas no console (sem persistência)
+> A versão anterior deste documento listava "Frontend: React (planejado)" e
+> "PostgreSQL 8.0+" — ambos desatualizados. O frontend web está implementado
+> e cabeado desde 2026-08-02/05; a versão de PostgreSQL suportada é a 16.
 
 ---
 
-**Última atualização:** Após análise profunda e correções de segurança/lógica
+## 3. Módulos Implementados
 
+A contagem por módulo abaixo é um resumo narrativo. Para a lista completa e
+rastreável de requisitos funcionais por módulo (com link para UC/rota real),
+ver **[`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`](../arquitetura/DOCUMENTO_DE_REQUISITOS.md)**.
+
+### ✅ Autenticação, Usuários e Perfis de Acesso
+Login JWT com rate-limit e refresh deslizante; perfis de acesso configuráveis
+por módulo (`operate`/`approve`), substituindo o modelo antigo de 3 roles
+fixas (admin/operator/financial) como único controle — hoje RBAC é 100% das
+rotas + perfil de área.
+
+### ✅ Cadastros Base
+Clientes, fornecedores, `Item` (núcleo intocado + extensões comerciais/
+técnicas — ver `CLAUDE.md` §7), categorias, departamentos, catálogo
+item×fornecedor N:N.
+
+### ✅ Estoque e Almoxarifado
+Entrada/saída/ajuste, múltiplos depósitos com transferência, lotes com
+liberação/bloqueio de qualidade (`quarantine → available/blocked`),
+rastreabilidade por QR, inventário cíclico (pool/atribuído) — inclusive via
+app mobile.
+
+### ✅ Vendas / Comercial
+Pedidos, alteração de itens antes de faturar, faturamento parcial de NF-e,
+tabela de preços por cliente, expedição.
+
+### ✅ Compras / Suprimentos
+Requisição de compra como origem obrigatória, cotação/RFQ multi-fornecedor
+com adjudicação por item, pedidos de compra, recebimento com quarentena,
+cockpit de compras, avaliação de fornecedor.
+
+### ✅ Financeiro
+Contas a pagar/receber, centros de custo, projeção de fluxo de caixa
+(semanal e diária), conciliação bancária OFX, configuração fiscal.
+
+### ✅ Produção / PCP
+Ordens de Produção contra estoque real, apontamento reconciliado, BOM
+multi-nível, MRP com conversão manual/automática em requisição, paradas de
+máquina categorizadas, OEE por centro de trabalho, custeio real de mão de
+obra/overhead.
+
+### ✅ Qualidade / Laboratório / Engenharia
+Não-conformidades (ciclo completo causa raiz → ação corretiva →
+verificação de eficácia), inspeção de recebimento (libera/bloqueia lote),
+testes de laboratório (Thiele-Small, com opção destrutiva), projetos de
+engenharia, desenhos técnicos, requisição de amostra.
+
+### ✅ Patrimônio / Manutenção
+Ativos com QR Code e depreciação, ordens de manutenção
+(preventiva/corretiva/preditiva/emergencial/overhaul) com custo de
+peças+mão de obra+downtime, ordens de serviço externas (garantia).
+
+### ✅ RH
+Funcionários (CTPS, PIS, dados bancários), departamentos com hierarquia,
+turnos e regime de trabalho.
+
+### ✅ Relatórios / Dashboard / Auditor Inteligente
+KPIs, relatórios por módulo, OEE, variação de custo, Auditor Inteligente
+(estoque negativo/zerado/baixo/excessivo, sugestão de reposição, curva ABC),
+semáforo de handoff entre departamentos, painel Android TV.
+
+### ✅ Segurança e Auditoria
+JWT + refresh, Helmet, rate limiting por rota sensível, CORS configurável,
+anti-spoofing de identidade (requester/approved_by/operator do JWT, nunca do
+payload livre), `AuditLog` de ações sensíveis, logging estruturado Winston.
+
+### 🔴 Pendências reais (não implementadas, não "modelo pendente" genérico)
+- **Importação/COMEX (UC-19):** descrito em `docs/projeto/04-USE_CASES.md`,
+  sem rota/modelo no backend — decisão de negócio pendente (implementar ou
+  descontinuar o UC).
+- **Folha de pagamento (Payroll) e Benefícios:** sem modelo/rota.
+- **Certificações de produto/processo:** sem modelo/rota dedicada.
+- **CNAB (boleto/remessa/retorno):** só conciliação via OFX foi implementada.
+- **Capacidade finita por centro de trabalho:** roadmap Fase 3 (P2).
+
+Ver detalhamento completo em `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
+(seção "Divergências UC × Código").
+
+---
+
+## 4. Modelos de Dados
+
+O projeto evoluiu de 18 modelos (versão inicial) para bem mais de 30 hoje,
+incluindo `Item`/extensões (substituindo o antigo `Product` monolítico em
+migração faseada — ver `docs/HANDOFF_CODEX.md`), `NonConformity`,
+`MaintenanceOrder`, `LotControl`, RFQ (`Rfq`, `RfqSupplier`, `RfqQuote`),
+`CostCenter`, `ProductionCostSettings`, `ProductCostLedger`,
+`AccessProfile`, `AuditLog`, e mais. **A lista completa e o schema real
+vivem em [`docs/DATABASE.md`](../DATABASE.md)** — este documento não
+duplica a modelagem de dados, apenas referencia.
+
+---
+
+## 5. Roadmap
+
+Ver **`CLAUDE.md` §5 (Go-Live Readiness)** para o roadmap vigente e
+autoritativo, incluindo:
+
+1. **Fase 1 (P0):** ✅ concluída em 2026-08-02.
+2. **Fase 2 (P1):** ✅ majoritariamente entregue entre 2026-08-04 e
+   2026-08-06 — o que falta está listado lá (validação em hardware real dos
+   apps novos, teste de concorrência real de contagem cíclica, backfill de
+   custeio, CNAB, histórico multi-NF-e, testes de integração Postgres das
+   features de maior risco da terceira rodada).
+3. **Fase 3 (P2):** capacidade finita/centros de trabalho, TypeScript strict.
+4. **Fase 4 (P3):** refugo detalhado por etapa, CI/CD, unificação de schema
+   legado/novo.
+5. **Infra de produção:** servidor ainda não adquirido — bloqueia o deploy
+   independentemente do progresso funcional acima.
+
+Este documento não repete o roadmap item a item para evitar duas fontes
+divergentes — apenas aponta para `CLAUDE.md` como SSOT.
+
+---
+
+## 6. Segurança
+
+### Implementado
+- JWT com expiração configurável (7 dias) + refresh deslizante.
+- Bcrypt para hash de senha.
+- Helmet para headers de segurança.
+- Rate limiting específico por rota sensível (login, registro, refresh,
+  recuperação de senha) + geral de API.
+- CORS configurável por ambiente.
+- RBAC 100% das rotas via `authenticate` + `authorizeModule`.
+- Anti-spoofing de identidade em campos como `requester`/`approved_by`.
+- Proteção contra XSS via express-validator; Zod em módulos novos.
+- Auditoria de operações sensíveis (`AuditLog`).
+
+### Pendente / recomendado
+- Teste de penetração / pentest formal.
+- 2FA (opcional, não decidido).
+- Política formal de retenção/anonimização de dados pessoais (LGPD).
+- TLS em produção (depende do reverse proxy, ainda não implantado).
+
+Detalhamento completo, item a item, com status e fonte, em
+`docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md` §2.
+
+---
+
+## 7. Performance
+
+### Boas práticas em vigor
+- Paginação nas principais listagens.
+- Índices em foreign keys (159+ FKs versionadas via migration).
+- Pool de conexões PostgreSQL (dev: 10 / produção: 20).
+- Transações Sequelize em operações críticas (vendas, compras, produção,
+  contagem cíclica, conciliação bancária).
+
+### Pontos de atenção conhecidos
+- Sem benchmark formal de tempo de resposta sob carga real (nº de usuários
+  simultâneos, volume de OPs/vendas) — recomendado antes do Go-Live com uso
+  pleno da força de trabalho.
+- Sem cache de aplicação (Redis ou equivalente) implementado.
+- Arquitetura horizontal (múltiplas instâncias de API) não testada/
+  configurada.
+
+Ver `docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md` §1 e §4 para o
+detalhamento completo (desempenho e escalabilidade).
+
+---
+
+## Referências
+
+- **[`CLAUDE.md`](../../CLAUDE.md)** — SSOT geral, status vigente do Go-Live.
+- **[`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`](../arquitetura/DOCUMENTO_DE_REQUISITOS.md)** — requisitos funcionais rastreáveis por módulo.
+- **[`docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md`](../arquitetura/REQUISITOS_NAO_FUNCIONAIS.md)** — requisitos não funcionais.
+- **[`docs/DATABASE.md`](../DATABASE.md)** — modelo de dados real.
+- **[`docs/API.md`](../API.md)** — contrato de endpoints.
+- **[`docs/projeto/04-USE_CASES.md`](04-USE_CASES.md)**, **[`docs/business/01-USE_CASES.md`](../business/01-USE_CASES.md)** — casos de uso formais.
+- **[`docs/governance/TODO.md`](../governance/TODO.md)** — pendências dia a dia.
+
+---
+
+**Última atualização:** 6 de agosto de 2026 — reescrita para refletir o
+estado real do projeto (substitui a versão de MVP inicial).

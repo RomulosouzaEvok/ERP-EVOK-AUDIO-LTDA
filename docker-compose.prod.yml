@@ -1,0 +1,139 @@
+# docker-compose.prod.yml — ESQUELETO para o servidor de producao.
+#
+# STATUS: nao exercitado ainda (servidor de producao/VPS ainda nao foi
+# adquirido — ver docs/GO_LIVE_G6_CHECKLIST.md e
+# docs/DIARIO_BORDO_GO_LIVE_G6.md). Este arquivo existe para ficar PRONTO
+# quando a infra existir, nao para ser aplicado agora. Baseado no
+# docker-compose.yml de desenvolvimento, com as diferencas de producao
+# comentadas abaixo.
+#
+# Uso quando o servidor existir:
+#   cp .env.example .env   # preencher com segredos fortes E UNICOS de producao
+#   docker compose -f docker-compose.prod.yml config   # validar antes de subir
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Pre-requisitos que este arquivo assume e NAO implementa sozinho:
+#   - Reverse proxy + TLS (nginx/Caddy) na frente da API, terminando HTTPS
+#     e repassando para 127.0.0.1:5000 (ver docs/infra/DEPLOY_UBUNTU.md).
+#   - DB_SSL=true + DB_SSL_CA_PATH/DB_SSL_CA_BASE64 validados de ponta a
+#     ponta contra o Postgres real de producao (nao apenas a flag ligada).
+#   - Cron/systemd timer de backup ativo (scripts/schedule-backup-cron.sh)
+#     rodando fora deste compose, apontando para o volume postgres_data
+#     deste arquivo.
+#   - .env de producao com DB_PASSWORD, JWT_SECRET, ADMIN_SEED_PASSWORD
+#     fortes e UNICOS — nunca reaproveitar valores de dev/staging.
+#   - Considerar usar DB_USER=evok_app (role de privilegio minimo criada
+#     pela migration 20260806-000080) em vez de evok_admin para a API em
+#     producao — ver docs/database/05-ACESSOS_E_ISOLAMENTO.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: evok-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-erp_evok_audio}
+      POSTGRES_USER: ${DB_ADMIN_USER:-evok_admin}
+      TZ: America/Sao_Paulo
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env antes de subir o Postgres de producao}
+    # PRODUCAO: porta do Postgres NAO exposta ao host/rede externa. A API
+    # conecta pela rede interna do compose (DB_HOST=postgres). Se precisar
+    # de acesso administrativo pontual, use `docker exec` ou um tunel SSH
+    # — nunca publique 5432 no host de producao.
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_ADMIN_USER:-evok_admin} -d ${DB_NAME:-erp_evok_audio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: erp-evok-audio-server:${APP_IMAGE_TAG:-prod}
+    container_name: evok-api-prod
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      TZ: America/Sao_Paulo
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-erp_evok_audio}
+      # PRODUCAO (recomendado, nao obrigatorio no primeiro deploy): trocar
+      # para DB_USER=evok_app (role de privilegio minimo, sem DDL) — ver
+      # docs/database/05-ACESSOS_E_ISOLAMENTO.md antes de decidir.
+      # Migrations continuam precisando rodar com a role administrativa
+      # (evok_admin), fora deste container de runtime.
+      DB_USER: ${DB_USER:?defina DB_USER no .env (evok_admin ou evok_app) antes de subir a API de producao}
+      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env antes de subir a API de producao}
+      # PRODUCAO: TLS obrigatorio na conexao com o Postgres gerenciado
+      # (validar de ponta a ponta antes do Go-Live — item pendente do
+      # checklist em docs/infra/DEPLOY_UBUNTU.md).
+      DB_SSL: ${DB_SSL:-true}
+      DB_SSL_CA_PATH: ${DB_SSL_CA_PATH:-}
+      DB_SSL_CA_BASE64: ${DB_SSL_CA_BASE64:-}
+      DB_LOGGING: "false"
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env antes de subir a API de producao}
+      CORS_ORIGIN: ${CORS_ORIGIN:?defina CORS_ORIGIN (dominio real do frontend) no .env}
+      # PRODUCAO: atras de 1 reverse proxy (nginx/Caddy) — necessario para
+      # o rate-limit de login enxergar o IP real do cliente.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:?defina ADMIN_SEED_PASSWORD no .env antes de subir a API de producao}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
+      LOG_FILE: ${LOG_FILE:-/app/logs/app.log}
+    # PRODUCAO: porta da API vinculada apenas a localhost. Um reverse
+    # proxy (nginx/Caddy) na mesma maquina termina TLS e repassa para
+    # 127.0.0.1:5000. NUNCA publicar 0.0.0.0:5000 direto na internet em
+    # producao (diferente do docker-compose.yml de dev, que expõe em
+    # 0.0.0.0 propositalmente para os apps mobile/TV da rede local).
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - app_uploads_prod:/app/uploads
+      # Logs estruturados (Winston) persistidos fora do container — sem
+      # rotacao de arquivo embutida (configurar logrotate externo
+      # apontando para este volume, ver CLAUDE.md secao Monitoramento).
+      - app_logs_prod:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  postgres_data_prod:
+  # Persistencia de uploads (fotos/desenhos de produto enviados via multer)
+  # e de logs estruturados. Ambos DEVEM entrar na rotina de backup do
+  # servidor de producao junto com o dump do Postgres — ver
+  # docs/database/07-DISASTER_RECOVERY.md e docs/infra/DEPLOY_UBUNTU.md.
+  app_uploads_prod:
+  app_logs_prod:
+
+# NAO IMPLEMENTADO NESTE ARQUIVO (fora de escopo de composicao Docker,
+# ver documentos referenciados):
+#   - Reverse proxy/TLS (nginx/Caddy) — nao ha servico dedicado aqui
+#     porque a config real (certificado, dominio) depende do servidor
+#     escolhido; adicionar servico proprio quando o dominio/certificado
+#     existirem.
+#   - Cron de backup — roda fora do compose, no host (ver
+#     scripts/schedule-backup-cron.sh), apontando para o volume
+#     postgres_data_prod acima via `docker exec`.

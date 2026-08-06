@@ -298,6 +298,10 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 - **[docs/projeto/01-PLANO.md](docs/projeto/01-PLANO.md)** — Arquitetura, 18 modelos, stack, roadmap técnico
 - **[docs/projeto/02-PLANO_INDUSTRIAL.md](docs/projeto/02-PLANO_INDUSTRIAL.md)** — 21 departamentos, BOM de auto-falante, processos produção
 - **[docs/projeto/04-USE_CASES.md](docs/projeto/04-USE_CASES.md)** — Casos de uso (UC-01 a UC-XX)
+- **[docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md](docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md)** — Índice executivo de Requisitos Funcionais por módulo (link para UC/rota real cada um), + RNFs por referência
+- **[docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md](docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md)** — Requisitos não funcionais (desempenho, segurança, disponibilidade, escalabilidade)
+- **[docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md](docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md)** — Diagrama de casos de uso + BPMN simplificado (Order-to-Cash, Purchase-to-Pay, Qualidade, Manutenção)
+- **[docs/manual/00-MANUAL_DO_USUARIO.md](docs/manual/00-MANUAL_DO_USUARIO.md)** — Manual do usuário (conteúdo prático completo em Vendas, Compras, Estoque/Inventário e Produção; demais módulos ainda esqueleto)
 - **[docs/HANDOFF_CODEX.md](docs/HANDOFF_CODEX.md)** — Migração Product → Item (Fase 1–4.1, backfill scripts)
 - **[docs/DATABASE.md](docs/DATABASE.md)** — Changelog histórico narrativo de modelagem/migrations
 - **[docs/database/00-INDICE.md](docs/database/00-INDICE.md)** — Documentação de dados de referência sempre-atual (Modelo Conceitual/MER, Modelo Lógico/DER, Modelo Físico/DDL, Dicionário de Dados das 78 tabelas, Acessos e Isolamento, Estruturas Programáveis, Disaster Recovery) — NOVO, 2026-08-06

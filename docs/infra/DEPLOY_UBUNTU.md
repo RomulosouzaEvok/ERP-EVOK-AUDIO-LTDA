@@ -181,7 +181,12 @@ docker volume ls | grep postgres_data
 - [ ] Banco sobe e fica healthcheck green
 - [ ] API conecta ao banco (`/health/ready` retorna true)
 - [ ] Schema aplicado via `npm run migration:up` (tabelas existem, todas as 53 migrations status `up`)
-- [ ] Backup local foi testado (restore funciona)
+- [x] Backup local foi testado (restore funciona) — **testado em
+      2026-08-06** contra o banco local: `pg_dump -Fc -Z 9` +
+      `pg_restore` em banco descartável, 79/79 tabelas com contagem de
+      linhas idêntica (ver `docs/database/07-DISASTER_RECOVERY.md` §2.1).
+      **Não cobre ainda** o cenário de provisionamento de servidor novo
+      do zero (só existirá servidor real para testar isso após a compra).
 - [ ] Logs estão sendo rotacionados (max-size: 10m)
 - [ ] Rede PostgreSQL isolada (127.0.0.1:5432 apenas)
 - [ ] TZ=America/Sao_Paulo está configurado (Postgres e API)
@@ -214,6 +219,14 @@ docker volume ls | grep postgres_data
 
 ---
 
+> **`docker-compose.prod.yml`** (raiz do repo, criado em 2026-08-06) é o
+> esqueleto de composição para o servidor de produção — reverse proxy
+> não incluído (config real depende do domínio/certificado do servidor
+> escolhido), Postgres sem porta publicada, API vinculada a
+> `127.0.0.1:5000`, `DB_SSL=true` por padrão. Use-o como ponto de partida
+> quando o servidor for provisionado; ainda não foi implantado de
+> verdade.
+
 ## ✅ Checklist de prontidão — antes do Go-Live no servidor de produção
 
 Itens levantados na auditoria de infraestrutura de 2026-08-06. Marcar cada um
@@ -227,12 +240,22 @@ antes de aprovar o Go-Live no VPS/servidor físico definitivo:
 - [ ] **Volume/backup de uploads**: volume nomeado `app_uploads` (fotos/
       desenhos de produto) incluído na rotina de backup, junto com o dump do
       Postgres — testar restore de ambos.
-- [ ] **`docker-compose.prod.yml`** dedicado com `NODE_ENV=production` e
-      `DB_SSL=true` validado de ponta a ponta (conexão real com certificado,
-      sem depender de `ALLOW_LOCAL_DB_NO_SSL`).
+- [x] **`docker-compose.prod.yml`** dedicado com `NODE_ENV=production` e
+      `DB_SSL=true` por padrão — **criado em 2026-08-06** (raiz do repo),
+      validado por `docker compose -f docker-compose.prod.yml config`.
+      **Pendente ainda:** implantar de verdade e validar `DB_SSL=true` de
+      ponta a ponta com certificado real (sem depender de
+      `ALLOW_LOCAL_DB_NO_SSL`) — só possível quando o servidor de
+      produção existir. Ver `docs/database/05-ACESSOS_E_ISOLAMENTO.md`
+      §3 e `docs/database/07-DISASTER_RECOVERY.md`.
 - [ ] **Cron de backup ativado** (`scripts/schedule-backup-*`) rodando no
       servidor de produção, com verificação de que os arquivos de backup
-      estão sendo gerados e são íntegros.
+      estão sendo gerados e são íntegros. **Nota:** o equivalente local
+      (Agendador de Tarefas do Windows, `schedule-backup-task.ps1`) já
+      está ativo neste ambiente de desenvolvimento desde 2026-08-06 (ver
+      `docs/database/07-DISASTER_RECOVERY.md` §1.1) — este item do
+      checklist se refere especificamente ao **servidor de produção**
+      (Ubuntu, `schedule-backup-cron.sh`), que ainda não existe.
 - [ ] **Logs estruturados** (Winston ou equivalente) — pendente, item P1 do
       roadmap; validar que ao menos os logs de erro/acesso estão sendo
       persistidos e rotacionados no servidor definitivo.
