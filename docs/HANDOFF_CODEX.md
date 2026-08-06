@@ -6891,3 +6891,135 @@ comportamento (mesma query, `where`, `transaction`/`lock`, mesmos erros).
   fica como sugestão para um próximo incremento, especialmente porque essa
   correção pontual (instanciar `SequelizeFiscalRepository` localmente) não
   tem cobertura automatizada hoje.
+
+---
+
+## App Mobile — Login + Inventário Mobile (QR Code) + Histórico (Nova Entrega)
+
+**Data**: 2026-08-06
+**Escopo**: Criação do app mobile (Android + iOS) em `mobile/` (React Native + Expo + Expo Router), consumindo os endpoints já existentes de `server/src/modules/auth` e `server/src/modules/mobileInventory`. **Nenhuma rota/endpoint novo foi criado no backend** — esta entrega é 100% client-side.
+**Status**: ✅ Concluído (build/tsc/doctor validados; testado apenas via bundling estático — QA deve validar em dispositivo/emulador real contra um backend rodando)
+
+### O que foi feito
+- Projeto Expo criado do zero em `mobile/` (paralelo a `client/`/`server/`), SDK 57, TypeScript, Expo Router (file-based routing).
+- 3 telas: Login (`app/login.tsx`), Inventário Mobile com scanner de QR/código de barras (`app/(app)/home.tsx`), Histórico paginado de movimentações (`app/(app)/history.tsx`).
+- Client HTTP tipado em `mobile/src/api/` (`client.ts`, `auth.ts`, `mobileInventory.ts`, `types.ts`), espelhando os contratos JSON reais lidos diretamente do código-fonte do backend (não documentação — ver arquivos citados abaixo).
+- Sessão JWT persistida via `expo-secure-store` (`mobile/src/context/AuthContext.tsx`), nunca `AsyncStorage`.
+- URL da API configurável via `EXPO_PUBLIC_API_URL` (`mobile/.env`, ver `mobile/.env.example`).
+- Assets de marca copiados de `client/src/assets/brand/` para `mobile/assets/brand/`.
+
+### Endpoints consumidos (já existentes — não alterados)
+1. `POST /api/auth/login` — `server/src/modules/auth/presentation/controllers/authController.ts`
+   - Request: `{ email, password }` → Response: `{ success: true, data: { token, user: { id, name, email, role } } }`
+   - Rate-limit: 10 tentativas/15min por `IP+email` (`server/app.ts`, `authLimiter`), resposta 429: `{ success: false, error: "Muitas tentativas. Tente novamente em 15 minutos." }`
+2. `POST /api/mobile-inventory/scan` — requer `Authorization: Bearer <jwt>` + permissão `estoque:operate` (`authorizeModule('estoque', 'operate')`)
+   - Request: `{ product_code, quantity, type: 'in'|'out', description? }`
+   - Response: `{ success: true, data: { product: {id,name,code}, movement, new_quantity } }`
+   - Erros: 404 produto não encontrado, 400/422 validação (campo obrigatório ausente, estoque insuficiente em saída), 403 se o perfil do usuário não tiver `estoque:operate`.
+3. `GET /api/mobile-inventory/movements?page=&limit=` — requer `Authorization: Bearer <jwt>` + permissão `estoque` (view implícito)
+   - Response: `{ success: true, data: Movement[], pagination: { total, page, limit, totalPages } }`
+
+### Como testar (QA / próximo agente)
+1. Subir o backend localmente (`npm run server` na raiz, ou apontar `EXPO_PUBLIC_API_URL` para um túnel/servidor já rodando).
+2. Confirmar a porta real do backend (`server/src/config/runtimeEnv.ts`, `PORT`, default `5000`) e o IP da máquina na rede local (`ipconfig`/`ifconfig`).
+3. `cd mobile && npm install && cp .env.example .env` e editar `EXPO_PUBLIC_API_URL` com esse IP:porta.
+4. `npx expo start` → abrir no Expo Go (celular físico, mesma rede Wi-Fi) ou emulador Android (`10.0.2.2:<porta>` como IP nesse caso).
+5. Testar login com um usuário existente com perfil que tenha `estoque:operate` (checar `access_profiles`/`access_profile_permissions` ou usuário `admin`).
+6. Testar o scanner apontando para qualquer QR Code/código de barras contendo o `code` de um `Item`/`Product` existente no banco — ou preencher `product_code` manualmente no campo de texto (o campo aceita digitação, não é scanner-only).
+7. Testar cenários de erro: código inexistente (404), saída maior que o estoque disponível (422), usuário sem permissão `estoque:operate` (403), 10+ tentativas de login erradas seguidas (429).
+8. Testar histórico: paginação por scroll infinito (`onEndReached`) e pull-to-refresh.
+
+### Validado nesta entrega (sem dispositivo real)
+- `npx tsc --noEmit` — 0 erros.
+- `npx expo-doctor` — 20/20 checks OK.
+- `npx expo export --platform android` — bundle Metro compila com sucesso (smoke test).
+- **Não validado**: comportamento real em dispositivo/emulador (permissão de câmera, leitura de QR físico, chamadas de rede reais) — fica para QA/próximo agente com acesso a um dispositivo e ao backend rodando.
+
+### Decisões técnicas relevantes (ver também `mobile/README.md`)
+- Expo Router (não `@react-navigation` configurado manualmente) — `main` do `package.json` é `expo-router/entry`.
+- `expo-camera` `CameraView` (API atual, SDK 57) com `barcodeScannerSettings` para QR + códigos de barras comuns de etiqueta industrial (EAN-13/EAN-8/Code128/Code39/UPC).
+- `babel.config.js` precisou ser criado manualmente (o template padrão do Expo SDK 57 não gera um) com `babel-preset-expo` + `react-native-worklets/plugin` (exigido pelo Reanimated 4.x, dependência transitiva de navegação). `babel-preset-expo` teve que ser adicionado como `devDependency` direta em `mobile/package.json` — por padrão só existe aninhado em `node_modules/expo/node_modules/babel-preset-expo`, o que quebra a resolução do Babel ao existir um `babel.config.js` próprio.
+- Client HTTP único (`mobile/src/api/client.ts`) trata os dois formatos de erro do backend (`{error: string}` legado/Sequelize/rate-limit vs. `{error: {code,message}}` de `AppError`) e dispara logout automático em qualquer 401 global (exceto no próprio login).
+
+### Arquivos criados
+- `mobile/` (projeto completo — ver árvore em `mobile/README.md`)
+- Principais: `mobile/app.json`, `mobile/babel.config.js`, `mobile/app/_layout.tsx`, `mobile/app/index.tsx`, `mobile/app/login.tsx`, `mobile/app/(app)/_layout.tsx`, `mobile/app/(app)/home.tsx`, `mobile/app/(app)/history.tsx`, `mobile/src/api/client.ts`, `mobile/src/api/auth.ts`, `mobile/src/api/mobileInventory.ts`, `mobile/src/api/types.ts`, `mobile/src/context/AuthContext.tsx`, `mobile/src/components/QrScannerModal.tsx`, `mobile/src/config/env.ts`, `mobile/.env.example`, `mobile/README.md`
+
+### Próximos passos sugeridos (fora do escopo desta entrega)
+- Validação em dispositivo/emulador real (ver seção "Como testar" acima).
+- Ícones/splash screen customizados com a marca Evok Áudio (hoje usa os placeholders gerados pelo `create-expo-app`).
+- EAS Build (`eas.json`) para gerar builds Android/iOS instaláveis fora do Expo Go, quando houver ambiente de CI/CD definido para o mobile.
+
+---
+
+## Inventário Cíclico — Atribuição de Contagem a Funcionário / Pool (Backend)
+
+**Data**: 2026-08-06
+**Escopo**: Evolução do submódulo `InventoryCount`/`InventoryCountItem` (`server/src/modules/inventory`) para suportar atribuição de contagens a um funcionário específico e/ou "pool" (qualquer funcionário autorizado pode pegar). **100% backend** — preparação para a tela "Contagens disponíveis para mim" do app mobile (não implementada nesta entrega).
+**Status**: ✅ Concluído (typecheck + testes unitários passando; sem commit — arquivos deixados para revisão)
+
+### O que foi feito
+- Novo campo `assigned_to` (nullable, FK → `users.id`, `ON DELETE SET NULL`) em `inventory_counts`.
+- Criação (`POST /api/inventory-counts`) aceita `assigned_to` opcional: informado = atribuição específica; ausente/`null` = contagem fica no "pool".
+- Início da contagem (`POST /api/inventory-counts/:id/start`) faz o **claim atômico**: se a contagem está no pool, atribui ao usuário logado (lock pessimista `SELECT ... FOR UPDATE` dentro de transação, serializando corrida entre dois funcionários); se já atribuída a **outro** usuário, rejeita com `ConflictError` (HTTP 409, `{"code":"CONFLICT","message":"Esta contagem já foi atribuída a outro funcionário."}`); se já for do próprio usuário, segue idempotente.
+- Listagem (`GET /api/inventory-counts`) ganhou os filtros `assigned_to` (aceita o atalho `assigned_to=me`, resolvido pelo controller para o id do usuário autenticado) e `unassigned=true` (contagens do pool; tem prioridade sobre `assigned_to` se ambos vierem informados). Filtros pré-existentes (`status`, `count_type`, paginação) inalterados.
+- Aprovação/rejeição (`approve`/`reject`) permanecem exclusivas do painel web, sem nenhuma mudança de comportamento.
+
+### Arquivos modificados
+- `server/migrations/20260806-000001-add-assigned-to-inventory-counts.cjs` (novo) — coluna + índice, idempotente.
+- `server/src/models/InventoryCount.ts` — campo `assigned_to` + JSDoc do workflow.
+- `server/src/models/index.ts` — associação `InventoryCount.belongsTo(User, { foreignKey: 'assigned_to', as: 'assignedTo' })` / `User.hasMany(..., as: 'assigned_inventory_counts')`.
+- `server/src/modules/inventory/domain/entities/InventoryCountEntity.ts` — aceita `assigned_to` opcional, expõe em `toRepositoryInput()`.
+- `server/src/modules/inventory/application/use-cases/CreateInventoryCountUseCase.ts` — repassa `assigned_to`.
+- `server/src/modules/inventory/application/use-cases/StartInventoryCountUseCase.ts` — reescrito: agora abre transação própria (`sequelize.transaction()`), usa `findRawByIdForUpdate` (lock pessimista) e implementa a lógica de claim/trava descrita acima. **Assinatura de `execute` mudou de `{ id }` para `{ id, userId }`** (breaking change interno, sem impacto em client/mobile — só o controller chama este use case).
+- `server/src/modules/inventory/application/use-cases/ListInventoryCountsUseCase.ts` — novos filtros `assigned_to`/`unassigned`.
+- `server/src/modules/inventory/domain/repositories/InventoryCountRepository.ts` — JSDoc de `list()` atualizado.
+- `server/src/modules/inventory/infrastructure/sequelize/SequelizeInventoryCountRepository.ts` — `list()` aplica `where.assigned_to`; `list()`/`findById()` passam a incluir `{ model: User, as: 'assignedTo' }`.
+- `server/src/modules/inventory/presentation/validators/inventoryValidators.ts` — `createInventoryCountSchema.assigned_to` (opcional, inteiro positivo ou `null`).
+- `server/src/modules/inventory/presentation/controllers/inventoryCountController.ts` — `create` repassa `assigned_to`; `list` resolve `assigned_to=me`; `start` passa `userId: req.user.id`.
+- `server/tests/unit/inventory-count-assignment.test.ts` (novo) — 10 testes cobrindo criação com/sem `assigned_to`, claim do pool, rejeição de claim de contagem de outro usuário, idempotência do próprio usuário, transição inválida de status, e os filtros de listagem.
+
+### Documentações atualizadas
+- `docs/API.md` — nova seção "8.2 Inventário Cíclico (Contagens)" com todos os endpoints de `/api/inventory-counts`, incluindo o contrato de atribuição/pool e o formato do erro 409.
+- `docs/DATABASE.md` — nova subseção "Coluna nova: `inventory_counts.assigned_to` (migration `20260806-000001`)" logo após a seção existente de `warehouse_id`.
+- `docs/HANDOFF_CODEX.md` — esta seção.
+- JSDoc atualizado em todos os arquivos de código listados acima (classes, use cases, validators, controller, migration).
+- Não havia caso de uso dedicado de inventário cíclico em `docs/projeto/04-USE_CASES.md` nem item correspondente em `docs/governance/TODO.md` — nenhum dos dois foi alterado (nada para marcar `[x]`; a feature não fazia parte do backlog rastreado ali).
+
+### Contrato final da API
+**Criação** (`POST /api/inventory-counts`):
+```json
+{
+  "count_type": "cycle",
+  "warehouse_id": 2,
+  "location": "Corredor A",
+  "notes": "Contagem mensal",
+  "item_ids": ["uuid-item-1"],
+  "assigned_to": 15
+}
+```
+`assigned_to` opcional; ausente/`null` = pool.
+
+**Listagem** (`GET /api/inventory-counts`) — novos query params: `assigned_to=<id>`, `assigned_to=me`, `unassigned=true` (combinado tipicamente com `status=draft`). Filtros pré-existentes mantidos.
+
+**Início** (`POST /api/inventory-counts/:id/start`) — sem payload novo; erro de atribuição conflitante:
+```json
+{ "success": false, "error": { "code": "CONFLICT", "message": "Esta contagem já foi atribuída a outro funcionário." } }
+```
+HTTP 409.
+
+### Instruções de teste (próximo agente/humano)
+1. Rodar a migration em um banco de desenvolvimento: `cd server && npm run migration:up` (ou `migration:up --name 20260806-000001-add-assigned-to-inventory-counts.cjs`).
+2. `cd server && npx jest tests/unit/inventory-count-assignment.test.ts` — 10 testes devem passar.
+3. `cd server && npx tsc --noEmit` — 0 erros (validado nesta entrega).
+4. Teste manual via API (Postman/curl), com um token de usuário com `contagens:operate`:
+   - Criar uma contagem sem `assigned_to` → confirmar que fica no pool (`GET /api/inventory-counts?unassigned=true&status=draft` deve listá-la).
+   - Chamar `POST /:id/start` com o usuário A → confirmar `assigned_to` no retorno.
+   - Chamar `POST /:id/start` novamente com o usuário B na MESMA contagem (agora em `counting`, não mais `draft`) → deve falhar com `BusinessRuleError` (422, comportamento pré-existente inalterado).
+   - Criar uma segunda contagem sem `assigned_to`, iniciar com o usuário A, depois tentar `POST /:id/start` com o usuário B em uma contagem QUE VOLTOU a `draft` manualmente (ou testar diretamente a corrida via dois requests simultâneos) → deve retornar 409 se já atribuída a A.
+   - `GET /api/inventory-counts?assigned_to=me` autenticado como A → deve listar as contagens de A.
+5. **Não testado nesta entrega** (fora de escopo, mobile/client não tocados): telas de app mobile/web consumindo os novos filtros — quando forem construídas, apontar para o contrato documentado em `docs/API.md` §8.2.
+
+### Riscos residuais
+- A lógica de "corrida" (dois usuários tentando iniciar a MESMA contagem do pool simultaneamente) foi validada com lock pessimista dentro de transação e coberta por teste unitário com repositório mockado — **não há teste de integração contra PostgreSQL real** exercitando a concorrência de fato (exigiria dois clients simultâneos contra um banco real). Recomenda-se um teste de integração dedicado antes do Go-Live se esse fluxo for crítico em produção.
+- Nenhuma tela de frontend (web ou mobile) foi criada ou alterada — os novos filtros/campo só existem na API até que `PromadorFonteEnd` (web) ou o time do app mobile os consumam.

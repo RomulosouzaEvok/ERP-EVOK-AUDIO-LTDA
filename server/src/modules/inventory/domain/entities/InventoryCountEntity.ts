@@ -15,6 +15,14 @@ interface InventoryCountEntityProps {
   location?: string | null;
   notes?: string | null;
   created_by: number;
+  /** Funcionário responsável pela contagem (opcional). `null`/ausente = pool. */
+  assigned_to?: number | null;
+  /**
+   * FK -> departments.id (opcional). Departamento dono da contagem, usado
+   * pelo painel de TV de demandas por departamento (migration
+   * 20260806-000003). Ausente/`null` = "Sem departamento" no painel.
+   */
+  department_id?: number | null;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }
@@ -36,6 +44,10 @@ class InventoryCountEntity extends Entity {
    * @param {string} [props.location] - Local/área física contada.
    * @param {string} [props.notes] - Observações gerais.
    * @param {number} props.created_by - Id do usuário que criou a contagem.
+   * @param {number} [props.assigned_to] - Id do funcionário responsável pela
+   *   contagem (opcional). Ausente/`null` = contagem fica disponível no
+   *   "pool" (qualquer funcionário autorizado pode "pegá-la" via
+   *   `POST /:id/start`, ver `StartInventoryCountUseCase`).
    * @throws {ValidationError} Se `count_type` for inválido, `warehouse_id` ou `created_by` estiverem ausentes.
    */
   constructor(props: InventoryCountEntityProps) {
@@ -46,6 +58,8 @@ class InventoryCountEntity extends Entity {
     this.location = props.location ?? null;
     this.notes = props.notes ?? null;
     this.created_by = props.created_by;
+    this.assigned_to = props.assigned_to ?? null;
+    this.department_id = props.department_id ?? null;
 
     this.validate();
   }
@@ -74,7 +88,7 @@ class InventoryCountEntity extends Entity {
   /**
    * Serializa a entidade para os parâmetros aceitos por `InventoryCountRepository.create`.
    *
-   * @returns {{ count_type: string, warehouse_id: number, location: string|null, notes: string|null, created_by: number, status: 'draft' }}
+   * @returns {{ count_type: string, warehouse_id: number, location: string|null, notes: string|null, created_by: number, assigned_to: number|null, department_id: number|null, status: 'draft' }}
    */
   toRepositoryInput() {
     return {
@@ -83,6 +97,8 @@ class InventoryCountEntity extends Entity {
       location: this.location,
       notes: this.notes,
       created_by: this.created_by,
+      assigned_to: this.assigned_to !== null ? Number(this.assigned_to) : null,
+      department_id: this.department_id !== null ? Number(this.department_id) : null,
       status: 'draft'
     };
   }

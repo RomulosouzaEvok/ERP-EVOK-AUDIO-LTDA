@@ -21,6 +21,18 @@ interface CreateInventoryCountInput {
   item_ids?: string[];
   /** Id do usuário que está criando a contagem. */
   created_by: number;
+  /**
+   * Id do funcionário responsável pela contagem (opcional). Ausente/`null`
+   * = contagem fica disponível no "pool" (qualquer funcionário autorizado
+   * pode "pegá-la" via `POST /:id/start`).
+   */
+  assigned_to?: number | null;
+  /**
+   * FK -> departments.id (opcional). Departamento dono da contagem, usado
+   * pelo painel de TV de demandas por departamento (migration
+   * 20260806-000003). Ausente/`null` = "Sem departamento" no painel.
+   */
+  department_id?: number | null;
 }
 
 /**
@@ -60,12 +72,14 @@ class CreateInventoryCountUseCase extends UseCase {
    * @param {number[]} [input.product_ids] - Produtos a incluir desde já na contagem (legado, opcional).
    * @param {string[]} [input.item_ids] - Itens a incluir desde já na contagem (novo, PREFERIDO, opcional).
    * @param {number} input.created_by - Id do usuário que está criando a contagem.
+   * @param {number} [input.assigned_to] - Id do funcionário responsável pela contagem (opcional; ausente = pool).
+   * @param {number} [input.department_id] - Id do departamento dono da contagem (opcional; usado pelo painel de TV).
    * @returns {Promise<{ count: Object, items: Object[] }>}
    * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos (inclusive `warehouse_id` ausente).
    * @throws {NotFoundError} Se algum id em `product_ids` ou `item_ids` não corresponder a um item/produto existente.
    */
-  async execute({ count_type, warehouse_id, location, notes, product_ids, item_ids, created_by }: CreateInventoryCountInput) {
-    const entity = new InventoryCountEntity({ count_type, warehouse_id, location, notes, created_by });
+  async execute({ count_type, warehouse_id, location, notes, product_ids, item_ids, created_by, assigned_to, department_id }: CreateInventoryCountInput) {
+    const entity = new InventoryCountEntity({ count_type, warehouse_id, location, notes, created_by, assigned_to, department_id });
 
     const t = await sequelize.transaction();
     try {

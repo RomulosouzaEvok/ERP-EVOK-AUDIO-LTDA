@@ -197,15 +197,24 @@ InventoryCountItem.belongsTo(InventoryCount, { foreignKey: 'inventory_count_id',
 Product.hasMany(InventoryCountItem, { foreignKey: 'product_id', as: 'inventory_count_items' });
 InventoryCountItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
-// User ↔ InventoryCount (created by / approved by)
+// User ↔ InventoryCount (created by / approved by / assigned to)
 User.hasMany(InventoryCount, { foreignKey: 'created_by', as: 'created_inventory_counts' });
 InventoryCount.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
 User.hasMany(InventoryCount, { foreignKey: 'approved_by', as: 'approved_inventory_counts' });
 InventoryCount.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' });
+// assigned_to (nullable = pool): funcionário responsável pela contagem, ver
+// migration 20260806-000001-add-assigned-to-inventory-counts.cjs.
+User.hasMany(InventoryCount, { foreignKey: 'assigned_to', as: 'assigned_inventory_counts' });
+InventoryCount.belongsTo(User, { foreignKey: 'assigned_to', as: 'assignedTo' });
 
 // User ↔ InventoryCountItem (counted by)
 User.hasMany(InventoryCountItem, { foreignKey: 'counted_by', as: 'counted_inventory_items' });
 InventoryCountItem.belongsTo(User, { foreignKey: 'counted_by', as: 'countedBy' });
+
+// Department ↔ InventoryCount (painel de TV de demandas por departamento,
+// migration 20260806-000003; nullable também no histórico legado).
+Department.hasMany(InventoryCount, { foreignKey: 'department_id', as: 'inventory_counts' });
+InventoryCount.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
 
 // Product ↔ ProductionOrder
 Product.hasMany(ProductionOrder, { foreignKey: 'product_id', as: 'production_orders' });
@@ -226,6 +235,11 @@ ProductionOrder.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
 // Sale ↔ ProductionOrder
 Sale.hasMany(ProductionOrder, { foreignKey: 'sales_order_id', as: 'production_orders' });
 ProductionOrder.belongsTo(Sale, { foreignKey: 'sales_order_id', as: 'salesOrder' });
+
+// Department ↔ ProductionOrder (painel de TV de demandas por departamento,
+// migration 20260806-000003; nullable também no histórico legado).
+Department.hasMany(ProductionOrder, { foreignKey: 'department_id', as: 'production_orders' });
+ProductionOrder.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
 
 Product.hasMany(ProductionRoute, { foreignKey: 'product_id', as: 'production_routes' });
 ProductionRoute.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });

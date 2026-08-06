@@ -16,9 +16,16 @@ const dashboardController = require('../controllers/dashboardController');
  * `GET /handoffs` (Bloco 3.3, UC-40): resumo por área do semáforo de
  * handoff, para o badge/contador do menu lateral. Mesma autorização do
  * dashboard principal (`authorizeModule('dashboard')`).
+ *
+ * `GET /department-demands`: painel de TV para gestores acompanharem
+ * demandas em aberto por departamento (OPs, requisições de compra,
+ * contagens de inventário) sem precisar entrar no sistema. Somente leitura,
+ * qualquer usuário autenticado com acesso ao módulo `dashboard` pode ver —
+ * mesma autorização dos demais endpoints deste módulo.
  */
 
 router.get('/', authenticate, authorizeModule('dashboard'), dashboardController.index);
 router.get('/handoffs', authenticate, authorizeModule('dashboard'), dashboardController.handoffs);
+router.get('/department-demands', authenticate, authorizeModule('dashboard'), dashboardController.departmentDemands);
 
 module.exports = router;

@@ -20,6 +20,10 @@ export const createProductionOrderSchema = z.object({
   due_date: z.string().date(),
   sales_order_id: z.coerce.number().int().positive().nullable().optional(),
   responsible_id: z.coerce.number().int().positive().nullable().optional(),
+  // Opcional (painel de TV de demandas por departamento, migration
+  // 20260806-000003): quando informado, agrupa a OP no departamento dono
+  // dela; ausente/null = "Sem departamento" no painel.
+  department_id: z.coerce.number().int().positive().nullable().optional(),
   notes: z.string().trim().max(4000).nullable().optional(),
 }).strict();
 

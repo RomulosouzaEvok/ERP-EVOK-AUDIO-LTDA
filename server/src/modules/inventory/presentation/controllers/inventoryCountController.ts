@@ -47,6 +47,11 @@ function handleError(error: any, res: Response, next: NextFunction) {
  * payload — validado aqui via Zod (400 didático) e reforçado por
  * `InventoryCountEntity` na camada de aplicação (defesa em profundidade).
  *
+ * `assigned_to` é OPCIONAL: quando informado, atribui a contagem a um
+ * funcionário específico; quando ausente, a contagem fica disponível no
+ * "pool" (qualquer funcionário autorizado pode "pegá-la" via
+ * `POST /:id/start`).
+ *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
@@ -56,11 +61,11 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createInventoryCountSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { count_type, warehouse_id, location, notes, product_ids, item_ids } = parsed.data;
+    const { count_type, warehouse_id, location, notes, product_ids, item_ids, assigned_to, department_id } = parsed.data;
 
     const useCase = new CreateInventoryCountUseCase(inventoryCountRepository);
     const { count, items } = await useCase.execute({
-      count_type, warehouse_id, location, notes, product_ids, item_ids, created_by: (req as any).user.id
+      count_type, warehouse_id, location, notes, product_ids, item_ids, assigned_to, department_id, created_by: (req as any).user.id
     });
 
     logAction(req, {
@@ -77,7 +82,15 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
 };
 
 /**
- * `GET /api/inventory-counts` — lista contagens de inventário com filtros e paginação.
+ * `GET /api/inventory-counts` — lista contagens de inventário com filtros e
+ * paginação.
+ *
+ * Filtros de atribuição (app mobile — tela "Contagens disponíveis para
+ * mim"):
+ * - `assigned_to=<id>` ou `assigned_to=me` (atalho resolvido aqui para o id
+ *   do usuário autenticado) — contagens atribuídas a um funcionário.
+ * - `unassigned=true` (tipicamente combinado com `status=draft`) —
+ *   contagens do "pool" (sem atribuição, disponíveis para pegar).
  *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -86,9 +99,16 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
  */
 exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { page, limit, status, count_type } = req.query;
+    const { page, limit, status, count_type, unassigned } = req.query;
+    let { assigned_to } = req.query as { assigned_to?: string };
+    if (assigned_to === 'me') {
+      assigned_to = String((req as any).user.id);
+    }
+
     const useCase = new ListInventoryCountsUseCase(inventoryCountRepository);
-    const { rows, count, page: p, limit: l, totalPages } = await useCase.execute({ status, count_type, page, limit });
+    const { rows, count, page: p, limit: l, totalPages } = await useCase.execute({
+      status, count_type, assigned_to, unassigned, page, limit
+    });
     res.json({ success: true, data: rows, pagination: { total: count, page: p, limit: l, totalPages } });
   } catch (error) { handleError(error, res, next); }
 };
@@ -110,7 +130,13 @@ exports.getById = async (req: Request, res: Response, next: NextFunction) => {
 };
 
 /**
- * `POST /api/inventory-counts/:id/start` — inicia a contagem (`draft` → `counting`).
+ * `POST /api/inventory-counts/:id/start` — inicia a contagem (`draft` →
+ * `counting`).
+ *
+ * Também resolve a atribuição (`assigned_to`): se a contagem estiver no
+ * "pool", faz o claim atômico para o usuário logado; se já estiver
+ * atribuída a OUTRO funcionário, retorna 409 (`ConflictError`); se já for
+ * do próprio usuário, segue normalmente (ver `StartInventoryCountUseCase`).
  *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -120,7 +146,7 @@ exports.getById = async (req: Request, res: Response, next: NextFunction) => {
 exports.start = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new StartInventoryCountUseCase(inventoryCountRepository);
-    const count = await useCase.execute({ id: req.params.id });
+    const count = await useCase.execute({ id: req.params.id, userId: (req as any).user.id });
 
     logAction(req, {
       action: 'update',

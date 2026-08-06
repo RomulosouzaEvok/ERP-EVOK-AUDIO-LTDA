@@ -8,6 +8,7 @@ import { ClipboardList, Plus } from 'lucide-react';
 import * as inventoryApi from '@/api/inventory';
 import * as productsApi from '@/api/products';
 import * as warehousesApi from '@/api/warehouses';
+import * as usersApi from '@/api/users';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
@@ -33,6 +35,7 @@ const STATUS_LABEL: Record<inventoryApi.InventoryCountStatus, string> = {
 const createCountSchema = z.object({
   warehouse_id: z.coerce.number({ message: 'Selecione o depósito.' }).int().positive('Selecione o depósito.'),
   location: z.string().trim().max(100).optional(),
+  assigned_to: z.coerce.number().int().positive().optional(),
 });
 
 type CreateCountFormData = z.infer<typeof createCountSchema>;
@@ -61,13 +64,22 @@ export default function InventoryCountsPage() {
   const [page, setPage] = React.useState(1);
   const [createFormError, setCreateFormError] = React.useState<DidacticError | null>(null);
   const [approveError, setApproveError] = React.useState<DidacticError | null>(null);
+  /** Filtro de responsável: `''` (todas), `'unassigned'` (pool) ou o `id` do usuário. */
+  const [assignmentFilter, setAssignmentFilter] = React.useState<string>('');
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['inventory-counts', page],
-    queryFn: () => inventoryApi.listInventoryCounts({ limit: 20, page }),
+    queryKey: ['inventory-counts', page, assignmentFilter],
+    queryFn: () =>
+      inventoryApi.listInventoryCounts({
+        limit: 20,
+        page,
+        unassigned: assignmentFilter === 'unassigned' ? true : undefined,
+        assigned_to: assignmentFilter && assignmentFilter !== 'unassigned' ? Number(assignmentFilter) : undefined,
+      }),
   });
   const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
   const { data: warehouses } = useQuery({ queryKey: ['warehouses'], queryFn: warehousesApi.listWarehouses });
+  const { data: users } = useQuery({ queryKey: ['users-all-active'], queryFn: () => usersApi.listUsers({ limit: 200, active: true }) });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['inventory-counts'] });
   const onError = (error: unknown) => window.alert(extractApiErrorMessage(error));
@@ -79,7 +91,7 @@ export default function InventoryCountsPage() {
     formState: { errors, isSubmitting },
   } = useForm<CreateCountFormData>({
     resolver: zodResolver(createCountSchema),
-    defaultValues: { warehouse_id: undefined, location: '' },
+    defaultValues: { warehouse_id: undefined, location: '', assigned_to: undefined },
   });
 
   const createMutation = useMutation({
@@ -88,12 +100,13 @@ export default function InventoryCountsPage() {
         warehouse_id: values.warehouse_id,
         location: values.location?.trim() || undefined,
         product_ids: selectedProductIds,
+        assigned_to: values.assigned_to || undefined,
       }),
     onSuccess: () => {
       invalidate();
       setCreateOpen(false);
       setSelectedProductIds([]);
-      reset({ warehouse_id: undefined, location: '' });
+      reset({ warehouse_id: undefined, location: '', assigned_to: undefined });
       setCreateFormError(null);
     },
     onError: (error) => setCreateFormError(translateApiError(error, 'Não foi possível criar a contagem de inventário')),
@@ -144,7 +157,7 @@ export default function InventoryCountsPage() {
               setCreateOpen(open);
               if (!open) {
                 setSelectedProductIds([]);
-                reset({ warehouse_id: undefined, location: '' });
+                reset({ warehouse_id: undefined, location: '', assigned_to: undefined });
                 setCreateFormError(null);
               }
             }}
@@ -189,6 +202,22 @@ export default function InventoryCountsPage() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="count-assigned-to">Atribuir a (opcional)</Label>
+                  <SelectNative id="count-assigned-to" defaultValue="" {...register('assigned_to')}>
+                    <option value="">Deixar disponível (pool) — qualquer funcionário pode pegar</option>
+                    {users?.data.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </SelectNative>
+                  <p className="text-xs text-muted-foreground">
+                    Se não for atribuída a ninguém, a contagem fica disponível no app mobile para qualquer funcionário
+                    autorizado pegar ("pool"). Se um funcionário for selecionado, apenas ele poderá iniciá-la.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
                   <Label>Produtos a contar *</Label>
                   <div className="flex max-h-72 flex-col gap-1 overflow-y-auto rounded-md border p-1">
                     {products?.data.map((product) => (
@@ -225,21 +254,42 @@ export default function InventoryCountsPage() {
 
       {approveError && <DidacticAlert error={approveError} />}
 
+      <div className="flex flex-col gap-1.5 sm:w-72">
+        <Label htmlFor="count-assignment-filter">Filtrar por responsável</Label>
+        <SelectNative
+          id="count-assignment-filter"
+          value={assignmentFilter}
+          onChange={(event) => {
+            setAssignmentFilter(event.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">Todas as contagens</option>
+          <option value="unassigned">Sem responsável (pool)</option>
+          {users?.data.map((user) => (
+            <option key={user.id} value={user.id}>
+              Atribuídas a {user.name}
+            </option>
+          ))}
+        </SelectNative>
+      </div>
+
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Número</TableHead>
             <TableHead>Depósito</TableHead>
+            <TableHead>Responsável</TableHead>
             <TableHead>Criada em</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableSkeletonRows columns={5} />}
+          {isLoading && <TableSkeletonRows columns={6} />}
           {isError && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-destructive">
+              <TableCell colSpan={6} className="text-center text-destructive">
                 Não foi possível carregar as contagens. Tente novamente.
               </TableCell>
             </TableRow>
@@ -248,6 +298,13 @@ export default function InventoryCountsPage() {
             <TableRow key={count.id}>
               <TableCell>{count.count_number}</TableCell>
               <TableCell>{warehouseLabel(warehouses, count.warehouse_id)}</TableCell>
+              <TableCell>
+                {count.assignedTo ? (
+                  <span className="text-sm">{count.assignedTo.name}</span>
+                ) : (
+                  <Badge variant="outline">Disponível (pool)</Badge>
+                )}
+              </TableCell>
               <TableCell>{new Date(count.createdAt).toLocaleString('pt-BR')}</TableCell>
               <TableCell>
                 <Badge variant="secondary">{STATUS_LABEL[count.status]}</Badge>
@@ -285,7 +342,7 @@ export default function InventoryCountsPage() {
           ))}
           {!isLoading && !isError && data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 Nenhuma contagem registrada.
               </TableCell>
             </TableRow>
@@ -336,6 +393,11 @@ function CountItemsDialog({
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           Depósito: <span className="font-medium text-foreground">{warehouseLabel(warehouses, count?.warehouse_id ?? null)}</span>
+          {' · '}
+          Responsável:{' '}
+          <span className="font-medium text-foreground">
+            {count?.assignedTo ? count.assignedTo.name : 'Disponível (pool)'}
+          </span>
         </p>
         <div className="flex flex-col gap-2">
           {count?.items?.map((item) => (

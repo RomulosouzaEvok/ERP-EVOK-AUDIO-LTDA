@@ -184,12 +184,31 @@ export interface InventoryCount {
    */
   warehouse_id: number | null;
   location?: string | null;
+  /**
+   * Id do funcionário responsável pela contagem (migration `20260806-000001`).
+   * `null`/ausente = contagem no "pool" — qualquer funcionário autorizado
+   * pode assumi-la pelo app mobile via `POST /:id/start` (claim atômico).
+   */
+  assigned_to?: number | null;
+  /** Eager-loaded pelo backend (`SequelizeInventoryCountRepository`, alias `assignedTo`) — nome/id do responsável, quando houver. */
+  assignedTo?: { id: number; name: string } | null;
   createdAt: string;
   items?: InventoryCountItem[];
 }
 
 /** `GET /api/inventory-counts`. */
-export async function listInventoryCounts(params: { page?: number; limit?: number; status?: InventoryCountStatus } = {}) {
+export async function listInventoryCounts(
+  params: {
+    page?: number;
+    limit?: number;
+    status?: InventoryCountStatus;
+    count_type?: InventoryCountType;
+    /** Filtra por funcionário atribuído. Aceita o `id` do usuário ou o atalho `'me'` (usuário autenticado). */
+    assigned_to?: number | 'me';
+    /** Quando `true`, retorna apenas contagens do "pool" (sem responsável). Tem prioridade sobre `assigned_to`. */
+    unassigned?: boolean;
+  } = {},
+) {
   const { data } = await httpClient.get<ListResponse<InventoryCount>>('/api/inventory-counts', { params });
   return data;
 }
@@ -213,6 +232,12 @@ export interface CreateInventoryCountInput {
   warehouse_id: number;
   location?: string;
   product_ids: number[];
+  /**
+   * Funcionário responsável pela contagem (opcional, migration
+   * `20260806-000001`). Ausente/`null` deixa a contagem no "pool" — qualquer
+   * funcionário autorizado pode pegá-la depois pelo app mobile.
+   */
+  assigned_to?: number | null;
 }
 
 /** `POST /api/inventory-counts` — cria já com os produtos selecionados, escopada a um depósito. */

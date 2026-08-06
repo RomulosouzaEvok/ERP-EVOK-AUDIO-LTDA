@@ -1125,6 +1125,91 @@ Rejeita uma transferência pendente (`authorizeModule('estoque', 'approve')`), c
 
 ---
 
+## 8.2 Inventário Cíclico (Contagens)
+
+Base URL: `/api/inventory-counts`. Todas as rotas exigem JWT válido
+(`authenticate`) e `authorizeModule('contagens', ...)` — leituras exigem
+`view` implícito, escritas comuns exigem `operate`, aprovar/rejeitar exigem
+`approve`.
+
+Workflow de status: `draft` → `counting` → `pending_approval` → `approved`
+→ `adjusted` (ou `pending_approval` → `rejected`).
+
+### Atribuição a funcionário (`assigned_to`) e "pool"
+
+Toda contagem tem um campo opcional `assigned_to` (id de usuário):
+
+- **Atribuição específica:** informado na criação (`assigned_to` no
+  payload) — só aquele funcionário pode iniciar a contagem.
+- **Pool:** `assigned_to` ausente/`null` na criação — qualquer funcionário
+  autorizado (`operate` em `contagens`, mesmo depósito) pode "pegar" a
+  contagem chamando `POST /:id/start`.
+
+### POST /api/inventory-counts
+Cria uma contagem (`status='draft'`) (`authorizeModule('contagens', 'operate')`).
+
+**Request:**
+```json
+{
+  "count_type": "cycle",
+  "warehouse_id": 2,
+  "location": "Corredor A",
+  "notes": "Contagem mensal",
+  "item_ids": ["uuid-item-1", "uuid-item-2"],
+  "assigned_to": 15,
+  "department_id": 3
+}
+```
+`warehouse_id` é obrigatório. `product_ids` (legado) OU `item_ids` (novo,
+preferido) são opcionais e mutuamente aceitos (dual-read). `assigned_to` é
+opcional — ausente/`null` deixa a contagem no pool. `department_id` é
+**opcional** (FK → `departments.id`) — departamento dono da contagem, usado
+apenas pelo painel de TV (`GET /api/dashboard/department-demands`); ausente
+= contagem aparece no grupo "Sem departamento" do painel.
+
+### GET /api/inventory-counts
+Lista contagens com filtros e paginação (`authorizeModule('contagens')`).
+
+**Query Params:**
+- `status`, `count_type` (filtros pré-existentes, inalterados)
+- `assigned_to=<id>` — contagens atribuídas a um funcionário específico
+- `assigned_to=me` — atalho: resolvido pelo servidor para o id do usuário
+  autenticado (contagens atribuídas a mim)
+- `unassigned=true` — apenas contagens do pool (`assigned_to IS NULL`);
+  tem prioridade sobre `assigned_to` se ambos forem informados; tipicamente
+  combinado com `status=draft` para montar a tela "contagens disponíveis
+  para pegar"
+- `page`, `limit`
+
+### GET /api/inventory-counts/:id
+Busca uma contagem por id, com itens (`authorizeModule('contagens')`).
+
+### POST /api/inventory-counts/:id/start
+Inicia a contagem, `draft` → `counting` (`authorizeModule('contagens', 'operate')`).
+
+Resolve a atribuição de forma atômica:
+- Contagem no pool (`assigned_to IS NULL`): faz o **claim** — `assigned_to`
+  passa a ser o usuário logado. Em corrida entre dois usuários, apenas um
+  vence (lock pessimista `SELECT ... FOR UPDATE` dentro de transação).
+- Contagem já atribuída a **outro** usuário: rejeita com **409
+  Conflict** — `{ "success": false, "error": { "code": "CONFLICT", "message": "Esta contagem já foi atribuída a outro funcionário." } }`.
+- Contagem já atribuída ao **próprio** usuário: segue normalmente
+  (idempotente, nenhuma reatribuição).
+
+### POST /api/inventory-counts/:id/items/:itemId/count
+Registra a quantidade contada de um item (`authorizeModule('contagens', 'operate')`).
+
+### POST /api/inventory-counts/:id/submit
+Envia para aprovação, `counting` → `pending_approval` (`authorizeModule('contagens', 'operate')`).
+
+### POST /api/inventory-counts/:id/approve
+Aprova a contagem, `pending_approval` → `adjusted` (`authorizeModule('contagens', 'approve')`, exclusivo do painel web). Ajusta `Product.quantity` e o saldo do depósito da contagem para cada item com variância.
+
+### POST /api/inventory-counts/:id/reject
+Rejeita a contagem, `pending_approval` → `rejected` (`authorizeModule('contagens', 'approve')`, exclusivo do painel web), com `body.reason` opcional.
+
+---
+
 ## 9. Estrutura de Produto (BOM)
 
 Base URL: `/api/engineering/bom`
@@ -1226,10 +1311,11 @@ Cria uma OP. Requer papel `admin` ou `operator`.
   "due_date": "2026-08-30",
   "priority": "normal",
   "responsible_id": 3,
+  "department_id": 3,
   "notes": "Lote para pedido X"
 }
 ```
-O `order_number` (`OP-<ano>-XXXX`) é gerado automaticamente. O produto deve estar `active` e ser do tipo `finished`.
+O `order_number` (`OP-<ano>-XXXX`) é gerado automaticamente. O produto deve estar `active` e ser do tipo `finished`. `department_id` é **opcional** (FK → `departments.id`) — departamento dono da OP, usado apenas pelo painel de TV (`GET /api/dashboard/department-demands`); ausente = OP aparece no grupo "Sem departamento" do painel.
 
 ### PUT /api/production-orders/:id
 Atualiza campos gerais (`priority`, `due_date`, `responsible_id`, `notes`). **Não aceita** `status` — use `PUT /:id/status`.
@@ -1474,6 +1560,54 @@ Regras de negócio:
 - Uma única requisição é criada (`origin: "mrp"`), com um item de requisição por ordem convertida.
 - O fornecedor preferencial ativo do item (`ItemSupplier`), quando existir, é sugerido automaticamente (`suggested_supplier_id`) junto com o preço de referência (`unit_price_estimated`).
 - Ao final, as ordens planejadas convertidas são marcadas como `EM_EXECUCAO`.
+
+---
+
+## 14. Dashboard / Painel de TV
+
+### GET /api/dashboard/department-demands
+Painel de TV (gestores) — demandas em aberto agrupadas por departamento, para acompanhamento sem precisar entrar no sistema (consumido pelo app Android TV construído em paralelo em `tv/`). Somente leitura; qualquer usuário autenticado com acesso ao módulo `dashboard` (`authorizeModule('dashboard')`, mesma autorização de `GET /api/dashboard` e `GET /api/dashboard/handoffs`).
+
+Agrega, sem paginação, 3 entidades por departamento:
+- **OPs** (`open_production_orders`): status `planned`, `released`, `in_progress` ou `paused` (tudo que não é `completed`/`canceled`).
+- **Requisições de compra** (`open_purchase_requisitions`): status `draft`, `pending` ou `approved` (ainda não convertidas em pedido de compra pelo MRP/Compras — a partir de `ordered` a requisição deixa de ser demanda do departamento requisitante).
+- **Contagens de inventário** (`open_inventory_counts`): status `draft`, `counting` ou `pending_approval`.
+
+Inclui sempre um grupo agregado `department_id: null` ("Sem departamento") — cobre hoje 100% do histórico de OPs e contagens (campo novo, sem backfill retroativo por design, ver `docs/DATABASE.md`) e qualquer requisição legada sem departamento atribuído.
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "department_id": 3,
+      "department_name": "Producao",
+      "open_production_orders": {
+        "count": 2,
+        "items": [
+          { "id": 10, "reference": "OP-2026-0001", "status": "planned", "due_date": "2026-08-10", "label": "Alto-falante 12in" }
+        ]
+      },
+      "open_purchase_requisitions": { "count": 0, "items": [] },
+      "open_inventory_counts": {
+        "count": 1,
+        "items": [
+          { "id": 30, "reference": "CC-2026-0001", "status": "counting", "due_date": null, "label": "cycle" }
+        ]
+      }
+    },
+    {
+      "department_id": null,
+      "department_name": "Sem departamento",
+      "open_production_orders": { "count": 5, "items": [ "..." ] },
+      "open_purchase_requisitions": { "count": 1, "items": [ "..." ] },
+      "open_inventory_counts": { "count": 3, "items": [ "..." ] }
+    }
+  ]
+}
+```
+
+Departamentos ativos aparecem em ordem alfabética; o grupo `"Sem departamento"` é sempre o último item da lista. Demandas vinculadas a um departamento inativo (soft delete, `active = false`) não aparecem em nenhum grupo até o departamento ser reativado.
 
 ---
 

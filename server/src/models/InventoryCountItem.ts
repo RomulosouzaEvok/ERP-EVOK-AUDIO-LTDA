@@ -34,7 +34,7 @@ interface InventoryCountItemAttributes {
 const InventoryCountItem = sequelize.define('InventoryCountItem', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   inventory_count_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → inventory_counts.id' },
-  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id (LEGADO)' },
+  product_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → products.id (LEGADO, dual-read com item_id — um dos dois deve estar preenchido)' },
   item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (NOVO, parallel to product_id)' },
   system_quantity: { type: DataTypes.DECIMAL(12, 3), allowNull: false, defaultValue: 0, comment: 'Quantidade em sistema no momento em que o item entrou na contagem' },
   counted_quantity: { type: DataTypes.DECIMAL(12, 3), comment: 'Quantidade contada fisicamente' },

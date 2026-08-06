@@ -1084,6 +1084,89 @@ expand-contract já usado em `inventory_movements.warehouse_id` e
 `lot_controls.warehouse_id` (migration `20260804-000001`): coluna
 nullable no banco + backfill das linhas legadas.
 
+### Coluna nova: `inventory_counts.assigned_to` (migration `20260806-000001`)
+
+**Migration:** `server/migrations/20260806-000001-add-assigned-to-inventory-counts.cjs`
+
+Evolução do inventário cíclico para suportar atribuição de contagens a
+funcionários específicos e/ou um "pool" (qualquer funcionário autorizado
+pode pegar). Fecha o gap de "qualquer usuário com `operate` podia
+iniciar/contar QUALQUER contagem em `draft` de qualquer depósito que ele
+tivesse acesso" — agora a contagem pode ser reservada a um funcionário.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `inventory_counts.assigned_to` | INTEGER FK → `users.id` (`ON DELETE SET NULL`, `ON UPDATE CASCADE`) | Nullable. `NULL` = contagem disponível no "pool". Índice `idx_inventory_counts_assigned_to`. |
+
+**Semântica:**
+- **Criação** (`CreateInventoryCountUseCase`): `assigned_to` é opcional no
+  payload. Informado = atribuição específica; ausente/`null` = pool.
+- **Início** (`StartInventoryCountUseCase`, `POST /:id/start`): faz o
+  **claim atômico** quando a contagem está no pool — `assigned_to` passa a
+  ser o usuário que chamou o endpoint. A trava é um lock pessimista
+  (`SELECT ... FOR UPDATE`, dentro de transação) sobre o cabeçalho da
+  contagem: em corrida entre dois usuários tentando pegar a MESMA
+  contagem, a segunda transação espera a primeira commitar e então lê
+  `assigned_to` já preenchido — só uma vence. Se a contagem já estiver
+  atribuída a **outro** usuário, rejeita com `ConflictError` (HTTP 409).
+  Se já for do próprio usuário, segue normalmente (idempotente).
+- **Listagem** (`ListInventoryCountsUseCase`, `GET /api/inventory-counts`):
+  novos filtros `assigned_to` (aceita o atalho `me`, resolvido pelo
+  controller para o id do usuário autenticado) e `unassigned=true`
+  (contagens do pool, tipicamente combinado com `status=draft`).
+- **Aprovação/rejeição** (`Approve`/`RejectInventoryCountUseCase`,
+  exclusivas do painel web): inalteradas — não dependem de `assigned_to`.
+- **`ON DELETE SET NULL`** (diferente de `warehouse_id`, que é
+  `RESTRICT`): se o funcionário atribuído for removido, a contagem volta
+  ao pool em vez de bloquear a exclusão do usuário.
+- Associação Sequelize: `InventoryCount.belongsTo(User, { foreignKey: 'assigned_to', as: 'assignedTo' })` / `User.hasMany(InventoryCount, { foreignKey: 'assigned_to', as: 'assigned_inventory_counts' })`.
+- Validação Zod da API: `createInventoryCountSchema` (`assigned_to` opcional, inteiro positivo ou `null`) em
+  `server/src/modules/inventory/presentation/validators/inventoryValidators.ts`.
+
+### Coluna nova: `production_orders.department_id` e `inventory_counts.department_id` (migration `20260806-000003`)
+
+**Migration:** `server/migrations/20260806-000003-add-department-id-to-production-orders-and-inventory-counts.cjs`
+
+Suporte ao painel de TV para gestores acompanharem demandas em aberto por
+departamento (`GET /api/dashboard/department-demands`, consumido pelo app
+Android TV construído em paralelo em `tv/`). `purchase_requisitions.department_id`
+já existia; faltava o mesmo campo em `production_orders` (OPs) e
+`inventory_counts` (contagens de inventário cíclico) para as 3 entidades
+serem agrupadas por departamento de verdade — decisão de produto: **não**
+usar depósito (`warehouse_id`) nem centro de trabalho como proxy de
+departamento.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `production_orders.department_id` | INTEGER FK → `departments.id` (`ON DELETE SET NULL`, `ON UPDATE CASCADE`) | Nullable. Departamento dono da OP. Índice `idx_production_orders_department_id`. |
+| `inventory_counts.department_id` | INTEGER FK → `departments.id` (`ON DELETE SET NULL`, `ON UPDATE CASCADE`) | Nullable. Departamento dono da contagem. Índice `idx_inventory_counts_department_id`. |
+
+**Por que nullable e SEM backfill (diferente de `warehouse_id` acima):**
+não existe nenhuma forma confiável de inferir retroativamente a qual
+departamento uma OP ou contagem já existente pertence — não há coluna,
+convenção de nomenclatura nem relação transitiva (produto, depósito,
+responsável) que garanta o departamento correto sem risco de atribuição
+errada. Diferente do backfill de `warehouse_id` (destino óbvio: depósito
+padrão `INSUMOS`), inventar uma regra aqui contaminaria a auditoria com
+dados fabricados. Todas as linhas existentes de ambas as tabelas ficam
+`NULL` — 100% do histórico hoje.
+
+**Semântica:**
+- **Criação** (`CreateProductionOrderUseCase` / `CreateInventoryCountUseCase`):
+  `department_id` é **opcional** no payload (`POST /api/production-orders`,
+  `POST /api/inventory-counts`). Diferente de `warehouse_id` em contagens
+  (obrigatório), `department_id` nunca é exigido — se ausente, fica `null`.
+- **Painel de TV** (`GET /api/dashboard/department-demands`,
+  `GetDepartmentDemandsUseCase` / `SequelizeDashboardRepository.getDepartmentDemands`):
+  agrupa OPs em aberto (`planned`/`released`/`in_progress`/`paused`),
+  requisições de compra em aberto (`draft`/`pending`/`approved`) e
+  contagens em aberto (`draft`/`counting`/`pending_approval`) por
+  `department_id`, com um grupo agregado `department_id: null` ("Sem
+  departamento") sempre presente. Demandas vinculadas a um departamento
+  inativo (`departments.active = false`) ficam fora do painel até o
+  departamento ser reativado.
+- Associações Sequelize (`server/src/models/index.ts`): `ProductionOrder.belongsTo(Department, { foreignKey: 'department_id', as: 'department' })` / `Department.hasMany(ProductionOrder, { foreignKey: 'department_id', as: 'production_orders' })`; `InventoryCount.belongsTo(Department, { foreignKey: 'department_id', as: 'department' })` / `Department.hasMany(InventoryCount, { foreignKey: 'department_id', as: 'inventory_counts' })` — mesmo padrão já usado por `PurchaseRequisition.belongsTo(Department, ...)`.
+
 ## Custeio de Produção — Mão-de-Obra e Overhead (roadmap pós-Go-Live, item 7/9)
 
 Fecha o gap "custeio real vs padrão não incorpora mão-de-obra nem

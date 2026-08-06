@@ -21,6 +21,24 @@ interface DashboardHandoffsSummary {
   compras: { pending_returns: number };
 }
 
+/** Item resumido de uma demanda em aberto (OP, requisição ou contagem) no painel de TV. */
+interface DepartmentDemandItem {
+  id: number;
+  reference: string;
+  status: string;
+  due_date: string | null;
+  label: string | null;
+}
+
+/** Bloco de demandas em aberto de um departamento (ou do grupo "Sem departamento") no painel de TV. */
+interface DepartmentDemandGroup {
+  department_id: number | null;
+  department_name: string;
+  open_production_orders: { count: number; items: DepartmentDemandItem[] };
+  open_purchase_requisitions: { count: number; items: DepartmentDemandItem[] };
+  open_inventory_counts: { count: number; items: DepartmentDemandItem[] };
+}
+
 class DashboardRepository {
   /** @returns Indicadores agregados do dashboard. @throws {Error} Se nao implementado. */
   public async getSummary(): Promise<DashboardSummary> {
@@ -36,6 +54,19 @@ class DashboardRepository {
    */
   public async getHandoffsSummary(): Promise<DashboardHandoffsSummary> {
     throw new Error('DashboardRepository.getHandoffsSummary não implementado.');
+  }
+
+  /**
+   * Painel de TV (gestores) — demandas em aberto (OPs, requisições de
+   * compra e contagens de inventário) agrupadas por departamento, incluindo
+   * um grupo agregado `department_id: null` ("Sem departamento") para
+   * registros legados sem departamento atribuído.
+   *
+   * @returns Lista de grupos por departamento (departamentos ativos + "Sem departamento").
+   * @throws {Error} Se não implementado.
+   */
+  public async getDepartmentDemands(): Promise<DepartmentDemandGroup[]> {
+    throw new Error('DashboardRepository.getDepartmentDemands não implementado.');
   }
 }
 

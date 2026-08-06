@@ -23,6 +23,7 @@ interface ProductionOrderProps {
   completion_date?: string | Date | null;
   sales_order_id?: number | null;
   responsible_id?: number | null;
+  department_id?: number | null;
   notes?: string | null;
   created_by?: number | null;
   createdAt?: Date;
@@ -79,6 +80,8 @@ class ProductionOrderEntity extends Entity {
   public completion_date: string | Date | null;
   public sales_order_id: number | null;
   public responsible_id: number | null;
+  /** FK -> departments.id (opcional). Departamento dono da OP, usado pelo painel de TV de demandas por departamento. */
+  public department_id: number | null;
   public notes: string | null;
   public created_by: number | null;
 
@@ -102,6 +105,7 @@ class ProductionOrderEntity extends Entity {
     this.completion_date = props.completion_date ?? null;
     this.sales_order_id = props.sales_order_id ?? null;
     this.responsible_id = props.responsible_id ?? null;
+    this.department_id = props.department_id ?? null;
     this.notes = props.notes ?? null;
     this.created_by = props.created_by ?? null;
 
@@ -204,6 +208,7 @@ class ProductionOrderEntity extends Entity {
       due_date: this.due_date,
       sales_order_id: this.sales_order_id,
       responsible_id: this.responsible_id,
+      department_id: this.department_id,
       notes: this.notes,
       created_by: input.created_by
     };

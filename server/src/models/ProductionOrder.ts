@@ -26,6 +26,7 @@ interface ProductionOrderAttributes {
   completion_date: string | null;
   sales_order_id: number | null;
   responsible_id: number | null;
+  department_id: number | null;
   notes: string | null;
   created_by: number | null;
   item_id?: string | null;
@@ -56,13 +57,21 @@ const ProductionOrder = sequelize.define('ProductionOrder', {
   completion_date: { type: DataTypes.DATEONLY, allowNull: true },
   sales_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → sales.id (pedido de venda associado)' },
   responsible_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → employees.id (responsável)' },
+  department_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'FK → departments.id (departamento dono da OP; opcional, usado pelo painel de TV de demandas por departamento — nullable também no histórico legado, sem backfill possível, ver migration 20260806-000003)'
+  },
   notes: { type: DataTypes.TEXT, allowNull: true },
   created_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → users.id (criador)' },
   item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (Fase 4.4 expand-contract)' }
 }, {
   tableName: 'production_orders',
   underscored: true,
-  timestamps: true
+  timestamps: true,
+  indexes: [
+    { fields: ['department_id'] }
+  ]
 });
 
 export = ProductionOrder;

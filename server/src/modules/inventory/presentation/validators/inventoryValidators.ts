@@ -69,6 +69,9 @@ export const idParamSchema = z.coerce.number().int().positive();
 // contagem inteira (cabeçalho + todos os `inventory_count_items`) é
 // escopada a um único depósito por vez. Aceita `product_ids` (legado) OU
 // `item_ids` (novo, dual-read, ver `CreateInventoryCountUseCase`).
+// `assigned_to` (migration `20260806-000001`) é OPCIONAL: quando informado,
+// atribui a contagem a um funcionário específico; ausente/`null` deixa a
+// contagem no "pool" (ver `StartInventoryCountUseCase`).
 export const createInventoryCountSchema = z.object({
   count_type: z.enum(['cycle', 'full', 'spot']).optional(),
   warehouse_id: z.coerce.number().int().positive({ message: 'Depósito (warehouse_id) é obrigatório para criar uma contagem de inventário.' }),
@@ -76,6 +79,11 @@ export const createInventoryCountSchema = z.object({
   notes: z.string().trim().max(2000).nullable().optional(),
   product_ids: z.array(z.coerce.number().int().positive()).optional(),
   item_ids: z.array(z.string().trim().min(1)).optional(),
+  assigned_to: z.coerce.number().int().positive().nullable().optional(),
+  // Opcional (painel de TV de demandas por departamento, migration
+  // 20260806-000003): quando informado, agrupa a contagem no departamento
+  // dono dela; ausente/null = "Sem departamento" no painel.
+  department_id: z.coerce.number().int().positive().nullable().optional(),
 }).strict();
 
 const schemas = {

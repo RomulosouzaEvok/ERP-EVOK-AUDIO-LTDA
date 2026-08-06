@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 const SequelizeDashboardRepository = require('../../infrastructure/sequelize/SequelizeDashboardRepository');
 const GetDashboardSummaryUseCase = require('../../application/use-cases/GetDashboardSummaryUseCase');
 const GetDashboardHandoffsUseCase = require('../../application/use-cases/GetDashboardHandoffsUseCase');
+const GetDepartmentDemandsUseCase = require('../../application/use-cases/GetDepartmentDemandsUseCase');
 
 /**
  * Controller enxuto do módulo `dashboard`. Delega toda a agregação de dados
@@ -33,6 +34,22 @@ exports.handoffs = async (req: Request, res: Response, next: NextFunction) => {
     const useCase = new GetDashboardHandoffsUseCase(dashboardRepository);
     const summary = await useCase.execute();
     res.json({ success: true, data: summary });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * `GET /api/dashboard/department-demands` — painel de TV: demandas em
+ * aberto (OPs, requisições de compra e contagens de inventário) agrupadas
+ * por departamento, para acompanhamento sem login (app Android TV,
+ * consumido em `tv/`, construído em paralelo por outro time).
+ */
+exports.departmentDemands = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const useCase = new GetDepartmentDemandsUseCase(dashboardRepository);
+    const departments = await useCase.execute();
+    res.json({ success: true, data: departments });
   } catch (error) {
     next(error);
   }

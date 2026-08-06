@@ -59,7 +59,7 @@ class InventoryCountRepository {
    * Lista contagens de estoque com filtros e paginação.
    *
    * @abstract
-   * @param {Object} [filters] - `{ status, count_type }`.
+   * @param {Object} [filters] - `{ status, count_type, assigned_to, unassigned }`.
    * @param {Object} [pagination] - `{ limit, offset }`.
    * @returns {Promise<{ rows: Object[], count: number }>}
    */

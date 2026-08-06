@@ -36,12 +36,21 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
     const where: any = {};
     if (filters.status) where.status = filters.status;
     if (filters.count_type) where.count_type = filters.count_type;
+    // `unassigned` tem prioridade sobre `assigned_to` (já resolvido assim
+    // pelo use case — nunca ambos informados juntos, mas defesa em
+    // profundidade aqui também).
+    if (filters.unassigned) {
+      where.assigned_to = null;
+    } else if (filters.assigned_to !== undefined && filters.assigned_to !== null) {
+      where.assigned_to = filters.assigned_to;
+    }
 
     return InventoryCount.findAndCountAll({
       where,
       include: [
         { model: User, as: 'createdBy', attributes: ['id', 'name'] },
-        { model: User, as: 'approvedBy', attributes: ['id', 'name'] }
+        { model: User, as: 'approvedBy', attributes: ['id', 'name'] },
+        { model: User, as: 'assignedTo', attributes: ['id', 'name'] }
       ],
       limit: pagination.limit,
       offset: pagination.offset,
@@ -55,6 +64,7 @@ class SequelizeInventoryCountRepository extends InventoryCountRepository {
       include: [
         { model: User, as: 'createdBy', attributes: ['id', 'name'] },
         { model: User, as: 'approvedBy', attributes: ['id', 'name'] },
+        { model: User, as: 'assignedTo', attributes: ['id', 'name'] },
         {
           model: InventoryCountItem,
           as: 'items',
