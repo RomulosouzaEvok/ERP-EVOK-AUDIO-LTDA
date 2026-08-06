@@ -321,7 +321,7 @@ R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de 
 - **CFO:** Risco contábil (custeio, payable), aprovação fiscal
 - **Gerente Produção:** Validação rastreabilidade, OP + apontamento
 - **Compliance:** LGPD conformidade, ateste ISO (se aplicável)
-- **Codex Agents:** `Codex --agent evok-production-remediation` ou `@evok-production-remediation` em sessão; `Codex --agent PromadorFonteEnd` ou `@PromadorFonteEnd` para tarefas de frontend; `Codex --agent AdmDBA` ou `@AdmDBA` para schema e PostgreSQL; `Codex --agent iterative-review` ou `@iterative-review` para revisões multi-agente; `Codex --agent cleanliness-review` ou `@cleanliness-review` para limpeza e polimento de código
+- **Codex Agents:** `Codex --agent evok-production-remediation` ou `@evok-production-remediation` em sessão; `Codex --agent PromadorFonteEnd` ou `@PromadorFonteEnd` para tarefas de frontend; `Codex --agent AdmDBA` ou `@AdmDBA` para modelagem/schema/PostgreSQL (MER/DER, dicionário de dados, acessos/isolamento, disaster recovery); `Codex --agent AnalistaNegocios` ou `@AnalistaNegocios` para engenharia de requisitos/BPMN/casos de uso; `Codex --agent ArquitetoSoftwareAPI` ou `@ArquitetoSoftwareAPI` para diagramas de classe/sequência e contratos de API; `Codex --agent AuditorIntegrador` ou `@AuditorIntegrador` para auditoria cruzada Requisito↔Banco↔API; `Codex --agent iterative-review` ou `@iterative-review` para revisões multi-agente; `Codex --agent cleanliness-review` ou `@cleanliness-review` para limpeza e polimento de código
 
 ---
 

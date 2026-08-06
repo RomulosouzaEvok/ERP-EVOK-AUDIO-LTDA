@@ -163,11 +163,15 @@ Dentro de uma sessao Claude Code, tambem e possivel mencionar
 | Agente | Uso |
 |---|---|
 | `programador` | Implementacao backend com documentacao, testes e handoff |
-| `AdmDBA` | PostgreSQL, migrations e integridade de schema (ciente das armadilhas: timestamps snake_case, schema dual UUID x INTEGER) |
+| `AdmDBA` | Arquitetura de dados completa: MER/DER (Mermaid), dicionario de dados, DDL, acessos/isolamento e disaster recovery, alem de migrations e integridade de schema (ciente das armadilhas: timestamps snake_case, schema dual UUID x INTEGER) |
 | `docker` | Infraestrutura conteinerizada e PostgreSQL local |
 | `auditor` / `auditor-seguranca` | Auditoria profunda de codigo/banco e varredura de seguranca |
+| `AuditorIntegrador` | Auditoria cruzada de artefatos: rastreabilidade Requisito -> Banco -> API entre os documentos de AnalistaNegocios/AdmDBA/ArquitetoSoftwareAPI |
 | `documentador` | Governanca documental e SSOT |
-| `AnalistaNegocios` | Descoberta e refinamento de requisitos: casos de uso BDD, regras de negocio e criterios de aceite em docs/business/ |
+| `AnalistaNegocios` | Engenharia de requisitos e processos: RF/RNF catalogados, casos de uso BDD, BPMN e regras de negocio em docs/business/ e docs/arquitetura/ |
+| `ArquitetoSoftwareAPI` | Diagramas de classe/sequencia (UML/Mermaid) e especificacao de endpoints REST a partir dos requisitos e do schema |
+| `PromadorFonteEnd` | Integracao de frontend com a API, logica, estado e validacao |
+| `webdesiner` | Estilizacao/UI-UX de telas ja funcionais — sempre propoe plano e para para aprovacao antes de editar |
 | `cleanliness-review` | Passe iterativo de limpeza: comentarios redundantes/narrativos, duplicacao, best-practice — protege comentarios de "why" |
 | `iterative-review` | Revisao iterativa do branch em rodadas multi-perspectiva (cega, informada, focada) ate nao restar problema genuino |
 

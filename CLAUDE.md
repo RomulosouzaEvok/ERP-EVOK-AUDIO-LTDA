@@ -359,7 +359,7 @@ R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de 
 - **CFO:** Risco contábil (custeio, payable), aprovação fiscal
 - **Gerente Produção:** Validação rastreabilidade, OP + apontamento
 - **Compliance:** LGPD conformidade, ateste ISO (se aplicável)
-- **Claude Code Agents:** `claude --agent evok-production-remediation` ou `@evok-production-remediation` em sessão; `claude --agent PromadorFonteEnd` ou `@PromadorFonteEnd` para tarefas de frontend; `claude --agent AdmDBA` ou `@AdmDBA` para schema e PostgreSQL; `claude --agent iterative-review` ou `@iterative-review` para revisões multi-agente; `claude --agent cleanliness-review` ou `@cleanliness-review` para limpeza e polimento de código
+- **Claude Code Agents:** `claude --agent evok-production-remediation` ou `@evok-production-remediation` em sessão; `claude --agent PromadorFonteEnd` ou `@PromadorFonteEnd` para tarefas de frontend; `claude --agent webdesiner` ou `@webdesiner` para estilização/UI-UX (propõe plano e para para aprovação antes de editar); `claude --agent AdmDBA` ou `@AdmDBA` para modelagem/schema/PostgreSQL (MER/DER, dicionário de dados, acessos/isolamento, disaster recovery); `claude --agent AnalistaNegocios` ou `@AnalistaNegocios` para engenharia de requisitos/BPMN/casos de uso; `claude --agent ArquitetoSoftwareAPI` ou `@ArquitetoSoftwareAPI` para diagramas de classe/sequência e contratos de API; `claude --agent AuditorIntegrador` ou `@AuditorIntegrador` para auditoria cruzada Requisito↔Banco↔API; `claude --agent iterative-review` ou `@iterative-review` para revisões multi-agente; `claude --agent cleanliness-review` ou `@cleanliness-review` para limpeza e polimento de código
 
 ---
 
