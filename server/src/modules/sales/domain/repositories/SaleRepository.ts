@@ -117,6 +117,93 @@ class SaleRepository {
   async cancelPendingReceivables(saleId: number, transaction?: Transaction): Promise<void> { // eslint-disable-line no-unused-vars
     throw new Error('SaleRepository.cancelPendingReceivables não implementado.');
   }
+
+  /**
+   * Atualiza um item de venda existente (gap 2/3, alteração de pedido).
+   *
+   * @abstract
+   * @param {number} id - Id do `SaleItem`.
+   * @param {Object} data - Campos a atualizar (`product_id`/`quantity`/`unit_price`/`total_price`).
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object|null>}
+   */
+  async updateSaleItem(id: number, data: Record<string, unknown>, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('SaleRepository.updateSaleItem não implementado.');
+  }
+
+  /**
+   * Remove um item de venda (gap 2/3, alteração de pedido) — o estoque
+   * associado já deve ter sido restaurado pelo use case antes de chamar isto.
+   *
+   * @abstract
+   * @param {number} id - Id do `SaleItem`.
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<void>}
+   */
+  async deleteSaleItem(id: number, transaction?: Transaction): Promise<void> { // eslint-disable-line no-unused-vars
+    throw new Error('SaleRepository.deleteSaleItem não implementado.');
+  }
+
+  /**
+   * Busca um cliente pelo id (usado na validação de `customer_id` da
+   * tabela de preços por cliente — gap 1/3).
+   *
+   * @abstract
+   * @param {number} id
+   * @returns {Promise<Object|null>}
+   */
+  async findClientById(id: number): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('SaleRepository.findClientById não implementado.');
+  }
+
+  /**
+   * Lista os preços cadastrados para um cliente (gap 1/3), opcionalmente
+   * filtrando por produto. Sempre inclui o produto resumido.
+   *
+   * @abstract
+   * @param {number} customerId
+   * @param {Object} [filters] - `{ product_id, active_only }`.
+   * @returns {Promise<Object[]>}
+   */
+  async listCustomerPrices(customerId: number, filters?: Record<string, unknown>): Promise<any[]> { // eslint-disable-line no-unused-vars
+    throw new Error('SaleRepository.listCustomerPrices não implementado.');
+  }
+
+  /**
+   * Busca um preço de cliente pelo id.
+   *
+   * @abstract
+   * @param {number} id
+   * @returns {Promise<Object|null>}
+   */
+  async findCustomerPriceById(id: number): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('SaleRepository.findCustomerPriceById não implementado.');
+  }
+
+  /**
+   * Lista preços ativos do mesmo par cliente×produto (usado para detectar
+   * sobreposição de vigência antes de criar/atualizar um preço).
+   *
+   * @abstract
+   * @param {number} customerId
+   * @param {number} productId
+   * @param {number} [excludeId] - Id a excluir da checagem (uso em update).
+   * @returns {Promise<Object[]>}
+   */
+  async listActiveCustomerPricesForProduct(customerId: number, productId: number, excludeId?: number): Promise<any[]> { // eslint-disable-line no-unused-vars
+    throw new Error('SaleRepository.listActiveCustomerPricesForProduct não implementado.');
+  }
+
+  /**
+   * Cria um preço de cliente.
+   *
+   * @abstract
+   * @param {Object} data
+   * @returns {Promise<Object>}
+   */
+  async createCustomerPrice(data: Record<string, unknown>): Promise<any> { // eslint-disable-line no-unused-vars
+    throw new Error('SaleRepository.createCustomerPrice não implementado.');
+  }
 }
 
 module.exports = SaleRepository;

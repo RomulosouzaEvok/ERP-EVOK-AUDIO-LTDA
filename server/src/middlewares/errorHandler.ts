@@ -11,6 +11,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 
+import logger from '../config/logger';
+
 // Importação híbrida para compatibilidade CommonJS
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { AppError } = require('../errors/index');
@@ -37,8 +39,7 @@ interface ExtendedError extends Error {
 const errorHandler = (err: ExtendedError, req: Request, res: Response, _next: NextFunction): Response | void => {
   // Log interno (nunca exposto ao cliente)
   if (process.env.NODE_ENV !== 'test' || process.env.DEBUG_ERRORS === 'true') {
-    console.error(`[${new Date().toISOString()}] ERROR:`, err.message);
-    console.error(err.stack);
+    logger.error(err.message, { stack: err.stack, requestId: req.requestId, path: req.originalUrl });
   }
 
   // 1. Erros operacionais padronizados (AppError e subclasses)

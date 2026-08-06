@@ -9,6 +9,7 @@ const { logAction }: any = require('../../../../services/auditLogService');
 import SequelizeAuthRepository = require('../../infrastructure/sequelize/SequelizeAuthRepository');
 import TokenService = require('../../infrastructure/jwt/TokenService');
 import LoginUseCase = require('../../application/use-cases/LoginUseCase');
+import RefreshTokenUseCase = require('../../application/use-cases/RefreshTokenUseCase');
 import RegisterUserUseCase = require('../../application/use-cases/RegisterUserUseCase');
 import GetMeUseCase = require('../../application/use-cases/GetMeUseCase');
 import GetMyPermissionsUseCase = require('../../application/use-cases/GetMyPermissionsUseCase');
@@ -41,6 +42,36 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
     if (error.audit) {
       logAction(req, error.audit);
     }
+    next(error);
+  }
+}
+
+/**
+ * `POST /api/auth/refresh` — renovação deslizante do token JWT (Bloco
+ * "painel de TV sempre ligado"). Rota protegida por `authenticate`: exige um
+ * token AINDA válido no header `Authorization: Bearer <token>` e devolve um
+ * token novo com TTL renovado, preservando `id` e `passwordVersion` (a
+ * invalidação por troca de senha — SEC-10 — continua valendo: se a senha
+ * mudou depois da emissão do token atual, `authenticate` já bloqueia com 401
+ * antes deste handler rodar). Não existe refresh-token separado nesta v1 —
+ * token expirado sempre recebe 401 normal (o cliente deve refazer login).
+ *
+ * Contrato de resposta (não alterar sem avisar os apps que integram, ex.
+ * `tv/`): `{ success: true, data: { token: string } }`.
+ *
+ * @param req - Request (autenticado; usa `req.user.id` e `req.user.passwordVersion`).
+ * @param res - Response.
+ * @param next - Next.
+ * @returns Promise<void>.
+ */
+export async function refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = (req as any).user;
+    const useCase = new RefreshTokenUseCase(tokenService);
+    const { token } = await useCase.execute({ userId: user.id, passwordVersion: user.passwordVersion });
+
+    res.json({ success: true, data: { token } });
+  } catch (error) {
     next(error);
   }
 }

@@ -33,6 +33,13 @@ export interface Item {
    * `server/src/modules/mrp/application/use-cases/GenerateMrpPlanUseCase.ts`.
    */
   conversao_automatica?: boolean;
+  /**
+   * Fornecedor padrão do item (FK `suppliers.id`, INTEGER — corrigido de
+   * `uuid` em 2026-08-06, ver `itemValidators.ts`). Usado pelo MRP para
+   * sugerir o fornecedor na requisição de compra automática. `null`/ausente
+   * = sem fornecedor padrão definido.
+   */
+  fornecedor_padrao_id?: number | null;
 }
 
 export interface ItemListParams {
@@ -86,12 +93,15 @@ export interface UpdateItemInput {
   lead_time_dias?: number;
   custo_padrao?: number;
   conversao_automatica?: boolean;
+  /** Fornecedor padrão do item (FK `suppliers.id`). `null` limpa a seleção. */
+  fornecedor_padrao_id?: number | null;
 }
 
 /**
  * `PATCH /api/items/:id` — atualização parcial de um item mestre. Usado
  * hoje para o toggle de `conversao_automatica` (opt-in de compra sem
- * revisão humana no MRP).
+ * revisão humana no MRP) e para o fornecedor padrão (sugestão do MRP na
+ * requisição automática).
  */
 export async function updateItem(id: string, input: UpdateItemInput) {
   const { data } = await httpClient.patch<ItemResponse<Item>>(`/api/items/${id}`, input);

@@ -8,7 +8,7 @@ const CancelSaleNfeUseCase = require('../../application/use-cases/CancelSaleNfeU
 const RegisterIncomingNfeUseCase = require('../../application/use-cases/RegisterIncomingNfeUseCase');
 const GetCompanyFiscalConfigUseCase = require('../../application/use-cases/GetCompanyFiscalConfigUseCase');
 const UpsertCompanyFiscalConfigUseCase = require('../../application/use-cases/UpsertCompanyFiscalConfigUseCase');
-const { cancelNfeSchema, registerIncomingNfeSchema, upsertCompanyFiscalConfigSchema, handleZodError } = require('../validators/fiscalValidators');
+const { cancelNfeSchema, issueSaleNfeSchema, registerIncomingNfeSchema, upsertCompanyFiscalConfigSchema, handleZodError } = require('../validators/fiscalValidators');
 
 /**
  * Controller do módulo `fiscal`. Endpoints de NF-e ficam expostos sob os
@@ -18,11 +18,20 @@ const { cancelNfeSchema, registerIncomingNfeSchema, upsertCompanyFiscalConfigSch
  */
 const fiscalRepository = new SequelizeFiscalRepository();
 
-/** `POST /api/sales/:id/nfe` — emite a NF-e da venda. */
+/**
+ * `POST /api/sales/:id/nfe` — emite a NF-e da venda (total ou parcial).
+ *
+ * Faturamento parcial (gap 3/3 do módulo `sales`): aceita payload opcional
+ * `{ items: [{ sale_item_id, quantity }] }`; omitido/vazio preserva o
+ * comportamento anterior (fatura o saldo pendente inteiro).
+ */
 exports.issueSaleNfe = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const parsed = issueSaleNfeSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return handleZodError(parsed.error);
+
     const useCase = new IssueSaleNfeUseCase(fiscalRepository);
-    const sale = await useCase.execute({ saleId: req.params.id });
+    const sale = await useCase.execute({ saleId: req.params.id, items: parsed.data.items });
 
     logAction(req, {
       action: 'status_change',

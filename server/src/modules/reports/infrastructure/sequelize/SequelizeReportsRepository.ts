@@ -11,6 +11,7 @@ import type {
   PurchasePriceVarianceRow,
   OeeWorkCenterRow,
   OeeAggregateRow,
+  OeeDowntimeRow,
 } from '../../domain/reportTypes';
 
 const { Op, QueryTypes } = require('sequelize');
@@ -371,6 +372,47 @@ class SequelizeReportsRepository extends ReportsRepository {
           AND prs.work_center_id IS NOT NULL
           ${workCenterFilter}
         GROUP BY prs.work_center_id`,
+      { replacements: { start, end, workCenterId: workCenterId ?? null }, type: QueryTypes.SELECT }
+    );
+  }
+
+  /**
+   * Horas de parada (`production_downtimes`) por centro de trabalho x
+   * motivo, sobrepostas ao período `[start, end]` — base do desconto de
+   * disponibilidade do OEE (`GetOeeReportUseCase`).
+   *
+   * Uma parada entra no cálculo se `started_at <= end` e
+   * (`finished_at IS NULL` ou `finished_at >= start`) — overlap clássico de
+   * intervalos. As horas contadas são só a fração da parada dentro do
+   * período: `effective_start = GREATEST(started_at, start)`,
+   * `effective_end = LEAST(COALESCE(finished_at, LEAST(NOW(), end)), end)`
+   * — uma parada em aberto (`finished_at IS NULL`) conta até `NOW()` (ou até
+   * `end`, se `end` já passou), nunca além do fim do período.
+   *
+   * @param start - Início do período.
+   * @param end - Fim do período.
+   * @param workCenterId - Filtra um único centro, quando informado.
+   * @returns Linhas agregadas por `(work_center_id, reason)`.
+   */
+  async findDowntimeHoursByWorkCenter(start: Date, end: Date, workCenterId?: number): Promise<OeeDowntimeRow[]> {
+    const workCenterFilter = workCenterId ? 'AND work_center_id = :workCenterId' : '';
+    return sequelize.query(
+      `SELECT work_center_id AS work_center_id,
+              reason         AS reason,
+              COALESCE(SUM(
+                GREATEST(
+                  EXTRACT(EPOCH FROM (
+                    LEAST(COALESCE(finished_at, LEAST(NOW(), :end)), :end)
+                    - GREATEST(started_at, :start)
+                  )) / 3600.0,
+                  0
+                )
+              ), 0)::float AS hours
+         FROM production_downtimes
+        WHERE started_at <= :end
+          AND (finished_at IS NULL OR finished_at >= :start)
+          ${workCenterFilter}
+        GROUP BY work_center_id, reason`,
       { replacements: { start, end, workCenterId: workCenterId ?? null }, type: QueryTypes.SELECT }
     );
   }

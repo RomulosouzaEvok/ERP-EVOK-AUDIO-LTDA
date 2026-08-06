@@ -1,15 +1,42 @@
 /**
- * Emite a NF-e de uma venda confirmada.
+ * Emite a NF-e de uma venda confirmada — total ou parcial.
  *
  * Fluxo (evita segurar lock de banco durante a chamada HTTP externa ao
  * provedor de NF-e):
- *   1. Transação curta: trava a venda, valida estado, reserva
- *      série/número sequencial em `CompanyFiscalConfig` (lock pessimista),
- *      calcula e persiste os tributos de cada item, marca
- *      `nfe_status = 'processing'`.
+ *   1. Transação curta: trava a venda, valida estado, resolve quais itens/
+ *      quantidades entram nesta NF-e (total ou parcial — ver `items` no
+ *      input), reserva série/número sequencial em `CompanyFiscalConfig`
+ *      (lock pessimista), calcula e persiste os tributos de cada item
+ *      (sobre a quantidade desta emissão), marca `nfe_status =
+ *      'processing'`.
  *   2. Fora de transação: monta o payload e chama o provedor configurado.
  *   3. Transação curta: grava o resultado (autorizada/negada/processando)
- *      na venda; se autorizada, transiciona `status: confirmed -> invoiced`.
+ *      na venda; se autorizada, incrementa `invoiced_quantity` de cada
+ *      item envolvido e transiciona `sale.status` conforme o saldo
+ *      pendente total (`confirmed`/`partially_invoiced` -> `invoiced`
+ *      quando não sobra saldo, ou -> `partially_invoiced` quando ainda
+ *      resta saldo em algum item).
+ *
+ * FATURAMENTO PARCIAL (gap 3/3 do módulo `sales` —
+ * `docs/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`): quando o chamador
+ * informa `items: [{ sale_item_id, quantity }]`, só essas quantidades
+ * (limitadas ao saldo pendente de cada item) entram nesta NF-e; quando
+ * omitido, preserva o comportamento anterior (fatura o saldo pendente
+ * inteiro de todos os itens — que na primeira emissão é a quantidade cheia
+ * da venda).
+ *
+ * LIMITAÇÃO CONHECIDA (residual, documentada no handoff): os campos
+ * `nfe_*` ficam em `Sale` (uma única NF-e "atual" por venda) e os campos
+ * fiscais (CST/alíquotas/valores) ficam em `SaleItem` (uma linha por
+ * produto). Múltiplas emissões parciais para a mesma venda sobrescrevem
+ * esses campos a cada chamada — o histórico completo de cada NF-e parcial
+ * (chave, protocolo, XML/DANFE de cada emissão) NÃO é preservado
+ * individualmente; apenas a última emissão fica visível em `Sale`, e
+ * `SaleItem.invoiced_quantity` é o único registro cumulativo confiável do
+ * saldo faturado. Uma tabela dedicada `sale_invoices`/`sale_invoice_items`
+ * seria necessária para um histórico completo por emissão — fora do
+ * escopo desta entrega (embarque parcial também está fora do escopo, por
+ * decisão explícita da tarefa).
  *
  * @module modules/fiscal/application/use-cases/IssueSaleNfeUseCase
  */
@@ -19,12 +46,18 @@ import type FiscalRepository = require('../../domain/repositories/FiscalReposito
 
 const UseCase = require('../../../../shared/application/UseCase');
 const { sequelize } = require('../../../../config/database');
-const { NotFoundError, BusinessRuleError, ConflictError } = require('../../../../errors');
+const { NotFoundError, BusinessRuleError, ConflictError, ValidationError } = require('../../../../errors');
 const TaxCalculationService = require('../../domain/services/TaxCalculationService');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
 
+interface IssueSaleNfeItemInput {
+  sale_item_id: number;
+  quantity: number;
+}
+
 interface IssueSaleNfeInput {
   saleId: number | string;
+  items?: IssueSaleNfeItemInput[];
 }
 
 class IssueSaleNfeUseCase extends UseCase {
@@ -39,25 +72,65 @@ class IssueSaleNfeUseCase extends UseCase {
   /**
    * @param {Object} input
    * @param {number} input.saleId
+   * @param {Array<{sale_item_id:number, quantity:number}>} [input.items] - Faturamento parcial: quando informado, fatura apenas estas quantidades (limitadas ao saldo pendente de cada item); quando omitido, fatura o saldo pendente inteiro de todos os itens.
    * @returns {Promise<Object>} A venda atualizada com o resultado da emissão.
+   * @throws {BusinessRuleError} Se o status da venda não permitir faturamento, se não houver saldo pendente para faturar, ou se alguma quantidade solicitada exceder o saldo pendente do item.
    */
-  async execute({ saleId }: IssueSaleNfeInput) {
+  async execute({ saleId, items: requestedItems }: IssueSaleNfeInput) {
     const reserved = await sequelize.transaction(async (transaction: Transaction) => {
       const sale = await this.fiscalRepository.findSaleById(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!sale) throw new NotFoundError('Venda não encontrada');
 
-      if (sale.status !== 'confirmed') {
-        throw new BusinessRuleError(`Apenas vendas 'confirmed' podem ser faturadas. Status atual: '${sale.status}'.`);
+      // Faturamento parcial (gap 3/3): uma venda 'partially_invoiced' ainda
+      // tem saldo pendente e pode receber novas emissões, além da
+      // 'confirmed' original (primeira emissão, total ou parcial).
+      if (sale.status !== 'confirmed' && sale.status !== 'partially_invoiced') {
+        throw new BusinessRuleError(`Apenas vendas 'confirmed' ou 'partially_invoiced' podem ser faturadas. Status atual: '${sale.status}'.`);
       }
       if (sale.nfe_status === 'processing') {
         throw new ConflictError('Já existe uma emissão de NF-e em andamento para esta venda.');
       }
-      if (sale.nfe_status === 'authorized') {
-        throw new ConflictError('Esta venda já possui uma NF-e autorizada.');
+
+      const allItems = await this.fiscalRepository.findSaleItemsBySaleId(saleId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (allItems.length === 0) throw new BusinessRuleError('Venda sem itens não pode ser faturada.');
+
+      const allItemsById = new Map<number, any>(allItems.map((item: any) => [item.id, item]));
+      const remaining = (item: any) => parseFloat(item.quantity) - parseFloat(item.invoiced_quantity || 0);
+
+      // Resolve a quantidade a faturar de cada item nesta emissão: payload
+      // explícito (parcial) ou saldo pendente inteiro de todo item que
+      // ainda tenha saldo (comportamento anterior, preservado).
+      const qtyToInvoiceByItemId = new Map<number, number>();
+      if (requestedItems && requestedItems.length > 0) {
+        for (const requested of requestedItems) {
+          const item = allItemsById.get(requested.sale_item_id);
+          if (!item) throw new NotFoundError(`Item #${requested.sale_item_id} não pertence a esta venda.`);
+
+          const qty = parseFloat(String(requested.quantity));
+          if (!Number.isFinite(qty) || qty <= 0) {
+            throw new ValidationError(`Quantidade a faturar do item #${requested.sale_item_id} deve ser maior que zero.`);
+          }
+          const itemRemaining = remaining(item);
+          if (qty > itemRemaining + 1e-9) {
+            throw new BusinessRuleError(
+              `Quantidade a faturar (${qty}) do item #${requested.sale_item_id} excede o saldo pendente (${itemRemaining}).`,
+              { sale_item_id: requested.sale_item_id, requested: qty, remaining: itemRemaining }
+            );
+          }
+          qtyToInvoiceByItemId.set(item.id, qty);
+        }
+      } else {
+        for (const item of allItems) {
+          const itemRemaining = remaining(item);
+          if (itemRemaining > 1e-9) qtyToInvoiceByItemId.set(item.id, itemRemaining);
+        }
       }
 
-      const items = await this.fiscalRepository.findSaleItemsBySaleId(saleId, { transaction, lock: transaction.LOCK.UPDATE });
-      if (items.length === 0) throw new BusinessRuleError('Venda sem itens não pode ser faturada.');
+      if (qtyToInvoiceByItemId.size === 0) {
+        throw new BusinessRuleError('Não há saldo pendente para faturar nesta venda.');
+      }
+
+      const items = allItems.filter((item: any) => qtyToInvoiceByItemId.has(item.id));
 
       const client = await this.fiscalRepository.findClientById(sale.customer_id, { transaction });
       if (!client) throw new NotFoundError('Cliente da venda não encontrado.');
@@ -79,9 +152,19 @@ class IssueSaleNfeUseCase extends UseCase {
       const productById = new Map<number, any>(products.map((p: any) => [p.id, p]));
 
       const itemsForProvider = [];
+      let totalAmount = 0;
       for (const item of items) {
         const product = productById.get(item.product_id);
         if (!product) throw new NotFoundError(`Produto #${item.product_id} do item da venda não encontrado.`);
+
+        // Quantidade/valor desta emissão (pode ser parcial) — NÃO a
+        // quantidade total do item, para o cálculo tributário e o payload
+        // do provedor refletirem exatamente o que está sendo faturado
+        // agora (ver LIMITAÇÃO CONHECIDA no JSDoc da classe).
+        const invoiceQty = qtyToInvoiceByItemId.get(item.id)!;
+        const unitPrice = parseFloat(item.unit_price);
+        const invoiceTotal = Math.round(invoiceQty * unitPrice * 100) / 100;
+        totalAmount += invoiceTotal;
 
         const tax = TaxCalculationService.calculateItem(
           { state: config.state, crt: config.crt },
@@ -89,9 +172,9 @@ class IssueSaleNfeUseCase extends UseCase {
           {
             product_type: product.product_type,
             ncm: product.ncm,
-            quantity: parseFloat(item.quantity),
-            unit_price: parseFloat(item.unit_price),
-            total_price: parseFloat(item.total_price),
+            quantity: invoiceQty,
+            unit_price: unitPrice,
+            total_price: invoiceTotal,
           }
         );
 
@@ -103,9 +186,9 @@ class IssueSaleNfeUseCase extends UseCase {
           description: product.name,
           ncm: product.ncm,
           unit: product.unit,
-          quantity: parseFloat(item.quantity),
-          unit_price: parseFloat(item.unit_price),
-          total_price: parseFloat(item.total_price),
+          quantity: invoiceQty,
+          unit_price: unitPrice,
+          total_price: invoiceTotal,
           ...tax,
         });
       }
@@ -128,7 +211,11 @@ class IssueSaleNfeUseCase extends UseCase {
         company: config,
         client,
         items: itemsForProvider,
-        totalAmount: parseFloat(sale.total_amount),
+        totalAmount,
+        // Repassado à transação final (fora deste closure) para
+        // incrementar SaleItem.invoiced_quantity e recalcular o status da
+        // venda apenas com base no que foi de fato autorizado.
+        qtyToInvoiceByItemId,
       };
     });
 
@@ -199,8 +286,25 @@ class IssueSaleNfeUseCase extends UseCase {
 
       if (result.status === 'authorized') {
         sale.nfe_issued_at = new Date();
-        if (sale.status === 'confirmed') {
-          sale.status = 'invoiced';
+
+        // Faturamento parcial (gap 3/3): incrementa invoiced_quantity de
+        // cada item envolvido nesta emissão e recalcula o status da venda
+        // com base no saldo pendente TOTAL (não apenas nesta emissão).
+        const allItems = await this.fiscalRepository.findSaleItemsBySaleId(saleId, { transaction, lock: transaction.LOCK.UPDATE });
+        let anyRemaining = false;
+        for (const item of allItems) {
+          const invoiceQty = reserved.qtyToInvoiceByItemId.get(item.id);
+          if (invoiceQty) {
+            item.invoiced_quantity = parseFloat(item.invoiced_quantity || 0) + invoiceQty;
+            await item.save({ transaction });
+          }
+          if (parseFloat(item.quantity) - parseFloat(item.invoiced_quantity || 0) > 1e-9) {
+            anyRemaining = true;
+          }
+        }
+
+        if (sale.status === 'confirmed' || sale.status === 'partially_invoiced') {
+          sale.status = anyRemaining ? 'partially_invoiced' : 'invoiced';
         }
       }
 

@@ -20,6 +20,7 @@ import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
 import { CostCentersTab } from './CostCentersTab';
 import { DailyCashFlowProjectionTab } from './DailyCashFlowProjectionTab';
+import { ReconciliationTab } from './ReconciliationTab';
 
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'destructive' | 'secondary' | 'warning'> = {
   pending: 'secondary',
@@ -63,7 +64,7 @@ const payableSchema = z.object({
 
 type PayableFormData = z.infer<typeof payableSchema>;
 
-type FinancialView = 'accounts' | 'cost-centers' | 'cash-flow-daily';
+type FinancialView = 'accounts' | 'cost-centers' | 'cash-flow-daily' | 'reconciliation';
 
 /** `FE5`: contas a pagar/receber, centros de custo e projeção de fluxo de caixa. */
 export default function FinancialPage() {
@@ -114,10 +115,20 @@ export default function FinancialPage() {
         >
           Projeção de caixa
         </button>
+        <button
+          type="button"
+          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            view === 'reconciliation' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setView('reconciliation')}
+        >
+          Conciliação
+        </button>
       </div>
 
       {view === 'cost-centers' && <CostCentersTab />}
       {view === 'cash-flow-daily' && <DailyCashFlowProjectionTab />}
+      {view === 'reconciliation' && <ReconciliationTab />}
       {view === 'accounts' && <AccountsTab canWrite={canWrite} />}
     </div>
   );

@@ -69,6 +69,17 @@ class GetSaleNfeStatusUseCase extends UseCase {
 
       if (result.status === 'authorized') {
         locked.nfe_issued_at = locked.nfe_issued_at || new Date();
+        // LIMITAÇÃO CONHECIDA (faturamento parcial, gap 3/3 do módulo
+        // `sales`): esta reconciliação assíncrona (provedor real,
+        // FocusNfe/ENotas) não tem acesso às quantidades da emissão em
+        // andamento, então não incrementa `SaleItem.invoiced_quantity` nem
+        // sabe diferenciar `invoiced` de `partially_invoiced` aqui — apenas
+        // finaliza o status quando a venda nasceu 'confirmed' (fluxo de
+        // faturamento total, único caminho hoje coberto pelo provedor mock
+        // usado em testes, que autoriza sincronamente dentro de
+        // `IssueSaleNfeUseCase`). Emissões parciais via provedor
+        // assíncrono ficariam com `nfe_status` desatualizado até uma nova
+        // consulta manual; residual documentado no handoff.
         if (locked.status === 'confirmed') {
           locked.status = 'invoiced';
         }

@@ -1,7 +1,7 @@
 import type { Transaction } from 'sequelize';
 
 const { Op } = require('sequelize');
-const { Sale, SaleItem, Product, Client, AccountReceivable } = require('../../../../models/index');
+const { Sale, SaleItem, Product, Client, AccountReceivable, CustomerPriceList } = require('../../../../models/index');
 const SaleRepository = require('../../domain/repositories/SaleRepository');
 
 /**
@@ -162,6 +162,86 @@ class SequelizeSaleRepository extends SaleRepository {
       where: { sale_id: saleId, status: { [Op.notIn]: ['paid', 'canceled'] } },
       transaction
     });
+  }
+
+  /**
+   * @param {number} id
+   * @param {Object} data
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object|null>}
+   */
+  async updateSaleItem(id: number, data: Record<string, unknown>, transaction?: Transaction) {
+    const item = await SaleItem.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+    if (!item) return null;
+    Object.assign(item, data);
+    await item.save({ transaction });
+    return item;
+  }
+
+  /**
+   * @param {number} id
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<void>}
+   */
+  async deleteSaleItem(id: number, transaction?: Transaction) {
+    await SaleItem.destroy({ where: { id }, transaction });
+  }
+
+  /**
+   * @param {number} id
+   * @returns {Promise<Object|null>}
+   */
+  async findClientById(id: number) {
+    return Client.findByPk(id);
+  }
+
+  /**
+   * @param {number} customerId
+   * @param {Object} [filters]
+   * @param {number} [filters.product_id]
+   * @param {boolean} [filters.active_only]
+   * @returns {Promise<Object[]>}
+   */
+  async listCustomerPrices(customerId: number, { product_id, active_only }: any = {}) {
+    const where: any = { customer_id: customerId };
+    if (product_id) where.product_id = product_id;
+    if (active_only) where.active = true;
+
+    return CustomerPriceList.findAll({
+      where,
+      include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }],
+      order: [['createdAt', 'DESC']]
+    });
+  }
+
+  /**
+   * @param {number} id
+   * @returns {Promise<Object|null>}
+   */
+  async findCustomerPriceById(id: number) {
+    return CustomerPriceList.findByPk(id, {
+      include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }]
+    });
+  }
+
+  /**
+   * @param {number} customerId
+   * @param {number} productId
+   * @param {number} [excludeId]
+   * @returns {Promise<Object[]>}
+   */
+  async listActiveCustomerPricesForProduct(customerId: number, productId: number, excludeId?: number) {
+    const where: any = { customer_id: customerId, product_id: productId, active: true };
+    if (excludeId) where.id = { [Op.ne]: excludeId };
+    return CustomerPriceList.findAll({ where });
+  }
+
+  /**
+   * @param {Object} data
+   * @returns {Promise<Object>}
+   */
+  async createCustomerPrice(data: Record<string, unknown>) {
+    return CustomerPriceList.create(data);
   }
 }
 

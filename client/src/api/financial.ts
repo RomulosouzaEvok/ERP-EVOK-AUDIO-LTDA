@@ -220,3 +220,112 @@ export async function getDailyCashFlowProjection(params: { days: 30 | 60 | 90; o
   });
   return data.data;
 }
+
+// ============================================
+// Conciliação Bancária v1 (importação OFX)
+// ============================================
+
+export type BankStatementEntryStatus = 'pending' | 'matched' | 'ignored';
+
+export interface BankStatement {
+  id: number;
+  filename: string;
+  bank_name: string | null;
+  account_number: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  imported_by: number;
+  createdAt?: string;
+}
+
+export interface BankStatementEntry {
+  id: number;
+  statement_id: number;
+  entry_date: string;
+  amount: string;
+  description: string | null;
+  fitid: string;
+  status: BankStatementEntryStatus;
+  matched_payable_id: number | null;
+  matched_receivable_id: number | null;
+  matched_by: number | null;
+  matched_at: string | null;
+}
+
+export interface ImportStatementResult {
+  statement: BankStatement;
+  entries_created: number;
+  duplicates_skipped: number;
+  total_in_file: number;
+}
+
+/** `POST /api/finance/reconciliation/statements` — envia o arquivo .ofx (multipart, campo `file`). */
+export async function importBankStatement(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  // Content-Type explicitamente indefinido: deixa o navegador computar o
+  // boundary do multipart automaticamente (mesmo padrão de `uploadAssetPhoto`).
+  const { data } = await httpClient.post<ItemResponse<ImportStatementResult>>('/api/finance/reconciliation/statements', formData, {
+    headers: { 'Content-Type': undefined },
+  });
+  return data.data;
+}
+
+/** `GET /api/finance/reconciliation/statements`. */
+export async function listBankStatements(params: { page?: number; limit?: number } = {}) {
+  const { data } = await httpClient.get<ListResponse<BankStatement>>('/api/finance/reconciliation/statements', { params });
+  return data;
+}
+
+/** `GET /api/finance/reconciliation/statements/:id/entries?status=`. */
+export async function listBankStatementEntries(statementId: number, status?: BankStatementEntryStatus) {
+  const { data } = await httpClient.get<ItemResponse<BankStatementEntry[]>>(
+    `/api/finance/reconciliation/statements/${statementId}/entries`,
+    { params: status ? { status } : undefined },
+  );
+  return data.data;
+}
+
+export interface MatchSuggestionCandidate {
+  type: 'payable' | 'receivable';
+  id: number;
+  description: string | null;
+  due_date: string;
+  remaining_amount: number;
+  date_diff_days: number;
+  amount_diff_cents: number;
+}
+
+export interface MatchSuggestionGroup {
+  entry: BankStatementEntry;
+  suggestions: MatchSuggestionCandidate[];
+}
+
+/** `GET /api/finance/reconciliation/statements/:id/suggestions`. */
+export async function getReconciliationSuggestions(statementId: number) {
+  const { data } = await httpClient.get<ItemResponse<MatchSuggestionGroup[]>>(
+    `/api/finance/reconciliation/statements/${statementId}/suggestions`,
+  );
+  return data.data;
+}
+
+/** `POST /api/finance/reconciliation/entries/:id/match` — XOR entre `payableId`/`receivableId`. */
+export async function matchBankStatementEntry(entryId: number, target: { payableId?: number; receivableId?: number }) {
+  const { data } = await httpClient.post<ItemResponse<{ entry: BankStatementEntry }>>(
+    `/api/finance/reconciliation/entries/${entryId}/match`,
+    { payable_id: target.payableId, receivable_id: target.receivableId },
+  );
+  return data.data;
+}
+
+/** `POST /api/finance/reconciliation/entries/:id/ignore`. */
+export async function ignoreBankStatementEntry(entryId: number) {
+  const { data } = await httpClient.post<ItemResponse<BankStatementEntry>>(`/api/finance/reconciliation/entries/${entryId}/ignore`);
+  return data.data;
+}
+
+/** `POST /api/finance/reconciliation/entries/:id/unmatch`. */
+export async function unmatchBankStatementEntry(entryId: number) {
+  const { data } = await httpClient.post<ItemResponse<BankStatementEntry>>(`/api/finance/reconciliation/entries/${entryId}/unmatch`);
+  return data.data;
+}

@@ -289,3 +289,16 @@ export async function rejectInventoryCount(id: number, reason?: string) {
   const { data } = await httpClient.post<ItemResponse<InventoryCount>>(`/api/inventory-counts/${id}/reject`, { reason });
   return data.data;
 }
+
+/**
+ * `PUT /api/inventory-counts/:id/reassign` — reatribui a contagem a outro
+ * funcionário ou devolve ao "pool" (`assigned_to: null`). Ação de gestor
+ * (`authorizeModule('contagens', 'approve')` no backend), permitida apenas
+ * em contagens `draft`/`counting` (422 didático nos demais status).
+ */
+export async function reassignInventoryCount(id: number, assignedTo: number | null) {
+  const { data } = await httpClient.put<ItemResponse<InventoryCount>>(`/api/inventory-counts/${id}/reassign`, {
+    assigned_to: assignedTo,
+  });
+  return data.data;
+}

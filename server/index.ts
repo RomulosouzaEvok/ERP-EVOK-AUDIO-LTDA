@@ -6,6 +6,7 @@ import type { Server } from 'http';
 
 import app from './app';
 import connectDB from './config/db';
+import logger from './src/config/logger';
 import { sequelize } from './src/config/database';
 import { loadRuntimeEnv } from './src/config/runtimeEnv';
 import { setShuttingDown } from './src/config/runtimeState';
@@ -20,10 +21,10 @@ async function shutdown(signal: string): Promise<void> {
 
   shuttingDown = true;
   setShuttingDown(true);
-  console.log(`Sinal ${signal} recebido. Iniciando shutdown gracioso.`);
+  logger.info(`Sinal ${signal} recebido. Iniciando shutdown gracioso.`);
 
   const forcedExit = setTimeout(() => {
-    console.error('Shutdown excedeu 15s. Encerrando processo forcadamente.');
+    logger.error('Shutdown excedeu 15s. Encerrando processo forcadamente.');
     process.exit(1);
   }, 15000);
 
@@ -42,12 +43,12 @@ async function shutdown(signal: string): Promise<void> {
 
     await sequelize.close();
     clearTimeout(forcedExit);
-    console.log('Shutdown concluido com sucesso.');
+    logger.info('Shutdown concluido com sucesso.');
     process.exit(0);
   } catch (error: unknown) {
     clearTimeout(forcedExit);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error(`Falha no shutdown: ${message}`);
+    logger.error(`Falha no shutdown: ${message}`);
     process.exit(1);
   }
 }
@@ -59,9 +60,9 @@ const start = async () => {
     await connectDB();
 
     server = app.listen(runtimeEnv.port, () => {
-      console.log(`Servidor rodando na porta ${runtimeEnv.port}`);
-      console.log(`Ambiente: ${runtimeEnv.nodeEnv}`);
-      console.log('Banco: PostgreSQL via Sequelize');
+      logger.info(`Servidor rodando na porta ${runtimeEnv.port}`);
+      logger.info(`Ambiente: ${runtimeEnv.nodeEnv}`);
+      logger.info('Banco: PostgreSQL via Sequelize');
     });
 
     process.on('SIGTERM', () => {
@@ -73,7 +74,7 @@ const start = async () => {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error(`Falha ao iniciar o servidor: ${message}`);
+    logger.error(`Falha ao iniciar o servidor: ${message}`);
     process.exit(1);
   }
 };

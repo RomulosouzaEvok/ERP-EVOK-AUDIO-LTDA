@@ -7,6 +7,19 @@ export const cancelNfeSchema = z.object({
   reason: z.string().trim().min(15, 'Justificativa deve ter ao menos 15 caracteres.'),
 }).strict();
 
+// Faturamento parcial (gap 3/3 do módulo `sales`, dono real deste fluxo —
+// ver `IssueSaleNfeUseCase`): payload opcional de `POST /api/sales/:id/nfe`.
+// Omitido/vazio = fatura o saldo pendente inteiro de todos os itens
+// (comportamento anterior, preservado).
+const issueSaleNfeItemSchema = z.object({
+  sale_item_id: z.coerce.number().int().positive(),
+  quantity: z.coerce.number().positive(),
+}).strict();
+
+export const issueSaleNfeSchema = z.object({
+  items: z.array(issueSaleNfeItemSchema).min(1).optional(),
+}).strict();
+
 export const registerIncomingNfeSchema = z.object({
   nfe_key: z.string().trim().min(1, 'Chave de acesso é obrigatória.'),
   invoice_number: z.string().trim().max(50).optional(),
@@ -35,7 +48,7 @@ export const upsertCompanyFiscalConfigSchema = z.object({
   nfe_provider: z.enum(['mock', 'focus_nfe', 'enotas']).optional(),
 }).strict();
 
-const schemas = { cancelNfeSchema, registerIncomingNfeSchema, upsertCompanyFiscalConfigSchema };
+const schemas = { cancelNfeSchema, issueSaleNfeSchema, registerIncomingNfeSchema, upsertCompanyFiscalConfigSchema };
 
 module.exports = schemas;
 module.exports.handleZodError = (error: any) => {

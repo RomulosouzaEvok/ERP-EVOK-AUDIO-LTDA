@@ -4,6 +4,12 @@
  * @module models/SaleItem
  *
  * Itens que compõem uma venda, com produto, quantidade e preços.
+ *
+ * `invoiced_quantity` (faturamento parcial, gap 3/3 do módulo `sales`):
+ * quanto desta linha já foi incluído em alguma NF-e autorizada,
+ * cumulativo entre múltiplas emissões parciais
+ * (`server/src/modules/fiscal/application/use-cases/IssueSaleNfeUseCase.ts`).
+ * `quantity - invoiced_quantity` = saldo pendente de faturamento.
  */
 
 import { DataTypes } from 'sequelize';
@@ -17,6 +23,7 @@ interface SaleItemAttributes {
   quantity: number;
   unit_price: number;
   total_price: number;
+  invoiced_quantity: number;
   cfop: string | null;
   icms_cst: string | null;
   icms_aliquot: number | null;
@@ -43,6 +50,7 @@ const SaleItem = sequelize.define('SaleItem', {
   quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, comment: 'Quantidade vendida' },
   unit_price: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Preço unitário' },
   total_price: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Total (qtd × preço)' },
+  invoiced_quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, defaultValue: 0, comment: 'Quantidade ja faturada (NF-e), cumulativa entre emissoes parciais' },
   cfop: DataTypes.STRING(4),
   icms_cst: DataTypes.STRING(3),
   icms_aliquot: DataTypes.DECIMAL(5, 2),

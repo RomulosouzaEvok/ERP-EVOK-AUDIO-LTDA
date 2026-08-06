@@ -25,9 +25,10 @@ import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
 import { DidacticAlert } from '@/components/DidacticAlert';
 
-const STATUS_VARIANT: Record<salesApi.SaleStatus, 'default' | 'success' | 'destructive' | 'secondary'> = {
+const STATUS_VARIANT: Record<salesApi.SaleStatus, 'default' | 'success' | 'destructive' | 'secondary' | 'warning'> = {
   quote: 'secondary',
   confirmed: 'default',
+  partially_invoiced: 'warning',
   invoiced: 'success',
   shipped: 'success',
   canceled: 'destructive',
@@ -36,6 +37,7 @@ const STATUS_VARIANT: Record<salesApi.SaleStatus, 'default' | 'success' | 'destr
 const STATUS_LABEL: Record<salesApi.SaleStatus, string> = {
   quote: 'Orçamento',
   confirmed: 'Confirmada',
+  partially_invoiced: 'Faturada parcialmente',
   invoiced: 'Faturada',
   shipped: 'Embarcada',
   canceled: 'Cancelada',
@@ -302,26 +304,36 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
   // como authorizeModule('vendas', 'approve') no backend (Bloco 5). Consulta de
   // status (GET) permanece liberada para qualquer nível do módulo vendas.
   const canApproveNfe = hasRole('admin') || permissions?.vendas === 'approve';
+  const canWrite = hasRole('admin', 'operator');
   const queryClient = useQueryClient();
   const [nfeOverride, setNfeOverride] = React.useState<salesApi.Sale | null>(null);
   const [nfeError, setNfeError] = React.useState<DidacticError | null>(null);
+  const [nfeDialogOpen, setNfeDialogOpen] = React.useState(false);
+  const [editItemsOpen, setEditItemsOpen] = React.useState(false);
 
   React.useEffect(() => {
     setNfeOverride(null);
     setNfeError(null);
+    setNfeDialogOpen(false);
+    setEditItemsOpen(false);
   }, [sale?.id]);
 
   const current = nfeOverride ?? sale;
   const items = current?.items ?? [];
   const itemsTotal = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), 0);
+  // Gap 3/3 (faturamento parcial): saldo pendente de cada item = quantity - invoiced_quantity.
+  const hasPendingBalance = items.some((item) => Number(item.quantity) - Number(item.invoiced_quantity ?? 0) > 1e-9);
+  // Gap 2/3 (alteração de pedido): só permitido antes do faturamento (quote/confirmed).
+  const canEditItems = current?.status === 'quote' || current?.status === 'confirmed';
 
   const invalidateSales = () => queryClient.invalidateQueries({ queryKey: ['sales'] });
 
   const issueMutation = useMutation({
-    mutationFn: () => fiscalApi.issueSaleNfe(current!.id),
+    mutationFn: (items?: fiscalApi.IssueSaleNfeItemInput[]) => fiscalApi.issueSaleNfe(current!.id, items),
     onSuccess: (updated) => {
       setNfeOverride(updated);
       setNfeError(null);
+      setNfeDialogOpen(false);
       invalidateSales();
     },
     onError: (error) =>
@@ -333,6 +345,16 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
           'Apenas usuários com nível gestor no módulo Vendas podem emitir NF-e.',
         ),
       ),
+  });
+
+  const editItemsMutation = useMutation({
+    mutationFn: (items: Array<salesApi.SaleItemInput & { sale_item_id?: number }>) => salesApi.editSaleItems(current!.id, items),
+    onSuccess: (updated) => {
+      setNfeOverride(updated);
+      setEditItemsOpen(false);
+      invalidateSales();
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
   });
 
   const checkStatusMutation = useMutation({
@@ -386,7 +408,14 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
             </div>
 
             <div className="flex flex-col gap-2">
-              <p className="text-sm font-semibold">Itens da venda</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Itens da venda</p>
+                {canWrite && canEditItems && (
+                  <Button size="sm" variant="outline" onClick={() => setEditItemsOpen(true)}>
+                    Editar itens
+                  </Button>
+                )}
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -394,6 +423,7 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
                     <TableHead className="text-right">Qtd.</TableHead>
                     <TableHead className="text-right">Preço unit.</TableHead>
                     <TableHead className="text-right">Subtotal</TableHead>
+                    <TableHead className="text-right">Faturado</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -405,11 +435,14 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
                       <TableCell className="text-right tabular-nums">
                         R$ {Number(item.total_price ?? Number(item.quantity) * Number(item.unit_price)).toFixed(2)}
                       </TableCell>
+                      <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
+                        {Number(item.invoiced_quantity ?? 0)} de {Number(item.quantity)}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {items.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
                         Itens não disponíveis.
                       </TableCell>
                     </TableRow>
@@ -464,11 +497,15 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
                   {/* UC-41/§11: emissão e cancelamento de NF-e exigem nível gestor
                       (authorizeModule('vendas', 'approve')) — botões ocultos para
                       quem não tem esse nível, evitando um 403 didaticamente inútil. */}
-                  {current.status === 'confirmed' && (nfeStatus === 'pending' || nfeStatus === 'denied') && canApproveNfe && (
-                    <Button size="sm" disabled={nfeBusy} onClick={() => issueMutation.mutate()}>
-                      <FileText className="size-4" /> {issueMutation.isPending ? 'Emitindo...' : 'Emitir NF-e'}
-                    </Button>
-                  )}
+                  {(current.status === 'confirmed' || current.status === 'partially_invoiced') &&
+                    nfeStatus !== 'processing' &&
+                    hasPendingBalance &&
+                    canApproveNfe && (
+                      <Button size="sm" disabled={nfeBusy} onClick={() => setNfeDialogOpen(true)}>
+                        <FileText className="size-4" />{' '}
+                        {current.status === 'partially_invoiced' ? 'Faturar saldo restante' : 'Emitir NF-e'}
+                      </Button>
+                    )}
                   {nfeStatus === 'processing' && (
                     <Button size="sm" variant="outline" disabled={nfeBusy} onClick={() => checkStatusMutation.mutate()}>
                       <RefreshCw className="size-4" /> {checkStatusMutation.isPending ? 'Consultando...' : 'Consultar status'}
@@ -487,8 +524,9 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
                       <Ban className="size-4" /> {cancelNfeMutation.isPending ? 'Cancelando...' : 'Cancelar NF-e'}
                     </Button>
                   )}
-                  {current.status === 'confirmed' &&
-                    (nfeStatus === 'pending' || nfeStatus === 'denied') &&
+                  {(current.status === 'confirmed' || current.status === 'partially_invoiced') &&
+                    nfeStatus !== 'processing' &&
+                    hasPendingBalance &&
                     !canApproveNfe && (
                       <p className="text-xs text-muted-foreground">
                         Emissão de NF-e restrita ao nível gestor do módulo Vendas.
@@ -500,6 +538,248 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
           </>
         )}
       </SheetContent>
+
+      <IssueNfeDialog
+        open={nfeDialogOpen}
+        onOpenChange={setNfeDialogOpen}
+        items={items}
+        busy={issueMutation.isPending}
+        error={nfeError}
+        onSubmit={(selectedItems) => issueMutation.mutate(selectedItems)}
+      />
+
+      <EditSaleItemsDialog
+        open={editItemsOpen}
+        onOpenChange={setEditItemsOpen}
+        sale={current}
+        onSubmit={(items) => editItemsMutation.mutate(items)}
+        busy={editItemsMutation.isPending}
+        error={editItemsMutation.error}
+      />
     </Sheet>
+  );
+}
+
+/**
+ * Dialog de emissão de NF-e com seleção de quantidade por item (gap 3/3,
+ * "Faturamento parcial"). Cada linha nasce preenchida com o saldo pendente
+ * inteiro (comportamento padrão preservado se o usuário não alterar nada);
+ * o vendedor pode reduzir a quantidade de qualquer linha para faturar
+ * apenas parte do pedido.
+ */
+function IssueNfeDialog({
+  open,
+  onOpenChange,
+  items,
+  busy,
+  error,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  items: salesApi.SaleItem[];
+  busy: boolean;
+  error: DidacticError | null;
+  onSubmit: (items: fiscalApi.IssueSaleNfeItemInput[]) => void;
+}) {
+  const pendingItems = items.filter((item) => Number(item.quantity) - Number(item.invoiced_quantity ?? 0) > 1e-9);
+  const [quantities, setQuantities] = React.useState<Record<number, number>>({});
+
+  React.useEffect(() => {
+    if (!open) return;
+    setQuantities(
+      Object.fromEntries(pendingItems.map((item) => [item.id, Number(item.quantity) - Number(item.invoiced_quantity ?? 0)])),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Emitir NF-e</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Ajuste a quantidade de cada item para faturar apenas parte do saldo pendente (faturamento parcial), ou mantenha os
+            valores sugeridos para faturar tudo o que ainda resta.
+          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Produto</TableHead>
+                <TableHead className="text-right">Saldo pendente</TableHead>
+                <TableHead className="text-right">Faturar agora</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pendingItems.map((item) => {
+                const remaining = Number(item.quantity) - Number(item.invoiced_quantity ?? 0);
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell>{item.product ? `${item.product.code} — ${item.product.name}` : item.product_id}</TableCell>
+                    <TableCell className="text-right tabular-nums">{remaining}</TableCell>
+                    <TableCell className="text-right">
+                      <Input
+                        type="number"
+                        step="any"
+                        min={0}
+                        max={remaining}
+                        className="w-24 ml-auto text-right"
+                        value={quantities[item.id] ?? remaining}
+                        onChange={(event) =>
+                          setQuantities((prev) => ({ ...prev, [item.id]: Number(event.target.value) }))
+                        }
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          {error && <DidacticAlert error={error} />}
+        </div>
+        <DialogFooter>
+          <Button
+            disabled={busy}
+            onClick={() => {
+              const selected = pendingItems
+                .map((item) => ({ sale_item_id: item.id, quantity: Number(quantities[item.id] ?? 0) }))
+                .filter((entry) => entry.quantity > 0);
+              onSubmit(selected);
+            }}
+          >
+            {busy ? 'Emitindo...' : 'Confirmar emissão'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Dialog de "Alteração de pedido" (gap 2/3): edita produto/quantidade/preço
+ * dos itens de uma venda `quote`/`confirmed` via `PUT /api/sales/:id/items`
+ * (substituição completa do conjunto de itens).
+ */
+function EditSaleItemsDialog({
+  open,
+  onOpenChange,
+  sale,
+  onSubmit,
+  busy,
+  error,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  sale: salesApi.Sale | null;
+  onSubmit: (items: Array<salesApi.SaleItemInput & { sale_item_id?: number }>) => void;
+  busy: boolean;
+  error: unknown;
+}) {
+  const { data: products } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.listProducts({ limit: 200 }) });
+  type Row = { sale_item_id?: number; product_id: number; quantity: number; unit_price: number; key: string };
+  const [rows, setRows] = React.useState<Row[]>([]);
+
+  React.useEffect(() => {
+    if (!open || !sale) return;
+    setRows(
+      (sale.items ?? []).map((item) => ({
+        sale_item_id: item.id,
+        product_id: item.product_id,
+        quantity: Number(item.quantity),
+        unit_price: Number(item.unit_price),
+        key: `existing-${item.id}`,
+      })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, sale?.id]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Editar itens da venda #{sale?.id}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          {rows.map((row, index) => (
+            <div key={row.key} className="flex items-end gap-2">
+              <div className="flex-1">
+                <SelectNative
+                  value={row.product_id}
+                  onChange={(event) =>
+                    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, product_id: Number(event.target.value) } : r)))
+                  }
+                >
+                  <option value="" disabled>
+                    Produto...
+                  </option>
+                  {products?.data.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.code} — {product.name}
+                    </option>
+                  ))}
+                </SelectNative>
+              </div>
+              <Input
+                type="number"
+                step="any"
+                placeholder="Qtd."
+                className="w-24"
+                value={row.quantity}
+                onChange={(event) =>
+                  setRows((prev) => prev.map((r, i) => (i === index ? { ...r, quantity: Number(event.target.value) } : r)))
+                }
+              />
+              <Input
+                type="number"
+                step="any"
+                placeholder="Preço unit."
+                className="w-28"
+                value={row.unit_price}
+                onChange={(event) =>
+                  setRows((prev) => prev.map((r, i) => (i === index ? { ...r, unit_price: Number(event.target.value) } : r)))
+                }
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}
+                disabled={rows.length === 1}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setRows((prev) => [
+                ...prev,
+                { product_id: undefined as unknown as number, quantity: 1, unit_price: undefined as unknown as number, key: `new-${Date.now()}-${prev.length}` },
+              ])
+            }
+          >
+            <Plus className="size-3" /> Adicionar item
+          </Button>
+          {error ? <p className="text-sm text-destructive">{extractApiErrorMessage(error)}</p> : null}
+        </div>
+        <DialogFooter>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              onSubmit(
+                rows.map(({ key, ...row }) => row),
+              )
+            }
+          >
+            {busy ? 'Salvando...' : 'Salvar alterações'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

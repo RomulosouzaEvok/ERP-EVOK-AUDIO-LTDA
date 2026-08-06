@@ -5,6 +5,7 @@ import { BarChart3 } from 'lucide-react';
 
 import * as reportsApi from '@/api/reports';
 import { listWorkCenters } from '@/api/workCenters';
+import { DOWNTIME_REASON_LABEL } from '@/api/productionDowntime';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -408,16 +409,27 @@ export default function ReportsPage() {
             <SectionError message={extractApiErrorMessage(oeeQuery.error, 'Falha ao carregar o relatório de OEE.')} />
           )}
           <p className="text-xs text-muted-foreground">
-            Disponibilidade aproximada pelo calendário de turnos do centro de trabalho (o sistema ainda não registra
-            parada de máquina/downtime detalhado) — se um centro não tiver turnos cadastrados, usa a capacidade
-            padrão (h/dia) do cadastro. Eixos sem dados no período aparecem como “—”, não como 0%.
+            Disponibilidade líquida = calendário de turnos do centro de trabalho menos as horas de parada
+            registradas em "Chão de fábrica → Registrar parada" (se um centro não tiver turnos cadastrados, usa a
+            capacidade padrão h/dia do cadastro). Eixos sem dados no período aparecem como “—”, não como 0%.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <StatTile
               label="Disponibilidade"
               value={formatRateOrDash(oee?.aggregate.availability)}
               tone={oeeTone(oee?.aggregate.availability)}
               hint={`${formatHours(oee?.aggregate.run_hours)} produzindo / ${formatHours(oee?.aggregate.available_hours)} disponíveis`}
+            />
+            <StatTile
+              label="Horas de parada"
+              value={formatHours(oee?.aggregate.downtime_hours)}
+              hint={
+                (oee?.aggregate.downtime_by_reason.length ?? 0) > 0
+                  ? oee!.aggregate.downtime_by_reason
+                      .map((row) => `${DOWNTIME_REASON_LABEL[row.reason as keyof typeof DOWNTIME_REASON_LABEL] ?? row.reason}: ${formatHours(row.hours)}`)
+                      .join(' · ')
+                  : 'Nenhuma parada registrada no período'
+              }
             />
             <StatTile
               label="Performance"
@@ -439,6 +451,16 @@ export default function ReportsPage() {
             />
           </div>
 
+          {(oee?.aggregate.downtime_by_reason.length ?? 0) > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {oee!.aggregate.downtime_by_reason.map((row) => (
+                <Badge key={row.reason} variant="outline">
+                  {DOWNTIME_REASON_LABEL[row.reason as keyof typeof DOWNTIME_REASON_LABEL] ?? row.reason}: {formatHours(row.hours)}
+                </Badge>
+              ))}
+            </div>
+          )}
+
           <Card>
             <CardHeader><CardTitle>OEE por centro de trabalho</CardTitle></CardHeader>
             <CardContent>
@@ -447,6 +469,7 @@ export default function ReportsPage() {
                   <TableRow>
                     <TableHead>Centro</TableHead>
                     <TableHead className="text-right">Horas disp.</TableHead>
+                    <TableHead className="text-right">Horas parada</TableHead>
                     <TableHead className="text-right">Horas produzindo</TableHead>
                     <TableHead className="text-right">Disponibilidade</TableHead>
                     <TableHead className="text-right">Horas padrão</TableHead>
@@ -459,14 +482,24 @@ export default function ReportsPage() {
                 </TableHeader>
                 <TableBody>
                   {oeeQuery.isLoading ? (
-                    <TableSkeletonRows rows={4} columns={10} />
+                    <TableSkeletonRows rows={4} columns={11} />
                   ) : !oee || oee.by_work_center.length === 0 ? (
-                    <EmptyRow colSpan={10} text="Nenhum centro de trabalho ativo encontrado." />
+                    <EmptyRow colSpan={11} text="Nenhum centro de trabalho ativo encontrado." />
                   ) : (
                     oee.by_work_center.map((row) => (
-                      <TableRow key={String(row.work_center_id)} title={row.no_data_reason ?? undefined}>
+                      <TableRow
+                        key={String(row.work_center_id)}
+                        title={
+                          row.downtime_by_reason.length > 0
+                            ? row.downtime_by_reason
+                                .map((d) => `${DOWNTIME_REASON_LABEL[d.reason as keyof typeof DOWNTIME_REASON_LABEL] ?? d.reason}: ${formatHours(d.hours)}`)
+                                .join(' · ')
+                            : row.no_data_reason ?? undefined
+                        }
+                      >
                         <TableCell className="font-medium">{row.code} — {row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatHours(row.available_hours)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatHours(row.downtime_hours)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatHours(row.run_hours)}</TableCell>
                         <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.availability) === 'good' ? 'text-emerald-600' : oeeTone(row.availability) === 'warn' ? 'text-amber-600' : oeeTone(row.availability) === 'bad' ? 'text-destructive' : ''}`}>
                           {formatRateOrDash(row.availability)}

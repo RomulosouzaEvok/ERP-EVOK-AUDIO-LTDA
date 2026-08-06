@@ -34,14 +34,17 @@ export const createSaleSchema = z.object({
   status: z.enum(['quote', 'confirmed']).optional().default('confirmed'),
 }).strict();
 
+// 'partially_invoiced' (faturamento parcial, gap 3/3) aceito no shape do
+// payload por simetria com 'invoiced' — ambos sao bloqueados por regra de
+// negocio (422) dentro de ChangeSaleStatusUseCase, nunca setados aqui.
 export const updateSaleStatusSchema = z.object({
-  status: z.enum(['quote', 'confirmed', 'invoiced', 'shipped', 'canceled']),
+  status: z.enum(['quote', 'confirmed', 'partially_invoiced', 'invoiced', 'shipped', 'canceled']),
 }).strict();
 
 export const listSalesQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().optional(),
-  status: z.enum(['quote', 'confirmed', 'invoiced', 'shipped', 'canceled']).optional(),
+  status: z.enum(['quote', 'confirmed', 'partially_invoiced', 'invoiced', 'shipped', 'canceled']).optional(),
   customer_id: z.coerce.number().int().positive().optional(),
   start_date: z.string().date().optional(),
   end_date: z.string().date().optional(),
@@ -51,11 +54,67 @@ export const getSaleByIdParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 }).strict();
 
+// Gap 2/3 (alteracao de pedido): PUT /api/sales/:id/items. `sale_item_id`
+// omitido = linha nova; informado = atualiza a linha existente daquele id.
+const editSaleItemSchema = z.object({
+  sale_item_id: z.coerce.number().int().positive().optional(),
+  product_id: z.coerce.number().int().positive(),
+  quantity: decimalQuantity,
+  unit_price: z.coerce.number().positive(),
+}).strict();
+
+export const editSaleItemsSchema = z.object({
+  items: z.array(editSaleItemSchema).min(1),
+}).strict();
+
+export const editSaleItemsParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+}).strict();
+
+// Gap 1/3 (tabela de precos por cliente): POST/PUT/DELETE .../prices[/:priceId]
+export const customerIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+}).strict();
+
+export const customerPriceIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  priceId: z.coerce.number().int().positive(),
+}).strict();
+
+export const listCustomerPricesQuerySchema = z.object({
+  product_id: z.coerce.number().int().positive().optional(),
+  active_only: z.coerce.boolean().optional(),
+}).strict();
+
+const vigenciaDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar no formato YYYY-MM-DD.');
+
+export const createCustomerPriceSchema = z.object({
+  product_id: z.coerce.number().int().positive(),
+  unit_price: z.coerce.number().positive(),
+  currency: z.string().trim().length(3).optional().default('BRL'),
+  valid_from: vigenciaDate.optional(),
+  valid_until: vigenciaDate.optional(),
+}).strict();
+
+export const updateCustomerPriceSchema = z.object({
+  unit_price: z.coerce.number().positive().optional(),
+  currency: z.string().trim().length(3).optional(),
+  valid_from: vigenciaDate.nullable().optional(),
+  valid_until: vigenciaDate.nullable().optional(),
+}).strict();
+
 const schemas = {
   createSaleSchema,
   updateSaleStatusSchema,
   listSalesQuerySchema,
   getSaleByIdParamSchema,
+  editSaleItemsSchema,
+  editSaleItemsParamSchema,
+  customerIdParamSchema,
+  customerPriceIdParamSchema,
+  listCustomerPricesQuerySchema,
+  createCustomerPriceSchema,
+  updateCustomerPriceSchema,
 };
 
 module.exports = schemas;

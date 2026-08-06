@@ -3,12 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Play, CheckCircle2, Plus, Search, PackageCheck, HardHat } from 'lucide-react';
+import { Play, CheckCircle2, Plus, Search, PackageCheck, HardHat, OctagonPause, StopCircle } from 'lucide-react';
 
 import * as productionApi from '@/api/production';
 import * as trackingApi from '@/api/productionTracking';
 import * as employeesApi from '@/api/employees';
 import * as inventoryApi from '@/api/inventory';
+import * as downtimeApi from '@/api/productionDowntime';
+import { listWorkCenters } from '@/api/workCenters';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,6 +63,13 @@ export default function ShopFloorPage() {
   const [addStepOpen, setAddStepOpen] = React.useState(false);
   const [completingOrder, setCompletingOrder] = React.useState<productionApi.ProductionOrder | null>(null);
   const [printingLot, setPrintingLot] = React.useState<inventoryApi.LotByCode | null>(null);
+  const [openDowntimeDialog, setOpenDowntimeDialog] = React.useState(false);
+  const [finishingDowntime, setFinishingDowntime] = React.useState<downtimeApi.ProductionDowntime | null>(null);
+
+  const { data: openDowntimes, isLoading: loadingDowntimes } = useQuery({
+    queryKey: ['production-downtimes', 'open'],
+    queryFn: () => downtimeApi.listProductionDowntimes({ open: true, limit: 50 }),
+  });
 
   const { data: releasedOrders, isLoading: loadingReleased } = useQuery({
     queryKey: ['production-orders', 'shop-floor', 'released'],
@@ -102,15 +111,54 @@ export default function ShopFloorPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
-          <HardHat className="size-5" />
+      <div className="flex flex-col gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <HardHat className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Chão de fábrica</h1>
+            <p className="text-sm text-muted-foreground">Apontamento de etapas de produção por ordem, bancada ou tablet.</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-semibold">Chão de fábrica</h1>
-          <p className="text-sm text-muted-foreground">Apontamento de etapas de produção por ordem, bancada ou tablet.</p>
-        </div>
+        <Button className="min-h-12" variant="secondary" onClick={() => setOpenDowntimeDialog(true)}>
+          <OctagonPause /> Registrar parada
+        </Button>
       </div>
+
+      {((openDowntimes?.data.length ?? 0) > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Paradas abertas</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {loadingDowntimes && <p className="text-sm text-muted-foreground">Carregando paradas...</p>}
+            {(openDowntimes?.data ?? []).map((downtime) => (
+              <div
+                key={downtime.id}
+                className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950/30"
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="warning">{downtimeApi.DOWNTIME_REASON_LABEL[downtime.reason]}</Badge>
+                    <span className="text-sm font-medium">
+                      {downtime.workCenter ? `${downtime.workCenter.code} — ${downtime.workCenter.name}` : `Centro #${downtime.work_center_id}`}
+                    </span>
+                    {downtime.productionOrder && (
+                      <span className="text-sm text-muted-foreground">OP {downtime.productionOrder.order_number}</span>
+                    )}
+                  </div>
+                  <span className="text-sm text-muted-foreground">Iniciada em {formatDateTime(downtime.started_at)}</span>
+                  {downtime.notes && <span className="text-sm text-muted-foreground">Obs.: {downtime.notes}</span>}
+                </div>
+                <Button className="min-h-12 sm:min-h-9" variant="outline" onClick={() => setFinishingDowntime(downtime)}>
+                  <StopCircle /> Encerrar parada
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <Card className="w-full lg:w-96 lg:shrink-0">
@@ -228,6 +276,12 @@ export default function ShopFloorPage() {
         onClose={() => setCompletingOrder(null)}
         onCompleted={(lot) => setPrintingLot(lot)}
       />
+      <OpenDowntimeDialog
+        open={openDowntimeDialog}
+        defaultProductionOrderId={selectedOrder?.id ?? null}
+        onClose={() => setOpenDowntimeDialog(false)}
+      />
+      <FinishDowntimeDialog downtime={finishingDowntime} onClose={() => setFinishingDowntime(null)} />
       {printingLot && (
         <QrCodeDialog
           open={Boolean(printingLot)}
@@ -516,6 +570,174 @@ function AddStepDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Dialog para abrir uma parada de máquina/centro de trabalho (geral ou vinculada à OP selecionada no chão de fábrica). */
+function OpenDowntimeDialog({
+  open,
+  defaultProductionOrderId,
+  onClose,
+}: {
+  open: boolean;
+  defaultProductionOrderId: number | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [workCenterId, setWorkCenterId] = React.useState('');
+  const [reason, setReason] = React.useState<downtimeApi.ProductionDowntimeReason | ''>('');
+  const [linkToOrder, setLinkToOrder] = React.useState(false);
+  const [notes, setNotes] = React.useState('');
+  const [error, setError] = React.useState<string | null>(null);
+
+  const { data: workCenters, isLoading: loadingWorkCenters } = useQuery({
+    queryKey: ['work-centers-active'],
+    queryFn: () => listWorkCenters({ active: true, limit: 200 }),
+    enabled: open,
+  });
+
+  React.useEffect(() => {
+    if (open) {
+      setWorkCenterId('');
+      setReason('');
+      setLinkToOrder(false);
+      setNotes('');
+      setError(null);
+    }
+  }, [open]);
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      if (!workCenterId) throw new Error('Selecione o centro de trabalho.');
+      if (!reason) throw new Error('Selecione o motivo da parada.');
+      return downtimeApi.openProductionDowntime({
+        work_center_id: Number(workCenterId),
+        production_order_id: linkToOrder && defaultProductionOrderId ? defaultProductionOrderId : undefined,
+        reason,
+        notes: notes || undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['production-downtimes'] });
+      onClose();
+    },
+    onError: (err) => setError(extractApiErrorMessage(err, 'Não foi possível registrar a parada.')),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Registrar parada de máquina</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="downtime_work_center">Centro de trabalho</Label>
+            <SelectNative
+              id="downtime_work_center"
+              className="h-12 text-base"
+              value={workCenterId}
+              onChange={(event) => setWorkCenterId(event.target.value)}
+              disabled={loadingWorkCenters}
+            >
+              <option value="">Selecione...</option>
+              {workCenters?.data.map((wc) => (
+                <option key={wc.id} value={wc.id}>
+                  {wc.code} — {wc.name}
+                </option>
+              ))}
+            </SelectNative>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="downtime_reason">Motivo</Label>
+            <SelectNative
+              id="downtime_reason"
+              className="h-12 text-base"
+              value={reason}
+              onChange={(event) => setReason(event.target.value as downtimeApi.ProductionDowntimeReason)}
+            >
+              <option value="">Selecione...</option>
+              {Object.entries(downtimeApi.DOWNTIME_REASON_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </SelectNative>
+          </div>
+          {defaultProductionOrderId && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4"
+                checked={linkToOrder}
+                onChange={(event) => setLinkToOrder(event.target.checked)}
+              />
+              Vincular à ordem de produção selecionada (OP #{defaultProductionOrderId})
+            </label>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="downtime_notes">Observações</Label>
+            <Input id="downtime_notes" className="h-12 text-base" value={notes} onChange={(event) => setNotes(event.target.value)} />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button className="min-h-12 w-full" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            {mutation.isPending ? 'Registrando...' : 'Registrar parada'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Dialog para encerrar uma parada de máquina em aberto. */
+function FinishDowntimeDialog({
+  downtime,
+  onClose,
+}: {
+  downtime: downtimeApi.ProductionDowntime | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (downtime) setError(null);
+  }, [downtime]);
+
+  const mutation = useMutation({
+    mutationFn: () => downtimeApi.finishProductionDowntime(downtime!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['production-downtimes'] });
+      onClose();
+    },
+    onError: (err) => setError(extractApiErrorMessage(err, 'Não foi possível encerrar a parada.')),
+  });
+
+  return (
+    <Dialog open={Boolean(downtime)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Encerrar parada</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-muted-foreground">
+            Centro: {downtime?.workCenter ? `${downtime.workCenter.code} — ${downtime.workCenter.name}` : `#${downtime?.work_center_id}`}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Motivo: {downtime ? downtimeApi.DOWNTIME_REASON_LABEL[downtime.reason] : ''}
+          </p>
+          <p className="text-sm text-muted-foreground">Iniciada em: {downtime ? formatDateTime(downtime.started_at) : ''}</p>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button className="min-h-12 w-full" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            {mutation.isPending ? 'Encerrando...' : 'Encerrar parada agora'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

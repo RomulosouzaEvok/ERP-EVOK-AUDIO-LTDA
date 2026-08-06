@@ -4,12 +4,19 @@
  * @module models/Sale
  *
  * Gerencia vendas com suporte a orçamento (quote), confirmação,
- * faturamento (NF-e), expedição (shipped) e cancelamento. Gera contas a
- * receber.
+ * faturamento parcial/total (NF-e), expedição (shipped) e cancelamento.
+ * Gera contas a receber.
  *
- * Fluxo de status: quote -> confirmed -> invoiced -> shipped -> (terminal).
- * `canceled` é possível a partir de quote/confirmed/invoiced, mas NÃO a
- * partir de shipped (venda já embarcada — ver `ChangeSaleStatusUseCase`).
+ * Fluxo de status: quote -> confirmed -> [partially_invoiced ->] invoiced
+ * -> shipped -> (terminal). `partially_invoiced` (gap 3/3 do módulo
+ * `sales`) é atingido automaticamente quando `POST /api/sales/:id/nfe` é
+ * chamado com uma quantidade menor que o saldo pendente de algum item
+ * (`IssueSaleNfeUseCase`) — nunca via `PUT /:id/status` manual, mesmo
+ * tratamento hoje dado a `invoiced`. `canceled` é possível a partir de
+ * quote/confirmed/partially_invoiced/invoiced, mas NÃO a partir de shipped
+ * (venda já embarcada — ver `ChangeSaleStatusUseCase`). Embarque
+ * (`shipped`) exige a venda totalmente `invoiced` (saldo pendente zerado
+ * em todos os itens) + NF-e autorizada.
  */
 
 import { DataTypes } from 'sequelize';
@@ -21,7 +28,7 @@ interface SaleAttributes {
   user_id: number;
   total_amount: number;
   discount: number;
-  status: 'quote' | 'confirmed' | 'invoiced' | 'shipped' | 'canceled';
+  status: 'quote' | 'confirmed' | 'partially_invoiced' | 'invoiced' | 'shipped' | 'canceled';
   payment_method: 'cash' | 'credit_card' | 'debit_card' | 'pix' | 'boleto' | 'transfer';
   installments: number;
   notes: string;
@@ -46,7 +53,7 @@ const Sale = sequelize.define('Sale', {
   user_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → users.id (vendedor)' },
   total_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, comment: 'Valor total da venda' },
   discount: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, comment: 'Desconto concedido' },
-  status: { type: DataTypes.ENUM('quote', 'confirmed', 'invoiced', 'shipped', 'canceled'), defaultValue: 'quote' },
+  status: { type: DataTypes.ENUM('quote', 'confirmed', 'partially_invoiced', 'invoiced', 'shipped', 'canceled'), defaultValue: 'quote' },
   payment_method: { type: DataTypes.ENUM('cash', 'credit_card', 'debit_card', 'pix', 'boleto', 'transfer'), defaultValue: 'pix' },
   installments: { type: DataTypes.INTEGER, defaultValue: 1, comment: 'Número de parcelas' },
   notes: { type: DataTypes.TEXT, defaultValue: '' },

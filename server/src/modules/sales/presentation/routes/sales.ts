@@ -32,9 +32,25 @@ const fiscalController = require('../../../fiscal/presentation/controllers/fisca
  */
 
 router.get('/', authenticate, authorizeModule('vendas'), saleController.list);
+
+// Gap 1/3 ("Tabela de preços por cliente"): rotas sob /customers/:id/prices,
+// sem colisão com /:id (3 segmentos vs 1) independente da ordem de
+// declaração — mantidas antes por clareza.
+router.get('/customers/:id/prices', authenticate, authorizeModule('vendas'), saleController.listCustomerPrices);
+router.post('/customers/:id/prices', authenticate, authorizeModule('vendas', 'operate'), saleController.createCustomerPrice);
+router.put('/customers/:id/prices/:priceId', authenticate, authorizeModule('vendas', 'operate'), saleController.updateCustomerPrice);
+router.delete('/customers/:id/prices/:priceId', authenticate, authorizeModule('vendas', 'operate'), saleController.deactivateCustomerPrice);
+
 router.get('/:id', authenticate, authorizeModule('vendas'), saleController.getById);
 router.post('/', authenticate, authorizeModule('vendas', 'operate'), saleController.create);
 router.put('/:id/status', authenticate, authorizeModule('vendas', 'operate'), saleController.updateStatus);
+// Gap 2/3 ("Alteração de pedido"): substitui o conjunto de itens de uma
+// venda quote/confirmed (bloqueado a partir de partially_invoiced/invoiced
+// pelo use case, ver EditSaleItemsUseCase).
+router.put('/:id/items', authenticate, authorizeModule('vendas', 'operate'), saleController.editItems);
+// Gap 3/3 ("Faturamento parcial"): POST /:id/nfe aceita payload opcional
+// `{ items: [{ sale_item_id, quantity }] }` — ver IssueSaleNfeUseCase
+// (módulo fiscal, dono real do fluxo de emissão de NF-e).
 router.post('/:id/nfe', authenticate, authorizeModule('vendas', 'approve'), fiscalController.issueSaleNfe);
 router.get('/:id/nfe', authenticate, authorizeModule('vendas'), fiscalController.getSaleNfeStatus);
 router.post('/:id/nfe/cancel', authenticate, authorizeModule('vendas', 'approve'), fiscalController.cancelSaleNfe);

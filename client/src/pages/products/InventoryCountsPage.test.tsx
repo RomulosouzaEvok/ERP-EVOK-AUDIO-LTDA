@@ -133,3 +133,69 @@ describe('InventoryCountsPage — criação de contagem', () => {
     );
   });
 });
+
+describe('InventoryCountsPage — reatribuição de contagem', () => {
+  const DRAFT_COUNT = {
+    id: 5,
+    count_number: 'CNT-005',
+    status: 'draft' as const,
+    count_type: 'cycle' as const,
+    warehouse_id: 1,
+    location: null,
+    assigned_to: null,
+    assignedTo: null,
+    createdAt: '2026-08-06T10:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockedInventoryApi.listInventoryCounts.mockResolvedValue({
+      success: true,
+      data: [DRAFT_COUNT],
+      pagination: { total: 1, page: 1, limit: 20, totalPages: 1 },
+    });
+    mockedInventoryApi.reassignInventoryCount.mockResolvedValue({ ...DRAFT_COUNT, assigned_to: USER.id });
+    mockedProductsApi.listProducts.mockResolvedValue({
+      success: true,
+      data: [PRODUCT],
+      pagination: { total: 1, page: 1, limit: 200, totalPages: 1 },
+    });
+    mockedWarehousesApi.listWarehouses.mockResolvedValue([WAREHOUSE]);
+    mockedUsersApi.listUsers.mockResolvedValue({
+      success: true,
+      data: [USER],
+      pagination: { total: 1, page: 1, limit: 200, totalPages: 1 },
+    });
+  });
+
+  it('reatribui a contagem a um funcionário selecionado no dialog', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /reatribuir/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    await user.selectOptions(within(dialog).getByLabelText(/novo responsável/i), String(USER.id));
+    await user.click(within(dialog).getByRole('button', { name: /confirmar/i }));
+
+    await waitFor(() =>
+      expect(mockedInventoryApi.reassignInventoryCount).toHaveBeenCalledWith(DRAFT_COUNT.id, USER.id),
+    );
+  });
+
+  it('devolve a contagem ao pool (assigned_to: null)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /reatribuir/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    // Deixa a opção "Devolver ao pool" (valor default) selecionada.
+    await user.click(within(dialog).getByRole('button', { name: /confirmar/i }));
+
+    await waitFor(() =>
+      expect(mockedInventoryApi.reassignInventoryCount).toHaveBeenCalledWith(DRAFT_COUNT.id, null),
+    );
+  });
+});

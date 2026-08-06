@@ -405,6 +405,7 @@ function ProductSuppliersDialog({ product, onClose }: { product: productsApi.Pro
   const [formError, setFormError] = React.useState<string | null>(null);
   const [showForm, setShowForm] = React.useState(false);
   const [mrpError, setMrpError] = React.useState<DidacticError | null>(null);
+  const [defaultSupplierError, setDefaultSupplierError] = React.useState<DidacticError | null>(null);
 
   const { data: matchedItems, isLoading: isResolvingItem } = useQuery({
     queryKey: ['item-by-code', product?.code],
@@ -440,7 +441,22 @@ function ProductSuppliersDialog({ product, onClose }: { product: productsApi.Pro
   const { data: suppliers } = useQuery({
     queryKey: ['suppliers-all'],
     queryFn: () => suppliersApi.listSuppliers({ limit: 200 }),
-    enabled: showForm,
+    enabled: showForm || Boolean(item),
+  });
+
+  const activeSuppliers = React.useMemo(
+    () => suppliers?.data.filter((supplier) => supplier.status === 'active') ?? [],
+    [suppliers],
+  );
+
+  const setDefaultSupplierMutation = useMutation({
+    mutationFn: (fornecedor_padrao_id: number | null) => itemsApi.updateItem(item!.id, { fornecedor_padrao_id }),
+    onSuccess: () => {
+      setDefaultSupplierError(null);
+      queryClient.invalidateQueries({ queryKey: ['item-by-code', product?.code] });
+    },
+    onError: (error) =>
+      setDefaultSupplierError(translateApiError(error, 'Não foi possível atualizar o fornecedor padrão do item')),
   });
 
   const {
@@ -558,6 +574,31 @@ function ProductSuppliersDialog({ product, onClose }: { product: productsApi.Pro
                     />
                   </div>
                   {mrpError && <DidacticAlert error={mrpError} />}
+                </div>
+
+                <div className="flex flex-col gap-1.5 rounded-lg border p-3">
+                  <Label htmlFor="fornecedor-padrao">Fornecedor padrão</Label>
+                  <SelectNative
+                    id="fornecedor-padrao"
+                    value={item.fornecedor_padrao_id ?? ''}
+                    disabled={!canWrite || setDefaultSupplierMutation.isPending}
+                    onChange={(event) =>
+                      setDefaultSupplierMutation.mutate(event.target.value === '' ? null : Number(event.target.value))
+                    }
+                  >
+                    <option value="">Nenhum fornecedor padrão definido</option>
+                    {activeSuppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.company_name}
+                      </option>
+                    ))}
+                  </SelectNative>
+                  <p className="text-sm text-muted-foreground">
+                    O MRP usa este fornecedor para sugerir automaticamente quem cotar/comprar quando gerar uma
+                    requisição de compra para este item. Não é obrigatório vincular um vínculo de fornecimento
+                    detalhado abaixo para definir o padrão.
+                  </p>
+                  {defaultSupplierError && <DidacticAlert error={defaultSupplierError} />}
                 </div>
 
                 <div className="flex items-center justify-between">

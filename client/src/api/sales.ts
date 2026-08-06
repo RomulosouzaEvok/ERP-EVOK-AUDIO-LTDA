@@ -2,7 +2,7 @@ import { httpClient } from './httpClient';
 import type { ItemResponse, ListResponse } from './types';
 import type { HandoffSignal } from '@/components/HandoffDot';
 
-export type SaleStatus = 'quote' | 'confirmed' | 'invoiced' | 'shipped' | 'canceled';
+export type SaleStatus = 'quote' | 'confirmed' | 'partially_invoiced' | 'invoiced' | 'shipped' | 'canceled';
 
 export interface SaleItem {
   id: number;
@@ -10,6 +10,8 @@ export interface SaleItem {
   quantity: string;
   unit_price: string;
   total_price: string;
+  /** Quantidade já faturada (NF-e), cumulativa entre emissões parciais (gap 3/3). */
+  invoiced_quantity?: string;
   product?: { id: number; name: string; code: string };
 }
 
@@ -75,5 +77,63 @@ export async function updateSaleStatus(id: number, status: SaleStatus) {
 /** `GET /api/sales/:id` — inclui `items` (com `product`) e `customer`. */
 export async function getSale(id: number) {
   const { data } = await httpClient.get<ItemResponse<Sale>>(`/api/sales/${id}`);
+  return data.data;
+}
+
+/**
+ * `PUT /api/sales/:id/items` — substitui o conjunto de itens de uma venda
+ * `quote`/`confirmed` (gap 2/3, "Alteração de pedido"). `sale_item_id`
+ * omitido = linha nova; informado = atualiza a linha existente.
+ */
+export async function editSaleItems(id: number, items: Array<SaleItemInput & { sale_item_id?: number }>) {
+  const { data } = await httpClient.put<ItemResponse<Sale>>(`/api/sales/${id}/items`, { items });
+  return data.data;
+}
+
+// ---------------------------------------------------------------------------
+// Tabela de preços por cliente (gap 1/3, "Tabela de preços por cliente")
+// ---------------------------------------------------------------------------
+
+export interface CustomerPrice {
+  id: number;
+  customer_id: number;
+  product_id: number;
+  unit_price: string;
+  currency: string;
+  valid_from: string | null;
+  valid_until: string | null;
+  active: boolean;
+  product?: { id: number; name: string; code: string };
+}
+
+export interface CustomerPriceInput {
+  product_id: number;
+  unit_price: number;
+  currency?: string;
+  valid_from?: string;
+  valid_until?: string;
+}
+
+/** `GET /api/sales/customers/:id/prices`. */
+export async function listCustomerPrices(customerId: number, params: { product_id?: number; active_only?: boolean } = {}) {
+  const { data } = await httpClient.get<ItemResponse<CustomerPrice[]>>(`/api/sales/customers/${customerId}/prices`, { params });
+  return data.data;
+}
+
+/** `POST /api/sales/customers/:id/prices`. */
+export async function createCustomerPrice(customerId: number, input: CustomerPriceInput) {
+  const { data } = await httpClient.post<ItemResponse<CustomerPrice>>(`/api/sales/customers/${customerId}/prices`, input);
+  return data.data;
+}
+
+/** `PUT /api/sales/customers/:id/prices/:priceId`. */
+export async function updateCustomerPrice(customerId: number, priceId: number, input: Partial<CustomerPriceInput>) {
+  const { data } = await httpClient.put<ItemResponse<CustomerPrice>>(`/api/sales/customers/${customerId}/prices/${priceId}`, input);
+  return data.data;
+}
+
+/** `DELETE /api/sales/customers/:id/prices/:priceId` — desativa (soft delete), não remove fisicamente. */
+export async function deactivateCustomerPrice(customerId: number, priceId: number) {
+  const { data } = await httpClient.delete<ItemResponse<CustomerPrice>>(`/api/sales/customers/${customerId}/prices/${priceId}`);
   return data.data;
 }

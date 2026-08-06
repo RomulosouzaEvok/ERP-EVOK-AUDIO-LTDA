@@ -69,6 +69,10 @@ import RfqItem = require('./RfqItem');
 import RfqSupplier = require('./RfqSupplier');
 import RfqQuote = require('./RfqQuote');
 import CostCenter = require('./CostCenter');
+import BankStatement = require('./BankStatement');
+import BankStatementEntry = require('./BankStatementEntry');
+import ProductionDowntime = require('./ProductionDowntime');
+import CustomerPriceList = require('./CustomerPriceList');
 
 // ============================================
 // RELACIONAMENTOS
@@ -614,6 +618,58 @@ AccountPayable.belongsTo(CostCenter, { foreignKey: 'cost_center_id', as: 'costCe
 CostCenter.hasMany(AccountReceivable, { foreignKey: 'cost_center_id', as: 'accounts_receivable' });
 AccountReceivable.belongsTo(CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter' });
 
+// ============================================
+// RELACIONAMENTOS - PARADAS DE MAQUINA (DOWNTIME)
+// ============================================
+
+// WorkCenter ↔ ProductionDowntime (parada geral do centro ou vinculada a uma OP)
+WorkCenter.hasMany(ProductionDowntime, { foreignKey: 'work_center_id', as: 'downtimes' });
+ProductionDowntime.belongsTo(WorkCenter, { foreignKey: 'work_center_id', as: 'workCenter' });
+
+// ProductionOrder ↔ ProductionDowntime (opcional — null = parada geral do centro)
+ProductionOrder.hasMany(ProductionDowntime, { foreignKey: 'production_order_id', as: 'downtimes' });
+ProductionDowntime.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+// User ↔ ProductionDowntime (quem abriu o registro)
+User.hasMany(ProductionDowntime, { foreignKey: 'created_by', as: 'created_production_downtimes' });
+ProductionDowntime.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
+
+// ============================================
+// RELACIONAMENTOS - TABELA DE PRECOS POR CLIENTE (gap 1/3 modulo sales)
+// ============================================
+
+Client.hasMany(CustomerPriceList, { foreignKey: 'customer_id', as: 'price_lists' });
+CustomerPriceList.belongsTo(Client, { foreignKey: 'customer_id', as: 'customer' });
+
+Product.hasMany(CustomerPriceList, { foreignKey: 'product_id', as: 'customer_prices' });
+CustomerPriceList.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+User.hasMany(CustomerPriceList, { foreignKey: 'created_by', as: 'created_customer_prices' });
+CustomerPriceList.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
+
+// ============================================
+// RELACIONAMENTOS - CONCILIACAO BANCARIA (importacao OFX)
+// ============================================
+
+// User ↔ BankStatement (quem fez o upload do .ofx)
+User.hasMany(BankStatement, { foreignKey: 'imported_by', as: 'bank_statements' });
+BankStatement.belongsTo(User, { foreignKey: 'imported_by', as: 'importedBy' });
+
+// BankStatement ↔ BankStatementEntry
+BankStatement.hasMany(BankStatementEntry, { foreignKey: 'statement_id', as: 'entries', onDelete: 'CASCADE' });
+BankStatementEntry.belongsTo(BankStatement, { foreignKey: 'statement_id', as: 'statement', onDelete: 'CASCADE' });
+
+// AccountPayable/AccountReceivable ↔ BankStatementEntry (XOR — no maximo um preenchido, ver CHECK da migration)
+AccountPayable.hasMany(BankStatementEntry, { foreignKey: 'matched_payable_id', as: 'bank_statement_entries' });
+BankStatementEntry.belongsTo(AccountPayable, { foreignKey: 'matched_payable_id', as: 'matchedPayable' });
+
+AccountReceivable.hasMany(BankStatementEntry, { foreignKey: 'matched_receivable_id', as: 'bank_statement_entries' });
+BankStatementEntry.belongsTo(AccountReceivable, { foreignKey: 'matched_receivable_id', as: 'matchedReceivable' });
+
+// User ↔ BankStatementEntry (quem confirmou a conciliacao)
+User.hasMany(BankStatementEntry, { foreignKey: 'matched_by', as: 'matched_bank_statement_entries' });
+BankStatementEntry.belongsTo(User, { foreignKey: 'matched_by', as: 'matchedBy' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -634,5 +690,8 @@ export {
   Warehouse, ProductWarehouseStock, WarehouseTransfer,
   ProductionCostSettings,
   CostCenter,
-  Rfq, RfqItem, RfqSupplier, RfqQuote
+  Rfq, RfqItem, RfqSupplier, RfqQuote,
+  ProductionDowntime,
+  CustomerPriceList,
+  BankStatement, BankStatementEntry
 };

@@ -142,3 +142,15 @@ export interface OeeAggregateRow {
   quantity_scrapped: number;
   tracking_count: number;
 }
+
+/**
+ * Horas de parada (`production_downtimes`) de um centro de trabalho no
+ * período, agrupadas por `reason`, base do desconto de disponibilidade do
+ * OEE (`findDowntimeHoursByWorkCenter`). Paradas em aberto contam até o fim
+ * do período (ou `now`, se anterior) — ver `GetOeeReportUseCase`.
+ */
+export interface OeeDowntimeRow {
+  work_center_id: number;
+  reason: string;
+  hours: number;
+}

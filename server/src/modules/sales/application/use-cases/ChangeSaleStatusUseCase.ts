@@ -12,6 +12,12 @@ const { toCents, fromCents } = require('../../../../shared/utils/money');
 const VALID_TRANSITIONS: Record<string, string[]> = {
   quote: ['confirmed', 'canceled'],
   confirmed: ['invoiced', 'canceled'],
+  // 'partially_invoiced' (faturamento parcial, gap 3/3 do modulo sales) e
+  // atingido automaticamente por IssueSaleNfeUseCase quando a NF-e emitida
+  // cobre apenas parte do saldo pendente de algum item — NAO tem 'shipped'
+  // nas transicoes permitidas: embarque continua exigindo a venda
+  // totalmente 'invoiced' (saldo pendente zerado em todos os itens).
+  partially_invoiced: ['invoiced', 'canceled'],
   // 'shipped' (expedicao) so pode ser atingido a partir de 'invoiced' (venda
   // ja faturada/NF-e emitida). Cancelamento a partir de 'invoiced' ainda e
   // permitido (nota pode ser cancelada antes de embarcar).
@@ -81,12 +87,13 @@ class ChangeSaleStatusUseCase extends UseCase {
       throw new ValidationError('Status e obrigatorio');
     }
 
-    if (status === 'invoiced') {
-      // 'invoiced' agora reflete uma NF-e de fato autorizada (modulo
-      // fiscal) — nao pode mais ser setado manualmente via este endpoint
-      // generico, sob risco de marcar uma venda como faturada sem NF-e
-      // real. Use POST /api/sales/:id/nfe.
-      throw new BusinessRuleError("Status 'invoiced' e definido automaticamente pela emissao de NF-e (POST /api/sales/:id/nfe), nao pode ser setado manualmente.");
+    if (status === 'invoiced' || status === 'partially_invoiced') {
+      // 'invoiced'/'partially_invoiced' (faturamento parcial, gap 3/3)
+      // refletem uma NF-e de fato autorizada (modulo fiscal) — nao podem
+      // ser setados manualmente via este endpoint generico, sob risco de
+      // marcar uma venda como faturada sem NF-e real. Use
+      // POST /api/sales/:id/nfe.
+      throw new BusinessRuleError(`Status '${status}' e definido automaticamente pela emissao de NF-e (POST /api/sales/:id/nfe), nao pode ser setado manualmente.`);
     }
 
     const sale = await this.saleRepository.findSaleWithItemsForUpdate(id, transaction);

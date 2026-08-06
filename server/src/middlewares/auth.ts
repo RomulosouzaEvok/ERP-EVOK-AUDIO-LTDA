@@ -32,6 +32,15 @@ interface RequestUser {
   active: boolean;
   accessProfileId: number | null;
   /**
+   * Versão da senha do usuário no momento em que `authenticate` validou o
+   * token (igual ao `passwordVersion` atual do usuário no banco — token com
+   * versão desatualizada já é rejeitado com 401 antes de chegar aqui, ver
+   * checagem SEC-10 logo acima). Exposta para uso por
+   * `POST /api/auth/refresh` (renovação deslizante): o token renovado deve
+   * embutir a MESMA versão, nunca uma versão obsoleta lida de outro lugar.
+   */
+  passwordVersion: number;
+  /**
    * Mapa module -> nível ('operate'|'approve') resolvido a partir do
    * `AccessProfile` do usuário (UC-34/UC-36: consultado no banco a cada
    * `authenticate`, sem cache no payload do JWT — troca de perfil tem
@@ -109,6 +118,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       role: user.role,
       active: user.active,
       accessProfileId: user.accessProfileId ?? null,
+      passwordVersion: user.passwordVersion,
       permissions,
       accessProfileName: accessProfile && accessProfile.active ? accessProfile.nome : null,
       createdAt: user.createdAt,

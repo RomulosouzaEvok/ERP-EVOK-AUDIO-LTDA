@@ -1723,3 +1723,181 @@ antigas legitimamente referenciam essas tabelas para criá-las/alterá-las).
 tabelas em uma janela dedicada, após confirmação formal de que não há
 nenhuma dependência de auditoria/compliance sobre o schema-fantasma — ver
 item registrado em `docs/governance/TODO.md`.
+
+---
+
+## Terceira rodada de 2026-08-06 — Vendas (preço por cliente + faturamento
+## parcial), Produção (downtime) e Financeiro (conciliação bancária OFX)
+
+Migrations `20260806-000050/051/052/060/070`, todas aplicadas no banco
+local (junto com as das rodadas anteriores do dia — 64 migrations no
+total ao final desta rodada).
+
+### Tabela: `customer_price_lists` (Tabela de Preços por Cliente)
+Gap 1/3 do módulo `sales` (`docs/LEVANTAMENTO_ERP_2026-08-02.md`, linha
+`sales`). Contrato completo em `docs/API.md` §5.
+
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| customer_id | INT | FK → clients.id, `ON DELETE CASCADE`, NOT NULL | Cliente |
+| product_id | INT | FK → products.id, `ON DELETE CASCADE`, NOT NULL | Produto (schema legado, não `items.id`) |
+| unit_price | DECIMAL(10,2) | NOT NULL | Preço unitário negociado |
+| currency | VARCHAR(3) | NOT NULL, DEFAULT 'BRL' | Moeda |
+| valid_from | DATEONLY | NULL | Início da vigência (`NULL` = válido desde sempre) |
+| valid_until | DATEONLY | NULL | Fim da vigência (`NULL` = sem prazo) |
+| active | BOOLEAN | NOT NULL, DEFAULT true | Soft delete (mesmo padrão de `Category.active`/`item_suppliers.active`) |
+| created_by | INT | FK → users.id, `ON DELETE SET NULL`, NULL | Quem cadastrou |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+**Índices:** `idx_customer_price_lists_customer_id`,
+`idx_customer_price_lists_customer_product` (`customer_id, product_id`,
+não único), `idx_customer_price_lists_product_id`. **Sem índice único**
+de `customer_id + product_id` — a vigência permite múltiplas faixas de
+preço no tempo para o mesmo par (reajuste mantendo histórico); a
+unicidade de uma vigência ativa e não sobreposta é validada na aplicação
+(`CreateCustomerPriceUseCase`), não no banco.
+
+**Migration:** `server/migrations/20260806-000050-create-customer-price-lists.cjs`.
+
+### Colunas novas: `sale_items.invoiced_quantity` e status `partially_invoiced`
+Gap 3/3 do módulo `sales` ("Faturamento parcial").
+
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| `sale_items.invoiced_quantity` | DECIMAL(18,6) | NOT NULL, DEFAULT 0 | Quantidade já faturada (NF-e emitida) deste item, cumulativa entre emissões parciais. `quantity - invoiced_quantity` = saldo pendente |
+
+`enum_sales_status` ganha o valor `'partially_invoiced'` — transição
+automática `confirmed → partially_invoiced → invoiced` (nunca manual via
+`PUT /:id/status`, disparada por `POST /:id/nfe` quando a NF-e cobre só
+parte da quantidade). Embarque (`shipped`) continua exigindo a venda
+totalmente `invoiced` — `partially_invoiced` não tem transição direta para
+`shipped` em `VALID_TRANSITIONS`.
+
+**Migrations:** `server/migrations/20260806-000051-add-invoiced-quantity-sale-items.cjs`
+(coluna, idempotente via `describeTable`), `server/migrations/20260806-000052-add-partially-invoiced-sale-status.cjs`
+(`ALTER TYPE ... ADD VALUE IF NOT EXISTS`, fora de transação — mesma
+técnica de `20260803-000007-add-shipped-sale-status.cjs`; `down()` é
+no-op, remover valor de ENUM no Postgres exige recriar o tipo inteiro).
+
+**Risco residual documentado:** `Sale.nfe_*` guarda apenas a NF-e mais
+recente — múltiplas emissões parciais sobrescrevem
+chave/protocolo/XML uma da outra, sem histórico por emissão. Não há
+tabela `sale_invoices` (1 venda : N NF-e) nesta v1 — ver
+`docs/governance/TODO.md`. `GetSaleNfeStatusUseCase` (path assíncrono de
+provedores reais — `focus_nfe`/`enotas`) ainda não atualiza
+`invoiced_quantity`/`partially_invoiced`, só finaliza `confirmed →
+invoiced`; afeta apenas provedor real, não o mock usado em dev.
+
+### Tabela: `production_downtimes` (Paradas de Máquina/Centro de Trabalho)
+Fecha a pendência "campo de downtime/paradas para OEE preciso" registrada
+em `docs/governance/TODO.md`. Contrato completo em `docs/API.md` §7.
+
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| work_center_id | INT | FK → work_centers.id, `ON DELETE RESTRICT`, NOT NULL | Centro de trabalho parado |
+| production_order_id | INT | FK → production_orders.id, `ON DELETE SET NULL`, NULL | OP vinculada (opcional — parada pode ser geral do centro) |
+| reason | ENUM | NOT NULL | `setup`, `manutencao_corretiva`, `manutencao_preventiva`, `falta_material`, `falta_operador`, `qualidade`, `outros` |
+| notes | TEXT | NULL | Observações livres |
+| started_at | TIMESTAMP | NOT NULL | Início da parada |
+| finished_at | TIMESTAMP | NULL | Fim da parada (`NULL` = parada em aberto) |
+| created_by | INT | FK → users.id, `ON DELETE RESTRICT`, NOT NULL | Quem abriu a parada |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+**Índices:** `idx_production_downtimes_work_center_id`,
+`idx_production_downtimes_production_order_id`,
+`idx_production_downtimes_started_at`, e o índice único parcial
+`uq_production_downtimes_open_per_work_center` (`work_center_id` WHERE
+`finished_at IS NULL`) — defesa em profundidade contra 2 paradas abertas
+simultâneas do mesmo centro (a regra de negócio primária vive em
+`OpenProductionDowntimeUseCase`; este índice cobre corrida de escrita
+concorrente que a checagem em aplicação sozinha não pega).
+
+**Migration:** `server/migrations/20260806-000060-create-production-downtimes.cjs`
+— idempotente (`showAllTables()`/`showIndex()` antes de criar).
+
+**Impacto em OEE:** `GetOeeReportUseCase` passou a descontar
+`downtime_hours` (agregado de `production_downtimes` no período) das
+horas de calendário brutas para calcular `available_hours` líquidas —
+`available_hours = max(calendario_bruto - downtime_hours, 0)`. Ver
+`docs/API.md` §7.
+
+**Risco residual documentado:** sem teste de integração real contra
+Postgres para o índice único parcial (só unitário com mock).
+
+### Tabelas: `bank_statements` / `bank_statement_entries` (Conciliação Bancária OFX)
+Fecha parte do gap "conciliação bancária/CNAB" de
+`docs/LEVANTAMENTO_ERP_2026-08-02.md` — **CNAB fica fora desta v1**.
+Contrato completo em `docs/API.md` §6.
+
+#### Tabela: `bank_statements` (um registro por arquivo `.ofx` importado)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| filename | VARCHAR(255) | NOT NULL | Nome original do arquivo enviado |
+| bank_name | VARCHAR(150) | NULL | `BANKID` do OFX (informativo) |
+| account_number | VARCHAR(60) | NULL | `ACCTID` do OFX (informativo) |
+| period_start | DATEONLY | NULL | `DTSTART` do OFX |
+| period_end | DATEONLY | NULL | `DTEND` do OFX |
+| imported_by | INT | FK → users.id, `ON DELETE RESTRICT`, NOT NULL | Quem importou |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+**Índice:** `idx_bank_statements_imported_by`.
+
+#### Tabela: `bank_statement_entries` (cada `<STMTTRN>` do OFX)
+| Coluna | Tipo | Restrições | Descrição |
+|--------|------|------------|-----------|
+| id | INT | PK, AUTO_INCREMENT | Identificador |
+| statement_id | INT | FK → bank_statements.id, `ON DELETE CASCADE`, NOT NULL | Extrato de origem |
+| entry_date | DATEONLY | NOT NULL | `DTPOSTED` do `<STMTTRN>` |
+| amount | DECIMAL(12,2) | NOT NULL | `TRNAMT` com sinal (negativo = saída/débito, positivo = entrada/crédito) |
+| description | VARCHAR(255) | NULL | `MEMO`/`NAME` do `<STMTTRN>` |
+| fitid | VARCHAR(100) | NOT NULL | `FITID` do `<STMTTRN>` (ou id sintético determinístico quando ausente) — usado para dedup |
+| status | ENUM | NOT NULL, DEFAULT 'pending' | `pending`, `matched`, `ignored` |
+| matched_payable_id | INT | FK → accounts_payable.id, `ON DELETE SET NULL`, NULL | Conta a pagar vinculada (XOR com `matched_receivable_id`) |
+| matched_receivable_id | INT | FK → accounts_receivable.id, `ON DELETE SET NULL`, NULL | Conta a receber vinculada (XOR com `matched_payable_id`) |
+| matched_by | INT | FK → users.id, `ON DELETE SET NULL`, NULL | Quem fez o match |
+| matched_at | TIMESTAMP | NULL | Quando o match foi feito |
+| created_at / updated_at | TIMESTAMP | NOT NULL | Auditoria |
+
+**Índices:** `uq_bank_statement_entries_statement_fitid` (único,
+`statement_id + fitid`), `idx_bank_statement_entries_fitid` (dedup
+**global** — contra qualquer importação anterior, não só a mesma —
+verificado em `ImportStatementUseCase` via `findExistingFitids`),
+`idx_bank_statement_entries_status`,
+`idx_bank_statement_entries_matched_payable`,
+`idx_bank_statement_entries_matched_receivable`. **Constraint**
+`chk_bank_statement_entries_single_match`: `matched_payable_id IS NULL OR
+matched_receivable_id IS NULL` (nunca os dois ao mesmo tempo).
+
+**Migration:** `server/migrations/20260806-000070-create-bank-statements.cjs`
+— idempotente (`showAllTables()` antes de criar).
+
+**Parser OFX:** implementação manual (`server/src/modules/financial/infrastructure/ofx/`),
+cobrindo OFX 1.x (SGML) e OFX 2.x (XML) — decisão de não adicionar
+biblioteca nova, cobertura suficiente do subconjunto necessário sem
+dependência frágil numa área de upload de arquivo de terceiro. Detecção
+de encoding (Latin-1/CP1252) é heurística.
+
+**Sugestões de match:** tolerância de 1 centavo (`MATCH_TOLERANCE_CENTS`)
+e vencimento a até ±7 dias da data do lançamento — nunca vincula
+sozinho, só sugere (`GetMatchSuggestionsUseCase`). `unmatch` é bloqueado
+(422) se a conta já foi baixada — correção manual exigida, decisão
+conservadora (`UnmatchEntryUseCase`).
+
+**Risco residual documentado:** sem teste de integração end-to-end contra
+Postgres real (só unitários com mocks); CNAB (boleto/remessa/retorno)
+fora de escopo desta v1 — ver `docs/governance/TODO.md`.
+
+---
+
+### Auth — renovação deslizante de token (`POST /api/auth/refresh`) e Winston
+
+Sem migration/tabela nova. `POST /api/auth/refresh` (`authenticate` +
+`RefreshTokenUseCase`) renova o JWT com o mesmo `passwordVersion` já
+validado nessa requisição — ver `docs/API.md` §1. Logging estruturado
+Winston (`server/src/config/logger.ts`) integrado em request-logger,
+errorHandler e boot (`server/index.ts`) — JSON em produção, colorido em
+dev, `LOG_FILE` opcional (sem rotação de arquivo — se usado em produção,
+rotação/logrotate deve ser configurada fora da aplicação).

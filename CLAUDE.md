@@ -1,7 +1,7 @@
 # CLAUDE.md — ERP Evok Áudio LTDA
 **Single Source of Truth (SSOT) para o projeto ERP**
 
-**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 majoritariamente entregue (2026-08-04/06), incluindo apps mobile e Android TV novos | **Data:** 6 de agosto de 2026  
+**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 majoritariamente entregue (2026-08-04/06), incluindo apps mobile e Android TV novos, RFQ, centros de custo, OEE, conciliação bancária, faturamento parcial e downtime de produção | **Data:** 6 de agosto de 2026  
 **Próximo passo:** UAT completo → aprovação formal G6 → aquisição do servidor de produção → Go-Live
 
 ---
@@ -23,12 +23,13 @@
 
 ### Status Atual
 - ✅ Backend: Node.js + Express + Sequelize (30+ módulos, Clean Architecture — use-cases desacoplados do Sequelize direto em 22+ módulos desde 2026-08-05)
-- ✅ Database: PostgreSQL 16 (59 migrations versionadas, 159+ foreign keys — RFQ + centros de custo, 2026-08-06)
+- ✅ Database: PostgreSQL 16 (64 migrations versionadas, 159+ foreign keys — RFQ, centros de custo, tabela de preços por cliente, downtime de produção e conciliação bancária, 2026-08-06)
 - ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, configuração fiscal e auditor inteligente foram cabeados entre 2026-08-02 e 2026-08-05); as únicas exceções por desenho são o inventário mobile (QR, propositalmente mobile-only) e os endpoints de webhook (sem UI, são integração backend-to-backend)
 - ✅ **App mobile novo** (`mobile/`, Expo/React Native): login JWT, scan de estoque QR, histórico de movimentações, execução de contagens cíclicas (pool/atribuídas) — entregue em 2026-08-06, validado só por typecheck/bundle, **sem teste em dispositivo real ainda**
 - ✅ **App Android TV novo** (`tv/`, react-native-tvos): painel de demandas por departamento (recebimento, requisições, expedição, qualidade), auto-refresh 60s — entregue em 2026-08-06, mesma ressalva de validação (sem hardware real testado)
 - ✅ **4 bloqueadores P0 + 2 P1 remediados em 2026-08-02** (commit `d1d3aff`) — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
 - ✅ **Auditoria multi-agente de 7 frentes concluída em 2026-08-06** (geral, segurança, DBA, infra, frontend, mobile/TV, documentação) com remediação imediata de 4 frentes no mesmo dia — veja `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06, e pendências residuais em `docs/governance/TODO.md`
+- ✅ **Terceira rodada de entregas em 2026-08-06** (auth refresh deslizante + logging estruturado Winston, paginação/renovação de sessão em `mobile/`/`tv/`, telas web de reatribuição de contagem e fornecedor padrão do item, e 3 gaps de negócio fechados — tabela de preços por cliente, alteração de pedido confirmado, faturamento parcial de NF-e em Vendas; paradas de máquina com OEE preciso em Produção; conciliação bancária OFX em Financeiro) — veja `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "terceira rodada", e `docs/HANDOFF_CODEX.md`
 
 ---
 
@@ -128,7 +129,9 @@ erp-evok-audio/
 
 ### Planejamento & Produção
 - **OP (Ordem de Produção):** Status (planned → released → in_progress → completed), vínculo com venda
-- **Apontamento:** Quantidade produzida, refugo, parada de máquina, downtime (CRÍTICO: reconciliação com OP) 
+- **Apontamento:** Quantidade produzida, refugo, parada de máquina, downtime (CRÍTICO: reconciliação com OP)
+- **Paradas de Máquina / Downtime (NOVO, 2026-08-06):** `/api/production/downtimes` — motivo categorizado (setup, manutenção corretiva/preventiva, falta de material/operador, qualidade, outros), bloqueio de 2ª parada aberta simultânea por centro (use case + índice único parcial); alimenta o cálculo de OEE
+- **OEE (NOVO, 2026-08-06):** `GET /api/reports/oee` — Disponibilidade × Performance × Qualidade por centro de trabalho e agregado geral, com desconto de downtime real das horas disponíveis
 - **Rotas de Manufatura:** Operações sequenciais, setup, cycle time, labor time
 - **MRP:** Roda contra estoque REAL (não congelado), requisita materiais via **Requisição de Compra** (NOVO P0)
 
@@ -147,11 +150,15 @@ erp-evok-audio/
 - **Curva ABC:** Análise de rotatividade e valor
 
 ### Vendas & Financeiro
-- **Pedidos:** Itens, descontos, transições de status (quote → confirmed → invoiced)
+- **Pedidos:** Itens, descontos, transições de status (quote → confirmed → partially_invoiced → invoiced)
+- **Alteração de pedido (NOVO, 2026-08-06):** `PUT /api/sales/:id/items` substitui os itens de uma venda `quote`/`confirmed` (ajusta reserva de estoque na mesma transação; bloqueado a partir de faturamento parcial/total)
+- **Faturamento parcial (NOVO, 2026-08-06):** `POST /api/sales/:id/nfe` aceita quantidade por item; `sale_items.invoiced_quantity` acumula entre emissões; risco residual: sem histórico multi-NF-e por pedido (`Sale.nfe_*` só guarda a mais recente)
+- **Tabela de preços por cliente (NOVO, 2026-08-06):** `customer_price_lists`, preço negociado por par cliente×produto com vigência opcional, sugerido (editável) ao montar o pedido
 - **Contas a Receber:** Origem em vendas, controle de inadimplência
 - **Contas a Pagar:** Manual + automática de compras (no recebimento); `cost_center_id` opcional (NOVO, 2026-08-06)
 - **Centros de Custo (NOVO, 2026-08-06):** CRUD + relatório agrupado (`GET /api/finance/cost-centers/report`), atribuição em contas a pagar/receber existentes
-- **Fluxo de Caixa:** Projeção semanal 30/60/90 dias + **projeção diária (NOVO, 2026-08-06)** com saldo acumulado dia a dia (`GET /api/finance/cashflow/projection`); conciliação bancária/CNAB ainda pendente (ver `docs/governance/TODO.md`)
+- **Fluxo de Caixa:** Projeção semanal 30/60/90 dias + **projeção diária (NOVO, 2026-08-06)** com saldo acumulado dia a dia (`GET /api/finance/cashflow/projection`)
+- **Conciliação Bancária (NOVO, 2026-08-06):** `/api/finance/reconciliation/*` — importação de extrato OFX (dedup global por FITID), sugestões automáticas de match, baixa de conta a pagar/receber; **CNAB ainda pendente** (ver `docs/governance/TODO.md`)
 - **Relatórios:** Dashboard KPI (vendas hoje/mês/ano), análise cliente
 
 ### Qualidade & Compliance
@@ -178,12 +185,13 @@ Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-
 
 ### Roadmap
 1. **Fase 1 (P0):** ✅ Concluída em 2026-08-02 → **próximo: UAT → Go-Live G6**
-2. **Fase 2 (P1):** ✅ Majoritariamente entregue entre 2026-08-04 e 2026-08-06 — catálogo item×fornecedor (N:N), **Cotação/RFQ multi-fornecedor (NOVO)**, conversão requisição→pedido, MRP fecha ciclo (plano→OP e plano→requisição), telas de MRP/requisição/qualidade, custeio real de mão-de-obra/overhead, rastreabilidade por lote/QR, perfis de acesso configuráveis (RBAC completo), múltiplos depósitos, **centros de custo + projeção diária de fluxo de caixa (NOVO)**, **OEE completo (NOVO)**, apps mobile e Android TV. **O que realmente falta desta fase:**
+2. **Fase 2 (P1):** ✅ Majoritariamente entregue entre 2026-08-04 e 2026-08-06 — catálogo item×fornecedor (N:N), **Cotação/RFQ multi-fornecedor**, conversão requisição→pedido, MRP fecha ciclo (plano→OP e plano→requisição), telas de MRP/requisição/qualidade, custeio real de mão-de-obra/overhead, rastreabilidade por lote/QR, perfis de acesso configuráveis (RBAC completo), múltiplos depósitos, **centros de custo + projeção diária de fluxo de caixa**, **OEE completo com downtime real (NOVO)**, apps mobile e Android TV com **renovação de sessão via `POST /api/auth/refresh` (NOVO)**, **conciliação bancária OFX (NOVO)**, e em Vendas **alteração de pedido, faturamento parcial e tabela de preços por cliente (NOVO)**. **O que realmente falta desta fase:**
    - Validação em hardware real dos apps `mobile/`/`tv/` (checklist em `mobile/README.md` §5 e `tv/README.md` §5)
-   - Decisão de produto sobre JWT de 7 dias × painel de TV sempre ligado (ver `docs/governance/TODO.md`, seção 2026-08-06)
    - Teste de integração de concorrência real do claim de contagem cíclica (2 clients simultâneos contra Postgres)
    - Backfill retroativo de custo de mão-de-obra/overhead em OPs concluídas antes de 2026-08-04 (decisão consciente de não fazer, registrada como risco residual)
-   - Conciliação bancária/CNAB, mapeamento departamento→centro de custo na AP automática, campo de downtime real para OEE preciso (ver `docs/governance/TODO.md`, seção 2026-08-06 segunda rodada)
+   - Mapeamento departamento→centro de custo na AP automática, CNAB (boleto/remessa/retorno — só OFX foi implementado)
+   - Histórico multi-NF-e por pedido (`sale_invoices`) e reconciliação de status assíncrono de provedores reais de NF-e com faturamento parcial
+   - Teste de integração real (Postgres) das 3 features de maior risco da terceira rodada de 2026-08-06: conciliação bancária, índice único parcial de downtime, faturamento parcial (ver `docs/governance/TODO.md`, seção 2026-08-06 terceira rodada)
 3. **Fase 3 (P2):** Capacidade finita/centros de trabalho, TypeScript strict
 4. **Fase 4 (P3):** Refugo detalhado por etapa, CI/CD, unificação schema legado/novo (decisão futura de `DROP TABLE` das 12 tabelas órfãs do schema-fantasma em português, marcadas `DEPRECATED` em 2026-08-06 — ver `docs/DATABASE.md`)
 5. **Infra de produção (bloqueia deploy, independente das fases acima):** servidor de produção (VPS/on-premise) ainda não adquirido; reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato e cron de backup aguardando essa compra — ver `docs/infra/DEPLOY_UBUNTU.md` e `docs/GO_LIVE_G6_CHECKLIST.md`
@@ -232,7 +240,7 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 - **Rollback:** Revert Git commit + re-deploy + `npm run migration:down` se necessário
 
 ### Monitoramento Pós-Go-Live
-- **Logs:** Console (TODO: Winston structured logging em P1)
+- **Logs:** Winston estruturado (NOVO, 2026-08-06) — JSON em produção, colorido em dev; integrado em request-logger, errorHandler e boot; `LOG_FILE` opcional (sem rotação de arquivo — configurar logrotate externo se usado em produção)
 - **Alertas:** Estoque zerado/negativo, OP atrasadas, contas vencidas
 - **Health Check:** `GET /health/live` (processo) e `GET /health/ready` (processo + PostgreSQL) — implementados
 - **Backup:** PostgreSQL dump diário via cron
@@ -341,8 +349,8 @@ R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de 
 
 ---
 
-**Versão:** 1.1 SSOT  
-**Última atualização:** 6 de agosto de 2026  
+**Versão:** 1.2 SSOT  
+**Última atualização:** 6 de agosto de 2026 (terceira rodada do dia)  
 **Próxima revisão:** Pós-Go-Live (semana 1 de setembro)
 
 Remova referências a análises antigas. Este documento é o guia único de verdade.

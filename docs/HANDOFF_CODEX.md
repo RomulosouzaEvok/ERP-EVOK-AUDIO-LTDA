@@ -7219,3 +7219,207 @@ tabela de módulos, item 9, seção "Bombas latentes conhecidas"),
 `docs/governance/TODO.md` (itens novos de risco residual),
 `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md` (contagem de
 migrations, roadmap), este arquivo (esta seção).
+
+---
+
+## Terceira rodada de 2026-08-06 — auth refresh + Winston, mobile/TV, telas web, vendas, produção, financeiro
+
+**Contexto:** terceira rodada de entregas do dia (distinta das duas
+anteriores registradas acima). Working tree não commitado no momento
+desta entrada; migrations `20260806-000050/051/052/060/070` já aplicadas
+no banco real, junto com as das rodadas anteriores (64 migrations no
+total). 6 frentes:
+
+### 1. Auth refresh + Winston
+
+`POST /api/auth/refresh` (`RefreshTokenUseCase.ts`, header `Authorization:
+Bearer <token válido>` → `{ success:true, data:{ token } }`) — renovação
+deslizante sem refresh-token separado, mesmo `TokenService` de geração do
+login, mesmas claims (`id`, `passwordVersion`, `iss`, `aud`), token já
+expirado sempre 401 (cliente deve refazer login). Rate-limit 30/15min por
+usuário. Testado ao vivo. Fecha a pendência "Decisão de produto — JWT de 7
+dias × painel de TV sempre ligado" registrada em `docs/governance/TODO.md`
+desde a auditoria multi-agente original de 2026-08-06.
+
+Logging estruturado Winston (`server/src/config/logger.ts`) integrado no
+request-logger (`server/src/middlewares/requestContext.ts`), no
+`errorHandler` e no boot (`server/index.ts`) — JSON estruturado em
+produção, formato colorido legível em dev, `LOG_FILE` opcional para
+persistir em arquivo (**sem rotação de arquivo** — se usado em produção
+real, rotação/logrotate deve ser configurada fora da aplicação, não
+implementado nesta entrega).
+
+### 2. Mobile/TV — paginação + renovação de sessão
+
+`mobile/app/(app)/counts/index.tsx`: paginação incremental (20/página) nas
+seções "Minhas contagens"/"Pool" — antes usava limite fixo de 100 itens,
+sem paginação real (itens acima do limite simplesmente somiam da lista).
+Fecha a pendência correspondente registrada na entrada de auditoria
+multi-agente original.
+
+Mobile ganha refresh do token ao abrir o app com sessão persistida
+(`mobile/src/context/AuthContext.tsx`, chama `POST /api/auth/refresh` no
+boot se já houver token salvo). TV ganha refresh **proativo** a cada 12h
+(`tv/src/context/AuthContext.tsx`) — bem abaixo do TTL de 7 dias do JWT,
+resolvendo de fato (não só documentando) a pendência do painel "sempre
+ligado" chão de fábrica.
+
+### 3. Web — 2 telas pendentes fechadas
+
+**Reatribuição de contagem cíclica:** o endpoint
+`PUT /api/inventory-counts/:id/reassign` já existia desde a remediação de
+2026-08-06 original (`ReassignInventoryCountUseCase.ts`), mas sem UI.
+Adicionado botão "Reatribuir" (com opção de devolver ao pool,
+`assigned_to: null`) em `client/src/pages/products/InventoryCountsPage.tsx`,
+gateado por permissão `approve` (mesma exigência do backend — só
+gestor/admin reatribui).
+
+**Fornecedor padrão do item:** campo `SelectNative` "Fornecedor padrão"
+adicionado ao dialog de fornecedores do produto
+(`client/src/pages/products/ProductsPage.tsx`, componente
+`ProductSuppliersDialog`) — usa `PATCH /api/items/:id` com
+`fornecedor_padrao_id` (já `INTEGER` desde a correção de "bomba latente"
+da rodada anterior, `20260806-000040`). Lista só fornecedores `status:
+'active'`. Texto de ajuda explica a implicação (MRP usa este fornecedor
+para sugerir quem cotar/comprar ao gerar requisição). **Nota importante:**
+isso cabeia o campo em uma tela já existente (o dialog de fornecedores do
+produto), **não** é a tela de cadastro completa do Item Mestre canônico
+(`items`), que continua sem nenhuma tela dedicada.
+
+### 4. Vendas — 3 gaps fechados
+
+Fecha a linha `sales` de `docs/LEVANTAMENTO_ERP_2026-08-02.md`.
+
+**Tabela de preços por cliente (gap 1/3):** tabela `customer_price_lists`
+(migration `20260806-000050`, `customer_id`/`product_id`/`unit_price`/
+`currency`/`valid_from`/`valid_until`/`active`), CRUD sob
+`/api/sales/customers/:id/prices`
+(`CreateCustomerPriceUseCase`/`UpdateCustomerPriceUseCase`/
+`DeactivateCustomerPriceUseCase`/`ListCustomerPricesUseCase`), dialog
+"Tabela de preços" em `client/src/pages/sales/ClientsPage.tsx`. Preço
+sugerido (editável manualmente) ao adicionar item ao pedido em
+`SalesPage.tsx`.
+
+**Alteração de pedido confirmado (gap 2/3):** `PUT /api/sales/:id/items`
+(`EditSaleItemsUseCase.ts`) substitui **todo** o conjunto de itens da
+venda (não é PATCH incremental) — permitido em `quote`/`confirmed`,
+bloqueado a partir de
+`partially_invoiced`/`invoiced`/`shipped`/`canceled` com 422 didático
+(`details.status`). Em `confirmed`, ajusta a reserva de estoque já
+debitada na mesma transação (delta por produto). Protege linhas já
+faturadas (parcial ou totalmente). Botão "Editar itens" em
+`SalesPage.tsx`.
+
+**Faturamento parcial (gap 3/3):** `sale_items.invoiced_quantity`
+(migration `20260806-000051`, cumulativa entre emissões), novo status
+`partially_invoiced` no ENUM `enum_sales_status` (migration
+`20260806-000052`, transição automática `confirmed → partially_invoiced →
+invoiced`, nunca manual via `PUT /:id/status`; embarque continua exigindo
+faturamento total). `POST /api/sales/:id/nfe` (módulo `fiscal`,
+`IssueSaleNfeUseCase.ts`) aceita `{ items: [{ sale_item_id, quantity }] }`
+opcional — omitido/vazio preserva o comportamento anterior (fatura o
+saldo pendente inteiro). Dialog de emissão de NF-e com seleção de
+quantidade por item + indicador "faturado X de Y".
+
+**Desvio de território justificado:** o módulo `sales` tocou o módulo
+`fiscal` (`IssueSaleNfeUseCase.ts`, `fiscalController.ts`,
+`fiscalValidators.ts`) para viabilizar o faturamento parcial — decisão
+consciente, faturamento parcial é estruturalmente parte do fluxo de
+emissão de NF-e (o dono real do endpoint `POST /:id/nfe` sempre foi o
+módulo `fiscal`, montado sob o prefixo `/api/sales` por semântica de
+ciclo de vida de venda).
+
+**Risco residual real, documentado no código e aqui:** `Sale.nfe_*` guarda
+só a NF-e **mais recente** — múltiplas emissões parciais sobrescrevem
+chave/protocolo/XML uma da outra, **sem histórico por emissão**. Não é
+bloqueante para uso mock/dev (o mock não distingue múltiplas NF-e reais),
+mas é uma limitação real para produção com múltiplas NF-e por pedido —
+requer nova tabela `sale_invoices` (1 venda : N NF-e), registrada em
+`docs/governance/TODO.md`. Adicionalmente, `GetSaleNfeStatusUseCase` (path
+assíncrono de provedores reais — `focus_nfe`/`enotas`, não o mock usado em
+dev) **não** atualiza `invoiced_quantity`/`partially_invoiced`, só
+finaliza a transição `confirmed → invoiced` — afeta apenas ambientes com
+provider real configurado.
+
+### 5. Produção — paradas + OEE preciso
+
+Tabela `production_downtimes` (migration `20260806-000060`):
+`work_center_id` (FK obrigatória), `production_order_id` (FK opcional),
+`reason` (enum: setup/manutenção corretiva/preventiva/falta
+material/falta operador/qualidade/outros), `notes`,
+`started_at`/`finished_at` (parada em aberto quando `finished_at IS
+NULL`). Endpoints `POST/PUT/GET /api/production/downtimes`
+(`authorizeModule('chao_de_fabrica', ...)`, mesmo módulo de permissão do
+apontamento de OP). **Bloqueio de 2ª parada aberta simultânea no mesmo
+centro protegido em 2 níveis:** `OpenProductionDowntimeUseCase` (checagem
+em aplicação) **e** índice único parcial no Postgres
+(`uq_production_downtimes_open_per_work_center`, `work_center_id` WHERE
+`finished_at IS NULL`) — o índice cobre corrida de escrita concorrente que
+a checagem em aplicação sozinha não pega. UI em
+`client/src/pages/production/ShopFloorPage.tsx`.
+
+**OEE preciso:** `GetOeeReportUseCase.ts` passou a descontar downtime real
+das horas de calendário — `available_hours = max(calendario_bruto -
+downtime_hours, 0)` (satura em zero, nunca negativa). Payload ganha
+`downtime_hours` (soma) e `downtime_by_reason` (breakdown por categoria).
+**Remove a limitação documentada na rodada anterior** (Disponibilidade
+era só uma aproximação por calendário de turnos, sem desconto de paradas
+reais). Ver `docs/API.md` §7.
+
+### 6. Financeiro — conciliação bancária (OFX)
+
+Tabelas `bank_statements`/`bank_statement_entries` (migration
+`20260806-000070`) — um registro por arquivo `.ofx` importado, e cada
+`<STMTTRN>` do OFX com dedup **global** por `FITID` (contra qualquer
+importação anterior, não só a mesma). Parser OFX **manual**
+(`server/src/modules/financial/infrastructure/ofx/`), cobrindo OFX 1.x
+(SGML) e OFX 2.x (XML) — **decisão justificada de não adicionar biblioteca
+nova**: cobertura suficiente do subconjunto necessário para conciliação
+bancária, sem dependência frágil numa área de upload de arquivo de
+terceiro. Detecção de encoding (Latin-1/CP1252) é heurística.
+
+Endpoints sob `/api/finance/reconciliation`: `POST /statements` (upload
+multipart, campo `file`), `GET /statements`, `GET
+/statements/:id/entries`, `GET /statements/:id/suggestions` (sugestões
+automáticas — tolerância 1 centavo, ±7 dias de vencimento, **nunca
+vincula sozinho**), `POST /entries/:id/match` (XOR `payable_id`/
+`receivable_id`), `POST /entries/:id/ignore`, `POST /entries/:id/unmatch`
+(**bloqueado com 422 se a conta já foi baixada** — correção manual
+exigida, decisão conservadora). 4ª aba "Conciliação" em
+`client/src/pages/financial/FinancialPage.tsx`
+(`ReconciliationTab.tsx`, novo). **CNAB (boleto/remessa/retorno) fica fora
+desta v1** — próxima etapa do módulo, sem data definida.
+
+### Números finais de validação (rodados nesta consolidação)
+
+```
+Server: 669/669 testes unitários (85 suítes)
+Server: typecheck — 0 erros
+Server: migration:status — limpo (64 migrations no total)
+Client: 51/51 testes
+Client: typecheck — 0 erros
+Client: build — ok
+```
+
+### Riscos residuais gerais registrados (decisão consciente de não resolver nesta rodada)
+
+- Sem teste de integração end-to-end contra Postgres real para
+  conciliação bancária, downtime (índice único parcial) e faturamento
+  parcial — só unitários com mocks.
+- Detecção de encoding do OFX é heurística (Latin-1/CP1252).
+- `GetSaleNfeStatusUseCase` (provedores reais) não atualiza
+  `invoiced_quantity`/`partially_invoiced` — só o mock/fluxo síncrono via
+  `POST /:id/nfe` faz.
+- Histórico multi-NF-e por pedido (`sale_invoices`) não existe —
+  `Sale.nfe_*` só guarda a emissão mais recente.
+- CNAB continua fora de escopo.
+
+**Documentos atualizados nesta consolidação:** `docs/API.md` (auth
+refresh §1, vendas §5, financeiro §6, relatórios §7 — OEE com downtime +
+`/api/production/downtimes`), `docs/DATABASE.md` (`customer_price_lists`,
+`sale_items.invoiced_quantity` + `partially_invoiced`,
+`production_downtimes`, `bank_statements`/`bank_statement_entries`),
+`docs/LEVANTAMENTO_ERP_2026-08-02.md` (linhas `sales`/`financial`, item 9),
+`docs/governance/TODO.md` (itens marcados `[x]`, novos `[ ]` de risco
+residual), `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md`
+(contagem de migrations, módulos/telas novas), este arquivo (esta seção).

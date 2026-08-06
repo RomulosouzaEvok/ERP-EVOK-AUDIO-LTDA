@@ -1622,15 +1622,14 @@ P0 do campo "Atribuir a" (frontend) e os achados de infra/mobile mais
 simples ja foram corrigidos na propria remediacao de 2026-08-06 (ver
 diario) e nao aparecem aqui.
 
-- [ ] **[PENDENTE] Decisao de produto — JWT de 7 dias x painel de TV
-  "sempre ligado".** O app `tv/` fica logado indefinidamente em uma tela
-  fixa de chao de fabrica; o TTL de 7 dias do JWT (padrao do sistema,
-  pensado para sessao de usuario humano) nao tem hoje um mecanismo de
-  renovacao automatica para esse caso de uso. Precisa de decisao de
-  produto: refresh token dedicado, TTL especifico para o app de TV, ou
-  runbook operacional de relogin periodico (ex.: reiniciar o app
-  semanalmente). Nao e um bug — e uma lacuna de design a decidir antes de
-  instalar o app de TV em producao continuamente.
+- [x] **[IMPLEMENTADO 2026-08-06, terceira rodada] Decisao de produto —
+  JWT de 7 dias x painel de TV "sempre ligado".** Resolvido com
+  `POST /api/auth/refresh` (renovação deslizante, mesmo signing do login,
+  rate-limit 30/15min por usuário) + refresh proativo a cada 12h no app
+  `tv/` (`tv/src/context/AuthContext.tsx`) — bem abaixo do TTL de 7 dias.
+  Mobile também ganhou refresh ao abrir o app com sessão persistida. Ver
+  `docs/API.md` §1, `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada "terceira
+  rodada").
 - [ ] **[PENDENTE] Validacao em hardware real dos 2 apps novos
   (`mobile/`, `tv/`).** Hoje validados so por `tsc --noEmit`/bundle
   Metro — nenhum teste em dispositivo/emulador real. Checklist detalhado
@@ -1645,9 +1644,10 @@ diario) e nao aparecem aqui.
   critico em producao (ver risco ja registrado em
   `docs/HANDOFF_CODEX.md`, secao "Inventario Ciclico — Atribuicao de
   Contagem a Funcionario / Pool").
-- [ ] **[PENDENTE] Paginacao da lista de contagens no app mobile.** Hoje
-  usa limite fixo de 100 itens, sem paginacao real — funciona enquanto o
-  volume de contagens ativas for baixo, mas nao escala.
+- [x] **[IMPLEMENTADO 2026-08-06, terceira rodada] Paginacao da lista de
+  contagens no app mobile.** `mobile/app/(app)/counts/index.tsx` ganhou
+  paginação incremental (20/página) nas seções "Minhas contagens"/"Pool"
+  — substitui o limite fixo de 100 itens anterior.
 - [ ] **[PENDENTE] Infra de producao — reverse proxy/TLS,
   `docker-compose.prod.yml` exercitado de fato, cron de backup.**
   Aguardando a compra do servidor de producao (mesma pendencia (a) ja
@@ -1674,10 +1674,11 @@ cada entrega em `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06
 residuais e trabalho futuro registrados por decisao consciente de nao
 resolver na mesma rodada.
 
-- [ ] **[PENDENTE] Conciliacao bancaria/CNAB.** Modulo financeiro ganhou
-  centros de custo e projecao diaria de fluxo de caixa nesta rodada, mas
-  conciliacao bancaria (importacao de extrato/CNAB, baixa automatica de
-  titulos) continua sem nenhuma implementacao. Sem data definida.
+- [ ] **[PENDENTE] Conciliacao bancaria/CNAB.** ✅ **OFX resolvido em
+  2026-08-06 (terceira rodada)** — `/api/finance/reconciliation/*`,
+  `bank_statements`/`bank_statement_entries`, dedup global por `FITID`,
+  sugestoes de match. **CNAB (boleto/remessa/retorno) continua fora de
+  escopo** — sem data definida.
 - [ ] **[PENDENTE] Mapeamento automatico departamento -> centro de custo
   na criacao automatica de `AccountPayable`.** Hoje `cost_center_id` so e
   atribuido manualmente (`PUT /api/finance/payable/:id/cost-center` ou no
@@ -1685,14 +1686,14 @@ resolver na mesma rodada.
   criada automaticamente (ex.: ao aprovar um pedido de compra), nasce sem
   centro de custo. Precisa de regra de negocio (provavelmente por
   `department_id` de quem originou a compra) antes de implementar.
-- [ ] **[PENDENTE] Campo de downtime/parada de maquina para OEE preciso.**
-  `GET /api/reports/oee` calcula Disponibilidade por aproximacao de
-  calendario de turnos (tempo apontado vs. tempo disponivel do centro) —
-  o schema (`production_order_tracking`) nao tem um registro explicito de
-  inicio/fim de parada real (so o status `paused`, sem timestamp). Se o
-  negocio precisar de OEE com desconto de paradas reais, e necessario
-  desenhar esse campo/tabela antes de ajustar a formula em
-  `GetOeeReportUseCase.ts`.
+- [x] **[IMPLEMENTADO 2026-08-06, terceira rodada] Campo de downtime/parada
+  de maquina para OEE preciso.** Tabela `production_downtimes`
+  (migration `20260806-000060`), endpoints
+  `POST/PUT/GET /api/production/downtimes`, bloqueio de 2ª parada aberta
+  simultânea no mesmo centro (use case + índice único parcial).
+  `GetOeeReportUseCase.ts` agora desconta `downtime_hours` real das horas
+  de calendário (`available_hours = max(calendario - downtime, 0)`), com
+  breakdown por motivo. Ver `docs/API.md` §7/`docs/DATABASE.md`.
 - [ ] **[PENDENTE] Decisao futura — `DROP TABLE` definitivo das 12
   tabelas orfas do schema-fantasma em portugues.** Marcadas `DEPRECATED`
   via `COMMENT ON TABLE` nesta rodada (migration `20260806-000042`), mas
@@ -1701,21 +1702,38 @@ resolver na mesma rodada.
   confirmacao formal de que nao ha dependencia de compliance sobre esse
   schema, antes de dropar. Ver `docs/DATABASE.md`, secao "Tabelas orfas do
   schema-fantasma em portugues".
-- [ ] **[PENDENTE] Tela de reatribuicao de contagem ciclica.** O endpoint
-  `PUT /api/inventory-counts/:id/reassign` (`ReassignInventoryCountUseCase.ts`,
-  entregue na remediacao de 2026-08-06 registrada na entrada anterior
-  deste arquivo) nao tem UI — hoje so e acionavel via chamada direta a
-  API. Precisa de um botao/dialog em `client/src/pages/products/InventoryCountsPage.tsx`
-  (ou equivalente) para o gestor reatribuir uma contagem sem depender de
-  suporte tecnico.
-- [ ] **[PENDENTE] Tela de `fornecedor_padrao_id` no cadastro de item.**
-  O campo existe no backend (`Item.fornecedor_padrao_id`, corrigido de
-  UUID para INTEGER nesta rodada, `POST`/`PATCH /api/items`), mas o Item
-  Mestre canonico continua sem nenhuma tela de cadastro completa (ver
-  `docs/LEVANTAMENTO_ERP_2026-08-02.md`, lista de "9 modulos do backend
-  SEM NENHUMA TELA" — `items` e um deles). Quando a tela de cadastro do
-  Item Mestre for construida, incluir um seletor de fornecedor padrao
-  (`supplier_id` inteiro, nao mais UUID) como parte do formulario.
+- [x] **[IMPLEMENTADO 2026-08-06, terceira rodada] Tela de reatribuicao de
+  contagem ciclica.** Botão "Reatribuir" + devolver ao pool em
+  `client/src/pages/products/InventoryCountsPage.tsx`, gateado por
+  permissão `approve` (consome `PUT /api/inventory-counts/:id/reassign`).
+- [x] **[IMPLEMENTADO 2026-08-06, terceira rodada] Campo de
+  `fornecedor_padrao_id` acessível em tela.** Seletor "Fornecedor padrão"
+  adicionado ao dialog de fornecedores do produto
+  (`client/src/pages/products/ProductsPage.tsx`, `ProductSuppliersDialog`,
+  `PATCH /api/items/:id`). **Nota:** isso NÃO substitui a tela de cadastro
+  completa do Item Mestre canônico (`items`), que continua sem nenhuma
+  tela dedicada — ver `docs/LEVANTAMENTO_ERP_2026-08-02.md`.
+- [ ] **[PENDENTE] CNAB (boleto/remessa/retorno).** Conciliação bancária
+  v1 (2026-08-06, terceira rodada) cobriu apenas importação de extrato
+  OFX. CNAB é uma frente separada, sem data definida.
+- [ ] **[PENDENTE] Histórico multi-NF-e por pedido (`sale_invoices`).**
+  `Sale.nfe_*` guarda apenas a NF-e mais recente — múltiplas emissões
+  parciais (faturamento parcial, 2026-08-06 terceira rodada) sobrescrevem
+  chave/protocolo/XML uma da outra, sem histórico por emissão. Não
+  bloqueante para uso mock/dev; necessário para produção real com
+  múltiplas NF-e por pedido. Requer nova tabela `sale_invoices` (1 venda :
+  N NF-e) e migração dos campos hoje em `Sale.nfe_*`.
+- [ ] **[PENDENTE] Reconciliação de status assíncrono de provedores reais
+  de NF-e com faturamento parcial.** `GetSaleNfeStatusUseCase` (path
+  assíncrono de provedores reais — `focus_nfe`/`enotas`, não o mock usado
+  em dev) não atualiza `invoiced_quantity`/`partially_invoiced`, só
+  finaliza `confirmed → invoiced`. Afeta apenas ambientes com provider
+  real configurado.
+- [ ] **[PENDENTE] Teste de integração real das 3 features de maior risco
+  da terceira rodada de 2026-08-06.** Conciliação bancária, downtime
+  (índice único parcial `uq_production_downtimes_open_per_work_center`) e
+  faturamento parcial — hoje só cobertos por testes unitários com
+  repositório mockado, sem teste de integração contra PostgreSQL real.
 
 **Documentos atualizados nesta consolidacao:** este arquivo (secao nova),
 `docs/API.md` (RFQ §11.1, financeiro §6, OEE §7, nota breaking change em
@@ -1723,3 +1741,28 @@ resolver na mesma rodada.
 colunas-bomba, `DEPRECATED` nas 12 tabelas orfas), `docs/LEVANTAMENTO_ERP_2026-08-02.md`,
 `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `docs/HANDOFF_CODEX.md`
 (secao nova), `CLAUDE.md` (contagem de migrations, roadmap).
+
+---
+
+## 2026-08-06 (terceira rodada do dia) — Pendencias das 6 frentes de hoje (auth refresh/Winston, mobile/TV, telas web, vendas, producao, financeiro)
+
+**Origem:** terceira rodada de entregas de 2026-08-06, distinta das duas
+anteriores (auditoria multi-agente de apps mobile/TV; RFQ/centros de
+custo/OEE/bombas latentes). Detalhe completo de cada entrega em
+`docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (terceira rodada —
+6 frentes...)". Os itens marcados `[x]` acima (decisao JWT/TV, paginacao
+mobile, downtime/OEE, tela de reatribuicao de contagem, campo de
+fornecedor padrao) e os `[ ]` novos (CNAB, historico multi-NF-e, status
+assincrono de provedores reais, testes de integracao das 3 features de
+maior risco) foram registrados nas secoes correspondentes acima — nao
+duplicados aqui.
+
+**Documentos atualizados nesta consolidacao:** este arquivo (itens
+marcados `[x]`/`[ ]` novos nas duas secoes de 2026-08-06 anteriores),
+`docs/API.md` (auth refresh §1, vendas §5, financeiro §6, relatorios §7 +
+`/api/production/downtimes`), `docs/DATABASE.md` (`customer_price_lists`,
+`sale_items.invoiced_quantity`/`partially_invoiced`,
+`production_downtimes`, `bank_statements`/`bank_statement_entries`),
+`docs/LEVANTAMENTO_ERP_2026-08-02.md` (linhas `sales`/`financial`, item 9),
+`docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `docs/HANDOFF_CODEX.md`
+(secao nova), `CLAUDE.md` (contagem de migrations, modulos/telas novas).

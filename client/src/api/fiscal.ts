@@ -4,9 +4,20 @@ import type { Sale } from './sales';
 
 export type NfeStatus = 'pending' | 'processing' | 'authorized' | 'denied' | 'cancelled';
 
-/** `POST /api/sales/:id/nfe` — emite a NF-e de uma venda `confirmed`. */
-export async function issueSaleNfe(saleId: number) {
-  const { data } = await httpClient.post<ItemResponse<Sale>>(`/api/sales/${saleId}/nfe`);
+/** Item de faturamento parcial (gap 3/3, "Faturamento parcial"). */
+export interface IssueSaleNfeItemInput {
+  sale_item_id: number;
+  quantity: number;
+}
+
+/**
+ * `POST /api/sales/:id/nfe` — emite a NF-e de uma venda `confirmed`/
+ * `partially_invoiced`. `items` omitido = fatura o saldo pendente inteiro
+ * (comportamento padrão); informado = fatura apenas as quantidades
+ * indicadas (faturamento parcial).
+ */
+export async function issueSaleNfe(saleId: number, items?: IssueSaleNfeItemInput[]) {
+  const { data } = await httpClient.post<ItemResponse<Sale>>(`/api/sales/${saleId}/nfe`, items ? { items } : {});
   return data.data;
 }
 

@@ -4,12 +4,22 @@
  * O JWT é persistido com `expo-secure-store` (Keychain no iOS / Keystore no
  * Android), nunca em `AsyncStorage` puro, por se tratar de uma credencial de
  * sessão. Ver https://docs.expo.dev/versions/latest/sdk/securestore/.
+ *
+ * Renovação silenciosa de sessão (`POST /api/auth/refresh`): ao restaurar
+ * uma sessão persistida no boot do app, trocamos o token salvo por um novo
+ * (TTL renovado de 7 dias) — assim um usuário que abre o app esporadicamente
+ * não é deslogado só por o token antigo estar perto de expirar. Regras:
+ *   - 401 no refresh (token já expirado/inválido) -> `onUnauthorized` global
+ *     dispara `clearSession` (mesmo fluxo de "sessão expirada" de qualquer
+ *     outra chamada) -> relogin normal.
+ *   - Erro de rede no refresh -> falha SILENCIOSA; segue com o token atual
+ *     (já persistido) e tenta de novo na próxima abertura do app.
  */
 
 import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { login as loginRequest } from '../api/auth';
+import { login as loginRequest, refresh as refreshRequest } from '../api/auth';
 import { setAuthToken, setUnauthorizedHandler } from '../api/client';
 import type { AuthUser } from '../api/types';
 
@@ -49,6 +59,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (token && storedUser) {
           setAuthToken(token);
           setUser(JSON.parse(storedUser) as AuthUser);
+          // Renovação silenciosa: troca o token salvo por um novo (TTL de
+          // mais 7 dias) sempre que o app é reaberto com sessão válida.
+          try {
+            const newToken = await refreshRequest();
+            setAuthToken(newToken);
+            await SecureStore.setItemAsync(TOKEN_KEY, newToken);
+          } catch {
+            // 401: já tratado pelo handler global de `onUnauthorized`
+            // (registrado no efeito abaixo) -> `clearSession` roda por lá.
+            // Erro de rede/timeout ou qualquer outra falha: silencioso —
+            // segue normalmente com o token atual já persistido.
+          }
         }
       } catch {
         // SecureStore indisponível/corrompido: trata como deslogado.

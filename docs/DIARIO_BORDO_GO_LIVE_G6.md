@@ -1148,3 +1148,129 @@ bomba, `DEPRECATED` nas 12 tabelas órfãs), `docs/LEVANTAMENTO_ERP_2026-08-02.m
 marcados resolvidos), `docs/governance/TODO.md` (itens novos de risco
 residual), `docs/HANDOFF_CODEX.md` (seção nova consolidando as duas
 ondas), `CLAUDE.md` (contagem de migrations, roadmap), este diário.
+
+---
+
+### 2026-08-06 (terceira rodada — 6 frentes: auth refresh, Winston, mobile/TV, telas web, vendas, produção, financeiro)
+
+**Contexto:** terceira rodada de entregas do dia, distinta das duas
+anteriores (auditoria multi-agente de apps mobile/TV + atribuição de
+contagem; RFQ/centros de custo/OEE/bombas latentes). Working tree não
+commitado no momento desta entrada; migrations
+`20260806-000050/051/052/060/070` já aplicadas no banco real, junto com
+as das rodadas anteriores (64 migrations no total).
+
+1. **Auth refresh + Winston.** `POST /api/auth/refresh`
+   (`authenticate` + `RefreshTokenUseCase`, header `Authorization: Bearer
+   <token válido>` → `{ success:true, data:{ token } }`) — renovação
+   deslizante sem refresh-token separado, mesmo signing do login,
+   rate-limit 30/15min por usuário. Testado ao vivo. Fecha a pendência
+   "Decisão de produto — JWT de 7 dias × painel de TV sempre ligado"
+   registrada em `docs/governance/TODO.md`. Logging estruturado Winston
+   (`server/src/config/logger.ts`) integrado no request-logger,
+   errorHandler e boot (`index.ts`) — JSON em produção, colorido em dev,
+   `LOG_FILE` opcional (sem rotação de arquivo, documentado).
+2. **Mobile/TV — paginação + renovação de sessão.**
+   `mobile/app/(app)/counts/index.tsx` ganhou paginação incremental
+   (20/página) nas seções "Minhas contagens"/"Pool" (antes: limite fixo
+   100, itens somiam acima disso — pendência registrada na entrada
+   "2026-08-06" original deste diário). Mobile: refresh do token ao abrir
+   o app com sessão persistida (`mobile/src/context/AuthContext.tsx`). TV:
+   refresh proativo a cada 12h, bem abaixo do TTL de 7 dias
+   (`tv/src/context/AuthContext.tsx`) — resolve de fato a pendência do
+   painel "sempre ligado".
+3. **Web — 2 telas pendentes fechadas.** Reatribuição de contagem
+   (`PUT /api/inventory-counts/:id/reassign`, endpoint já existia desde a
+   remediação de 2026-08-06 original): botão "Reatribuir" + devolver ao
+   pool em `InventoryCountsPage.tsx`, gateado por permissão `approve`.
+   Fornecedor padrão do item: campo `SelectNative` no dialog de
+   fornecedores do produto (`ProductsPage.tsx`, `ProductSuppliersDialog`),
+   usa `PATCH /api/items/:id` com `fornecedor_padrao_id` (já `INTEGER`
+   desde a correção da rodada anterior).
+4. **Vendas — 3 gaps fechados** (`docs/LEVANTAMENTO_ERP_2026-08-02.md`,
+   linha `sales`). **Tabela de preços por cliente:** tabela
+   `customer_price_lists` (migration `-000050`), CRUD
+   `/api/sales/customers/:id/prices`, dialog "Tabela de preços" em
+   `ClientsPage.tsx`, preço sugerido (editável) ao adicionar item ao
+   pedido. **Alteração de pedido confirmado:** `PUT /api/sales/:id/items`
+   (substituição completa de itens), permitido em `quote`/`confirmed`,
+   bloqueado a partir de
+   `partially_invoiced`/`invoiced`/`shipped`/`canceled` (422 com
+   `details`), ajusta reserva de estoque na mesma transação, protege
+   linhas já parcialmente faturadas. Botão "Editar itens" em
+   `SalesPage.tsx`. **Faturamento parcial:** `sale_items.invoiced_quantity`
+   (migration `-000051`), novo status `partially_invoiced` (migration
+   `-000052`, `confirmed → partially_invoiced → invoiced`; embarque
+   continua exigindo faturamento total). `POST /api/sales/:id/nfe` aceita
+   `{ items: [{ sale_item_id, quantity }] }` opcional. Dialog de emissão
+   com seleção de quantidade por item + indicador "faturado X de Y".
+   **Risco residual real, documentado no código:** `Sale.nfe_*` guarda só
+   a NF-e mais recente — múltiplas emissões parciais sobrescrevem
+   chave/protocolo/XML uma da outra (sem histórico por emissão); não
+   bloqueante para uso mock/dev, mas registrado como pendência para
+   produção real com múltiplas NF-e por pedido (`sale_invoices`, ver
+   `docs/governance/TODO.md`). O módulo `sales` tocou o módulo `fiscal`
+   (`IssueSaleNfeUseCase`, `fiscalController`, `fiscalValidators`) para
+   viabilizar faturamento parcial — desvio de território consciente e
+   justificado (faturamento parcial é estruturalmente parte do fluxo de
+   NF-e).
+5. **Produção — paradas + OEE preciso.** Tabela `production_downtimes`
+   (migration `-000060`): `work_center`, OP opcional, motivo
+   (setup/manutenção corretiva/preventiva/falta material/falta
+   operador/qualidade/outros), `started_at`/`finished_at`.
+   `POST/PUT/GET /api/production/downtimes`, bloqueio de 2ª parada aberta
+   simultânea no mesmo centro protegido em 2 níveis (use case + índice
+   único parcial no Postgres). UI em `ShopFloorPage.tsx`. OEE
+   (`GetOeeReportUseCase`): disponibilidade agora desconta downtime real
+   (`available_hours = max(calendario - downtime, 0)`), expõe
+   `downtime_hours` + breakdown por motivo. Remove a limitação
+   documentada na rodada anterior (aproximação só por calendário de
+   turnos).
+6. **Financeiro — conciliação bancária (OFX).** Tabelas
+   `bank_statements`/`bank_statement_entries` (migration `-000070`).
+   Parser OFX manual (1.x SGML e 2.x XML, sem lib nova — decisão
+   justificada: cobertura suficiente do subconjunto necessário sem
+   dependência frágil numa área de upload). `POST
+   /api/finance/reconciliation/statements` (upload `.ofx`, dedup global
+   por `FITID`), sugestões de match (±7 dias, tolerância 1 centavo),
+   `match`/`ignore`/`unmatch` (`unmatch` bloqueado se conta já paga —
+   correção manual exigida, decisão conservadora). 4ª aba "Conciliação" em
+   `FinancialPage.tsx`. CNAB fica fora desta v1 (próxima etapa).
+
+#### Números finais de validação (rodados nesta consolidação)
+
+```
+Server: 669/669 testes unitários (85 suítes)
+Server: typecheck — 0 erros
+Server: migration:status — limpo (64 migrations no total)
+Client: 51/51 testes
+Client: typecheck — 0 erros
+Client: build — ok
+```
+
+#### Riscos residuais registrados (decisão consciente de não resolver nesta rodada)
+
+- **Sem teste de integração end-to-end contra Postgres real** para
+  conciliação bancária, downtime (índice único parcial) e faturamento
+  parcial — só unitários com mocks.
+- **Detecção de encoding do OFX é heurística** (Latin-1/CP1252).
+- **`GetSaleNfeStatusUseCase`** (path assíncrono de provedores reais —
+  `focus_nfe`/`enotas`, não o mock usado em dev) não atualiza
+  `invoiced_quantity`/`partially_invoiced` — só finaliza `confirmed →
+  invoiced`. Afeta apenas providers reais.
+- **Histórico multi-NF-e por pedido** (`sale_invoices`, 1 venda : N NF-e)
+  não existe — `Sale.nfe_*` só guarda a emissão mais recente.
+- **CNAB** (boleto/remessa/retorno) continua fora de escopo — só OFX foi
+  implementado.
+
+**Documentos atualizados nesta consolidação:** `docs/API.md` (auth
+refresh §1, vendas §5 — preço por cliente/edição de itens/faturamento
+parcial, financeiro §6 — conciliação bancária, relatórios §7 — OEE com
+downtime + `/api/production/downtimes`), `docs/DATABASE.md`
+(`customer_price_lists`, `sale_items.invoiced_quantity` +
+`partially_invoiced`, `production_downtimes`, `bank_statements`/
+`bank_statement_entries`), `docs/LEVANTAMENTO_ERP_2026-08-02.md` (linhas
+`sales`/`financial`, item 9 — downtime real), `docs/governance/TODO.md`
+(itens resolvidos marcados `[x]`, novos `[ ]` de risco residual),
+`docs/HANDOFF_CODEX.md` (seção nova consolidando as 6 frentes),
+`CLAUDE.md` (contagem de migrations, módulos/telas novas), este diário.

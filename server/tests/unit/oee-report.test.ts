@@ -1,13 +1,15 @@
 /**
  * Testes do relatório de OEE (item 7/9 do LEVANTAMENTO_ERP — "OEE completo
- * ainda não implementado"): GET /api/reports/oee.
+ * ainda não implementado") + pendência "campo de downtime/paradas para OEE
+ * preciso" (docs/governance/TODO.md): GET /api/reports/oee.
  *
- * Mocka `ReportsRepository.findWorkCentersForOee` e
- * `findOeeAggregatesByWorkCenter` diretamente (as agregações SQL já viram
- * `OeeAggregateRow` prontos) — o foco destes testes é a regra de negócio do
- * use case: cálculo dos 3 eixos, composição do OEE, proteção contra divisão
- * por zero (null com motivo, nunca 0 enganoso) e agregação por soma (não
- * média) entre centros de trabalho.
+ * Mocka `ReportsRepository.findWorkCentersForOee`,
+ * `findOeeAggregatesByWorkCenter` e `findDowntimeHoursByWorkCenter`
+ * diretamente (as agregações SQL já viram linhas prontas) — o foco destes
+ * testes é a regra de negócio do use case: cálculo dos 3 eixos, composição
+ * do OEE, proteção contra divisão por zero (null com motivo, nunca 0
+ * enganoso), agregação por soma (não média) entre centros de trabalho e o
+ * desconto de horas de parada (downtime) na disponibilidade líquida.
  */
 
 import GetOeeReportUseCase = require('../../src/modules/reports/application/use-cases/GetOeeReportUseCase');
@@ -18,7 +20,12 @@ function shiftsAllWeek(start_time: string, end_time: string) {
   return [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, start_time, end_time }));
 }
 
-describe('GetOeeReportUseCase (item 7/9)', () => {
+/** Mock padrão de `findDowntimeHoursByWorkCenter` sem nenhuma parada registrada. */
+function noDowntime() {
+  return jest.fn(async () => []);
+}
+
+describe('GetOeeReportUseCase (item 7/9 + downtime)', () => {
   it('calcula os 3 eixos (disponibilidade, performance, qualidade) a partir dos turnos e apontamentos', async () => {
     const repository = {
       findWorkCentersForOee: jest.fn(async () => [
@@ -35,6 +42,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
       findOeeAggregatesByWorkCenter: jest.fn(async () => [
         { work_center_id: 1, run_hours: 45, standard_hours: 40.5, quantity_good: 90, quantity_scrapped: 10, tracking_count: 20 },
       ]),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -43,6 +51,8 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
 
     const center = report.by_work_center[0];
     expect(center.available_hours).toBe(63);
+    expect(center.downtime_hours).toBe(0);
+    expect(center.downtime_by_reason).toEqual([]);
     expect(center.availability).toBeCloseTo(45 / 63, 4);
     expect(center.performance).toBeCloseTo(40.5 / 45, 4); // 0.9
     expect(center.quality).toBeCloseTo(0.9, 4);
@@ -57,6 +67,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
       findOeeAggregatesByWorkCenter: jest.fn(async () => [
         { work_center_id: 1, run_hours: 8, standard_hours: 6, quantity_good: 90, quantity_scrapped: 10, tracking_count: 5 },
       ]),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -77,6 +88,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
       ]),
       // Nenhum apontamento concluído no período para este centro.
       findOeeAggregatesByWorkCenter: jest.fn(async () => []),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -103,6 +115,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
       findOeeAggregatesByWorkCenter: jest.fn(async () => [
         { work_center_id: 2, run_hours: 10, standard_hours: 10, quantity_good: 10, quantity_scrapped: 0, tracking_count: 1 },
       ]),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -121,6 +134,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
       findOeeAggregatesByWorkCenter: jest.fn(async () => [
         { work_center_id: 3, run_hours: 5, standard_hours: 4, quantity_good: 0, quantity_scrapped: 50, tracking_count: 10 },
       ]),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -140,6 +154,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
         // standard_hours (20) > run_hours (10) -> razão bruta 2.0, deve ser limitada a 1.0.
         { work_center_id: 4, run_hours: 10, standard_hours: 20, quantity_good: 100, quantity_scrapped: 0, tracking_count: 3 },
       ]),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -159,6 +174,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
       findOeeAggregatesByWorkCenter: jest.fn(async () => [
         { work_center_id: 5, run_hours: 5, standard_hours: 5, quantity_good: 10, quantity_scrapped: 0, tracking_count: 2 },
       ]),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -180,6 +196,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
         { work_center_id: 1, run_hours: 10, standard_hours: 5, quantity_good: 50, quantity_scrapped: 50, tracking_count: 5 },
         { work_center_id: 2, run_hours: 10, standard_hours: 10, quantity_good: 100, quantity_scrapped: 0, tracking_count: 8 },
       ]),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -198,12 +215,13 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
     expect(report.aggregate.work_centers_count).toBe(2);
   });
 
-  it('filtra por work_center_id e repassa o filtro ao repositório', async () => {
+  it('filtra por work_center_id e repassa o filtro ao repositório (inclusive para downtime)', async () => {
     const repository = {
       findWorkCentersForOee: jest.fn(async () => [
         { id: 7, code: 'FILTRADO', name: 'Centro filtrado', machines_count: 1, capacity_hours_per_day: 8, efficiency_factor: 1, shifts: [] },
       ]),
       findOeeAggregatesByWorkCenter: jest.fn(async () => []),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -211,6 +229,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
 
     expect(repository.findWorkCentersForOee).toHaveBeenCalledWith(7);
     expect(repository.findOeeAggregatesByWorkCenter).toHaveBeenCalledWith(expect.any(Date), expect.any(Date), 7);
+    expect(repository.findDowntimeHoursByWorkCenter).toHaveBeenCalledWith(expect.any(Date), expect.any(Date), 7);
     expect(report.work_center_id).toBe(7);
   });
 
@@ -218,6 +237,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
     const repository = {
       findWorkCentersForOee: jest.fn(),
       findOeeAggregatesByWorkCenter: jest.fn(),
+      findDowntimeHoursByWorkCenter: jest.fn(),
     };
     const useCase = new GetOeeReportUseCase(repository as any);
 
@@ -231,6 +251,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
     const repository = {
       findWorkCentersForOee: jest.fn(async () => []),
       findOeeAggregatesByWorkCenter: jest.fn(async () => []),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -239,6 +260,8 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
     expect(report.by_work_center).toEqual([]);
     expect(report.aggregate.oee).toBeNull();
     expect(report.aggregate.work_centers_count).toBe(0);
+    expect(report.aggregate.downtime_hours).toBe(0);
+    expect(report.aggregate.downtime_by_reason).toEqual([]);
     expect(report.aggregate.no_data_reason).toContain('nenhum centro de trabalho ativo');
   });
 
@@ -254,6 +277,7 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
       findOeeAggregatesByWorkCenter: jest.fn(async () => [
         { work_center_id: 9, run_hours: 4, standard_hours: 4, quantity_good: 8, quantity_scrapped: 0, tracking_count: 2 },
       ]),
+      findDowntimeHoursByWorkCenter: noDowntime(),
     };
 
     const useCase = new GetOeeReportUseCase(repository as any);
@@ -261,5 +285,116 @@ describe('GetOeeReportUseCase (item 7/9)', () => {
 
     expect(report.by_work_center[0].code).toBe('SEQ');
     expect(report.by_work_center[0].availability).toBeCloseTo(0.5, 4); // 4/8
+  });
+
+  it('desconta horas de parada da disponibilidade líquida (available_hours = calendário - downtime)', async () => {
+    const repository = {
+      findWorkCentersForOee: jest.fn(async () => [
+        { id: 1, code: 'MONT', name: 'Montagem', machines_count: 1, capacity_hours_per_day: 10, efficiency_factor: 1, shifts: [] },
+      ]),
+      findOeeAggregatesByWorkCenter: jest.fn(async () => [
+        { work_center_id: 1, run_hours: 6, standard_hours: 6, quantity_good: 10, quantity_scrapped: 0, tracking_count: 2 },
+      ]),
+      // Calendário bruto = 10h (1 dia * 10h/dia). 3h de parada -> líquido = 7h.
+      findDowntimeHoursByWorkCenter: jest.fn(async () => [
+        { work_center_id: 1, reason: 'manutencao_corretiva', hours: 3 },
+      ]),
+    };
+
+    const useCase = new GetOeeReportUseCase(repository as any);
+    const report = await useCase.execute({ start_date: '2026-08-05', end_date: '2026-08-05' });
+
+    const center = report.by_work_center[0];
+    expect(center.available_hours).toBe(7); // 10 - 3
+    expect(center.downtime_hours).toBe(3);
+    expect(center.downtime_by_reason).toEqual([{ reason: 'manutencao_corretiva', hours: 3 }]);
+    expect(center.availability).toBeCloseTo(6 / 7, 4);
+  });
+
+  it('breakdown de downtime por múltiplos motivos no mesmo centro', async () => {
+    const repository = {
+      findWorkCentersForOee: jest.fn(async () => [
+        { id: 1, code: 'MONT', name: 'Montagem', machines_count: 1, capacity_hours_per_day: 24, efficiency_factor: 1, shifts: [] },
+      ]),
+      findOeeAggregatesByWorkCenter: jest.fn(async () => [
+        { work_center_id: 1, run_hours: 10, standard_hours: 10, quantity_good: 10, quantity_scrapped: 0, tracking_count: 1 },
+      ]),
+      findDowntimeHoursByWorkCenter: jest.fn(async () => [
+        { work_center_id: 1, reason: 'setup', hours: 2 },
+        { work_center_id: 1, reason: 'falta_material', hours: 1.5 },
+      ]),
+    };
+
+    const useCase = new GetOeeReportUseCase(repository as any);
+    const report = await useCase.execute({ start_date: '2026-08-05', end_date: '2026-08-05' });
+
+    const center = report.by_work_center[0];
+    expect(center.downtime_hours).toBe(3.5);
+    expect(center.downtime_by_reason).toEqual([
+      { reason: 'setup', hours: 2 },
+      { reason: 'falta_material', hours: 1.5 },
+    ]);
+    expect(center.available_hours).toBe(24 - 3.5);
+  });
+
+  it('nunca deixa a disponibilidade líquida negativa quando a parada excede o calendário', async () => {
+    const repository = {
+      findWorkCentersForOee: jest.fn(async () => [
+        { id: 1, code: 'MONT', name: 'Montagem', machines_count: 1, capacity_hours_per_day: 8, efficiency_factor: 1, shifts: [] },
+      ]),
+      findOeeAggregatesByWorkCenter: jest.fn(async () => []),
+      // Calendário = 8h, mas 20h de parada registrada (ex.: parada aberta de longa duração).
+      findDowntimeHoursByWorkCenter: jest.fn(async () => [
+        { work_center_id: 1, reason: 'manutencao_corretiva', hours: 20 },
+      ]),
+    };
+
+    const useCase = new GetOeeReportUseCase(repository as any);
+    const report = await useCase.execute({ start_date: '2026-08-05', end_date: '2026-08-05' });
+
+    expect(report.by_work_center[0].available_hours).toBe(0);
+    expect(report.by_work_center[0].downtime_hours).toBe(20);
+  });
+
+  it('agrega downtime_hours e downtime_by_reason somando entre centros de trabalho', async () => {
+    const repository = {
+      findWorkCentersForOee: jest.fn(async () => [
+        { id: 1, code: 'A', name: 'Centro A', machines_count: 1, capacity_hours_per_day: 10, efficiency_factor: 1, shifts: [] },
+        { id: 2, code: 'B', name: 'Centro B', machines_count: 1, capacity_hours_per_day: 10, efficiency_factor: 1, shifts: [] },
+      ]),
+      findOeeAggregatesByWorkCenter: jest.fn(async () => []),
+      findDowntimeHoursByWorkCenter: jest.fn(async () => [
+        { work_center_id: 1, reason: 'setup', hours: 1 },
+        { work_center_id: 2, reason: 'setup', hours: 2 },
+        { work_center_id: 2, reason: 'qualidade', hours: 0.5 },
+      ]),
+    };
+
+    const useCase = new GetOeeReportUseCase(repository as any);
+    const report = await useCase.execute({ start_date: '2026-08-05', end_date: '2026-08-05' });
+
+    expect(report.aggregate.downtime_hours).toBe(3.5);
+    const setupTotal = report.aggregate.downtime_by_reason.find((row: any) => row.reason === 'setup');
+    const qualityTotal = report.aggregate.downtime_by_reason.find((row: any) => row.reason === 'qualidade');
+    expect(setupTotal.hours).toBe(3);
+    expect(qualityTotal.hours).toBe(0.5);
+  });
+
+  it('ignora motivos de parada com 0h (arredondamento) no breakdown', async () => {
+    const repository = {
+      findWorkCentersForOee: jest.fn(async () => [
+        { id: 1, code: 'A', name: 'Centro A', machines_count: 1, capacity_hours_per_day: 10, efficiency_factor: 1, shifts: [] },
+      ]),
+      findOeeAggregatesByWorkCenter: jest.fn(async () => []),
+      findDowntimeHoursByWorkCenter: jest.fn(async () => [
+        { work_center_id: 1, reason: 'outros', hours: 0 },
+        { work_center_id: 1, reason: 'setup', hours: 1 },
+      ]),
+    };
+
+    const useCase = new GetOeeReportUseCase(repository as any);
+    const report = await useCase.execute({ start_date: '2026-08-05', end_date: '2026-08-05' });
+
+    expect(report.by_work_center[0].downtime_by_reason).toEqual([{ reason: 'setup', hours: 1 }]);
   });
 });

@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate, authorizeModule } = require('../../../../middlewares/auth');
 const financialController = require('../controllers/financialController');
 const costCenterController = require('../controllers/costCenterController');
+const reconciliationRouter = require('./reconciliation');
 
 /**
  * Rotas do módulo `financial` (Clean Architecture). Mantém exatamente o
@@ -46,6 +47,12 @@ router.get('/cost-centers', authenticate, authorizeModule('financeiro'), costCen
 router.get('/cost-centers/report', authenticate, authorizeModule('financeiro'), costCenterController.report);
 router.post('/cost-centers', authenticate, authorizeModule('financeiro', 'operate'), costCenterController.create);
 router.put('/cost-centers/:id', authenticate, authorizeModule('financeiro', 'operate'), costCenterController.update);
+
+// Conciliação Bancária v1 (importação OFX) — gap "conciliação
+// bancária/CNAB" de docs/governance/TODO.md (CNAB fica fora desta v1).
+// Sub-router com RBAC próprio em cada rota (ver `./reconciliation.ts`),
+// resultando em `/api/finance/reconciliation/...`.
+router.use('/reconciliation', reconciliationRouter);
 
 module.exports = router;
 

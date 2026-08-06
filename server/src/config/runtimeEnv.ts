@@ -52,6 +52,11 @@ const runtimeEnvSchema = z.object({
   // de TODOS os usuarios como um unico IP e esgotando o rate limit de
   // login para todo mundo assim que houver qualquer proxy em producao.
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+  // Caminho opcional de arquivo para o transporte de arquivo do Winston
+  // (`src/config/logger.ts`). Quando ausente (default), o logger usa apenas
+  // console — comportamento historico do projeto, sem quebrar ambientes sem
+  // volume de disco persistente para logs (ex.: containers efemeros).
+  LOG_FILE: z.string().optional(),
 }).superRefine((env, ctx) => {
   if (env.NODE_ENV !== 'production') {
     return;
@@ -143,6 +148,7 @@ export type RuntimeEnv = {
   corsOrigin: string;
   adminSeedPassword?: string;
   trustProxy: number;
+  logFile?: string;
 };
 
 let cachedRuntimeEnv: RuntimeEnv | null = null;
@@ -169,6 +175,7 @@ function normalizeRuntimeEnv(parsedEnv: z.infer<typeof runtimeEnvSchema>): Runti
     corsOrigin: parsedEnv.CORS_ORIGIN || 'http://localhost:5173',
     adminSeedPassword: parsedEnv.ADMIN_SEED_PASSWORD,
     trustProxy: parsedEnv.TRUST_PROXY,
+    logFile: parsedEnv.LOG_FILE,
   };
 }
 

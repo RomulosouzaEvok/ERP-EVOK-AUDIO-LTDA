@@ -88,6 +88,19 @@ function apiRequestKey(req: Request): string {
   return ipKeyGenerator(req.ip ?? '');
 }
 
+// Limiter dedicado para a renovacao deslizante de sessao (painel de TV
+// "sempre ligado"): chave por USUARIO autenticado (mesmo `apiRequestKey` do
+// limiter geral da API), nao por IP — o cenario de abuso aqui e uma conta
+// comprometida renovando token em loop, nao trafego generico da API. 30
+// renovacoes/15min e folgado o bastante para varios dispositivos (TVs,
+// abas) do mesmo usuario renovando de forma independente, sem abrir espaco
+// para um script indefinidamente manter uma sessao viva sem novo login.
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  keyGenerator: apiRequestKey,
+  message: { success: false, error: 'Muitas renovacoes de sessao. Tente novamente em 15 minutos.' },
+});
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   // Em NODE_ENV=test, a suite de integracao/edge legitimamente dispara
@@ -127,6 +140,7 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 // fallback por IP, fazendo qualquer usuario atras do mesmo IP/NAT
 // compartilhar (e esgotar) a cota de tentativas dos colegas.
 app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/refresh', refreshLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/forgot-password', passwordRecoveryLimiter);
 app.use('/api/auth/reset-password', passwordRecoveryLimiter);
@@ -151,6 +165,7 @@ app.use('/api/reports', require('./src/modules/reports/presentation/routes/repor
 app.use('/api/employees', require('./src/modules/employees/presentation/routes/employees'));
 app.use('/api/departments', require('./src/modules/departments/presentation/routes/departments'));
 app.use('/api/production-orders', require('./src/modules/production/presentation/routes/productionOrders'));
+app.use('/api/production/downtimes', require('./src/modules/production/presentation/routes/productionDowntimes'));
 app.use('/api/work-centers', require('./src/modules/workCenters/presentation/routes/workCenters'));
 app.use('/api/inventory', require('./src/modules/inventory/presentation/routes/inventory'));
 app.use('/api/inventory-counts', require('./src/modules/inventory/presentation/routes/inventoryCounts'));

@@ -109,6 +109,39 @@ Autentica o usuário e retorna o token JWT.
 ```
 > A mensagem é propositalmente idêntica tanto para "email não encontrado" quanto para "senha incorreta" — nunca revela se um email está cadastrado. Usuário inativo retorna a mesma estrutura com `message: "Usuário inativo. Contate o administrador."`.
 
+### POST /api/auth/refresh
+**(Novo, 2026-08-06)** Renova (renovação deslizante) o token JWT de uma
+sessão já autenticada — usado principalmente pelo painel Android TV
+(sessão "sempre ligada", ver `tv/`) para evitar redigitar credenciais
+quando o token de 7 dias (`JWT_EXPIRE`) está perto de expirar, mas
+disponível para qualquer cliente. Requer `Authorization: Bearer <token>`
+com um token **ainda válido** (mesmo middleware `authenticate` normal) —
+**não existe refresh-token separado nesta v1**. Token já expirado sempre
+recebe `401`; o cliente deve refazer login normalmente. Rate-limit: 30
+requisições/15min por usuário. O token renovado embute exatamente o mesmo
+`passwordVersion` já validado nesta mesma requisição pelo `authenticate`
+(nunca uma leitura própria e potencialmente divergente do banco).
+
+**Request:** sem corpo (só o header `Authorization`).
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs..."
+  }
+}
+```
+
+Implementado em `server/src/modules/auth/application/use-cases/RefreshTokenUseCase.ts`
+(`TokenService`, mesma implementação de geração de token do login). Uso
+recomendado: mobile (`mobile/src/context/AuthContext.tsx`, renova ao abrir
+o app com sessão persistida) e TV (`tv/src/context/AuthContext.tsx`,
+renovação proativa a cada 12h — bem abaixo do TTL de 7 dias, fecha a
+pendência "Decisão de produto — JWT de 7 dias × painel de TV sempre
+ligado" de `docs/governance/TODO.md`).
+
 ### POST /api/auth/register
 Registra um novo usuário (apenas admin).
 
@@ -800,6 +833,13 @@ Atualiza status da venda (máquina de estados: `quote` → `confirmed` →
 `quote`/`confirmed`/`invoiced`). `shipped` é terminal: não pode ser
 cancelada (422) nem transicionar para nenhum outro status.
 
+**(Novo, 2026-08-06)** `partially_invoiced` também faz parte da máquina de
+estados (`confirmed → partially_invoiced → invoiced`), mas é uma
+transição **automática**, disparada por `POST /:id/nfe` quando a NF-e
+emitida cobre só parte da quantidade dos itens — nunca aceita como valor
+manual de `PUT /:id/status` (só `POST /:id/nfe` decide isso). Embarque
+(`shipped`) continua exigindo a venda totalmente `invoiced`.
+
 **Request:**
 ```json
 {
@@ -817,6 +857,89 @@ Só é aceito a partir de `invoiced`. Qualquer outra origem retorna 422
 (`BusinessRuleError`). Cancelar uma venda já `shipped` também retorna 422,
 com a mensagem "Venda já foi expedida (status shipped) e não pode ser
 cancelada."
+
+### PUT /api/sales/:id/items
+**(Novo, 2026-08-06)** Gap 2/3 do módulo `sales` ("Alteração de pedido",
+`docs/LEVANTAMENTO_ERP_2026-08-02.md`). Substitui **todo** o conjunto de
+itens de uma venda (não é um PATCH incremental) — `authorizeModule('vendas',
+'operate')`. Implementado em `EditSaleItemsUseCase.ts`.
+
+Permitido apenas com a venda em `quote` ou `confirmed`. A partir de
+`partially_invoiced`/`invoiced`/`shipped`/`canceled` retorna **422**
+`BUSINESS_RULE_VIOLATION` com `details.status` — a venda já tem NF-e
+emitida (total ou parcial) ou já foi encerrada. Em `quote` nada foi
+debitado do estoque ainda; em `confirmed`, o estoque já debitado na
+confirmação é ajustado (delta por produto) na mesma transação.
+
+**Request:**
+```json
+{
+  "items": [
+    { "sale_item_id": 42, "product_id": 1, "quantity": 3, "unit_price": 599.90 },
+    { "product_id": 5, "quantity": 1, "unit_price": 129.90 }
+  ]
+}
+```
+`sale_item_id` omitido = linha nova; informado = atualiza a linha
+existente daquele id (precisa pertencer à venda). Toda linha existente
+cujo `sale_item_id` não aparecer no payload é removida (com restauração
+de estoque, se aplicável). `product_id` duplicado no payload é rejeitado
+(422).
+
+**Response:** `200 OK`, venda atualizada no mesmo formato de
+`GET /api/sales/:id`.
+
+### POST /api/sales/:id/nfe (payload de faturamento parcial)
+**(Novo, 2026-08-06)** Gap 3/3 do módulo `sales` ("Faturamento parcial").
+Endpoint pré-existente (`authorizeModule('vendas', 'approve')`), agora
+aceita um payload opcional para faturar só parte da quantidade dos itens:
+
+**Request (opcional — omitido/vazio preserva o comportamento anterior, fatura o saldo pendente inteiro):**
+```json
+{
+  "items": [
+    { "sale_item_id": 42, "quantity": 2 }
+  ]
+}
+```
+`quantity` é cumulativa contra `sale_items.invoiced_quantity` — não pode
+exceder o saldo pendente (`quantity - invoiced_quantity`) do item. Quando
+o saldo pendente de **todos** os itens chega a zero, a venda transiciona
+automaticamente para `invoiced`; enquanto houver saldo pendente em pelo
+menos um item, fica em `partially_invoiced`. Response continua `202
+Accepted` com a venda atualizada (`nfe_status`, `nfe_key`, etc.).
+
+**Risco residual documentado (não bloqueante para mock/dev):**
+`Sale.nfe_*` guarda apenas a NF-e **mais recente** — múltiplas emissões
+parciais sobrescrevem chave/protocolo/XML uma da outra, sem histórico por
+emissão. Não há tabela `sale_invoices` (1 venda : N NF-e) nesta v1. Ver
+`docs/governance/TODO.md`. Além disso, `GetSaleNfeStatusUseCase` (path
+assíncrono de provedores reais — `focus_nfe`/`enotas`, não o mock usado em
+dev) ainda **não** atualiza `invoiced_quantity`/`partially_invoiced`; só
+finaliza a transição `confirmed → invoiced`. Afeta apenas o fluxo com
+provedor real, não o mock.
+
+### Tabela de preços por cliente (`/api/sales/customers/:id/prices`)
+**(Novo, 2026-08-06)** Gap 1/3 do módulo `sales`. Preço unitário negociado
+por par cliente×produto, com vigência opcional. Referencia `products.id`
+(schema legado, mesmo usado pelo restante do fluxo de vendas), não
+`items.id`. `authorizeModule('vendas', ...)` — leitura para todos, escrita
+exige `operate`.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/sales/customers/:id/prices?product_id=&active_only=` | Lista preços do cliente (filtros opcionais) |
+| `POST` | `/api/sales/customers/:id/prices` | Cria `{ product_id, unit_price, currency?, valid_from?, valid_until? }` (`currency` default `"BRL"`, datas `YYYY-MM-DD`) |
+| `PUT` | `/api/sales/customers/:id/prices/:priceId` | Atualiza `{ unit_price?, currency?, valid_from?, valid_until? }` |
+| `DELETE` | `/api/sales/customers/:id/prices/:priceId` | Soft delete (`active = false`) |
+
+Não há índice único de `customer_id + product_id` no banco — a vigência
+permite múltiplas faixas de preço no tempo para o mesmo par (ex.: reajuste
+anual mantendo histórico); a unicidade de uma vigência ativa e não
+sobreposta é validada na camada de aplicação
+(`CreateCustomerPriceUseCase`), não no banco. UI: dialog "Tabela de
+preços" em `ClientsPage.tsx`, com sugestão de preço ao adicionar item ao
+pedido (editável manualmente).
 
 ---
 
@@ -1033,6 +1156,59 @@ módulo:** mapeamento automático departamento→centro de custo na criação
 automática de `AccountPayable` (ex.: ao aprovar um pedido de compra),
 conciliação bancária/CNAB — ver `docs/governance/TODO.md`.
 
+### Conciliação Bancária (`/api/finance/reconciliation`)
+**(Novo, 2026-08-06)** Fecha parte do gap "conciliação bancária/CNAB" de
+`docs/LEVANTAMENTO_ERP_2026-08-02.md` (só a parte OFX — **CNAB fica fora
+desta v1**). Sub-router de `/api/finance`, resultando em
+`/api/finance/reconciliation/...`. `authorizeModule('financeiro', ...)`
+— leitura para todos, escrita (upload/match/ignore/unmatch) exige
+`operate`. Tabelas `bank_statements`/`bank_statement_entries`
+(migration `20260806-000070-create-bank-statements.cjs`) — ver
+`docs/DATABASE.md`.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `POST` | `/api/finance/reconciliation/statements` | Upload multipart (campo `file`) de um extrato `.ofx`. Cria o extrato e seus lançamentos, com dedup por `fitid` **global** (contra qualquer importação anterior, não só a mesma) |
+| `GET` | `/api/finance/reconciliation/statements` | Lista extratos importados, paginado |
+| `GET` | `/api/finance/reconciliation/statements/:id/entries?status=` | Lista lançamentos de um extrato (`status`: `pending`/`matched`/`ignored`) |
+| `GET` | `/api/finance/reconciliation/statements/:id/suggestions` | Sugestões automáticas de match por lançamento pendente (nunca vincula sozinho) |
+| `POST` | `/api/finance/reconciliation/entries/:id/match` | Vincula e dá baixa: `{ payable_id }` **ou** `{ receivable_id }` (XOR, nunca os dois) |
+| `POST` | `/api/finance/reconciliation/entries/:id/ignore` | Marca o lançamento como sem conciliação necessária |
+| `POST` | `/api/finance/reconciliation/entries/:id/unmatch` | Desfaz o vínculo — **422** se a conta já foi baixada (correção manual exigida, decisão conservadora) |
+
+**Response de `POST /statements` (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "statement": { "id": 3, "filename": "extrato-agosto.ofx", "bank_name": "341", "period_start": "2026-08-01", "period_end": "2026-08-31" },
+    "entries_created": 42,
+    "duplicates_skipped": 3,
+    "total_in_file": 45
+  }
+}
+```
+
+**Parser OFX:** implementação manual em
+`server/src/modules/financial/infrastructure/ofx/`, cobrindo os dois
+formatos mais comuns em uso real — OFX 1.x (SGML) e OFX 2.x (XML). **Sem
+biblioteca nova** (decisão justificada: cobertura suficiente do
+subconjunto necessário para conciliação bancária, sem dependência frágil
+numa área de upload de arquivo de terceiro). Detecção de encoding
+(Latin-1/CP1252) é **heurística**, não uma leitura garantida do header
+OFX.
+
+**Sugestões de match** (`GetMatchSuggestionsUseCase`): para lançamentos de
+saída (`amount < 0`), busca contas a pagar em aberto; para entrada
+(`amount > 0`), contas a receber em aberto. Candidatos com diferença de
+valor até 1 centavo (`MATCH_TOLERANCE_CENTS`) e vencimento a até ±7 dias
+da data do lançamento, ordenados por proximidade de data e depois de
+valor.
+
+**Riscos residuais documentados:** sem teste de integração end-to-end
+contra Postgres real (só unitários com mocks); CNAB (boleto/remessa/
+retorno) fora de escopo desta v1 — ver `docs/governance/TODO.md`.
+
 ---
 
 ## 7. Relatórios
@@ -1100,30 +1276,40 @@ trabalho e agregado geral — fecha o item 7/9 do
         "code": "CNC-01",
         "name": "Corte CNC",
         "has_shifts": true,
-        "available_hours": 176.0,
+        "available_hours": 168.5,
+        "downtime_hours": 7.5,
+        "downtime_by_reason": [
+          { "reason": "setup", "hours": 4.0 },
+          { "reason": "falta_material", "hours": 3.5 }
+        ],
         "run_hours": 140.5,
         "standard_hours": 132.0,
         "quantity_good": 980,
         "quantity_scrapped": 20,
         "tracking_count": 42,
-        "availability": 0.7983,
+        "availability": 0.8338,
         "performance": 0.9395,
         "quality": 0.98,
-        "oee": 0.7351,
+        "oee": 0.7676,
         "no_data_reason": null
       }
     ],
     "aggregate": {
-      "available_hours": 176.0,
+      "available_hours": 168.5,
+      "downtime_hours": 7.5,
+      "downtime_by_reason": [
+        { "reason": "setup", "hours": 4.0 },
+        { "reason": "falta_material", "hours": 3.5 }
+      ],
       "run_hours": 140.5,
       "standard_hours": 132.0,
       "quantity_good": 980,
       "quantity_scrapped": 20,
       "tracking_count": 42,
-      "availability": 0.7983,
+      "availability": 0.8338,
       "performance": 0.9395,
       "quality": 0.98,
-      "oee": 0.7351,
+      "oee": 0.7676,
       "no_data_reason": null,
       "work_centers_count": 1
     }
@@ -1134,11 +1320,19 @@ trabalho e agregado geral — fecha o item 7/9 do
 **Fórmulas (os 3 eixos clássicos de OEE):**
 - **Disponibilidade** = horas produzindo (`run_hours`, somadas de
   `production_order_tracking` — apontamentos `completed` no período) /
-  horas disponíveis (`available_hours`, calculadas do calendário de turnos
-  do centro, `work_center_shifts`, multiplicado pelas ocorrências de cada
-  dia da semana no período × `machines_count` × `efficiency_factor`; sem
+  horas disponíveis **líquidas** (`available_hours`). As horas
+  **brutas** de calendário são calculadas do calendário de turnos do
+  centro (`work_center_shifts`, multiplicado pelas ocorrências de cada dia
+  da semana no período × `machines_count` × `efficiency_factor`; sem
   turnos cadastrados, usa o fallback `capacity_hours_per_day × dias do
-  período × machines_count × efficiency_factor`).
+  período × machines_count × efficiency_factor`) e então **descontam o
+  downtime real** registrado em `production_downtimes` no período:
+  `available_hours = max(horas_brutas_calendario - downtime_hours, 0)`
+  (satura em zero, nunca fica negativa). `downtime_hours` (soma) e
+  `downtime_by_reason` (breakdown por categoria — setup, manutenção
+  corretiva/preventiva, falta de material/operador, qualidade, outros)
+  vêm no payload **(novo, 2026-08-06)**. Paradas em aberto (`finished_at
+  IS NULL`) contam até o fim do período (ou `now`, se anterior).
 - **Performance** = (tempo padrão × unidades processadas) / tempo real
   apontado, ambos agregados por centro. Tempo padrão usa
   `standard_time_minutes` da etapa de roteiro; "unidades processadas" =
@@ -1161,20 +1355,46 @@ trabalho e agregado geral — fecha o item 7/9 do
   simples distorceria o resultado quando os centros têm volumes de
   produção muito diferentes).
 
-**LIMITAÇÃO DOCUMENTADA (downtime não modelado):** o schema atual
-(`production_order_tracking`) não tem um campo explícito de parada de
-máquina/downtime — apenas `started_at`/`finished_at`/`status` por etapa
-(incluindo o status `paused`, mas sem timestamp de início/fim de pausa).
-Por isso a **Disponibilidade é uma aproximação por calendário de turnos**
-(tempo apontado vs. tempo disponível do centro), **sem desconto de
-paradas reais registradas**. Se o schema ganhar um registro explícito de
-downtime no futuro, a fórmula deve passar a descontar as paradas do tempo
-disponível em vez de inferir apenas pelo tempo apontado — ver
-`docs/governance/TODO.md`.
+**LIMITAÇÃO ANTERIOR RESOLVIDA (2026-08-06):** até 2026-08-06, o schema não
+tinha um campo explícito de parada de máquina/downtime, e a Disponibilidade
+era só uma aproximação por calendário de turnos (tempo apontado vs. tempo
+disponível do centro, sem desconto de paradas reais). A tabela
+`production_downtimes` (migration `20260806-000060-create-production-downtimes.cjs`)
+fecha esse gap — ver `POST/PUT/GET /api/production/downtimes` abaixo e
+`docs/DATABASE.md`.
 
 Implementado em `server/src/modules/reports/application/use-cases/GetOeeReportUseCase.ts`.
-Sem migration nova (reaproveita `production_order_tracking`, `work_centers`,
-`work_center_shifts`, `production_route_steps`).
+Migration `20260806-000060` (downtime); demais fontes reaproveitadas
+(`production_order_tracking`, `work_centers`, `work_center_shifts`,
+`production_route_steps`).
+
+### Paradas de Máquina / Centro de Trabalho (`/api/production/downtimes`)
+**(Novo, 2026-08-06)** Registro de paradas (downtime), base do desconto de
+disponibilidade acima. `authorizeModule('chao_de_fabrica', ...)` — mesmo
+módulo de permissão do apontamento de etapas de OP (quem aponta produção
+também registra/encerra paradas do centro). UI: `ShopFloorPage.tsx`.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/production/downtimes` | Lista paradas (filtros de centro/período/status aberto-fechado) |
+| `POST` | `/api/production/downtimes` | Abre uma parada: `{ work_center_id, production_order_id?, reason, notes?, started_at? }` |
+| `PUT` | `/api/production/downtimes/:id/finish` | Encerra a parada aberta: `{ finished_at? }` (default: agora) |
+
+`reason` (enum): `setup`, `manutencao_corretiva`, `manutencao_preventiva`,
+`falta_material`, `falta_operador`, `qualidade`, `outros`.
+`production_order_id` é opcional — parada pode ser geral do centro ou
+vinculada a uma OP específica.
+
+**Bloqueio de 2ª parada aberta simultânea no mesmo centro** — protegido em
+2 níveis: `OpenProductionDowntimeUseCase` (checagem em aplicação) **e**
+índice único parcial no Postgres
+(`uq_production_downtimes_open_per_work_center`, `work_center_id` WHERE
+`finished_at IS NULL`) — o índice cobre corrida de escrita concorrente que
+a checagem em aplicação sozinha não pega.
+
+**Riscos residuais documentados:** sem teste de integração real contra
+Postgres para o índice único parcial (só unitário com mock) — ver
+`docs/governance/TODO.md`.
 
 ---
 

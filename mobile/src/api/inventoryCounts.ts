@@ -33,22 +33,34 @@ interface ItemApiResponse {
   data: InventoryCountItemDTO;
 }
 
-/** Contagens atribuídas ao usuário logado (`assigned_to=me`). */
-export async function listMyInventoryCounts(): Promise<InventoryCount[]> {
-  const response = await apiRequest<ListInventoryCountsResponse>('/inventory-counts', {
-    method: 'GET',
-    query: { assigned_to: 'me', limit: 100 },
-  });
-  return response.data;
+/** Página padrão usada nas listagens paginadas de contagens (`page`/`limit`, ver `PaginationMeta`). */
+export const INVENTORY_COUNTS_PAGE_LIMIT = 20;
+
+export interface ListInventoryCountsPageParams {
+  page?: number;
+  limit?: number;
 }
 
-/** Contagens disponíveis no "pool" (sem responsável, status `draft`), livres para qualquer funcionário pegar. */
-export async function listPoolInventoryCounts(): Promise<InventoryCount[]> {
-  const response = await apiRequest<ListInventoryCountsResponse>('/inventory-counts', {
+/** Contagens atribuídas ao usuário logado (`assigned_to=me`), paginado. */
+export async function listMyInventoryCounts(
+  params: ListInventoryCountsPageParams = {}
+): Promise<ListInventoryCountsResponse> {
+  const { page = 1, limit = INVENTORY_COUNTS_PAGE_LIMIT } = params;
+  return apiRequest<ListInventoryCountsResponse>('/inventory-counts', {
     method: 'GET',
-    query: { unassigned: 'true', status: 'draft', limit: 100 },
+    query: { assigned_to: 'me', page, limit },
   });
-  return response.data;
+}
+
+/** Contagens disponíveis no "pool" (sem responsável, status `draft`), livres para qualquer funcionário pegar. Paginado. */
+export async function listPoolInventoryCounts(
+  params: ListInventoryCountsPageParams = {}
+): Promise<ListInventoryCountsResponse> {
+  const { page = 1, limit = INVENTORY_COUNTS_PAGE_LIMIT } = params;
+  return apiRequest<ListInventoryCountsResponse>('/inventory-counts', {
+    method: 'GET',
+    query: { unassigned: 'true', status: 'draft', page, limit },
+  });
 }
 
 /** Busca uma contagem por id, com os itens (`InventoryCountItemDTO[]`). */

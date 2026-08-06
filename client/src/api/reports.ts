@@ -153,12 +153,20 @@ export async function getCashFlowReport(period: ReportsPeriodInput) {
  * completo ainda não implementado"). Os 3 eixos (`availability`,
  * `performance`, `quality`) e o composto (`oee`) são `null` (nunca `0`
  * enganoso) quando o denominador correspondente é zero no período —
- * `no_data_reason` explica o motivo. Ver limitações documentadas no backend
- * (`GetOeeReportUseCase`): disponibilidade é aproximada pelo calendário de
- * turnos (sem registro explícito de parada/downtime no schema atual).
+ * `no_data_reason` explica o motivo. Disponibilidade (`available_hours`) já
+ * é líquida: calendário de turnos do centro menos as horas de parada
+ * registradas (`downtime_hours`, com breakdown em `downtime_by_reason`) —
+ * ver `GetOeeReportUseCase` no backend.
  */
+export interface OeeDowntimeReasonBreakdown {
+  reason: string;
+  hours: number | string;
+}
+
 export interface OeeComponents {
   available_hours: number | string;
+  downtime_hours: number | string;
+  downtime_by_reason: OeeDowntimeReasonBreakdown[];
   run_hours: number | string;
   standard_hours: number | string;
   quantity_good: number | string;

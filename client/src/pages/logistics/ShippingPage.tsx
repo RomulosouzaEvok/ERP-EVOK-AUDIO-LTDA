@@ -16,17 +16,23 @@ import { DetailField } from '@/components/DetailField';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 
+// 'partially_invoiced' (faturamento parcial, gap 3/3 do módulo `sales`):
+// embarque continua exigindo a venda totalmente `invoiced` (ver
+// ChangeSaleStatusUseCase), então esta tela não tem um fluxo dedicado para
+// esse status — apenas o rótulo/badge, por completude do tipo `SaleStatus`.
 const STATUS_LABEL: Record<salesApi.SaleStatus, string> = {
   quote: 'Orçamento',
   confirmed: 'Confirmada',
+  partially_invoiced: 'Faturada parcialmente',
   invoiced: 'Faturada',
   shipped: 'Embarcada',
   canceled: 'Cancelada',
 };
 
-const STATUS_VARIANT: Record<salesApi.SaleStatus, 'default' | 'success' | 'destructive' | 'secondary'> = {
+const STATUS_VARIANT: Record<salesApi.SaleStatus, 'default' | 'success' | 'destructive' | 'secondary' | 'warning'> = {
   quote: 'secondary',
   confirmed: 'default',
+  partially_invoiced: 'warning',
   invoiced: 'success',
   shipped: 'success',
   canceled: 'destructive',

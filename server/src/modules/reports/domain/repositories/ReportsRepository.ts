@@ -16,6 +16,7 @@ import type {
   PurchasePriceVarianceRow,
   OeeWorkCenterRow,
   OeeAggregateRow,
+  OeeDowntimeRow,
 } from '../reportTypes';
 
 class ReportsRepository {
@@ -126,6 +127,20 @@ class ReportsRepository {
    */
   async findOeeAggregatesByWorkCenter(_start: Date, _end: Date, _workCenterId?: number): Promise<OeeAggregateRow[]> {
     throw new Error('ReportsRepository.findOeeAggregatesByWorkCenter não implementado.');
+  }
+
+  /**
+   * Horas de parada (`production_downtimes`) por centro de trabalho x
+   * motivo, sobrepostas ao período informado — base do desconto de
+   * disponibilidade do OEE.
+   *
+   * @param _start - Início do período.
+   * @param _end - Fim do período.
+   * @param _workCenterId - Filtra um único centro, quando informado.
+   * @returns Linhas agregadas por `(work_center_id, reason)`.
+   */
+  async findDowntimeHoursByWorkCenter(_start: Date, _end: Date, _workCenterId?: number): Promise<OeeDowntimeRow[]> {
+    throw new Error('ReportsRepository.findDowntimeHoursByWorkCenter não implementado.');
   }
 }
 

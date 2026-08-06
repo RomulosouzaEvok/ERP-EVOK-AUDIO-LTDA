@@ -11,6 +11,7 @@ const authController: any = require('../controllers/authController');
 const router = express.Router();
 
 router.post('/login', authController.login);
+router.post('/refresh', authenticate, authController.refresh);
 router.post('/register', authenticate, authorize('admin'), authController.register);
 router.get('/me', authenticate, authController.getMe);
 router.get('/me/permissions', authenticate, authController.getMyPermissions);

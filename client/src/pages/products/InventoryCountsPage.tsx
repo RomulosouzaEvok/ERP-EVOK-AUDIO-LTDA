@@ -89,6 +89,8 @@ export default function InventoryCountsPage() {
   const [startError, setStartError] = React.useState<DidacticError | null>(null);
   const [submitError, setSubmitError] = React.useState<DidacticError | null>(null);
   const [rejectError, setRejectError] = React.useState<DidacticError | null>(null);
+  const [reassignError, setReassignError] = React.useState<DidacticError | null>(null);
+  const [reassignCountId, setReassignCountId] = React.useState<number | null>(null);
   /** Filtro de responsável: `''` (todas), `'unassigned'` (pool) ou o `id` do usuário. */
   const [assignmentFilter, setAssignmentFilter] = React.useState<string>('');
 
@@ -184,6 +186,16 @@ export default function InventoryCountsPage() {
       setRejectError(null);
     },
     onError: (error) => setRejectError(translateApiError(error, 'Não foi possível rejeitar a contagem')),
+  });
+  const reassignMutation = useMutation({
+    mutationFn: ({ id, assignedTo }: { id: number; assignedTo: number | null }) =>
+      inventoryApi.reassignInventoryCount(id, assignedTo),
+    onSuccess: () => {
+      invalidate();
+      setReassignError(null);
+      setReassignCountId(null);
+    },
+    onError: (error) => setReassignError(translateApiError(error, 'Não foi possível reatribuir a contagem')),
   });
 
   function toggleProduct(id: number) {
@@ -319,6 +331,7 @@ export default function InventoryCountsPage() {
       {startError && <DidacticAlert error={startError} />}
       {submitError && <DidacticAlert error={submitError} />}
       {rejectError && <DidacticAlert error={rejectError} />}
+      {reassignError && <DidacticAlert error={reassignError} />}
 
       <div className="flex flex-col gap-1.5 sm:w-72">
         <Label htmlFor="count-assignment-filter">Filtrar por responsável</Label>
@@ -381,7 +394,7 @@ export default function InventoryCountsPage() {
               <TableCell>
                 <Badge variant="secondary">{STATUS_LABEL[count.status]}</Badge>
               </TableCell>
-              <TableCell className="flex gap-2">
+              <TableCell className="flex flex-wrap gap-2">
                 {canWrite && count.status === 'draft' && (
                   <Button size="sm" variant="outline" onClick={() => startMutation.mutate(count.id)}>
                     Iniciar
@@ -390,6 +403,18 @@ export default function InventoryCountsPage() {
                 {canWrite && count.status === 'counting' && (
                   <Button size="sm" onClick={() => setOpenCountId(count.id)}>
                     Contar itens
+                  </Button>
+                )}
+                {canApprove && (count.status === 'draft' || count.status === 'counting') && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setReassignError(null);
+                      setReassignCountId(count.id);
+                    }}
+                  >
+                    Reatribuir
                   </Button>
                 )}
                 {canApprove && count.status === 'pending_approval' && (
@@ -425,7 +450,89 @@ export default function InventoryCountsPage() {
       <Pagination pagination={data?.pagination} onPageChange={setPage} />
 
       <CountItemsDialog countId={openCountId} onClose={() => setOpenCountId(null)} onSubmitted={submitMutation.mutate} />
+
+      <ReassignCountDialog
+        countId={reassignCountId}
+        users={users?.data}
+        usersError={usersError}
+        currentAssignedTo={data?.data.find((c) => c.id === reassignCountId)?.assigned_to ?? null}
+        isPending={reassignMutation.isPending}
+        onClose={() => setReassignCountId(null)}
+        onSubmit={(assignedTo) => reassignCountId !== null && reassignMutation.mutate({ id: reassignCountId, assignedTo })}
+      />
     </div>
+  );
+}
+
+/**
+ * Dialog de reatribuição de contagem (`PUT /:id/reassign`) — reaproveita o
+ * mesmo select de usuários (+ fallback para `operator` sem acesso a
+ * `GET /api/users`) já usado no formulário de criação. `''` mapeia para
+ * "devolver ao pool" (`assigned_to: null`).
+ */
+function ReassignCountDialog({
+  countId,
+  users,
+  usersError,
+  currentAssignedTo,
+  isPending,
+  onClose,
+  onSubmit,
+}: {
+  countId: number | null;
+  users: usersApi.User[] | undefined;
+  usersError: boolean;
+  currentAssignedTo: number | null;
+  isPending: boolean;
+  onClose: () => void;
+  onSubmit: (assignedTo: number | null) => void;
+}) {
+  const [selected, setSelected] = React.useState<string>('');
+
+  React.useEffect(() => {
+    if (countId !== null) {
+      setSelected(currentAssignedTo ? String(currentAssignedTo) : '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countId]);
+
+  return (
+    <Dialog open={countId !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Reatribuir contagem</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="reassign-user">Novo responsável</Label>
+          {usersError ? (
+            <p className="text-sm text-muted-foreground">
+              Seleção por nome disponível apenas para administradores — use "Devolver ao pool".
+            </p>
+          ) : (
+            <SelectNative id="reassign-user" value={selected} onChange={(event) => setSelected(event.target.value)}>
+              <option value="">Devolver ao pool (sem responsável)</option>
+              {users?.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </SelectNative>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Útil quando o funcionário atribuído está de férias/desligado e a contagem ficaria presa. Só é possível
+            reatribuir contagens em rascunho ou em andamento.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button
+            disabled={isPending}
+            onClick={() => onSubmit(selected === '' ? null : Number(selected))}
+          >
+            {isPending ? 'Salvando...' : 'Confirmar'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
