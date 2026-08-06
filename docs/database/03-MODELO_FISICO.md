@@ -2,7 +2,7 @@
 
 O modelo físico real é o schema efetivamente aplicado no PostgreSQL 16
 pelas migrations do Sequelize. **A fonte de verdade é sempre o banco
-rodando**, nunca um arquivo `.sql` escrito à mão — ver `docs/DATABASE.md`
+rodando**, nunca um arquivo `.sql` escrito à mão — ver `docs/database/DATABASE.md`
 seção "Schema Strategy & Migrations (ADR-DB-001)".
 
 ## Como este DDL foi obtido
@@ -40,7 +40,7 @@ docker exec evok-postgres pg_dump -U evok_admin -d erp_evok_audio \
 E revisar se a mudança precisa refletir também em:
 - [02-MODELO_LOGICO.md](02-MODELO_LOGICO.md) (se mexeu em uma tabela dos módulos cobertos pelo DER)
 - [04-DICIONARIO_DADOS.md](04-DICIONARIO_DADOS.md) (regenerar — ver `gen_dict.py` abaixo)
-- `docs/DATABASE.md` (registrar a decisão/racional da mudança, changelog)
+- `docs/database/DATABASE.md` (registrar a decisão/racional da mudança, changelog)
 
 ## Regenerando o Dicionário de Dados
 

@@ -14,6 +14,18 @@ docs/rh/
 └── 07-ESOCIAL.md          <- Integracao com eSocial
 ```
 
+## Departamentos Cobertos
+
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+
+| ID | Departamento | Sigla | Responsável |
+|----|-------------|-------|-------------|
+| 02 | Recursos Humanos | RH | Gerente de RH |
+
+> Cargos/headcount detalhado do departamento RH ainda não foram levantados
+> nos docs (pendência conhecida, não é reorganização de conteúdo existente —
+> exige dado real de headcount).
+
 ## Funcionalidades do Modulo RH
 
 1. **Cadastro de Funcionarios** - Dados pessoais, CTPS, exames
@@ -73,3 +85,7 @@ Cadastro de ponto biometrico
     |
     v
 Integracao com o departamento
+
+---
+
+**Última atualização:** 2026-08-06

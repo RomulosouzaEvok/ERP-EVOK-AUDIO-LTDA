@@ -4,7 +4,7 @@
 negócio/risco técnico do sistema. Baseado nos casos de uso já
 especificados em `docs/projeto/04-USE_CASES.md` (UC-04, UC-12, UC-13,
 UC-15, UC-16, UC-17B, UC-23, UC-24, UC-25, UC-41) e no comportamento real
-descrito em `docs/API.md` e `docs/DATABASE.md`. Onde um passo do use case
+descrito em `docs/arquitetura/API.md` e `docs/database/DATABASE.md`. Onde um passo do use case
 textual é simplificado (ex.: "sistema calcula total"), o diagrama mantém o
 mesmo nível de abstração do UC de origem — não inventa detalhe de
 implementação que o UC não descreve.
@@ -213,6 +213,6 @@ sequenceDiagram
 
 - `docs/projeto/04-USE_CASES.md` — UC-04, UC-12, UC-13, UC-15, UC-16,
   UC-17B, UC-23, UC-24, UC-24b, UC-25, UC-41.
-- `docs/API.md` §5 (Vendas), §8 (Estoque), §10 (Produção), §11/§11.1
+- `docs/arquitetura/API.md` §5 (Vendas), §8 (Estoque), §10 (Produção), §11/§11.1
   (Compras/RFQ), §13 (MRP).
 - `CLAUDE.md` §4 — descrição funcional dos módulos por área.

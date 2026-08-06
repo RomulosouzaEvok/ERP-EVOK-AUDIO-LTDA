@@ -340,5 +340,5 @@ foi executado nesta sessão, pois nenhuma imagem de produção foi implantada.
   detalhado desse ensaio chegou a virar um documento próprio ou se ficou
   apenas nesta nota. Para o status vigente de Gate G6 (incluindo
   rollback/canário contra o servidor real, ainda pendente), ver
-  `docs/GO_LIVE_G6_CHECKLIST.md`. O que falta é repetir esse mesmo teste
+  `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md`. O que falta é repetir esse mesmo teste
   contra o orquestrador de deploy do servidor real, ainda nao definido.

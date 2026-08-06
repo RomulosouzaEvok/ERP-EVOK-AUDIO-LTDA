@@ -69,7 +69,7 @@ Quando solicitado para organizar as documentacoes atuais, voce deve:
    uso, dicionario de banco e indices centrais.
 4. Remover ou aposentar relatorios soltos, logs antigos de chat salvos como
    `.md` e arquivos redundantes apos a consolidacao.
-5. Atualizar o `docs/HANDOFF_CODEX.md` registrando como a estrutura ficou e qual
+5. Atualizar o `docs/governance/HANDOFF_CODEX.md` registrando como a estrutura ficou e qual
    e a situacao atual do projeto.
 
 ## Regras de execucao

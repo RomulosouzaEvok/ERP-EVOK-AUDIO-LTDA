@@ -15,6 +15,8 @@ docs/producao/
 
 ## Departamentos Cobertos
 
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+
 | ID | Departamento | Sigla | Responsável |
 |----|-------------|-------|-------------|
 | 03 | Engenharia do Produto | ENG | Gerente de Engenharia |
@@ -67,3 +69,7 @@ product_costs          - Custo padrão do produto
 cost_centers           - Centros de custo
 time_records           - Apontamento de tempo por operação
 
+
+---
+
+**Última atualização:** 2026-08-06

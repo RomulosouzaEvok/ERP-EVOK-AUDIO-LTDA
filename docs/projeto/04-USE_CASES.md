@@ -397,11 +397,11 @@
 `server/src/modules/comex/` (`/api/comex/import-processes`, RBAC via
 módulo `comex`), models `ImportProcess`/`ImportProcessItem`, RF-COM-12
 `[IMPLEMENTADO]` (`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §3), API
-documentada em `docs/API.md` §32. **Tela web (`client/`) ainda não existe**
+documentada em `docs/arquitetura/API.md` §32. **Tela web (`client/`) ainda não existe**
 — próxima rodada de frontend.
 
 **Decisões de escopo tomadas (não pedidas explicitamente pelo UC, mas
-necessárias para implementar; detalhadas em `docs/HANDOFF_CODEX.md`, seção
+necessárias para implementar; detalhadas em `docs/governance/HANDOFF_CODEX.md`, seção
 "UC-19 — Importação/COMEX"):**
 - Reaproveitado o cadastro de `Supplier` existente — sem campo dedicado de
   "fornecedor estrangeiro"; qualquer fornecedor cadastrado pode ser usado.
@@ -582,7 +582,7 @@ necessárias para implementar; detalhadas em `docs/HANDOFF_CODEX.md`, seção
 do planejador)
 **Pré-condições:** Item com `items.conversao_automatica = true`
 **Decisão de design (roadmap pós-Go-Live item 3,
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 3):** dado que o projeto tem
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` seção 3):** dado que o projeto tem
 cultura forte de rastreabilidade/auditoria, comprar automaticamente **sem
 nenhuma revisão humana para qualquer item** foi descartado por risco de
 negócio. O trigger automático é um **opt-in explícito por item**

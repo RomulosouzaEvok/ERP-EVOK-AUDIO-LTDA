@@ -11,9 +11,11 @@ docs/juridico/
 
 ## Departamentos Cobertos
 
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+
 | ID | Departamento | Sigla | Responsável |
 |----|-------------|-------|-------------|
-| 13 | Jurídico | JUR | Assessor Jurídico |
+| 16 | Jurídico | JUR | Assessor Jurídico |
 
 ## Estrutura do Departamento
 
@@ -75,3 +77,7 @@ CREATE TABLE legal_cases (
     created_at DATETIME,
     updated_at DATETIME
 );
+
+---
+
+**Última atualização:** 2026-08-06

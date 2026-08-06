@@ -14,7 +14,7 @@ lacunas explícitas para o time de negócio decidir.
 | Item | Valor | Status | Fonte |
 |---|---|---|---|
 | SLA de tempo de resposta da API (p95/p99) | Não especificado formalmente | `[PENDENTE]` | Nenhum teste de carga (k6, artillery, etc.) encontrado no repositório |
-| Paginação em listagens | Aplicada nos principais endpoints de listagem | `[IMPLEMENTADO]` | `docs/API.md`, controllers com `page`/`limit` |
+| Paginação em listagens | Aplicada nos principais endpoints de listagem | `[IMPLEMENTADO]` | `docs/arquitetura/API.md`, controllers com `page`/`limit` |
 | Pool de conexões PostgreSQL | dev: 10 conexões / produção: 20 conexões | `[IMPLEMENTADO]` | `server/src/config/database.ts` |
 | Transações em operações críticas | Vendas, compras, produção, contagem cíclica, conciliação bancária usam transação Sequelize | `[IMPLEMENTADO]` | Use cases correspondentes (`CreateSaleUseCase`, `ReceivePurchaseUseCase`, etc.) |
 | Auto-refresh do painel Android TV | 60 segundos | `[IMPLEMENTADO]` | `tv/` — CLAUDE.md §1 |
@@ -30,22 +30,22 @@ antes do Go-Live definitivo com uso pleno de ~100-150 colaboradores.
 | Item | Valor | Status | Fonte |
 |---|---|---|---|
 | Autenticação | JWT, TTL configurável via `JWT_EXPIRE` (padrão `7d`) | `[IMPLEMENTADO]` | `.env.example`, `server/app.ts` |
-| Renovação de sessão | `POST /api/auth/refresh` (renovação deslizante, requer token ainda válido) | `[IMPLEMENTADO]` | `docs/API.md` §1, `RefreshTokenUseCase.ts` |
+| Renovação de sessão | `POST /api/auth/refresh` (renovação deslizante, requer token ainda válido) | `[IMPLEMENTADO]` | `docs/arquitetura/API.md` §1, `RefreshTokenUseCase.ts` |
 | Rate-limit login (`/api/auth/login`) | 10 tentativas / 15 min | `[IMPLEMENTADO]` | `server/app.ts` (`authLimiter`) |
 | Rate-limit registro (`/api/auth/register`) | 5 tentativas / 60 min | `[IMPLEMENTADO]` | `server/app.ts` (`registerLimiter`) |
-| Rate-limit refresh token | 30 requisições / 15 min por usuário | `[IMPLEMENTADO]` | `server/app.ts` (`refreshLimiter`), `docs/API.md` §1 |
+| Rate-limit refresh token | 30 requisições / 15 min por usuário | `[IMPLEMENTADO]` | `server/app.ts` (`refreshLimiter`), `docs/arquitetura/API.md` §1 |
 | Rate-limit geral de API | 300 requisições / 15 min (100.000 em ambiente de teste) | `[IMPLEMENTADO]` | `server/app.ts` (`apiLimiter`) |
 | Rate-limit recuperação de senha | 10 tentativas / 15 min | `[IMPLEMENTADO]` | `server/app.ts` (`passwordRecoveryLimiter`) |
 | Hash de senha | bcrypt | `[IMPLEMENTADO]` | modelo `User` |
 | Headers de segurança | Helmet | `[IMPLEMENTADO]` | `server/app.ts` |
 | CORS | Restrito por `CORS_ORIGIN` configurável | `[IMPLEMENTADO]` | `server/app.ts`, `.env.example` |
-| RBAC | 100% das rotas com `authenticate` + `authorizeModule`/checagem de role; perfis de acesso configuráveis por módulo (`operate`/`approve`) | `[IMPLEMENTADO]` | `docs/business/BUSINESS_RULES.md`, `docs/DATABASE.md` (access_profiles) |
-| Anti-spoofing de identidade | `requester`/`approved_by`/`operator` vêm do JWT ou são validados por FK, nunca aceitos livres do payload | `[IMPLEMENTADO]` | remediação 3.1 de `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` |
+| RBAC | 100% das rotas com `authenticate` + `authorizeModule`/checagem de role; perfis de acesso configuráveis por módulo (`operate`/`approve`) | `[IMPLEMENTADO]` | `docs/business/BUSINESS_RULES.md`, `docs/database/DATABASE.md` (access_profiles) |
+| Anti-spoofing de identidade | `requester`/`approved_by`/`operator` vêm do JWT ou são validados por FK, nunca aceitos livres do payload | `[IMPLEMENTADO]` | remediação 3.1 de `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` |
 | Validação/sanitização de entrada | express-validator (XSS), Zod em vários módulos novos | `[IMPLEMENTADO]` | validators por módulo |
 | TLS em produção | `[PENDENTE]` — depende do reverse proxy ainda não implantado | `[PENDENTE]` | `docs/infra/DEPLOY_UBUNTU.md` |
 | SSL na conexão com o banco | Obrigatório em produção (`DB_SSL=true`, validado no boot) | `[IMPLEMENTADO]` (validação) / `[PENDENTE]` (certificado real do servidor de produção) | `server/src/config/runtimeEnv.ts` |
 | Segredos obrigatórios sem default fraco | `DB_PASSWORD`, `JWT_SECRET`, `ADMIN_SEED_PASSWORD` exigidos em produção, sem fallback previsível | `[IMPLEMENTADO]` | `docker-compose.yml`, `runtimeEnv.ts` |
-| Auditoria de operações sensíveis | `AuditLog` (ações de usuário), Winston estruturado para logs de sistema | `[IMPLEMENTADO]` | modelo `AuditLog`, `docs/DIARIO_BORDO_GO_LIVE_G6.md` |
+| Auditoria de operações sensíveis | `AuditLog` (ações de usuário), Winston estruturado para logs de sistema | `[IMPLEMENTADO]` | modelo `AuditLog`, `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` |
 | Vulnerabilidades de dependências conhecidas | `npm audit`: 0 vulnerabilidades (última verificação 2026-08-04, após upgrade react-router) | `[IMPLEMENTADO]` (no momento da verificação) | CLAUDE.md §5 |
 | Teste de penetração / pentest formal | Não realizado | `[PENDENTE]` | Não especificado formalmente em nenhum documento |
 | LGPD — política formal de retenção/anonimização de dados pessoais | Não especificado formalmente além de RBAC e auditoria | `[PENDENTE]` | — |
@@ -111,6 +111,6 @@ antes do Go-Live definitivo com uso pleno de ~100-150 colaboradores.
 - `server/src/config/runtimeEnv.ts` — validação de variáveis críticas.
 - `server/src/config/database.ts` — pool de conexões.
 - `.env.example` — variáveis de ambiente e seus defaults.
-- `docs/API.md` — comportamento documentado de cada endpoint.
-- `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` — remediações de segurança P0/P1.
+- `docs/arquitetura/API.md` — comportamento documentado de cada endpoint.
+- `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` — remediações de segurança P0/P1.
 - `CLAUDE.md` §5 — Go-Live Readiness.

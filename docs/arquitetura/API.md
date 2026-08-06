@@ -954,7 +954,7 @@ cancelada."
 
 ### PUT /api/sales/:id/items
 **(Novo, 2026-08-06)** Gap 2/3 do módulo `sales` ("Alteração de pedido",
-`docs/LEVANTAMENTO_ERP_2026-08-02.md`). Substitui **todo** o conjunto de
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`). Substitui **todo** o conjunto de
 itens de uma venda (não é um PATCH incremental) — `authorizeModule('vendas',
 'operate')`. Implementado em `EditSaleItemsUseCase.ts`.
 
@@ -1197,9 +1197,9 @@ Regras:
 
 ### Centros de Custo (`/api/finance/cost-centers`)
 **(Novo, 2026-08-06)** Gap "centros de custo" de
-`docs/LEVANTAMENTO_ERP_2026-08-02.md`. `cost_center_id` (nullable, `ON
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`. `cost_center_id` (nullable, `ON
 DELETE SET NULL`) foi adicionado em `accounts_payable`/`accounts_receivable`
-— ver `docs/DATABASE.md`.
+— ver `docs/database/DATABASE.md`.
 
 | Método | Rota | Nível | Descrição |
 |--------|------|-------|-----------|
@@ -1252,13 +1252,13 @@ conciliação bancária/CNAB — ver `docs/governance/TODO.md`.
 
 ### Conciliação Bancária (`/api/finance/reconciliation`)
 **(Novo, 2026-08-06)** Fecha parte do gap "conciliação bancária/CNAB" de
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` (só a parte OFX — **CNAB fica fora
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` (só a parte OFX — **CNAB fica fora
 desta v1**). Sub-router de `/api/finance`, resultando em
 `/api/finance/reconciliation/...`. `authorizeModule('financeiro', ...)`
 — leitura para todos, escrita (upload/match/ignore/unmatch) exige
 `operate`. Tabelas `bank_statements`/`bank_statement_entries`
 (migration `20260806-000070-create-bank-statements.cjs`) — ver
-`docs/DATABASE.md`.
+`docs/database/DATABASE.md`.
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
@@ -1345,7 +1345,7 @@ Relatório de fluxo de caixa.
 ### GET /api/reports/oee
 **(Novo, 2026-08-06)** OEE (Overall Equipment Effectiveness) por centro de
 trabalho e agregado geral — fecha o item 7/9 do
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` ("OEE completo"). `authorizeModule
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` ("OEE completo"). `authorizeModule
 ('relatorios.producao')` (mesma sub-permissão de `GET /api/reports/production`).
 
 **Query Params:**
@@ -1455,7 +1455,7 @@ era só uma aproximação por calendário de turnos (tempo apontado vs. tempo
 disponível do centro, sem desconto de paradas reais). A tabela
 `production_downtimes` (migration `20260806-000060-create-production-downtimes.cjs`)
 fecha esse gap — ver `POST/PUT/GET /api/production/downtimes` abaixo e
-`docs/DATABASE.md`.
+`docs/database/DATABASE.md`.
 
 Implementado em `server/src/modules/reports/application/use-cases/GetOeeReportUseCase.ts`.
 Migration `20260806-000060` (downtime); demais fontes reaproveitadas
@@ -2082,9 +2082,9 @@ Cada item não pode exceder a quantidade pendente (`quantity - received_quantity
 ## 11.1 Cotação / RFQ (Multi-fornecedor)
 
 **(Novo, 2026-08-06)** Módulo `server/src/modules/rfq/` — fecha o gap
-"Cotação/RFQ multi-fornecedor" do item 1 (`docs/LEVANTAMENTO_ERP_2026-08-02.md`
+"Cotação/RFQ multi-fornecedor" do item 1 (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`
 seção 2). Tabelas `rfqs`/`rfq_items`/`rfq_suppliers`/`rfq_quotes` (migration
-`20260806-000010-create-rfq-tables.cjs`, ver `docs/DATABASE.md`). Todas as
+`20260806-000010-create-rfq-tables.cjs`, ver `docs/database/DATABASE.md`). Todas as
 rotas exigem `authenticate` + `authorizeModule('compras', ...)` — leitura
 para `GET`, `operate` para criação/convite/cotação, **`approve`** (nível
 gestor) para adjudicar. Página web: `/purchases/rfqs`. Testado ao vivo
@@ -2396,7 +2396,7 @@ Agrega, sem paginação, 3 entidades por departamento:
 - **Requisições de compra** (`open_purchase_requisitions`): status `draft`, `pending` ou `approved` (ainda não convertidas em pedido de compra pelo MRP/Compras — a partir de `ordered` a requisição deixa de ser demanda do departamento requisitante).
 - **Contagens de inventário** (`open_inventory_counts`): status `draft`, `counting` ou `pending_approval`.
 
-Inclui sempre um grupo agregado `department_id: null` ("Sem departamento") — cobre hoje 100% do histórico de OPs e contagens (campo novo, sem backfill retroativo por design, ver `docs/DATABASE.md`) e qualquer requisição legada sem departamento atribuído.
+Inclui sempre um grupo agregado `department_id: null` ("Sem departamento") — cobre hoje 100% do histórico de OPs e contagens (campo novo, sem backfill retroativo por design, ver `docs/database/DATABASE.md`) e qualquer requisição legada sem departamento atribuído.
 
 ```json
 {
@@ -2437,7 +2437,7 @@ Departamentos ativos aparecem em ordem alfabética; o grupo `"Sem departamento"`
 ## 15. Requisição de Compra
 
 **(Seção adicionada em 2026-08-06 — módulo P0 do Go-Live, sem seção própria
-em `docs/API.md` até então.)** Módulo `server/src/modules/purchaseRequisitions/`,
+em `docs/arquitetura/API.md` até então.)** Módulo `server/src/modules/purchaseRequisitions/`,
 base URL `/api/purchase-requisitions`. Origem obrigatória de toda a cadeia
 de suprimentos (`CLAUDE.md` §7, "Requisição de Compra como Origem").
 `authorizeModule('requisicoes', ...)`: leituras exigem `view` implícito,
@@ -3184,7 +3184,7 @@ Módulo `server/src/modules/items/`, base URL `/api/items`. É o cadastro
 mestre canônico usado por BOM/MRP/rastreabilidade (`CLAUDE.md` §4, "Item
 Core Intocado + Extensões"), **distinto** de `/api/products` (schema
 legado, seção 3) — os dois convivem durante a migração Product→Item (ver
-`docs/HANDOFF_CODEX.md`). `authorizeModule('produtos', ...)`: leituras
+`docs/governance/HANDOFF_CODEX.md`). `authorizeModule('produtos', ...)`: leituras
 `view` implícito, escritas `operate`. Todos os campos numéricos de
 estoque/custo são `DECIMAL(18,6)`, expostos como **string** no JSON (não
 `number` — evita perda de precisão de ponto flutuante em quantidades
@@ -3383,7 +3383,7 @@ Cancela o processo.
 
 **Erro (422)** — processo já `received` (bloqueado).
 
-> Ver `docs/HANDOFF_CODEX.md`, seção "UC-19 — Importação/COMEX", para o
+> Ver `docs/governance/HANDOFF_CODEX.md`, seção "UC-19 — Importação/COMEX", para o
 > detalhamento completo das decisões de escopo (fórmula fiscal
 > simplificada, sem AP automática de tributos, sem integração Siscomex).
 

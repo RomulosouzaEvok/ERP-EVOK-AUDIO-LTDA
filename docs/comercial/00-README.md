@@ -11,10 +11,12 @@ docs/comercial/
 
 ## Departamentos Cobertos
 
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+
 | ID | Departamento | Sigla | Responsável |
 |----|-------------|-------|-------------|
 | 08 | Vendas / Comercial | VEND | Gerente Comercial |
-| - | Marketing | MKT | Coordenador de Marketing |
+| 14 | Marketing | MKT | Coordenador de Marketing |
 
 ## Estrutura Comercial EVOK ÁUDIO
 
@@ -76,3 +78,7 @@ CREATE TABLE sales_commissions (
 );
 ```
 
+
+---
+
+**Última atualização:** 2026-08-06

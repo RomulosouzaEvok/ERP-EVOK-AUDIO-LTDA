@@ -12,12 +12,17 @@ docs/financeiro/
 
 ## Departamentos Cobertos
 
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+> `CONT`, `CTR` e `TES` são subáreas funcionais de Financeiro — não têm linha
+> própria em `departments` (ver `docs/00-ESTRUTURA_ORGANIZACIONAL.md` §
+> Subáreas funcionais).
+
 | ID | Departamento | Sigla | Responsável |
 |----|-------------|-------|-------------|
 | 09 | Financeiro | FIN | Gerente Financeiro |
-| 10 | Contabilidade | CONT | Contador |
-| - | Controladoria | CTR | Controller |
-| - | Tesouraria | TES | Tesoureiro |
+| - | Contabilidade (subárea de FIN) | CONT | Contador |
+| - | Controladoria (subárea de FIN) | CTR | Controller |
+| - | Tesouraria (subárea de FIN) | TES | Tesoureiro |
 
 ## Estrutura Financeira EVOK ÁUDIO
 
@@ -111,3 +116,7 @@ CREATE TABLE bank_transactions (
     reconciled BOOLEAN DEFAULT false,
     created_at DATETIME
 );
+
+---
+
+**Última atualização:** 2026-08-06

@@ -49,11 +49,21 @@ nomenclatura isolado (`access_profiles.nome`/`descricao`) registrado em
   editar manualmente; regenerar a cada mudança relevante de schema (ver
   comando em `03-MODELO_FISICO.md`).
 
-## Relação com `docs/DATABASE.md`
+## Auditorias específicas
 
-`docs/DATABASE.md` continua existindo como **changelog histórico
+- **[AUDITORIA_DEPARTAMENTOS_2026-08-06.md](AUDITORIA_DEPARTAMENTOS_2026-08-06.md)**
+  — auditoria de espelhamento banco × seed (`server/src/config/seeds.ts`) ×
+  docs organizacionais para a tabela `departments`. Achado crítico: a
+  tabela `departments` está **vazia** no banco local hoje, apesar do seed
+  oficial ter 17 registros; matriz completa de divergência de
+  código/nome/sigla entre as 3 fontes e migration de reconciliação
+  preparada (não aplicada, pendente de aprovação).
+
+## Relação com `docs/database/DATABASE.md`
+
+`docs/database/DATABASE.md` continua existindo como **changelog histórico
 narrativo** de cada migration/decisão de modelagem desde 2026-07-31 (a
 "memória" de por que cada tabela existe do jeito que existe). Esta pasta
 (`docs/database/`) é a **documentação de referência estruturada e sempre
 atual** — comece por aqui se quiser saber "o que existe hoje", vá para
-`docs/DATABASE.md` se quiser saber "por que foi decidido assim".
+`docs/database/DATABASE.md` se quiser saber "por que foi decidido assim".

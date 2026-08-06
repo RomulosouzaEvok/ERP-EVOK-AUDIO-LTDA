@@ -4,7 +4,7 @@
 
 Legenda: **PK** = chave primária, **FK → tabela.coluna** = chave estrangeira, **UQ** = unique constraint (isolada ou parte de composta), coluna `Nulo?` indica se a coluna aceita `NULL`.
 
-Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em português (schema-fantasma nunca adotado pelo app real, `COMMENT ON TABLE` aplicado em 2026-08-06) e **não devem ser usadas em código novo** — ver `docs/DATABASE.md` seção "Tabelas órfãs do schema-fantasma em português".
+Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em português (schema-fantasma nunca adotado pelo app real, `COMMENT ON TABLE` aplicado em 2026-08-06) e **não devem ser usadas em código novo** — ver `docs/database/DATABASE.md` seção "Tabelas órfãs do schema-fantasma em português".
 
 ---
 

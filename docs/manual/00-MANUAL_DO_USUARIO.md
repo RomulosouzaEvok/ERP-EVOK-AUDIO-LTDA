@@ -2,7 +2,7 @@
 
 **Status:** 🟡 Parcial (atualizado em 2026-08-06) — cobre navegação real
 confirmada em `client/src/App.tsx` e o comportamento documentado em
-`docs/projeto/04-USE_CASES.md`/`docs/API.md`. É o ponto de partida para
+`docs/projeto/04-USE_CASES.md`/`docs/arquitetura/API.md`. É o ponto de partida para
 treinamento; **não é** um guia com capturas de tela (fora do escopo desta
 rodada — ver "Próximos passos" no fim).
 
@@ -429,7 +429,7 @@ Consulta de lote/série por produto e histórico de ações sensíveis
   de uso formais por trás de cada tela.
 - `docs/business/BUSINESS_RULES.md` — regras de perfis de acesso.
 - `client/src/App.tsx` — rotas reais do frontend web.
-- `docs/API.md` — comportamento detalhado de cada endpoint, se precisar
+- `docs/arquitetura/API.md` — comportamento detalhado de cada endpoint, se precisar
   ir além da tela.
 - `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` — lista rastreável de
   requisitos funcionais por módulo.

@@ -96,7 +96,7 @@ mobile/
 
 ## Contagem de Inventário (Inventário Cíclico)
 
-Fluxo separado da movimentação avulsa de estoque, para o processo de contagem cíclica/geral/pontual criado pelo supervisor no painel web (módulo `InventoryCount`, base `/api/inventory-counts`, documentado em `docs/API.md` seção 8.2):
+Fluxo separado da movimentação avulsa de estoque, para o processo de contagem cíclica/geral/pontual criado pelo supervisor no painel web (módulo `InventoryCount`, base `/api/inventory-counts`, documentado em `docs/arquitetura/API.md` seção 8.2):
 
 - **Lista** (`(app)/counts/index.tsx`): duas seções — "Minhas contagens" (`GET /api/inventory-counts?assigned_to=me`) e "Disponíveis (pool)" (`GET /api/inventory-counts?unassigned=true&status=draft`), com pull-to-refresh.
 - **Detalhe/execução** (`(app)/counts/[id].tsx`):

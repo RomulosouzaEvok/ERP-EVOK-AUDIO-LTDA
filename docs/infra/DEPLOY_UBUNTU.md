@@ -22,7 +22,7 @@
 > ```
 >
 > Provisionar um servidor novo com os SQL manuais resulta em schema
-> quebrado. Veja também [docs/DATABASE_SETUP.md](../DATABASE_SETUP.md).
+> quebrado. Veja também [docs/database/DATABASE_SETUP.md](../database/DATABASE_SETUP.md).
 
 ---
 

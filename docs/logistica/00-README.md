@@ -11,9 +11,11 @@ docs/logistica/
 
 ## Departamentos Cobertos
 
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+
 | ID | Departamento | Sigla | Responsável |
 |----|-------------|-------|-------------|
-| 12 | Expedição / Logística | EXP | Supervisor de Logística |
+| 11 | Expedição / Logística | EXP | Supervisor de Logística |
 
 ## Estrutura do Departamento
 
@@ -69,3 +71,7 @@ CREATE TABLE shipping_orders (
     created_at DATETIME,
     updated_at DATETIME
 );
+
+---
+
+**Última atualização:** 2026-08-06

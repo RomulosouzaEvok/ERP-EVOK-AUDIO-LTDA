@@ -2,12 +2,12 @@
 
 **Versão:** 1.0
 **Data-base:** 2026-07-31
-**Status:** ⚠️ HISTÓRICO — o frontend FOI implementado em `client/` (React 19 + Vite, React Router v7.18.2, porta 5173). FE0 está concluído; FE1–FE7 parcialmente. Cobertura real de telas: ver docs/LEVANTAMENTO_ERP_2026-08-02.md
+**Status:** ⚠️ HISTÓRICO — o frontend FOI implementado em `client/` (React 19 + Vite, React Router v7.18.2, porta 5173). FE0 está concluído; FE1–FE7 parcialmente. Cobertura real de telas: ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md
 **Depende de:** API já existente em `server/` (Gates G0-G5 aprovados, ver
 `docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md` — **nota de pente-fino
 2026-08-06:** esse arquivo e `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`
 (citado na seção 13 abaixo) **não existem mais no repositório**; para o
-status vigente de Go-Live use `CLAUDE.md` §5 e `docs/GO_LIVE_G6_CHECKLIST.md`)
+status vigente de Go-Live use `CLAUDE.md` §5 e `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md`)
 
 ## 1. Objetivo
 
@@ -99,6 +99,14 @@ tela funciona.
   e, se houver, `error.details` por campo).
 - [ ] Build de produção (`npm run build` gera `client/dist`) validado
   localmente (`npm run preview`).
+- [x] **Home por Perfil (workspace por papel, 2026-08-06):** rota `/` monta
+  dinamicamente um grid de widgets por módulo do perfil logado
+  (`client/src/pages/home/HomePage.tsx` + `widgetRegistry.tsx`), em vez de
+  cravar o dashboard executivo para todo mundo. Perfis com 1-2 módulos
+  (ex.: almoxarife) veem layout de foco; perfis com muitos módulos (admin)
+  veem grid denso incluindo o painel executivo (`kpis-executivos`, restrito
+  a admin/financial). O dashboard executivo antigo continua acessível em
+  `/dashboard` para quem quiser o link direto.
 
 ### Critério de aceite
 
@@ -157,7 +165,7 @@ tela funciona.
   "Depósito de destino" (Insumos default/Laboratório), enviado como
   `warehouse_code` no payload de `POST /api/purchases/:id/receive`.
 - Detalhamento completo, decisões e roteiro de teste manual:
-  `docs/HANDOFF_CODEX.md` seção "Bloco 4 — Múltiplos Depósitos: Frontend".
+  `docs/governance/HANDOFF_CODEX.md` seção "Bloco 4 — Múltiplos Depósitos: Frontend".
 
 ### Onda 3 — Expedição
 
@@ -173,7 +181,7 @@ tela funciona.
   (`bg-brand/10 text-brand`), mesmo padrão do `KpiCard` de
   `DashboardPage.tsx`; abas de `/logistics/estoque` com ícone e estado
   ativo/hover em verde. Puramente visual, sem alteração de lógica/API —
-  ver `docs/HANDOFF_CODEX.md` seção "Identidade Visual EVOK ÁUDIO — Telas
+  ver `docs/governance/HANDOFF_CODEX.md` seção "Identidade Visual EVOK ÁUDIO — Telas
   de Logística".
 
 ## 7. FE2 - Vendas (PDV/pedidos)

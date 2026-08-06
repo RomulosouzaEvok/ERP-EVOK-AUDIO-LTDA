@@ -180,11 +180,11 @@ Ver detalhamento completo em `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
 
 O projeto evoluiu de 18 modelos (versão inicial) para bem mais de 30 hoje,
 incluindo `Item`/extensões (substituindo o antigo `Product` monolítico em
-migração faseada — ver `docs/HANDOFF_CODEX.md`), `NonConformity`,
+migração faseada — ver `docs/governance/HANDOFF_CODEX.md`), `NonConformity`,
 `MaintenanceOrder`, `LotControl`, RFQ (`Rfq`, `RfqSupplier`, `RfqQuote`),
 `CostCenter`, `ProductionCostSettings`, `ProductCostLedger`,
 `AccessProfile`, `AuditLog`, e mais. **A lista completa e o schema real
-vivem em [`docs/DATABASE.md`](../DATABASE.md)** — este documento não
+vivem em [`docs/database/DATABASE.md`](../database/DATABASE.md)** — este documento não
 duplica a modelagem de dados, apenas referencia.
 
 ---
@@ -263,8 +263,8 @@ detalhamento completo (desempenho e escalabilidade).
 - **[`CLAUDE.md`](../../CLAUDE.md)** — SSOT geral, status vigente do Go-Live.
 - **[`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`](../arquitetura/DOCUMENTO_DE_REQUISITOS.md)** — requisitos funcionais rastreáveis por módulo.
 - **[`docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md`](../arquitetura/REQUISITOS_NAO_FUNCIONAIS.md)** — requisitos não funcionais.
-- **[`docs/DATABASE.md`](../DATABASE.md)** — modelo de dados real.
-- **[`docs/API.md`](../API.md)** — contrato de endpoints.
+- **[`docs/database/DATABASE.md`](../database/DATABASE.md)** — modelo de dados real.
+- **[`docs/arquitetura/API.md`](../arquitetura/API.md)** — contrato de endpoints.
 - **[`docs/projeto/04-USE_CASES.md`](04-USE_CASES.md)**, **[`docs/business/01-USE_CASES.md`](../business/01-USE_CASES.md)** — casos de uso formais.
 - **[`docs/governance/TODO.md`](../governance/TODO.md)** — pendências dia a dia.
 

@@ -25,7 +25,7 @@
 - ✅ Backend: Node.js + Express + Sequelize (30+ módulos, 32 rotas montadas)
 - ✅ Database: PostgreSQL 16 (24 migrations versionadas, 133 foreign keys)
 - ✅ Frontend: React 19 + Vite em `client/` (porta 5173) — 9 módulos com UI completa, 8 parciais, 12 sem tela
-- ✅ **4 bloqueadores P0 + 2 P1 remediados em 2026-08-02** (commit `d1d3aff`) — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
+- ✅ **4 bloqueadores P0 + 2 P1 remediados em 2026-08-02** (commit `d1d3aff`) — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
 
 ---
 
@@ -99,15 +99,15 @@ erp-evok-audio/
 │   ├── business/                    # Casos de uso em draft (UC-30+) + regras de negócio — a consolidar em projeto/04-USE_CASES.md conforme implementado
 │   ├── governance/                  # TODO.md (SSOT de pendências dia a dia) + reorganização de departamentos
 │   ├── manual/                      # Manual do usuário final — NOVO 2026-08-06
-│   ├── infra/                       # Deploy Ubuntu/produção
+│   ├── infra/                       # Deploy Ubuntu/produção, Docker/Postgres, backup/restore
+│   ├── governance/
+│   │   ├── auditorias/                # AUDITORIA_PRE_PRODUCAO_*, CONFORMIDADE_CHECK_*, LEVANTAMENTO_ERP_* — achados
+│   │   ├── go-live/                   # GO_LIVE_G6_CHECKLIST, DIARIO_BORDO_GO_LIVE_G6 (append-only), PLANO_IMPLEMENTACAO_*
+│   │   ├── HANDOFF_CODEX.md           # Product/Item migration (Phase 1–4.1) + handoffs de bloco
+│   │   └── TODO.md                    # SSOT de pendências dia a dia
 │   ├── producao/, administrativo/, comercial/, financeiro/, juridico/,
 │   │   logistica/, patrimonio/, qualidade/, rh/, seguranca_trabalho/,
 │   │   suprimentos/, tributario/    # docs departamentais (00-README.md + NN-TEMA.md cada)
-│   ├── AUDITORIA_PRE_PRODUCAO_2026-08-02.md  # CRÍTICO: Bloqueadores
-│   ├── HANDOFF_CODEX.md             # Product/Item migration (Phase 1–4.1)
-│   ├── DATABASE.md                  # Changelog narrativo do banco (ver docs/database/ para o modelo estruturado atual)
-│   ├── DIARIO_BORDO_GO_LIVE_G6.md   # Diário append-only da execução do Go-Live
-│   ├── GO_LIVE_G6_CHECKLIST.md      # Checklist operacional de Go-Live
 │   └── ...
 ├── package.json
 └── AGENTS.md                        # Este arquivo
@@ -168,7 +168,7 @@ erp-evok-audio/
 ## 5. Go-Live Readiness (Crítico)
 
 ### ✅ Bloqueadores remediados em 2026-08-02 (commit `d1d3aff`)
-Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) e [LEVANTAMENTO_ERP_2026-08-02.md](docs/LEVANTAMENTO_ERP_2026-08-02.md).
+Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) e [LEVANTAMENTO_ERP_2026-08-02.md](docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md).
 
 | ID | Bloqueador | Status |
 |----|-----------|--------|
@@ -287,17 +287,17 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 - **[docs/projeto/01-PLANO.md](docs/projeto/01-PLANO.md)** — Arquitetura, 18 modelos, stack, roadmap técnico
 - **[docs/projeto/02-PLANO_INDUSTRIAL.md](docs/projeto/02-PLANO_INDUSTRIAL.md)** — 21 departamentos, BOM de auto-falante, processos produção
 - **[docs/projeto/04-USE_CASES.md](docs/projeto/04-USE_CASES.md)** — Casos de uso (UC-01 a UC-XX)
-- **[docs/HANDOFF_CODEX.md](docs/HANDOFF_CODEX.md)** — Migração Product → Item (Fase 1–4.1, backfill scripts)
-- **[docs/DATABASE.md](docs/DATABASE.md)** — Modelo de dados, ER diagram
+- **[docs/governance/HANDOFF_CODEX.md](docs/governance/HANDOFF_CODEX.md)** — Migração Product → Item (Fase 1–4.1, backfill scripts)
+- **[docs/database/DATABASE.md](docs/database/DATABASE.md)** — Modelo de dados, ER diagram
 
 ### Crítico — Go-Live
-- **[docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)** — 4 bloqueadores P0, 15 altos P1, plano 30h
-- **[docs/API.md](docs/API.md)** — Endpoints, payloads, erros
+- **[docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)** — 4 bloqueadores P0, 15 altos P1, plano 30h
+- **[docs/arquitetura/API.md](docs/arquitetura/API.md)** — Endpoints, payloads, erros
 
 ### Operacional
 - **[README.md](README.md)** — Setup rápido, scripts npm
-- **[docs/DOCKER_POSTGRES_SETUP.md](docs/DOCKER_POSTGRES_SETUP.md)** — Docker Compose, troubleshooting DB
-- **[docs/DEPLOY.md](docs/DEPLOY.md)** — CI/CD, produção
+- **[docs/infra/DOCKER_POSTGRES_SETUP.md](docs/infra/DOCKER_POSTGRES_SETUP.md)** — Docker Compose, troubleshooting DB
+- **[docs/infra/DEPLOY.md](docs/infra/DEPLOY.md)** — CI/CD, produção
 
 ### Funcional por Área
 - **[docs/producao/06-BOM.md](docs/producao/06-BOM.md)** — Estrutura de produtos (detalhado)
@@ -318,7 +318,7 @@ R: Siga `modules/{modulo}/{use-cases,repositories,controllers}/` padrão Clean A
 R: CTO/Tech Lead (plano 30h), CFO (riscos), Gerente Produção (rastreabilidade), Compliance (LGPD/ISO).
 
 **P: Frontend está pronto?**  
-R: Parcialmente. Existe em `client/` (React 19 + Vite, porta 5173) com login, dashboard, produtos, vendas, compras, produção/BOM, financeiro, patrimônio, usuários e rastreabilidade. Faltam telas para 12 módulos do backend (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, etc.) — ver docs/LEVANTAMENTO_ERP_2026-08-02.md.
+R: Parcialmente. Existe em `client/` (React 19 + Vite, porta 5173) com login, dashboard, produtos, vendas, compras, produção/BOM, financeiro, patrimônio, usuários e rastreabilidade. Faltam telas para 12 módulos do backend (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, etc.) — ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md.
 
 **P: Posso rodar em MySQL/SQLite?**  
 R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de arquitetura").

@@ -3,9 +3,9 @@
 
 **Data Planejada (original):** 2 de agosto de 2026 — **superada**  
 **Versão:** 1.2 — reconciliada em 2026-08-06  
-**Status:** 🟡 **FASE 1 (bloqueadores P0) CONCLUÍDA** — commit `d1d3aff`, 2026-08-02. **Fase 2/P1 majoritariamente entregue entre 2026-08-04 e 2026-08-06** (RBAC completo, múltiplos depósitos, custeio real, rastreabilidade por lote/QR, apps mobile e Android TV novos — ver `CLAUDE.md` seção 5 e `docs/DIARIO_BORDO_GO_LIVE_G6.md`). Gate atual continua **inalterado**: **UAT + aprovação formal G6**, ainda **não iniciado**. Deploy (Fase 2 deste checklist — Go-Live Day) **NÃO autorizado** — falta servidor de produção.  
+**Status:** 🟡 **FASE 1 (bloqueadores P0) CONCLUÍDA** — commit `d1d3aff`, 2026-08-02. **Fase 2/P1 majoritariamente entregue entre 2026-08-04 e 2026-08-06** (RBAC completo, múltiplos depósitos, custeio real, rastreabilidade por lote/QR, apps mobile e Android TV novos — ver `CLAUDE.md` seção 5 e `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`). Gate atual continua **inalterado**: **UAT + aprovação formal G6**, ainda **não iniciado**. Deploy (Fase 2 deste checklist — Go-Live Day) **NÃO autorizado** — falta servidor de produção.  
 **Horizonte:** 30h pré-Go-Live (✅ executadas) + Go-Live Day (⏳ aguardando gate) + 48h pós-Go-Live (⏳ não iniciado)  
-**SSOT:** `CLAUDE.md` (seção 5 "Go-Live Readiness") e `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` são a fonte da verdade sobre o status dos bloqueadores. Este documento é o plano operacional/checklist detalhado, reconciliado com essas fontes.
+**SSOT:** `CLAUDE.md` (seção 5 "Go-Live Readiness") e `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` são a fonte da verdade sobre o status dos bloqueadores. Este documento é o plano operacional/checklist detalhado, reconciliado com essas fontes.
 
 > ⚠️ **Nota de reconciliação (2026-08-04):** este arquivo estava desatualizado —
 > marcava os 4 bloqueadores P0 originais como `[ ]`/`⏳` quando na verdade
@@ -29,7 +29,7 @@
 > comandos literais a executar. O runbook real de deploy (Docker Compose,
 > `docker compose up -d`, healthcheck HTTP simples, logs via
 > `docker compose logs`) está em `docs/infra/DEPLOY_UBUNTU.md` e
-> `docs/DEPLOY.md` — usar esses como referência operacional, não as seções
+> `docs/infra/DEPLOY.md` — usar esses como referência operacional, não as seções
 > de Kubernetes abaixo.
 
 ---
@@ -48,12 +48,12 @@
 3. ✅ **[IMPLEMENTADO] 37 tabelas sem Foreign Keys** (2.1) — 133 FKs aplicadas via migration `20260802-000003`
 4. ✅ **[IMPLEMENTADO] IDOR sem validação tenant** (3.1) — RBAC 100% + anti-spoofing de identidade a partir do JWT
 
-**Pendências reais restantes para o Go-Live (rastreadas centralmente em `docs/governance/TODO.md` e `docs/DIARIO_BORDO_GO_LIVE_G6.md`):**
+**Pendências reais restantes para o Go-Live (rastreadas centralmente em `docs/governance/TODO.md` e `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`):**
 - **(a) [PENDENTE] Servidor de produção não adquirido** — VPS/on-premise ainda não comprado; bloqueia o deploy (Fase 2 / F10) independentemente do gate de UAT.
 - **(b) [PENDENTE] UAT completo com stakeholders** — nunca executado; é o gate formal da Fase 1 (Decision Point 1).
-- **(c) [x] Risco residual `react-router@7.18.2` — RESOLVIDO em 2026-08-04.** Advisory `GHSA-qwww-vcr4-c8h2` fechado via upgrade real para `react-router@8.3.0` (unificação `react-router-dom` → `react-router` a partir da v8). `npm audit --omit=dev` em `client/` confirma 0 vulnerabilidades. Detalhe em `docs/governance/TODO.md`, seção "Pendências de Segurança / Gate G6", e `docs/DIARIO_BORDO_GO_LIVE_G6.md`, apêndice 2026-08-04.
+- **(c) [x] Risco residual `react-router@7.18.2` — RESOLVIDO em 2026-08-04.** Advisory `GHSA-qwww-vcr4-c8h2` fechado via upgrade real para `react-router@8.3.0` (unificação `react-router-dom` → `react-router` a partir da v8). `npm audit --omit=dev` em `client/` confirma 0 vulnerabilidades. Detalhe em `docs/governance/TODO.md`, seção "Pendências de Segurança / Gate G6", e `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, apêndice 2026-08-04.
 - **(d) [PENDENTE] Testes de integração RBAC contra infraestrutura real** — cobertura foi adicionada em `server/tests/integration/legacy-routes-rbac-regression.test.ts` (2026-08-04), mas roda via `describe.skip` por falta de `RUN_INTEGRATION=true` + `TEST_API_URL` + `TEST_AUTH_TOKEN` + PostgreSQL acessível no ambiente de CI/dev atual. Precisa ser executada de fato contra infra real antes do Go-Live.
-- **(e) [PENDENTE] Apps `mobile/` e `tv/` (novos em 2026-08-06) sem validação em hardware real.** Entregues e auditados (7 agentes em paralelo, achados P0/altos já remediados no mesmo dia — ver `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06), mas validados só por typecheck/bundle. Checklist de validação em dispositivo real em `mobile/README.md` §5 e `tv/README.md` §5.
+- **(e) [PENDENTE] Apps `mobile/` e `tv/` (novos em 2026-08-06) sem validação em hardware real.** Entregues e auditados (7 agentes em paralelo, achados P0/altos já remediados no mesmo dia — ver `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06), mas validados só por typecheck/bundle. Checklist de validação em dispositivo real em `mobile/README.md` §5 e `tv/README.md` §5.
 - **(f) [PENDENTE] Decisão de produto — JWT de 7 dias × painel de TV "sempre ligado".** O app `tv/` roda continuamente em um painel fixo; falta decidir refresh token dedicado, TTL específico, ou runbook de relogin periódico. Registrado em `docs/governance/TODO.md`, seção "2026-08-06".
 
 ---
@@ -69,7 +69,7 @@ Garantir que os 4 bloqueadores críticos sejam resolvidos, testados com stakehol
 
 ### P0.1: Requisição de Compra gerada na Cadeia (8h) — ✅ [IMPLEMENTADO]
 **Status:** Remediado em 2026-08-02, commit `d1d3aff`.
-**Evidência:** Módulo `/api/purchase-requisitions` implementado e testado end-to-end (ver `CLAUDE.md` seção 5, tabela de bloqueadores; `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` seção "Plano de Ação → Fase 1", item marcado `[x]`).
+**Evidência:** Módulo `/api/purchase-requisitions` implementado e testado end-to-end (ver `CLAUDE.md` seção 5, tabela de bloqueadores; `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` seção "Plano de Ação → Fase 1", item marcado `[x]`).
 **Responsável:** Programador Backend + TechLead  
 **⏱️ Estimado:** 8h  
 **📍 Arquivo crítico:** `src/usecases/SupplyChainUseCase.ts`  
@@ -106,7 +106,7 @@ Garantir que os 4 bloqueadores críticos sejam resolvidos, testados com stakehol
 
 ### P0.2: MRP roda contra estoque_atual REAL (6h) — ✅ [IMPLEMENTADO]
 **Status:** Remediado em 2026-08-02, commit `d1d3aff`.
-**Evidência:** MRP roda contra estoque real (dual-read), validado (ver `CLAUDE.md` seção 5, item 1.2; `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`, "MRP estoque real (1.2) — dual-read validado (BOM + perda %)").
+**Evidência:** MRP roda contra estoque real (dual-read), validado (ver `CLAUDE.md` seção 5, item 1.2; `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`, "MRP estoque real (1.2) — dual-read validado (BOM + perda %)").
 **Responsável:** Programador Backend  
 **⏱️ Estimado:** 6h  
 **📍 Arquivo crítico:** `src/usecases/MRPUseCase.ts`  
@@ -141,7 +141,7 @@ Garantir que os 4 bloqueadores críticos sejam resolvidos, testados com stakehol
 
 ### P0.3: Foreign Keys em 37 tabelas operacionais (4h) — ✅ [IMPLEMENTADO]
 **Status:** Remediado em 2026-08-02, commit `d1d3aff`.
-**Evidência:** 133 FKs aplicadas via migration versionada `20260802-000003` (ver `CLAUDE.md` seção 5, item 2.1: "133 FKs via migration versionada"; `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`: "Adicionar FKs (2.1) — 133 FKs via migration `20260802-000003`").
+**Evidência:** 133 FKs aplicadas via migration versionada `20260802-000003` (ver `CLAUDE.md` seção 5, item 2.1: "133 FKs via migration versionada"; `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`: "Adicionar FKs (2.1) — 133 FKs via migration `20260802-000003`").
 **Responsável:** DevOps + Backend  
 **⏱️ Estimado:** 4h (migração + testes)  
 **📍 Arquivo crítico:** `migrations/` folder  
@@ -210,7 +210,7 @@ Garantir que os 4 bloqueadores críticos sejam resolvidos, testados com stakehol
 
 ### P0.5: react-router upgrade v7 → v8 (2h) — ✅ [IMPLEMENTADO] (risco residual RESOLVIDO em 2026-08-04)
 **Status:** Upgrade original para v7.18.2 concluído em 2026-08-02 (commit `d1d3aff`), resolvendo o CVE-2025-68470 original. Triagem de segurança de 2026-08-04 identificou que a própria v7.18.2 estava na faixa vulnerável de um advisory diferente: `GHSA-qwww-vcr4-c8h2` (CSRF em modo RSC/Server Actions, faixa afetada `>=7.12.0 <8.3.0`). **No mesmo dia (2026-08-04)** foi feito o upgrade para `react-router@8.3.0` (`client/package.json`; `react-router-dom` foi descontinuado a partir da v8 e unificado em `react-router`, incluindo bindings de DOM). `npm audit --omit=dev` em `client/` confirma **0 vulnerabilidades**. Risco fechado, não apenas aceito.
-**Evidência:** `CLAUDE.md` seção 5, item 3.2 ("react-router CVE-2025-68470 ✅ RESOLVIDO — v7.18.2"); `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entradas "2026-08-04 — Triagem de Segurança" e apêndice "2026-08-04 — Fechamento react-router@8.3.0"; `docs/governance/TODO.md`, seção "Pendências de Segurança / Gate G6" (item marcado `[x]`).
+**Evidência:** `CLAUDE.md` seção 5, item 3.2 ("react-router CVE-2025-68470 ✅ RESOLVIDO — v7.18.2"); `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entradas "2026-08-04 — Triagem de Segurança" e apêndice "2026-08-04 — Fechamento react-router@8.3.0"; `docs/governance/TODO.md`, seção "Pendências de Segurança / Gate G6" (item marcado `[x]`).
 **Responsável:** Frontend Dev  
 **⏱️ Estimado:** 2h  
 **📍 Arquivo crítico:** `package.json`, `src/routes/`  
@@ -242,7 +242,7 @@ Garantir que os 4 bloqueadores críticos sejam resolvidos, testados com stakehol
 
 ### P0.6: Apontamento reconciliação com OP (6h) — ✅ [IMPLEMENTADO]
 **Status:** Remediado em 2026-08-02, commit `d1d3aff` (item 1.3 da auditoria, tratado como ALTO mas incluído no pacote de remediação).
-**Evidência:** `CLAUDE.md` seção 5, item 1.3 ("Apontamento × OP desconectados ✅ RESOLVIDO — reconciliação na conclusão da OP"); `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`: "Apontamento reconciliação (1.3) — reconciliação na conclusão da OP + testes".
+**Evidência:** `CLAUDE.md` seção 5, item 1.3 ("Apontamento × OP desconectados ✅ RESOLVIDO — reconciliação na conclusão da OP"); `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`: "Apontamento reconciliação (1.3) — reconciliação na conclusão da OP + testes".
 **Responsável:** Backend + QA  
 **⏱️ Estimado:** 6h  
 **📍 Arquivo crítico:** `src/usecases/ProductionReportUseCase.ts`  
@@ -1243,7 +1243,7 @@ PÓS-GO-LIVE (48h)
 
 ---
 
-**SSOT deste documento:** plano operacional/checklist de Go-Live G6, reconciliado com `CLAUDE.md` (seção 5) e `docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`, que são as fontes de verdade sobre o status dos bloqueadores P0.
+**SSOT deste documento:** plano operacional/checklist de Go-Live G6, reconciliado com `CLAUDE.md` (seção 5) e `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md`, que são as fontes de verdade sobre o status dos bloqueadores P0.
 
 **Próximo passo real (2026-08-06):**
 1. Adquirir servidor de produção (VPS/on-premise) — bloqueia Fase 2/F10 independentemente de tudo mais.
@@ -1252,6 +1252,6 @@ PÓS-GO-LIVE (48h)
 4. Validar os apps `mobile/`/`tv/` (novos em 2026-08-06) em hardware real — checklist em `mobile/README.md` §5 e `tv/README.md` §5 (ver pendência (e) no resumo executivo).
 5. Decidir a estratégia de sessão do app `tv/` (JWT de 7 dias × painel sempre ligado) — ver pendência (f) no resumo executivo e `docs/governance/TODO.md`, seção "2026-08-06".
 
-~~Decisão formal do gate G6 sobre o risco residual `react-router@7.18.2` / `GHSA-qwww-vcr4-c8h2`~~ — **resolvido em 2026-08-04** (upgrade para `react-router@8.3.0`, ver `docs/governance/TODO.md` e `docs/DIARIO_BORDO_GO_LIVE_G6.md`); removido da lista de próximos passos.
+~~Decisão formal do gate G6 sobre o risco residual `react-router@7.18.2` / `GHSA-qwww-vcr4-c8h2`~~ — **resolvido em 2026-08-04** (upgrade para `react-router@8.3.0`, ver `docs/governance/TODO.md` e `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`); removido da lista de próximos passos.
 6. Coletar sign-offs formais (CTO, CFO, Gerente Produção, Compliance) — seção 1.6.
 

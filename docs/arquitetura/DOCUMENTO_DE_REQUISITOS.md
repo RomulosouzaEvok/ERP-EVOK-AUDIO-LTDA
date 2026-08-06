@@ -33,7 +33,7 @@ Convenção de tags (igual ao restante da documentação do projeto, ver
 | RF | Descrição | Status | Referência |
 |---|---|---|---|
 | RF-AUT-01 | Login com email/senha, JWT, rate-limit 10/15min | `[IMPLEMENTADO]` | UC-01, `POST /api/auth/login` |
-| RF-AUT-02 | Renovação de sessão sem novo login (refresh deslizante) | `[IMPLEMENTADO]` | `POST /api/auth/refresh`, `docs/API.md` §1 |
+| RF-AUT-02 | Renovação de sessão sem novo login (refresh deslizante) | `[IMPLEMENTADO]` | `POST /api/auth/refresh`, `docs/arquitetura/API.md` §1 |
 | RF-AUT-03 | Recuperação de senha por email | `[IMPLEMENTADO]` | `client/src/pages/ForgotPasswordPage.tsx`, `ResetPasswordPage.tsx` |
 | RF-AUT-04 | CRUD de usuários, ativação/inativação | `[IMPLEMENTADO]` | UC-10, `/api/users` |
 | RF-AUT-05 | Perfis de acesso configuráveis por módulo (`operate`/`approve`), atribuição a usuário | `[IMPLEMENTADO]` | UC-30 a UC-33, UC-36, `/api/access-profiles` |
@@ -53,7 +53,7 @@ Convenção de tags (igual ao restante da documentação do projeto, ver
 | RF-VEN-03 | Transições de status (`quote → confirmed → partially_invoiced → invoiced → shipped`/`canceled`) | `[IMPLEMENTADO]` | UC-04, UC-41, `PUT /api/sales/:id/status` |
 | RF-VEN-04 | Alteração de itens de venda `quote`/`confirmed` com reajuste de reserva de estoque | `[IMPLEMENTADO]` | `PUT /api/sales/:id/items`, CLAUDE.md §4 (2026-08-06) |
 | RF-VEN-05 | Emissão de NF-e restrita a perfil `approve` do módulo Vendas | `[IMPLEMENTADO]` | UC-41, `POST /api/sales/:id/nfe` |
-| RF-VEN-06 | Faturamento parcial de NF-e por pedido (`invoiced_quantity` acumulado por item) | `[IMPLEMENTADO]` | CLAUDE.md §4 (2026-08-06); risco residual: sem histórico multi-NF-e (`docs/API.md` §5) |
+| RF-VEN-06 | Faturamento parcial de NF-e por pedido (`invoiced_quantity` acumulado por item) | `[IMPLEMENTADO]` | CLAUDE.md §4 (2026-08-06); risco residual: sem histórico multi-NF-e (`docs/arquitetura/API.md` §5) |
 | RF-VEN-07 | Tabela de preços negociados por cliente×produto (sugestão editável ao montar pedido) | `[IMPLEMENTADO]` | `customer_price_lists`, `/api/sales/customers/:id/prices` |
 | RF-VEN-08 | Expedição de venda faturada (status terminal `shipped`) | `[IMPLEMENTADO]` | UC-27, tela `/logistics/expedicao` |
 | RF-VEN-09 | Handoff visual (semáforo) entre Vendas e Expedição/Qualidade | `[IMPLEMENTADO]` | UC-40, `GET /api/dashboard` (handoffs) |
@@ -66,8 +66,8 @@ Convenção de tags (igual ao restante da documentação do projeto, ver
 |---|---|---|---|
 | RF-COM-01 | Requisição de compra como origem obrigatória da cadeia de suprimentos | `[IMPLEMENTADO]` | UC-23, `/api/purchase-requisitions`, tela `/purchases/requisitions` |
 | RF-COM-02 | Workflow de aprovação de requisição restrito a `admin`/perfil `approve`, com `approved_by` vindo do JWT (anti-spoofing) | `[IMPLEMENTADO]` | UC-23, remediação 3.1 `AUDITORIA_PRE_PRODUCAO_2026-08-02.md` |
-| RF-COM-03 | Conversão de requisição aprovada em pedido(s) de compra (1 por fornecedor resolvido) | `[IMPLEMENTADO]` | UC-25, `POST /api/purchase-requisitions/:id/convert` (ver `docs/API.md`) |
-| RF-COM-04 | Cotação/RFQ multi-fornecedor: convite, registro de cotações, mapa comparativo, adjudicação por item (com split) | `[IMPLEMENTADO]` | `/api/rfqs`, tela `/purchases/rfqs`, `docs/API.md` §11.1 |
+| RF-COM-03 | Conversão de requisição aprovada em pedido(s) de compra (1 por fornecedor resolvido) | `[IMPLEMENTADO]` | UC-25, `POST /api/purchase-requisitions/:id/convert` (ver `docs/arquitetura/API.md`) |
+| RF-COM-04 | Cotação/RFQ multi-fornecedor: convite, registro de cotações, mapa comparativo, adjudicação por item (com split) | `[IMPLEMENTADO]` | `/api/rfqs`, tela `/purchases/rfqs`, `docs/arquitetura/API.md` §11.1 |
 | RF-COM-05 | Pedido de compra: fluxo `pending → approved → sent → partial → received` | `[IMPLEMENTADO]` | UC-15, `/api/purchases` |
 | RF-COM-06 | Recebimento parcial/total de pedido, entrada física no estoque | `[IMPLEMENTADO]` | UC-16, `POST /api/purchases/:id/receive` |
 | RF-COM-07 | Lote recebido nasce em quarentena (`quarantine`), bloqueado para consumo até liberação de qualidade | `[IMPLEMENTADO]` | UC-17B, `server/src/models/LotControl.ts` |
@@ -75,7 +75,7 @@ Convenção de tags (igual ao restante da documentação do projeto, ver
 | RF-COM-09 | Catálogo item×fornecedor (N:N), com preço/prazo e fornecedor preferencial | `[IMPLEMENTADO]` | UC-22 |
 | RF-COM-10 | Avaliação de fornecedor (`rating` manual) + `quality_score` automático via NCs vinculadas | `[IMPLEMENTADO]` | tela `/purchases/suppliers` |
 | RF-COM-11 | Cockpit de compras (visão consolidada de pedidos/requisições em aberto) | `[IMPLEMENTADO]` | UC-28, `GET /api/purchases/cockpit` |
-| RF-COM-12 | Importação (COMEX): registro de processo, cálculo de tributos de importação, nacionalização de custo | `[IMPLEMENTADO]` (2026-08-06, backend; **sem tela web ainda**) | UC-19, `server/src/modules/comex/`, `/api/comex/import-processes`, `docs/API.md` §32 — fórmula fiscal simplificada e alíquotas manuais (sem integração Siscomex/NCM), sem AP automática de tributos (ver decisões de escopo em `docs/HANDOFF_CODEX.md`) |
+| RF-COM-12 | Importação (COMEX): registro de processo, cálculo de tributos de importação, nacionalização de custo | `[IMPLEMENTADO]` (2026-08-06, backend; **sem tela web ainda**) | UC-19, `server/src/modules/comex/`, `/api/comex/import-processes`, `docs/arquitetura/API.md` §32 — fórmula fiscal simplificada e alíquotas manuais (sem integração Siscomex/NCM), sem AP automática de tributos (ver decisões de escopo em `docs/governance/HANDOFF_CODEX.md`) |
 
 ---
 
@@ -177,7 +177,7 @@ Convenção de tags (igual ao restante da documentação do projeto, ver
 |---|---|---|---|
 | RF-REL-01 | Dashboard com KPIs (vendas hoje/mês/ano) | `[IMPLEMENTADO]` | UC-07, `/api/dashboard`, tela `/` |
 | RF-REL-02 | Semáforo de handoff entre departamentos (recebimento, requisições, expedição, qualidade) | `[IMPLEMENTADO]` | UC-40, `GetDashboardHandoffsUseCase` |
-| RF-REL-03 | Relatórios de vendas, estoque, clientes, fluxo de caixa, produção, compras | `[IMPLEMENTADO]` | `docs/API.md` §7 |
+| RF-REL-03 | Relatórios de vendas, estoque, clientes, fluxo de caixa, produção, compras | `[IMPLEMENTADO]` | `docs/arquitetura/API.md` §7 |
 | RF-REL-04 | Auditor Inteligente (estoque negativo/zerado/baixo/excessivo, sugestão de reposição, curva ABC) | `[IMPLEMENTADO]` | `/api/auditor`, tela `/reports/auditor` |
 | RF-REL-05 | Consulta de rastreabilidade por lote/série de produto | `[IMPLEMENTADO]` | `/api/traceability`, tela `/traceability` |
 | RF-REL-06 | Painel de demandas por departamento em Android TV (auto-refresh 60s) | `[IMPLEMENTADO]` (validado só por typecheck/bundle, sem hardware real) | `tv/`, `/api/dashboard` |
@@ -224,7 +224,7 @@ RF-PRD-02, RF-FIN-06).
 - `docs/projeto/04-USE_CASES.md` — UC-01 a UC-41 (fluxo de negócio).
 - `docs/business/01-USE_CASES.md` — UC-30 a UC-43 (RBAC/perfis de acesso).
 - `docs/business/BUSINESS_RULES.md` — regras de negócio transversais.
-- `docs/API.md` — contrato de cada endpoint (payload, resposta, erros).
+- `docs/arquitetura/API.md` — contrato de cada endpoint (payload, resposta, erros).
 - `docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md` — RNFs completos.
 - `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md` — visão visual dos
   processos Order-to-Cash, Purchase-to-Pay, Qualidade e Manutenção.

@@ -4,8 +4,8 @@
 > **atual** e sempre-atualizado do banco (Modelo Conceitual, DER,
 > DDL físico, Dicionário de Dados completo das 78 tabelas, Matriz de
 > Privilégios/Isolamento, Estruturas Programáveis e Plano de Disaster
-> Recovery), veja **[docs/database/00-INDICE.md](database/00-INDICE.md)**.
-> Este arquivo (`docs/DATABASE.md`) continua sendo o **changelog
+> Recovery), veja **[docs/database/00-INDICE.md](00-INDICE.md)**.
+> Este arquivo (`docs/database/DATABASE.md`) continua sendo o **changelog
 > histórico narrativo** — o racional de cada migration/decisão de
 > modelagem desde 2026-07-31 — mantido como está abaixo, sem duplicar o
 > conteúdo já consolidado na pasta `docs/database/`.
@@ -369,7 +369,7 @@ prospectivamente, a partir da próxima RNC criada para cada fornecedor).
 ### Tabela: `items` (Item Mestre Canônico) — coluna `conversao_automatica`
 Novo campo do núcleo `items` (roadmap pós-Go-Live item 3, "fechar o ciclo
 MRP — plano → requisição/OP automático", ver
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 3):
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` seção 3):
 
 | Coluna | Tipo | Restrições | Descrição |
 |--------|------|------------|-----------|
@@ -1056,7 +1056,7 @@ mesma justificativa de `20260803-000002-add-quarantine-lot-status.cjs`).
 | `POST` | `/api/inventory/transfers` | `authorizeModule('estoque', 'operate')` | Solicita transferência (`{ product_id, from_warehouse_code, to_warehouse_code, quantity, reason }`). Cria em `status='pending'`, não altera saldo. |
 | `PUT` | `/api/inventory/transfers/:id/approve` | `authorizeModule('estoque', 'approve')` | Aprova e executa a transferência atomicamente (débito origem + crédito destino + 2 `InventoryMovement`). 422 didático se saldo de origem insuficiente no momento da aprovação. |
 | `PUT` | `/api/inventory/transfers/:id/reject` | `authorizeModule('estoque', 'approve')` | Rejeita (`body.reason` obrigatório), não altera saldo. |
-| `GET` | `/api/products/:id/stock-by-warehouse` | `authorizeModule('estoque')` | **Novo.** Roteado em `server/src/modules/products/presentation/routes/products.ts` (não em `inventory.ts`). Saldo de UM produto específico por depósito — retorna TODOS os depósitos ativos, inclusive com `quantity: 0` quando o produto não tem linha em `product_warehouse_stock` (decisão de UI, ver `docs/API.md`). |
+| `GET` | `/api/products/:id/stock-by-warehouse` | `authorizeModule('estoque')` | **Novo.** Roteado em `server/src/modules/products/presentation/routes/products.ts` (não em `inventory.ts`). Saldo de UM produto específico por depósito — retorna TODOS os depósitos ativos, inclusive com `quantity: 0` quando o produto não tem linha em `product_warehouse_stock` (decisão de UI, ver `docs/arquitetura/API.md`). |
 
 **Integração com endpoints existentes:**
 - `POST /api/purchases/:id/receive` — aceita `warehouse_code` opcional
@@ -1270,7 +1270,7 @@ removido, para simetria completa do rollback).
 ## Custeio de Produção — Mão-de-Obra e Overhead (roadmap pós-Go-Live, item 7/9)
 
 Fecha o gap "custeio real vs padrão não incorpora mão-de-obra nem
-overhead" listado em `docs/LEVANTAMENTO_ERP_2026-08-02.md`. Schema/modelagem
+overhead" listado em `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`. Schema/modelagem
 e cálculo (uso destes campos em `costingService.ts` /
 `ChangeProductionOrderStatusUseCase`) implementados na mesma frente — ver
 "Cálculo implementado" ao final desta seção.
@@ -1503,9 +1503,9 @@ simples, sem efeitos colaterais em outras tabelas).
 ## Cotação / RFQ Multi-Fornecedor (`rfqs`, `rfq_items`, `rfq_suppliers`, `rfq_quotes`) — 2026-08-06
 
 Fecha o gap "Cotação/RFQ multi-fornecedor" (item 1,
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 2). Módulo
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` seção 2). Módulo
 `server/src/modules/rfq/`. Contrato completo dos endpoints em
-`docs/API.md` §11.1.
+`docs/arquitetura/API.md` §11.1.
 
 ### Tabela: `rfqs` (Cabeçalho da Cotação)
 | Coluna | Tipo | Restrições | Descrição |
@@ -1580,9 +1580,9 @@ duplicadas).
 
 ## Financeiro — Centros de Custo (`cost_centers`) — 2026-08-06
 
-Fecha o gap "centros de custo" (`docs/LEVANTAMENTO_ERP_2026-08-02.md`,
+Fecha o gap "centros de custo" (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`,
 linha `financial`). Módulo `server/src/modules/financial/`. Contrato
-completo dos endpoints em `docs/API.md` §6.
+completo dos endpoints em `docs/arquitetura/API.md` §6.
 
 ### Tabela: `cost_centers` (Centros de Custo)
 | Coluna | Tipo | Restrições | Descrição |
@@ -1624,7 +1624,7 @@ automático departamento → centro de custo na criação automática de
 
 Continuação do mesmo padrão de bug já corrigido em `item_estruturas`
 (migration `20260802-000005-fix-item-estruturas-user-columns`) e listado
-como pendência em `docs/LEVANTAMENTO_ERP_2026-08-02.md`, seção "Bombas
+como pendência em `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, seção "Bombas
 latentes conhecidas": colunas `UUID` referenciando usuário/fornecedor
 `INTEGER`, tornando o campo estruturalmente impossível de preencher
 corretamente via API (ou quebrando em runtime com `operator does not
@@ -1644,12 +1644,12 @@ linhas, `fornecedor_padrao_id` 100% `NULL` (0/13) — sem dado incompatível
 a migrar, correção segura. Model (`Item.ts`) e validators
 (`itemValidators.ts`, `z.coerce.number().int().positive().nullable().optional()`)
 atualizados no mesmo commit. **BREAKING CHANGE de API:** ver
-`docs/API.md` §3 (nota no topo da seção Produtos).
+`docs/arquitetura/API.md` §3 (nota no topo da seção Produtos).
 
 **Migration:** `server/migrations/20260806-000040-fix-items-fornecedor-padrao-id-type.cjs`.
 
 ### 2–7. Bombas em tabelas órfãs do schema-fantasma em português
-As 4 colunas já documentadas em `docs/LEVANTAMENTO_ERP_2026-08-02.md`
+As 4 colunas já documentadas em `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`
 ("Bombas latentes conhecidas") + 2 encontradas nesta rodada pelo mesmo
 padrão de auditoria:
 
@@ -1709,7 +1709,7 @@ de trabalho. Cada tabela recebeu apenas `COMMENT ON TABLE` marcando-a
 > criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso
 > em código vivo (confirmado por auditoria). NÃO usar em código novo.
 > Equivalente ativo em inglês com PKs INTEGER. Ver
-> docs/LEVANTAMENTO_ERP_2026-08-02.md e
+> docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e
 > server/tests/unit/no-orphan-pt-schema-tables.test.ts."
 
 **Migration:** `server/migrations/20260806-000042-comment-deprecated-orphan-pt-schema-tables.cjs`.
@@ -1744,8 +1744,8 @@ local (junto com as das rodadas anteriores do dia — 64 migrations no
 total ao final desta rodada).
 
 ### Tabela: `customer_price_lists` (Tabela de Preços por Cliente)
-Gap 1/3 do módulo `sales` (`docs/LEVANTAMENTO_ERP_2026-08-02.md`, linha
-`sales`). Contrato completo em `docs/API.md` §5.
+Gap 1/3 do módulo `sales` (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, linha
+`sales`). Contrato completo em `docs/arquitetura/API.md` §5.
 
 | Coluna | Tipo | Restrições | Descrição |
 |--------|------|------------|-----------|
@@ -1801,7 +1801,7 @@ invoiced`; afeta apenas provedor real, não o mock usado em dev.
 
 ### Tabela: `production_downtimes` (Paradas de Máquina/Centro de Trabalho)
 Fecha a pendência "campo de downtime/paradas para OEE preciso" registrada
-em `docs/governance/TODO.md`. Contrato completo em `docs/API.md` §7.
+em `docs/governance/TODO.md`. Contrato completo em `docs/arquitetura/API.md` §7.
 
 | Coluna | Tipo | Restrições | Descrição |
 |--------|------|------------|-----------|
@@ -1831,15 +1831,15 @@ concorrente que a checagem em aplicação sozinha não pega).
 `downtime_hours` (agregado de `production_downtimes` no período) das
 horas de calendário brutas para calcular `available_hours` líquidas —
 `available_hours = max(calendario_bruto - downtime_hours, 0)`. Ver
-`docs/API.md` §7.
+`docs/arquitetura/API.md` §7.
 
 **Risco residual documentado:** sem teste de integração real contra
 Postgres para o índice único parcial (só unitário com mock).
 
 ### Tabelas: `bank_statements` / `bank_statement_entries` (Conciliação Bancária OFX)
 Fecha parte do gap "conciliação bancária/CNAB" de
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` — **CNAB fica fora desta v1**.
-Contrato completo em `docs/API.md` §6.
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — **CNAB fica fora desta v1**.
+Contrato completo em `docs/arquitetura/API.md` §6.
 
 #### Tabela: `bank_statements` (um registro por arquivo `.ofx` importado)
 | Coluna | Tipo | Restrições | Descrição |
@@ -1906,7 +1906,7 @@ fora de escopo desta v1 — ver `docs/governance/TODO.md`.
 
 Sem migration/tabela nova. `POST /api/auth/refresh` (`authenticate` +
 `RefreshTokenUseCase`) renova o JWT com o mesmo `passwordVersion` já
-validado nessa requisição — ver `docs/API.md` §1. Logging estruturado
+validado nessa requisição — ver `docs/arquitetura/API.md` §1. Logging estruturado
 Winston (`server/src/config/logger.ts`) integrado em request-logger,
 errorHandler e boot (`server/index.ts`) — JSON em produção, colorido em
 dev, `LOG_FILE` opcional (sem rotação de arquivo — se usado em produção,

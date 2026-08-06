@@ -61,7 +61,7 @@ O compose usa `DB_PASSWORD` do `.env` e **não tem default**: se a variável
 não estiver definida, `docker compose up` falha explicitamente em vez de subir
 com uma senha previsível. Guia completo de conexão e troubleshooting (dois PCs
 diferentes, `DB_HOST` local vs. dentro do Compose, erros comuns):
-[`docs/DOCKER_POSTGRES_SETUP.md`](docs/DOCKER_POSTGRES_SETUP.md).
+[`docs/infra/DOCKER_POSTGRES_SETUP.md`](docs/infra/DOCKER_POSTGRES_SETUP.md).
 
 Na primeira execução o servidor roda os seeds automaticamente (usuário
 administrador, departamentos e categorias). O seed é idempotente: não faz nada
@@ -123,13 +123,13 @@ docs/              # documentação por área da empresa
 
 | Documento                                                              | Conteúdo                       |
 | ---------------------------------------------------------------------- | ------------------------------ |
-| [docs/API.md](docs/API.md)                                             | Endpoints da API               |
-| [docs/DATABASE.md](docs/DATABASE.md)                                   | Modelo de dados                |
-| [docs/DEPLOY.md](docs/DEPLOY.md)                                       | Processo de deploy             |
+| [docs/arquitetura/API.md](docs/arquitetura/API.md)                                             | Endpoints da API               |
+| [docs/database/DATABASE.md](docs/database/DATABASE.md)                                   | Modelo de dados                |
+| [docs/infra/DEPLOY.md](docs/infra/DEPLOY.md)                                       | Processo de deploy             |
 | [docs/00-ESTRUTURA_ORGANIZACIONAL.md](docs/00-ESTRUTURA_ORGANIZACIONAL.md) | Estrutura organizacional    |
 | [CLAUDE.md](CLAUDE.md)                                                  | SSOT do projeto (status, arquitetura, runbook) |
-| [docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) | Auditoria pré-produção e status da remediação |
-| [docs/GO_LIVE_G6_CHECKLIST.md](docs/GO_LIVE_G6_CHECKLIST.md)            | Checklist de Go-Live G6        |
+| [docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) | Auditoria pré-produção e status da remediação |
+| [docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md](docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md)            | Checklist de Go-Live G6        |
 
 ## Agentes Claude Code
 

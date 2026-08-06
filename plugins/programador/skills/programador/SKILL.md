@@ -54,7 +54,7 @@ Para evitar falhas de conexao de rede ou perda de contexto:
 ## 4. O checklist de encerramento
 
 Ao finalizar qualquer implementacao, sua ultima acao deve ser gerar ou atualizar
-`docs/HANDOFF_CODEX.md` com a seguinte estrutura:
+`docs/governance/HANDOFF_CODEX.md` com a seguinte estrutura:
 
 - Resumo da feature: o que foi codificado.
 - Documentacoes atualizadas: quais arquivos `.md` e JSDocs foram revisados.

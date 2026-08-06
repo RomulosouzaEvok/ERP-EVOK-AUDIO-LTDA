@@ -274,4 +274,4 @@ erDiagram
 
 Para o `ON DELETE`/`ON UPDATE` exato de cada FK (RESTRICT/CASCADE/SET
 NULL), ver [03-MODELO_FISICO.md](03-MODELO_FISICO.md) → `schema.sql`
-(fonte de verdade) ou `docs/DATABASE.md` (racional de cada decisão).
+(fonte de verdade) ou `docs/database/DATABASE.md` (racional de cada decisão).

@@ -7,7 +7,7 @@ contra prática de mercado) publicada como artifact — este documento é a
 versão persistente/executável da mesma decisão, para sobreviver a queda de
 sessão. Este documento **não implementa nada** — quebra a decisão em
 blocos técnicos que os agentes programadores/DBA/frontend devem puxar, na
-ordem sugerida. Ao concluir cada bloco, atualizar `docs/HANDOFF_CODEX.md`
+ordem sugerida. Ao concluir cada bloco, atualizar `docs/governance/HANDOFF_CODEX.md`
 e marcar aqui.
 
 **Status das decisões de negócio:** todas as decisões abaixo foram
@@ -98,7 +98,7 @@ Nenhum bloco de frontend/backend de aplicação deve começar antes destas
 migrations existirem — os demais blocos dependem dos campos abaixo.
 
 Detalhe completo (migrations criadas, decisões técnicas, desvios) em
-[`docs/HANDOFF_CODEX.md`](../HANDOFF_CODEX.md), seção "Bloco A — Schema:
+[`docs/governance/HANDOFF_CODEX.md`](HANDOFF_CODEX.md), seção "Bloco A — Schema:
 classificação de item + ativo/licença + NF-e/NFS-e + módulos RBAC
 (2026-08-05)". Todas as migrations abaixo já foram aplicadas no Postgres
 local; `tsc --noEmit` e `test:unit` passam limpos.
@@ -139,7 +139,7 @@ local; `tsc --noEmit` e `test:unit` passam limpos.
 
 Depende do Bloco A (`asset_id` em `NonConformity`).
 
-Detalhe completo em [`docs/HANDOFF_CODEX.md`](../HANDOFF_CODEX.md), seção
+Detalhe completo em [`docs/governance/HANDOFF_CODEX.md`](HANDOFF_CODEX.md), seção
 "Bloco B — Backend: consequência real da devolução ao fornecedor
 (2026-08-05)". `tsc --noEmit` e `test:unit` (473 testes) passam limpos.
 
@@ -246,7 +246,7 @@ paralelo assim que o Bloco A estiver aplicado, mesmo que B/C/D ainda não
 tenham terminado — usar dado mock/vazio até o backend fechar.
 
 Detalhe completo (decisões técnicas, componentes criados) em
-[`docs/HANDOFF_CODEX.md`](../HANDOFF_CODEX.md), seção "Bloco E — Frontend:
+[`docs/governance/HANDOFF_CODEX.md`](HANDOFF_CODEX.md), seção "Bloco E — Frontend:
 menu reorganizado (2026-08-05)". `npx tsc --noEmit` (client e server),
 `npm run lint` (oxlint, só warnings pré-existentes) e `npx vitest run`
 (45/45) passam limpos; `test:unit` do server (473/473) também.
@@ -322,7 +322,7 @@ menu reorganizado (2026-08-05)". `npx tsc --noEmit` (client e server),
 
 Depende do Bloco A.
 
-Detalhe completo em [`docs/HANDOFF_CODEX.md`](../HANDOFF_CODEX.md), seção
+Detalhe completo em [`docs/governance/HANDOFF_CODEX.md`](HANDOFF_CODEX.md), seção
 "Bloco F — Frontend: NF-e/NFS-e e licença de Ativo (2026-08-05)".
 
 - [x] Tela de Contas a Pagar ganha seletor `invoice_type` (nfe/nfse) —

@@ -16,6 +16,18 @@ docs/patrimonio/
 └── 05-DEPRECIACAO.md           <- Calculo de depreciacao fiscal
 ```
 
+## Departamentos Cobertos
+
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+> `patrimonio` em si é um módulo transversal (ativos pertencem a qualquer
+> departamento via `assets.department_id`), mas hospeda a documentação
+> funcional de dois departamentos reais do seed:
+
+| ID | Departamento | Sigla | Responsável | Doc funcional |
+|----|-------------|-------|-------------|----------------|
+| 06 | Almoxarifado | ALM | Almoxarife | [04-ALMOXARIFADO_INSUMOS.md](04-ALMOXARIFADO_INSUMOS.md) |
+| 12 | Manutenção | MANUT | Supervisor de Manutenção | [03-MANUTENCAO.md](03-MANUTENCAO.md) |
+
 ## Tipo de Ativos na EVOK AUDIO
 
 ### Grupo 1 - Maquinas de Producao
@@ -89,3 +101,7 @@ CREATE TABLE assets (
 );
 ```
 
+
+---
+
+**Última atualização:** 2026-08-06

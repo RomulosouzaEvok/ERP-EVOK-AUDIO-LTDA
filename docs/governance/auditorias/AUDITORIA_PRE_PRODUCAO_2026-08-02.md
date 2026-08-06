@@ -56,7 +56,7 @@
 - **CRÍTICO 3.1:** IDOR: usuários acessam recursos de outras empresas (sem validação company_id)
 - **ALTO 3.2:** react-router-dom ^6.30.4 vulnerável (CVE-2025-68470 — open redirect) — ✅ **RESOLVIDO** (upgrade para v8.3.0, 2026-08-04, `npm audit` 0 vulnerabilidades)
 - **ALTO 3.3:** TypeScript sem `strict` (NaN em cálculos financeiros) — ✅ **RESOLVIDO em 2026-08-05**: `server/tsconfig.json` tinha `strict: true` anulado por `noImplicitAny`/`strictNullChecks`/`strictPropertyInitialization`/`useUnknownInCatchVariables` individualmente `false` logo abaixo — sobrescritas removidas, 1223 erros de tipo corrigidos em todos os módulos (sem uso de `any`/`as any` para silenciar), `tsc --noEmit` limpo, 494/494 testes unitários passando
-- **ALTO 3.4:** 13 use-cases acoplados a Sequelize (testabilidade quebrada) — ✅ **RESOLVIDO em 2026-08-05** (escopo real era 25, não 13): todos os use-cases que importavam `models/index` direto foram refatorados para receber repository injetado (Clean Architecture); 6 repositories novos/estendidos, incluindo `fiscal` e `webhooks` (módulos que nunca tinham tido essa abstração). Zero mudança de comportamento — mesma query/transação/erro preservados. Ver `docs/HANDOFF_CODEX.md`
+- **ALTO 3.4:** 13 use-cases acoplados a Sequelize (testabilidade quebrada) — ✅ **RESOLVIDO em 2026-08-05** (escopo real era 25, não 13): todos os use-cases que importavam `models/index` direto foram refatorados para receber repository injetado (Clean Architecture); 6 repositories novos/estendidos, incluindo `fiscal` e `webhooks` (módulos que nunca tinham tido essa abstração). Zero mudança de comportamento — mesma query/transação/erro preservados. Ver `docs/governance/HANDOFF_CODEX.md`
 
 ### Pilar 4: Dependências & Arquitetura
 **3 achados altos:**

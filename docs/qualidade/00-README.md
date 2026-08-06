@@ -12,11 +12,15 @@ docs/qualidade/
 
 ## Departamentos Cobertos
 
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+> `LAB` e `GQ` são subáreas funcionais de Qualidade — não têm linha própria em
+> `departments` (ver `docs/00-ESTRUTURA_ORGANIZACIONAL.md` § Subáreas funcionais).
+
 | ID | Departamento | Sigla | Responsável |
 |----|-------------|-------|-------------|
-| 11 | Qualidade | QUAL | Gerente de Qualidade |
-| - | Laboratório de Testes | LAB | Supervisor de Testes |
-| - | Garantia da Qualidade | GQ | Analista da Qualidade |
+| 10 | Qualidade | QUAL | Gerente de Qualidade |
+| - | Laboratório de Testes (subárea de QUAL) | LAB | Supervisor de Testes |
+| - | Garantia da Qualidade (subárea de QUAL) | GQ | Analista da Qualidade |
 
 ## Estrutura do Departamento
 
@@ -141,3 +145,7 @@ CREATE TABLE non_conformities (
 | Auditoria Fornecedor | Pontuação | > 80% |
 | NPS Clientes | Pesquisa | > 80 |
 | Índice de NCs | NCs abertas / NCs fechadas | > 90% |
+
+---
+
+**Última atualização:** 2026-08-06

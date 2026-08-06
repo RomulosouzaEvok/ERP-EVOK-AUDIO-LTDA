@@ -18,8 +18,8 @@
 - `server/database/postgresql/04g_serial_numbers_expand.sql`
 - `server/database/postgresql/04h_production_routes_expand.sql`
 - `server/database/postgresql/04i_bill_of_material_items_expand.sql`
-- `docs/DATABASE.md`
-- `docs/DATABASE_SETUP.md`
+- `docs/database/DATABASE.md`
+- `docs/database/DATABASE_SETUP.md`
 
 ## Achado principal
 
@@ -120,8 +120,8 @@ Nas expansoes `04a` a `04i`, existem indices adicionais direcionados a:
 
 ## Divergencias documentadas
 
-- `docs/DATABASE.md` ainda menciona `sequelize.sync({ alter: true })` como estrategia de desenvolvimento.
-- `docs/DATABASE_SETUP.md` ainda instrui ativar `DB_FORCE_SYNC=true` para certas tabelas legadas.
+- `docs/database/DATABASE.md` ainda menciona `sequelize.sync({ alter: true })` como estrategia de desenvolvimento.
+- `docs/database/DATABASE_SETUP.md` ainda instrui ativar `DB_FORCE_SYNC=true` para certas tabelas legadas.
 - O G1 implementado em `2026-07-31` passou a bloquear `DB_FORCE_SYNC` e `DB_AUTO_ALTER` em producao, entao essa documentacao esta **desalinhada** com o runtime seguro.
 
 ## Resultado do DB-01

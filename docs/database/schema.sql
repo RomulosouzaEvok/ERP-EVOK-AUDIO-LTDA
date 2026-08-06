@@ -1766,7 +1766,7 @@ CREATE TABLE public.auditoria_eventos (
 -- Name: TABLE auditoria_eventos; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.auditoria_eventos IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.auditoria_eventos IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -2791,7 +2791,7 @@ CREATE TABLE public.entradas_nf (
 -- Name: TABLE entradas_nf; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.entradas_nf IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.entradas_nf IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -2820,7 +2820,7 @@ CREATE TABLE public.entradas_nf_items (
 -- Name: TABLE entradas_nf_items; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.entradas_nf_items IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.entradas_nf_items IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -2843,7 +2843,7 @@ CREATE TABLE public.fornecedores (
 -- Name: TABLE fornecedores; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.fornecedores IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.fornecedores IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -3847,7 +3847,7 @@ CREATE TABLE public.lotes (
 -- Name: TABLE lotes; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.lotes IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.lotes IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -4052,7 +4052,7 @@ CREATE TABLE public.movimentos_estoque (
 -- Name: TABLE movimentos_estoque; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.movimentos_estoque IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.movimentos_estoque IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -4234,7 +4234,7 @@ CREATE TABLE public.numeros_serie (
 -- Name: TABLE numeros_serie; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.numeros_serie IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.numeros_serie IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -4261,7 +4261,7 @@ CREATE TABLE public.ordens_producao (
 -- Name: TABLE ordens_producao; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.ordens_producao IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.ordens_producao IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -5550,7 +5550,7 @@ CREATE TABLE public.requisicao_compra_items (
 -- Name: TABLE requisicao_compra_items; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.requisicao_compra_items IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.requisicao_compra_items IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -5575,7 +5575,7 @@ CREATE TABLE public.requisicoes_compra (
 -- Name: TABLE requisicoes_compra; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.requisicoes_compra IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.requisicoes_compra IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -6501,7 +6501,7 @@ CREATE TABLE public.usuarios (
 -- Name: TABLE usuarios; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.usuarios IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.usuarios IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --
@@ -6692,7 +6692,7 @@ CREATE TABLE public.webhooks_eventos (
 -- Name: TABLE webhooks_eventos; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.webhooks_eventos IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
+COMMENT ON TABLE public.webhooks_eventos IS 'DEPRECATED (2026-08-06): tabela orfa do schema-fantasma em portugues criado pelo 01_schema.sql baseline. 0 linhas, 0 models Sequelize, 0 uso em codigo vivo (confirmado por auditoria). NAO usar em codigo novo. Equivalente ativo em ingles com PKs INTEGER. Ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md e server/tests/unit/no-orphan-pt-schema-tables.test.ts.';
 
 
 --

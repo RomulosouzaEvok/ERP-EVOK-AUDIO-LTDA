@@ -11,10 +11,15 @@ docs/suprimentos/
 
 ## Departamentos Cobertos
 
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+> `COMEX` é subárea funcional de Compras/Suprimentos — não tem linha própria
+> em `departments` (ver `docs/00-ESTRUTURA_ORGANIZACIONAL.md` § Subáreas
+> funcionais).
+
 | ID | Departamento | Sigla | Responsável |
 |----|-------------|-------|-------------|
 | 07 | Compras / Suprimentos | COMP | Gerente de Suprimentos |
-| - | Comércio Exterior | COMEX | Analista de Comex |
+| - | Comércio Exterior (subárea de COMP) | COMEX | Analista de Comex |
 
 ## Estrutura do Departamento
 
@@ -80,3 +85,7 @@ CREATE TABLE purchase_categories (
     active BOOLEAN DEFAULT true,
     created_at DATETIME
 );
+
+---
+
+**Última atualização:** 2026-08-06

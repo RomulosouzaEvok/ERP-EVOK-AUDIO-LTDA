@@ -158,5 +158,5 @@ esse problema por completo.
 | `DB_PASSWORD` | obrigatório, sem default | igual ao valor usado no `.env` da raiz na criação do volume |
 | `DB_SSL`      | `false` (dev local)      | `false` (dev local)          |
 
-Ver também `docs/DATABASE_SETUP.md` (schema, migrations, backfill) e
+Ver também `docs/database/DATABASE_SETUP.md` (schema, migrations, backfill) e
 `docker-compose.yml` / `server/src/config/database.ts` (fonte da verdade).

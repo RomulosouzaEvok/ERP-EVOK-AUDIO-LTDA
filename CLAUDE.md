@@ -27,10 +27,10 @@
 - ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, configuração fiscal e auditor inteligente foram cabeados entre 2026-08-02 e 2026-08-05); as exceções são o inventário mobile (QR, propositalmente mobile-only), os endpoints de webhook (sem UI, integração backend-to-backend) e, temporariamente, o módulo de **Importação/COMEX (NOVO)**, backend completo mas ainda sem tela
 - ✅ **App mobile novo** (`mobile/`, Expo/React Native): login JWT, scan de estoque QR, histórico de movimentações, execução de contagens cíclicas (pool/atribuídas) — entregue em 2026-08-06, validado só por typecheck/bundle, **sem teste em dispositivo real ainda**
 - ✅ **App Android TV novo** (`tv/`, react-native-tvos): painel de demandas por departamento (recebimento, requisições, expedição, qualidade), auto-refresh 60s — entregue em 2026-08-06, mesma ressalva de validação (sem hardware real testado)
-- ✅ **4 bloqueadores P0 + 2 P1 remediados em 2026-08-02** (commit `d1d3aff`) — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
-- ✅ **Auditoria multi-agente de 7 frentes concluída em 2026-08-06** (geral, segurança, DBA, infra, frontend, mobile/TV, documentação) com remediação imediata de 4 frentes no mesmo dia — veja `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06, e pendências residuais em `docs/governance/TODO.md`
-- ✅ **Terceira rodada de entregas em 2026-08-06** (auth refresh deslizante + logging estruturado Winston, paginação/renovação de sessão em `mobile/`/`tv/`, telas web de reatribuição de contagem e fornecedor padrão do item, e 3 gaps de negócio fechados — tabela de preços por cliente, alteração de pedido confirmado, faturamento parcial de NF-e em Vendas; paradas de máquina com OEE preciso em Produção; conciliação bancária OFX em Financeiro) — veja `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "terceira rodada", e `docs/HANDOFF_CODEX.md`
-- ✅ **Quarta rodada de entregas em 2026-08-06** (`Asset.status` passou a sincronizar automaticamente com o ciclo de vida da ordem de manutenção — RF-PAT-05 `[IMPLEMENTADO]`, `docs/patrimonio/03-MANUTENCAO.md` §6; e o módulo **Importação/COMEX** (UC-19, RF-COM-12) foi implementado do zero — backend completo em `server/src/modules/comex/`, `/api/comex/import-processes`, tela web pendente) — veja `docs/DIARIO_BORDO_GO_LIVE_G6.md` e `docs/HANDOFF_CODEX.md`
+- ✅ **4 bloqueadores P0 + 2 P1 remediados em 2026-08-02** (commit `d1d3aff`) — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
+- ✅ **Auditoria multi-agente de 7 frentes concluída em 2026-08-06** (geral, segurança, DBA, infra, frontend, mobile/TV, documentação) com remediação imediata de 4 frentes no mesmo dia — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06, e pendências residuais em `docs/governance/TODO.md`
+- ✅ **Terceira rodada de entregas em 2026-08-06** (auth refresh deslizante + logging estruturado Winston, paginação/renovação de sessão em `mobile/`/`tv/`, telas web de reatribuição de contagem e fornecedor padrão do item, e 3 gaps de negócio fechados — tabela de preços por cliente, alteração de pedido confirmado, faturamento parcial de NF-e em Vendas; paradas de máquina com OEE preciso em Produção; conciliação bancária OFX em Financeiro) — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "terceira rodada", e `docs/governance/HANDOFF_CODEX.md`
+- ✅ **Quarta rodada de entregas em 2026-08-06** (`Asset.status` passou a sincronizar automaticamente com o ciclo de vida da ordem de manutenção — RF-PAT-05 `[IMPLEMENTADO]`, `docs/patrimonio/03-MANUTENCAO.md` §6; e o módulo **Importação/COMEX** (UC-19, RF-COM-12) foi implementado do zero — backend completo em `server/src/modules/comex/`, `/api/comex/import-processes`, tela web pendente) — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` e `docs/governance/HANDOFF_CODEX.md`
 
 ---
 
@@ -104,15 +104,15 @@ erp-evok-audio/
 │   ├── business/                    # Casos de uso em draft (UC-30+) + regras de negócio — a consolidar em projeto/04-USE_CASES.md conforme implementado
 │   ├── governance/                  # TODO.md (SSOT de pendências dia a dia) + reorganização de departamentos
 │   ├── manual/                      # Manual do usuário final — NOVO 2026-08-06
-│   ├── infra/                       # Deploy Ubuntu/produção
+│   ├── infra/                       # Deploy Ubuntu/produção, Docker/Postgres, backup/restore
+│   ├── governance/
+│   │   ├── auditorias/                # AUDITORIA_PRE_PRODUCAO_*, CONFORMIDADE_CHECK_*, LEVANTAMENTO_ERP_* — achados
+│   │   ├── go-live/                   # GO_LIVE_G6_CHECKLIST, DIARIO_BORDO_GO_LIVE_G6 (append-only), PLANO_IMPLEMENTACAO_*
+│   │   ├── HANDOFF_CODEX.md           # Product/Item migration (Phase 1–4.1) + handoffs de bloco
+│   │   └── TODO.md                    # SSOT de pendências dia a dia
 │   ├── producao/, administrativo/, comercial/, financeiro/, juridico/,
 │   │   logistica/, patrimonio/, qualidade/, rh/, seguranca_trabalho/,
 │   │   suprimentos/, tributario/    # docs departamentais (00-README.md + NN-TEMA.md cada)
-│   ├── AUDITORIA_PRE_PRODUCAO_2026-08-02.md  # CRÍTICO: Bloqueadores
-│   ├── HANDOFF_CODEX.md             # Product/Item migration (Phase 1–4.1)
-│   ├── DATABASE.md                  # Changelog narrativo do banco (ver docs/database/ para o modelo estruturado atual)
-│   ├── DIARIO_BORDO_GO_LIVE_G6.md   # Diário append-only da execução do Go-Live
-│   ├── GO_LIVE_G6_CHECKLIST.md      # Checklist operacional de Go-Live
 │   └── ...
 ├── package.json
 └── CLAUDE.md                        # Este arquivo
@@ -150,7 +150,7 @@ erp-evok-audio/
 - **Pedido de Compra:** Origem em Requisição, status (pending → approved → sent → partial → received)
 - **Fornecedores:** Avaliação, prazos, termos de pagamento
 - **Recebimento:** Entrada no estoque, geração de Contas a Pagar (pós-recebimento, não em aprovação)
-- **Importação / COMEX (NOVO, 2026-08-06):** `/api/comex/import-processes` (UC-19) — processo de importação (fornecedor, itens, FOB, câmbio, frete/seguro), cálculo automático de tributos (II/IPI/PIS/COFINS/ICMS, alíquotas informadas manualmente por item — sem integração Siscomex/NCM), acompanhamento sequencial (`shipped → arrived → customs_cleared`), recebimento com entrada em estoque e custo nacionalizado; backend completo, **tela web ainda pendente**; sem AP automática de tributos (ver `docs/API.md` §32, `docs/HANDOFF_CODEX.md`)
+- **Importação / COMEX (NOVO, 2026-08-06):** `/api/comex/import-processes` (UC-19) — processo de importação (fornecedor, itens, FOB, câmbio, frete/seguro), cálculo automático de tributos (II/IPI/PIS/COFINS/ICMS, alíquotas informadas manualmente por item — sem integração Siscomex/NCM), acompanhamento sequencial (`shipped → arrived → customs_cleared`), recebimento com entrada em estoque e custo nacionalizado; backend completo, **tela web ainda pendente**; sem AP automática de tributos (ver `docs/arquitetura/API.md` §32, `docs/governance/HANDOFF_CODEX.md`)
 
 ### Estoque & Logística
 - **Inventário:** Entrada/saída/ajuste com rastreamento completo
@@ -182,7 +182,7 @@ erp-evok-audio/
 ## 5. Go-Live Readiness (Crítico)
 
 ### ✅ Bloqueadores remediados em 2026-08-02 (commit `d1d3aff`)
-Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) e [LEVANTAMENTO_ERP_2026-08-02.md](docs/LEVANTAMENTO_ERP_2026-08-02.md).
+Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md) e [LEVANTAMENTO_ERP_2026-08-02.md](docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md).
 
 | ID | Bloqueador | Status |
 |----|-----------|--------|
@@ -204,8 +204,8 @@ Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-
    - Teste de integração real (Postgres) das 3 features de maior risco da terceira rodada de 2026-08-06: conciliação bancária, índice único parcial de downtime, faturamento parcial (ver `docs/governance/TODO.md`, seção 2026-08-06 terceira rodada)
    - Tela web do módulo Importação/COMEX (backend pronto, `client/` pendente) e teste de integração real (Postgres) do fluxo create→tracking→receive de COMEX e da sincronização `Asset.status`↔ordem de manutenção
 3. **Fase 3 (P2):** Capacidade finita/centros de trabalho, TypeScript strict
-4. **Fase 4 (P3):** Refugo detalhado por etapa, CI/CD, unificação schema legado/novo (decisão futura de `DROP TABLE` das 12 tabelas órfãs do schema-fantasma em português, marcadas `DEPRECATED` em 2026-08-06 — ver `docs/DATABASE.md`)
-5. **Infra de produção (bloqueia deploy, independente das fases acima):** servidor de produção (VPS/on-premise) ainda não adquirido; reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato e cron de backup aguardando essa compra — ver `docs/infra/DEPLOY_UBUNTU.md` e `docs/GO_LIVE_G6_CHECKLIST.md`
+4. **Fase 4 (P3):** Refugo detalhado por etapa, CI/CD, unificação schema legado/novo (decisão futura de `DROP TABLE` das 12 tabelas órfãs do schema-fantasma em português, marcadas `DEPRECATED` em 2026-08-06 — ver `docs/database/DATABASE.md`)
+5. **Infra de produção (bloqueia deploy, independente das fases acima):** servidor de produção (VPS/on-premise) ainda não adquirido; reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato e cron de backup aguardando essa compra — ver `docs/infra/DEPLOY_UBUNTU.md` e `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md`
 
 ---
 
@@ -313,25 +313,27 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 - **[docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md](docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md)** — Requisitos não funcionais (desempenho, segurança, disponibilidade, escalabilidade)
 - **[docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md](docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md)** — Diagrama de casos de uso + BPMN simplificado (Order-to-Cash, Purchase-to-Pay, Qualidade, Manutenção)
 - **[docs/manual/00-MANUAL_DO_USUARIO.md](docs/manual/00-MANUAL_DO_USUARIO.md)** — Manual do usuário (conteúdo prático completo em Vendas, Compras, Estoque/Inventário e Produção; demais módulos ainda esqueleto)
-- **[docs/HANDOFF_CODEX.md](docs/HANDOFF_CODEX.md)** — Migração Product → Item (Fase 1–4.1, backfill scripts)
-- **[docs/DATABASE.md](docs/DATABASE.md)** — Changelog histórico narrativo de modelagem/migrations
+- **[docs/governance/HANDOFF_CODEX.md](docs/governance/HANDOFF_CODEX.md)** — Migração Product → Item (Fase 1–4.1, backfill scripts)
+- **[docs/database/DATABASE.md](docs/database/DATABASE.md)** — Changelog histórico narrativo de modelagem/migrations
 - **[docs/database/00-INDICE.md](docs/database/00-INDICE.md)** — Documentação de dados de referência sempre-atual (Modelo Conceitual/MER, Modelo Lógico/DER, Modelo Físico/DDL, Dicionário de Dados das 78 tabelas, Acessos e Isolamento, Estruturas Programáveis, Disaster Recovery) — NOVO, 2026-08-06
 
 ### Crítico — Go-Live
-- **[docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)** — 4 bloqueadores P0, 15 altos P1, plano 30h
-- **[docs/GO_LIVE_G6_CHECKLIST.md](docs/GO_LIVE_G6_CHECKLIST.md)** — Plano operacional/checklist de Go-Live, gate atual (UAT + servidor de produção pendente)
+- **[docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)** — 4 bloqueadores P0, 15 altos P1, plano 30h
+- **[docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md](docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md)** — Plano operacional/checklist de Go-Live, gate atual (UAT + servidor de produção pendente)
 - **[docs/governance/TODO.md](docs/governance/TODO.md)** — Rastreamento dia a dia de tarefas/bugs/achados de auditoria (SSOT de pendências)
-- **[docs/DIARIO_BORDO_GO_LIVE_G6.md](docs/DIARIO_BORDO_GO_LIVE_G6.md)** — Diário de bordo append-only da execução do Go-Live G6
-- **[docs/API.md](docs/API.md)** — Endpoints, payloads, erros
+- **[docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md](docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md)** — Diário de bordo append-only da execução do Go-Live G6
+- **[docs/arquitetura/API.md](docs/arquitetura/API.md)** — Endpoints, payloads, erros
 
 ### Operacional
 - **[README.md](README.md)** — Setup rápido, scripts npm
-- **[docs/DOCKER_POSTGRES_SETUP.md](docs/DOCKER_POSTGRES_SETUP.md)** — Docker Compose, troubleshooting DB
-- **[docs/DEPLOY.md](docs/DEPLOY.md)** — CI/CD, produção
+- **[docs/infra/DOCKER_POSTGRES_SETUP.md](docs/infra/DOCKER_POSTGRES_SETUP.md)** — Docker Compose, troubleshooting DB
+- **[docs/infra/DEPLOY.md](docs/infra/DEPLOY.md)** — CI/CD, produção
 
 ### Funcional por Área
 - **[docs/producao/06-BOM.md](docs/producao/06-BOM.md)** — Estrutura de produtos (detalhado)
-- **[docs/00-ESTRUTURA_ORGANIZACIONAL.md](docs/00-ESTRUTURA_ORGANIZACIONAL.md)** — 21 departamentos
+- **[docs/00-ESTRUTURA_ORGANIZACIONAL.md](docs/00-ESTRUTURA_ORGANIZACIONAL.md)** — 17 departamentos reais (seed) + 6 subáreas funcionais, índice por módulo
+- **[docs/administrativo/04-PERFIS_ACESSO.md](docs/administrativo/04-PERFIS_ACESSO.md)** — RBAC + Perfis de Acesso configuráveis (`/api/access-profiles`), 29 módulos atribuíveis
+- **[docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md](docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md)** — Organograma executivo consolidado (CEO → 3 diretorias → 17 departamentos)
 - Mais em `docs/comercial/`, `docs/financeiro/`, `docs/qualidade/`, etc.
 
 ### Arquitetura, Diagramas e Manual do Usuário (NOVO, 2026-08-06)
@@ -339,9 +341,9 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 - **[docs/arquitetura/DIAGRAMA_ARQUITETURA_INFRAESTRUTURA.md](docs/arquitetura/DIAGRAMA_ARQUITETURA_INFRAESTRUTURA.md)** — diagrama Mermaid do ambiente de dev real e do plano de produção (servidor ainda não adquirido)
 - **[docs/arquitetura/DIAGRAMAS_SEQUENCIA.md](docs/arquitetura/DIAGRAMAS_SEQUENCIA.md)** — sequência dos 3 fluxos mais críticos (venda→estoque→NF-e, requisição→RFQ→compra→recebimento, OP→apontamento→OEE)
 - **[docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md](docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md)** — diagrama de casos de uso (atores × módulos) e BPMN simplificado (Order-to-Cash, Purchase-to-Pay)
-- **[docs/DIAGRAMA_CLASSES.md](docs/DIAGRAMA_CLASSES.md)** / **[docs/DIAGRAMA_CLASSES_CAMADAS.md](docs/DIAGRAMA_CLASSES_CAMADAS.md)** — diagrama de classes do backend e das camadas Clean Architecture
+- **[docs/arquitetura/DIAGRAMA_CLASSES.md](docs/arquitetura/DIAGRAMA_CLASSES.md)** / **[docs/arquitetura/DIAGRAMA_CLASSES_CAMADAS.md](docs/arquitetura/DIAGRAMA_CLASSES_CAMADAS.md)** — diagrama de classes do backend e das camadas Clean Architecture
 - **[docs/manual/00-MANUAL_DO_USUARIO.md](docs/manual/00-MANUAL_DO_USUARIO.md)** — manual do usuário por módulo (esqueleto inicial, caminhos de menu reais)
-- Modelo conceitual/lógico/físico, matriz de privilégios, procedures/triggers e plano de disaster recovery ficam em `docs/DATABASE.md` (escopo do agente `AdmDBA`, tratado separadamente para não duplicar/conflitar)
+- Modelo conceitual/lógico/físico, matriz de privilégios, procedures/triggers e plano de disaster recovery ficam em `docs/database/DATABASE.md` (escopo do agente `AdmDBA`, tratado separadamente para não duplicar/conflitar)
 
 ---
 

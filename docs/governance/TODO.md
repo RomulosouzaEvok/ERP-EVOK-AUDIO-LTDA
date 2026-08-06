@@ -5,7 +5,7 @@ Origem: `docs/business/01-USE_CASES.md` (UC-30 a UC-43) e
 — apenas quebra os requisitos em tarefas técnicas que os agentes
 programadores/DBA/QA devem puxar, na ordem sugerida (dependências
 indicadas). Ao concluir cada bloco, o programador deve atualizar
-`docs/HANDOFF_CODEX.md` e consolidar os casos de uso implementados em
+`docs/governance/HANDOFF_CODEX.md` e consolidar os casos de uso implementados em
 `docs/projeto/04-USE_CASES.md`.
 
 **Status das decisões de negócio:** as 6 decisões antes propostas foram
@@ -162,7 +162,7 @@ Todas Confirmadas" ao final deste documento e o topo de
   enunciado): `intelligentAuditor` (`authorize('admin')` mantido),
   `users`/`audit-logs`/`access-profiles`/`auth` (admin-only por role,
   fora do catálogo de 26 módulos de área, §1), `webhooks` (público).
-  Ver tabela completa rota→módulo no handoff (`docs/HANDOFF_CODEX.md`).
+  Ver tabela completa rota→módulo no handoff (`docs/governance/HANDOFF_CODEX.md`).
 - [x] Teste de guarda anti-regressão criado:
   `server/tests/unit/module-authorization-map.test.ts` — verifica que
   todo arquivo de rota dos módulos listados usa `authorizeModule` e que
@@ -232,7 +232,7 @@ Todas Confirmadas" ao final deste documento e o topo de
   por renderização condicionada aos módulos retornados. **Implementado**:
   `NavItem.module` mapeado para as 26 `AccessModuleKey`; `itemVisible()`
   combina `roles` legado + `hasModuleAccess` (novo, via `AuthContext`).
-  Ver `docs/HANDOFF_CODEX.md` §"Bloco 1.4" para detalhes e decisão do
+  Ver `docs/governance/HANDOFF_CODEX.md` §"Bloco 1.4" para detalhes e decisão do
   fallback de segurança em falha de rede.
 - [x] Tela "Acesso Negado" para navegação direta por URL fora do perfil
   (UC-35). **Implementado**: `client/src/pages/AccessDeniedPage.tsx`
@@ -257,7 +257,7 @@ Todas Confirmadas" ao final deste documento e o topo de
   continua não existindo — **não é um gap, é decisão de arquitetura
   confirmada** (Bloco 1.2): não há campo `access_level` no schema porque o
   nível já é 100% resolvido pela matriz do perfil (`level` por módulo).
-  Ver nota "Fora de escopo" em `docs/HANDOFF_CODEX.md`.
+  Ver nota "Fora de escopo" em `docs/governance/HANDOFF_CODEX.md`.
 - [x] **Não é necessário** tratamento de "Sessão invalidada" para troca
   de perfil nesta entrega — decisão do dono (UC-36) é que a troca vale no
   próximo login, sem forçar logout. O tratamento de 401 já existente para
@@ -419,7 +419,7 @@ bloco foi implementado em sequência, reaproveitando `warehouseStockService`.
   opcional de Projeto de P&D (`GET /api/engineering/projects`) + aviso
   "Pedidos desta requisição serão recebidos no Depósito do Laboratório";
   badge "Amostra" na listagem e projeto vinculado no detalhe (2026-08-04,
-  ver `docs/HANDOFF_CODEX.md` seção "Frontend — Semáforo de Handoff...").
+  ver `docs/governance/HANDOFF_CODEX.md` seção "Frontend — Semáforo de Handoff...").
 - [x] Badge "Amostra — Engenharia" na tela de Recebimento — **implementado em
   2026-08-04**: `client/src/pages/logistics/ReceivingPage.tsx` exibe
   `<Badge variant="outline">Amostra — Engenharia</Badge>` ao lado do número
@@ -536,7 +536,7 @@ rota nova foi criada; `POST /api/purchase-requisitions` já exige
 - [x] Componente reutilizável de "bolinha de status" (semáforo) —
   `client/src/components/HandoffDot.tsx` (`HandoffDot({ signal })`,
   `title`/`aria-label` didáticos, sem texto cru de status) — 2026-08-04,
-  ver `docs/HANDOFF_CODEX.md`.
+  ver `docs/governance/HANDOFF_CODEX.md`.
 - [x] Aplicar o componente nas telas já existentes — coluna extra (só a
   bolinha) em `PurchasesPage.tsx`, `RequisitionsPage.tsx`,
   `ReceivingPage.tsx`, `ShippingPage.tsx`, `InspectionTab.tsx` (aba de
@@ -611,7 +611,7 @@ priorizar este bloco antes de finalizar o Bloco 2.
   `ON DELETE SET NULL`, seguindo o padrão expand-contract (fase expand
   apenas; tornar `NOT NULL` fica para uma fase contract futura, quando
   todo código que grava `InventoryMovement` já estiver informando
-  depósito — ver `docs/HANDOFF_CODEX.md` Fase 4.1 como precedente).
+  depósito — ver `docs/governance/HANDOFF_CODEX.md` Fase 4.1 como precedente).
 - [x] Adicionar `type='transfer'` ao enum de tipo de `inventory_movements`
   — `server/migrations/20260804-000002-warehouse-transfers.cjs`
   (`ALTER TYPE ... ADD VALUE IF NOT EXISTS`, mesmo padrão de
@@ -810,7 +810,7 @@ priorizar este bloco antes de finalizar o Bloco 2.
   `warehouse_id` (via `client/src/api/inventory.ts`). **Ainda não
   implementado**: filtro de depósito em Expedição e tela de Contagem/
   inventário mobile — fora do escopo desta tarefa (ver
-  `docs/HANDOFF_CODEX.md` seção "Bloco 4 — Frontend").
+  `docs/governance/HANDOFF_CODEX.md` seção "Bloco 4 — Frontend").
 - [x] Tela/fluxo de solicitação de transferência + fila de aprovação para
   gestores — nova aba "Transferências" em `/logistics/estoque`
   (`client/src/pages/logistics/TransfersTab.tsx`): tabela com badge de
@@ -893,7 +893,7 @@ priorizar este bloco antes de finalizar o Bloco 2.
     `server/migrations/20260804-000006-add-warehouse-id-to-inventory-counts.cjs`
     (`inventory_counts.warehouse_id`, FK `warehouses.id`, nullable por
     legado, backfill para `INSUMOS` das 4 linhas pré-existentes,
-    documentado em `docs/DATABASE.md` §"Coluna nova:
+    documentado em `docs/database/DATABASE.md` §"Coluna nova:
     inventory_counts.warehouse_id"), `InventoryCount.warehouse_id` no
     model Sequelize com associação `belongsTo(Warehouse, { foreignKey:
     'warehouse_id', as: 'warehouse' })`. `InventoryCountItem` continua
@@ -1355,7 +1355,7 @@ continuar existindo sem uso).
   do advisory `GHSA-qwww-vcr4-c8h2`** (CSRF em modo RSC/Server Actions,
   `npm audit` reportava severidade "high", faixa afetada `>=7.12.0 <8.3.0`).
   Identificado na triagem de segurança de 2026-08-04 (ver
-  `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-04) e **resolvido no
+  `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-04) e **resolvido no
   mesmo dia** via upgrade para `react-router@8.3.0` — risco não mais
   aceito, mitigado por atualização real.
   - **Resolução (2026-08-04):** `client/package.json` migrado de
@@ -1379,7 +1379,7 @@ continuar existindo sem uso).
   /api/inventory/movements` derrubava o processo Node.js inteiro em
   qualquer entrada/saída manual bem-sucedida.** Achado durante a correção
   da suíte de testes de integração contra Postgres real (ver detalhe
-  completo em `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-04).
+  completo em `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-04).
   Causa raiz: `server/src/modules/inventory/presentation/controllers/inventoryController.ts`
   (`exports.create`) desestruturava `{ movement }` do retorno de
   `CreateInventoryMovementUseCase.execute(...)`, mas o use case só
@@ -1422,8 +1422,8 @@ continuar existindo sem uso).
 
 Rodada de 5 agentes em paralelo concluída em 2026-08-04. Detalhamento
 completo por frente, decisões e riscos residuais em
-`docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova datada 2026-08-04) e
-`docs/HANDOFF_CODEX.md` (seção nova). Resumo do que foi fechado nesta
+`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova datada 2026-08-04) e
+`docs/governance/HANDOFF_CODEX.md` (seção nova). Resumo do que foi fechado nesta
 consolidação (cada item abaixo foi verificado por leitura direta do
 código/testes, não apenas pelo relato do agente que o entregou):
 
@@ -1432,15 +1432,15 @@ código/testes, não apenas pelo relato do agente que o entregou):
 2. **Bloco 1.5** (4 testes de integração/E2E de permissões pendentes) —
    fechado. Ver seção 1.5 acima.
 3. **Roadmap item 3** (trigger automático do MRP) — ver
-   `docs/LEVANTAMENTO_ERP_2026-08-02.md`, linha do item 3, e
+   `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, linha do item 3, e
    `docs/projeto/04-USE_CASES.md` UC-24b. **Pendência residual pequena
    registrada:** não existe endpoint/UI para ligar `items
    .conversao_automatica` por item — só via UPDATE direto no banco. Fica
    como próxima tarefa pequena de backend+frontend (tela de cadastro de
    item ganhar um toggle).
 4. **Roadmap item 8** (rating de fornecedor via RNC) — ver
-   `docs/LEVANTAMENTO_ERP_2026-08-02.md`, linha do item 8, e
-   `docs/DATABASE.md` (tabela `suppliers`, coluna `quality_score`), já
+   `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, linha do item 8, e
+   `docs/database/DATABASE.md` (tabela `suppliers`, coluna `quality_score`), já
    documentado por completo, incluindo o **risco residual de não haver
    backfill retroativo** (RNCs fechadas antes desta entrega não contam no
    cálculo inicial de `quality_score` — o campo nasce no default neutro
@@ -1511,7 +1511,7 @@ direta do código/testes (não apenas pelo relato do agente que entregou):
   `overhead_calculation_basis`), lançando em `ProductCostLedger` com
   `source_type: 'production_labor'`/`'production_overhead'`, na mesma
   transação da conclusão da OP. Contrato completo já documentado em
-  `docs/DATABASE.md` (seção "Cálculo implementado (item 7/9 — mão-de-obra
+  `docs/database/DATABASE.md` (seção "Cálculo implementado (item 7/9 — mão-de-obra
   e overhead)"). Testado em
   `server/tests/unit/production-labor-overhead-cost.test.ts` (6 casos,
   `costingService` real não mockado). **Bug real encontrado e corrigido
@@ -1525,7 +1525,7 @@ direta do código/testes (não apenas pelo relato do agente que entregou):
   sem mitigação:** não há backfill retroativo — OPs concluídas antes
   desta entrega não ganham custo de mão-de-obra/overhead (permanecem só
   com o custo de material já existente). Marcado `feito` no item 7 do
-  roadmap em `docs/LEVANTAMENTO_ERP_2026-08-02.md`.
+  roadmap em `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`.
 
 - [x] **Roadmap item 6 — rastreabilidade por lote/QR no chão de fábrica.**
   Backend reaproveitou 100% a infraestrutura de QR já existente
@@ -1547,7 +1547,7 @@ direta do código/testes (não apenas pelo relato do agente que entregou):
   registrada como não sendo gap:** leitura por câmera (`getUserMedia`)
   não foi implementada — leitor físico/teclado (padrão em chão de
   fábrica) já preenche o campo de texto como se fosse digitação. Marcado
-  `feito` no item 6 do roadmap em `docs/LEVANTAMENTO_ERP_2026-08-02.md`.
+  `feito` no item 6 do roadmap em `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`.
 
 **Validação rodada diretamente nesta consolidação:**
 
@@ -1564,8 +1564,8 @@ cd client && npx vitest run
 
 **Documentos atualizados nesta consolidação:** `docs/governance/TODO.md`
 (este bloco + nota na seção "Rodada de 5 Frentes Paralelas"),
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` (itens 6 e 7 marcados `feito`),
-`docs/HANDOFF_CODEX.md` (seção nova), `docs/DIARIO_BORDO_GO_LIVE_G6.md`
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` (itens 6 e 7 marcados `feito`),
+`docs/governance/HANDOFF_CODEX.md` (seção nova), `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`
 (entrada nova datada 2026-08-04, em apêndice).
 
 ---
@@ -1582,7 +1582,7 @@ gap real encontrado com backend pronto e sem UI: fluxo CAPA de RNC
 (`PUT /api/quality/non-conformities/:id`) sem tela de tratativa —
 resolvido com `NonConformityTreatmentSheet` em
 `client/src/pages/quality/NonConformitiesTab.tsx`. Detalhe completo em
-`docs/HANDOFF_CODEX.md`, seção "Frontend — Levantamento MRP/Requisições/
+`docs/governance/HANDOFF_CODEX.md`, seção "Frontend — Levantamento MRP/Requisições/
 Qualidade e fechamento do loop CAPA (Bloco 8)".
 
 ---
@@ -1603,7 +1603,7 @@ um bug de schema real e pré-existente que bloqueava toda criação de OP
 (`production_orders` com 7 colunas `NOT NULL` sem default no banco físico,
 apesar de opcionais no model/domínio) via migration
 `20260804-000012-fix-production-orders-nullable-columns.cjs`. Detalhe
-completo em `docs/HANDOFF_CODEX.md`, seção "Backend — Catálogo
+completo em `docs/governance/HANDOFF_CODEX.md`, seção "Backend — Catálogo
 item×fornecedor (confirmação) + MRP fecha o ciclo para OP (Fase 2/P1)".
 
 ---
@@ -1615,7 +1615,7 @@ DBA, infra, frontend, mobile/TV, documentacao) rodada em 2026-08-06 sobre
 as entregas do dia (apps `mobile/`/`tv/` novos, atribuicao de contagem
 ciclica pool/atribuida, `department_id` em OP/contagens, painel de
 demandas por departamento). Detalhe completo de cada achado e da
-remediacao imediata (4 frentes) em `docs/DIARIO_BORDO_GO_LIVE_G6.md`,
+remediacao imediata (4 frentes) em `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`,
 entrada "2026-08-06". Os itens abaixo sao as pendencias que ficaram
 registradas por decisao consciente de nao resolver no mesmo dia — o bug
 P0 do campo "Atribuir a" (frontend) e os achados de infra/mobile mais
@@ -1628,7 +1628,7 @@ diario) e nao aparecem aqui.
   rate-limit 30/15min por usuário) + refresh proativo a cada 12h no app
   `tv/` (`tv/src/context/AuthContext.tsx`) — bem abaixo do TTL de 7 dias.
   Mobile também ganhou refresh ao abrir o app com sessão persistida. Ver
-  `docs/API.md` §1, `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada "terceira
+  `docs/arquitetura/API.md` §1, `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (entrada "terceira
   rodada").
 - [ ] **[PENDENTE] Validacao em hardware real dos 2 apps novos
   (`mobile/`, `tv/`).** Hoje validados so por `tsc --noEmit`/bundle
@@ -1642,7 +1642,7 @@ diario) e nao aparecem aqui.
   mas nao por um teste de integracao com dois clients HTTP simultaneos
   contra PostgreSQL real. Recomendado antes do Go-Live se o fluxo for
   critico em producao (ver risco ja registrado em
-  `docs/HANDOFF_CODEX.md`, secao "Inventario Ciclico — Atribuicao de
+  `docs/governance/HANDOFF_CODEX.md`, secao "Inventario Ciclico — Atribuicao de
   Contagem a Funcionario / Pool").
 - [x] **[IMPLEMENTADO 2026-08-06, terceira rodada] Paginacao da lista de
   contagens no app mobile.** `mobile/app/(app)/counts/index.tsx` ganhou
@@ -1651,14 +1651,14 @@ diario) e nao aparecem aqui.
 - [ ] **[PENDENTE] Infra de producao — reverse proxy/TLS,
   `docker-compose.prod.yml` exercitado de fato, cron de backup.**
   Aguardando a compra do servidor de producao (mesma pendencia (a) ja
-  registrada em `docs/GO_LIVE_G6_CHECKLIST.md` e na memoria de sessao do
+  registrada em `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md` e na memoria de sessao do
   time). Checklist em `docs/infra/DEPLOY_UBUNTU.md`.
 
 **Documentos atualizados nesta consolidacao:** este arquivo (secao nova),
-`docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada 2026-08-05 retroativa +
+`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (entrada 2026-08-05 retroativa +
 entrada 2026-08-06), `CLAUDE.md` (status/data, migrations/FKs, arvore de
-pastas, roadmap), `docs/HANDOFF_CODEX.md` (nota de atualizacao),
-`docs/GO_LIVE_G6_CHECKLIST.md` (resumo executivo/datas, secoes
+pastas, roadmap), `docs/governance/HANDOFF_CODEX.md` (nota de atualizacao),
+`docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md` (resumo executivo/datas, secoes
 Kubernetes/Datadog marcadas nao aplicaveis).
 
 ---
@@ -1669,7 +1669,7 @@ Kubernetes/Datadog marcadas nao aplicaveis).
 RFQ multi-fornecedor, centros de custo + projecao de caixa diaria, OEE
 completo; Onda 2 no working tree: desarme de 7 bombas latentes UUID x
 INTEGER + marcacao DEPRECATED de 12 tabelas orfas). Detalhe completo de
-cada entrega em `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06
+cada entrega em `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06
 (segunda rodada — 4 frentes do roadmap)". Os itens abaixo sao os riscos
 residuais e trabalho futuro registrados por decisao consciente de nao
 resolver na mesma rodada.
@@ -1693,14 +1693,14 @@ resolver na mesma rodada.
   simultânea no mesmo centro (use case + índice único parcial).
   `GetOeeReportUseCase.ts` agora desconta `downtime_hours` real das horas
   de calendário (`available_hours = max(calendario - downtime, 0)`), com
-  breakdown por motivo. Ver `docs/API.md` §7/`docs/DATABASE.md`.
+  breakdown por motivo. Ver `docs/arquitetura/API.md` §7/`docs/database/DATABASE.md`.
 - [ ] **[PENDENTE] Decisao futura — `DROP TABLE` definitivo das 12
   tabelas orfas do schema-fantasma em portugues.** Marcadas `DEPRECATED`
   via `COMMENT ON TABLE` nesta rodada (migration `20260806-000042`), mas
   nao removidas (decisao consciente de preservar historico/possivel
   relevancia de auditoria fiscal). Avaliar em uma janela dedicada, com
   confirmacao formal de que nao ha dependencia de compliance sobre esse
-  schema, antes de dropar. Ver `docs/DATABASE.md`, secao "Tabelas orfas do
+  schema, antes de dropar. Ver `docs/database/DATABASE.md`, secao "Tabelas orfas do
   schema-fantasma em portugues".
 - [x] **[IMPLEMENTADO 2026-08-06, terceira rodada] Tela de reatribuicao de
   contagem ciclica.** Botão "Reatribuir" + devolver ao pool em
@@ -1712,7 +1712,7 @@ resolver na mesma rodada.
   (`client/src/pages/products/ProductsPage.tsx`, `ProductSuppliersDialog`,
   `PATCH /api/items/:id`). **Nota:** isso NÃO substitui a tela de cadastro
   completa do Item Mestre canônico (`items`), que continua sem nenhuma
-  tela dedicada — ver `docs/LEVANTAMENTO_ERP_2026-08-02.md`.
+  tela dedicada — ver `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`.
 - [ ] **[PENDENTE] CNAB (boleto/remessa/retorno).** Conciliação bancária
   v1 (2026-08-06, terceira rodada) cobriu apenas importação de extrato
   OFX. CNAB é uma frente separada, sem data definida.
@@ -1757,7 +1757,7 @@ resolver na mesma rodada.
   têm cobertura de integração real (a 3ª, faturamento parcial, ficou
   deliberadamente fora — o agente de Vendas está refatorando esse fluxo
   para `sale_invoices` em paralelo e escreverá o teste de integração junto,
-  ver `docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (rodada de
+  ver `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (rodada de
   testes de integração)"). **ATUALIZAÇÃO (rodada Vendas/NF-e):** a 3ª
   feature (faturamento parcial) agora também tem teste de integração real
   — `server/tests/integration/sale-invoice-history.test.ts`, ver item
@@ -1824,10 +1824,10 @@ resolver na mesma rodada.
     de Vendas.
 
 **Documentos atualizados nesta consolidacao:** este arquivo (secao nova),
-`docs/API.md` (RFQ §11.1, financeiro §6, OEE §7, nota breaking change em
-§3), `docs/DATABASE.md` (tabelas RFQ, `cost_centers`, correcao das 7
-colunas-bomba, `DEPRECATED` nas 12 tabelas orfas), `docs/LEVANTAMENTO_ERP_2026-08-02.md`,
-`docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `docs/HANDOFF_CODEX.md`
+`docs/arquitetura/API.md` (RFQ §11.1, financeiro §6, OEE §7, nota breaking change em
+§3), `docs/database/DATABASE.md` (tabelas RFQ, `cost_centers`, correcao das 7
+colunas-bomba, `DEPRECATED` nas 12 tabelas orfas), `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`,
+`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `docs/governance/HANDOFF_CODEX.md`
 (secao nova), `CLAUDE.md` (contagem de migrations, roadmap).
 
 ---
@@ -1837,7 +1837,7 @@ colunas-bomba, `DEPRECATED` nas 12 tabelas orfas), `docs/LEVANTAMENTO_ERP_2026-0
 **Origem:** terceira rodada de entregas de 2026-08-06, distinta das duas
 anteriores (auditoria multi-agente de apps mobile/TV; RFQ/centros de
 custo/OEE/bombas latentes). Detalhe completo de cada entrega em
-`docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (terceira rodada —
+`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (terceira rodada —
 6 frentes...)". Os itens marcados `[x]` acima (decisao JWT/TV, paginacao
 mobile, downtime/OEE, tela de reatribuicao de contagem, campo de
 fornecedor padrao) e os `[ ]` novos (CNAB, historico multi-NF-e, status
@@ -1847,12 +1847,12 @@ duplicados aqui.
 
 **Documentos atualizados nesta consolidacao:** este arquivo (itens
 marcados `[x]`/`[ ]` novos nas duas secoes de 2026-08-06 anteriores),
-`docs/API.md` (auth refresh §1, vendas §5, financeiro §6, relatorios §7 +
-`/api/production/downtimes`), `docs/DATABASE.md` (`customer_price_lists`,
+`docs/arquitetura/API.md` (auth refresh §1, vendas §5, financeiro §6, relatorios §7 +
+`/api/production/downtimes`), `docs/database/DATABASE.md` (`customer_price_lists`,
 `sale_items.invoiced_quantity`/`partially_invoiced`,
 `production_downtimes`, `bank_statements`/`bank_statement_entries`),
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` (linhas `sales`/`financial`, item 9),
-`docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `docs/HANDOFF_CODEX.md`
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` (linhas `sales`/`financial`, item 9),
+`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `docs/governance/HANDOFF_CODEX.md`
 (secao nova), `CLAUDE.md` (contagem de migrations, modulos/telas novas).
 
 ---
@@ -1937,7 +1937,7 @@ confirmado respondendo antes e depois (API seguiu autenticando com
 atualizada, §3), `docs/database/07-DISASTER_RECOVERY.md` (secoes 1.1/2.1
 novas, status honesto atualizado), `docs/infra/DEPLOY_UBUNTU.md`
 (checklist atualizado, referencia ao `docker-compose.prod.yml`),
-`.env.example` (`APP_DB_ROLE_PASSWORD`), `docs/DIARIO_BORDO_GO_LIVE_G6.md`
+`.env.example` (`APP_DB_ROLE_PASSWORD`), `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`
 (entrada nova), este arquivo (secao nova).
 
 ---
@@ -2131,7 +2131,7 @@ sem inconsistência** `[BAIXO/CLEAN]`:
 
 **Origem:** fechamento das 4 pendências deixadas explicitamente pelo Tech
 Lead de governança/documentação nos apêndices anteriores desta mesma data
-(`docs/DIARIO_BORDO_GO_LIVE_G6.md`, "2026-08-06 (apêndice 3)"). Trabalho em
+(`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, "2026-08-06 (apêndice 3)"). Trabalho em
 paralelo ao `AdmDBA` — não altera nada de `docs/database/` ou infra de
 banco.
 
@@ -2188,22 +2188,22 @@ esquecidas):**
 **Documentos atualizados nesta consolidação:** `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
 (novo), `docs/projeto/01-PLANO.md` (reescrito), `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md`
 (seções 4/5 novas), `docs/manual/00-MANUAL_DO_USUARIO.md` (conteúdo
-prático), `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md`
+prático), `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md`
 (link novo em §8), este arquivo.
 
 ---
 
-## 2026-08-06 (auditoria cruzada `AuditorIntegrador`) — Requisitos × Banco × API, achado maior: ~55% dos endpoints reais sem documentação em `docs/API.md`
+## 2026-08-06 (auditoria cruzada `AuditorIntegrador`) — Requisitos × Banco × API, achado maior: ~55% dos endpoints reais sem documentação em `docs/arquitetura/API.md`
 
 **Origem:** auditoria "pente fino" pedida explicitamente sobre
 `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` ↔ `docs/database/` ↔
-`docs/API.md`/`docs/DIAGRAMA_CLASSES.md`. Não altera código nem schema —
+`docs/arquitetura/API.md`/`docs/arquitetura/DIAGRAMA_CLASSES.md`. Não altera código nem schema —
 apenas registra achados de documentação para os donos corrigirem.
 Relatório completo (com a tabela de rastreabilidade RF→tabela→endpoint)
 foi apresentado na resposta ao usuário; aqui ficam só as pendências
 reais, com as tags padrão do projeto.
 
-- [x] **[CORRIGIDO 2026-08-06, `ArquitetoSoftwareAPI`] `docs/API.md` não
+- [x] **[CORRIGIDO 2026-08-06, `ArquitetoSoftwareAPI`] `docs/arquitetura/API.md` não
   documenta pelo menos 17 dos ~34 grupos de rota reais montados em
   `server/app.ts`**, entre eles módulos inteiros citados como
   `[IMPLEMENTADO]` em `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`:
@@ -2222,7 +2222,7 @@ reais, com as tags padrão do projeto.
   (citados em `RF-AUT-03` e usados por rate-limiters dedicados em
   `server/app.ts`) não tinham entrada na própria seção 1 (Autenticação)
   do arquivo. **Resolvido:** todas as 18 lacunas cobertas —
-  `docs/API.md` novas seções 15 (Requisição de Compra), 16 (Qualidade —
+  `docs/arquitetura/API.md` novas seções 15 (Requisição de Compra), 16 (Qualidade —
   RNC), 17 (Laboratório), 18 (Engenharia — Projetos/Desenhos/Ficha
   Técnica), 19 (Patrimônio), 20 (Manutenção), 21 (RH — Funcionários), 22
   (RH — Departamentos), 23 (Rastreabilidade), 24 (Logs de Auditoria), 25
@@ -2236,7 +2236,7 @@ reais, com as tags padrão do projeto.
   formato de resposta) — não copiada de suposição.
 - [x] **[CORRIGIDO 2026-08-06, `ArquitetoSoftwareAPI`] `docs/arquitetura/DIAGRAMAS_SEQUENCIA.md`
   tinha 2 endpoints com rota/verbo HTTP incorretos** (não batiam com
-  `server/app.ts` nem com `docs/API.md`, que já estavam corretos e
+  `server/app.ts` nem com `docs/arquitetura/API.md`, que já estavam corretos e
   concordavam entre si): fluxo 3 ("Ordem de Produção → Apontamento")
   usava `POST /api/production/orders` e `PATCH /api/production/orders/:id`
   — corrigido para `POST /api/production-orders` (hífen, sem `/orders`
@@ -2244,16 +2244,16 @@ reais, com as tags padrão do projeto.
   ("Requisição → RFQ → Pedido → Recebimento") usava
   `PATCH /api/purchases/:id/status` — corrigido para `PUT`
   (`server/src/modules/purchases/presentation/routes/purchases.ts`,
-  confirma `docs/API.md` §11).
+  confirma `docs/arquitetura/API.md` §11).
 - [x] **[DOCUMENTADO 2026-08-06, `ArquitetoSoftwareAPI`] Inconsistência de
   convenção de nome de campo entre request e response do mesmo
-  endpoint:** `docs/API.md` §1.1, `PUT /api/users/:id/access-profile` —
+  endpoint:** `docs/arquitetura/API.md` §1.1, `PUT /api/users/:id/access-profile` —
   confirmado no código (`userController.ts`/`AssignAccessProfileUseCase.ts`)
   que o `Request` de fato usa `{ "access_profile_id": 3 }` (snake_case,
   lido manualmente do body) e o `Response` de fato usa
   `{ "id": 12, "accessProfileId": 3 }` (camelCase, shape do use case) —
   **não era erro de digitação da doc, é o comportamento real**. Mais
-  amplamente, confirmado que `docs/API.md` mistura convenção de saída
+  amplamente, confirmado que `docs/arquitetura/API.md` mistura convenção de saída
   entre módulos porque cada model Sequelize declara os nomes de atributo
   JS que quiser (`underscored: true` só afeta a coluna do banco, não a
   chave JSON) — `Client`/`Sale` declaram atributos como `cpf_cnpj`/
@@ -2261,7 +2261,7 @@ reais, com as tags padrão do projeto.
   `accessProfileId`/`passwordVersion` com `field:` explícito (camel no
   JSON), e `Item` chega a renomear os próprios timestamps para
   `criado_em`/`atualizado_em`. **Resolvido:** nota "Convenção de caixa
-  (casing) dos campos JSON" adicionada no topo de `docs/API.md`
+  (casing) dos campos JSON" adicionada no topo de `docs/arquitetura/API.md`
   (antes da seção 1) explicando a regra real; e os 2 exemplos que
   estavam **de fato errados** relativo ao comportamento real do
   Sequelize (`GET /api/clients` e `GET /api/sales` mostravam
@@ -2275,9 +2275,9 @@ reais, com as tags padrão do projeto.
   `{ lot_number, product_code, product_name }` codificado em memória via
   `QRCodeService`), sem nenhuma coluna de imagem/payload persistida em
   `lot_controls` — está correto por desenho, não é um gap. Documentado
-  explicitamente em `docs/API.md` §8.3 (nova seção).
+  explicitamente em `docs/arquitetura/API.md` §8.3 (nova seção).
 - [ ] Nota de rastreabilidade cruzada (não bloqueante, registrar para o
-  ciclo de manutenção do Diagrama de Classes): `docs/DIAGRAMA_CLASSES.md`
+  ciclo de manutenção do Diagrama de Classes): `docs/arquitetura/DIAGRAMA_CLASSES.md`
   já se auto-declara parcial desde 2026-08-06 (seção "Módulos entregues
   após a versão original", que lista `Rfq`/`CostCenter`/`WorkCenter`/
   `ProductionDowntime`/`BankStatement`/etc. em texto, sem re-renderizar o
@@ -2295,8 +2295,8 @@ todas as ~78 tabelas de `docs/database/04-DICIONARIO_DADOS.md`
 `docs/database/00-INDICE.md` a `07-DISASTER_RECOVERY.md`,
 `docs/arquitetura/DIAGRAMAS_SEQUENCIA.md`,
 `docs/arquitetura/DIAGRAMA_ARQUITETURA_INFRAESTRUTURA.md`,
-`docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md`, `docs/DIAGRAMA_CLASSES.md`,
-`docs/DIAGRAMA_CLASSES_CAMADAS.md` e os títulos de UC de
+`docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md`, `docs/arquitetura/DIAGRAMA_CLASSES.md`,
+`docs/arquitetura/DIAGRAMA_CLASSES_CAMADAS.md` e os títulos de UC de
 `docs/projeto/04-USE_CASES.md`/`docs/business/01-USE_CASES.md`.
 
 **O que ficou de fora desta rodada (auditoria parcial nesse recorte,
@@ -2305,7 +2305,7 @@ completa de `docs/projeto/04-USE_CASES.md` (1217 linhas — só os títulos
 de UC e os UCs citados diretamente pelo Documento de Requisitos foram
 conferidos em detalhe, não o corpo de todos os ~35 casos de uso);
 conferência campo a campo de 100% dos payloads de exemplo de
-`docs/API.md` contra o Dicionário de Dados (feita por amostragem
+`docs/arquitetura/API.md` contra o Dicionário de Dados (feita por amostragem
 dirigida às seções mais prováveis de divergência — Autenticação, Vendas,
 Financeiro, Compras/RFQ, Estoque — não todas as ~34 seções linha a
 linha); `docs/database/07-DISASTER_RECOVERY.md` foi indexado mas não
@@ -2323,7 +2323,7 @@ de `docs/` (não no conteúdo técnico — isso é o escopo do
 markdown internos de `docs/`, `CLAUDE.md`, `README.md`, `AGENTS.md`
 contra o filesystem (case-sensitive) + varredura de menções em texto
 corrido a `docs/*.md`. Detalhe completo da metodologia em
-`docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "apêndice 5".
+`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "apêndice 5".
 
 **Links markdown formais `[texto](arquivo.md)`: 0 quebrados** (115/115
 resolvem, inclusive em checagem case-sensitive). Nenhuma correção
@@ -2335,12 +2335,12 @@ necessária nessa frente.
   `docs/infra/` (criadas em sessões anteriores) nem, no caso de
   `AGENTS.md`, as pastas `mobile/`/`tv/` da raiz do repo. Ambas as
   árvores foram atualizadas para refletir a estrutura real.
-- [x] **[CORRIGIDO]** `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` citava em
+- [x] **[CORRIGIDO]** `docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md` citava em
   texto corrido `docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md` e
   `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` sem avisar que não existem
   mais — adicionada nota (mesmo padrão já usado em
   `.claude/agents/evok-production-remediation.md`/`.codex/agents/evok-production-remediation.toml`)
-  apontando para `CLAUDE.md` §5 e `docs/GO_LIVE_G6_CHECKLIST.md` como
+  apontando para `CLAUDE.md` §5 e `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md` como
   fonte vigente de status.
 - [ ] **[PENDENTE] Mistura de idioma nos nomes de pasta de `docs/`
   sem critério documentado:** maioria em português
@@ -2398,11 +2398,11 @@ necessária nessa frente.
 - [x] **[CORRIGIDO] Referências cruzadas soltas (texto corrido, sem
   sintaxe de link markdown) a arquivos que não existem mais — todas as 4
   resolvidas em 2026-08-06:**
-  - `docs/HANDOFF_CODEX.md:418` citava `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`
+  - `docs/governance/HANDOFF_CODEX.md:418` citava `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`
     (ordem de risco das micro-entregas de expansão de schema) —
     **corrigido**: nota histórica adicionada (arquivo não existe mais; a
     ordem de execução em si já foi seguida, Fases 1–4.1 concluídas).
-  - `docs/HANDOFF_CODEX.md:1571` citava `docs/DATABASE_DICTIONARY.md` —
+  - `docs/governance/HANDOFF_CODEX.md:1571` citava `docs/DATABASE_DICTIONARY.md` —
     **corrigido**: confirmado (pelo `documentador`, nesta sessão) como o
     nome antigo do que hoje é `docs/database/04-DICIONARIO_DADOS.md`
     (arquivo existe, verificado); referência atualizada.
@@ -2416,13 +2416,13 @@ necessária nessa frente.
     estoque no chão de fábrica → custo real), com nota explicando a
     correção e a citação órfã tratada com o mesmo padrão de nota
     histórica.
-  - `docs/BACKUP_RESTORE_G2_2026-07-31.md:336` citava
+  - `docs/infra/BACKUP_RESTORE_G2_2026-07-31.md:336` citava
     `docs/UAT_RELEASE_G6_2026-07-31.md`, referenciado como evidência de
     um ensaio de canário local de 2026-07-31 — esse arquivo nunca existiu
     no repositório. **Corrigido**: nota adicionada deixando claro que a
     descrição do ensaio já presente no próprio documento é o registro
     disponível (não ficou claro se um arquivo dedicado chegou a existir),
-    e apontando `docs/GO_LIVE_G6_CHECKLIST.md` como fonte vigente de
+    e apontando `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md` como fonte vigente de
     status de Gate G6/rollback.
 - [ ] **[PENDENTE] Paridade `.claude/agents/` × `.codex/agents/`:**
   `.claude/agents/` tem 15 arquivos `.md`, `.codex/agents/` tem 14
@@ -2431,9 +2431,9 @@ necessária nessa frente.
   conhecimento do formato/schema `.toml` usado pelos demais agentes
   Codex do projeto, fora do escopo de uma auditoria puramente
   estrutural de `docs/`).
-- [x] **Confirmado, sem ação necessária:** `docs/DATABASE.md` (raiz) e a
+- [x] **Confirmado, sem ação necessária:** `docs/database/DATABASE.md` (raiz) e a
   pasta `docs/database/` **não são duplicados divergentes** — o próprio
-  `docs/DATABASE.md` já tem uma nota de topo (2026-08-06) deixando claro
+  `docs/database/DATABASE.md` já tem uma nota de topo (2026-08-06) deixando claro
   que é o changelog histórico narrativo, enquanto `docs/database/`
   (00-INDICE.md a 07-DISASTER_RECOVERY.md) é a referência estruturada
   vigente. Nenhum link aponta o caminho errado.
@@ -2509,7 +2509,7 @@ compartilhado `ItemSupplierRepository`, só a assinatura), `server/tests/`.
 
 **Documentos atualizados nesta rodada:** este arquivo (seção nova). Sem
 mudança de contrato de API pública nem de regra de negócio visível ao
-usuário — não houve alteração em `docs/API.md`, `docs/database/` ou
+usuário — não houve alteração em `docs/arquitetura/API.md`, `docs/database/` ou
 `docs/projeto/04-USE_CASES.md` (fora do território desta rodada e sem
 necessidade real: nenhum endpoint/comportamento de negócio mudou, só
 robustez interna + cobertura de teste).
@@ -2635,7 +2635,7 @@ entrada no estoque com custo nacionalizado.
 - `POST /:id/cancel` — cancela processo não recebido (`operate`).
 
 Payloads/contratos completos (para o agente de frontend que for construir
-a tela) estão documentados em `docs/HANDOFF_CODEX.md`, seção "UC-19 —
+a tela) estão documentados em `docs/governance/HANDOFF_CODEX.md`, seção "UC-19 —
 Importação/COMEX".
 
 **Validação:**
@@ -2682,23 +2682,23 @@ Importação/COMEX".
 - `server/tests/unit/module-authorization-map.test.ts` (`'comex'` adicionado)
 
 **Documentos atualizados nesta rodada:** este arquivo (seção nova) e
-`docs/HANDOFF_CODEX.md` (seção UC-19). Por instrução explícita do
-orquestrador desta rodada, `docs/API.md`, `docs/arquitetura/`,
+`docs/governance/HANDOFF_CODEX.md` (seção UC-19). Por instrução explícita do
+orquestrador desta rodada, `docs/arquitetura/API.md`, `docs/arquitetura/`,
 `docs/projeto/` (incluindo `04-USE_CASES.md`), `docs/business/` e
 `docs/patrimonio/` **não foram tocados** neste território (outros agentes
 trabalhando em paralelo nesses arquivos) — os detalhes de rota/payload que
-normalmente iriam para `docs/API.md`/`04-USE_CASES.md` foram registrados
-integralmente em `docs/HANDOFF_CODEX.md` para o próximo agente consolidar
+normalmente iriam para `docs/arquitetura/API.md`/`04-USE_CASES.md` foram registrados
+integralmente em `docs/governance/HANDOFF_CODEX.md` para o próximo agente consolidar
 onde for apropriado.
 
 **[ATUALIZAÇÃO 2026-08-06, rodada de sincronização documental]** — as
-pendências acima foram fechadas por outro agente: `docs/API.md` ganhou a
+pendências acima foram fechadas por outro agente: `docs/arquitetura/API.md` ganhou a
 seção `§32. Importação / COMEX` (payloads reais confirmados contra
 `importProcessValidators.ts`); `docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md`
 §3 (RF-COM-12) e a tabela de divergências passaram para `[IMPLEMENTADO]`;
 `docs/projeto/04-USE_CASES.md` (UC-19) ganhou a marcação
 `[IMPLEMENTADO]` (backend; tela web pendente) com as decisões de escopo
-resumidas; `docs/DIAGRAMA_CLASSES.md` ganhou o módulo `comex` na seção de
+resumidas; `docs/arquitetura/DIAGRAMA_CLASSES.md` ganhou o módulo `comex` na seção de
 módulos recentes; `CLAUDE.md` §1/§4 e a contagem de migrations (66) foram
 atualizados. Os dois achados `[ ]` acima sobre UC-19 (apêndice 4, item 1,
 e a lista de "Achados/pendências novas" do apêndice 5) foram marcados
@@ -2716,9 +2716,9 @@ bloco/entidade "Processo de Importação (COMEX)", contagens reconferidas
 `03-MODELO_FISICO.md`, e `05-ACESSOS_E_ISOLAMENTO.md` ganhou confirmação
 real (query em `information_schema.role_table_grants`) de que `evok_app`
 herdou os grants nas tabelas novas automaticamente. Detalhe completo em
-`docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (quarta rodada)".
+`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (quarta rodada)".
 Território estrito de `docs/database/` + este registro + changelog em
-`docs/DATABASE.md` — nenhum código (`server/`, `client/`) alterado, e
+`docs/database/DATABASE.md` — nenhum código (`server/`, `client/`) alterado, e
 nenhuma migration nova criada (a `-000090` já existia e já estava `up`).
 
 ### 2026-08-06 (rodada seguinte, `PromadorFonteEnd`) — UC-19 (Importação/COMEX) — tela web entregue `[x]` `[IMPLEMENTADO]`
@@ -2727,7 +2727,7 @@ nenhuma migration nova criada (a `-000090` já existia e já estava `up`).
 esta rodada fecha a pendência residual "Tela web (`client/`) do módulo".
 Contratos confirmados contra o código real (`server/src/modules/comex/
 presentation/`) antes de escrever qualquer tipo TypeScript, além da leitura
-de `docs/HANDOFF_CODEX.md`, seção "UC-19 — Importação/COMEX".
+de `docs/governance/HANDOFF_CODEX.md`, seção "UC-19 — Importação/COMEX".
 
 **O que foi entregue:**
 - `client/src/api/comex.ts` — serviço de API com tipos estritos de todos os
@@ -2761,7 +2761,7 @@ tracking válida e inválida (422 confirmado com a mensagem esperada) e
 cancelamento — registro de teste cancelado ao final para não sujar o banco.
 
 **Pendências residuais:**
-- `docs/API.md` não referencia a tela nova (fora do território deste
+- `docs/arquitetura/API.md` não referencia a tela nova (fora do território deste
   agente; os endpoints em si já estão documentados lá desde a rodada de
   sincronização documental do mesmo dia).
 - Sem teste E2E em navegador real (Cypress/Playwright não fazem parte do
@@ -2779,11 +2779,100 @@ cancelamento — registro de teste cancelado ao final para não sujar o banco.
 - `client/src/pages/purchases/ComexPage.tsx` (novo)
 - `client/src/App.tsx`, `client/src/layouts/AppLayout.tsx`,
   `client/src/api/accessProfiles.ts` (alterados)
-- `docs/HANDOFF_CODEX.md` (nova seção "UC-19 — Importação/COMEX: tela web"),
-  `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` (FE3), `docs/
+- `docs/governance/HANDOFF_CODEX.md` (nova seção "UC-19 — Importação/COMEX: tela web"),
+  `docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md` (FE3), `docs/
   LEVANTAMENTO_ERP_2026-08-02.md` (seção 1), este arquivo (esta entrada).
 
 **Território:** `client/` apenas, mais os 4 arquivos de registro acima.
-`server/`, `docs/API.md`, `docs/arquitetura/`, `docs/database/`,
+`server/`, `docs/arquitetura/API.md`, `docs/arquitetura/`, `docs/database/`,
 `docs/projeto/` não foram tocados (instrução explícita do escopo desta
 rodada).
+
+---
+
+## 2026-08-06 — Reorganização da documentação departamental (IDs de departamento vs. seed)
+
+**Contexto:** dono do produto reclamou que faltava documentação em
+`docs/administrativo/` e pediu auditoria de todos os docs departamentais
+contra o seed oficial (`server/src/config/seeds.ts`, 17 departamentos,
+códigos `01`–`17`).
+
+**Feito nesta rodada (agente documentador, território `docs/` apenas):**
+- Reescrita da tabela "Índice de Departamentos por Módulo" em
+  `docs/00-ESTRUTURA_ORGANIZACIONAL.md` para bater 1:1 com o seed
+  (`02 RH`, `06 ALM`, `10 QUAL`, `11 EXP`, `12 MANUT`, `13 TI`, `14 MKT`,
+  `16 JUR`, `17 FAC` corrigidos); nova seção "Subáreas funcionais" para
+  `CONT`/`CTR`/`TES` (⊂ Financeiro), `LAB`/`GQ` (⊂ Qualidade), `COMEX`
+  (⊂ Compras) — deixando explícito que **não são departamentos no banco**.
+- Corrigidos os IDs errados em `docs/{comercial,juridico,logistica,
+  qualidade,financeiro,suprimentos}/00-README.md` (tabela "Departamentos
+  Cobertos").
+- Adicionada tabela "Departamentos Cobertos" em `docs/patrimonio/00-README.md`
+  (ALM=06, MANUT=12 — hospedados ali por afinidade de conteúdo) e em
+  `docs/rh/00-README.md` (RH=02, sem headcount ainda).
+- Criados `docs/administrativo/04-PERFIS_ACESSO.md` (RBAC + Perfis de
+  Acesso configuráveis, a partir de `accessModules.ts`/`accessProfiles`
+  módulo real) e `docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md`
+  (organograma consolidado por diretoria).
+- `CLAUDE.md` §8: corrigida a contagem "21 departamentos" → "17
+  departamentos reais + 6 subáreas" no link de `00-ESTRUTURA_ORGANIZACIONAL.md`,
+  adicionados links para os dois docs novos de `administrativo/`.
+
+**[AUDITORIA-FALHOU] achado crítico de um agente em paralelo (AdmDBA), não
+resolvido por este agente (fora do território `docs/`):** ver
+`docs/database/AUDITORIA_DEPARTAMENTOS_2026-08-06.md`. A tabela `departments`
+está **vazia (0 linhas)** no banco Docker local usado pela API
+(`erp_evok_audio`), apesar do seed já ter rodado uma vez (usuário admin e
+outros artefatos já existem) — `seedDatabase()` só popula departamentos
+quando `User.count() === 0`, então nunca mais recria a linha se o admin já
+existe e os departamentos não. Existe uma migration idempotente já pronta e
+**não aplicada**: `server/migrations/20260806-000120-reconcile-departments-with-official-seed.cjs`.
+O mesmo achado reporta o banco local contaminado com ~53 usuários e ~37
+perfis de acesso de fixtures de teste (`*-rbac-*@evok.local`, timestamps Unix
+no nome).
+
+- [PENDENTE] Dono do produto aprovar e rodar
+  `npm run migration:up` para a migration `20260806-000120` (repopula os 17
+  departamentos oficiais via `INSERT ... ON CONFLICT (code) DO UPDATE`).
+- [PENDENTE] Decidir se o banco Docker local (`erp_evok_audio`) deve ser
+  resetado (`docker compose down -v` + novo `up` + seed limpo) antes do
+  Go-Live, dado o volume de fixtures de teste RBAC/E2E encontrado nele.
+- [PENDENTE] Decisão de negócio: se `Contabilidade`/`Controladoria`/
+  `Tesouraria`/`Laboratório de Testes`/`Garantia da Qualidade`/`Comex` devem
+  virar departamentos formais em `departments` (novos códigos `18+`) — até
+  lá, seguem documentados apenas como subáreas funcionais (sem
+  `department_id` próprio), conforme feito nesta rodada.
+- [PENDENTE] Avaliar criação de um script de verificação (candidato a CI)
+  que compare `DEPARTMENTS` de `seeds.ts` contra as tabelas "Departamentos
+  Cobertos" de cada `docs/*/00-README.md`, para nunca mais divergir sem
+  detecção automática (proposto em detalhe no §5 do audit doc acima).
+
+**Não tocado nesta rodada (decisão de escopo, registrar para o dono
+avaliar):**
+- `docs/projeto/02-PLANO_INDUSTRIAL.md` mantém a numeração histórica de 21
+  departamentos (concepção original, anterior ao seed de 17) — não foi
+  reescrito; tratado como documento histórico, com nota de divergência
+  adicionada em `docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md`.
+- `docs/administrativo/01-DIRETORIA.md`, `02-TI.md`, `03-FACILITIES.md`
+  continuam com esquemas SQL de planejamento (`strategic_planning`,
+  `it_tickets`, `fleet_vehicles`, etc.) que não existem no schema real —
+  adicionada nota `[PENDENTE]` no topo de cada um apontando para
+  `docs/database/DATABASE.md`, mas o conteúdo de negócio (cargos, funções, KPIs) não
+  foi reescrito por já ser considerado útil/não-redundante.
+- `docs/governance/HANDOFF_CODEX.md` não foi atualizado por este agente: é o handoff
+  específico da migração Product→Item, sem relação temática com
+  reorganização departamental — registrar aqui em vez de poluir aquele
+  documento.
+
+**Arquivos alterados/criados nesta rodada:**
+- `docs/00-ESTRUTURA_ORGANIZACIONAL.md`, `CLAUDE.md` (§8 apenas).
+- `docs/administrativo/00-README.md`, `01-DIRETORIA.md`, `02-TI.md`,
+  `03-FACILITIES.md` (notas + footer), `04-PERFIS_ACESSO.md` (novo),
+  `05-ORGANOGRAMA_EXECUTIVO.md` (novo).
+- `docs/{comercial,juridico,logistica,qualidade,financeiro,suprimentos,
+  seguranca_trabalho,producao,patrimonio,rh}/00-README.md` (correção de
+  IDs + footer de data).
+- Este arquivo (esta entrada).
+
+**Território:** `docs/` apenas. `client/`, `server/`, migrations não foram
+tocados por este agente.

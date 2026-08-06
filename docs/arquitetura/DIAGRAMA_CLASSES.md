@@ -445,7 +445,7 @@ classDiagram
 re-renderizado** com estas classes (ficaria muito denso); esta seção lista,
 em texto, as entidades novas e suas relações principais, para que o
 diagrama fique rastreável sem duplicar o dicionário de dados completo
-(que é responsabilidade de `docs/DATABASE.md`, mantido separadamente pelo
+(que é responsabilidade de `docs/database/DATABASE.md`, mantido separadamente pelo
 agente `AdmDBA`).
 
 | Classe (model) | Tabela | Relações principais |
@@ -464,7 +464,7 @@ agente `AdmDBA`).
 | `ItemSupplier` | `item_suppliers` | `Item N--N Supplier` (catálogo item×fornecedor, com `preferred` único por item) |
 | `ImportProcess`, `ImportProcessItem` | `import_processes`, `import_process_items` | `ImportProcess 1--N ImportProcessItem` (CASCADE); `ImportProcess N--1 Supplier` (RESTRICT), `N--1 User` (`created_by`, RESTRICT); `ImportProcessItem N--1 Item` (RESTRICT) |
 
-Fonte: `server/src/models/*.ts` (2026-08-06). Consulte `docs/DATABASE.md`
+Fonte: `server/src/models/*.ts` (2026-08-06). Consulte `docs/database/DATABASE.md`
 para o dicionário de dados completo (colunas, tipos, constraints) — esta
 tabela é apenas o mapa de classes/relações, não o dicionário.
 

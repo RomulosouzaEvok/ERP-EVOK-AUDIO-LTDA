@@ -11,6 +11,8 @@ docs/seguranca_trabalho/
 
 ## Departamentos Cobertos
 
+> Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).
+
 | ID | Departamento | Sigla | Responsável |
 |----|-------------|-------|-------------|
 | 15 | Segurança do Trabalho | SST | Técnico de Segurança do Trabalho |
@@ -95,3 +97,7 @@ CREATE TABLE safety_trainings (
 | Montagem | Ergonômico | Movimentos repetitivos | Pausas, rodízio |
 | Testes | Físico | Ruído (>100 dB) | Protetor duplo |
 | Almoxarifado | Mecânico | Empilhadeira | Sinalização |
+
+---
+
+**Última atualização:** 2026-08-06

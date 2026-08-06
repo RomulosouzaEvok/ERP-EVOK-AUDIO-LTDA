@@ -3,7 +3,7 @@
  * base `/api/inventory-counts`. Contratos exatos confirmados em
  * `server/src/modules/inventory/presentation/controllers/inventoryCountController.ts`,
  * `server/src/modules/inventory/application/use-cases/*.ts` e
- * `docs/API.md` (seção 8.2).
+ * `docs/arquitetura/API.md` (seção 8.2).
  *
  * Fluxo coberto pelo app mobile (aprovar/rejeitar continuam exclusivos do
  * painel web):

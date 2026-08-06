@@ -106,5 +106,5 @@ erDiagram
 - As 12 tabelas órfãs do schema-fantasma em português (nunca adotadas
   pelo app real, `[DEPRECATED]`) — ver
   [04-DICIONARIO_DADOS.md](04-DICIONARIO_DADOS.md) e
-  `docs/DATABASE.md` seção "Tabelas órfãs".
+  `docs/database/DATABASE.md` seção "Tabelas órfãs".
 - Tabelas puramente técnicas de migração (`migracao_*`).

@@ -28,7 +28,7 @@ Esta separação evita:
 - `server/src/models/ItemCategoria.ts` — Model Sequelize com UUID PK, `codigo` unique, `descricao`, timestamps
 - `server/src/models/ItemDetalheComercial.ts` — Model Sequelize com FK `item_id` (PK), `preco_venda`, `categoria_id`, NCM/CEST, peso, localização, desenho, revisão, lote/série, timestamps
 - `server/src/models/ItemEspecificacaoTecnica.ts` — Model Sequelize com FK `item_id` (PK), `familia_tecnica` VARCHAR(40), `atributos` JSONB com índice GIN, timestamps
-- `docs/HANDOFF_CODEX.md` — Este arquivo
+- `docs/governance/HANDOFF_CODEX.md` — Este arquivo
 
 #### Modificados
 - `server/src/models/index.ts` — Adicionados imports e associações 1:1 de `Item` com `ItemDetalheComercial` e `ItemEspecificacaoTecnica`, `ItemCategoria` com `ItemDetalheComercial`
@@ -512,11 +512,11 @@ fornecedor. (2) Workflow de transição de status da Requisição de Compra
 
 ### Documentações atualizadas
 
-- `docs/DATABASE.md` — nova seção `### Tabela: item_suppliers` (colunas,
+- `docs/database/DATABASE.md` — nova seção `### Tabela: item_suppliers` (colunas,
   constraints, regra do `preferred`, referência à migration).
 - `docs/projeto/04-USE_CASES.md` — `UC-22: Gerenciar Catálogo Item ×
   Fornecedor` e `UC-23: Workflow de Aprovação da Requisição de Compra`.
-- `docs/HANDOFF_CODEX.md` — esta seção.
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
 - JSDoc em todos os arquivos novos (models, repositories, use-cases,
   controllers) descrevendo parâmetros, retornos e exceções lançadas.
 
@@ -871,7 +871,7 @@ Erros:
 ### Documentações atualizadas
 - `docs/projeto/04-USE_CASES.md` — novo `UC-24: Conversão de Ordens
   Planejadas do MRP em Requisição de Compra`
-- `docs/HANDOFF_CODEX.md` — esta seção
+- `docs/governance/HANDOFF_CODEX.md` — esta seção
 
 ### Testes executados
 - `npm run typecheck` — limpo, sem erros
@@ -1033,7 +1033,7 @@ Pedido → Recebimento → Estoque. Contrato confirmado 100% compatível com o a
 ### Documentações atualizadas
 - `docs/projeto/04-USE_CASES.md` — novo `UC-25: Conversão de Requisição de Compra Aprovada em
   Pedido(s) de Compra`
-- `docs/HANDOFF_CODEX.md` — esta seção
+- `docs/governance/HANDOFF_CODEX.md` — esta seção
 
 ### Testes executados
 - `npm run typecheck` — limpo, sem erros (antes e depois da mudança)
@@ -1197,10 +1197,10 @@ Novo valor de enum: `lot_controls.status` ganhou `'quarantine'` (além de
 
 ### Documentações atualizadas
 
-- `docs/DATABASE.md` — nova seção "Tabela `lot_controls` (Rastreabilidade de Lotes + Quarentena de Qualidade)", com diagrama ASCII do lifecycle do enum `status` e tabela de endpoints.
+- `docs/database/DATABASE.md` — nova seção "Tabela `lot_controls` (Rastreabilidade de Lotes + Quarentena de Qualidade)", com diagrama ASCII do lifecycle do enum `status` e tabela de endpoints.
 - `docs/projeto/04-USE_CASES.md` — UC-16 (Receber Pedido de Compra) e UC-17 (Realizar Inspeção de Qualidade) atualizados para refletir quarentena e bloqueio de lote pela RNC; novo UC-17B (Liberar/Bloquear Lote).
 - `server/src/modules/inventory/README.md` — tabela de endpoints, estrutura de use cases e seção de auditoria atualizadas; nova subseção "Quarentena de lotes de recebimento (item 8)".
-- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — item 8 da tabela de prioridades marcado como resolvido (parcial — rating de fornecedor pendente).
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — item 8 da tabela de prioridades marcado como resolvido (parcial — rating de fornecedor pendente).
 - JSDoc completo em todos os arquivos novos/modificados (classes, métodos, parâmetros e retornos).
 
 ### Instruções de teste
@@ -1255,8 +1255,8 @@ O model `NonConformity` (`server/src/models/NonConformity.ts`) define `nc_number
 
 ### Documentação atualizada
 
-- `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` — nova subseção "Qualidade (item 8 do backlog de telas)" sob FE4, item marcado `[x]`.
-- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — seção "Frontend" atualizada: contagem de "9 módulos com UI completa" → "10 módulos" (incluindo qualidade/RNC) e "12 módulos sem tela" → "11 módulos" (removido qualidade/RNC da lista de lacunas).
+- `docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md` — nova subseção "Qualidade (item 8 do backlog de telas)" sob FE4, item marcado `[x]`.
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — seção "Frontend" atualizada: contagem de "9 módulos com UI completa" → "10 módulos" (incluindo qualidade/RNC) e "12 módulos sem tela" → "11 módulos" (removido qualidade/RNC da lista de lacunas).
 
 ### O que o Agente QA (ou humano) deve testar na interface
 
@@ -1344,7 +1344,7 @@ relatórios de manufatura já existentes (`production`, `purchasing`):
 - `docs/projeto/04-USE_CASES.md` — novo **UC-26: Relatório de Variação de
   Custo**, descrevendo endpoint, fluxo de cálculo, regras de negócio e
   proteção contra divisão por zero.
-- `docs/HANDOFF_CODEX.md` — esta seção.
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
 
 ### Contrato JSON (resposta)
 
@@ -1522,7 +1522,7 @@ models/migrations (já existentes: `WorkCenter`, `WorkCenterShift`,
 ### Arquivos modificados
 
 - `server/app.ts` — registrada a rota `/api/work-centers`.
-- `docs/HANDOFF_CODEX.md` — esta seção.
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
 
 ### Instruções de teste
 
@@ -1568,7 +1568,7 @@ models/migrations (já existentes: `WorkCenter`, `WorkCenterShift`,
 - Não há teste de integração HTTP (supertest) dedicado às rotas — apenas
   cobertura unitária dos use cases (mesmo padrão dos demais módulos
   recentes deste handoff, ex.: `cost-variance`, `purchase-requisitions`).
-- Não foram tocados `docs/database/04-DICIONARIO_DADOS.md`/`docs/DATABASE.md` nem
+- Não foram tocados `docs/database/04-DICIONARIO_DADOS.md`/`docs/database/DATABASE.md` nem
   `docs/projeto/04-USE_CASES.md`: os models `WorkCenter`/`WorkCenterShift`
   e a coluna `production_route_steps.work_center_id` já estavam prontos e
   documentados por outro agente antes desta tarefa (instrução explícita
@@ -1642,9 +1642,9 @@ nenhum arquivo de `server/`.
 - `client/src/layouts/AppLayout.tsx` — item "Centros de Trabalho" no grupo
   Produção da sidebar (ícone `Factory`, já importado) + entrada em
   `BREADCRUMBS`.
-- `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` — marcado item de Centros de
+- `docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md` — marcado item de Centros de
   Trabalho como concluído na seção FE4.
-- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — itens 5 e 7 da tabela de
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — itens 5 e 7 da tabela de
   prioridades marcados como entregues (Centros de Trabalho e Custo real
   vs padrão), seção de frontend atualizada.
 
@@ -1746,7 +1746,7 @@ de suporte a engenharia de produto e qualidade acústica, sem tocar em
   - `User.hasMany(AcousticTestResult, { foreignKey: 'tester_id', as: 'acoustic_tests_performed' })`
   - `NonConformity.hasMany(AcousticTestResult, { as: 'acoustic_test_results' })` / `belongsTo(NonConformity)`
   - Exports atualizados: `EngineeringProject, ProductDrawing, AcousticTestResult`.
-- `docs/DATABASE.md` — 3 novas seções no Dicionário de Dados
+- `docs/database/DATABASE.md` — 3 novas seções no Dicionário de Dados
   (`engineering_projects`, `product_drawings`, `acoustic_test_results`) e
   8 novas linhas na tabela de Relacionamentos.
 
@@ -2248,8 +2248,8 @@ lidos antes de codar, nenhum payload/rota foi adivinhado).
 ### Documentações atualizadas
 
 - `docs/projeto/04-USE_CASES.md` — 3 novos casos de uso: `UC-27` (Expedir Venda Faturada), `UC-28` (Consultar Cockpit de Compras), `UC-29` (Consultar Projeção de Fluxo de Caixa).
-- `docs/DATABASE.md` — enum de `sales.status` documentado com `'shipped'` e referência à migration.
-- `docs/API.md` — `GET /api/sales` (query `status`), `PUT /api/sales/:id/status` (regras de `shipped`), `GET /api/purchases/cockpit` (novo, com contrato JSON completo) e `GET /api/finance/cash-flow-projection` (novo, com contrato JSON completo).
+- `docs/database/DATABASE.md` — enum de `sales.status` documentado com `'shipped'` e referência à migration.
+- `docs/arquitetura/API.md` — `GET /api/sales` (query `status`), `PUT /api/sales/:id/status` (regras de `shipped`), `GET /api/purchases/cockpit` (novo, com contrato JSON completo) e `GET /api/finance/cash-flow-projection` (novo, com contrato JSON completo).
 - `server/src/modules/sales/README.md` — máquina de estados, endpoint `PUT /:id/status` e lista de testes atualizados.
 - `server/src/modules/purchases/README.md` — endpoint `GET /cockpit` documentado (tabela de endpoints + seção dedicada "Cockpit de Compras (Onda 3)") e lista de testes atualizada.
 - `server/src/modules/financial/README.md` — endpoint `GET /cash-flow-projection` documentado (tabela de endpoints + regra de negócio dedicada) e lista de testes atualizada.
@@ -2353,8 +2353,8 @@ lidos antes de codar, nenhum payload/rota foi adivinhado).
 - `client/src/layouts/AppLayout.tsx` — ícone `Send` importado; item "Expedição" no grupo Logística; entrada em `BREADCRUMBS`.
 
 **Documentação:**
-- `docs/CRONOGRAMA_FRONTEND_2026-07-31.md` — checklist FE1 (Onda 3 — Expedição), FE3 (cockpit de compras) e FE5 (fluxo de caixa projetado) marcados `[x]` com descrição da entrega.
-- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — seção "Frontend" com 3 novos itens (Expedição, Cockpit de Compras, Fluxo de caixa projetado).
+- `docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md` — checklist FE1 (Onda 3 — Expedição), FE3 (cockpit de compras) e FE5 (fluxo de caixa projetado) marcados `[x]` com descrição da entrega.
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — seção "Frontend" com 3 novos itens (Expedição, Cockpit de Compras, Fluxo de caixa projetado).
 
 ### Decisões de UX/RBAC
 
@@ -2554,7 +2554,7 @@ espera um contador/badge de notificação por módulo no menu lateral.
    (com o contrato real de endpoint, que pode divergir ligeiramente do
    especificado) em `docs/projeto/04-USE_CASES.md`, continuando a
    numeração a partir de UC-30 (ou do próximo UC livre no momento), e
-   registrar a entrega nesta mesma seção de `docs/HANDOFF_CODEX.md`, no
+   registrar a entrega nesta mesma seção de `docs/governance/HANDOFF_CODEX.md`, no
    padrão já usado pelas entregas anteriores deste arquivo.
 
 **Desenvolvedor**: Claude Code (Business Analyst / Requirements Engineer)
@@ -2821,17 +2821,17 @@ frontend permanecem pendentes, ver "Riscos residuais" abaixo)
 - `docs/projeto/04-USE_CASES.md` — UC-30 a UC-34 consolidados (versão
   resumida, com nota apontando `01-USE_CASES.md`/`BUSINESS_RULES.md` como
   fonte normativa completa para UC-35 a UC-43, ainda não implementados)
-- `docs/DATABASE.md` — nota de escopo de `access_profiles`/
+- `docs/database/DATABASE.md` — nota de escopo de `access_profiles`/
   `access_profile_permissions` atualizada (removida a referência a
   `access_level` como pendência de schema)
-- `docs/API.md` — nova seção "1.2 Perfis de Acesso (Access Profiles)",
+- `docs/arquitetura/API.md` — nova seção "1.2 Perfis de Acesso (Access Profiles)",
   `GET /api/auth/me/permissions` e `PUT /api/users/:id/access-profile`
   documentados em "1. Autenticação"/"1.1 Usuários"
 
 ### Documentações atualizadas
 
 `docs/governance/TODO.md`, `docs/business/BUSINESS_RULES.md`,
-`docs/projeto/04-USE_CASES.md`, `docs/DATABASE.md`, `docs/API.md`,
+`docs/projeto/04-USE_CASES.md`, `docs/database/DATABASE.md`, `docs/arquitetura/API.md`,
 `server/src/modules/accessProfiles/README.md` (novo),
 `server/src/modules/users/README.md`, JSDoc completo em todos os arquivos
 `.ts` criados/modificados (middleware, use cases, controllers, rotas).
@@ -3195,7 +3195,7 @@ outro agente).
 - `docs/governance/TODO.md` — Bloco 1.2 marcado como retrofit completo
   (checklist `[x]`), com o mapeamento rota→módulo, a lista de exceções e
   a pendência de `sales`/`expedicao` registrada como item aberto.
-- `docs/HANDOFF_CODEX.md` — esta seção.
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
 - JSDoc de cabeçalho atualizado em cada arquivo de rota alterado (20
   arquivos), documentando o módulo aplicado, o nível exigido por rota e,
   quando aplicável, a exceção de módulo-dono-da-ação (`recebimento` em
@@ -3426,7 +3426,7 @@ prefixo já existente `/api/inventory` (não foi criado um módulo/prefixo
   adicionada ao final (o que foi/não foi entregue no backend) e ajuste
   do cenário BDD de transferência (`transfer_id` → `reference_type`/
   `reference_id`, refletindo a modelagem real).
-- `docs/DATABASE.md` — seção de Múltiplos Depósitos expandida: tabela
+- `docs/database/DATABASE.md` — seção de Múltiplos Depósitos expandida: tabela
   `warehouse_transfers` documentada, novo valor de enum
   `inventory_movements.type`, tabela de endpoints novos, nota de
   integração backend (o que foi/não foi conectado).
@@ -3728,11 +3728,11 @@ em `docs/business/01-USE_CASES.md`; `BUSINESS_RULES.md` §9/§10/§11.
   com todos os desvios de nomenclatura/escopo documentados inline.
 - `docs/projeto/04-USE_CASES.md` — consolidados UC-39 (parcial —
   backend), UC-40 (parcial — backend) e UC-41 (completo — backend).
-- `docs/DATABASE.md` — nova entrada para o incremento de
+- `docs/database/DATABASE.md` — nova entrada para o incremento de
   `purchase_requisitions.engineering_project_id` (a tabela completa não
   estava documentada neste arquivo antes desta entrega — pendência
   anterior, fora de escopo corrigir agora).
-- `docs/HANDOFF_CODEX.md` — esta seção.
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
 
 ### Contratos (não quebrados)
 
@@ -3794,7 +3794,7 @@ em `docs/business/01-USE_CASES.md`; `BUSINESS_RULES.md` §9/§10/§11.
   entrega — apenas cobertura unitária dos use cases/utilitário. O teste
   de integração pré-existente `sale-nfe-issuance.test.ts` não foi
   alterado e continua `describe.skip` sem `TEST_PRODUCT_ID` no ambiente.
-- `PurchaseRequisition` não estava documentada em `docs/DATABASE.md`
+- `PurchaseRequisition` não estava documentada em `docs/database/DATABASE.md`
   antes desta entrega — o dicionário de dados completo dessa tabela
   (colunas pré-existentes) continua pendente como débito técnico anterior
   a esta tarefa, não coberto aqui.
@@ -4132,7 +4132,7 @@ de segurança pontual do repositório (nenhum P0 novo encontrado):
      dessincronizado do lockfile, e a ação recomendada (upgrade
      `>=8.3.0` pós-UAT ou aceitação formal de risco no G6 + garantia de
      `npm ci` no pipeline).
-   - `docs/DIARIO_BORDO_GO_LIVE_G6.md`, nova entrada datada "2026-08-04 —
+   - `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, nova entrada datada "2026-08-04 —
      Triagem de Segurança (fechamento de 3 pendências menores)" (entradas
      antigas do diário não foram alteradas).
 
@@ -4150,17 +4150,17 @@ de segurança pontual do repositório (nenhum P0 novo encontrado):
   casos (401/403/2xx para `POST` e `PUT /warehouses/:id`).
 - `docs/governance/TODO.md` — nova seção "Pendências de Segurança / Gate
   G6" com o item `[ ]` do risco residual `react-router`.
-- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+- `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
   (apenas apêndice, nenhuma entrada anterior foi reescrita).
-- `docs/HANDOFF_CODEX.md` — esta seção.
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
 
 ### Documentações atualizadas
 
 - `docs/governance/TODO.md` (novo item `[ ]` de risco residual).
-- `docs/DIARIO_BORDO_GO_LIVE_G6.md` (nova entrada 2026-08-04).
+- `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (nova entrada 2026-08-04).
 - JSDoc dos novos blocos de teste (comentários explicando o gap coberto)
   em `legacy-routes-rbac-regression.test.ts`.
-- `docs/DATABASE.md` e `docs/projeto/04-USE_CASES.md` **não foram
+- `docs/database/DATABASE.md` e `docs/projeto/04-USE_CASES.md` **não foram
   alterados** — nenhuma mudança de schema/regra de negócio ocorreu nesta
   triagem (apenas validação defensiva de input e testes).
 
@@ -4222,7 +4222,7 @@ marca as ordens `EM_EXECUCAO` na mesma transação), rota
 `server/tests/unit/mrp-convert-to-requisition.test.ts` (conversão com
 fornecedor sugerido, notas customizadas, 422 `BusinessRuleError` para
 status inválido, 404 `NotFoundError` para ordem inexistente), documentado
-em `docs/API.md` §13. Item 3 da tabela em `docs/LEVANTAMENTO_ERP_2026-08-02.md`
+em `docs/arquitetura/API.md` §13. Item 3 da tabela em `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`
 marcado ✅ resolvido (parcial — trigger 100% automático plano→requisição
 sem intervenção do planejador segue fora do escopo).
 
@@ -4281,7 +4281,7 @@ wordmark é preto e sumiria sobre fundo escuro).
 
 ### Checklist G6
 
-`docs/GO_LIVE_G6_CHECKLIST.md` foi reconciliado por outro agente
+`docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md` foi reconciliado por outro agente
 anteriormente — confirmado (grep) que não há nenhuma menção a Bloco 2,
 Bloco 4 ou ao endpoint `planned-orders/convert` nesse arquivo, logo não há
 contradição com o que foi registrado nesta rodada.
@@ -4292,11 +4292,11 @@ contradição com o que foi registrado nesta rodada.
   `[ ]` → `[x]` com evidência de arquivo/teste); Bloco 4 (seção 4.4 QA, 3
   itens `[ ]` → `[x]`, 1 item reescrito como gap de desenvolvimento real
   em vez de teste faltando).
-- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — item 3 da tabela de lacunas
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — item 3 da tabela de lacunas
   marcado ✅ resolvido (parcial), no mesmo padrão `~~riscado~~` dos demais.
-- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+- `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
   (apêndice, entradas antigas preservadas).
-- Este arquivo (`docs/HANDOFF_CODEX.md`).
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`).
 
 ### Próximos passos para o time humano
 
@@ -4327,7 +4327,7 @@ nullable por legado — 4 linhas pré-existentes sem noção de depósito,
 backfill para `INSUMOS`), índice `idx_inventory_counts_warehouse_id`.
 Model `server/src/models/InventoryCount.ts` com `warehouse_id` e
 associação `belongsTo(Warehouse, { foreignKey: 'warehouse_id', as:
-'warehouse' })`. Documentado em `docs/DATABASE.md` §"Coluna nova:
+'warehouse' })`. Documentado em `docs/database/DATABASE.md` §"Coluna nova:
 inventory_counts.warehouse_id". `InventoryCountItem` deliberadamente
 **não** ganhou coluna própria — todo item herda o depósito do cabeçalho.
 
@@ -4423,10 +4423,10 @@ esta sessão só editou arquivos `.md`, sem risco de conflito.
   item permanece `[ ]`), Bloco 5 completo (§5.2 frontend e §5.3 QA, 5 itens
   `[ ]` → `[x]`), Bloco 6 (§6.2 4 telas `[ ]` → `[x]` com 2 notas parciais,
   §6.3 checklist `[ ]` → `[x]`, §6.1 item novo `[ ]` criado).
-- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+- `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
   (apêndice "Onda 2, segunda rodada em paralelo"; entradas antigas
   preservadas).
-- Este arquivo (`docs/HANDOFF_CODEX.md`).
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`).
 
 ### Próximos passos para o time humano
 
@@ -4588,9 +4588,9 @@ cd server && npx tsx src/scripts/backfill/04l_product_warehouse_stock_validation
   (contagem cíclica `[ ]` → `[x]`, fechando o bloco), seção "Pendências
   de Segurança / Gate G6" com 2 itens novos `[x]` (bug P0 corrigido, e
   saúde da suíte de integração).
-- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+- `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
   (apêndice "Onda 3+4"; entradas antigas preservadas, nenhuma reescrita).
-- Este arquivo (`docs/HANDOFF_CODEX.md`).
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`).
 
 ### Próximos passos para o time humano
 
@@ -4619,7 +4619,7 @@ Rodada grande concluída no mesmo dia, com 5 agentes trabalhando em
 paralelo em frentes independentes. Cada entrega abaixo foi verificada
 nesta consolidação por leitura direta do código-fonte/testes e execução
 real da suíte (não apenas pelo relato de cada agente). Detalhe completo
-em `docs/DIARIO_BORDO_GO_LIVE_G6.md` (apêndice "2026-08-04 — Rodada de 5
+em `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (apêndice "2026-08-04 — Rodada de 5
 frentes paralelas") e `docs/governance/TODO.md`.
 
 ### 1. Bloco 6.1 — `details` estruturado (9 endpoints priorizados, `BUSINESS_RULES.md` §13.5)
@@ -4671,7 +4671,7 @@ pequena:** falta endpoint/UI para ligar a flag por item (só via banco).
 sincronamente na criação de RNC vinculada a lote com fornecedor
 (`CreateNonConformityUseCase.recalculateSupplierQualityScore`), fórmula
 `MAX(0, 100 - (rncs_count / receipts_count * 100))`. Documentado por
-completo em `docs/DATABASE.md`. Testado em
+completo em `docs/database/DATABASE.md`. Testado em
 `server/tests/unit/quality-lot-lifecycle.test.ts` (20/20). **Risco
 residual importante:** sem backfill retroativo — RNCs fechadas antes
 desta entrega não contam no cálculo inicial (default neutro 100.00).
@@ -4680,7 +4680,7 @@ desta entrega não contam no cálculo inicial (default neutro 100.00).
 
 Só o schema (`work_centers.cost_per_hour` + `production_cost_settings`,
 migrations `20260804-000007/-000008/-000009`) — **cálculo real ainda não
-implementado**. Contrato documentado em `docs/DATABASE.md`, apontando
+implementado**. Contrato documentado em `docs/database/DATABASE.md`, apontando
 `ChangeProductionOrderStatusUseCase.completeOrder()` como o lugar certo.
 **Não marcado como resolvido** no roadmap — é a próxima tarefa de
 custeio.
@@ -4717,14 +4717,14 @@ cd server && npm run migration:status
 - `docs/governance/TODO.md` — Bloco 6.1 fechado `[x]` por completo, Bloco
   1.5 (4 itens) fechado `[x]`, nova seção "Rodada de 5 Frentes Paralelas
   — 2026-08-04" com o achado de processo sobre migrations.
-- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — item 3 (trigger automático)
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — item 3 (trigger automático)
   marcado `feito`, item 8 (rating de fornecedor) marcado `feito` com
   risco residual de backfill em destaque, item 7 mantido `feito
   (parcial)` com a distinção clara "schema pronto, cálculo pendente".
-- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+- `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
   (apêndice "Rodada de 5 frentes paralelas"; entradas antigas
   preservadas, nenhuma reescrita).
-- Este arquivo (`docs/HANDOFF_CODEX.md`).
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`).
 
 ### Próximos passos para o time humano
 
@@ -4754,7 +4754,7 @@ dia: o risco residual de segurança `react-router@7.18.2`
 `react-router@8.3.0` (`npm audit` confirma 0 vulnerabilidades), e a tela
 de contagem cíclica (`InventoryCountsPage.tsx`) ganhou seletor de
 depósito obrigatório e identidade visual EVOK. Detalhe completo de cada
-item em `docs/DIARIO_BORDO_GO_LIVE_G6.md` (apêndice "2026-08-04 —
+item em `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (apêndice "2026-08-04 —
 Fechamento do risco residual react-router") e `docs/governance/TODO.md`.
 **Data**: 2026-08-04
 
@@ -4762,7 +4762,7 @@ Fechamento do risco residual react-router") e `docs/governance/TODO.md`.
 
 ## Custeio real de mão-de-obra/overhead + rastreabilidade por lote/QR — 2026-08-04
 
-Duas frentes de roadmap fechadas nesta data (`docs/LEVANTAMENTO_ERP_2026-08-02.md`,
+Duas frentes de roadmap fechadas nesta data (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`,
 itens 6 e 7 da tabela de prioridades), verificadas por leitura direta do
 código/testes antes de marcar qualquer coisa. A seção "Rodada de 5
 frentes paralelas — 2026-08-04" logo acima deste bloco havia deixado o
@@ -4793,7 +4793,7 @@ Nesta entrega entrou o **cálculo**:
     `source_type: 'production_labor'`/`'production_overhead'`, separados
     do lançamento de material (`'production'`, já existia).
 - Contrato completo e justificativa de cada decisão de modelagem já
-  documentados em `docs/DATABASE.md`, seção "Cálculo implementado (item
+  documentados em `docs/database/DATABASE.md`, seção "Cálculo implementado (item
   7/9 — mão-de-obra e overhead)".
 - Teste dedicado: `server/tests/unit/production-labor-overhead-cost.test.ts`
   (6 casos, `costingService` real não mockado — mão-de-obra via
@@ -4869,12 +4869,12 @@ cd client && npx vitest run
   mão-de-obra/overhead + rastreabilidade por lote/QR — 2026-08-04", nota
   na seção "Rodada de 5 Frentes Paralelas" apontando que o item 7 deixou
   de ser "próxima tarefa" e passou a `feito`.
-- `docs/LEVANTAMENTO_ERP_2026-08-02.md` — itens 6 e 7 da tabela de
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — itens 6 e 7 da tabela de
   prioridades marcados `feito`, linha `production` da tabela de módulos
   parciais atualizada.
-- `docs/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
+- `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` — nova entrada datada 2026-08-04
   (apêndice; entradas antigas preservadas, nenhuma reescrita).
-- Este arquivo (`docs/HANDOFF_CODEX.md`).
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`).
 
 ### O que QA deve validar
 
@@ -4908,7 +4908,7 @@ cd client && npx vitest run
 ### Levantamento (achado principal)
 
 As 3 telas pedidas neste escopo **já estavam completas e roteadas** (não
-foi um levantamento desatualizado — `docs/LEVANTAMENTO_ERP_2026-08-02.md`
+foi um levantamento desatualizado — `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`
 já marcava os itens 1–9 do top 10 como `feito`, confirmado por leitura de
 código):
 - `client/src/pages/production/MrpPage.tsx` (rota `/production/mrp`):
@@ -4968,7 +4968,7 @@ UI, mesmo o backend suportando o ciclo completo.
 
 Nenhuma. Catálogo item×fornecedor N:N (`itemSuppliers.ts`) e conversão
 MRP→OP já têm UI e backend prontos (ver
-`docs/LEVANTAMENTO_ERP_2026-08-02.md`, itens 1 e 3 da tabela de
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, itens 1 e 3 da tabela de
 prioridades). O agente paralelo de backend não tinha, no momento desta
 sessão, nenhum endpoint novo aguardando UI dentro do escopo MRP/
 Requisições/Qualidade — o único gap encontrado (CAPA de RNC) já tinha
@@ -5127,7 +5127,7 @@ do lote original de 9 telas priorizadas):
 ## Backend — Catálogo item×fornecedor (confirmação) + MRP fecha o ciclo para OP (Fase 2/P1)
 
 **Data**: 2026-08-04
-**Escopo**: Duas frentes do roadmap Fase 2 (P1) do `CLAUDE.md`/`docs/LEVANTAMENTO_ERP_2026-08-02.md` §3. Somente `server/` — nenhum arquivo de `client/` tocado.
+**Escopo**: Duas frentes do roadmap Fase 2 (P1) do `CLAUDE.md`/`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` §3. Somente `server/` — nenhum arquivo de `client/` tocado.
 
 ### 1. Catálogo item×fornecedor (N:N) — já estava 100% pronto, sem trabalho novo
 
@@ -5411,7 +5411,7 @@ diferente, mas escopo real da EVOK é só recebimento).
 **Nenhum código foi alterado nesta sessão** — é planejamento puro. O
 plano de execução completo, com todas as decisões e blocos técnicos
 (schema → backend → frontend), está em
-[`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md).
+[`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](TODO_REORGANIZACAO_DEPARTAMENTOS.md).
 Qualquer agente retomando este trabalho deve começar lendo aquele
 documento, não este resumo — ele é a fonte de verdade executável
 (checkboxes por bloco, ordem de execução, ponto em aberto não
@@ -5424,7 +5424,7 @@ bloqueante).
 ## Bloco A — Schema: classificação de item + ativo/licença + NF-e/NFS-e + módulos RBAC (2026-08-05)
 
 Execução do "Bloco A — Schema" de
-[`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md).
+[`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](TODO_REORGANIZACAO_DEPARTAMENTOS.md).
 Todas as migrations abaixo já foram **aplicadas** no Postgres local
 (`npm run migration:up`, dentro de `server/`). `npx tsc --noEmit` e
 `npm run test:unit` passam limpos (64 suites, 456 testes).
@@ -5536,7 +5536,7 @@ entrega).
 ## Bloco D — Backend: retrofit RBAC de Manutenção e Garantia (Concluída)
 
 **Data**: 2026-08-05
-**Escopo**: [`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md),
+**Escopo**: [`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](TODO_REORGANIZACAO_DEPARTAMENTOS.md),
 Bloco D. Depende do Bloco A (chaves `manutencao`/`garantia` já
 adicionadas ao catálogo `server/src/shared/domain/accessModules.ts`).
 **Status**: ✅ Concluído
@@ -5585,7 +5585,7 @@ referência direta).
 
 - `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md` — Bloco D
   marcado `[x]` com nota de conclusão e resultado dos testes.
-- `docs/HANDOFF_CODEX.md` — esta entrada.
+- `docs/governance/HANDOFF_CODEX.md` — esta entrada.
 
 Nenhum JSDoc de model/schema/caso de uso precisou de atualização — não
 houve mudança de regra de negócio, apenas troca do mecanismo de
@@ -5639,7 +5639,7 @@ rotas foram atualizados para descrever o novo RBAC).
 ## Bloco C — Backend: requisição por departamento (Concluída)
 
 **Data**: 2026-08-06
-**Escopo**: [`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md),
+**Escopo**: [`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`](TODO_REORGANIZACAO_DEPARTAMENTOS.md),
 Bloco C. Depende do Bloco A (`PurchaseRequisition.department_id` já
 existia desde a migration original da tabela, coluna + FK + model já
 prontos — nenhuma migration nova neste bloco).
@@ -5705,7 +5705,7 @@ para as telas por departamento do Bloco E.
 
 - `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md` — Bloco C
   marcado `[x]` com nota de conclusão e detalhamento por item.
-- `docs/HANDOFF_CODEX.md` — esta entrada.
+- `docs/governance/HANDOFF_CODEX.md` — esta entrada.
 - JSDoc atualizado diretamente em `CreatePurchaseRequisitionUseCase.ts`
   e `ListPurchaseRequisitionsUseCase.ts` (cabeçalhos de classe/método
   explicando a nova regra). Nenhum caso de uso de
@@ -6205,7 +6205,7 @@ produção" / "Uso e consumo / Ativo"). Decisão técnica: usa o `Item`
 mestre (`/api/items`, `POST /api/items`), **não** o modelo `Product`
 legado que a aba principal usa — `Product.product_type` (enum
 `finished/semi_finished/component/raw_material`) não tem os 2 valores
-novos, e o handoff de arquitetura (`docs/HANDOFF_CODEX.md`, migração
+novos, e o handoff de arquitetura (`docs/governance/HANDOFF_CODEX.md`, migração
 Product→Item) já trata `Item` como o núcleo real de MRP/BOM, com `Product`
 em dual-read fora de sincronia estrutural. Consequência aceita: os dois
 cadastros (Produto e Item de uso/ativo) não compartilham código-fonte de
@@ -6335,7 +6335,7 @@ client). `client/src/api/employees.ts` ganhou `user_id` em
 
 **Data**: 2026-08-05
 **Escopo**: UI para o opt-in `items.conversao_automatica` (roadmap pós-Go-Live item 3,
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` seção 3). Consome o endpoint novo
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` seção 3). Consome o endpoint novo
 `PATCH /api/items/:id` (`authenticate` + `authorizeModule('produtos', 'operate')`).
 **Status**: ✅ Concluído (só frontend — backend já existia)
 
@@ -6474,7 +6474,7 @@ do TypeScript strict mode, no módulo `inventory` (`server/src/modules/inventory
   em `POST/GET /api/inventory/movements`"; tabela de endpoints atualizada;
   assinatura documentada de `InventoryService.adjust` atualizada com os dois
   parâmetros opcionais novos.
-- `docs/DATABASE.md` — tabela `inventory_movements` atualizada: linha nova
+- `docs/database/DATABASE.md` — tabela `inventory_movements` atualizada: linha nova
   `item_id`, e colunas que já existiam no model mas estavam ausentes da
   doc (`warehouse_id`, `unit_cost`) adicionadas para não ficar incompleta
   justamente na tabela tocada por esta correção.
@@ -6602,8 +6602,8 @@ regra. Esta é a fatia de 4 desses use cases.
   `PurchaseRequisitionRepository.ts`, `UsersRepository.ts` e no novo
   `WebhookRepository.ts` (contrato) — cada método deixa explícito que é
   leitura auxiliar cross-module e qual módulo é o dono real do model.
-- Este handoff (`docs/HANDOFF_CODEX.md`).
-- Sem mudança de schema/model/migration ⇒ `docs/DATABASE.md` não precisou
+- Este handoff (`docs/governance/HANDOFF_CODEX.md`).
+- Sem mudança de schema/model/migration ⇒ `docs/database/DATABASE.md` não precisou
   de atualização.
 - Sem mudança de regra de negócio/validação/gatilho ⇒
   `docs/projeto/04-USE_CASES.md` não precisou de atualização (comportamento
@@ -6725,8 +6725,8 @@ mesmo `where`/`attributes`/`transaction`, mesmos erros).
   em `domain/repositories/*.ts` e implementações em
   `infrastructure/sequelize/*.ts`), deixando explícito quando um método é
   leitura/escrita cross-module pontual e qual módulo é o dono real do model.
-- Este handoff (`docs/HANDOFF_CODEX.md`).
-- Sem mudança de schema/model/migration ⇒ `docs/DATABASE.md` não precisou
+- Este handoff (`docs/governance/HANDOFF_CODEX.md`).
+- Sem mudança de schema/model/migration ⇒ `docs/database/DATABASE.md` não precisou
   de atualização.
 - Sem mudança de regra de negócio/validação/gatilho ⇒
   `docs/projeto/04-USE_CASES.md` não precisou de atualização (comportamento
@@ -6846,8 +6846,8 @@ comportamento (mesma query, `where`, `transaction`/`lock`, mesmos erros).
   abstrato) e `SequelizeFiscalRepository.ts` (implementação), explicitando
   que `Sale`/`SaleItem`/`Client`/`Product` são cross-module (donos reais:
   `sales`, `products`).
-- Este handoff (`docs/HANDOFF_CODEX.md`).
-- Sem mudança de schema/model/migration ⇒ `docs/DATABASE.md` não precisou
+- Este handoff (`docs/governance/HANDOFF_CODEX.md`).
+- Sem mudança de schema/model/migration ⇒ `docs/database/DATABASE.md` não precisou
   de atualização.
 - Sem mudança de regra de negócio/validação/gatilho ⇒
   `docs/projeto/04-USE_CASES.md` não precisou de atualização (mesmo
@@ -6980,9 +6980,9 @@ comportamento (mesma query, `where`, `transaction`/`lock`, mesmos erros).
 - `server/tests/unit/inventory-count-assignment.test.ts` (novo) — 10 testes cobrindo criação com/sem `assigned_to`, claim do pool, rejeição de claim de contagem de outro usuário, idempotência do próprio usuário, transição inválida de status, e os filtros de listagem.
 
 ### Documentações atualizadas
-- `docs/API.md` — nova seção "8.2 Inventário Cíclico (Contagens)" com todos os endpoints de `/api/inventory-counts`, incluindo o contrato de atribuição/pool e o formato do erro 409.
-- `docs/DATABASE.md` — nova subseção "Coluna nova: `inventory_counts.assigned_to` (migration `20260806-000001`)" logo após a seção existente de `warehouse_id`.
-- `docs/HANDOFF_CODEX.md` — esta seção.
+- `docs/arquitetura/API.md` — nova seção "8.2 Inventário Cíclico (Contagens)" com todos os endpoints de `/api/inventory-counts`, incluindo o contrato de atribuição/pool e o formato do erro 409.
+- `docs/database/DATABASE.md` — nova subseção "Coluna nova: `inventory_counts.assigned_to` (migration `20260806-000001`)" logo após a seção existente de `warehouse_id`.
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
 - JSDoc atualizado em todos os arquivos de código listados acima (classes, use cases, validators, controller, migration).
 - Não havia caso de uso dedicado de inventário cíclico em `docs/projeto/04-USE_CASES.md` nem item correspondente em `docs/governance/TODO.md` — nenhum dos dois foi alterado (nada para marcar `[x]`; a feature não fazia parte do backlog rastreado ali).
 
@@ -7018,7 +7018,7 @@ HTTP 409.
    - Chamar `POST /:id/start` novamente com o usuário B na MESMA contagem (agora em `counting`, não mais `draft`) → deve falhar com `BusinessRuleError` (422, comportamento pré-existente inalterado).
    - Criar uma segunda contagem sem `assigned_to`, iniciar com o usuário A, depois tentar `POST /:id/start` com o usuário B em uma contagem QUE VOLTOU a `draft` manualmente (ou testar diretamente a corrida via dois requests simultâneos) → deve retornar 409 se já atribuída a A.
    - `GET /api/inventory-counts?assigned_to=me` autenticado como A → deve listar as contagens de A.
-5. **Não testado nesta entrega** (fora de escopo, mobile/client não tocados): telas de app mobile/web consumindo os novos filtros — quando forem construídas, apontar para o contrato documentado em `docs/API.md` §8.2.
+5. **Não testado nesta entrega** (fora de escopo, mobile/client não tocados): telas de app mobile/web consumindo os novos filtros — quando forem construídas, apontar para o contrato documentado em `docs/arquitetura/API.md` §8.2.
 
 ### Riscos residuais
 - A lógica de "corrida" (dois usuários tentando iniciar a MESMA contagem do pool simultaneamente) foi validada com lock pessimista dentro de transação e coberta por teste unitário com repositório mockado — **não há teste de integração contra PostgreSQL real** exercitando a concorrência de fato (exigiria dois clients simultâneos contra um banco real). Recomenda-se um teste de integração dedicado antes do Go-Live se esse fluxo for crítico em produção.
@@ -7033,7 +7033,7 @@ HTTP 409.
 > atribuição na listagem. Mobile: `mobile/app/(app)/counts/` (tela de
 > lista + detalhe de contagem) passou a consumir o pool/atribuição e o
 > claim atômico descritos acima. Ver a entrada 2026-08-06 de
-> `docs/DIARIO_BORDO_GO_LIVE_G6.md` para o relato completo (apps
+> `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` para o relato completo (apps
 > `mobile/`/`tv/` novos + esta feature de atribuição, incluindo um bug P0
 > real encontrado nesse mesmo consumo do campo "Atribuir a" na web e
 > corrigido no mesmo dia).
@@ -7047,11 +7047,11 @@ auditoria multi-agente registrada na seção anterior). Duas ondas:
 **Onda 1 commitada** (commit `feat: RFQ multi-fornecedor, centros de custo
 + projecao de caixa diaria, e relatorio OEE completo`); **Onda 2 no
 working tree**, ainda não commitada no momento desta entrada. Consolida 4
-frentes do roadmap de `docs/LEVANTAMENTO_ERP_2026-08-02.md`. Detalhe
+frentes do roadmap de `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`. Detalhe
 narrativo completo (decisões, riscos residuais, números de validação) em
-`docs/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (segunda rodada — 4
-frentes do roadmap)"; contrato de API completo em `docs/API.md` (RFQ §11.1,
-financeiro §6, OEE §7); schema completo em `docs/DATABASE.md`.
+`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "2026-08-06 (segunda rodada — 4
+frentes do roadmap)"; contrato de API completo em `docs/arquitetura/API.md` (RFQ §11.1,
+financeiro §6, OEE §7); schema completo em `docs/database/DATABASE.md`.
 
 ### Onda 1 — RFQ, financeiro, OEE
 
@@ -7125,7 +7125,7 @@ financeiro §6, OEE §7); schema completo em `docs/DATABASE.md`.
 
 Continuação do padrão de bug já corrigido em `item_estruturas` (migration
 `20260802-000005`), fechando a seção "Bombas latentes conhecidas" de
-`docs/LEVANTAMENTO_ERP_2026-08-02.md`. Migrations
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`. Migrations
 `20260806-000040/041/042.cjs`, todas aplicadas no banco local.
 
 - **`items.fornecedor_padrao_id` (bomba REAL em tabela viva, não só no
@@ -7151,7 +7151,7 @@ Continuação do padrão de bug já corrigido em `item_estruturas` (migration
   cadastro de item").
 - **6 colunas em tabelas órfãs (0 uso em código vivo), mesmo padrão de
   UUID→usuário INTEGER:** as 4 já documentadas em
-  `docs/LEVANTAMENTO_ERP_2026-08-02.md`
+  `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`
   (`requisicoes_compra.aprovado_por`, `ordens_producao.criado_por`,
   `movimentos_estoque.usuario_id`, `auditoria_eventos.usuario_id`) + 2
   novas encontradas nesta rodada por auditoria completa
@@ -7211,13 +7211,13 @@ OEE) contra dados reais no Postgres do Docker local.
   do projeto; mitigado por `UNIQUE(rfq_number)` (falha explícita em vez de
   duplicata silenciosa), sem retry automático.
 
-**Documentos atualizados nesta consolidação:** `docs/API.md` (RFQ §11.1,
-financeiro §6, OEE §7, nota de breaking change em §3), `docs/DATABASE.md`
+**Documentos atualizados nesta consolidação:** `docs/arquitetura/API.md` (RFQ §11.1,
+financeiro §6, OEE §7, nota de breaking change em §3), `docs/database/DATABASE.md`
 (tabelas RFQ, `cost_centers`, correção das 7 colunas-bomba, `DEPRECATED`
-nas 12 tabelas órfãs), `docs/LEVANTAMENTO_ERP_2026-08-02.md` (seção 2,
+nas 12 tabelas órfãs), `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` (seção 2,
 tabela de módulos, item 9, seção "Bombas latentes conhecidas"),
 `docs/governance/TODO.md` (itens novos de risco residual),
-`docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md` (contagem de
+`docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md` (contagem de
 migrations, roadmap), este arquivo (esta seção).
 
 ---
@@ -7288,7 +7288,7 @@ produto), **não** é a tela de cadastro completa do Item Mestre canônico
 
 ### 4. Vendas — 3 gaps fechados
 
-Fecha a linha `sales` de `docs/LEVANTAMENTO_ERP_2026-08-02.md`.
+Fecha a linha `sales` de `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`.
 
 **Tabela de preços por cliente (gap 1/3):** tabela `customer_price_lists`
 (migration `20260806-000050`, `customer_id`/`product_id`/`unit_price`/
@@ -7364,7 +7364,7 @@ downtime_hours, 0)` (satura em zero, nunca negativa). Payload ganha
 `downtime_hours` (soma) e `downtime_by_reason` (breakdown por categoria).
 **Remove a limitação documentada na rodada anterior** (Disponibilidade
 era só uma aproximação por calendário de turnos, sem desconto de paradas
-reais). Ver `docs/API.md` §7.
+reais). Ver `docs/arquitetura/API.md` §7.
 
 ### 6. Financeiro — conciliação bancária (OFX)
 
@@ -7414,14 +7414,14 @@ Client: build — ok
   `Sale.nfe_*` só guarda a emissão mais recente.
 - CNAB continua fora de escopo.
 
-**Documentos atualizados nesta consolidação:** `docs/API.md` (auth
+**Documentos atualizados nesta consolidação:** `docs/arquitetura/API.md` (auth
 refresh §1, vendas §5, financeiro §6, relatórios §7 — OEE com downtime +
-`/api/production/downtimes`), `docs/DATABASE.md` (`customer_price_lists`,
+`/api/production/downtimes`), `docs/database/DATABASE.md` (`customer_price_lists`,
 `sale_items.invoiced_quantity` + `partially_invoiced`,
 `production_downtimes`, `bank_statements`/`bank_statement_entries`),
-`docs/LEVANTAMENTO_ERP_2026-08-02.md` (linhas `sales`/`financial`, item 9),
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` (linhas `sales`/`financial`, item 9),
 `docs/governance/TODO.md` (itens marcados `[x]`, novos `[ ]` de risco
-residual), `docs/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md`
+residual), `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` (entrada nova), `CLAUDE.md`
 (contagem de migrations, módulos/telas novas), este arquivo (esta seção).
 
 ---
@@ -7519,9 +7519,9 @@ OM, com `SELECT ... FOR UPDATE` na ordem de manutenção antes de decidir
   (arquivo em si **não** editado por este agente — território exclusivo
   de `server/`; fica para o agente de documentação atualizar a ressalva
   na próxima rodada).
-- Este arquivo (`docs/HANDOFF_CODEX.md`, esta seção).
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`, esta seção).
 - **Não alterados por este agente** (território de outros agentes em
-  paralelo, conforme instrução): `docs/API.md`, `docs/arquitetura/`
+  paralelo, conforme instrução): `docs/arquitetura/API.md`, `docs/arquitetura/`
   (inclui `DOCUMENTO_DE_REQUISITOS.md` §8 e
   `DIAGRAMA_CASOS_DE_USO_BPMN.md` §5, que citam RF-PAT-05), `docs/projeto/`,
   `docs/business/`, `docs/patrimonio/`.
@@ -7698,7 +7698,7 @@ nacionalizado.
   adicionado a `MODULES_REQUIRING_AUTHORIZE_MODULE` (guarda anti-regressão
   já existente, cobre 100% das pastas de `src/modules/`).
 
-### Modelo de dados (não documentado em `docs/DATABASE.md` nesta rodada —
+### Modelo de dados (não documentado em `docs/database/DATABASE.md` nesta rodada —
 ver nota de território abaixo; resumo aqui para quem for consolidar)
 
 **`import_processes`** (cabeçalho):
@@ -7799,17 +7799,17 @@ Bloqueado se o processo já estiver `received` (`422`).
 
 ### Documentações atualizadas
 
-- Este arquivo (`docs/HANDOFF_CODEX.md`, esta seção).
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`, esta seção).
 - `docs/governance/TODO.md` — nova seção "2026-08-06 (apêndice 7)" com o
   item UC-19/RF-COM-12 marcado `[x]`/`[IMPLEMENTADO]`.
 - JSDoc completo em todos os arquivos novos (models, repositório,
   use cases, controller, rotas).
 - **Não alterados por este agente** (território de outros agentes em
   paralelo, instrução explícita do orquestrador desta rodada):
-  `docs/API.md`, `docs/arquitetura/`, `docs/projeto/` (inclui
+  `docs/arquitetura/API.md`, `docs/arquitetura/`, `docs/projeto/` (inclui
   `04-USE_CASES.md`, onde o UC-19 deveria idealmente ganhar uma nota "✅
   implementado"), `docs/business/`, `docs/patrimonio/`,
-  `docs/DATABASE.md` (schema resumido nesta seção para quem for
+  `docs/database/DATABASE.md` (schema resumido nesta seção para quem for
   consolidar). Fica pendente para o próximo agente de documentação
   atualizar esses arquivos com o resultado desta entrega.
 
@@ -7876,9 +7876,9 @@ descrito na seção anterior. Território: `client/` (novo `src/api/comex.ts`,
 nova página `src/pages/purchases/ComexPage.tsx`, rota em `src/App.tsx`, item
 de menu em `src/layouts/AppLayout.tsx`, chave `comex` adicionada a
 `AccessModuleKey` em `src/api/accessProfiles.ts`), mais os 4 arquivos de
-registro (`docs/HANDOFF_CODEX.md`, `docs/governance/TODO.md`,
-`docs/CRONOGRAMA_FRONTEND_2026-07-31.md`,
-`docs/LEVANTAMENTO_ERP_2026-08-02.md`). `server/`, `docs/API.md`,
+registro (`docs/governance/HANDOFF_CODEX.md`, `docs/governance/TODO.md`,
+`docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md`,
+`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`). `server/`, `docs/arquitetura/API.md`,
 `docs/arquitetura/`, `docs/database/`, `docs/projeto/` não foram tocados
 (território de outros agentes em paralelo).
 **Status**: ✅ Concluído — `npx tsc --noEmit` (0 erros), `npx vitest run`
@@ -8006,7 +8006,7 @@ desenvolvimento.
 - Sem teste E2E real em navegador (Cypress/Playwright não fazem parte do
   stack do projeto) — validação limitada a `tsc`/`vitest`/`build` +
   chamadas manuais de `curl` contra o backend real.
-- `docs/API.md` não foi atualizado com os endpoints de COMEX (fora do
+- `docs/arquitetura/API.md` não foi atualizado com os endpoints de COMEX (fora do
   território deste agente — pendente do próximo agente de documentação/
   backend, mesma pendência já registrada na seção anterior deste arquivo).
 - Nenhum ajuste fino de polimento visual (`webdesiner`) foi aplicado —
@@ -8230,13 +8230,13 @@ faturamento parcial entregue na terceira rodada de 2026-08-06.
   fechamento no item "Conciliação bancária + downtime — teste de
   integração real" (a 3ª feature pendente, faturamento parcial, agora
   também tem teste de integração real).
-- `docs/HANDOFF_CODEX.md` — esta seção.
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
 - **Não tocado nesta rodada (fora do território combinado):**
-  `docs/API.md`, `docs/DATABASE.md`, `docs/projeto/04-USE_CASES.md` — a
+  `docs/arquitetura/API.md`, `docs/database/DATABASE.md`, `docs/projeto/04-USE_CASES.md` — a
   tarefa restringiu docs a `TODO.md`/`HANDOFF_CODEX.md` porque outros
   agentes rodavam em paralelo sobre os mesmos arquivos; uma rodada de docs
-  dedicada deve incorporar `sale_invoices` em `docs/DATABASE.md` (nova
-  tabela) e o endpoint `GET /api/sales/:id/invoices` em `docs/API.md`.
+  dedicada deve incorporar `sale_invoices` em `docs/database/DATABASE.md` (nova
+  tabela) e o endpoint `GET /api/sales/:id/invoices` em `docs/arquitetura/API.md`.
 
 ### Testes
 
@@ -8288,6 +8288,226 @@ faturamento parcial entregue na terceira rodada de 2026-08-06.
   provedores `focus_nfe`/`enotas` de verdade (só o mock, que é síncrono) —
   seria necessário um ambiente de homologação desses provedores reais para
   validar isso ponta a ponta, fora do alcance desta rodada.
-- `docs/API.md`/`docs/DATABASE.md` ainda não descrevem `sale_invoices`/
+- `docs/arquitetura/API.md`/`docs/database/DATABASE.md` ainda não descrevem `sale_invoices`/
   `GET /api/sales/:id/invoices` (deliberadamente fora do território desta
   rodada — ver nota acima).
+
+---
+
+## 2026-08-06 (webdesiner) — Rollout do redesign para páginas de departamento
+
+### O que motivou
+
+Continuação do rollout de UI iniciado em `AppLayout.tsx`/`LoginPage.tsx`/
+`DashboardPage.tsx` (entradas anteriores desta seção). Extensão da mesma
+linguagem visual — banner com selo `bg-brand/10 text-brand`, linhas de
+tabela com feedback `border-l-4`/`hover:bg-brand/5`, números
+`text-right tabular-nums`, `motion-safe:animate-in fade-in` na entrada de
+seções — para as 5 telas de departamento mais usadas. Aprovação para pular
+o ponto de parada de proposta foi dada explicitamente pelo dono do produto
+para esta rodada.
+
+### O que mudou (só `className`/JSX decorativo — zero lógica/hooks/rotas tocados)
+
+- `client/src/pages/sales/SalesPage.tsx` — banner e tabela com
+  `motion-safe:animate-in fade-in`; estado vazio da tabela de vendas ganhou
+  ícone (`ShoppingCart`) + atalho "Nova venda" (reaproveita o `setOpen(true)`
+  já existente, sem novo estado).
+- `client/src/pages/purchases/PurchasesPage.tsx` — mesmo tratamento de
+  fade-in nos tiles do cockpit e no banner/tabela; estado vazio da lista de
+  pedidos ganhou ícone (`Truck`) + atalho "Novo pedido" (oculto quando o
+  filtro "pedidos em aberto" está ativo, para não sugerir criar um pedido
+  filtrado por status).
+- `client/src/pages/logistics/InventoryPage.tsx` — fade-in no banner e no
+  conteúdo da aba ativa (`key={tab}` para retrigger a cada troca);
+  `TabButton` ganhou `aria-selected`, `transition-colors` e
+  `focus-visible:ring-2` (antes sem indicador de foco por teclado
+  dedicado).
+- `client/src/pages/logistics/BalancesTab.tsx` — estados vazios das duas
+  tabelas (saldo agregado e saldo por depósito) ganharam ícone (`Boxes`) em
+  vez de só texto cinza.
+- `client/src/pages/production/ProductionOrdersPage.tsx` — linhas da
+  tabela de ordens passaram a usar o mesmo padrão de
+  `border-l-4 border-l-transparent hover:border-l-brand hover:bg-brand/5`
+  já usado em Vendas/Compras (antes só tinha `hover:bg-accent/50`, sem
+  indicador de borda); coluna "Quantidade" alinhada à direita com
+  `tabular-nums`; estado vazio com ícone (`Factory`) + atalho "Nova ordem";
+  tabela de explosão de BOM (consumo previsto no detalhe da ordem) ganhou
+  colunas numéricas `text-right tabular-nums` e ícone `AlertTriangle` ao
+  lado do saldo insuficiente (antes só texto vermelho).
+- `client/src/pages/financial/FinancialPage.tsx` — as 4 abas (Contas,
+  Centros de custo, Projeção de caixa, Conciliação), antes `<button>` só
+  com texto, agora seguem o mesmo componente de aba usado em
+  `InventoryPage.tsx` (`FinancialTabButton`, com ícone
+  `Receipt`/`Layers`/`CalendarRange`/`GitCompareArrows`, `aria-selected`,
+  foco visível); conteúdo da aba ativa com fade-in (`key={view}`); estados
+  vazios de contas a pagar/receber com ícone (`Wallet`); mini-cards de KPI
+  da projeção de fluxo de caixa ganharam `hover:shadow-md` para
+  consistência com os demais cards de KPI do sistema.
+
+### Validação
+
+- `npx vitest run` (client/) — 51/51 testes passando, nenhuma quebra.
+- `npx tsc -p tsconfig.app.json --noEmit` (client/) — 0 erros. Nota: durante
+  a execução desta tarefa, `tsc` falhou uma vez com
+  `Cannot find module '@/pages/home/HomePage'` porque outro agente estava
+  criando `client/src/pages/home/` em paralelo (conflito de arquivo já
+  sinalizado pelo dono do produto); o arquivo apareceu minutos depois e o
+  erro desapareceu sozinho — não é uma regressão desta entrega.
+- `npm run build` (client/) — build de produção OK (aviso pré-existente de
+  chunk grande em `index-*.js`, não relacionado a esta entrega).
+
+### Pendências para humano/QA validar no navegador
+
+- Contraste e leitura dos novos ícones de estado vazio nos dois temas
+  (claro/escuro), em especial `text-muted-foreground/50` sobre `--card`
+  escuro.
+- Navegação por teclado nas abas de `InventoryPage`/`FinancialPage` (Tab +
+  Enter/Espaço) — o anel de foco (`focus-visible:ring-brand`) deve ficar
+  visível sem cortar nas bordas do container com `overflow`.
+- `prefers-reduced-motion`: confirmar que a entrada das seções com
+  `motion-safe:animate-in fade-in` não anima para quem reduziu movimento no
+  SO (comportamento esperado do `tw-animate-css`/Tailwind `motion-safe:`,
+  não testado manualmente em SO com essa preferência ativada).
+- Responsividade das novas abas com ícone em `FinancialPage.tsx` em telas
+  estreitas (`flex-wrap` já aplicado, mas não verificado visualmente abaixo
+  de ~380px).
+
+### Fora do escopo desta rodada (não tocado, por instrução explícita)
+
+- `client/src/App.tsx`, `client/src/layouts/AppLayout.tsx`,
+  `client/src/pages/DashboardPage.tsx`, `client/src/pages/LoginPage.tsx`,
+  `client/src/main.tsx` e tudo em `client/src/pages/home/` — em edição
+  paralela por outro agente no momento desta tarefa.
+- `ComexPage.tsx`, `RfqPage.tsx` e as demais telas ainda pendentes de
+  polimento visual seguem na fila (ver nota de riscos residuais da entrada
+  anterior desta seção).
+
+## Home por Perfil (workspace por papel) — frontend (`client/`), 2026-08-06
+
+### Contexto
+
+Antes desta entrega, `/` sempre renderizava `DashboardPage.tsx` (dashboard
+executivo com KPIs de produtos/compras/produção/financeiro) para qualquer
+usuário logado, independente do perfil de acesso. Um almoxarife (perfil só
+com módulos `estoque`/`recebimento`/`expedicao`) via os mesmos cards de um
+admin — a maioria vazios/sem sentido para o papel dele. Dono do produto
+aprovou explicitamente a criação de uma "Home por Perfil" que monta a tela
+dinamicamente a partir dos módulos do perfil logado.
+
+### O que foi feito
+
+**Arquivos novos** (`client/src/pages/home/`):
+- `HomePage.tsx` — página `/` nova. Filtra `widgetRegistry` por
+  `hasModuleAccess`/`hasRole` (mesma lógica de fallback de segurança do
+  `AppLayout`/`DashboardPage`: `admin` ou falha de rede em
+  `GET /api/auth/me/permissions` nunca escondem widget), ordena por
+  `priority`, e decide o layout: **foco** (cards grandes, 1-2 colunas)
+  quando o perfil só tem 1-2 widgets visíveis, **grid denso** (até 3
+  colunas) quando tem mais. Saudação com primeiro nome + data por extenso
+  (`Intl.DateTimeFormat('pt-BR')`), mesma faixa visual `bg-brand/10` do
+  `DashboardPage` antigo.
+- `widgetRegistry.tsx` — array `homeWidgets: HomeWidgetDefinition[]` com
+  `{ key, title, module, roles?, priority, size?, component }`. Adicionar
+  um widget novo é só uma entrada aqui — a Home não tem nada hardcoded.
+- `WidgetCard.tsx` — casca visual compartilhada (ícone + título, loading
+  via `Skeleton`, erro via `DidacticAlert`/`translateApiError`, link de
+  ação no rodapé). Todos os widgets a usam para consistência.
+- `useHandoffs.ts` — hook compartilhado (`queryKey: ['home-handoffs']`)
+  que os 4 widgets de handoff usam, deduplicado pelo TanStack Query (uma
+  única chamada `GET /api/dashboard/handoffs` mesmo com os 4 montados).
+- `widgets/RecebimentoPendenteWidget.tsx`, `ExpedicaoProntaWidget.tsx`,
+  `RequisicoesAprovacaoWidget.tsx`, `QualidadePendenciasWidget.tsx` —
+  todos consomem `useHandoffs()` (endpoint já existente, usado hoje pelo
+  badge do menu lateral, UC-40); nenhum endpoint novo.
+- `widgets/EstoqueCriticoWidget.tsx` — reaproveita
+  `inventoryApi.listLowStock()` (`GET /api/inventory/low-stock`, mesma
+  query do painel executivo), mas aponta para `/logistics/estoque` (tela
+  do almoxarife) em vez de `/products` (fora do alcance de quem só tem o
+  módulo `estoque`).
+- `widgets/FinanceiroResumoWidget.tsx` — `financialApi.listPayables({
+  status: 'overdue' })`, restrito a `roles: ['admin', 'financial']`.
+- `widgets/KpisExecutivosWidget.tsx` — wrapper fino de `ExecutiveKpiPanel`
+  (ver abaixo), restrito a `roles: ['admin', 'financial']`.
+
+**Arquivos alterados:**
+- `client/src/pages/DashboardPage.tsx` — o conteúdo abaixo da saudação
+  (grid de KPIs + tabela de estoque baixo + atalhos) foi extraído para
+  `export function ExecutiveKpiPanel()`, sem nenhuma mudança de classe
+  Tailwind/estrutura visual. `DashboardPage` (default export) agora é só a
+  saudação + `<ExecutiveKpiPanel />`, montada na rota `/dashboard` (link
+  direto para quem quiser o dashboard executivo completo fora da Home).
+- `client/src/App.tsx` — rota `/` passa a renderizar `HomePage` (import
+  direto, não lazy — mesmo padrão de antes); nova rota `/dashboard`
+  (lazy, dentro do `Suspense` padrão) para `DashboardPage`. Nenhuma rota
+  existente foi removida ou teve seu módulo de proteção alterado.
+- `docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md` (FE0) e
+  `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` — item marcado `[x]`/bullet nova
+  descrevendo a entrega.
+
+**Não alterados (por restrição explícita da tarefa):** `AppLayout.tsx`,
+`LoginPage.tsx`, componentes shadcn (`components/ui/*`), nenhum endpoint
+de backend.
+
+### Como o registry decide o que mostrar
+
+```
+isWidgetVisible(widget):
+  modules = widget.module (array ou item único)
+  moduleOk = usingRoleFallback || modules.some(hasModuleAccess)
+  roleOk   = !widget.roles || hasRole(...widget.roles)
+  return moduleOk && roleOk
+```
+
+`usingRoleFallback = permissionsFetchFailed || hasRole('admin')` — mesma
+regra do `AppLayout`/`DashboardPage` antigo: nunca esconde nada por bug de
+rede, e admin sempre vê tudo. `roles` é uma trava **adicional** (não
+substitui o módulo) usada só em `financeiro-resumo` e `kpis-executivos`,
+porque o módulo `financeiro`/`dashboard` sozinho não é suficiente para
+decidir quem deve ver esses dois (ex.: `dashboard` é módulo agregador
+concedido a todos os perfis no backend — sem o `roles`, todo mundo veria o
+painel executivo completo).
+
+### O que um almoxarife vs. um admin veem na prática
+
+- **Almoxarife** (perfil com módulos `estoque` + `recebimento` +
+  `expedicao`, sem `dashboard`-role-alto): vê 3 widgets — Recebimento
+  pendente, Pronto para expedição, Estoque crítico — em **layout de foco**
+  (cards grandes, já que são só 2-3). Não vê o painel executivo nem contas
+  a pagar (não tem `financial`/`admin` role, mesmo que `dashboard` seja
+  universal).
+- **Admin**: vê todos os 7 widgets no **grid denso** — os 4 de handoff,
+  estoque crítico, contas a pagar atrasadas e o painel executivo completo
+  (`kpis-executivos`, ocupando 2 colunas via `size: 'wide'`).
+
+### Instruções de teste (para o próximo agente/QA)
+
+1. `cd client && npx tsc -p tsconfig.app.json --noEmit` — 0 erros (já
+   validado nesta entrega).
+2. `npx vitest run` — 51/51 passando (baseline, nenhum teste novo
+   adicionado nesta rodada — a tarefa não pediu testes automatizados para
+   a Home, só validação de tipos/build).
+3. `npm run build` — build de produção OK (mesmo warning pré-existente de
+   chunk `index-*.js` > 500kB, não introduzido por esta mudança).
+4. Manual: logar como usuário com perfil de acesso restrito (ex.: só
+   `estoque`+`recebimento`) e confirmar que `/` mostra só os widgets
+   correspondentes, em cards grandes; logar como `admin` e confirmar grid
+   denso com os 7 widgets, incluindo o painel executivo; confirmar que
+   `/dashboard` ainda funciona (link direto) com o mesmo visual de antes.
+5. Sugestão de teste futuro (não crítico, backlog QA): componente de
+   `HomePage.tsx` com mocks de `useAuth`/`hasModuleAccess` cobrindo os
+   casos "almoxarife" (foco) e "admin" (denso), similar ao padrão de
+   `LoginPage.test.tsx`.
+
+### Riscos residuais
+
+- Nenhum widget tem teste automatizado próprio ainda — risco baixo porque
+  cada um só compõe queries/componentes já testados indiretamente em
+  outras telas (`DashboardPage`, `InventoryPage`, etc.), mas vale cobrir
+  se a Home crescer.
+- `roles` como trava adicional é uma convenção nova no projeto (não existia
+  glossário formal em `widgetRegistry`-like antes) — se um novo perfil
+  "gerente" for criado sem ser `admin`/`financial`, os widgets
+  `financeiro-resumo`/`kpis-executivos` continuarão ocultos para ele
+  mesmo tendo o módulo `financeiro`/`dashboard`; ajustar a lista `roles`
+  quando esse perfil existir.

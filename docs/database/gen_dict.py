@@ -161,7 +161,7 @@ out.write(
     "Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em "
     "português (schema-fantasma nunca adotado pelo app real, `COMMENT ON TABLE` "
     "aplicado em 2026-08-06) e **não devem ser usadas em código novo** — ver "
-    "`docs/DATABASE.md` seção \"Tabelas órfãs do schema-fantasma em português\".\n\n"
+    "`docs/database/DATABASE.md` seção \"Tabelas órfãs do schema-fantasma em português\".\n\n"
 )
 out.write("---\n\n")
 
@@ -178,7 +178,7 @@ for t in tables:
     desc = TABLE_DESC.get(
         t,
         "_Descrição de negócio não catalogada nesta rodada — ver model Sequelize "
-        "correspondente ou `docs/DATABASE.md`._",
+        "correspondente ou `docs/database/DATABASE.md`._",
     )
     out.write(desc + "\n\n")
     out.write("| Coluna | Tipo | Nulo? | Default | Chave |\n")
