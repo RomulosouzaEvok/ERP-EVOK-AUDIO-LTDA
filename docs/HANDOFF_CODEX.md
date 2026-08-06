@@ -8013,3 +8013,117 @@ desenvolvimento.
   `ComexPage.tsx` segue a estrutura de `RfqPage.tsx`/`PurchasesPage.tsx`
   ponto a ponto, mas não passou por uma revisão dedicada de hierarquia
   visual/responsividade.
+
+---
+
+## 2026-08-06 (webdesiner) — Sidebar sempre visível + Atalhos por departamento
+
+### O que motivou
+
+A reformulação de navegação por departamento do mesmo dia introduziu
+`showSidebar = activeSection.items.length > 1`, ocultando a coluna lateral
+para departamentos com uma única página (Início, Vendas). O dono do produto
+apontou que isso deixava a área ali "vazia"/inconsistente com o resto do
+app (viu Logística com a caixa "LOGÍSTICA" + itens, Início sem nada) e pediu
+que **todo** departamento mostre a mesma caixa de sidebar, com um bloco
+"Atalhos" reaproveitando as ações rápidas do card "Atalhos" do
+`DashboardPage` (uma por departamento, só onde fizer sentido).
+
+### O que mudou (só `client/src/layouts/AppLayout.tsx`, camada visual)
+
+- `showSidebar` deixou de exigir `items.length > 1` — agora é
+  `Boolean(activeSection)`. Toda seção com página(s) visível(is) mostra a
+  aside no desktop e a faixa de chips no mobile, inclusive Início e Vendas.
+- Novo `SECTION_SHORTCUTS: Record<string, QuickAction[]>` (constante nova,
+  ao lado de `NAV_SECTIONS`, sem alterar a estrutura desta última), mapeando
+  `label` da seção → lista de atalhos `{ label, to, icon }`:
+  - `''` (Início): `Nova venda → /sales`, `Novo pedido de compra →
+    /purchases`, `Nova ordem de produção → /production` — os mesmos 3
+    atalhos do card "Atalhos" do Dashboard (que **continua existindo** lá,
+    não foi removido).
+  - `Vendas`: `Nova venda → /sales`.
+  - `Compras`: `Novo pedido de compra → /purchases`, `Nova requisição de
+    compra → /purchases/requisitions`.
+  - `Produção`: `Nova ordem de produção → /production`.
+  - Demais seções (Logística, Qualidade & Engenharia, Manutenção, Ativos &
+    Garantia, Gestão, Administração) **não** têm entrada — pedido explícito
+    do dono para não forçar atalho onde não há uma ação de criação óbvia;
+    essas seções continuam só com a lista normal de páginas.
+- Cada atalho é um `<Link>` simples para a página de listagem do módulo —
+  **nenhum mecanismo novo** (sem query param de auto-abrir diálogo, sem
+  estado global novo). O usuário clica no atalho, cai na página, e aciona o
+  botão "novo"/"nova requisição" que a própria página já tem (ex.:
+  `/purchases/requisitions` abre a fila de requisições e `RequisitionsPage`
+  já tem seu próprio `Dialog` local de criação). Mesmo mecanismo que
+  `ShortcutLink` já usava em `DashboardPage.tsx`.
+- Visual: bloco "Atalhos" com o mesmo cabeçalho uppercase/`text-[11px]` dos
+  demais grupos da sidebar; cada link usa `border border-dashed
+  border-brand/30 bg-brand/5 text-brand` (contorno tracejado + tokens
+  `--brand`, sem cor solta) com ícone `Plus` à esquerda, para se distinguir
+  visualmente dos itens de navegação normal (ícone de domínio, sem
+  preenchimento). Hover reforça o contorno (`hover:border-brand
+  hover:bg-brand/10`); foco por teclado usa `focus-visible:ring-2
+  focus-visible:ring-brand` — mesmo padrão do resto do menu.
+- Mobile (`md:hidden`): os atalhos são anexados como chips
+  `rounded-full border-dashed border-brand/40 bg-brand/5 text-brand` depois
+  dos chips de navegação normal, na mesma faixa horizontal com scroll — sem
+  linha/label "Atalhos" separada (não há espaço vertical extra na faixa de
+  chips), a distinção visual fica só no contorno tracejado + ícone `Plus`.
+- Nenhuma mudança em `NAV_SECTIONS` (array em si), `BREADCRUMBS`,
+  `activeSection`, hooks, rotas ou `App.tsx`.
+
+### Por que Vendas repete o link de "Vendas" e "Nova venda" (redundância aparente)
+
+Foi pedido explicitamente pelo dono do produto (seção "Vendas: Nova venda"
+no plano aprovado). Departamentos com 1 página só (Vendas) agora mostram a
+página normal na lista de navegação **e** o atalho de criação logo abaixo —
+redundante em termos de destino (`/sales` nos dois casos), mas o atalho
+reforça a ação (criar) em vez de só a navegação, replicando o padrão visual
+usado nos departamentos com múltiplos atalhos.
+
+### Validação
+
+- `npx tsc --noEmit`: 0 erros.
+- `npx vitest run`: 51/51 (baseline mantida, nenhum teste tocado — mudança
+  é 100% `className`/JSX de apresentação).
+- `npm run build`: sucesso.
+
+### O que o QA/humano deve validar no navegador
+
+1. Abrir `/` (Início) e `/sales` (Vendas) e confirmar que a sidebar agora
+   aparece (antes ficava oculta) com a caixa de navegação normal + bloco
+   "Atalhos" abaixo.
+2. Testar os 3 atalhos de Início (`Nova venda`, `Novo pedido de compra`,
+   `Nova ordem de produção`) e o de Vendas (`Nova venda`) — cada um deve
+   levar à página correta e permitir abrir o diálogo/formulário de criação
+   já existente ali.
+3. Testar os 2 atalhos de Compras (`Novo pedido de compra` →
+   `/purchases`, `Nova requisição de compra` → `/purchases/requisitions`,
+   confirmando que a fila de requisições abre com o botão "Nova requisição"
+   acessível) e o de Produção (`Nova ordem de produção` → `/production`).
+4. Confirmar que Logística e as demais seções sem atalho continuam mostrando
+   só a lista de páginas (sem bloco "Atalhos" vazio nem espaço em branco
+   estranho).
+5. Navegação por teclado (Tab) pelos novos links de atalho — confirmar anel
+   de foco visível (`focus-visible:ring-brand`) tanto no desktop quanto nos
+   chips mobile.
+6. Contraste do texto/ícone `text-brand` sobre `bg-brand/5` (fundo bem
+   claro) — validar leitura confortável em monitor real, inclusive no tema
+   escuro se o projeto tiver toggle ativo em produção.
+7. Redimensionar a janela até a faixa mobile (`md:hidden`) e confirmar que
+   os chips de atalho aparecem depois dos chips de navegação, com scroll
+   horizontal funcionando e sem quebra de layout.
+8. `prefers-reduced-motion`: a mudança usa apenas `transition-colors`
+   (cor), sem animação de movimento — não deveria haver o que desativar,
+   mas vale conferir que não há nenhum salto visual brusco ao focar/hover.
+
+### Riscos residuais
+
+- Nenhum teste automatizado novo cobre a presença/ausência do bloco
+  "Atalhos" por seção — ficou só validação manual (item acima). Se o
+  projeto ganhar suíte de teste de integração leve de `AppLayout` no
+  futuro, vale incluir um caso por seção.
+- `SECTION_SHORTCUTS` é uma lista estática mantida à mão — se um novo
+  departamento ganhar uma ação de criação óbvia no futuro, alguém precisa
+  lembrar de adicionar a entrada aqui (não há geração automática a partir
+  de `NAV_SECTIONS`).

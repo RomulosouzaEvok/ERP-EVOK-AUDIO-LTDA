@@ -25,6 +25,7 @@ import {
   DraftingCompass,
   Send,
   Zap,
+  Plus,
   Wrench,
   LifeBuoy,
   Contact,
@@ -168,6 +169,41 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
 ];
+
+interface QuickAction {
+  label: string;
+  to: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+/**
+ * Atalhos de criação por departamento (pedido do dono do produto,
+ * 2026-08-06): mesmo mecanismo de link simples usado no card "Atalhos" do
+ * `DashboardPage` — sem estado novo, sem query param de auto-abertura de
+ * diálogo. O link leva à página de listagem do módulo e o usuário aciona o
+ * botão "novo" já existente lá (ex.: `/purchases/requisitions` abre a fila
+ * de requisições, onde `RequisitionsPage` já tem seu próprio botão "Nova
+ * requisição" com `Dialog` local). Chave = `label` de `NAV_SECTIONS` (a
+ * seção "Início" usa `''`, mesma convenção do restante do arquivo).
+ * Departamentos sem ação de criação óbvia (Logística, Qualidade &
+ * Engenharia, Manutenção, Ativos & Garantia, Gestão, Administração) não têm
+ * entrada aqui de propósito — o pedido foi explícito em não forçar atalho
+ * onde não existe uma ação de criação clara e a própria seção já lista suas
+ * páginas normalmente.
+ */
+const SECTION_SHORTCUTS: Record<string, QuickAction[]> = {
+  '': [
+    { label: 'Nova venda', to: '/sales', icon: ShoppingCart },
+    { label: 'Novo pedido de compra', to: '/purchases', icon: Truck },
+    { label: 'Nova ordem de produção', to: '/production', icon: Factory },
+  ],
+  Vendas: [{ label: 'Nova venda', to: '/sales', icon: ShoppingCart }],
+  Compras: [
+    { label: 'Novo pedido de compra', to: '/purchases', icon: Truck },
+    { label: 'Nova requisição de compra', to: '/purchases/requisitions', icon: ClipboardList },
+  ],
+  Produção: [{ label: 'Nova ordem de produção', to: '/production', icon: Factory }],
+};
 
 // Trilha de navegação (breadcrumb) por rota — mapeamento explícito porque as
 // sub-rotas (ex.: /sales/clients) não seguem um padrão previsível a partir do path.
@@ -318,9 +354,13 @@ export default function AppLayout() {
       }),
     ) ?? visibleSections[0];
 
-  // Departamentos com um único item (Início, Vendas) não precisam de coluna
-  // lateral redundante — a própria aba do topo já cobre a navegação.
-  const showSidebar = Boolean(activeSection && activeSection.items.length > 1);
+  // Sidebar sempre visível quando há uma seção ativa (2026-08-06: antes era
+  // ocultada para departamentos com 1 item só — Início/Vendas —, mas isso
+  // deixava a coluna lateral "vazia" e quebrava a consistência visual com o
+  // resto do app; agora todo departamento mostra a caixa de navegação e,
+  // quando aplicável, os atalhos de criação de `SECTION_SHORTCUTS`).
+  const showSidebar = Boolean(activeSection);
+  const sectionShortcuts = activeSection ? (SECTION_SHORTCUTS[activeSection.label] ?? []) : [];
 
   // UC-35-Exceção: usuário não-admin, sem perfil atribuído, sem falha de
   // rede (fallback não ativo) — bloqueio total com aviso didático.
@@ -403,9 +443,11 @@ export default function AppLayout() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Nível 2 (desktop): sidebar com apenas as páginas do departamento
-            ativo. Oculto quando o departamento tem só 1 página (Início,
-            Vendas) — a própria aba do topo já cobre a navegação. */}
+        {/* Nível 2 (desktop): sidebar com as páginas do departamento ativo +,
+            quando existir, um bloco "Atalhos" com ações de criação
+            relevantes daquele departamento (`SECTION_SHORTCUTS`). Sempre
+            visível quando há seção ativa — inclusive Início/Vendas, que têm
+            1 página só (2026-08-06). */}
         {showSidebar && activeSection && (
           <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r bg-card p-2 py-3 md:flex">
             <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -441,6 +483,26 @@ export default function AppLayout() {
                 );
               })}
             </div>
+
+            {sectionShortcuts.length > 0 && (
+              <>
+                <p className="mt-4 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Atalhos
+                </p>
+                <div className="flex flex-col gap-1">
+                  {sectionShortcuts.map((action) => (
+                    <Link
+                      key={`${action.to}-${action.label}`}
+                      to={action.to}
+                      className="flex items-center gap-2 rounded-md border border-dashed border-brand/30 bg-brand/5 px-3 py-2 text-sm font-medium text-brand transition-colors hover:border-brand hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                    >
+                      <Plus className="size-3.5 shrink-0" />
+                      <span className="flex-1">{action.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
           </aside>
         )}
 
@@ -467,6 +529,20 @@ export default function AppLayout() {
                 >
                   {item.label}
                 </NavLink>
+              ))}
+              {/* Atalhos de criação (mesma lista de `SECTION_SHORTCUTS` do
+                  desktop) — chip com contorno tracejado + ícone "+" para se
+                  distinguir das abas de navegação acima, mesmo em telas
+                  estreitas onde não há espaço para o rótulo "Atalhos". */}
+              {sectionShortcuts.map((action) => (
+                <Link
+                  key={`${action.to}-${action.label}`}
+                  to={action.to}
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-medium text-brand transition-colors hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                >
+                  <Plus className="size-3 shrink-0" />
+                  {action.label}
+                </Link>
               ))}
             </nav>
           )}
