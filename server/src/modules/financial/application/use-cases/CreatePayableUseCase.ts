@@ -13,6 +13,7 @@ interface CreatePayableInput {
   purchase_id?: number;
   invoice_type?: 'nfe' | 'nfse';
   notes?: string;
+  cost_center_id?: number;
 }
 
 /**
@@ -44,11 +45,12 @@ class CreatePayableUseCase extends UseCase {
    * @param {number} [input.purchase_id]
    * @param {'nfe'|'nfse'} [input.invoice_type]
    * @param {string} [input.notes]
+   * @param {number} [input.cost_center_id] - Centro de custo (opcional).
    * @returns {Promise<Object>} Conta a pagar criada.
    * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos.
    */
-  async execute({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes }: CreatePayableInput) {
-    const entity = new AccountPayableEntity({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes });
+  async execute({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes, cost_center_id }: CreatePayableInput) {
+    const entity = new AccountPayableEntity({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes, cost_center_id });
 
     return this.financialRepository.createPayable({
       description: entity.description,
@@ -59,6 +61,7 @@ class CreatePayableUseCase extends UseCase {
       purchase_id: entity.purchase_id,
       invoice_type: entity.invoice_type,
       notes: entity.notes,
+      cost_center_id: entity.cost_center_id,
       status: 'pending'
     });
   }

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorizeModule } = require('../../../../middlewares/auth');
 const financialController = require('../controllers/financialController');
+const costCenterController = require('../controllers/costCenterController');
 
 /**
  * Rotas do módulo `financial` (Clean Architecture). Mantém exatamente o
@@ -22,15 +23,29 @@ const financialController = require('../controllers/financialController');
 // Contas a Receber
 router.get('/receivable', authenticate, authorizeModule('financeiro'), financialController.listReceivable);
 router.put('/receivable/:id/pay', authenticate, authorizeModule('financeiro', 'operate'), financialController.receivePayment);
+router.put('/receivable/:id/cost-center', authenticate, authorizeModule('financeiro', 'operate'), financialController.updateReceivableCostCenter);
 
 // Contas a Pagar
 router.get('/payable', authenticate, authorizeModule('financeiro'), financialController.listPayable);
 router.post('/payable', authenticate, authorizeModule('financeiro', 'operate'), financialController.createPayable);
 router.put('/payable/:id/pay', authenticate, authorizeModule('financeiro', 'operate'), financialController.payPayable);
+router.put('/payable/:id/cost-center', authenticate, authorizeModule('financeiro', 'operate'), financialController.updatePayableCostCenter);
 
 // Fluxo de Caixa
 router.get('/cash-flow', authenticate, authorizeModule('financeiro'), financialController.cashFlow);
 router.get('/cash-flow-projection', authenticate, authorizeModule('financeiro', 'operate'), financialController.cashFlowProjection);
+// Projeção diária (série dia a dia, horizonte 30/60/90) — gap "fluxo
+// projetado" de docs/LEVANTAMENTO_ERP_2026-08-02.md.
+router.get('/cashflow/projection', authenticate, authorizeModule('financeiro'), financialController.dailyCashFlowProjection);
+
+// Centros de Custo — gap "centros de custo" de docs/LEVANTAMENTO_ERP_2026-08-02.md.
+// Rotas estáticas (`/report`) montadas ANTES de `/:id` para evitar conflito
+// de roteamento do Express (mesmo cuidado de outros módulos com sub-rotas
+// estáticas e `:id` no mesmo prefixo).
+router.get('/cost-centers', authenticate, authorizeModule('financeiro'), costCenterController.list);
+router.get('/cost-centers/report', authenticate, authorizeModule('financeiro'), costCenterController.report);
+router.post('/cost-centers', authenticate, authorizeModule('financeiro', 'operate'), costCenterController.create);
+router.put('/cost-centers/:id', authenticate, authorizeModule('financeiro', 'operate'), costCenterController.update);
 
 module.exports = router;
 

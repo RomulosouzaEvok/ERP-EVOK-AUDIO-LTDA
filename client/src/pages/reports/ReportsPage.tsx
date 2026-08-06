@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router';
 import { BarChart3 } from 'lucide-react';
 
 import * as reportsApi from '@/api/reports';
+import { listWorkCenters } from '@/api/workCenters';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -14,10 +15,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 
-type ReportTab = 'production' | 'purchasing' | 'costs' | 'financial';
+type ReportTab = 'production' | 'oee' | 'purchasing' | 'costs' | 'financial';
 
 const TAB_MODULE: Record<ReportTab, 'relatorios.producao' | 'relatorios.compras' | 'relatorios.custos' | 'relatorios.financeiro'> = {
   production: 'relatorios.producao',
+  oee: 'relatorios.producao',
   purchasing: 'relatorios.compras',
   costs: 'relatorios.custos',
   financial: 'relatorios.financeiro',
@@ -25,6 +27,7 @@ const TAB_MODULE: Record<ReportTab, 'relatorios.producao' | 'relatorios.compras'
 
 const TAB_QUERY_VALUE: Record<ReportTab, string> = {
   production: 'production',
+  oee: 'oee',
   purchasing: 'purchasing',
   costs: 'costs',
   financial: 'financial',
@@ -63,8 +66,8 @@ function isoDaysAgo(days: number): string {
 }
 
 /** Tile de indicador com rótulo e valor grande. */
-function StatTile({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'bad' }) {
-  const toneClass = tone === 'good' ? 'text-emerald-600' : tone === 'bad' ? 'text-destructive' : '';
+function StatTile({ label, value, tone, hint }: { label: string; value: string; tone?: 'good' | 'warn' | 'bad'; hint?: string }) {
+  const toneClass = tone === 'good' ? 'text-emerald-600' : tone === 'warn' ? 'text-amber-600' : tone === 'bad' ? 'text-destructive' : '';
   return (
     <Card>
       <CardHeader className="pb-1">
@@ -72,9 +75,34 @@ function StatTile({ label, value, tone }: { label: string; value: string; tone?:
       </CardHeader>
       <CardContent>
         <p className={`text-2xl font-semibold ${toneClass}`}>{value}</p>
+        {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * Classifica uma taxa de OEE (ou de um de seus 3 eixos) nos thresholds
+ * clássicos da indústria: ≥85% (classe mundial) = verde, 60-85% (típico) =
+ * âmbar, <60% (precisa de atenção) = vermelho. `null` (sem dados no
+ * período) não recebe cor de alerta — é neutro, não "ruim".
+ */
+function oeeTone(rate: number | string | null | undefined): 'good' | 'warn' | 'bad' | undefined {
+  if (rate === null || rate === undefined) return undefined;
+  const value = toNumber(rate);
+  if (value >= 0.85) return 'good';
+  if (value >= 0.6) return 'warn';
+  return 'bad';
+}
+
+/** Fração 0-1 → percentual com 1 casa, ou "—" quando `null` (sem dados no período, ver `no_data_reason`). */
+function formatRateOrDash(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  return formatRate(value);
+}
+
+function formatHours(value: number | string | null | undefined): string {
+  return `${toNumber(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} h`;
 }
 
 function SectionError({ message }: { message: string }) {
@@ -111,11 +139,11 @@ export default function ReportsPage() {
   const canSeeTab = (candidate: ReportTab): boolean =>
     hasRole('admin') || permissionsFetchFailed || hasModuleAccess(TAB_MODULE[candidate]);
 
-  const availableTabs = (['production', 'purchasing', 'costs', 'financial'] as const).filter(canSeeTab);
+  const availableTabs = (['production', 'oee', 'purchasing', 'costs', 'financial'] as const).filter(canSeeTab);
 
   const tabFromQuery = searchParams.get('tab');
   const initialTab: ReportTab =
-    (tabFromQuery === 'purchasing' || tabFromQuery === 'costs' || tabFromQuery === 'production' || tabFromQuery === 'financial') &&
+    (tabFromQuery === 'purchasing' || tabFromQuery === 'costs' || tabFromQuery === 'production' || tabFromQuery === 'oee' || tabFromQuery === 'financial') &&
     availableTabs.includes(tabFromQuery)
       ? tabFromQuery
       : (availableTabs[0] ?? 'production');
@@ -135,10 +163,25 @@ export default function ReportsPage() {
   const [endInput, setEndInput] = React.useState(isoDaysAgo(0));
   const [period, setPeriod] = React.useState({ start_date: isoDaysAgo(30), end_date: isoDaysAgo(0) });
 
+  // Filtro de centro de trabalho, exclusivo da aba OEE ('' = todos os centros ativos, agregado geral).
+  const [oeeWorkCenterId, setOeeWorkCenterId] = React.useState<string>('');
+
   const productionQuery = useQuery({
     queryKey: ['reports-production', period],
     queryFn: () => reportsApi.getProductionReport(period),
     enabled: tab === 'production',
+  });
+
+  const workCentersQuery = useQuery({
+    queryKey: ['work-centers-for-oee'],
+    queryFn: () => listWorkCenters({ active: true, limit: 100 }),
+    enabled: tab === 'oee',
+  });
+
+  const oeeQuery = useQuery({
+    queryKey: ['reports-oee', period, oeeWorkCenterId],
+    queryFn: () => reportsApi.getOeeReport({ ...period, work_center_id: oeeWorkCenterId || undefined }),
+    enabled: tab === 'oee',
   });
 
   const purchasingQuery = useQuery({
@@ -160,6 +203,8 @@ export default function ReportsPage() {
   });
 
   const production = productionQuery.data;
+  const oee = oeeQuery.data;
+  const workCenters = workCentersQuery.data?.data ?? [];
   const purchasing = purchasingQuery.data;
   const costVariance = costVarianceQuery.data;
   const cashFlow = cashFlowQuery.data;
@@ -172,7 +217,7 @@ export default function ReportsPage() {
         </div>
         <div>
           <h1 className="text-2xl font-semibold">Relatórios</h1>
-          <p className="text-sm text-muted-foreground">Indicadores de produção, compras, custos e financeiro.</p>
+          <p className="text-sm text-muted-foreground">Indicadores de produção, OEE, compras, custos e financeiro.</p>
         </div>
       </div>
 
@@ -192,6 +237,15 @@ export default function ReportsPage() {
               onClick={() => setTab('production')}
             >
               Produção
+            </Button>
+          )}
+          {availableTabs.includes('oee') && (
+            <Button
+              variant={tab === 'oee' ? 'default' : 'outline'}
+              className={tab !== 'oee' ? 'hover:border-brand hover:bg-brand/10 hover:text-brand' : ''}
+              onClick={() => setTab('oee')}
+            >
+              OEE
             </Button>
           )}
           {availableTabs.includes('purchasing') && (
@@ -237,6 +291,22 @@ export default function ReportsPage() {
             <Label htmlFor="end_date">Fim</Label>
             <Input id="end_date" type="date" value={endInput} onChange={(e) => setEndInput(e.target.value)} />
           </div>
+          {tab === 'oee' && (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="oee_work_center">Centro de trabalho</Label>
+              <select
+                id="oee_work_center"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                value={oeeWorkCenterId}
+                onChange={(e) => setOeeWorkCenterId(e.target.value)}
+              >
+                <option value="">Todos (agregado)</option>
+                {workCenters.map((wc) => (
+                  <option key={String(wc.id)} value={String(wc.id)}>{wc.code} — {wc.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <Button type="submit">Aplicar</Button>
         </form>
       </div>
@@ -324,6 +394,97 @@ export default function ReportsPage() {
                         </TableRow>
                       );
                     })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'oee' && (
+        <div className="flex flex-col gap-4">
+          {oeeQuery.isError && (
+            <SectionError message={extractApiErrorMessage(oeeQuery.error, 'Falha ao carregar o relatório de OEE.')} />
+          )}
+          <p className="text-xs text-muted-foreground">
+            Disponibilidade aproximada pelo calendário de turnos do centro de trabalho (o sistema ainda não registra
+            parada de máquina/downtime detalhado) — se um centro não tiver turnos cadastrados, usa a capacidade
+            padrão (h/dia) do cadastro. Eixos sem dados no período aparecem como “—”, não como 0%.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatTile
+              label="Disponibilidade"
+              value={formatRateOrDash(oee?.aggregate.availability)}
+              tone={oeeTone(oee?.aggregate.availability)}
+              hint={`${formatHours(oee?.aggregate.run_hours)} produzindo / ${formatHours(oee?.aggregate.available_hours)} disponíveis`}
+            />
+            <StatTile
+              label="Performance"
+              value={formatRateOrDash(oee?.aggregate.performance)}
+              tone={oeeTone(oee?.aggregate.performance)}
+              hint={`${formatHours(oee?.aggregate.standard_hours)} padrão / ${formatHours(oee?.aggregate.run_hours)} real`}
+            />
+            <StatTile
+              label="Qualidade"
+              value={formatRateOrDash(oee?.aggregate.quality)}
+              tone={oeeTone(oee?.aggregate.quality)}
+              hint={`${toNumber(oee?.aggregate.quantity_good).toLocaleString('pt-BR')} boas / ${toNumber(oee?.aggregate.quantity_scrapped).toLocaleString('pt-BR')} refugo`}
+            />
+            <StatTile
+              label="OEE"
+              value={formatRateOrDash(oee?.aggregate.oee)}
+              tone={oeeTone(oee?.aggregate.oee)}
+              hint={oee?.aggregate.no_data_reason ?? `${toNumber(oee?.aggregate.work_centers_count)} centro(s) de trabalho`}
+            />
+          </div>
+
+          <Card>
+            <CardHeader><CardTitle>OEE por centro de trabalho</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Centro</TableHead>
+                    <TableHead className="text-right">Horas disp.</TableHead>
+                    <TableHead className="text-right">Horas produzindo</TableHead>
+                    <TableHead className="text-right">Disponibilidade</TableHead>
+                    <TableHead className="text-right">Horas padrão</TableHead>
+                    <TableHead className="text-right">Performance</TableHead>
+                    <TableHead className="text-right">Boas</TableHead>
+                    <TableHead className="text-right">Refugo</TableHead>
+                    <TableHead className="text-right">Qualidade</TableHead>
+                    <TableHead className="text-right">OEE</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {oeeQuery.isLoading ? (
+                    <TableSkeletonRows rows={4} columns={10} />
+                  ) : !oee || oee.by_work_center.length === 0 ? (
+                    <EmptyRow colSpan={10} text="Nenhum centro de trabalho ativo encontrado." />
+                  ) : (
+                    oee.by_work_center.map((row) => (
+                      <TableRow key={String(row.work_center_id)} title={row.no_data_reason ?? undefined}>
+                        <TableCell className="font-medium">{row.code} — {row.name}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatHours(row.available_hours)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatHours(row.run_hours)}</TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.availability) === 'good' ? 'text-emerald-600' : oeeTone(row.availability) === 'warn' ? 'text-amber-600' : oeeTone(row.availability) === 'bad' ? 'text-destructive' : ''}`}>
+                          {formatRateOrDash(row.availability)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{formatHours(row.standard_hours)}</TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.performance) === 'good' ? 'text-emerald-600' : oeeTone(row.performance) === 'warn' ? 'text-amber-600' : oeeTone(row.performance) === 'bad' ? 'text-destructive' : ''}`}>
+                          {formatRateOrDash(row.performance)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{toNumber(row.quantity_good).toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className="text-right tabular-nums">{toNumber(row.quantity_scrapped).toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.quality) === 'good' ? 'text-emerald-600' : oeeTone(row.quality) === 'warn' ? 'text-amber-600' : oeeTone(row.quality) === 'bad' ? 'text-destructive' : ''}`}>
+                          {formatRateOrDash(row.quality)}
+                        </TableCell>
+                        <TableCell className={`text-right tabular-nums font-semibold ${oeeTone(row.oee) === 'good' ? 'text-emerald-600' : oeeTone(row.oee) === 'warn' ? 'text-amber-600' : oeeTone(row.oee) === 'bad' ? 'text-destructive' : ''}`}>
+                          {formatRateOrDash(row.oee)}
+                        </TableCell>
+                      </TableRow>
+                    ))
                   )}
                 </TableBody>
               </Table>

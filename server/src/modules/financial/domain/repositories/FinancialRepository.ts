@@ -19,6 +19,8 @@ export interface IFinancialRepository {
   findPayableById(id: number | string): Promise<any>;
   findPayableByIdForUpdate(id: number | string, transaction: Transaction): Promise<any>;
   createPayable(data: Record<string, any>): Promise<any>;
+  updatePayableCostCenter(id: number | string, costCenterId: number | null): Promise<any>;
+  updateReceivableCostCenter(id: number | string, costCenterId: number | null): Promise<any>;
   sumReceivableByStatus(start: Date, end: Date): Promise<Array<{ status: string; total: number }>>;
   sumPayableByStatus(start: Date, end: Date): Promise<Array<{ status: string; total: number }>>;
   getOpenTitlesForProjection(days: number): Promise<{
@@ -117,6 +119,30 @@ class FinancialRepository {
    */
   async createPayable(data: Record<string, any>) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.createPayable não implementado.');
+  }
+
+  /**
+   * Atribui (ou remove, com `null`) o centro de custo de uma conta a pagar existente.
+   *
+   * @abstract
+   * @param {number} id
+   * @param {number|null} costCenterId
+   * @returns {Promise<Object|null>}
+   */
+  async updatePayableCostCenter(id: number | string, costCenterId: number | null) { // eslint-disable-line no-unused-vars
+    throw new Error('FinancialRepository.updatePayableCostCenter não implementado.');
+  }
+
+  /**
+   * Atribui (ou remove, com `null`) o centro de custo de uma conta a receber existente.
+   *
+   * @abstract
+   * @param {number} id
+   * @param {number|null} costCenterId
+   * @returns {Promise<Object|null>}
+   */
+  async updateReceivableCostCenter(id: number | string, costCenterId: number | null) { // eslint-disable-line no-unused-vars
+    throw new Error('FinancialRepository.updateReceivableCostCenter não implementado.');
   }
 
   /**

@@ -18,6 +18,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
+import { CostCentersTab } from './CostCentersTab';
+import { DailyCashFlowProjectionTab } from './DailyCashFlowProjectionTab';
 
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'destructive' | 'secondary' | 'warning'> = {
   pending: 'secondary',
@@ -56,17 +58,72 @@ const payableSchema = z.object({
   amount: z.coerce.number().positive('Informe um valor maior que zero.'),
   due_date: z.string().min(1, 'Informe o vencimento.'),
   invoice_type: z.enum(['nfe', 'nfse']).optional(),
+  cost_center_id: z.coerce.number().int().positive().optional(),
 });
 
 type PayableFormData = z.infer<typeof payableSchema>;
 
-/** `FE5`: contas a pagar/receber e fluxo de caixa agregado por período. */
+type FinancialView = 'accounts' | 'cost-centers' | 'cash-flow-daily';
+
+/** `FE5`: contas a pagar/receber, centros de custo e projeção de fluxo de caixa. */
 export default function FinancialPage() {
   const { hasRole } = useAuth();
   // Perfil `financial` é somente-leitura no módulo Financeiro (CLAUDE.md §4 —
   // "financial (leitura financeira)"); mesmo padrão `canWrite` de
   // `SuppliersPage`/`ClientsPage`, aqui restrito a admin/operator.
   const canWrite = hasRole('admin', 'operator');
+  const [view, setView] = React.useState<FinancialView>('accounts');
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+          <Wallet className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold">Financeiro</h1>
+          <p className="text-sm text-muted-foreground">Contas a pagar, contas a receber, centros de custo e projeção de fluxo de caixa.</p>
+        </div>
+      </div>
+
+      <div className="flex gap-2 border-b">
+        <button
+          type="button"
+          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            view === 'accounts' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setView('accounts')}
+        >
+          Contas a pagar/receber
+        </button>
+        <button
+          type="button"
+          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            view === 'cost-centers' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setView('cost-centers')}
+        >
+          Centros de custo
+        </button>
+        <button
+          type="button"
+          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            view === 'cash-flow-daily' ? 'border-brand text-brand' : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setView('cash-flow-daily')}
+        >
+          Projeção de caixa
+        </button>
+      </div>
+
+      {view === 'cost-centers' && <CostCentersTab />}
+      {view === 'cash-flow-daily' && <DailyCashFlowProjectionTab />}
+      {view === 'accounts' && <AccountsTab canWrite={canWrite} />}
+    </div>
+  );
+}
+
+function AccountsTab({ canWrite }: { canWrite: boolean }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
@@ -81,6 +138,16 @@ export default function FinancialPage() {
     queryKey: ['receivables', receivablesPage],
     queryFn: () => financialApi.listReceivables({ limit: 20, page: receivablesPage }),
   });
+  const { data: costCenters } = useQuery({
+    queryKey: ['cost-centers', 'lookup'],
+    queryFn: () => financialApi.listCostCenters({ limit: 100 }),
+  });
+  const costCenterById = React.useMemo(() => {
+    const map = new Map<number, financialApi.CostCenter>();
+    costCenters?.data.forEach((costCenter) => map.set(costCenter.id, costCenter));
+    return map;
+  }, [costCenters]);
+  const activeCostCenters = costCenters?.data.filter((costCenter) => costCenter.active) ?? [];
 
   const {
     register,
@@ -112,18 +179,22 @@ export default function FinancialPage() {
     onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível registrar o recebimento.')),
   });
 
+  const updatePayableCostCenterMutation = useMutation({
+    mutationFn: ({ id, costCenterId }: { id: number; costCenterId: number | null }) =>
+      financialApi.updatePayableCostCenter(id, costCenterId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payables'] }),
+    onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível atualizar o centro de custo.')),
+  });
+
+  const updateReceivableCostCenterMutation = useMutation({
+    mutationFn: ({ id, costCenterId }: { id: number; costCenterId: number | null }) =>
+      financialApi.updateReceivableCostCenter(id, costCenterId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['receivables'] }),
+    onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível atualizar o centro de custo.')),
+  });
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent p-5">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
-          <Wallet className="size-5" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold">Financeiro</h1>
-          <p className="text-sm text-muted-foreground">Contas a pagar, contas a receber e projeção de fluxo de caixa.</p>
-        </div>
-      </div>
-
       <Card className="border-l-4 border-l-brand/40">
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>Contas a pagar</CardTitle>
@@ -141,7 +212,11 @@ export default function FinancialPage() {
                 <form
                   className="flex flex-col gap-3"
                   onSubmit={handleSubmit((values) =>
-                    createMutation.mutate({ ...values, invoice_type: values.invoice_type || undefined }),
+                    createMutation.mutate({
+                      ...values,
+                      invoice_type: values.invoice_type || undefined,
+                      cost_center_id: values.cost_center_id || undefined,
+                    }),
                   )}
                   noValidate
                 >
@@ -176,6 +251,17 @@ export default function FinancialPage() {
                       NF-e para mercadoria/matéria-prima; NFS-e para serviço ou licença digital recebida de fornecedor.
                     </p>
                   </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="cost_center_id">Centro de custo</Label>
+                    <SelectNative id="cost_center_id" defaultValue="" {...register('cost_center_id')}>
+                      <option value="">Sem centro de custo</option>
+                      {activeCostCenters.map((costCenter) => (
+                        <option key={costCenter.id} value={costCenter.id}>
+                          {costCenter.code} — {costCenter.name}
+                        </option>
+                      ))}
+                    </SelectNative>
+                  </div>
                   {formError && <p className="text-sm text-destructive">{formError}</p>}
                   <DialogFooter>
                     <Button type="submit" disabled={isSubmitting || createMutation.isPending}>
@@ -200,15 +286,16 @@ export default function FinancialPage() {
                 <TableHead className="text-right">Pago</TableHead>
                 <TableHead>Vencimento</TableHead>
                 <TableHead>Nota</TableHead>
+                <TableHead>Centro de custo</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loadingPayables && <TableSkeletonRows columns={7} />}
+              {loadingPayables && <TableSkeletonRows columns={8} />}
               {errorPayables && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-destructive">
+                  <TableCell colSpan={8} className="text-center text-destructive">
                     Não foi possível carregar as contas a pagar. Tente novamente.
                   </TableCell>
                 </TableRow>
@@ -226,6 +313,33 @@ export default function FinancialPage() {
                         <Badge variant="secondary">{INVOICE_TYPE_LABEL[account.invoice_type] ?? account.invoice_type}</Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {canWrite ? (
+                        <SelectNative
+                          value={account.cost_center_id ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            updatePayableCostCenterMutation.mutate({
+                              id: account.id,
+                              costCenterId: value ? Number(value) : null,
+                            });
+                          }}
+                          disabled={updatePayableCostCenterMutation.isPending}
+                          className="h-8 text-xs"
+                        >
+                          <option value="">Sem centro de custo</option>
+                          {activeCostCenters.map((costCenter) => (
+                            <option key={costCenter.id} value={costCenter.id}>
+                              {costCenter.code} — {costCenter.name}
+                            </option>
+                          ))}
+                        </SelectNative>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {account.cost_center_id ? costCenterById.get(account.cost_center_id)?.name ?? '—' : 'Sem centro de custo'}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -253,7 +367,7 @@ export default function FinancialPage() {
               })}
               {!loadingPayables && !errorPayables && payables?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     Nenhuma conta a pagar.
                   </TableCell>
                 </TableRow>
@@ -278,15 +392,16 @@ export default function FinancialPage() {
                 <TableHead className="text-right">Valor</TableHead>
                 <TableHead className="text-right">Recebido</TableHead>
                 <TableHead>Vencimento</TableHead>
+                <TableHead>Centro de custo</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loadingReceivables && <TableSkeletonRows columns={6} />}
+              {loadingReceivables && <TableSkeletonRows columns={7} />}
               {errorReceivables && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-destructive">
+                  <TableCell colSpan={7} className="text-center text-destructive">
                     Não foi possível carregar as contas a receber. Tente novamente.
                   </TableCell>
                 </TableRow>
@@ -299,6 +414,33 @@ export default function FinancialPage() {
                     <TableCell className="text-right tabular-nums">R$ {Number(account.amount).toFixed(2)}</TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">R$ {Number(account.amount_paid ?? 0).toFixed(2)}</TableCell>
                     <TableCell>{new Date(account.due_date).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell>
+                      {canWrite ? (
+                        <SelectNative
+                          value={account.cost_center_id ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            updateReceivableCostCenterMutation.mutate({
+                              id: account.id,
+                              costCenterId: value ? Number(value) : null,
+                            });
+                          }}
+                          disabled={updateReceivableCostCenterMutation.isPending}
+                          className="h-8 text-xs"
+                        >
+                          <option value="">Sem centro de custo</option>
+                          {activeCostCenters.map((costCenter) => (
+                            <option key={costCenter.id} value={costCenter.id}>
+                              {costCenter.code} — {costCenter.name}
+                            </option>
+                          ))}
+                        </SelectNative>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {account.cost_center_id ? costCenterById.get(account.cost_center_id)?.name ?? '—' : 'Sem centro de custo'}
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[account.status] ?? 'secondary'}>{STATUS_LABEL[account.status] ?? account.status}</Badge>
                     </TableCell>
@@ -324,7 +466,7 @@ export default function FinancialPage() {
               })}
               {!loadingReceivables && !errorReceivables && receivables?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     Nenhuma conta a receber.
                   </TableCell>
                 </TableRow>

@@ -37,9 +37,9 @@ interface GetProductionReportOutput {
  * Relatório de manufatura (`GET /api/reports/production`): WIP por status,
  * aderência ao plano, refugo por etapa e lead time de OPs concluídas.
  *
- * OEE completo exige centros de trabalho com capacidade/calendário (ainda não
- * modelados); este relatório entrega os indicadores deriváveis dos dados
- * atuais de OP e apontamento.
+ * OEE completo (disponibilidade × performance × qualidade, por centro de
+ * trabalho) é um relatório separado: `GET /api/reports/oee`, ver
+ * `GetOeeReportUseCase`.
  */
 class GetProductionReportUseCase extends UseCase<ReportPeriodInput, GetProductionReportOutput> {
   private readonly reportsRepository: ReportsRepository;

@@ -51,6 +51,7 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   'clients',
   'purchases',
   'purchaseRequisitions',
+  'rfq',
   'suppliers',
   'production', // productionOrders.ts
   'bom',

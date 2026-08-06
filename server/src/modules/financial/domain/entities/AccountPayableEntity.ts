@@ -12,6 +12,7 @@ interface AccountPayableProps {
   purchase_id?: number;
   invoice_type?: 'nfe' | 'nfse';
   notes?: string;
+  cost_center_id?: number;
 }
 
 /**
@@ -36,6 +37,7 @@ class AccountPayableEntity extends Entity {
    * @param {number} [props.purchase_id]
    * @param {'nfe'|'nfse'} [props.invoice_type] - Tipo de nota vinculada (mercadoria ou serviço/licença digital).
    * @param {string} [props.notes]
+   * @param {number} [props.cost_center_id] - Centro de custo (opcional; `undefined`/ausente = "Sem centro de custo" nos relatórios).
    * @throws {ValidationError} Se `description`, `amount` ou `due_date` estiverem ausentes, ou `amount` não for maior que zero.
    */
   constructor(props: AccountPayableProps) {
@@ -48,6 +50,7 @@ class AccountPayableEntity extends Entity {
     this.purchase_id = props.purchase_id ?? null;
     this.invoice_type = props.invoice_type ?? null;
     this.notes = props.notes ?? null;
+    this.cost_center_id = props.cost_center_id ?? null;
 
     this.validate();
   }

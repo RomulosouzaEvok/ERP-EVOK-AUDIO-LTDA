@@ -13,6 +13,7 @@ export interface AccountPayable {
   status: AccountStatus;
   supplier_id?: number | null;
   invoice_type?: InvoiceType | null;
+  cost_center_id?: number | null;
 }
 
 export interface AccountReceivable {
@@ -23,6 +24,7 @@ export interface AccountReceivable {
   status: AccountStatus;
   customer_id?: number | null;
   sale_id?: number | null;
+  cost_center_id?: number | null;
 }
 
 /** `GET /api/finance/payable`. */
@@ -45,6 +47,7 @@ export interface CreatePayableInput {
   supplier_id?: number;
   invoice_type?: InvoiceType;
   notes?: string;
+  cost_center_id?: number;
 }
 
 /** `POST /api/finance/payable`. */
@@ -62,6 +65,88 @@ export async function payPayable(id: number, amount?: number) {
 /** `PUT /api/finance/receivable/:id/pay`. */
 export async function receivePayment(id: number, amount?: number) {
   const { data } = await httpClient.put<ItemResponse<AccountReceivable>>(`/api/finance/receivable/${id}/pay`, { amount });
+  return data.data;
+}
+
+/** `PUT /api/finance/payable/:id/cost-center` — atribui (ou remove, com `null`) o centro de custo. */
+export async function updatePayableCostCenter(id: number, costCenterId: number | null) {
+  const { data } = await httpClient.put<ItemResponse<AccountPayable>>(`/api/finance/payable/${id}/cost-center`, {
+    cost_center_id: costCenterId,
+  });
+  return data.data;
+}
+
+/** `PUT /api/finance/receivable/:id/cost-center` — atribui (ou remove, com `null`) o centro de custo. */
+export async function updateReceivableCostCenter(id: number, costCenterId: number | null) {
+  const { data } = await httpClient.put<ItemResponse<AccountReceivable>>(`/api/finance/receivable/${id}/cost-center`, {
+    cost_center_id: costCenterId,
+  });
+  return data.data;
+}
+
+// ============================================
+// Centros de Custo
+// ============================================
+
+export interface CostCenter {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  active: boolean;
+}
+
+/** `GET /api/finance/cost-centers`. */
+export async function listCostCenters(params: { active?: boolean; page?: number; limit?: number } = {}) {
+  const { data } = await httpClient.get<ListResponse<CostCenter>>('/api/finance/cost-centers', { params });
+  return data;
+}
+
+export interface CreateCostCenterInput {
+  code: string;
+  name: string;
+  description?: string;
+}
+
+/** `POST /api/finance/cost-centers`. */
+export async function createCostCenter(input: CreateCostCenterInput) {
+  const { data } = await httpClient.post<ItemResponse<CostCenter>>('/api/finance/cost-centers', input);
+  return data.data;
+}
+
+export interface UpdateCostCenterInput {
+  code?: string;
+  name?: string;
+  description?: string;
+  active?: boolean;
+}
+
+/** `PUT /api/finance/cost-centers/:id`. */
+export async function updateCostCenter(id: number, input: UpdateCostCenterInput) {
+  const { data } = await httpClient.put<ItemResponse<CostCenter>>(`/api/finance/cost-centers/${id}`, input);
+  return data.data;
+}
+
+export interface CostCenterReportGroup {
+  cost_center_id: number | null;
+  code: string | null;
+  name: string;
+  receivable: { open: number; realized: number };
+  payable: { open: number; realized: number };
+}
+
+export interface CostCenterReport {
+  period: { from: string; to: string };
+  groups: CostCenterReportGroup[];
+  totals: {
+    receivable: { open: number; realized: number };
+    payable: { open: number; realized: number };
+  };
+}
+
+/** `GET /api/finance/cost-centers/report?from=&to=`. */
+export async function getCostCenterReport(params: { from: string; to: string }) {
+  const { data } = await httpClient.get<ItemResponse<CostCenterReport>>('/api/finance/cost-centers/report', { params });
   return data.data;
 }
 
@@ -104,6 +189,34 @@ export interface CashFlowProjection {
 export async function getCashFlowProjection(days: 30 | 60 | 90 = 30) {
   const { data } = await httpClient.get<ItemResponse<CashFlowProjection>>('/api/finance/cash-flow-projection', {
     params: { days },
+  });
+  return data.data;
+}
+
+export interface DailyCashFlowProjectionPoint {
+  date: string;
+  day_index: number;
+  receivable: number;
+  payable: number;
+  net: number;
+  balance: number;
+}
+
+export interface DailyCashFlowProjection {
+  horizon_days: number;
+  opening_balance: number;
+  overdue: { receivable: number; payable: number };
+  series: DailyCashFlowProjectionPoint[];
+  summary: {
+    lowest_balance: { date: string; balance: number };
+    final_balance: number;
+  };
+}
+
+/** `GET /api/finance/cashflow/projection` — projeção diária (saldo acumulado dia a dia) no horizonte de 30/60/90 dias. */
+export async function getDailyCashFlowProjection(params: { days: 30 | 60 | 90; opening_balance?: number }) {
+  const { data } = await httpClient.get<ItemResponse<DailyCashFlowProjection>>('/api/finance/cashflow/projection', {
+    params,
   });
   return data.data;
 }

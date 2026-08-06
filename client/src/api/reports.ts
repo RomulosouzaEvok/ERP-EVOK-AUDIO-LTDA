@@ -147,3 +147,55 @@ export async function getCashFlowReport(period: ReportsPeriodInput) {
   const { data } = await httpClient.get<ItemResponse<CashFlowReport>>('/api/reports/cash-flow', { params: period });
   return data.data;
 }
+
+/**
+ * OEE — Overall Equipment Effectiveness (item 7/9 do levantamento: "OEE
+ * completo ainda não implementado"). Os 3 eixos (`availability`,
+ * `performance`, `quality`) e o composto (`oee`) são `null` (nunca `0`
+ * enganoso) quando o denominador correspondente é zero no período —
+ * `no_data_reason` explica o motivo. Ver limitações documentadas no backend
+ * (`GetOeeReportUseCase`): disponibilidade é aproximada pelo calendário de
+ * turnos (sem registro explícito de parada/downtime no schema atual).
+ */
+export interface OeeComponents {
+  available_hours: number | string;
+  run_hours: number | string;
+  standard_hours: number | string;
+  quantity_good: number | string;
+  quantity_scrapped: number | string;
+  tracking_count: number | string;
+  availability: number | string | null;
+  performance: number | string | null;
+  quality: number | string | null;
+  oee: number | string | null;
+  no_data_reason: string | null;
+}
+
+export interface OeeWorkCenterResult extends OeeComponents {
+  work_center_id: number | string;
+  code: string;
+  name: string;
+  has_shifts: boolean;
+}
+
+export interface OeeAggregate extends OeeComponents {
+  work_centers_count: number | string;
+}
+
+export interface OeeReport {
+  report_type: 'oee';
+  generated_at: string;
+  period: ReportsPeriod;
+  work_center_id: number | string | null;
+  by_work_center: OeeWorkCenterResult[];
+  aggregate: OeeAggregate;
+}
+
+export interface OeeReportParams extends ReportsPeriodInput {
+  work_center_id?: number | string;
+}
+
+export async function getOeeReport(params: OeeReportParams) {
+  const { data } = await httpClient.get<ItemResponse<OeeReport>>('/api/reports/oee', { params });
+  return data.data;
+}

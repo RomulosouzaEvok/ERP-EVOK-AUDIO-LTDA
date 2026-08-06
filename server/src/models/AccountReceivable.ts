@@ -31,6 +31,7 @@ interface AccountReceivableAttributes {
   protest_date: string | null;
   negativation_date: string | null;
   notes: string | null;
+  cost_center_id: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -55,7 +56,8 @@ const AccountReceivable = sequelize.define('AccountReceivable', {
   collection_status: { type: DataTypes.ENUM('normal', 'warning', 'overdue_30', 'overdue_60', 'overdue_90', 'protested'), defaultValue: 'normal' },
   protest_date: DataTypes.DATEONLY,
   negativation_date: DataTypes.DATEONLY,
-  notes: DataTypes.TEXT
+  notes: DataTypes.TEXT,
+  cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = "Sem centro de custo" nos relatórios)' }
 }, {
   tableName: 'accounts_receivable',
   underscored: true,

@@ -97,3 +97,48 @@ export interface PurchasePriceVarianceRow {
   total_quantity: number;
   avg_paid_price: number;
 }
+
+/**
+ * Turno cadastrado de um centro de trabalho (associação `WorkCenter.shifts`),
+ * usado para calcular horas disponíveis do OEE (`findWorkCentersForOee`).
+ */
+export interface OeeWorkCenterShift {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+
+/**
+ * Centro de trabalho ativo (instância Sequelize de `WorkCenter`, com
+ * `shifts` incluído) retornado por `findWorkCentersForOee`. Documentado aqui
+ * apenas o shape mínimo consumido pelo use case do OEE.
+ */
+export interface OeeWorkCenterRow {
+  id: number;
+  code: string;
+  name: string;
+  machines_count: number;
+  capacity_hours_per_day: number;
+  efficiency_factor: number;
+  shifts: OeeWorkCenterShift[];
+}
+
+/**
+ * Apontamentos concluídos (`production_order_tracking.status = 'completed'`)
+ * agregados por centro de trabalho no período, base de cálculo do OEE
+ * (`findOeeAggregatesByWorkCenter`).
+ *
+ * - `run_hours`: soma de `finished_at - started_at` (tempo real apontado).
+ * - `standard_hours`: soma de `(quantity_good + quantity_scrapped) *
+ *   standard_time_minutes / 60` (tempo padrão para as unidades processadas,
+ *   sem `setup_time_minutes` — ver `GetOeeReportUseCase` para a limitação).
+ * - `quantity_good` / `quantity_scrapped`: somas usadas no eixo de qualidade.
+ */
+export interface OeeAggregateRow {
+  work_center_id: number;
+  run_hours: number;
+  standard_hours: number;
+  quantity_good: number;
+  quantity_scrapped: number;
+  tracking_count: number;
+}

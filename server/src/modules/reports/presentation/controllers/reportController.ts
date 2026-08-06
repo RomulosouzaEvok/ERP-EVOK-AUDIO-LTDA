@@ -9,6 +9,7 @@ import GetCashFlowReportUseCase = require('../../application/use-cases/GetCashFl
 import GetProductionReportUseCase = require('../../application/use-cases/GetProductionReportUseCase');
 import GetPurchasingReportUseCase = require('../../application/use-cases/GetPurchasingReportUseCase');
 import GetCostVarianceReportUseCase = require('../../application/use-cases/GetCostVarianceReportUseCase');
+import GetOeeReportUseCase = require('../../application/use-cases/GetOeeReportUseCase');
 const { toCsv } = require('../../infrastructure/export/csvExporter');
 const { toPdf } = require('../../infrastructure/export/pdfExporter');
 
@@ -192,6 +193,20 @@ exports.costVariance = async (req: Request, res: Response, next: NextFunction) =
     const { start_date, end_date } = req.query as { start_date?: string; end_date?: string };
     const useCase = new GetCostVarianceReportUseCase(reportsRepository);
     const report = await useCase.execute({ start_date, end_date });
+    res.json({ success: true, data: report });
+  } catch (error) { next(error); }
+};
+
+/** `GET /api/reports/oee?start_date&end_date&work_center_id` — OEE (disponibilidade × performance × qualidade) (json). */
+exports.oee = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { start_date, end_date, work_center_id } = req.query as {
+      start_date?: string;
+      end_date?: string;
+      work_center_id?: string;
+    };
+    const useCase = new GetOeeReportUseCase(reportsRepository);
+    const report = await useCase.execute({ start_date, end_date, work_center_id });
     res.json({ success: true, data: report });
   } catch (error) { next(error); }
 };

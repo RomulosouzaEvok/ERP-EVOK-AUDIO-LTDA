@@ -9,10 +9,12 @@ import type {
   PurchasingTotals,
   CostVarianceRow,
   PurchasePriceVarianceRow,
+  OeeWorkCenterRow,
+  OeeAggregateRow,
 } from '../../domain/reportTypes';
 
 const { Op, QueryTypes } = require('sequelize');
-const { Sale, Product, Client, Purchase } = require('../../../../models/index');
+const { Sale, Product, Client, Purchase, WorkCenter, WorkCenterShift } = require('../../../../models/index');
 const Category = require('../../../../models/Category');
 import ReportsRepository = require('../../domain/repositories/ReportsRepository');
 const { sequelize } = require('../../../../config/database');
@@ -311,6 +313,65 @@ class SequelizeReportsRepository extends ReportsRepository {
         GROUP BY p.id, p.code, p.name, po.supplier_id, s.company_name
         ORDER BY p.id, po.supplier_id`,
       { replacements: { start, end }, type: QueryTypes.SELECT }
+    );
+  }
+
+  /**
+   * Centros de trabalho ativos com turnos (para o cálculo de horas
+   * disponíveis do OEE).
+   *
+   * @param workCenterId - Filtra um único centro, quando informado.
+   * @returns Instâncias de `WorkCenter` (com `shifts` incluído).
+   */
+  async findWorkCentersForOee(workCenterId?: number): Promise<OeeWorkCenterRow[]> {
+    const where: any = { active: true };
+    if (workCenterId) where.id = workCenterId;
+
+    return WorkCenter.findAll({
+      where,
+      include: [{ model: WorkCenterShift, as: 'shifts' }],
+      order: [['code', 'ASC']],
+    });
+  }
+
+  /**
+   * Apontamentos concluídos (`production_order_tracking.status = 'completed'`)
+   * no período, agregados por centro de trabalho via
+   * `production_route_steps.work_center_id` — mesmo caminho de schema usado
+   * por `findScrapByStep` e por `SequelizeWorkCenterRepository.aggregateLoadByWorkCenter`.
+   *
+   * `standard_hours` usa apenas `standard_time_minutes` (tempo padrão por
+   * unidade), sem somar `setup_time_minutes`: não há timestamp de início de
+   * setup separado do início da etapa em `production_order_tracking`, então
+   * o tempo de setup (se houve) já está embutido em `run_hours`
+   * (`finished_at - started_at`) — somar `setup_time_minutes * quantidade`
+   * duplicaria/distorceria o tempo padrão do eixo de performance.
+   *
+   * @param start - Início do período.
+   * @param end - Fim do período.
+   * @param workCenterId - Filtra um único centro, quando informado.
+   * @returns Linhas agregadas por `work_center_id`.
+   */
+  async findOeeAggregatesByWorkCenter(start: Date, end: Date, workCenterId?: number): Promise<OeeAggregateRow[]> {
+    const workCenterFilter = workCenterId ? 'AND prs.work_center_id = :workCenterId' : '';
+    return sequelize.query(
+      `SELECT prs.work_center_id                                                                        AS work_center_id,
+              COALESCE(SUM(EXTRACT(EPOCH FROM (pot.finished_at - pot.started_at)) / 3600.0), 0)::float   AS run_hours,
+              COALESCE(SUM((pot.quantity_good + pot.quantity_scrapped) * prs.standard_time_minutes / 60.0), 0)::float
+                                                                                                           AS standard_hours,
+              COALESCE(SUM(pot.quantity_good), 0)::float                                                 AS quantity_good,
+              COALESCE(SUM(pot.quantity_scrapped), 0)::float                                              AS quantity_scrapped,
+              COUNT(*)::int                                                                               AS tracking_count
+         FROM production_order_tracking pot
+         JOIN production_route_steps prs ON prs.id = pot.production_route_step_id
+        WHERE pot.status = 'completed'
+          AND pot.started_at IS NOT NULL
+          AND pot.finished_at IS NOT NULL
+          AND pot.finished_at BETWEEN :start AND :end
+          AND prs.work_center_id IS NOT NULL
+          ${workCenterFilter}
+        GROUP BY prs.work_center_id`,
+      { replacements: { start, end, workCenterId: workCenterId ?? null }, type: QueryTypes.SELECT }
     );
   }
 }

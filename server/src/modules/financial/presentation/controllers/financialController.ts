@@ -9,7 +9,14 @@ const CreatePayableUseCase = require('../../application/use-cases/CreatePayableU
 const PayPayableUseCase = require('../../application/use-cases/PayPayableUseCase');
 const GetCashFlowUseCase = require('../../application/use-cases/GetCashFlowUseCase');
 const GetCashFlowProjectionUseCase = require('../../application/use-cases/GetCashFlowProjectionUseCase');
-const { createPayableSchema, payAccountSchema, cashFlowProjectionQuerySchema, handleZodError } = require('../validators/financialValidators');
+const GetDailyCashFlowProjectionUseCase = require('../../application/use-cases/GetDailyCashFlowProjectionUseCase');
+const UpdatePayableCostCenterUseCase = require('../../application/use-cases/UpdatePayableCostCenterUseCase');
+const UpdateReceivableCostCenterUseCase = require('../../application/use-cases/UpdateReceivableCostCenterUseCase');
+const SequelizeCostCenterRepository = require('../../infrastructure/sequelize/SequelizeCostCenterRepository');
+const {
+  createPayableSchema, payAccountSchema, cashFlowProjectionQuerySchema,
+  dailyCashFlowProjectionQuerySchema, updateCostCenterAssignmentSchema, handleZodError,
+} = require('../validators/financialValidators');
 
 /**
  * Controller enxuto do módulo `financial`. Interpreta `req`, delega toda a
@@ -21,6 +28,7 @@ const { createPayableSchema, payAccountSchema, cashFlowProjectionQuerySchema, ha
  * em nenhuma rota ativa (ver `server/src/modules/financial/README.md`).
  */
 const financialRepository = new SequelizeFinancialRepository();
+const costCenterRepository = new SequelizeCostCenterRepository();
 
 /**
  * `GET /api/finance/receivable` — lista contas a receber com filtros e paginação.
@@ -104,9 +112,9 @@ exports.createPayable = async (req: Request, res: Response, next: NextFunction) 
   try {
     const parsed = createPayableSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes } = parsed.data;
+    const { description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes, cost_center_id } = parsed.data;
     const useCase = new CreatePayableUseCase(financialRepository);
-    const account = await useCase.execute({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes });
+    const account = await useCase.execute({ description, amount, due_date, category, supplier_id, purchase_id, invoice_type, notes, cost_center_id });
 
     logAction(req, {
       action: 'create',
@@ -186,6 +194,86 @@ exports.cashFlowProjection = async (req: Request, res: Response, next: NextFunct
     const useCase = new GetCashFlowProjectionUseCase(financialRepository);
     const data = await useCase.execute({ days });
     res.json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/finance/cashflow/projection` — projeta o fluxo de caixa DIÁRIO
+ * (série dia a dia, saldo acumulado a partir de um saldo inicial opcional e
+ * menor saldo do período) no horizonte de 30, 60 ou 90 dias — o dado de
+ * decisão do CFO para antecipar risco de caixa negativo.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.dailyCashFlowProjection = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = dailyCashFlowProjectionQuerySchema.safeParse(req.query);
+    if (!parsed.success) handleZodError(parsed.error);
+    const { days, opening_balance } = parsed.data;
+    const useCase = new GetDailyCashFlowProjectionUseCase(financialRepository);
+    const data = await useCase.execute({ days, opening_balance });
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `PUT /api/finance/payable/:id/cost-center` — atribui (ou remove, com
+ * `cost_center_id: null`) o centro de custo de uma conta a pagar existente.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.updatePayableCostCenter = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = updateCostCenterAssignmentSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const useCase = new UpdatePayableCostCenterUseCase(financialRepository, costCenterRepository);
+    const account = await useCase.execute({ id: req.params.id, cost_center_id: parsed.data.cost_center_id });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'AccountPayable',
+      entityId: account.id,
+      entityDescription: account.description,
+      newValues: { cost_center_id: parsed.data.cost_center_id },
+      description: `Centro de custo da conta a pagar #${account.id} atualizado`
+    });
+
+    res.json({ success: true, data: account });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `PUT /api/finance/receivable/:id/cost-center` — atribui (ou remove, com
+ * `cost_center_id: null`) o centro de custo de uma conta a receber existente.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.updateReceivableCostCenter = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = updateCostCenterAssignmentSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const useCase = new UpdateReceivableCostCenterUseCase(financialRepository, costCenterRepository);
+    const account = await useCase.execute({ id: req.params.id, cost_center_id: parsed.data.cost_center_id });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'AccountReceivable',
+      entityId: account.id,
+      entityDescription: `Conta a receber #${account.id}`,
+      newValues: { cost_center_id: parsed.data.cost_center_id },
+      description: `Centro de custo da conta a receber #${account.id} atualizado`
+    });
+
+    res.json({ success: true, data: account });
   } catch (error) { next(error); }
 };
 

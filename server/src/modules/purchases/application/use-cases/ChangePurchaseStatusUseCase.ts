@@ -99,6 +99,15 @@ class ChangePurchaseStatusUseCase extends UseCase {
       barcode: null,
       payment_type: null,
       cost_center: null,
+      // TODO(financeiro): a AP automática nasce sem centro de custo
+      // (cost_center_id null = "Sem centro de custo" no relatório de
+      // docs/LEVANTAMENTO_ERP_2026-08-02.md). Quando a requisição de origem
+      // (purchase.requisition_id -> purchase_requisitions.department_id)
+      // estiver disponível aqui, mapear departamento -> centro de custo
+      // (ainda sem correspondência 1:1 definida entre as duas dimensões;
+      // depende de decisão de negócio sobre o de-para) e preencher
+      // cost_center_id automaticamente neste ponto.
+      cost_center_id: null,
       approved_by: userId,
       approval_date: new Date(),
       notes: `Gerado automaticamente na aprovacao do pedido ${purchase.order_number}`

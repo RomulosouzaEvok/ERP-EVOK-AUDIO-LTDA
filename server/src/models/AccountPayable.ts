@@ -29,6 +29,7 @@ interface AccountPayableAttributes {
   approved_by: number | null;
   approval_date: string | null;
   invoice_type: 'nfe' | 'nfse' | null;
+  cost_center_id: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -51,7 +52,8 @@ const AccountPayable = sequelize.define('AccountPayable', {
   notes: DataTypes.TEXT,
   approved_by: { type: DataTypes.INTEGER, comment: 'FK → users.id' },
   approval_date: DataTypes.DATEONLY,
-  invoice_type: { type: DataTypes.ENUM('nfe', 'nfse'), allowNull: true, comment: 'Tipo de nota vinculada: nfe (mercadoria) ou nfse (serviço/licença digital)' }
+  invoice_type: { type: DataTypes.ENUM('nfe', 'nfse'), allowNull: true, comment: 'Tipo de nota vinculada: nfe (mercadoria) ou nfse (serviço/licença digital)' },
+  cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = "Sem centro de custo" nos relatórios). Substitui gradualmente o campo livre `cost_center` (STRING)' }
 }, {
   tableName: 'accounts_payable',
   underscored: true,

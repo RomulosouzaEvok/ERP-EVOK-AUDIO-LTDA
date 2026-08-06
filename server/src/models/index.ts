@@ -64,6 +64,11 @@ import Warehouse = require('./Warehouse');
 import ProductWarehouseStock = require('./ProductWarehouseStock');
 import WarehouseTransfer = require('./WarehouseTransfer');
 import ProductionCostSettings = require('./ProductionCostSettings');
+import Rfq = require('./Rfq');
+import RfqItem = require('./RfqItem');
+import RfqSupplier = require('./RfqSupplier');
+import RfqQuote = require('./RfqQuote');
+import CostCenter = require('./CostCenter');
 
 // ============================================
 // RELACIONAMENTOS
@@ -559,6 +564,56 @@ WarehouseTransfer.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' 
 Warehouse.hasMany(InventoryCount, { foreignKey: 'warehouse_id', as: 'inventory_counts' });
 InventoryCount.belongsTo(Warehouse, { foreignKey: 'warehouse_id', as: 'warehouse' });
 
+// ============================================
+// RELACIONAMENTOS - COTACAO / RFQ MULTI-FORNECEDOR
+// ============================================
+
+// PurchaseRequisition ↔ Rfq (opcional — RFQ pode nascer de requisicao ou avulsa)
+PurchaseRequisition.hasMany(Rfq, { foreignKey: 'requisition_id', as: 'rfqs' });
+Rfq.belongsTo(PurchaseRequisition, { foreignKey: 'requisition_id', as: 'requisition' });
+
+// User ↔ Rfq (comprador que criou a cotacao)
+User.hasMany(Rfq, { foreignKey: 'created_by', as: 'created_rfqs' });
+Rfq.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
+
+// Rfq ↔ RfqItem
+Rfq.hasMany(RfqItem, { foreignKey: 'rfq_id', as: 'items', onDelete: 'CASCADE' });
+RfqItem.belongsTo(Rfq, { foreignKey: 'rfq_id', as: 'rfq', onDelete: 'CASCADE' });
+
+// Item ↔ RfqItem
+Item.hasMany(RfqItem, { foreignKey: 'item_id', as: 'rfq_items' });
+RfqItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
+// Supplier ↔ RfqItem (vencedor da adjudicacao)
+Supplier.hasMany(RfqItem, { foreignKey: 'awarded_supplier_id', as: 'awarded_rfq_items' });
+RfqItem.belongsTo(Supplier, { foreignKey: 'awarded_supplier_id', as: 'awardedSupplier' });
+
+// Rfq ↔ RfqSupplier (fornecedores convidados)
+Rfq.hasMany(RfqSupplier, { foreignKey: 'rfq_id', as: 'suppliers', onDelete: 'CASCADE' });
+RfqSupplier.belongsTo(Rfq, { foreignKey: 'rfq_id', as: 'rfq', onDelete: 'CASCADE' });
+
+Supplier.hasMany(RfqSupplier, { foreignKey: 'supplier_id', as: 'rfq_invitations' });
+RfqSupplier.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+
+// RfqItem ↔ RfqQuote (resposta por item x fornecedor)
+RfqItem.hasMany(RfqQuote, { foreignKey: 'rfq_item_id', as: 'quotes', onDelete: 'CASCADE' });
+RfqQuote.belongsTo(RfqItem, { foreignKey: 'rfq_item_id', as: 'rfqItem', onDelete: 'CASCADE' });
+
+Supplier.hasMany(RfqQuote, { foreignKey: 'supplier_id', as: 'rfq_quotes' });
+RfqQuote.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' });
+
+// ============================================
+// RELACIONAMENTOS - CENTROS DE CUSTO (Financeiro)
+// ============================================
+
+// CostCenter ↔ AccountPayable/AccountReceivable (NULL = "Sem centro de
+// custo" nos relatórios; ver migration 20260806-000020-create-cost-centers.cjs)
+CostCenter.hasMany(AccountPayable, { foreignKey: 'cost_center_id', as: 'accounts_payable' });
+AccountPayable.belongsTo(CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter' });
+
+CostCenter.hasMany(AccountReceivable, { foreignKey: 'cost_center_id', as: 'accounts_receivable' });
+AccountReceivable.belongsTo(CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -577,5 +632,7 @@ export {
   EngineeringProject, ProductDrawing, AcousticTestResult,
   AccessProfile, AccessProfilePermission,
   Warehouse, ProductWarehouseStock, WarehouseTransfer,
-  ProductionCostSettings
+  ProductionCostSettings,
+  CostCenter,
+  Rfq, RfqItem, RfqSupplier, RfqQuote
 };

@@ -17,7 +17,8 @@ const reportController = require('../controllers/reportController');
  * `relatorios.producao`; `purchasing` → `relatorios.compras`;
  * `cost-variance` → `relatorios.custos`. Relatórios que cruzam
  * departamentos exigem a sub-permissão específica (§6.2), não são
- * liberados por interseção automática.
+ * liberados por interseção automática. `oee` reusa `relatorios.producao`
+ * (mesma sub-permissão de `production`, ambos indicadores de manufatura).
  */
 
 router.get('/sales', authenticate, authorizeModule('relatorios.financeiro'), reportController.sales);
@@ -25,6 +26,7 @@ router.get('/inventory', authenticate, authorizeModule('relatorios.financeiro'),
 router.get('/customers', authenticate, authorizeModule('relatorios.financeiro'), reportController.customers);
 router.get('/cash-flow', authenticate, authorizeModule('relatorios.financeiro'), reportController.cashFlow);
 router.get('/production', authenticate, authorizeModule('relatorios.producao'), reportController.production);
+router.get('/oee', authenticate, authorizeModule('relatorios.producao'), reportController.oee);
 router.get('/purchasing', authenticate, authorizeModule('relatorios.compras'), reportController.purchasing);
 router.get('/cost-variance', authenticate, authorizeModule('relatorios.custos'), reportController.costVariance);
 

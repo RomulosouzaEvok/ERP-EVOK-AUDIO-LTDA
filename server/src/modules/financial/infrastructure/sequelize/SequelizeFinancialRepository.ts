@@ -91,6 +91,22 @@ class SequelizeFinancialRepository extends FinancialRepository {
   }
 
   /** @inheritdoc */
+  async updatePayableCostCenter(id: number | string, costCenterId: number | null) {
+    const payable = await AccountPayable.findByPk(id);
+    if (!payable) return null;
+    await payable.update({ cost_center_id: costCenterId });
+    return payable;
+  }
+
+  /** @inheritdoc */
+  async updateReceivableCostCenter(id: number | string, costCenterId: number | null) {
+    const receivable = await AccountReceivable.findByPk(id);
+    if (!receivable) return null;
+    await receivable.update({ cost_center_id: costCenterId });
+    return receivable;
+  }
+
+  /** @inheritdoc */
   async sumReceivableByStatus(start: Date, end: Date) {
     return AccountReceivable.findAll({
       where: { due_date: { [Op.between]: [start, end] } },

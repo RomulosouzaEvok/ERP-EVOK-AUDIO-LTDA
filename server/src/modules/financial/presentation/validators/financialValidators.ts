@@ -12,6 +12,7 @@ export const createPayableSchema = z.object({
   purchase_id: z.coerce.number().int().positive().optional(),
   invoice_type: z.enum(['nfe', 'nfse']).optional(),
   notes: z.string().trim().max(2000).optional(),
+  cost_center_id: z.coerce.number().int().positive().optional(),
 }).strict();
 
 export const payAccountSchema = z.object({
@@ -29,7 +30,22 @@ export const cashFlowProjectionQuerySchema = z.object({
   days: z.coerce.number().int().min(7).max(90).optional().default(30),
 }).strict();
 
-const schemas = { createPayableSchema, payAccountSchema, cashFlowQuerySchema, cashFlowProjectionQuerySchema };
+/** `GET /api/finance/cashflow/projection` — horizonte fechado em 30/60/90 dias (série diária). */
+export const dailyCashFlowProjectionQuerySchema = z.object({
+  days: z.coerce.number().int().optional().default(30)
+    .refine((value) => [30, 60, 90].includes(value), { message: 'Horizonte (days) deve ser 30, 60 ou 90.' }),
+  opening_balance: z.coerce.number().optional().default(0),
+}).strict();
+
+/** Atribui/remove (`null`) o centro de custo de uma conta a pagar ou a receber já existente. */
+export const updateCostCenterAssignmentSchema = z.object({
+  cost_center_id: z.coerce.number().int().positive().nullable(),
+}).strict();
+
+const schemas = {
+  createPayableSchema, payAccountSchema, cashFlowQuerySchema, cashFlowProjectionQuerySchema,
+  dailyCashFlowProjectionQuerySchema, updateCostCenterAssignmentSchema,
+};
 
 module.exports = schemas;
 module.exports.handleZodError = (error: any) => {

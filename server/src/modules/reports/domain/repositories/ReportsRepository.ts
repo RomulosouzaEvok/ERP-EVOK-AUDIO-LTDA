@@ -14,6 +14,8 @@ import type {
   PurchasingTotals,
   CostVarianceRow,
   PurchasePriceVarianceRow,
+  OeeWorkCenterRow,
+  OeeAggregateRow,
 } from '../reportTypes';
 
 class ReportsRepository {
@@ -100,6 +102,30 @@ class ReportsRepository {
    */
   async findPurchasePriceVarianceByProductSupplier(_start: Date, _end: Date): Promise<PurchasePriceVarianceRow[]> {
     throw new Error('ReportsRepository.findPurchasePriceVarianceByProductSupplier não implementado.');
+  }
+
+  /**
+   * Centros de trabalho ativos com turnos (`WorkCenter` + `shifts`), base
+   * para o cálculo de horas disponíveis do relatório de OEE.
+   *
+   * @param _workCenterId - Filtra um único centro, quando informado.
+   * @returns Instâncias de `WorkCenter` (com `shifts` incluído).
+   */
+  async findWorkCentersForOee(_workCenterId?: number): Promise<OeeWorkCenterRow[]> {
+    throw new Error('ReportsRepository.findWorkCentersForOee não implementado.');
+  }
+
+  /**
+   * Apontamentos concluídos no período, agregados por centro de trabalho,
+   * base de cálculo dos eixos de performance e qualidade do OEE.
+   *
+   * @param _start - Início do período.
+   * @param _end - Fim do período.
+   * @param _workCenterId - Filtra um único centro, quando informado.
+   * @returns Linhas agregadas por `work_center_id`.
+   */
+  async findOeeAggregatesByWorkCenter(_start: Date, _end: Date, _workCenterId?: number): Promise<OeeAggregateRow[]> {
+    throw new Error('ReportsRepository.findOeeAggregatesByWorkCenter não implementado.');
   }
 }
 
