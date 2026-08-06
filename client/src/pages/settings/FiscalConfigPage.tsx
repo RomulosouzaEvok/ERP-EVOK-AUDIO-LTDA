@@ -356,7 +356,7 @@ export default function FiscalConfigPage() {
 
           {formError && <DidacticAlert error={formError} />}
           {successMessage && (
-            <p className="rounded-md border border-emerald-400/40 bg-emerald-400/10 p-3 text-sm text-emerald-700">
+            <p className="rounded-md border border-success/40 bg-success/10 p-3 text-sm text-success">
               {successMessage}
             </p>
           )}

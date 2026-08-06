@@ -31,11 +31,11 @@ export function PrerequisiteChecklist({ items, className }: { items: Prerequisit
           key={index}
           className={cn(
             'flex items-start gap-2 rounded-md border p-2 text-sm',
-            item.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-destructive/40 bg-destructive/10 text-destructive',
+            item.ok ? 'border-success/30 bg-success/10 text-success' : 'border-destructive/40 bg-destructive/10 text-destructive',
           )}
         >
           {item.ok ? (
-            <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+            <Check className="mt-0.5 size-4 shrink-0 text-success" />
           ) : (
             <X className="mt-0.5 size-4 shrink-0 text-destructive" />
           )}

@@ -262,7 +262,7 @@ function ScannedComponentRow({
           </p>
         </div>
         {item.resolvedLot && (
-          <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
+          <span className="flex items-center gap-1 text-xs font-medium text-success">
             <QrCode className="size-3.5" /> Lote {item.resolvedLot.lot_number} · saldo{' '}
             <span className="tabular-nums">{item.resolvedLot.quantity_available}</span>
           </span>

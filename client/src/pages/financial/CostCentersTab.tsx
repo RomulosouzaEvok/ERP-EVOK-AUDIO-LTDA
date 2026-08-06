@@ -166,7 +166,7 @@ export function CostCentersTab() {
                       {group.code ? <span className="font-mono text-xs text-muted-foreground">{group.code}</span> : null}{' '}
                       {group.cost_center_id === null ? <span className="italic text-muted-foreground">{group.name}</span> : group.name}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700">{formatBRL(group.receivable.open)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-success">{formatBRL(group.receivable.open)}</TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">{formatBRL(group.receivable.realized)}</TableCell>
                     <TableCell className="text-right tabular-nums text-destructive">{formatBRL(group.payable.open)}</TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">{formatBRL(group.payable.realized)}</TableCell>
@@ -174,7 +174,7 @@ export function CostCentersTab() {
                 ))}
                 <TableRow className="font-semibold">
                   <TableCell>Total</TableCell>
-                  <TableCell className="text-right tabular-nums text-emerald-700">{formatBRL(report.totals.receivable.open)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-success">{formatBRL(report.totals.receivable.open)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatBRL(report.totals.receivable.realized)}</TableCell>
                   <TableCell className="text-right tabular-nums text-destructive">{formatBRL(report.totals.payable.open)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatBRL(report.totals.payable.realized)}</TableCell>

@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { SelectNative } from '@/components/ui/select-native';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DidacticAlert } from '@/components/DidacticAlert';
+import { AmberNoticeBox } from '@/components/AmberNoticeBox';
 
 const TEST_TYPE_LABEL: Record<laboratoryApi.AcousticTestType, string> = {
   impedance: 'Impedância',
@@ -209,13 +210,12 @@ export function RegisterTestTab() {
             </div>
 
             {missingResultOrRange && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <AmberNoticeBox icon={AlertTriangle}>
                 <p>
                   Informe o resultado medido ou ao menos um limite de especificação (mínima/máxima) — sem isso, o
                   sistema não consegue calcular a aprovação/reprovação do teste.
                 </p>
-              </div>
+              </AmberNoticeBox>
             )}
 
             <div className="flex flex-col gap-1.5">
@@ -269,14 +269,14 @@ function VerdictBanner({
         unknown
           ? 'border-muted'
           : passed
-            ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/20'
+            ? 'border-success bg-success/10 dark:bg-success/15'
             : 'border-destructive bg-destructive/5'
       }
     >
       <CardContent className="flex items-center justify-between gap-4 pt-6">
         <div className="flex items-center gap-3">
           {unknown ? null : passed ? (
-            <CheckCircle2 className="size-10 text-emerald-600" />
+            <CheckCircle2 className="size-10 text-success" />
           ) : (
             <XCircle className="size-10 text-destructive" />
           )}
@@ -286,7 +286,7 @@ function VerdictBanner({
                 unknown
                   ? 'text-xl font-bold text-foreground'
                   : passed
-                    ? 'text-xl font-bold text-emerald-600'
+                    ? 'text-xl font-bold text-success'
                     : 'text-xl font-bold text-destructive'
               }
             >

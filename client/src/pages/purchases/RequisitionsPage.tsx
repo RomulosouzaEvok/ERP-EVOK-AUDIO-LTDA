@@ -23,9 +23,11 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { DetailField } from '@/components/DetailField';
 import { DidacticAlert } from '@/components/DidacticAlert';
+import { AmberNoticeBox } from '@/components/AmberNoticeBox';
 import { ItemSearchSelect } from '@/components/ItemSearchSelect';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const STATUS_LABEL: Record<requisitionsApi.RequisitionStatus, string> = {
   draft: 'Rascunho',
@@ -315,103 +317,190 @@ export default function RequisitionsPage() {
         </SelectNative>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-6" />
-            <TableHead>Requisição</TableHead>
-            <TableHead>Solicitante</TableHead>
-            <TableHead>Prioridade</TableHead>
-            <TableHead>Data</TableHead>
-            <TableHead>Status</TableHead>
-            {canWrite && <TableHead>Ações</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading && <TableSkeletonRows columns={7} />}
-          {isError && (
+      {/* Desktop/tablet (>= md): tabela tradicional. */}
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-destructive">
-                Não foi possível carregar as requisições de compra. Tente novamente.
-              </TableCell>
+              <TableHead className="w-6" />
+              <TableHead>Requisição</TableHead>
+              <TableHead>Solicitante</TableHead>
+              <TableHead>Prioridade</TableHead>
+              <TableHead>Data</TableHead>
+              <TableHead>Status</TableHead>
+              {canWrite && <TableHead>Ações</TableHead>}
             </TableRow>
-          )}
-          {data?.data.map((requisition) => (
-            <TableRow
-              key={requisition.id}
-              className="cursor-pointer border-l-4 border-l-transparent transition-colors hover:border-l-brand hover:bg-brand/5"
-              onClick={() => setDetailsRequisition(requisition)}
-            >
-              <TableCell>{requisition.handoff_signal && <HandoffDot signal={requisition.handoff_signal} />}</TableCell>
-              <TableCell className="font-medium">
-                <div className="flex items-center gap-2">
-                  {requisition.requisition_number ?? requisition.id}
-                  {requisition.origin === ENGINEERING_SAMPLE_ORIGIN && <Badge variant="outline">Amostra</Badge>}
-                </div>
-              </TableCell>
-              <TableCell>{requisition.requester?.name ?? '-'}</TableCell>
-              <TableCell>{PRIORITY_LABEL[requisition.priority]}</TableCell>
-              <TableCell>{new Date(requisition.request_date).toLocaleDateString('pt-BR')}</TableCell>
-              <TableCell>
-                <Badge variant={STATUS_VARIANT[requisition.status]}>{STATUS_LABEL[requisition.status]}</Badge>
-              </TableCell>
-              {canWrite && (
-                <TableCell className="flex gap-2" onClick={(event) => event.stopPropagation()}>
-                  <Button size="sm" variant="ghost" onClick={() => setDetailsRequisition(requisition)}>
-                    <Eye className="size-4" /> Detalhes
-                  </Button>
-                  {isAdmin && requisition.status === 'pending' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setStatusError(null);
-                        statusMutation.mutate({
-                          id: requisition.id,
-                          status: 'approved',
-                          requisitionLabel: String(requisition.requisition_number ?? requisition.id),
-                        });
-                      }}
-                    >
-                      Aprovar
+          </TableHeader>
+          <TableBody>
+            {isLoading && <TableSkeletonRows columns={7} />}
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-destructive">
+                  Não foi possível carregar as requisições de compra. Tente novamente.
+                </TableCell>
+              </TableRow>
+            )}
+            {data?.data.map((requisition) => (
+              <TableRow
+                key={requisition.id}
+                className="cursor-pointer border-l-4 border-l-transparent transition-colors hover:border-l-brand hover:bg-brand/5"
+                onClick={() => setDetailsRequisition(requisition)}
+              >
+                <TableCell>{requisition.handoff_signal && <HandoffDot signal={requisition.handoff_signal} />}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    {requisition.requisition_number ?? requisition.id}
+                    {requisition.origin === ENGINEERING_SAMPLE_ORIGIN && <Badge variant="outline">Amostra</Badge>}
+                  </div>
+                </TableCell>
+                <TableCell>{requisition.requester?.name ?? '-'}</TableCell>
+                <TableCell>{PRIORITY_LABEL[requisition.priority]}</TableCell>
+                <TableCell>{new Date(requisition.request_date).toLocaleDateString('pt-BR')}</TableCell>
+                <TableCell>
+                  <Badge variant={STATUS_VARIANT[requisition.status]}>{STATUS_LABEL[requisition.status]}</Badge>
+                </TableCell>
+                {canWrite && (
+                  <TableCell className="flex gap-2" onClick={(event) => event.stopPropagation()}>
+                    <Button size="sm" variant="ghost" onClick={() => setDetailsRequisition(requisition)}>
+                      <Eye className="size-4" /> Detalhes
                     </Button>
-                  )}
-                  {requisition.status === 'approved' && (
-                    <Button size="sm" variant="default" onClick={() => setConvertingRequisition(requisition)}>
-                      <ShoppingCart className="size-4" /> Gerar Pedido de Compra
-                    </Button>
-                  )}
-                  {requisition.status !== 'canceled' && requisition.status !== 'received' && (
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => {
-                        if (window.confirm(`Cancelar a requisição ${requisition.requisition_number ?? requisition.id}?`)) {
+                    {isAdmin && requisition.status === 'pending' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
                           setStatusError(null);
                           statusMutation.mutate({
                             id: requisition.id,
-                            status: 'canceled',
+                            status: 'approved',
                             requisitionLabel: String(requisition.requisition_number ?? requisition.id),
                           });
-                        }
-                      }}
-                    >
-                      Cancelar
-                    </Button>
-                  )}
+                        }}
+                      >
+                        Aprovar
+                      </Button>
+                    )}
+                    {requisition.status === 'approved' && (
+                      <Button size="sm" variant="default" onClick={() => setConvertingRequisition(requisition)}>
+                        <ShoppingCart className="size-4" /> Gerar Pedido de Compra
+                      </Button>
+                    )}
+                    {requisition.status !== 'canceled' && requisition.status !== 'received' && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          if (window.confirm(`Cancelar a requisição ${requisition.requisition_number ?? requisition.id}?`)) {
+                            setStatusError(null);
+                            statusMutation.mutate({
+                              id: requisition.id,
+                              status: 'canceled',
+                              requisitionLabel: String(requisition.requisition_number ?? requisition.id),
+                            });
+                          }
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    )}
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+            {!isLoading && !isError && data?.data.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  Nenhuma requisição registrada.
                 </TableCell>
-              )}
-            </TableRow>
-          ))}
-          {!isLoading && !isError && data?.data.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
-                Nenhuma requisição registrada.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Telas estreitas (< md): cards empilhados, mesmo padrão label-acima-do-valor do
+          painel de detalhes (`DetailField`), sem duplicar nenhum handler/mutation. */}
+      <div className="flex flex-col gap-3 md:hidden">
+        {isLoading &&
+          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-28 w-full rounded-lg" />)}
+        {isError && (
+          <div className="rounded-lg border p-4 text-center text-sm text-destructive">
+            Não foi possível carregar as requisições de compra. Tente novamente.
+          </div>
+        )}
+        {data?.data.map((requisition) => (
+          <div key={requisition.id} className="rounded-lg border bg-card p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 font-medium">
+                {requisition.handoff_signal && <HandoffDot signal={requisition.handoff_signal} />}
+                {requisition.requisition_number ?? requisition.id}
+                {requisition.origin === ENGINEERING_SAMPLE_ORIGIN && <Badge variant="outline">Amostra</Badge>}
+              </div>
+              <Badge variant={STATUS_VARIANT[requisition.status]}>{STATUS_LABEL[requisition.status]}</Badge>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <DetailField label="Solicitante" value={requisition.requester?.name ?? '-'} />
+              <DetailField label="Prioridade" value={PRIORITY_LABEL[requisition.priority]} />
+              <DetailField label="Data" value={new Date(requisition.request_date).toLocaleDateString('pt-BR')} />
+            </div>
+
+            {canWrite && (
+              <div className="mt-4 flex flex-wrap gap-2 border-t pt-3">
+                <Button size="sm" variant="ghost" className="flex-1" onClick={() => setDetailsRequisition(requisition)}>
+                  <Eye className="size-4" /> Detalhes
+                </Button>
+                {isAdmin && requisition.status === 'pending' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setStatusError(null);
+                      statusMutation.mutate({
+                        id: requisition.id,
+                        status: 'approved',
+                        requisitionLabel: String(requisition.requisition_number ?? requisition.id),
+                      });
+                    }}
+                  >
+                    Aprovar
+                  </Button>
+                )}
+                {requisition.status === 'approved' && (
+                  <Button size="sm" variant="default" className="flex-1" onClick={() => setConvertingRequisition(requisition)}>
+                    <ShoppingCart className="size-4" /> Gerar Pedido
+                  </Button>
+                )}
+                {requisition.status !== 'canceled' && requisition.status !== 'received' && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => {
+                      if (window.confirm(`Cancelar a requisição ${requisition.requisition_number ?? requisition.id}?`)) {
+                        setStatusError(null);
+                        statusMutation.mutate({
+                          id: requisition.id,
+                          status: 'canceled',
+                          requisitionLabel: String(requisition.requisition_number ?? requisition.id),
+                        });
+                      }
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+        {!isLoading && !isError && data?.data.length === 0 && (
+          <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+            Nenhuma requisição registrada.
+          </div>
+        )}
+      </div>
 
       <Pagination pagination={data?.pagination} onPageChange={setPage} />
 
@@ -474,9 +563,9 @@ function RequisitionDetailSheet({
             </div>
 
             {requisition.origin === ENGINEERING_SAMPLE_ORIGIN && (
-              <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              <AmberNoticeBox size="xs">
                 Pedidos gerados a partir desta requisição são recebidos no Depósito do Laboratório.
-              </p>
+              </AmberNoticeBox>
             )}
 
             <div className="flex flex-col gap-2">

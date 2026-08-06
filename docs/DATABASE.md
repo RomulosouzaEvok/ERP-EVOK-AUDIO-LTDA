@@ -1,5 +1,15 @@
 # Modelagem de Dados - ERP EVOK ÁUDIO
 
+> **Documentação de referência estruturada (2026-08-06):** para o estado
+> **atual** e sempre-atualizado do banco (Modelo Conceitual, DER,
+> DDL físico, Dicionário de Dados completo das 78 tabelas, Matriz de
+> Privilégios/Isolamento, Estruturas Programáveis e Plano de Disaster
+> Recovery), veja **[docs/database/00-INDICE.md](database/00-INDICE.md)**.
+> Este arquivo (`docs/DATABASE.md`) continua sendo o **changelog
+> histórico narrativo** — o racional de cada migration/decisão de
+> modelagem desde 2026-07-31 — mantido como está abaixo, sem duplicar o
+> conteúdo já consolidado na pasta `docs/database/`.
+
 ## Tecnologia
 - **ORM:** Sequelize 6.x
 - **Banco:** PostgreSQL 16 (único suportado; 59 migrations versionadas em 2026-08-06, 133+ FKs)

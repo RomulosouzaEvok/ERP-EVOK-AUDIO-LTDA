@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SelectNative } from '@/components/ui/select-native';
+import { AmberNoticeBox } from '@/components/AmberNoticeBox';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import { ItemSearchSelect } from '@/components/ItemSearchSelect';
 
@@ -164,10 +165,10 @@ export function SampleRequestTab() {
         </div>
 
         {isAtypicalQuantity && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          <AmberNoticeBox size="xs">
             Quantidade acima de {ATYPICAL_QUANTITY_THRESHOLD} unidades para uma amostra é incomum — confira antes de
             enviar. Isto não impede o envio da requisição.
-          </p>
+          </AmberNoticeBox>
         )}
 
         <div className="flex flex-col gap-1.5">
@@ -195,7 +196,7 @@ export function SampleRequestTab() {
 
         {submitError && <DidacticAlert error={submitError} />}
         {successMessage && (
-          <p className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+          <p className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success dark:border-success/40 dark:bg-success/15">
             {successMessage}
           </p>
         )}

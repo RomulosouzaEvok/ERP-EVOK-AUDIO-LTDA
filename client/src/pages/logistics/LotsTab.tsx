@@ -32,8 +32,11 @@ const STATUS_BADGE: Record<lotsApi.LotStatus, BadgeProps['variant']> = {
   reserved: 'secondary',
 };
 
+// Ver mesma decisão em `InspectionTab.tsx`: unifica a paleta de atenção do
+// sistema em duas cores (âmbar = pendência, destructive = crítico), em vez
+// de um terceiro tom (laranja) só para "expirado".
 const STATUS_BADGE_CLASS: Partial<Record<lotsApi.LotStatus, string>> = {
-  expired: 'border-orange-500 text-orange-600',
+  expired: 'border-destructive text-destructive',
 };
 
 function formatDate(value: string | null): string {

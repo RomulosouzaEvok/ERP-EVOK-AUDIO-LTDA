@@ -18,8 +18,15 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { DetailField } from '@/components/DetailField';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
@@ -300,24 +307,24 @@ export default function PurchasesPage() {
       {!openOrdersOnly && <Pagination pagination={data?.pagination} onPageChange={setPage} />}
 
       <ReceiveItemsDialog purchase={receivingPurchase} onClose={() => setReceivingPurchase(null)} />
-      <PurchaseDetailSheet purchase={detailsPurchase} onClose={() => setDetailsPurchase(null)} />
+      <PurchaseDetailDialog purchase={detailsPurchase} onClose={() => setDetailsPurchase(null)} />
     </div>
   );
 }
 
-function PurchaseDetailSheet({ purchase, onClose }: { purchase: purchasesApi.Purchase | null; onClose: () => void }) {
+function PurchaseDetailDialog({ purchase, onClose }: { purchase: purchasesApi.Purchase | null; onClose: () => void }) {
   const items = purchase?.items ?? [];
   const itemsTotal = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), 0);
 
   return (
-    <Sheet open={Boolean(purchase)} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent>
+    <Dialog open={Boolean(purchase)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
         {purchase && (
           <>
-            <SheetHeader>
-              <SheetTitle>Pedido de compra {purchase.order_number ?? `#${purchase.id}`}</SheetTitle>
-              <SheetDescription>Detalhes completos da operação de compra.</SheetDescription>
-            </SheetHeader>
+            <DialogHeader>
+              <DialogTitle>Pedido de compra {purchase.order_number ?? `#${purchase.id}`}</DialogTitle>
+              <DialogDescription>Detalhes completos da operação de compra.</DialogDescription>
+            </DialogHeader>
 
             <div className="grid grid-cols-2 gap-4">
               <DetailField label="Fornecedor" value={purchase.supplier?.company_name ?? `#${purchase.supplier_id}`} />
@@ -329,7 +336,7 @@ function PurchaseDetailSheet({ purchase, onClose }: { purchase: purchasesApi.Pur
               />
             </div>
 
-            <div className="flex flex-col gap-2">
+            <div className="flex min-w-0 flex-col gap-2">
               <p className="text-sm font-semibold">Itens do pedido</p>
               <Table>
                 <TableHeader>
@@ -374,8 +381,8 @@ function PurchaseDetailSheet({ purchase, onClose }: { purchase: purchasesApi.Pur
             </div>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -513,12 +520,12 @@ function PurchaseCockpitTiles({
 
       <Card className="border-l-4 border-l-transparent">
         <CardContent className="flex items-center gap-3 p-4">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-emerald-600/10 text-emerald-600">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
             <CalendarClock className="size-5" />
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Chegando em 7 dias</p>
-            <p className="text-2xl font-semibold text-emerald-700">{isLoading ? '—' : (cockpit?.arriving_this_week ?? 0)}</p>
+            <p className="text-2xl font-semibold text-success">{isLoading ? '—' : (cockpit?.arriving_this_week ?? 0)}</p>
           </div>
         </CardContent>
       </Card>

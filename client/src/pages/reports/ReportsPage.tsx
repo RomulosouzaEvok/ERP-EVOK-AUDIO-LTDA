@@ -68,7 +68,7 @@ function isoDaysAgo(days: number): string {
 
 /** Tile de indicador com rótulo e valor grande. */
 function StatTile({ label, value, tone, hint }: { label: string; value: string; tone?: 'good' | 'warn' | 'bad'; hint?: string }) {
-  const toneClass = tone === 'good' ? 'text-emerald-600' : tone === 'warn' ? 'text-amber-600' : tone === 'bad' ? 'text-destructive' : '';
+  const toneClass = tone === 'good' ? 'text-success' : tone === 'warn' ? 'text-amber-600' : tone === 'bad' ? 'text-destructive' : '';
   return (
     <Card>
       <CardHeader className="pb-1">
@@ -501,19 +501,19 @@ export default function ReportsPage() {
                         <TableCell className="text-right tabular-nums">{formatHours(row.available_hours)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatHours(row.downtime_hours)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatHours(row.run_hours)}</TableCell>
-                        <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.availability) === 'good' ? 'text-emerald-600' : oeeTone(row.availability) === 'warn' ? 'text-amber-600' : oeeTone(row.availability) === 'bad' ? 'text-destructive' : ''}`}>
+                        <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.availability) === 'good' ? 'text-success' : oeeTone(row.availability) === 'warn' ? 'text-amber-600' : oeeTone(row.availability) === 'bad' ? 'text-destructive' : ''}`}>
                           {formatRateOrDash(row.availability)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{formatHours(row.standard_hours)}</TableCell>
-                        <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.performance) === 'good' ? 'text-emerald-600' : oeeTone(row.performance) === 'warn' ? 'text-amber-600' : oeeTone(row.performance) === 'bad' ? 'text-destructive' : ''}`}>
+                        <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.performance) === 'good' ? 'text-success' : oeeTone(row.performance) === 'warn' ? 'text-amber-600' : oeeTone(row.performance) === 'bad' ? 'text-destructive' : ''}`}>
                           {formatRateOrDash(row.performance)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{toNumber(row.quantity_good).toLocaleString('pt-BR')}</TableCell>
                         <TableCell className="text-right tabular-nums">{toNumber(row.quantity_scrapped).toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.quality) === 'good' ? 'text-emerald-600' : oeeTone(row.quality) === 'warn' ? 'text-amber-600' : oeeTone(row.quality) === 'bad' ? 'text-destructive' : ''}`}>
+                        <TableCell className={`text-right tabular-nums font-medium ${oeeTone(row.quality) === 'good' ? 'text-success' : oeeTone(row.quality) === 'warn' ? 'text-amber-600' : oeeTone(row.quality) === 'bad' ? 'text-destructive' : ''}`}>
                           {formatRateOrDash(row.quality)}
                         </TableCell>
-                        <TableCell className={`text-right tabular-nums font-semibold ${oeeTone(row.oee) === 'good' ? 'text-emerald-600' : oeeTone(row.oee) === 'warn' ? 'text-amber-600' : oeeTone(row.oee) === 'bad' ? 'text-destructive' : ''}`}>
+                        <TableCell className={`text-right tabular-nums font-semibold ${oeeTone(row.oee) === 'good' ? 'text-success' : oeeTone(row.oee) === 'warn' ? 'text-amber-600' : oeeTone(row.oee) === 'bad' ? 'text-destructive' : ''}`}>
                           {formatRateOrDash(row.oee)}
                         </TableCell>
                       </TableRow>
@@ -568,7 +568,7 @@ export default function ReportsPage() {
                           <TableCell className="text-right tabular-nums">{BRL.format(toNumber(row.total_amount))}</TableCell>
                           <TableCell className="text-right tabular-nums">{formatDays(row.avg_lead_time_days)}</TableCell>
                           <TableCell
-                            className={`text-right font-medium ${onTime >= 0.9 ? 'text-emerald-600' : onTime < 0.7 ? 'text-destructive' : ''}`}
+                            className={`text-right font-medium ${onTime >= 0.9 ? 'text-success' : onTime < 0.7 ? 'text-destructive' : ''}`}
                           >
                             {formatRate(onTime)}
                           </TableCell>
@@ -624,7 +624,7 @@ export default function ReportsPage() {
                   ) : (
                     costVariance.by_product.map((row) => {
                       const rate = toNumber(row.variance_rate);
-                      const tone = rate > 0.05 ? 'text-destructive' : rate <= 0 ? 'text-emerald-600' : '';
+                      const tone = rate > 0.05 ? 'text-destructive' : rate <= 0 ? 'text-success' : '';
                       return (
                         <TableRow key={String(row.product_id)}>
                           <TableCell className="font-medium">{row.code}</TableCell>
@@ -663,7 +663,7 @@ export default function ReportsPage() {
                     costVariance.purchase_price_variance.map((row, index) => {
                       const hasCatalog = row.catalog_price !== null && row.catalog_price !== undefined;
                       const rate = hasCatalog ? toNumber(row.variance_rate) : null;
-                      const tone = rate === null ? '' : rate > 0.05 ? 'text-destructive' : rate <= 0 ? 'text-emerald-600' : '';
+                      const tone = rate === null ? '' : rate > 0.05 ? 'text-destructive' : rate <= 0 ? 'text-success' : '';
                       return (
                         <TableRow key={`${row.product_id}-${row.supplier_id}-${index}`}>
                           <TableCell className="font-medium">{row.code} — {row.name}</TableCell>

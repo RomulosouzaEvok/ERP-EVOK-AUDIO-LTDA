@@ -1274,3 +1274,171 @@ downtime + `/api/production/downtimes`), `docs/DATABASE.md`
 (itens resolvidos marcados `[x]`, novos `[ ]` de risco residual),
 `docs/HANDOFF_CODEX.md` (seção nova consolidando as 6 frentes),
 `CLAUDE.md` (contagem de migrations, módulos/telas novas), este diário.
+
+---
+
+## 2026-08-06 (apêndice) — Framework de documentação em 4 categorias: auditoria de gap + primeiros artefatos de arquitetura/UX (escopo Tech Lead de governança)
+
+**Contexto:** o dono definiu um framework de documentação de referência em
+4 categorias (Engenharia de Requisitos, Modelagem de Dados, Arquitetura e
+Engenharia de Software, Integrações e Operação — 11 artefatos no total) e
+pediu auditoria do que já existe + criação do que falta. O trabalho foi
+dividido entre este agente (governança/documentação geral) e o agente
+`AdmDBA` (escopo próprio e mais profundo para a camada de dados: modelo
+conceitual/lógico/físico, dicionário de dados completo, matriz de
+privilégios, procedures/triggers, disaster recovery — tratado à parte,
+**não duplicado aqui**).
+
+**Auditoria de gap (11 itens do framework):**
+
+| Item do framework | Situação encontrada |
+|---|---|
+| Documento de Requisitos (funcionais/não funcionais) | Funcionais: cobertos em `docs/projeto/04-USE_CASES.md`/`docs/business/01-USE_CASES.md`. Não funcionais: inexistente como documento formal — só implícito no código |
+| Diagrama de Casos de Uso | Inexistente como diagrama visual — só texto (UC-01 a UC-41) |
+| Mapeamento de Processos (BPMN) | Inexistente |
+| DER visual + Dicionário de Dados | `docs/DATABASE.md` tem dicionário de dados real e ER em ASCII (não Mermaid, incompleto frente ao schema atual) — **deixado para o `AdmDBA`, não retrabalhado nesta rodada** |
+| Diagrama de Arquitetura de Infraestrutura | Fragmentos em `docs/infra/DEPLOY_UBUNTU.md` e comentários do `docker-compose.yml`, sem diagrama visual consolidado |
+| Diagrama de Classes | Já existia (`docs/DIAGRAMA_CLASSES.md`, `docs/DIAGRAMA_CLASSES_CAMADAS.md`), mas desatualizado frente aos módulos entregues em 2026-08-03/06 (RFQ, centros de custo, work centers, downtime, conciliação bancária, etc.) |
+| Diagrama de Sequência | Inexistente para fluxos críticos |
+| Documentação de API | `docs/API.md` já é robusto e detalhado (payloads, auth, erros) — nenhuma ação necessária |
+| Manual do Usuário | Inexistente |
+
+**O que foi criado/atualizado nesta rodada (fora do escopo do `AdmDBA`):**
+
+1. `docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md` (NOVO) — desempenho,
+   segurança, disponibilidade, escalabilidade, compatibilidade e
+   observabilidade, extraído do código real (rate-limits, JWT TTL, pool
+   de conexões, healthchecks) — sem inventar números não implementados
+   (ex.: SLA de tempo de resposta marcado "não especificado formalmente").
+2. `docs/arquitetura/DIAGRAMA_ARQUITETURA_INFRAESTRUTURA.md` (NOVO) —
+   diagrama Mermaid do ambiente de dev real (`docker-compose.yml`) e do
+   plano de produção `[PENDENTE]` (servidor ainda não adquirido), com
+   tabela de portas expostas.
+3. `docs/arquitetura/DIAGRAMAS_SEQUENCIA.md` (NOVO) — 3 diagramas Mermaid
+   `sequenceDiagram` dos fluxos mais críticos: (a) venda → reserva/baixa
+   de estoque → contas a receber → NF-e (incl. faturamento parcial e
+   alteração de pedido); (b) requisição de compra → RFQ/cotação → pedido
+   → recebimento com quarentena de lote; (c) ordem de produção →
+   apontamento → paradas/OEE → baixa de produto acabado.
+4. `docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md` (NOVO) — diagrama de
+   casos de uso (atores × módulos) e 2 fluxos BPMN simplificados
+   (Order-to-Cash, Purchase-to-Pay) em Mermaid `flowchart`, com raias por
+   departamento real (`docs/00-ESTRUTURA_ORGANIZACIONAL.md`).
+5. `docs/DIAGRAMA_CLASSES.md` (ATUALIZADO) — nova seção "Módulos
+   entregues após a versão original deste diagrama" listando em tabela as
+   classes/relações que faltavam (RFQ, CostCenter, CustomerPriceList,
+   WorkCenter, ProductionDowntime, BankStatement, etc.), sem
+   re-renderizar o diagrama principal (ficaria denso demais) nem duplicar
+   o dicionário de dados de `docs/DATABASE.md`.
+6. `docs/manual/00-MANUAL_DO_USUARIO.md` (NOVO) — esqueleto por módulo,
+   com caminho de menu real (`client/src/App.tsx`) e casos de uso formais
+   por trás de cada tela; sem capturas de tela (fora do escopo desta
+   rodada, listado em "Próximos passos" do próprio documento).
+
+**Itens do framework intencionalmente NÃO tocados nesta rodada** (para
+não conflitar com o trabalho paralelo do `AdmDBA`): DER visual e
+Dicionário de Dados completo — permanecem em `docs/DATABASE.md`
+até o `AdmDBA` entregar o escopo mais profundo (modelo
+conceitual/lógico/físico separados, matriz de privilégios,
+procedures/triggers, plano de disaster recovery).
+
+**Pendências para uma próxima rodada:**
+- Documento de Requisitos Funcionais/Não Funcionais como artefato único
+  formal (hoje RNF está pronto; funcionais seguem espalhados nos UCs,
+  o que é aceitável, mas não foi consolidado num único índice de
+  requisitos).
+- `docs/projeto/01-PLANO.md` está visivelmente desatualizado (menciona 18
+  modelos, ausência de frontend, ausência de testes — tudo já superado)
+  — não foi reescrito nesta rodada por estar fora do escopo imediato
+  (é histórico de arquitetura, não um dos 11 itens do framework), mas
+  fica registrado como risco de confusão para quem ler sem contexto.
+  Ação recomendada: marcar o topo do arquivo como histórico/desatualizado
+  ou revisá-lo numa rodada de limpeza geral.
+- Manual do usuário sem capturas de tela/vídeos de treinamento.
+- BPMN cobre 2 dos processos mais críticos (Order-to-Cash,
+  Purchase-to-Pay); processos de qualidade (inspeção→RNC→liberação de
+  lote) e manutenção de ativos ainda não têm swimlane dedicada.
+
+---
+
+## 2026-08-06 (apêndice 2) — `AdmDBA`: framework de documentação de dados completo (Modelo Conceitual/Lógico/Físico, Dicionário de Dados, Acessos/Isolamento, Estruturas Programáveis, Disaster Recovery)
+
+Escopo reservado pelo `documentador` no apêndice anterior. Auditoria
+primeiro (introspecção real do PostgreSQL 16 local via
+`information_schema`/`pg_dump`, não apenas leitura de código), depois
+criação de `docs/database/` (7 documentos + índice + anexo de DDL).
+
+**Auditoria — números reais confirmados (2026-08-06, banco local):**
+78 tabelas de negócio (+ `SequelizeMeta`), 171 foreign keys, 64
+migrations aplicadas, 0 functions/triggers/procedures customizados
+(apenas `pgcrypto` padrão), 1 único usuário Postgres (`evok_admin`,
+superuser) — sem segregação de roles.
+
+**Criado em `docs/database/`:**
+1. `00-INDICE.md` — porta de entrada, aponta os 7 documentos + anexo.
+2. `01-MODELO_CONCEITUAL.md` — MER de negócio (Mermaid `erDiagram`, sem
+   tecnologia), glossário de 22 entidades.
+3. `02-MODELO_LOGICO.md` — DER técnico (5 diagramas Mermaid por domínio:
+   Compras/RFQ, Vendas, Produção, Financeiro/Centros de Custo, Acesso),
+   cobrindo os módulos pedidos explicitamente (Item, Fornecedor, Venda,
+   OP, Requisição/Pedido de Compra, Financeiro, RFQ, Centros de Custo).
+4. `03-MODELO_FISICO.md` — como o DDL real (`schema.sql` anexo,
+   `pg_dump --schema-only` do banco local) foi gerado e como
+   regenerá-lo a cada migration nova; estatísticas do schema atual;
+   achado sobre `NUMERIC(10,2)` em colunas monetárias do schema legado
+   (`sales`/`products`) vs. a regra `DECIMAL(18,6)` do CLAUDE.md
+   (documentado como observação consciente, não como bug a corrigir
+   agora).
+5. `04-DICIONARIO_DADOS.md` — catálogo coluna-a-coluna das 78 tabelas,
+   gerado por `docs/database/gen_dict.py` (introspecção real via
+   `information_schema`, não leitura de model) + descrição de negócio
+   curada para as tabelas ativas/deprecated.
+6. `05-ACESSOS_E_ISOLAMENTO.md` — **achado de segurança**: banco tem um
+   único usuário Postgres (`evok_admin`), superusuário, usado por
+   runtime da API, migrations e administração manual — sem segregação
+   de privilégio mínimo. Recomendação de roles separadas (app/migration/
+   backup) registrada, não implementada nesta rodada (decisão do dono).
+   Isolamento de serviços externos **verificado e confirmado correto**:
+   n8n (webhook HMAC), Focus NFe/eNotas (webhook + segredo), apps
+   mobile/TV (JWT via API REST) — nenhum tem credencial direta de banco;
+   porta 5432 vinculada a `127.0.0.1` apenas.
+7. `06-ESTRUTURAS_PROGRAMAVEIS.md` — confirmado 0 functions/triggers/
+   procedures de negócio no banco; decisão arquitetural documentada
+   ("toda lógica de negócio vive na aplicação, Clean Architecture") com
+   racional e trade-offs, distinguindo isso de `CHECK`/`UNIQUE`/FK que
+   continuam no banco como invariantes estruturais (ex.: índice único
+   parcial de paradas de produção).
+8. `07-DISASTER_RECOVERY.md` — **achado**: scripts de backup
+   (`scripts/backup-postgres.sh`/`.ps1` + agendadores cron/Task
+   Scheduler) existem e funcionam, mas os únicos dumps reais em
+   `backups/` são de 31/07/2026 (6 dias parados até a data desta
+   auditoria) — nenhuma execução automatizada confirmada ativa neste
+   ambiente (consistente com ser dev local, não produção — servidor de
+   produção ainda não comprado). `docker-compose.prod.yml` não existe.
+   Processo de restore documentado passo a passo, mas **nunca testado
+   de ponta a ponta**; RPO/RTO não formalizados. Recomendações objetivas
+   registradas para antes do Go-Live (ativar cron no servidor real,
+   cobrir `app_uploads` no backup, testar restore, formalizar RPO/RTO).
+
+**Ajustado (sem duplicar conteúdo):** `docs/DATABASE.md` ganhou um aviso
+no topo apontando para `docs/database/00-INDICE.md` como a documentação
+de referência sempre-atual, mantendo o corpo do arquivo como changelog
+histórico narrativo (papel que já cumpria bem e que o `documentador`
+preservou intencionalmente).
+
+**Regra permanente estabelecida:** qualquer migration nova deve
+regenerar `docs/database/schema.sql` e `04-DICIONARIO_DADOS.md`
+(comandos documentados em `03-MODELO_FISICO.md`) no mesmo ciclo de
+trabalho — não é tarefa pontual.
+
+**Pendências para uma próxima rodada:**
+- Implementar a segregação de roles Postgres recomendada em
+  `05-ACESSOS_E_ISOLAMENTO.md` (decisão do dono do produto, não
+  bloqueador técnico imediato).
+- Ativar de fato o cron/Task Scheduler de backup assim que o servidor de
+  produção for adquirido, e testar um restore completo cronometrado
+  (RPO/RTO reais).
+- Criar `docker-compose.prod.yml` dedicado (pendência já rastreada em
+  `docs/infra/DEPLOY_UBUNTU.md`, reforçada aqui pela ótica de DR).
+- Estender o backup para cobrir o volume `app_uploads`, não apenas o
+  dump do Postgres.

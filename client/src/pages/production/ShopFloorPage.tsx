@@ -136,7 +136,7 @@ export default function ShopFloorPage() {
             {(openDowntimes?.data ?? []).map((downtime) => (
               <div
                 key={downtime.id}
-                className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950/30"
+                className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800 dark:bg-amber-950/30"
               >
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">

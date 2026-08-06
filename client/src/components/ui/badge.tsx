@@ -12,8 +12,11 @@ const badgeVariants = cva(
         secondary: 'border-transparent bg-secondary text-secondary-foreground',
         destructive: 'border-transparent bg-destructive text-destructive-foreground',
         outline: 'text-foreground',
-        success: 'border-transparent bg-emerald-600 text-white',
-        warning: 'border-transparent bg-amber-500 text-white',
+        success: 'border-transparent bg-success text-success-foreground',
+        // amber-500/white ficava abaixo do contraste AA (~2:1); amber-700
+        // garante >= 4.5:1 mantendo a mesma convenção "fundo sólido + texto
+        // branco" dos demais variants (success/destructive).
+        warning: 'border-transparent bg-amber-700 text-white',
       },
     },
     defaultVariants: { variant: 'default' },

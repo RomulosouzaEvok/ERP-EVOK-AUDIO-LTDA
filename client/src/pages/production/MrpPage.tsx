@@ -37,8 +37,9 @@ const ORIGIN_LABEL: Record<mrpApi.MrpDemandOrigin, string> = {
 const PLANNED_ORDER_STATUS_STYLE: Record<string, string> = {
   RASCUNHO: 'border-transparent bg-muted text-muted-foreground',
   APROVADA: 'border-transparent bg-blue-600 text-white',
-  EM_EXECUCAO: 'border-transparent bg-amber-500 text-white',
-  CONCLUIDA: 'border-transparent bg-emerald-600 text-white',
+  // amber-500/branco ficava abaixo do contraste AA (~2:1); amber-700 garante >= 4.5:1.
+  EM_EXECUCAO: 'border-transparent bg-amber-700 text-white',
+  CONCLUIDA: 'border-transparent bg-success text-success-foreground',
   CANCELADA: 'border-transparent bg-destructive text-destructive-foreground',
 };
 

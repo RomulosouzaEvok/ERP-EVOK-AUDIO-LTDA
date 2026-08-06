@@ -4,9 +4,9 @@ import { cn } from '@/lib/utils';
 export type HandoffSignal = 'green' | 'yellow' | 'red';
 
 const SIGNAL_META: Record<HandoffSignal, { className: string; label: string }> = {
-  green: { className: 'bg-emerald-500', label: 'No fluxo / a caminho — sem pendência de ação.' },
+  green: { className: 'bg-success', label: 'No fluxo / a caminho — sem pendência de ação.' },
   yellow: { className: 'bg-amber-500', label: 'Aguardando ação — handoff aberto para o próximo setor.' },
-  red: { className: 'bg-red-600', label: 'Atrasado / problema — requer atenção imediata.' },
+  red: { className: 'bg-destructive', label: 'Atrasado / problema — requer atenção imediata.' },
 };
 
 /**

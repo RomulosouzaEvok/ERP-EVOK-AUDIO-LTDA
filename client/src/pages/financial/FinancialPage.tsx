@@ -518,7 +518,7 @@ function CashFlowProjectionSection() {
     queryFn: () => financialApi.getCashFlowProjection(days),
   });
 
-  const netVariant = (data?.totals.net ?? 0) >= 0 ? 'text-emerald-700' : 'text-destructive';
+  const netVariant = (data?.totals.net ?? 0) >= 0 ? 'text-success' : 'text-destructive';
   const overdueTotal = (data?.totals.overdue_receivable ?? 0) + (data?.totals.overdue_payable ?? 0);
 
   return (
@@ -554,10 +554,10 @@ function CashFlowProjectionSection() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <Card>
                 <CardContent className="flex items-center gap-3 p-4">
-                  <TrendingUp className="size-7 text-emerald-600" />
+                  <TrendingUp className="size-7 text-success" />
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Entradas previstas</p>
-                    <p className="text-lg font-semibold text-emerald-700">{formatBRL(data.totals.receivable)}</p>
+                    <p className="text-lg font-semibold text-success">{formatBRL(data.totals.receivable)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -615,9 +615,9 @@ function CashFlowProjectionSection() {
                 {data.weeks.map((week) => (
                   <TableRow key={week.week_start}>
                     <TableCell>{formatWeekRange(week.week_start, week.week_end)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700">{formatBRL(week.receivable)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-success">{formatBRL(week.receivable)}</TableCell>
                     <TableCell className="text-right tabular-nums text-destructive">{formatBRL(week.payable)}</TableCell>
-                    <TableCell className={`text-right tabular-nums ${week.net >= 0 ? 'text-emerald-700' : 'text-destructive'}`}>{formatBRL(week.net)}</TableCell>
+                    <TableCell className={`text-right tabular-nums ${week.net >= 0 ? 'text-success' : 'text-destructive'}`}>{formatBRL(week.net)}</TableCell>
                     <TableCell className={`text-right tabular-nums font-bold ${week.cumulative_net >= 0 ? '' : 'text-destructive'}`}>
                       {formatBRL(week.cumulative_net)}
                     </TableCell>

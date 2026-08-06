@@ -236,7 +236,7 @@ export function ReconciliationTab() {
                       <TableCell className="max-w-64 truncate" title={entry.description ?? undefined}>
                         {entry.description || '—'}
                       </TableCell>
-                      <TableCell className={`text-right tabular-nums ${amount < 0 ? 'text-destructive' : 'text-emerald-700'}`}>
+                      <TableCell className={`text-right tabular-nums ${amount < 0 ? 'text-destructive' : 'text-success'}`}>
                         {formatBRL(amount)}
                       </TableCell>
                       <TableCell>
@@ -300,7 +300,7 @@ export function ReconciliationTab() {
                                 <Undo2 className="size-4" />
                               </Button>
                             )}
-                            {entry.status === 'matched' && <CheckCircle2 className="size-4 self-center text-emerald-600" />}
+                            {entry.status === 'matched' && <CheckCircle2 className="size-4 self-center text-success" />}
                           </div>
                         </TableCell>
                       )}

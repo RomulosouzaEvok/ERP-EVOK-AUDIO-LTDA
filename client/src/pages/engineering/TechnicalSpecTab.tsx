@@ -205,7 +205,7 @@ export function TechnicalSpecTab() {
 
               {formError && <p className="text-sm text-destructive">{formError}</p>}
               {saved && !formError && (
-                <p className="text-sm font-medium text-emerald-600">Ficha técnica salva com sucesso.</p>
+                <p className="text-sm font-medium text-success">Ficha técnica salva com sucesso.</p>
               )}
 
               {canWrite && (

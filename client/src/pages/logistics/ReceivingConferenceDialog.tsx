@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DidacticAlert } from '@/components/DidacticAlert';
+import { AmberNoticeBox } from '@/components/AmberNoticeBox';
 
 const conferenceItemSchema = z.object({
   purchase_item_id: z.number(),
@@ -243,15 +244,14 @@ export function ReceivingConferenceDialog({
 
         {successMessage && (
           <div className="flex flex-col gap-3">
-            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-              <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+            <AmberNoticeBox icon={ShieldAlert}>
               <p>
                 {successMessage} Lotes recebidos entram em quarentena para inspeção (Qualidade).{' '}
                 <Link to="/quality" className="font-medium underline">
                   Ir para Qualidade
                 </Link>
               </p>
-            </div>
+            </AmberNoticeBox>
             <DialogFooter>
               <Button onClick={handleClose}>Fechar</Button>
             </DialogFooter>

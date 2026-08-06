@@ -436,3 +436,33 @@ classDiagram
 - Se voce quiser, eu posso gerar uma segunda versao:
   - mais enxuta, para apresentar em reuniao;
   - ou mais detalhada, com os `use cases` e camadas `domain/application/infrastructure`.
+
+---
+
+## Módulos entregues após a versão original deste diagrama (2026-08-06)
+
+**Status:** 🟡 Parcial — o diagrama principal acima **não foi
+re-renderizado** com estas classes (ficaria muito denso); esta seção lista,
+em texto, as entidades novas e suas relações principais, para que o
+diagrama fique rastreável sem duplicar o dicionário de dados completo
+(que é responsabilidade de `docs/DATABASE.md`, mantido separadamente pelo
+agente `AdmDBA`).
+
+| Classe (model) | Tabela | Relações principais |
+|---|---|---|
+| `Rfq`, `RfqItem`, `RfqSupplier`, `RfqQuote` | `rfqs`, `rfq_items`, `rfq_suppliers`, `rfq_quotes` | `Rfq 1--N RfqItem`; `Rfq N--N Supplier` via `RfqSupplier`; `RfqQuote` referencia `RfqItem` + `Supplier`, alimenta `ItemSupplier` na adjudicação |
+| `CostCenter` | `cost_centers` | `CostCenter 1--N AccountPayable`, `CostCenter 1--N AccountReceivable` (FK `cost_center_id` opcional) |
+| `CustomerPriceList` | `customer_price_lists` | `Client 1--N CustomerPriceList N--1 Item/Product` (preço negociado por par cliente×produto, com vigência opcional) |
+| `WorkCenter`, `WorkCenterShift` | `work_centers`, `work_center_shifts` | `WorkCenter 1--N WorkCenterShift`; `WorkCenter 1--N ProductionRouteStep` (via `work_center_id`); `WorkCenter 1--N ProductionDowntime` |
+| `ProductionDowntime` | `production_downtimes` | `ProductionOrder`/`WorkCenter 1--N ProductionDowntime`; alimenta o cálculo de OEE (`GET /api/reports/oee`) |
+| `BankStatement`, `BankStatementEntry` | `bank_statements`, `bank_statement_entries` | `BankStatement 1--N BankStatementEntry`; `BankStatementEntry N--1 AccountPayable`/`AccountReceivable` (baixa por conciliação) |
+| `PurchaseRequisition`, `PurchaseRequisitionItem` | `purchase_requisitions`, `purchase_requisition_items` | `PurchaseRequisition 1--N PurchaseRequisitionItem`; `PurchaseRequisition 1--N Purchase` (via `requisition_id`, UC-25) |
+| `EngineeringProject`, `ProductDrawing` | `engineering_projects`, `product_drawings` | `EngineeringProject 1--N PurchaseRequisition` (via `engineering_project_id`, UC-39); `Product 1--N ProductDrawing` |
+| `AcousticTestResult` | `acoustic_test_results` | `Product 1--N AcousticTestResult`; `AcousticTestResult N--1 NonConformity` (quando reprovado) |
+| `AccessProfile`, `AccessProfilePermission` | `access_profiles`, `access_profile_permissions` | `AccessProfile 1--N AccessProfilePermission`; `User N--1 AccessProfile` |
+| `Warehouse`, `WarehouseTransfer` | `warehouses`, `warehouse_transfers` | `Warehouse 1--N InventoryMovement` (via `warehouse_id`); `WarehouseTransfer` referencia dois `Warehouse` (origem/destino) |
+| `ItemSupplier` | `item_suppliers` | `Item N--N Supplier` (catálogo item×fornecedor, com `preferred` único por item) |
+
+Fonte: `server/src/models/*.ts` (2026-08-06). Consulte `docs/DATABASE.md`
+para o dicionário de dados completo (colunas, tipos, constraints) — esta
+tabela é apenas o mapa de classes/relações, não o dicionário.

@@ -248,6 +248,7 @@ function Breadcrumbs() {
  */
 export default function AppLayout() {
   const { user, hasRole, hasModuleAccess, permissions, permissionsFetchFailed, isPermissionsLoading, logout } = useAuth();
+  const { pathname, search } = useLocation();
 
   const isAdmin = hasRole('admin');
   const usingRoleFallback = permissionsFetchFailed || isAdmin;
@@ -296,34 +297,119 @@ export default function AppLayout() {
     items: section.items.filter(itemVisible),
   })).filter((section) => section.items.length > 0);
 
+  // Departamento ativo derivado apenas da rota atual (mesmo princípio de
+  // `BREADCRUMBS[pathname]`, sem estado novo): usado pela barra superior
+  // de departamentos e pelo sidebar filtrado (reformulação de navegação,
+  // ver `docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`).
+  //
+  // Itens com querystring (ex.: "Relatórios de Compras" -> /reports?tab=purchasing)
+  // comparam pathname + search inteiros — várias seções apontam para o
+  // mesmo /reports com tabs diferentes, então só o pathname não bastaria
+  // para saber qual departamento está de fato ativo.
+  const activeSection =
+    visibleSections.find((section) =>
+      section.items.some((item) => {
+        if (item.to === '/') return pathname === '/';
+        if (item.to.includes('?')) return `${pathname}${search}` === item.to;
+        return pathname.startsWith(item.to);
+      }),
+    ) ?? visibleSections[0];
+
+  // Departamentos com um único item (Início, Vendas) não precisam de coluna
+  // lateral redundante — a própria aba do topo já cobre a navegação.
+  const showSidebar = Boolean(activeSection && activeSection.items.length > 1);
+
   // UC-35-Exceção: usuário não-admin, sem perfil atribuído, sem falha de
   // rede (fallback não ativo) — bloqueio total com aviso didático.
   const hasNoProfileConfigured =
     !isAdmin && !permissionsFetchFailed && !isPermissionsLoading && (!permissions || Object.keys(permissions).length === 0);
 
   return (
-    <div className="flex min-h-svh">
-      <aside className="flex w-64 shrink-0 flex-col border-r bg-card">
-        <Link to="/" className="flex items-center gap-2.5 border-b bg-brand-dark p-4 transition-opacity hover:opacity-90">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-[0_0_16px_color-mix(in_oklch,var(--brand)_55%,transparent)]">
-            <Zap className="size-5" fill="currentColor" />
+    <div className="flex min-h-svh flex-col">
+      <header className="flex flex-col border-b bg-brand-dark">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <Link to="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-[0_0_16px_color-mix(in_oklch,var(--brand)_55%,transparent)]">
+              <Zap className="size-5" fill="currentColor" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold leading-tight text-white">
+                EVOK <span className="text-brand">ÁUDIO</span>
+              </p>
+              <p className="text-xs text-white/50">Gestão integrada</p>
+            </div>
+          </Link>
+          <div className="flex items-center gap-3">
+            <div className="text-right text-sm">
+              <p className="font-medium leading-tight text-white">{user?.name}</p>
+              <p className="text-xs text-white/50">{roleLabel(user?.role)}</p>
+            </div>
+            <div className="flex size-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-brand-foreground">
+              {initials(user?.name)}
+            </div>
+            <Button asChild variant="ghost" size="icon" title="Trocar senha" className="text-white hover:bg-white/10 hover:text-white">
+              <Link to="/change-password">
+                <KeyRound className="size-4" />
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Sair"
+              onClick={logout}
+              className="text-white hover:bg-white/10 hover:text-white"
+            >
+              <LogOut className="size-4" />
+            </Button>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold leading-tight text-white">
-              EVOK <span className="text-brand">ÁUDIO</span>
+        </div>
+
+        {/* Nível 1: departamentos (Bloco de reformulação de navegação — cada
+            aba linka para a primeira página já cadastrada em `NAV_SECTIONS`
+            para o departamento, sem rota nova). */}
+        <nav className="overflow-x-auto border-t border-white/10 px-2" aria-label="Departamentos">
+          {/*
+            `w-max` + `mx-auto` (em vez de `justify-center` no container com
+            `overflow-x-auto`) centraliza as abas quando cabem na largura da
+            tela, mas em telas estreitas onde o conteúdo transborda, o navegador
+            resolve as margens automáticas para 0 e o scroll continua normal
+            (0..max), sem a "zona morta" à esquerda que `justify-center` causa
+            em containers com overflow (parte do conteúdo ficaria inacessível
+            por scroll em alguns navegadores).
+          */}
+          <div className="mx-auto flex w-max items-center gap-1">
+            {visibleSections.map((section) => {
+              const target = section.items[0]?.to ?? '/';
+              const displayLabel = section.label || section.items[0]?.label || '';
+              const isActiveSection = activeSection?.label === section.label;
+              return (
+                <NavLink
+                  key={section.label || 'inicio'}
+                  to={target}
+                  className={cn(
+                    'shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-brand-dark',
+                    isActiveSection && 'border-brand text-white',
+                  )}
+                >
+                  {displayLabel}
+                </NavLink>
+              );
+            })}
+          </div>
+        </nav>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Nível 2 (desktop): sidebar com apenas as páginas do departamento
+            ativo. Oculto quando o departamento tem só 1 página (Início,
+            Vendas) — a própria aba do topo já cobre a navegação. */}
+        {showSidebar && activeSection && (
+          <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r bg-card p-2 py-3 md:flex">
+            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {activeSection.label || activeSection.items[0]?.label}
             </p>
-            <p className="text-xs text-white/50">Gestão integrada</p>
-          </div>
-        </Link>
-        <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-2 py-3">
-          {visibleSections.map((section) => (
-            <div key={section.label || 'root'} className="flex flex-col gap-1">
-              {section.label && (
-                <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {section.label}
-                </p>
-              )}
-              {section.items.map((item) => {
+            <div className="flex flex-col gap-1">
+              {activeSection.items.map((item) => {
                 const { label, to, icon: Icon, badgeKey } = item;
                 const count = badgeCount(badgeKey);
                 return (
@@ -333,7 +419,7 @@ export default function AppLayout() {
                     end={to === '/'}
                     className={({ isActive }) =>
                       cn(
-                        'flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground',
+                        'flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
                         isActive && 'border-brand bg-brand/10 text-brand',
                       )
                     }
@@ -352,34 +438,44 @@ export default function AppLayout() {
                 );
               })}
             </div>
-          ))}
-        </nav>
-      </aside>
+          </aside>
+        )}
 
-      <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b bg-card px-4 py-3">
-          <Breadcrumbs />
-          <div className="flex items-center gap-3">
-            <div className="text-right text-sm">
-              <p className="font-medium leading-tight">{user?.name}</p>
-              <p className="text-xs text-muted-foreground">{roleLabel(user?.role)}</p>
-            </div>
-            <div className="flex size-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-brand-foreground">
-              {initials(user?.name)}
-            </div>
-            <Button asChild variant="ghost" size="icon" title="Trocar senha">
-              <Link to="/change-password">
-                <KeyRound className="size-4" />
-              </Link>
-            </Button>
-            <Button variant="ghost" size="icon" title="Sair" onClick={logout}>
-              <LogOut className="size-4" />
-            </Button>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Nível 2 (mobile/telas estreitas): mesma lista de páginas do
+              departamento ativo, como uma segunda faixa de chips
+              horizontais no lugar da sidebar (`hidden` em md+). */}
+          {showSidebar && activeSection && (
+            <nav
+              className="flex items-center gap-2 overflow-x-auto border-b bg-muted/30 px-3 py-2 md:hidden"
+              aria-label={`Páginas de ${activeSection.label || activeSection.items[0]?.label || ''}`}
+            >
+              {activeSection.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/'}
+                  className={({ isActive }) =>
+                    cn(
+                      'shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
+                      isActive && 'bg-brand/10 text-brand',
+                    )
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          )}
+
+          <div className="border-b bg-card px-4 py-3">
+            <Breadcrumbs />
           </div>
-        </header>
-        <main className="flex-1 overflow-auto p-6">
-          {hasNoProfileConfigured ? <AccessDeniedPage variant="noProfile" /> : <Outlet />}
-        </main>
+
+          <main className="flex-1 overflow-auto p-6">
+            {hasNoProfileConfigured ? <AccessDeniedPage variant="noProfile" /> : <Outlet />}
+          </main>
+        </div>
       </div>
     </div>
   );

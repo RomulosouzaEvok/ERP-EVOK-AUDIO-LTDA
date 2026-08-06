@@ -41,7 +41,7 @@ function utilizationTone(rate: number | null): string {
   if (rate === null) return 'bg-muted-foreground/40';
   if (rate > 1) return 'bg-destructive';
   if (rate >= 0.8) return 'bg-amber-500';
-  return 'bg-emerald-600';
+  return 'bg-success';
 }
 
 /** Barra de utilização proporcional (0–100%, capada visualmente em 100%). */

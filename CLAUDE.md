@@ -299,7 +299,8 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 - **[docs/projeto/02-PLANO_INDUSTRIAL.md](docs/projeto/02-PLANO_INDUSTRIAL.md)** — 21 departamentos, BOM de auto-falante, processos produção
 - **[docs/projeto/04-USE_CASES.md](docs/projeto/04-USE_CASES.md)** — Casos de uso (UC-01 a UC-XX)
 - **[docs/HANDOFF_CODEX.md](docs/HANDOFF_CODEX.md)** — Migração Product → Item (Fase 1–4.1, backfill scripts)
-- **[docs/DATABASE.md](docs/DATABASE.md)** — Modelo de dados, ER diagram
+- **[docs/DATABASE.md](docs/DATABASE.md)** — Changelog histórico narrativo de modelagem/migrations
+- **[docs/database/00-INDICE.md](docs/database/00-INDICE.md)** — Documentação de dados de referência sempre-atual (Modelo Conceitual/MER, Modelo Lógico/DER, Modelo Físico/DDL, Dicionário de Dados das 78 tabelas, Acessos e Isolamento, Estruturas Programáveis, Disaster Recovery) — NOVO, 2026-08-06
 
 ### Crítico — Go-Live
 - **[docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)** — 4 bloqueadores P0, 15 altos P1, plano 30h
@@ -317,6 +318,15 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 - **[docs/producao/06-BOM.md](docs/producao/06-BOM.md)** — Estrutura de produtos (detalhado)
 - **[docs/00-ESTRUTURA_ORGANIZACIONAL.md](docs/00-ESTRUTURA_ORGANIZACIONAL.md)** — 21 departamentos
 - Mais em `docs/comercial/`, `docs/financeiro/`, `docs/qualidade/`, etc.
+
+### Arquitetura, Diagramas e Manual do Usuário (NOVO, 2026-08-06)
+- **[docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md](docs/arquitetura/REQUISITOS_NAO_FUNCIONAIS.md)** — desempenho, segurança, disponibilidade, escalabilidade, observabilidade (extraído do código real, sem números inventados)
+- **[docs/arquitetura/DIAGRAMA_ARQUITETURA_INFRAESTRUTURA.md](docs/arquitetura/DIAGRAMA_ARQUITETURA_INFRAESTRUTURA.md)** — diagrama Mermaid do ambiente de dev real e do plano de produção (servidor ainda não adquirido)
+- **[docs/arquitetura/DIAGRAMAS_SEQUENCIA.md](docs/arquitetura/DIAGRAMAS_SEQUENCIA.md)** — sequência dos 3 fluxos mais críticos (venda→estoque→NF-e, requisição→RFQ→compra→recebimento, OP→apontamento→OEE)
+- **[docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md](docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md)** — diagrama de casos de uso (atores × módulos) e BPMN simplificado (Order-to-Cash, Purchase-to-Pay)
+- **[docs/DIAGRAMA_CLASSES.md](docs/DIAGRAMA_CLASSES.md)** / **[docs/DIAGRAMA_CLASSES_CAMADAS.md](docs/DIAGRAMA_CLASSES_CAMADAS.md)** — diagrama de classes do backend e das camadas Clean Architecture
+- **[docs/manual/00-MANUAL_DO_USUARIO.md](docs/manual/00-MANUAL_DO_USUARIO.md)** — manual do usuário por módulo (esqueleto inicial, caminhos de menu reais)
+- Modelo conceitual/lógico/físico, matriz de privilégios, procedures/triggers e plano de disaster recovery ficam em `docs/DATABASE.md` (escopo do agente `AdmDBA`, tratado separadamente para não duplicar/conflitar)
 
 ---
 

@@ -89,7 +89,7 @@ export default function ChangePasswordPage() {
               {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>}
             </div>
             {apiError && <p className="text-sm text-destructive">{apiError}</p>}
-            {success && <p className="text-sm text-emerald-600">{success}</p>}
+            {success && <p className="text-sm text-success">{success}</p>}
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Salvando...' : 'Trocar senha'}
             </Button>

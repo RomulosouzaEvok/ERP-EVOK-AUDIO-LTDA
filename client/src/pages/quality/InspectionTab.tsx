@@ -42,8 +42,13 @@ const STATUS_BADGE: Record<lotsApi.LotStatus, BadgeProps['variant']> = {
   reserved: 'secondary',
 };
 
+// "Expirado" mantém o variant `outline` (visualmente distinto de "Bloqueado",
+// que usa `destructive` sólido), mas recolore borda/texto para o mesmo token
+// `--destructive` em vez de um terceiro tom de "atenção" (laranja) — a
+// paleta de atenção do sistema fica só em duas cores: âmbar (pendência,
+// `warning`) e destructive (crítico/bloqueante).
 const STATUS_BADGE_CLASS: Partial<Record<lotsApi.LotStatus, string>> = {
-  expired: 'border-orange-500 text-orange-600',
+  expired: 'border-destructive text-destructive',
 };
 
 function formatDate(value: string | null): string {
@@ -172,7 +177,7 @@ export function InspectionTab({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                      className="border-success/40 text-success hover:bg-success/10 hover:text-success dark:border-success/50 dark:hover:bg-success/15"
                       onClick={() => setReleasingLot(lot)}
                     >
                       <CheckCircle2 className="size-4" /> Aprovar

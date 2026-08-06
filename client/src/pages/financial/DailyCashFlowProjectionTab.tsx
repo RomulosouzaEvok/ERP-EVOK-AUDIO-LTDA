@@ -91,7 +91,7 @@ export function DailyCashFlowProjectionTab() {
                   <Wallet className="size-7 text-brand" />
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Saldo final projetado</p>
-                    <p className={`text-lg font-semibold ${data.summary.final_balance >= 0 ? 'text-emerald-700' : 'text-destructive'}`}>
+                    <p className={`text-lg font-semibold ${data.summary.final_balance >= 0 ? 'text-success' : 'text-destructive'}`}>
                       {formatBRL(data.summary.final_balance)}
                     </p>
                   </div>
@@ -154,9 +154,9 @@ export function DailyCashFlowProjectionTab() {
                           {point.day_index === 0 && <span className="ml-1 text-xs text-muted-foreground">(hoje)</span>}
                           {isLowest && <span className="ml-1 text-xs font-semibold text-destructive">menor saldo</span>}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-emerald-700">{formatBRL(point.receivable)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-success">{formatBRL(point.receivable)}</TableCell>
                         <TableCell className="text-right tabular-nums text-destructive">{formatBRL(point.payable)}</TableCell>
-                        <TableCell className={`text-right tabular-nums ${point.net >= 0 ? 'text-emerald-700' : 'text-destructive'}`}>
+                        <TableCell className={`text-right tabular-nums ${point.net >= 0 ? 'text-success' : 'text-destructive'}`}>
                           {formatBRL(point.net)}
                         </TableCell>
                         <TableCell className={`text-right tabular-nums font-bold ${point.balance >= 0 ? '' : 'text-destructive'}`}>

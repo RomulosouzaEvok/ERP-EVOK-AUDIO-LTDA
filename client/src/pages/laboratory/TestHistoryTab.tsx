@@ -300,10 +300,10 @@ function SummaryTile({
   value: string;
   tone?: 'good' | 'bad';
 }) {
-  const toneClass = tone === 'good' ? 'text-emerald-600' : tone === 'bad' ? 'text-destructive' : '';
+  const toneClass = tone === 'good' ? 'text-success' : tone === 'bad' ? 'text-destructive' : '';
   const badgeToneClass =
     tone === 'good'
-      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+      ? 'bg-success/10 text-success dark:bg-success/15'
       : tone === 'bad'
         ? 'bg-destructive/10 text-destructive'
         : 'bg-brand/10 text-brand';

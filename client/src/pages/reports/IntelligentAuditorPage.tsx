@@ -26,7 +26,7 @@ function formatDate(value: string | null | undefined): string {
 
 /** Tile de indicador com rótulo e valor grande. `tone='bad'` destaca achados que exigem ação. */
 function StatTile({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'bad' }) {
-  const toneClass = tone === 'good' ? 'text-emerald-600' : tone === 'bad' ? 'text-destructive' : '';
+  const toneClass = tone === 'good' ? 'text-success' : tone === 'bad' ? 'text-destructive' : '';
   return (
     <Card>
       <CardHeader className="pb-1">

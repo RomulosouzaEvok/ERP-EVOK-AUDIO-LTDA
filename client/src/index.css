@@ -32,6 +32,15 @@
   --accent-foreground: oklch(0.3 0.08 152);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
+  /*
+   * "Sucesso"/positivo (aprovado, concluído, recebido) — mesma família de
+   * matiz do verde de marca (hue 152), só mais escuro para garantir
+   * contraste AA com texto branco, em vez do `emerald-*` do Tailwind (matiz
+   * ~163, mais frio/saturado) que antes era hardcoded em ~20 arquivos e
+   * competia visualmente com `--brand` (identidade visual EVOK ÁUDIO).
+   */
+  --success: oklch(0.45 0.13 152);
+  --success-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.5 0.12 152 / 50%);
@@ -54,6 +63,9 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
+  /* Mais claro que no tema claro (mesmo princípio de `--destructive` acima), para se manter legível contra o fundo escuro. */
+  --success: oklch(0.62 0.15 152);
+  --success-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
@@ -80,6 +92,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

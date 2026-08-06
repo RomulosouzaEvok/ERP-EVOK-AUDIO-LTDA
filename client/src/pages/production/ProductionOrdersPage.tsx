@@ -45,9 +45,10 @@ const STATUS_LABEL: Record<productionApi.ProductionStatus, string> = {
 const STATUS_BADGE_CLASS: Record<productionApi.ProductionStatus, string> = {
   planned: 'border-transparent bg-muted text-muted-foreground',
   released: 'border-transparent bg-blue-600 text-white',
-  in_progress: 'border-transparent bg-amber-500 text-white',
+  // amber-500/branco ficava abaixo do contraste AA (~2:1); amber-700 garante >= 4.5:1.
+  in_progress: 'border-transparent bg-amber-700 text-white',
   paused: 'border-transparent bg-secondary text-secondary-foreground',
-  completed: 'border-transparent bg-emerald-600 text-white',
+  completed: 'border-transparent bg-success text-success-foreground',
   canceled: 'border-transparent bg-destructive text-destructive-foreground',
 };
 

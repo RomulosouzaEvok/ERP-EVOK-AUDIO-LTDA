@@ -690,7 +690,7 @@ function QuoteTab({ rfq }: { rfq: rfqApi.Rfq }) {
         </Table>
       )}
 
-      {success && <p className="text-sm text-emerald-600">Cotação registrada com sucesso.</p>}
+      {success && <p className="text-sm text-success">Cotação registrada com sucesso.</p>}
       {error && <DidacticAlert error={error} />}
 
       <Button
@@ -806,10 +806,10 @@ function ComparisonTab({ rfq, onClose }: { rfq: rfqApi.Rfq; onClose: () => void 
               {item.quotes.map((quote) => (
                 <TableRow key={quote.quote_id}>
                   <TableCell>{quote.supplier_name}</TableCell>
-                  <TableCell className={cn('text-right tabular-nums', quote.is_best_price && 'font-semibold text-emerald-600')}>
+                  <TableCell className={cn('text-right tabular-nums', quote.is_best_price && 'font-semibold text-success')}>
                     R$ {quote.unit_price.toFixed(2)} {quote.is_best_price && <Trophy className="ml-1 inline size-3" />}
                   </TableCell>
-                  <TableCell className={cn('text-right tabular-nums', quote.is_best_lead_time && 'font-semibold text-emerald-600')}>
+                  <TableCell className={cn('text-right tabular-nums', quote.is_best_lead_time && 'font-semibold text-success')}>
                     {quote.lead_time_days ?? '-'}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{quote.moq ?? '-'}</TableCell>
