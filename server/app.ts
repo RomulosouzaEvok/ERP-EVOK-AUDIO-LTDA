@@ -191,6 +191,9 @@ app.use('/api/ti', require('./src/modules/ti/presentation/routes/ti'));
 app.use('/api/facilities', require('./src/modules/facilities/presentation/routes/facilities'));
 app.use('/api/marketing', require('./src/modules/marketing/presentation/routes/marketing'));
 app.use('/api/legal', require('./src/modules/legal/presentation/routes/legal'));
+app.use('/api/accounting', require('./src/modules/accounting/presentation/routes/accounting'));
+app.use('/api/treasury', require('./src/modules/treasury/presentation/routes/treasury'));
+app.use('/api/budget', require('./src/modules/budget/presentation/routes/budget'));
 
 app.use('/uploads', express.static('uploads'));
 

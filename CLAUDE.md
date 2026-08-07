@@ -1,24 +1,31 @@
 # CLAUDE.md — ERP Evok Áudio LTDA
 **Single Source of Truth (SSOT) para o projeto ERP**
 
-**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 majoritariamente entregue (2026-08-04/06), incluindo apps mobile e Android TV novos, RFQ, centros de custo, OEE, conciliação bancária, faturamento parcial e downtime de produção | **Data:** 6 de agosto de 2026  
+**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 majoritariamente entregue (2026-08-04/07), incluindo apps mobile e Android TV novos, RFQ, centros de custo, OEE, conciliação bancária, faturamento parcial, downtime de produção, módulos SST/TI completos e os 6 departamentos/subáreas que faltavam (Facilities, Marketing, Jurídico, Contabilidade, Tesouraria, Controladoria) | **Data:** 7 de agosto de 2026  
 **Próximo passo:** UAT completo → aprovação formal G6 → aquisição do servidor de produção → Go-Live
 
 ---
 
 ## 1. Overview
 
-**ERP EVOK ÁUDIO LTDA** é um sistema completo de gestão empresarial para manufatura de auto-falantes profissionais em larga escala (~100-150 colaboradores, 21 departamentos).
+**ERP EVOK ÁUDIO LTDA** é um sistema completo de gestão empresarial para manufatura de auto-falantes profissionais em larga escala (~100-150 colaboradores, 17 departamentos + 6 subáreas funcionais — todos com módulo funcional real desde 2026-08-07, ver `docs/00-ESTRUTURA_ORGANIZACIONAL.md`).
 
 ### Cobertura
 - **RH & Departamentos:** Estrutura organizacional, funcionários, turnos
 - **Vendas & Comercial:** Pedidos, cotações, projeção financeira
-- **Compras & Suprimentos:** Requisição (NOVO), pedidos, recebimento, avaliação de fornecedores
+- **Marketing:** Campanhas, funil de leads, materiais de divulgação (NOVO 2026-08-07)
+- **Compras & Suprimentos:** Requisição, pedidos, recebimento, avaliação de fornecedores, RFQ, importação/COMEX
 - **Estoque & Almoxarifado:** Entrada/saída, inventário mobile (QR Code), reservas, curva ABC
 - **Produção & PCP:** Ordens de Produção (OP), apontamento, BOM (estrutura de produtos), rotas de manufatura
 - **Qualidade:** Inspeção, não-conformidades (NC), testes acústicos
-- **Financeiro & Contabilidade:** Contas a pagar/receber, fluxo de caixa, projeção 30 dias
+- **Financeiro:** Contas a pagar/receber, fluxo de caixa, projeção 30 dias, conciliação bancária/CNAB
+- **Contabilidade:** Plano de contas, lançamentos por partida dobrada, balancete (NOVO 2026-08-07)
+- **Tesouraria:** Contas bancárias, operações financeiras (empréstimos/aplicações), posição de caixa (NOVO 2026-08-07)
+- **Controladoria:** Orçamento por centro de custo, relatório orçado × realizado (NOVO 2026-08-07)
 - **Patrimônio & Manutenção:** Ativos, QR Code, depreciação, manutenção
+- **Facilities:** Frota de veículos, abastecimento, limpeza, áreas físicas (NOVO 2026-08-07)
+- **Jurídico:** Contratos (+ aditivos/lembretes de prazo), propriedade intelectual (NOVO 2026-08-07)
+- **SST & TI:** Segurança e Saúde do Trabalho (EPI, ASO, CIPA, PGR) e helpdesk/patrimônio de TI/acessos (2026-08-06/07)
 - **Relatórios & Dashboard:** KPIs, análise de estoque, eficiência de produção, auditor inteligente
 
 ### Status Atual
@@ -376,8 +383,8 @@ R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de 
 
 ---
 
-**Versão:** 1.2 SSOT  
-**Última atualização:** 6 de agosto de 2026 (terceira rodada do dia)  
+**Versão:** 1.3 SSOT  
+**Última atualização:** 7 de agosto de 2026 (Bloco 2 TI + fechamento dos 6 departamentos/subáreas sem módulo: Facilities, Marketing, Jurídico, Contabilidade, Tesouraria, Controladoria)  
 **Próxima revisão:** Pós-Go-Live (semana 1 de setembro)
 
 Remova referências a análises antigas. Este documento é o guia único de verdade.

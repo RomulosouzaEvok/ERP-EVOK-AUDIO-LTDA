@@ -44,6 +44,9 @@ const MyTicketsPage = lazy(() => import('@/pages/ti/MyTicketsPage'));
 const FacilitiesPage = lazy(() => import('@/pages/facilities/FacilitiesPage'));
 const MarketingPage = lazy(() => import('@/pages/marketing/MarketingPage'));
 const LegalPage = lazy(() => import('@/pages/legal/LegalPage'));
+const AccountingPage = lazy(() => import('@/pages/accounting/AccountingPage'));
+const TreasuryPage = lazy(() => import('@/pages/treasury/TreasuryPage'));
+const BudgetPage = lazy(() => import('@/pages/budget/BudgetPage'));
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'));
 const AssetsPage = lazy(() => import('@/pages/patrimonio/AssetsPage'));
 const MaintenanceRequisitionsPage = lazy(() => import('@/pages/maintenance/MaintenanceRequisitionsPage'));
@@ -453,6 +456,39 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <LegalPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="contabilidade" />}>
+            <Route
+              path="/accounting"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <AccountingPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="tesouraria" />}>
+            <Route
+              path="/treasury"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <TreasuryPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="controladoria" />}>
+            <Route
+              path="/budget"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <BudgetPage />
                 </Suspense>
               }
             />

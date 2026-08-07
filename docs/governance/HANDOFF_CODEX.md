@@ -10077,3 +10077,705 @@ parâmetros e retorno.
    mas sem ações de escrita dentro do diálogo).
 
 ---
+
+## Módulo Contabilidade — Implementação do zero (Backend + Frontend)
+
+**Data**: 2026-08-07
+**Escopo**: subárea CONT do departamento Financeiro (sem linha própria em
+`departments`) não tinha NENHUM código antes desta entrega — apenas o spec
+`docs/financeiro/02-CONTABILIDADE.md` com 4 tabelas em sintaxe MySQL
+apresentadas como reais, nunca migradas. Precedente direto: mesmo padrão de
+Facilities/Marketing/Jurídico implementados nesta mesma sessão, mas este é
+o módulo de maior risco funcional — envolve dupla entrada contábil (débito
+= crédito), não apenas cadastro/controle.
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+3 áreas funcionais sobre 3 tabelas novas:
+
+1. **Plano de Contas** (`accounting_chart_of_accounts`) — hierárquico via
+   `parent_id` self-FK, código único (`"1"`, `"1.1"`, `"1.1.1"`), tipo
+   (`asset|liability|equity|revenue|expense|cost`), `account_level`/
+   `parent_id` calculados automaticamente a partir dos segmentos do código
+   (nunca informados pelo chamador), `accept_entries` (só contas "folha"
+   recebem lançamento direto — validado ao criar/editar tanto a conta
+   quanto o item de lançamento), `active` (desativação lógica). Seedado com
+   as 30 contas do "Plano de Contas (Resumo)" do spec original.
+2. **Lançamentos Contábeis** (`accounting_entries` +
+   `accounting_entry_items`) — cabeçalho + N itens de débito/crédito.
+   Número sequencial `LC-000001` (por contagem, mesma limitação de
+   concorrência já documentada em `RfqRepository.countRfqsInYear` —
+   aceitável pelo baixo volume/setor único). Nasce sempre `draft`
+   (editável livremente, inclusive substituição integral dos itens via
+   `PUT`). Duas transições dedicadas de status:
+   - `PATCH /api/accounting/entries/:id/post` (`draft -> posted`): valida
+     mínimo 2 itens, ao menos 1 linha de débito E 1 de crédito, e soma de
+     débito = soma de crédito (comparação em centavos via
+     `shared/utils/money`, evita falso-negativo de ponto flutuante) —
+     senão `BusinessRuleError` 422 com a diferença em reais. Depois de
+     `posted`, itens ficam imutáveis.
+   - `PATCH /api/accounting/entries/:id/reverse` (`posted -> reversed`):
+     cria um NOVO lançamento (`entry_type: 'adjustment'`, já `posted`,
+     `reversal_of_id` apontando para o original) com débito/crédito de
+     cada item invertidos — nunca apaga/edita o original, só marca
+     `reversed`.
+3. **Balancete** (relatório derivado, sem tabela própria) — `GET
+   /api/accounting/trial-balance?year=&month=`: por conta, saldo anterior/
+   débito do mês/crédito do mês/saldo atual, calculado on-the-fly a partir
+   de `accounting_entry_items` de lançamentos `posted`, agregados via SQL
+   raw (mesmo padrão de `GetCostCenterReportUseCase`, módulo `financial`).
+
+Backend: `server/src/modules/accounting/` (Clean Architecture —
+`domain/repositories`, `application/{use-cases/{account,entry,report},
+services/validateEntryItemsShape}`, `infrastructure/sequelize`,
+`presentation/{controllers,routes,validators}`), 11 endpoints REST em
+`/api/accounting/*`, montado em `server/app.ts`. Frontend:
+`client/src/pages/accounting/AccountingPage.tsx` (3 abas — Lançamentos,
+Plano de Contas, Balancete), API client `client/src/api/accounting.ts`,
+rota `/accounting` protegida por `ModuleRoute module="contabilidade"`, item
+de menu no grupo "Gestão" (junto de Financeiro).
+
+### Decisões de design tomadas por conta própria
+
+- **`trial_balance` não virou tabela** — por instrução explícita da
+  tarefa, é 100% dado derivado (`GetTrialBalanceUseCase` +
+  `SequelizeAccountingRepository.getTrialBalanceRows`), calculado a cada
+  requisição a partir de `accounting_entry_items`. Evita o risco de
+  dessincronização entre a "foto" salva e o razão real.
+- **`accounting_entry_items.account_id` é FK real**, não o
+  `account_code VARCHAR(20)` solto do spec original — substituído por
+  integridade referencial (`ON DELETE RESTRICT`, não pode apagar conta com
+  lançamento).
+- **`reversal_of_id` é coluna NOVA** em `accounting_entries` (não existia
+  no spec original): self-FK nullable, `ON DELETE SET NULL`, populada
+  apenas no lançamento de ESTORNO, apontando para o original revertido.
+  Decisão consciente de ir além do pedido explícito da tarefa (que só
+  citava "descrição referenciando o original") porque uma FK real permite
+  navegar "este lançamento estornou o de nº X" sem parsing de texto — mais
+  seguro para auditoria fiscal.
+- **`account_level`/`parent_id` são sempre calculados no backend**, nunca
+  aceitos do payload do cliente — evita o cliente enviar um nível
+  inconsistente com o código informado.
+- **`UpdateAccountUseCase` bloqueia `accept_entries: true` em conta com
+  filhas** — uma conta sintética com contas-filha não pode virar "folha"
+  sem primeiro reorganizar a hierarquia (evitaria lançamento tanto na
+  conta pai quanto nas filhas, ambíguo para o balancete).
+- **`validateEntryItemsShape.ts` é um serviço de aplicação compartilhado**
+  (não um use case) entre `CreateEntryUseCase` e `UpdateEntryUseCase` — a
+  regra "exatamente um de débito/crédito por linha" é idêntica nos dois
+  fluxos; extraída para não duplicar a validação nem arriscar divergência
+  futura entre criar e editar.
+- **RBAC com nível `approve`** — diferente de
+  Facilities/Marketing/Jurídico (só `operate`), Contabilidade protege
+  `post`/`reverse` com `authorizeModule('contabilidade', 'approve')`: são
+  as duas ações que fecham/desfazem a contabilização oficial de um
+  lançamento, correspondendo ao "responsável técnico" (Contador CRC) do
+  organograma do departamento (`docs/financeiro/02-CONTABILIDADE.md`
+  §"Estrutura").
+- **Número sequencial calculado por `COUNT(*)`**, não por sequence
+  dedicada do Postgres — mesma limitação de concorrência já aceita em
+  `RfqRepository.countRfqsInYear` (RFQ), reconhecida como risco residual
+  aceitável pelo baixo volume esperado (um único setor contábil operando).
+- **Sem delete físico nem lógico de lançamento** — mesma filosofia de
+  `CLAUDE.md` §7 (auditoria fiscal exige histórico imutável): um
+  lançamento errado em `draft` pode ser editado livremente; um lançamento
+  `posted` errado só é corrigido via estorno (nunca apagado).
+
+### Arquivos criados
+
+**Backend:**
+- `server/migrations/20260807-000230-create-accounting-module.cjs`
+- `server/migrations/20260807-000231-seed-accounting-chart-of-accounts.cjs`
+- `server/src/models/{AccountingChartOfAccount,AccountingEntry,AccountingEntryItem}.ts`
+- `server/src/modules/accounting/domain/repositories/AccountingRepository.ts`
+- `server/src/modules/accounting/infrastructure/sequelize/SequelizeAccountingRepository.ts`
+- `server/src/modules/accounting/application/services/validateEntryItemsShape.ts`
+- `server/src/modules/accounting/application/use-cases/account/{Create,List,GetById,Update}AccountUseCase.ts`
+- `server/src/modules/accounting/application/use-cases/entry/{Create,List,GetById,Update,Post,Reverse}EntryUseCase.ts`
+- `server/src/modules/accounting/application/use-cases/report/GetTrialBalanceUseCase.ts`
+- `server/src/modules/accounting/presentation/validators/{chartOfAccounts,accountingEntry}Validators.ts`
+- `server/src/modules/accounting/presentation/controllers/{chartOfAccounts,accountingEntry,trialBalance}Controller.ts`
+- `server/src/modules/accounting/presentation/routes/accounting.ts`
+- `server/tests/unit/accounting-use-cases.test.ts` (19 casos)
+
+**Frontend:**
+- `client/src/api/accounting.ts`
+- `client/src/pages/accounting/{AccountingPage,ChartOfAccountsTab,EntriesTab,TrialBalanceTab}.tsx`
+
+### Arquivos modificados
+
+- `server/src/models/index.ts` — imports dos 3 models novos + associações
+  (`AccountingChartOfAccount` auto-relacionamento hierárquico,
+  `AccountingEntry↔AccountingEntryItem`, `AccountingEntryItem↔CostCenter`,
+  `AccountingEntry↔User` autor/aprovador, `AccountingEntry`
+  auto-relacionamento de estorno).
+- `server/src/shared/domain/accessModules.ts` — módulo `contabilidade`
+  adicionado a `AccessModuleKey`/`ACCESS_MODULES`.
+- `server/app.ts` — `app.use('/api/accounting', ...)`.
+- `server/tests/unit/module-authorization-map.test.ts` — `accounting`
+  adicionado a `MODULES_REQUIRING_AUTHORIZE_MODULE` (guarda
+  anti-regressão, senão o teste falha por módulo novo não coberto).
+- `client/src/api/accessProfiles.ts` — `contabilidade` adicionado ao tipo
+  `AccessModuleKey` espelhado.
+- `client/src/App.tsx` — lazy import `AccountingPage` + rota `/accounting`
+  atrás de `ModuleRoute module="contabilidade"`.
+- `client/src/layouts/AppLayout.tsx` — item de menu "Contabilidade" no
+  grupo Gestão (junto de Financeiro) + entrada em `BREADCRUMBS`.
+- `docs/financeiro/02-CONTABILIDADE.md` — removida a apresentação do SQL
+  MySQL como se fosse real, documentado o contrato real de
+  `accounting_chart_of_accounts`/`accounting_entries`/
+  `accounting_entry_items` na nova seção "Contrato Real Implementado".
+- `docs/governance/TODO.md` — nova entrada datada 2026-08-07.
+
+### Documentações atualizadas
+
+`docs/financeiro/02-CONTABILIDADE.md`, `docs/governance/TODO.md`, e este
+arquivo (`docs/governance/HANDOFF_CODEX.md`). Todo arquivo TypeScript novo
+tem cabeçalho JSDoc explicando responsabilidade, e cada método de
+repositório abstrato/use case documenta parâmetros e retorno.
+
+### Validação
+
+- `npm run typecheck --prefix server` — 0 erros.
+- Smoke test de runtime dos models (`node -e "require('tsx/cjs');
+  require('./src/models/index.ts')"`, a partir de `server/`) — OK, "OK
+  models carregam em runtime". Confirmado também com
+  `src/modules/accounting/presentation/routes/accounting.ts` carregado
+  isoladamente.
+- `npx tsc --noEmit --project client` (a partir de `client/`) — 0 erros
+  (`EXIT:0`).
+- `npm run migration:up --prefix server` — migrations `20260807-000230` e
+  `20260807-000231` aplicadas com sucesso contra o Postgres local
+  (`evok-postgres`, Docker); confirmado com `npm run migration:status
+  --prefix server` (ambas `up`) e com
+  `docker exec evok-postgres psql -U evok_admin -d erp_evok_audio -c
+  "SELECT count(*) FROM accounting_chart_of_accounts;"` → **30** (seed
+  aplicado corretamente, hierarquia `parent_id` conferida por amostra).
+- `npx jest tests/unit --runInBand --prefix server` — 962/963 passando (1
+  falha pré-existente e conhecida em
+  `onda3-shipping-cockpit-cashflow.test.ts`, não relacionada a este
+  módulo); 19 testes novos do módulo Contabilidade, 0 regressões
+  (incluindo o ajuste necessário em `module-authorization-map.test.ts`).
+  Os 19 testes cobrem especificamente os 5 cenários pedidos: lançamento
+  com débito≠crédito rejeitado ao postar, lançamento balanceado aceito,
+  itens de lançamento `posted` não editáveis, estorno gera novo lançamento
+  com valores invertidos, conta sintética (`accept_entries=false`) não
+  aceita lançamento direto — mais casos adicionais de plano de contas
+  (código duplicado, pai inexistente, pai já "folha", conta com filhas não
+  pode virar "folha").
+
+### Riscos residuais / fora do escopo desta entrega
+
+- Sem teste de integração HTTP real (Supertest) contra o banco — apenas
+  unitários com repositório mockado, mesmo padrão de
+  Facilities/Marketing/Jurídico.
+- Sem integração fiscal (SPED/ECD/ECF/DCTF/eSocial) — só escrituração
+  interna (lançamentos, plano de contas, balancete).
+- Sem geração automática de lançamento a partir de outros módulos (vendas,
+  compras, folha, depreciação de patrimônio) — todo lançamento é manual
+  nesta rodada, apesar do `entry_type` já prever essas categorias.
+- Número sequencial `LC-XXXXXX` por `COUNT(*)` — mesma limitação de
+  concorrência de `RfqRepository.countRfqsInYear`, aceitável pelo baixo
+  volume esperado (ver decisão de design acima).
+- Plano de Contas no frontend é lista indentada por nível
+  (`ChartOfAccountsTab.tsx`), não árvore com expand/collapse — suficiente
+  para os 30 registros do seed, pode precisar de UI de árvore de verdade
+  se o plano crescer muito.
+- Sem teste de integração real (Postgres) do fluxo completo
+  create→post→reverse — só verificado manualmente via
+  `npm run migration:up` + inspeção de dados (seed), não via requisição
+  HTTP ponta a ponta.
+
+### Instruções de teste manual
+
+1. Logar como `admin` (ou usuário com perfil que inclua o módulo
+   `contabilidade` em nível `operate`, e `approve` para postar/estornar) e
+   acessar `/accounting` pelo menu Gestão.
+2. Aba **Plano de Contas**: confirmar as 30 contas seedadas, indentadas por
+   nível (ex.: "1" no topo, "1.1" indentada, "1.1.1" mais indentada ainda).
+   Criar uma conta nova filha de uma sintética existente (ex.: código
+   `"1.1.5"`) e confirmar que aparece na posição correta.
+3. Aba **Lançamentos**: criar um lançamento novo com 2 itens (ex.: débito
+   R$ 1.000 na conta "1.1.1 Caixa e Equivalentes", crédito R$ 1.000 na
+   conta "3.1 Receita Bruta de Vendas") — confirmar que o indicador de
+   soma no rodapé do formulário mostra "Balanceado ✓" antes de salvar.
+4. Salvar como rascunho, abrir "Ver" e confirmar os 2 itens exibidos com
+   status "Rascunho".
+5. Clicar em "Postar" — confirmar que o status muda para "Contabilizado".
+6. Tentar criar outro lançamento com débito ≠ crédito (ex.: débito R$ 500,
+   crédito R$ 300) e postar — confirmar que a API retorna 422 com mensagem
+   didática explicando a diferença (R$ 200,00).
+7. No lançamento postado do passo 5, clicar em "Estornar" — confirmar que
+   surge um NOVO lançamento na lista (`entry_type` "Ajuste/Estorno") com
+   débito/crédito invertidos, e que o lançamento original agora mostra
+   status "Estornado".
+8. Aba **Balancete**: selecionar o mês/ano do lançamento postado —
+   confirmar que a conta "1.1.1 Caixa e Equivalentes" aparece com o
+   débito/crédito do mês refletindo o lançamento (e zerado de volta após o
+   estorno, se ambos caírem no mesmo mês).
+9. Confirmar que um usuário sem o módulo `contabilidade` no perfil de
+   acesso é redirecionado para "Acesso Negado" ao tentar `/accounting`
+   diretamente pela URL.
+10. Confirmar que um usuário com `contabilidade:operate` (mas sem
+    `approve`) consegue criar/editar rascunho, mas recebe 403 ao tentar
+    `post`/`reverse`.
+
+---
+
+## 2026-08-07 — Módulo Tesouraria implementado do zero (backend + frontend) — `programador`
+
+**Escopo:** subárea TES do departamento Financeiro (sem linha própria em
+`departments`) não tinha NENHUM código antes desta entrega — apenas o spec
+`docs/financeiro/03-TESOURARIA.md` com 2 tabelas em sintaxe MySQL
+apresentadas como reais (`reconciliation_items`, `financial_operations`),
+nunca migradas. Implementado do zero:
+
+1. **Contas Bancárias** (`treasury_bank_accounts`, tabela NOVA — não existia
+   no spec original, que só tinha uma tabela markdown estática de exemplo)
+   — cadastro operacional (banco, agência, número, tipo
+   `corrente|poupanca|aplicacao`, saldo atual mantido manualmente,
+   gerente/telefone, `active`), unicidade de agência+número.
+2. **Operações Financeiras** (`treasury_financial_operations`, do spec
+   original) — empréstimos, aplicações, financiamentos, leasing.
+   `contract_number` único. Ciclo de vida via `status`: `active` (editável
+   livremente via `PUT`) → `settled` (via `PATCH .../settle`, preenche
+   `settled_at` — coluna NOVA não prevista no spec original) ou `canceled`
+   (via `PATCH .../cancel`) — ambos estados finais, nunca reabertos, nunca
+   apagados fisicamente (histórico de contrato financeiro exige auditoria).
+3. **Posição de Caixa** (relatório derivado, sem tabela própria) — `GET
+   /api/treasury/cash-position`: soma o `current_balance` de todas as
+   `treasury_bank_accounts` ativas (total geral + por tipo de conta) e
+   cruza com o resumo de títulos em aberto de `accounts_payable`/
+   `accounts_receivable` (mesmo critério de payment_date/status de
+   `GetCashFlowProjectionUseCase`, módulo `financial`, sem reimplementar a
+   query — só reagregado em totais "hoje"), retornando `projected_balance`.
+
+**NÃO recriado por decisão explícita (evitar duplicação de domínio):**
+`reconciliation_items` do spec original — o projeto já tem conciliação
+bancária real e funcional em `server/src/modules/financial/`
+(`bank_statements`/`bank_statement_entries`,
+`presentation/routes/reconciliation.ts`/`cnab.ts`, extrato OFX + CNAB
+240 remessa/retorno). Este módulo Tesouraria não toca nesses arquivos.
+
+Backend: `server/src/modules/treasury/` (Clean Architecture —
+`domain/repositories`, `application/use-cases/{bank-account,operation,
+report}`, `infrastructure/sequelize`, `presentation/{controllers,routes,
+validators}`), 9 endpoints REST em `/api/treasury/*`, montado em
+`server/app.ts`. Frontend: `client/src/pages/treasury/TreasuryPage.tsx` (3
+abas — Operações Financeiras, Posição de Caixa, Contas Bancárias), API
+client `client/src/api/treasury.ts`, rota `/treasury` protegida por
+`ModuleRoute module="tesouraria"`, item de menu no grupo "Gestão" (junto de
+Contabilidade).
+
+### Decisões de design tomadas por conta própria
+
+- **`CompanyBankingConfig` NÃO foi reaproveitada/estendida** —
+  investigação do model (`server/src/models/CompanyBankingConfig.ts`)
+  confirmou que é uma tabela SINGLETON (1 linha, `id=1`) com os dados
+  bancários do CEDENTE (banco/agência/conta/convênio/carteira/contadores
+  sequenciais de nosso-número e remessa), usada exclusivamente na geração
+  de arquivo CNAB — não é, e nunca foi desenhada para ser, um cadastro de N
+  contas bancárias operacionais. `treasury_bank_accounts` foi criada como
+  tabela SEPARADA, sem nenhuma FK entre as duas — são domínios de
+  configuração distintos ("conta bancária operacional, saldo variável" vs.
+  "config de cedente para CNAB, 1 linha fixa"), mesma razão de design já
+  registrada no cabeçalho JSDoc do model `CompanyBankingConfig` original.
+- **`settled_at` é coluna NOVA** em `treasury_financial_operations` (não
+  existia no spec original, que só tinha o enum `status`) — registra
+  explicitamente a data de liquidação, preservando quando o encerramento
+  natural ocorreu (diferente de `updated_at`, que mudaria por qualquer
+  edição, não só pela liquidação).
+- **`settle` e `cancel` são 2 ações distintas**, não uma única transição
+  genérica `active -> encerrada` — `settle` representa o encerramento
+  NATURAL do contrato (ciclo cumprido), `cancel` representa encerramento
+  ANTES do previsto (erro de cadastro, distrato). Separar os dois preserva
+  o motivo do encerramento no histórico sem depender de parsing de
+  `notes`.
+- **Posição de Caixa reaproveita o critério de títulos em aberto do módulo
+  `financial`** (`payment_date IS NULL AND status != 'canceled'`) via
+  queries diretas aos models `AccountPayable`/`AccountReceivable` — não
+  duplica `GetCashFlowProjectionUseCase` nem importa do módulo `financial`
+  (mantém `treasury` sem dependência de outro módulo de aplicação),
+  apenas replica o MESMO critério de filtro, documentado no JSDoc do
+  método `getOpenPayablesAndReceivablesSummary`.
+- **RBAC com nível `approve`** — mesmo padrão de `contabilidade`:
+  `authorizeModule('tesouraria', 'approve')` protege `settle`/`cancel`
+  (transições que encerram um contrato financeiro), `operate` cobre o CRUD
+  comum, leitura usa o nível padrão.
+- **Sem vínculo automático entre operação financeira e conta bancária** —
+  o spec não define esse relacionamento (uma operação pode envolver
+  múltiplas contas ao longo do tempo, ex.: parcelas de empréstimo
+  depositadas em contas diferentes); adicionar `bank_account_id` seria
+  scope creep não solicitado, registrado como possível evolução futura.
+
+### Arquivos criados
+
+**Backend:**
+- `server/migrations/20260807-000240-create-treasury-module.cjs`
+- `server/src/models/{TreasuryBankAccount,TreasuryFinancialOperation}.ts`
+- `server/src/modules/treasury/domain/repositories/TreasuryRepository.ts`
+- `server/src/modules/treasury/infrastructure/sequelize/SequelizeTreasuryRepository.ts`
+- `server/src/modules/treasury/application/use-cases/bank-account/{Create,List,GetById,Update}BankAccountUseCase.ts`
+- `server/src/modules/treasury/application/use-cases/operation/{Create,List,GetById,Update,Settle,Cancel}OperationUseCase.ts`
+- `server/src/modules/treasury/application/use-cases/report/GetCashPositionUseCase.ts`
+- `server/src/modules/treasury/presentation/validators/treasuryValidators.ts`
+- `server/src/modules/treasury/presentation/controllers/{bankAccount,financialOperation,cashPosition}Controller.ts`
+- `server/src/modules/treasury/presentation/routes/treasury.ts`
+- `server/tests/unit/treasury-use-cases.test.ts` (18 casos)
+
+**Frontend:**
+- `client/src/api/treasury.ts`
+- `client/src/pages/treasury/{TreasuryPage,BankAccountsTab,FinancialOperationsTab,CashPositionTab}.tsx`
+
+### Arquivos modificados
+
+- `server/src/models/index.ts` — imports dos 2 models novos + inclusão no
+  barrel de exportação (sem associações Sequelize entre eles nem com
+  outros models — cash position consulta `AccountPayable`/
+  `AccountReceivable` diretamente via query, não via `include`).
+- `server/src/shared/domain/accessModules.ts` — módulo `tesouraria`
+  adicionado a `AccessModuleKey`/`ACCESS_MODULES`.
+- `server/app.ts` — `app.use('/api/treasury', ...)`.
+- `server/tests/unit/module-authorization-map.test.ts` — `treasury`
+  adicionado a `MODULES_REQUIRING_AUTHORIZE_MODULE` (guarda
+  anti-regressão, senão o teste falha por módulo novo não coberto).
+- `client/src/api/accessProfiles.ts` — `tesouraria` adicionado ao tipo
+  `AccessModuleKey` espelhado.
+- `client/src/App.tsx` — lazy import `TreasuryPage` + rota `/treasury`
+  atrás de `ModuleRoute module="tesouraria"`.
+- `client/src/layouts/AppLayout.tsx` — item de menu "Tesouraria" no grupo
+  Gestão (junto de Contabilidade) + entrada em `BREADCRUMBS`.
+- `docs/financeiro/03-TESOURARIA.md` — removida a apresentação do SQL
+  MySQL como se fosse real, documentado o contrato real de
+  `treasury_bank_accounts`/`treasury_financial_operations` na nova seção
+  "Contrato Real Implementado", incluindo a decisão sobre
+  `CompanyBankingConfig`.
+- `docs/governance/TODO.md` — nova entrada datada 2026-08-07.
+
+### Documentações atualizadas
+
+`docs/financeiro/03-TESOURARIA.md`, `docs/governance/TODO.md`, e este
+arquivo (`docs/governance/HANDOFF_CODEX.md`). Todo arquivo TypeScript novo
+tem cabeçalho JSDoc explicando responsabilidade, e cada método de
+repositório abstrato/use case documenta parâmetros e retorno.
+
+### Validação
+
+- `npm run typecheck --prefix server` — 0 erros.
+- Smoke test de runtime dos models (`node -e "require('tsx/cjs');
+  require('./src/models/index.ts')"`, a partir de `server/`) — OK, "OK
+  models carregam em runtime". Confirmado também com
+  `src/modules/treasury/presentation/routes/treasury.ts` carregado
+  isoladamente (retorna um router Express válido).
+- `npx tsc --noEmit --project .` (a partir de `client/`) — 0 erros.
+- `npm run migration:up --prefix server` — migration `20260807-000240`
+  aplicada com sucesso contra o Postgres local (Docker); confirmado com
+  `npm run migration:status --prefix server` (`up`) e com consulta real via
+  Sequelize (`TreasuryBankAccount.count()` /
+  `TreasuryFinancialOperation.count()` → `0`/`0`, sem erro de tabela
+  ausente — confirma que as 2 tabelas existem no schema real).
+- `npx jest tests/unit --runInBand --prefix server` — 981/982 passando (1
+  falha pré-existente e conhecida em
+  `onda3-shipping-cockpit-cashflow.test.ts`, não relacionada a este
+  módulo); 18 testes novos do módulo Tesouraria, 0 regressões (incluindo o
+  ajuste necessário em `module-authorization-map.test.ts`). Os 18 testes
+  cobrem: conflito de agência+número em conta bancária, atualização de
+  conta bancária sem colisão, conflito de `contract_number` em operação,
+  `end_date` anterior a `start_date` rejeitada na criação, edição de
+  operação `settled` rejeitada, `settle`/`cancel` só a partir de `active`
+  (e rejeitados a partir de outros estados), `settle` preenche
+  `settled_at`, agregação de saldo por tipo de conta e cálculo de
+  `projected_balance` na Posição de Caixa (incluindo caso de borda sem
+  contas ativas).
+
+### Riscos residuais / fora do escopo desta entrega
+
+- Sem teste de integração HTTP real (Supertest) contra o banco — apenas
+  unitários com repositório mockado, mesmo padrão de
+  Facilities/Marketing/Jurídico/Contabilidade.
+- Sem operações de câmbio dedicadas (mencionadas no spec original de
+  cargos/funções da Tesouraria, mas sem modelo de dados definido) — o
+  módulo Importação/COMEX (UC-19) já cobre nacionalização de importação
+  com câmbio informado manualmente por processo, sem campo de câmbio
+  dedicado a este módulo.
+- Sem vínculo automático entre uma Operação Financeira liquidada e a baixa
+  de um título em `accounts_payable`/`accounts_receivable` — o spec não
+  define esse relacionamento; liquidação de operação e baixa de conta
+  continuam fluxos independentes.
+- Saldo de `treasury_bank_accounts.current_balance` é mantido MANUALMENTE
+  pela Tesouraria (edição via `PUT /api/treasury/bank-accounts/:id`) — não
+  há reconciliação automática desse saldo com o extrato OFX importado em
+  `bank_statements` (módulo `financial`); reconciliar as duas fontes de
+  saldo é uma evolução futura possível, fora do escopo desta entrega.
+- Sem teste de integração real (Postgres) do fluxo completo
+  create→settle/cancel — só verificado manualmente via
+  `npm run migration:up` + contagem de linhas via Sequelize, não via
+  requisição HTTP ponta a ponta.
+
+### Instruções de teste manual
+
+1. Logar como `admin` (ou usuário com perfil que inclua o módulo
+   `tesouraria` em nível `operate`, e `approve` para liquidar/cancelar) e
+   acessar `/treasury` pelo menu Gestão.
+2. Aba **Contas Bancárias**: cadastrar uma conta nova (ex.: Banco do
+   Brasil, agência "1234-5", conta "10.000-1", tipo Corrente, saldo inicial
+   R$ 45.000) e confirmar que aparece na lista. Tentar cadastrar outra com
+   a mesma agência+conta e confirmar erro de conflito (409, mensagem
+   didática).
+3. Aba **Operações Financeiras**: criar uma operação nova (ex.: tipo
+   Empréstimo, instituição "BNDES", contrato "BNDES-2026-001", valor
+   R$ 200.000, taxa 8,5%, início hoje, garantia "Aval") e confirmar que
+   aparece na lista com status "Ativa".
+4. Tentar criar outra operação com o mesmo número de contrato e confirmar
+   erro de conflito (409).
+5. Clicar em "Liquidar" na operação criada — confirmar que o status muda
+   para "Liquidada" e que as ações de editar/liquidar/cancelar somem da
+   linha (estado final).
+6. Criar uma segunda operação e clicar em "Cancelar" (com confirmação) —
+   confirmar status "Cancelada".
+7. Aba **Posição de Caixa**: confirmar que o card "Saldo total em contas"
+   reflete o saldo cadastrado na conta bancária do passo 2, que o "Saldo
+   por tipo de conta" mostra o valor na categoria correta (Corrente), e
+   que "Saldo projetado" soma esse saldo com os títulos em aberto de
+   contas a pagar/receber do sistema (se houver).
+8. Confirmar que um usuário sem o módulo `tesouraria` no perfil de acesso é
+   redirecionado para "Acesso Negado" ao tentar `/treasury` diretamente
+   pela URL.
+9. Confirmar que um usuário com `tesouraria:operate` (mas sem `approve`)
+   consegue criar/editar operações `active`, mas recebe 403 ao tentar
+   `settle`/`cancel`.
+
+---
+
+## 2026-08-07 — Módulo Controladoria implementado do zero (backend + frontend) — `programador`
+
+**Escopo:** subárea CTR do departamento Financeiro (sem linha própria em
+`departments`), 6º e ÚLTIMO módulo desta sequência de entregas (Facilities,
+Marketing, Jurídico, Contabilidade, Tesouraria, Controladoria). Diferente
+dos 5 anteriores, Controladoria NÃO tinha doc dedicado com tabelas SQL
+prontas — seu escopo em `docs/financeiro/00-README.md` era só a linha
+"Custos Industriais: custeio por absorção/ABC" e "Orçamento: orçamento
+anual, acompanhamento" na tabela de Funções Financeiras. Levantamento antes
+de codar:
+
+- **Custeio industrial** (mão-de-obra/overhead de OP) já estava implementado
+  em `server/src/modules/production`/`server/src/modules/reports` — não
+  tocado.
+- **Centros de Custo** (`cost_centers`) e o relatório agrupado de contas a
+  pagar/receber (`GET /api/finance/cost-centers/report`,
+  `GetCostCenterReportUseCase`) já existiam em
+  `server/src/modules/financial/` — não duplicados.
+- **Orçamento** era a única peça genuinamente inexistente em código —
+  implementado do zero nesta entrega: linhas de orçamento por centro de
+  custo (anual "achatada" ou mensal) + relatório orçado × realizado.
+
+Backend: `server/src/modules/budget/` (Clean Architecture —
+`domain/repositories`, `application/use-cases/{budget-line,report}`,
+`infrastructure/sequelize`, `presentation/{controllers,routes,validators}`),
+6 endpoints REST em `/api/budget/*`, montado em `server/app.ts`. Frontend:
+`client/src/pages/budget/BudgetPage.tsx` (2 abas — Linhas de Orçamento,
+Orçado × Realizado), API client `client/src/api/budget.ts`, rota `/budget`
+protegida por `ModuleRoute module="controladoria"`, item de menu no grupo
+"Gestão" (junto de Tesouraria).
+
+### Decisões de design tomadas por conta própria
+
+- **Mês opcional (`month IS NULL` = linha anual "achatada")** — o
+  enunciado da tarefa deixou a decisão explícita a cargo desta entrega.
+  Optei por: `month` nulo representa o ano inteiro em uma única linha, sem
+  detalhamento mês a mês; `1`-`12` representa uma linha mensal. As duas
+  convivem para o mesmo centro de custo/ano/categoria sem colidir (testado
+  em `CreateBudgetLineUseCase`).
+- **Unicidade com `month` nulo via índice de expressão** —
+  `UNIQUE(cost_center_id, year, month, category)` padrão do PostgreSQL NÃO
+  bastaria: `NULL` nunca é igual a `NULL` em uma constraint UNIQUE, então
+  duas linhas anuais duplicadas para o mesmo centro/ano/categoria
+  passariam despercebidas. Resolvido com
+  `CREATE UNIQUE INDEX ... ON budget_lines (cost_center_id, year,
+  COALESCE(month, 0), category)` (SQL cru na migration — `queryInterface.
+  addIndex` do Sequelize não expressa `COALESCE` em `fields`). Confirmado
+  no Postgres real via `\d budget_lines` (ver seção Validação).
+- **Categoria como enum simples (4 valores)**, não um plano de contas
+  completo — o doc de origem não especificava esse nível de detalhe, e o
+  plano de contas real já existe em `accounting_chart_of_accounts` (módulo
+  Contabilidade, implementado antes nesta mesma sessão); cruzar orçamento
+  com conta contábil real fica registrado como evolução futura, não
+  implementado agora (evita scope creep não solicitado).
+- **DELETE físico permitido** — diferente da maioria das tabelas do
+  projeto, `budget_lines` é artefato de PLANEJAMENTO (editável/descartável
+  livremente), não histórico transacional imutável como uma OP ou NF-e.
+  `CLAUDE.md` §7 reserva soft delete só para `Category`; aqui o DELETE real
+  é a escolha correta e explícita, com `NotFoundError` se a linha já não
+  existir.
+- **"Realizado" reaproveita, não reimplementa, a agregação do módulo
+  `financial`** — `GetBudgetVsActualReportUseCase` recebe
+  `CostCenterRepository` (do módulo `financial`) como segunda dependência
+  injetada, além do `BudgetRepository` próprio, e chama
+  `getCostCenterTotalsByPayable(from, to)` diretamente — a MESMA função que
+  alimenta `GET /api/finance/cost-centers/report`. Só o lado de contas a
+  PAGAR entra no comparativo (Controladoria acompanha custos/despesas, não
+  receitas) — contas a receber ficam fora deste relatório por decisão de
+  design, não por omissão.
+- **Proração linear (÷12) de linha anual ao consultar um mês específico**
+  — quando o relatório é consultado para o ANO INTEIRO, linhas anuais
+  entram pelo valor cheio; quando consultado para um MÊS específico, linhas
+  mensais daquele mês entram cheias e linhas anuais são divididas por 12.
+  É uma simplificação deliberada (sem modelagem de sazonalidade), decidida
+  para dar um número comparável ao "realizado" mensal sem inventar uma
+  curva de distribuição não solicitada.
+- **Sem nível `approve` no RBAC** — diferente de Contabilidade/Tesouraria
+  (que têm transições de status sensíveis, ex.: liquidar/cancelar,
+  postar/estornar), planejamento orçamentário não tem uma transição de
+  status crítica a proteger; mesmo padrão de
+  Facilities/Marketing/Jurídico: `operate` cobre todo o CRUD (inclusive
+  exclusão), leitura usa o nível padrão.
+
+### Arquivos criados
+
+**Backend:**
+- `server/migrations/20260807-000250-create-budget-module.cjs`
+- `server/src/models/BudgetLine.ts`
+- `server/src/modules/budget/domain/repositories/BudgetRepository.ts`
+- `server/src/modules/budget/infrastructure/sequelize/SequelizeBudgetRepository.ts`
+- `server/src/modules/budget/application/use-cases/budget-line/{Create,List,GetById,Update,Delete}BudgetLineUseCase.ts`
+- `server/src/modules/budget/application/use-cases/report/GetBudgetVsActualReportUseCase.ts`
+- `server/src/modules/budget/presentation/validators/budgetValidators.ts`
+- `server/src/modules/budget/presentation/controllers/{budgetLine,budgetReport}Controller.ts`
+- `server/src/modules/budget/presentation/routes/budget.ts`
+- `server/tests/unit/budget-use-cases.test.ts` (17 casos)
+
+**Frontend:**
+- `client/src/api/budget.ts`
+- `client/src/pages/budget/{BudgetPage,BudgetLinesTab,BudgetReportTab}.tsx`
+
+### Arquivos modificados
+
+- `server/src/models/index.ts` — import do model `BudgetLine` + inclusão no
+  barrel de exportação + associação `CostCenter.hasMany(BudgetLine)` /
+  `BudgetLine.belongsTo(CostCenter, { as: 'costCenter' })` (usada no
+  `include` de `listBudgetLines`/`findBudgetLineById`, exibindo
+  código/nome do centro de custo na tela sem N+1).
+- `server/src/shared/domain/accessModules.ts` — módulo `controladoria`
+  adicionado a `AccessModuleKey`/`ACCESS_MODULES`.
+- `server/app.ts` — `app.use('/api/budget', ...)`.
+- `server/tests/unit/module-authorization-map.test.ts` — `budget`
+  adicionado a `MODULES_REQUIRING_AUTHORIZE_MODULE` (guarda
+  anti-regressão, senão o teste falha por módulo novo não coberto).
+- `client/src/api/accessProfiles.ts` — `controladoria` adicionado ao tipo
+  `AccessModuleKey` espelhado.
+- `client/src/App.tsx` — lazy import `BudgetPage` + rota `/budget` atrás de
+  `ModuleRoute module="controladoria"`.
+- `client/src/layouts/AppLayout.tsx` — import do ícone `PiggyBank` + item
+  de menu "Controladoria" no grupo Gestão (junto de Tesouraria).
+- `docs/financeiro/00-README.md` — nova seção "Controladoria (CTR) —
+  Contrato Real Implementado", documentando o contrato real de
+  `budget_lines`, as decisões de mês opcional/unicidade/proração, e o
+  relatório orçado × realizado.
+- `docs/governance/TODO.md` — nova entrada datada 2026-08-07, fechando a
+  sequência dos 6 módulos.
+
+### Documentações atualizadas
+
+`docs/financeiro/00-README.md`, `docs/governance/TODO.md`, e este arquivo
+(`docs/governance/HANDOFF_CODEX.md`). Todo arquivo TypeScript novo tem
+cabeçalho JSDoc explicando responsabilidade, e cada método de repositório
+abstrato/use case documenta parâmetros e retorno.
+
+### Validação (todos os comandos rodados de fato, output real abaixo)
+
+- `npm run typecheck --prefix server` — 0 erros.
+- Smoke test de runtime dos models (`node -e "require('tsx/cjs');
+  require('./src/models/index.ts')"`, a partir de `server/`) — output:
+  `OK models carregam em runtime`. `BudgetLine.ts` usa `type
+  BudgetLineCategory = ...` (sem `export`) + `export = BudgetLine`, nunca
+  `export type` misturado com `export =` no mesmo arquivo (bug conhecido
+  desta sessão, verificado deliberadamente).
+- `npx tsc --noEmit --project .` (a partir de `client/`) — 0 erros.
+- `npm run migration:up --prefix server` — migration
+  `20260807-000250-create-budget-module` aplicada com sucesso (log:
+  `== 20260807-000250-create-budget-module: migrated (0.078s)`) contra o
+  Postgres local (container `evok-postgres`); confirmado com
+  `npm run migration:status --prefix server` (`up`) e com
+  `docker exec evok-postgres psql -U evok_admin -d erp_evok_audio -c "\d
+  budget_lines"`, que confirmou: FK `cost_center_id → cost_centers.id ON
+  DELETE CASCADE ON UPDATE CASCADE`, 3 CHECK constraints
+  (`chk_budget_lines_month`, `chk_budget_lines_year`,
+  `chk_budget_lines_planned_amount`), e o índice de expressão
+  `uq_budget_lines_cost_center_year_month_category` (`btree
+  (cost_center_id, year, COALESCE(month, 0), category)`) — exatamente como
+  projetado.
+- `npx jest tests/unit --runInBand --prefix server` — 999/1000 passando (1
+  falha pré-existente e conhecida em
+  `onda3-shipping-cockpit-cashflow.test.ts`, não relacionada a este
+  módulo); 17 testes novos do módulo Controladoria
+  (`budget-use-cases.test.ts`), 0 regressões (incluindo o ajuste necessário
+  em `module-authorization-map.test.ts`, que também foi rodado
+  isoladamente e passou: 33/33). Os 17 testes cobrem: criação de linha
+  mensal e de linha anual (`month` omitido → `null`), conflito de chave
+  `(cost_center_id, year, month, category)`, caso de borda explícito de
+  linha anual e linha mensal do MESMO centro/ano/categoria NÃO colidindo,
+  listagem paginada com cálculo de `totalPages`, `NotFoundError` em
+  get/update/delete de linha inexistente, atualização sem mudança de chave
+  (não reconsulta unicidade) vs. com mudança de chave (reconsulta e
+  rejeita se colidir, mas permite manter a própria chave), exclusão física,
+  cálculo de variação absoluta/percentual no relatório para múltiplos
+  centros de custo, variação percentual `null` quando orçado é zero
+  (divisão por zero evitada), uso do intervalo `from`/`to` correto
+  (ano inteiro vs. mês específico com `lastDayOfMonth`), filtro por
+  `cost_center_id`.
+
+### Riscos residuais / fora do escopo desta entrega
+
+- Sem teste de integração HTTP real (Supertest) contra o banco — apenas
+  unitários com repositório mockado, mesmo padrão de
+  Facilities/Marketing/Jurídico/Contabilidade/Tesouraria. A migration em
+  si FOI validada de fato contra o Postgres local (ver seção Validação),
+  mas o fluxo HTTP completo (`POST` → `GET /report`) não foi exercitado
+  ponta a ponta.
+- Categoria de orçamento é um enum simples (`custo_fixo|custo_variavel|
+  investimento|outro`), sem vínculo com `accounting_chart_of_accounts` —
+  cruzar linha de orçamento com conta contábil real é evolução futura
+  possível, não solicitada nesta entrega.
+- Proração ÷12 de linha anual ao consultar um mês específico é linear —
+  não há suporte a curva de sazonalidade (ex.: décimo terceiro
+  concentrado em dezembro).
+- "Realizado" considera apenas o valor JÁ PAGO (`amount_paid`) de contas a
+  pagar no período (`due_date` dentro do intervalo) — não inclui o valor
+  em ABERTO (comprometido mas não pago), que ficaria mais próximo de um
+  "comprometido" contábil; a API retorna só `realized_amount` no
+  relatório, não `open_amount` (embora o repositório subjacente já
+  retorne ambos) — decisão de manter o contrato do endpoint simples para
+  esta primeira entrega.
+
+### Instruções de teste manual
+
+1. Logar como `admin` (ou usuário com perfil que inclua o módulo
+   `controladoria` em nível `operate`) e acessar `/budget` pelo menu
+   Gestão.
+2. Aba **Linhas de Orçamento**: criar uma linha MENSAL (ex.: centro de
+   custo existente, ano corrente, mês Agosto, categoria "Custo fixo",
+   valor R$ 50.000) e confirmar que aparece na tabela com o mês certo.
+3. Criar uma linha ANUAL para o MESMO centro de custo/ano/categoria
+   (deixando "Mês" em branco/"Anual") e confirmar que NÃO dá conflito
+   (linha mensal e anual coexistem).
+4. Tentar criar outra linha MENSAL idêntica à do passo 2 (mesmo centro,
+   ano, mês, categoria) e confirmar erro de conflito (409, mensagem
+   didática).
+5. Editar a linha criada no passo 2 (mudar valor) e confirmar que salva
+   sem pedir nova checagem de unicidade (chave não mudou).
+6. Excluir a linha anual criada no passo 3 (com confirmação) e confirmar
+   que some da lista.
+7. Aba **Orçado × Realizado**: selecionar o ano corrente com "Ano inteiro"
+   e confirmar que o centro de custo usado aparece com "Orçado" refletindo
+   a soma das linhas cadastradas; trocar para um mês específico e
+   confirmar que o valor orçado muda (proração de linha anual, se houver).
+8. Confirmar que "Realizado (pago)" reflete o total pago
+   (`amount_paid`) de contas a pagar daquele centro de custo no período
+   (comparar com `/financial` → relatório de centros de custo, mesmo
+   período).
+9. Confirmar que um usuário sem o módulo `controladoria` no perfil de
+   acesso é redirecionado para "Acesso Negado" ao tentar `/budget`
+   diretamente pela URL.
+
+---

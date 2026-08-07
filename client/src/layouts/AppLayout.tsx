@@ -39,6 +39,8 @@ import {
   Building2,
   Megaphone,
   Scale,
+  Calculator,
+  PiggyBank,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -170,6 +172,9 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Gestão',
     items: [
       { label: 'Financeiro', to: '/financial', icon: Wallet, roles: ['admin', 'financial'], module: 'financeiro' },
+      { label: 'Contabilidade', to: '/accounting', icon: Calculator, roles: ['admin', 'financial'], module: 'contabilidade' },
+      { label: 'Tesouraria', to: '/treasury', icon: Landmark, roles: ['admin', 'financial'], module: 'tesouraria' },
+      { label: 'Controladoria', to: '/budget', icon: PiggyBank, roles: ['admin', 'financial'], module: 'controladoria' },
       { label: 'Relatórios Financeiros', to: '/reports?tab=financial', icon: BarChart3, roles: ['admin', 'financial'], module: 'relatorios.financeiro' },
       { label: 'Rastreabilidade', to: '/traceability', icon: Search, module: 'rastreabilidade' },
     ],
@@ -266,6 +271,8 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/patrimonio': ['Ativos & Garantia', 'Patrimônio'],
   '/service-orders': ['Ativos & Garantia', 'Garantia / Assistência Técnica'],
   '/financial': ['Gestão', 'Financeiro'],
+  '/accounting': ['Gestão', 'Contabilidade'],
+  '/treasury': ['Gestão', 'Tesouraria'],
   '/traceability': ['Gestão', 'Rastreabilidade'],
   '/users': ['Usuários'],
   '/users/access-profiles': ['Usuários', 'Perfis de Acesso'],

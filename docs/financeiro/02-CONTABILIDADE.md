@@ -1,5 +1,13 @@
 # Contabilidade - Módulo Financeiro
 
+> **Status:** ✅ Implementado em 2026-08-07 (backend + frontend), sob
+> `server/src/modules/accounting/` e `/api/accounting/*`. As "Tabelas SQL"
+> abaixo eram só um spec narrativo em sintaxe MySQL, **nunca foram migradas**
+> — foram substituídas pelo contrato real descrito na seção
+> [Contrato Real Implementado](#contrato-real-implementado-2026-08-07) ao
+> final deste documento. RBAC: módulo `contabilidade`
+> (`server/src/shared/domain/accessModules.ts`).
+
 ## Departamento de Contabilidade (CONT)
 
 ### Estrutura
@@ -101,7 +109,7 @@ DEMONSTRATIVO DE RESULTADO - MÊS XX/2024
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Tabelas SQL
+### Tabelas SQL (spec original — NUNCA foram migradas em MySQL; ver schema real na seção final)
 
 ```sql
 -- LANÇAMENTOS CONTÁBEIS
@@ -171,3 +179,107 @@ CREATE TABLE trial_balance (
 | GIA (SP) | Mensal | Mensal | Mensal |
 | eSocial | Mensal | Mensal | Mensal |
 | DIFAL | Mensal | Mensal | Mensal |
+
+> Obrigações acessórias (SPED/ECD/ECF/DCTF/eSocial etc.) permanecem fora do
+> escopo do backend implementado em 2026-08-07 — sem integração com
+> Sped/Receita Federal. O módulo cobre apenas a escrituração interna
+> (lançamentos, plano de contas, balancete).
+
+## Contrato Real Implementado (2026-08-07)
+
+Backend em `server/src/modules/accounting/` (Clean Architecture:
+`domain/repositories`, `application/use-cases/{account,entry,report}`,
+`infrastructure/sequelize`, `presentation/{controllers,validators,routes}`),
+frontend em `client/src/pages/accounting/AccountingPage.tsx` (abas Plano de
+Contas / Lançamentos / Balancete), cliente de API em
+`client/src/api/accounting.ts`. RBAC: módulo `contabilidade`
+(`docs/administrativo/04-PERFIS_ACESSO.md`), leitura exige qualquer nível
+atribuído, escrita comum exige `operate`, as transições `post`/`reverse`
+exigem `approve`.
+
+### Schema PostgreSQL real (substitui as "Tabelas SQL" MySQL acima)
+
+Migrations: `server/migrations/20260807-000230-create-accounting-module.cjs`
+(schema) e `20260807-000231-seed-accounting-chart-of-accounts.cjs` (seed do
+plano de contas resumido, 30 contas, replicando fielmente a tabela "Plano de
+Contas (Resumo)" deste documento).
+
+**`accounting_chart_of_accounts`** (Plano de Contas, hierárquico via
+`parent_id` self-FK `ON DELETE RESTRICT`):
+`id`, `code` (único, ex.: `"1.1.1"`), `name`, `account_type`
+(`asset|liability|equity|revenue|expense|cost`), `account_level` (derivado
+automaticamente do número de segmentos de `code`), `parent_id` (nullable,
+derivado automaticamente do prefixo de `code`), `accept_entries` (boolean —
+só contas "folha" aceitam lançamento direto; contas sintéticas/pai não
+podem), `active` (boolean, desativação lógica), `created_at`/`updated_at`.
+
+**`accounting_entries`** (Lançamentos Contábeis):
+`id`, `entry_number` (único, sequencial `LC-000001`), `entry_date`,
+`description`, `entry_type`
+(`receipt|payment|sales|purchase|payroll|depreciation|closing|adjustment`),
+`status` (`draft|posted|reversed`), `created_by`/`approved_by` (FK `users`,
+`ON DELETE RESTRICT`; `approved_by` nullable até postar), `approved_at`,
+`reversal_of_id` (nullable, self-FK `ON DELETE SET NULL` — coluna NOVA em
+relação ao spec original: no lançamento de ESTORNO, aponta para o
+lançamento original revertido, preservando a rastreabilidade sem depender
+de parsing de texto na `description`), `created_at`/`updated_at`.
+
+**`accounting_entry_items`** (Itens do Lançamento — débito/crédito):
+`id`, `entry_id` (FK `accounting_entries`, `ON DELETE CASCADE`),
+`account_id` (FK `accounting_chart_of_accounts`, `ON DELETE RESTRICT` — não
+pode apagar conta com lançamento; substitui o `account_code VARCHAR` solto
+do spec original por integridade referencial real), `cost_center_id`
+(nullable, FK `cost_centers`, `ON DELETE SET NULL`), `debit`/`credit`
+(`DECIMAL(15,2)`, exatamente um dos dois > 0 por linha — nunca ambos,
+validado em `validateEntryItemsShape.ts`, não no banco), `historical`
+(texto), `created_at`/`updated_at`.
+
+**Balancete**: NÃO é tabela (a `trial_balance` do spec original não foi
+criada) — é relatório 100% derivado, calculado on-the-fly a partir de
+`accounting_entry_items` de lançamentos `posted`, agregados por conta/mês
+em `SequelizeAccountingRepository.getTrialBalanceRows`.
+
+### Regra de negócio central: partida dobrada
+
+Um lançamento nasce sempre `draft` (itens editáveis livremente, inclusive
+substituição integral via `PUT /api/accounting/entries/:id`). Ao "postar"
+(`PATCH /api/accounting/entries/:id/post`, `draft -> posted`), o
+`PostEntryUseCase` valida: mínimo de 2 itens, ao menos uma linha de débito E
+uma de crédito, e soma de todos os `debit` EXATAMENTE igual à soma de todos
+os `credit` (comparação em centavos via `shared/utils/money`, evitando
+falso-negativo de ponto flutuante) — senão rejeita com `BusinessRuleError`
+(HTTP 422) explicando a diferença em reais. Depois de `posted`, os itens
+ficam imutáveis; a única forma de desfazer é
+`PATCH /api/accounting/entries/:id/reverse` (`posted -> reversed`), que cria
+um NOVO lançamento (`entry_type: 'adjustment'`, já `posted`,
+`reversal_of_id` apontando para o original) com débito/crédito de cada item
+invertidos, e marca o original como `reversed` — nunca apaga nada.
+
+### Endpoints
+
+| Método | Rota | Nível RBAC |
+|--------|------|------------|
+| GET | `/api/accounting/accounts` | `contabilidade` |
+| GET | `/api/accounting/accounts/:id` | `contabilidade` |
+| POST | `/api/accounting/accounts` | `contabilidade:operate` |
+| PUT | `/api/accounting/accounts/:id` | `contabilidade:operate` |
+| GET | `/api/accounting/entries` | `contabilidade` |
+| GET | `/api/accounting/entries/:id` | `contabilidade` |
+| POST | `/api/accounting/entries` | `contabilidade:operate` |
+| PUT | `/api/accounting/entries/:id` | `contabilidade:operate` |
+| PATCH | `/api/accounting/entries/:id/post` | `contabilidade:approve` |
+| PATCH | `/api/accounting/entries/:id/reverse` | `contabilidade:approve` |
+| GET | `/api/accounting/trial-balance?year=&month=` | `contabilidade` |
+
+### Riscos residuais / fora de escopo
+
+- Sem integração fiscal (SPED/ECD/ECF/DCTF/eSocial) — só escrituração interna.
+- Sem geração automática de lançamento a partir de outros módulos (vendas,
+  compras, folha) — todo lançamento é manual nesta rodada.
+- Sem teste de integração real (Postgres) do fluxo completo
+  create→post→reverse; cobertura atual é só unitária (mock de repositório),
+  ver `server/tests/unit/accounting-use-cases.test.ts`.
+- Tela web não valida hierarquia de árvore com expand/collapse — lista
+  indentada por nível (`ChartOfAccountsTab.tsx`), suficiente para os 30
+  registros do seed, pode precisar de UI de árvore de verdade se o plano de
+  contas crescer muito.

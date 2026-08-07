@@ -10,7 +10,11 @@ import type { ItemResponse } from './types';
  * adicionado em 2026-08-07 para o módulo Facilities (departamento 17, FAC).
  * `marketing` adicionado em 2026-08-07 para o módulo Marketing
  * (departamento 14, MKT). `juridico` adicionado em 2026-08-07 para o
- * módulo Jurídico (departamento 16, JUR).
+ * módulo Jurídico (departamento 16, JUR). `contabilidade` adicionado em
+ * 2026-08-07 para o módulo Contabilidade (subárea CONT do Financeiro).
+ * `tesouraria` adicionado em 2026-08-07 para o módulo Tesouraria (subárea
+ * TES do Financeiro). `controladoria` adicionado em 2026-08-07 para o
+ * módulo Controladoria (subárea CTR do Financeiro, orçamento).
  */
 export type AccessModuleKey =
   | 'dashboard'
@@ -42,6 +46,9 @@ export type AccessModuleKey =
   | 'facilities'
   | 'marketing'
   | 'juridico'
+  | 'contabilidade'
+  | 'tesouraria'
+  | 'controladoria'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'

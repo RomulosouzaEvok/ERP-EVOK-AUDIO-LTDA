@@ -136,6 +136,12 @@ import LegalContract = require('./LegalContract');
 import LegalContractAddendum = require('./LegalContractAddendum');
 import LegalContractReminder = require('./LegalContractReminder');
 import LegalIntellectualProperty = require('./LegalIntellectualProperty');
+import AccountingChartOfAccount = require('./AccountingChartOfAccount');
+import AccountingEntry = require('./AccountingEntry');
+import AccountingEntryItem = require('./AccountingEntryItem');
+import TreasuryBankAccount = require('./TreasuryBankAccount');
+import TreasuryFinancialOperation = require('./TreasuryFinancialOperation');
+import BudgetLine = require('./BudgetLine');
 
 // ============================================
 // RELACIONAMENTOS
@@ -1057,6 +1063,40 @@ LegalContractAddendum.belongsTo(LegalContract, { foreignKey: 'contract_id', as: 
 LegalContract.hasMany(LegalContractReminder, { foreignKey: 'contract_id', as: 'reminders' });
 LegalContractReminder.belongsTo(LegalContract, { foreignKey: 'contract_id', as: 'contract' });
 
+// ============================================
+// RELACIONAMENTOS - CONTABILIDADE (subárea CONT do Financeiro)
+// ============================================
+
+// AccountingChartOfAccount (auto-relacionamento — hierarquia do Plano de Contas)
+AccountingChartOfAccount.hasMany(AccountingChartOfAccount, { foreignKey: 'parent_id', as: 'children' });
+AccountingChartOfAccount.belongsTo(AccountingChartOfAccount, { foreignKey: 'parent_id', as: 'parent' });
+
+// AccountingEntry ↔ AccountingEntryItem
+AccountingEntry.hasMany(AccountingEntryItem, { foreignKey: 'entry_id', as: 'items' });
+AccountingEntryItem.belongsTo(AccountingEntry, { foreignKey: 'entry_id', as: 'entry' });
+
+// AccountingEntryItem ↔ AccountingChartOfAccount
+AccountingChartOfAccount.hasMany(AccountingEntryItem, { foreignKey: 'account_id', as: 'entry_items' });
+AccountingEntryItem.belongsTo(AccountingChartOfAccount, { foreignKey: 'account_id', as: 'account' });
+
+// AccountingEntryItem ↔ CostCenter (opcional)
+CostCenter.hasMany(AccountingEntryItem, { foreignKey: 'cost_center_id', as: 'accounting_entry_items' });
+AccountingEntryItem.belongsTo(CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter' });
+
+// AccountingEntry ↔ User (autor / aprovador)
+User.hasMany(AccountingEntry, { foreignKey: 'created_by', as: 'accounting_entries_created' });
+AccountingEntry.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+User.hasMany(AccountingEntry, { foreignKey: 'approved_by', as: 'accounting_entries_approved' });
+AccountingEntry.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
+
+// AccountingEntry (auto-relacionamento — estorno aponta para o lançamento original)
+AccountingEntry.belongsTo(AccountingEntry, { foreignKey: 'reversal_of_id', as: 'reversalOf' });
+
+// CostCenter ↔ BudgetLine (Controladoria — orçamento por centro de custo)
+CostCenter.hasMany(BudgetLine, { foreignKey: 'cost_center_id', as: 'budget_lines' });
+BudgetLine.belongsTo(CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter' });
+AccountingEntry.hasOne(AccountingEntry, { foreignKey: 'reversal_of_id', as: 'reversalEntry' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -1097,5 +1137,8 @@ export {
   ItResponsibilityTerm, ItSoftwareLicenseDetail, ItLicenseSeat, ItAccessRequest, ItBackupLog, TiSettings,
   FacilityVehicle, FacilityFuelRecord, FacilityCleaningSchedule, FacilityArea,
   MarketingCampaign, MarketingLead, MarketingMaterial,
-  LegalContract, LegalContractAddendum, LegalContractReminder, LegalIntellectualProperty
+  LegalContract, LegalContractAddendum, LegalContractReminder, LegalIntellectualProperty,
+  AccountingChartOfAccount, AccountingEntry, AccountingEntryItem,
+  TreasuryBankAccount, TreasuryFinancialOperation,
+  BudgetLine
 };

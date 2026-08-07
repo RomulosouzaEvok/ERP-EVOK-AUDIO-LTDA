@@ -72,6 +72,9 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   'facilities',
   'marketing',
   'legal',
+  'accounting',
+  'treasury',
+  'budget',
 ];
 
 /**

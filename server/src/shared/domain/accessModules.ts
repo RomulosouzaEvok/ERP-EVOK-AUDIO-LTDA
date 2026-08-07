@@ -92,6 +92,48 @@
  * nível `approve`, escrita usa `authorizeModule('juridico', 'operate')`,
  * leitura usa `authorizeModule('juridico')` (nível `operate` implícito).
  *
+ * `contabilidade` foi adicionado em 2026-08-07 para o módulo Contabilidade
+ * (subárea CONT do departamento Financeiro, sem linha própria em
+ * `departments` — `docs/financeiro/02-CONTABILIDADE.md`), implementado do
+ * zero: Plano de Contas hierárquico, Lançamentos Contábeis em partida
+ * dobrada (débito = crédito) e Balancete (relatório derivado). Diferente de
+ * `facilities`/`marketing`/`juridico`, este módulo TEM nível `approve`:
+ * `authorizeModule('contabilidade', 'approve')` protege as duas transições
+ * de status mais sensíveis de um lançamento (`PATCH .../post`,
+ * `PATCH .../reverse`, que fecham/desfazem a contabilização), enquanto
+ * `authorizeModule('contabilidade', 'operate')` cobre o CRUD comum (contas,
+ * criação/edição de lançamento em rascunho) e a leitura usa o nível padrão
+ * (`authorizeModule('contabilidade')`, `operate` implícito).
+ *
+ * `tesouraria` foi adicionado em 2026-08-07 para o módulo Tesouraria
+ * (subárea TES do departamento Financeiro, sem linha própria em
+ * `departments` — `docs/financeiro/03-TESOURARIA.md`), implementado do
+ * zero: Contas Bancárias (cadastro operacional, saldo mantido manualmente),
+ * Operações Financeiras (empréstimos, aplicações, financiamentos, leasing)
+ * e Posição de Caixa (relatório derivado). Conciliação bancária OFX/CNAB
+ * NÃO faz parte deste módulo — permanece em `financeiro`
+ * (`server/src/modules/financial/`), evitando duplicação de domínio. Mesmo
+ * padrão de `contabilidade`: TEM nível `approve`, usado em
+ * `authorizeModule('tesouraria', 'approve')` para as 2 transições de status
+ * de uma operação financeira (`PATCH .../settle`, `PATCH .../cancel`, que
+ * encerram um contrato financeiro), enquanto
+ * `authorizeModule('tesouraria', 'operate')` cobre o CRUD comum (contas
+ * bancárias, criação/edição de operação em `active`) e a leitura usa o
+ * nível padrão (`authorizeModule('tesouraria')`, `operate` implícito).
+ *
+ * `controladoria` foi adicionado em 2026-08-07 para o módulo Controladoria
+ * (subárea CTR do departamento Financeiro, sem linha própria em
+ * `departments` — `docs/financeiro/00-README.md`, escopo "Custos
+ * Industriais, Orçamento, DRE"). Diferente dos 5 módulos anteriores, este
+ * NÃO tinha doc dedicado com tabelas SQL prontas: custeio industrial já
+ * existia em `production`/`reports`, e Centros de Custo já existiam em
+ * `financeiro` — o único pedaço novo é Orçamento (linhas de orçamento por
+ * centro de custo + relatório orçado × realizado). Mesmo padrão de
+ * `facilities`/`marketing`/`juridico`: sem nível `approve` (planejamento
+ * orçamentário não tem transição de status sensível a proteger), escrita
+ * usa `authorizeModule('controladoria', 'operate')`, leitura usa o nível
+ * padrão (`authorizeModule('controladoria')`, `operate` implícito).
+ *
  * @module shared/domain/accessModules
  */
 
@@ -126,6 +168,9 @@ export type AccessModuleKey =
   | 'facilities'
   | 'marketing'
   | 'juridico'
+  | 'contabilidade'
+  | 'tesouraria'
+  | 'controladoria'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'
@@ -177,6 +222,9 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   { key: 'facilities', label: 'Facilities (frota, limpeza, manutenção predial)' },
   { key: 'marketing', label: 'Marketing (campanhas, leads, materiais)' },
   { key: 'juridico', label: 'Jurídico (contratos, propriedade intelectual)' },
+  { key: 'contabilidade', label: 'Contabilidade (plano de contas, lançamentos, balancete)' },
+  { key: 'tesouraria', label: 'Tesouraria (contas bancárias, operações financeiras)' },
+  { key: 'controladoria', label: 'Controladoria (orçamento, custos industriais)' },
   { key: 'rastreabilidade', label: 'Rastreabilidade' },
   { key: 'financeiro', label: 'Financeiro' },
   { key: 'relatorios.producao', label: 'Relatórios de Produção' },
