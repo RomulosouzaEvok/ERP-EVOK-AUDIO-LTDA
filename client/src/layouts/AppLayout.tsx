@@ -35,6 +35,7 @@ import {
   Container,
   Layers,
   HardHat,
+  Server,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -87,7 +88,15 @@ interface NavSection {
  * — produto vendido que volta com defeito).
  */
 const NAV_SECTIONS: NavSection[] = [
-  { label: '', items: [{ label: 'Início', to: '/', icon: LayoutDashboard, module: 'dashboard' }] },
+  {
+    label: '',
+    items: [
+      { label: 'Início', to: '/', icon: LayoutDashboard, module: 'dashboard' },
+      // Meus Chamados: auto-serviço de Helpdesk de TI (BR-TI-001/RNF-TI-02),
+      // sem `module` — visível a QUALQUER usuário autenticado, igual /hr.
+      { label: 'Meus Chamados', to: '/meus-chamados', icon: LifeBuoy },
+    ],
+  },
   {
     label: 'Logística',
     items: [
@@ -169,6 +178,7 @@ const NAV_SECTIONS: NavSection[] = [
       // usuario logado, igual o backend; escrita e restrita a admin dentro
       // das proprias abas (ver HrPage.tsx).
       { label: 'RH (Funcionários/Departamentos)', to: '/hr', icon: Contact },
+      { label: 'TI (Helpdesk & Ativos)', to: '/ti', icon: Server, module: 'ti' },
       { label: 'Configuração Fiscal', to: '/settings/fiscal', icon: Landmark, roles: ['admin'] },
       { label: 'Auditor Inteligente', to: '/reports/auditor', icon: ShieldCheck, roles: ['admin'] },
     ],
@@ -215,6 +225,7 @@ const SECTION_SHORTCUTS: Record<string, QuickAction[]> = {
 const BREADCRUMBS: Record<string, string[]> = {
   '/': ['Início'],
   '/change-password': ['Início', 'Trocar senha'],
+  '/meus-chamados': ['Início', 'Meus Chamados'],
   '/products': ['Logística', 'Produtos'],
   '/products/inventory-counts': ['Logística', 'Produtos', 'Contagem de inventário'],
   '/products/items': ['Logística', 'Item Mestre'],
@@ -251,6 +262,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/users/access-profiles': ['Usuários', 'Perfis de Acesso'],
   '/audit-logs': ['Usuários', 'Log de auditoria'],
   '/hr': ['Administração', 'RH'],
+  '/ti': ['Administração', 'TI'],
   '/settings/fiscal': ['Administração', 'Configuração Fiscal'],
   '/reports/auditor': ['Administração', 'Auditor Inteligente'],
 };

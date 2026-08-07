@@ -39,6 +39,8 @@ const QualityRequisitionsPage = lazy(() => import('@/pages/quality/QualityRequis
 const LaboratoryPage = lazy(() => import('@/pages/laboratory/LaboratoryPage'));
 const EngineeringPage = lazy(() => import('@/pages/engineering/EngineeringPage'));
 const SstPage = lazy(() => import('@/pages/sst/SstPage'));
+const TiPage = lazy(() => import('@/pages/ti/TiPage'));
+const MyTicketsPage = lazy(() => import('@/pages/ti/MyTicketsPage'));
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'));
 const AssetsPage = lazy(() => import('@/pages/patrimonio/AssetsPage'));
 const MaintenanceRequisitionsPage = lazy(() => import('@/pages/maintenance/MaintenanceRequisitionsPage'));
@@ -100,6 +102,22 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <HrPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            /meus-chamados: auto-serviço de Helpdesk de TI (BR-TI-001/
+            RNF-TI-02) — qualquer usuário autenticado abre/acompanha os
+            PRÓPRIOS chamados, sem exigir o módulo `ti` (mesmo motivo de
+            /hr acima ficar fora de ModuleRoute). A gestão completa da fila
+            fica em /ti, atrás de ModuleRoute module="ti".
+          */}
+          <Route
+            path="/meus-chamados"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <MyTicketsPage />
               </Suspense>
             }
           />
@@ -388,6 +406,17 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <SstPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="ti" />}>
+            <Route
+              path="/ti"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <TiPage />
                 </Suspense>
               }
             />

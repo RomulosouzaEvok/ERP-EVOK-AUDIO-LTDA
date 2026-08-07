@@ -9443,3 +9443,85 @@ desta passada).
   (reset de senha) não foi desenhado neste bloco.
 - Dashboard/KPI consolidado de TI (RF-TI-045) permanece sem endpoint,
   pendência aceita.
+
+---
+
+## 2026-08-07 — Frontend do BLOCO 2 TI (`client/`) — `PromadorFonteEnd`
+
+Telas funcionais do módulo TI (departamento 13), consumindo os 57 endpoints
+`/api/ti/*` implementados na passada de backend anterior (commit `2518d42`).
+Segue o mesmo padrão do Bloco 1 SST (`client/src/pages/sst/`): página com
+abas, `sstShared`-like helpers, api client tipado, `DidacticAlert` +
+`TableSkeletonRows`. Foco em funcionalidade/integração — polimento visual
+fino fica para o `webdesiner` numa passada seguinte.
+
+Particularidade deste bloco (ausente no SST): **dois públicos distintos**
+consomem o mesmo backend — auto-serviço (`/meus-chamados`, qualquer usuário
+autenticado, sem `module`) e gestão (`/ti`, `module: 'ti'`). A separação de
+rota reflete a separação de autorização já feita no backend
+(`authorizeSelfOrModule` vs. `authorizeModule('ti', ...)`), evitando que a
+mesma tela precise alternar comportamento com `if (hasModuleAccess('ti'))`
+espalhado — cada página já assume seu público.
+
+### Arquivos criados
+
+- `client/src/api/ti.ts` — tipos TS + funções para as 5 áreas do contrato: Helpdesk (categorias, chamados — abrir/atribuir/prioridade/wait-resume/vincular O.M./resolver/confirmar/reabrir/cancelar/comentários), Termo de Responsabilidade (entrega/devolução/perda/ficha por funcionário/pendências de offboarding), Licenças (CRUD da extensão + reveal-key + assentos + expiring + request-renewal), Solicitações de Acesso (CRUD + approve/reject/execute/checklist/cancel) e Backup (list/create/health). Cobre os 57 endpoints do contrato (não fez recorte como o SST fez com PGR/GES).
+- `client/src/pages/ti/tiShared.tsx` — formatação de data (`formatDate`/`formatDateTime`/`toDateInputValue`/`toDateTimeInputValue`) e badges de status/prioridade (chamado, termo, solicitação de acesso) + `refName` (helper para referências `{id,name}` que às vezes vêm cruas como `number`, conforme o contrato documenta para `delivered_by`/`received_by`/`requested_by` etc. quando o mapper não conseguiu popular o relacionamento).
+- `client/src/pages/ti/MyTicketsPage.tsx` — **auto-serviço**, rota `/meus-chamados`. Lista os próprios chamados (qualquer status), dialog de abertura (assunto/descrição/categoria/urgência percebida/ativo opcional por ID), dialog de detalhe com comentários, confirmação de resolução (avaliação 1-5 opcional) e reabertura.
+- `client/src/pages/ti/TiPage.tsx` — página de **gestão**, rota `/ti`, 5 abas (padrão `TabButton` de `SstPage.tsx`).
+- `client/src/pages/ti/TicketsTab.tsx` — fila completa (filtro status/SLA estourado), dialog de atendimento: assumir, colocar em espera/retomar, vincular ordem de manutenção, registrar solução e resolver, reclassificar prioridade com motivo obrigatório (grava histórico no backend), comentar (com opção de nota interna), cancelar.
+- `client/src/pages/ti/TermsTab.tsx` — lista com filtro de status, dialog de registrar entrega (ativo de TI + funcionário + condição + acessórios + tipo de aceite), dialog de devolução (condição ok/danificado/incompleto), dialog de marcar perdido (justificativa obrigatória, botão desabilitado sem nível `approve`).
+- `client/src/pages/ti/LicensesTab.tsx` — lista com banner de licenças vencendo, cadastro de extensão sobre asset `asset_type='license'` existente, botão de revelar/ocultar chave (mascarada por padrão, clique explícito por linha), dialog de assentos (listar/alocar/revogar), dialog de solicitar renovação (nível `approve`, mostra o ID da Requisição de Compra gerada ao final).
+- `client/src/pages/ti/AccessRequestsTab.tsx` — lista com filtro de status, dialog de criação (grant/change/revoke — campos de departamento/perfil/e-mail somem para `revoke`), dialog de gestão com aprovar/rejeitar (apenas `pending` e tipo≠revoke), executar, cancelar, e checklist de desligamento (checkboxes por item). Erro 422 de bloqueio de offboarding (`BUSINESS_RULE_VIOLATION`/`pending_terms`) exibido via `DidacticAlert` com uma dica adicional apontando para a aba Termos.
+- `client/src/pages/ti/BackupTab.tsx` — 2 cards de saúde (backup diário/teste de restore) com alerta visual quando fora do prazo, histórico paginado, dialog de registro de execução (avisa quando a API cria automaticamente um chamado urgente por falha).
+- `client/src/pages/home/widgets/TiPendenciasWidget.tsx` — widget da Home por Perfil (chamados abertos na fila + licenças vencendo em 30 dias + acessos pendentes), registrado em `widgetRegistry.tsx` com `module: 'ti'`, `priority: 47`.
+
+### Arquivos alterados
+
+- `client/src/api/accessProfiles.ts` — união `AccessModuleKey` ganhou `ti` (já existia no backend, `server/src/shared/domain/accessModules.ts`).
+- `client/src/App.tsx` — rota `/meus-chamados` (lazy, **fora** de `ModuleRoute`, mesmo padrão de `/hr`) e rota `/ti` (lazy, dentro de `ModuleRoute` com `module="ti"`).
+- `client/src/layouts/AppLayout.tsx` — item "Meus Chamados" na seção `''` (Início), sem `module` (visível a todo usuário autenticado, ícone `LifeBuoy`); item "TI (Helpdesk & Ativos)" na seção "Administração", `module: 'ti'`, ícone `Server`; breadcrumbs para as duas rotas novas.
+- `client/src/pages/home/widgetRegistry.tsx` — registro do widget `ti-pendencias`.
+
+### Regras de segurança/imutabilidade respeitadas na UI
+
+- `MyTicketsPage` nunca expõe a fila completa nem ações de gestão (assumir/resolver/reclassificar) — só o que o backend já libera por posse (`authorizeSelfOrModule`). A tela nem tenta chamar `GET /api/ti/tickets` (fila).
+- Nota interna (`is_internal`) só aparece como opção de checkbox em `TicketsTab` (gestão) — `MyTicketsPage` sempre envia `is_internal: false` implicitamente (parâmetro omitido em `addTicketComment`, default `false` no client), consistente com o 403 que o backend daria a um comentário interno vindo de quem não tem o módulo.
+- Chave de licença mascarada por padrão em `LicensesTab`; revelar é um clique explícito por linha (não um "mostrar todas"), e o valor revelado não persiste após fechar a aba (estado local `revealed`, resetado a cada nova consulta).
+- Botão "Marcar perdido" (termo) e "Renovação" (licença) ficam desabilitados com `title` explicativo para quem não tem nível `approve` no módulo `ti` — o backend já rejeitaria com 403 via `authorizeModule('ti', 'approve')`, a UI só evita o clique morto (mesmo padrão do SST).
+- Bloqueio de offboarding (execução de `revoke` com termo ativo) não é escondido nem simplificado — o erro 422 estruturado do backend é exibido por completo via `DidacticAlert`, orientando o usuário a resolver o termo na aba correta antes de tentar de novo.
+
+### O que ficou de fora desta passada (declarado, não omissão)
+
+1. `GET /api/ti/dashboard`/KPIs consolidados de TI (RF-TI-045) — endpoint não existe no contrato (mesma pendência aceita pelo backend); nenhuma tela dedicada.
+2. Upload real do termo assinado (`signed_document_path` via Multer) quando `acceptance_type='physical_signature'` — o formulário de nova entrega desta passada só oferece aceite eletrônico de fato funcional; o campo de upload não foi implementado (mesma decisão de escopo aceita para o Bloco 1 SST em outros uploads).
+3. Ficha "equipamentos por funcionário" (`GET .../by-employee/:employeeId`) e listagem dedicada de "termos pendentes para offboarding" (`GET .../pending-for-offboarding/:employeeId`) — funções já existem em `client/src/api/ti.ts` (`getEmployeeTerms`/`getPendingTermsForOffboarding`), mas sem tela própria; o bloqueio de execução já aparece de forma didática no fluxo de Acessos (que é o caminho real do UC-51 E1).
+4. `opened_on_behalf_of` (abertura de chamado em nome de terceiro, RF-TI-003) — sem campo na UI (nem em `MyTicketsPage`, nem como ação separada em `TicketsTab`); a API já ignora o campo silenciosamente para quem não tem o módulo, então a ausência na UI é conservadora, não insegura.
+5. Busca de ativo por tag/QR na abertura de chamado — `asset_id` é um campo numérico simples (ID direto) em vez de busca por tag/QR do patrimônio.
+6. Categoria "seed" — como o backend não populou as 8 categorias sugeridas (ver "Riscos residuais" da seção de backend acima), o formulário de abertura de chamado depende de pelo menos uma categoria já cadastrada via `POST /api/ti/ticket-categories` (gestão) antes do primeiro teste manual de auto-serviço.
+
+### Validação
+
+- `npx tsc -p tsconfig.app.json --noEmit` — 0 erros.
+- `npx vitest run` — 51/51 testes passando (8 arquivos), nenhuma suíte quebrada (nenhum teste novo foi necessário — telas cobertas por convenção visual/funcional já testada em outros módulos, mesmo padrão do Bloco 1 SST).
+- `npm run build` — build de produção OK, `TiPage` e `MyTicketsPage` em chunks lazy próprios (`TiPage-*.js` ~52 kB, `MyTicketsPage-*.js` ~11 kB).
+
+### Instruções de teste manual
+
+1. **Pré-requisito (gestão):** logar como admin, ir em `/ti` aba "Fila de Chamados" — se a lista de categorias no dialog de abertura de chamado estiver vazia em qualquer tela, cadastrar ao menos uma categoria via `POST /api/ti/ticket-categories` (não há tela de CRUD de categoria nesta passada; usar `curl`/Postman uma única vez).
+2. **Auto-serviço:** logar como qualquer usuário (inclusive sem módulo `ti`), ir em "Meus Chamados" no menu (sempre visível). Abrir um chamado, confirmar que aparece na lista. Como admin/`ti:operate`, ir em `/ti` → Fila de Chamados, localizar o chamado, "Assumir chamado" → "Registrar solução" → "Resolver chamado". Voltar como o solicitante original em "Meus Chamados", abrir o detalhe do chamado agora `resolved`, avaliar com estrelas e "Confirmar resolução" (deve virar `closed`). Testar "Reabrir".
+3. **Termos:** em `/ti` → Termos, "Registrar entrega" escolhendo um ativo com `asset_type='it'` existente (cadastrar um em Patrimônio antes, se necessário) e um funcionário ativo. Tentar entregar o mesmo ativo de novo (deve bloquear com 409 traduzido). Registrar devolução do termo criado.
+4. **Licenças:** cadastrar um ativo `asset_type='license'` em Patrimônio, depois em `/ti` → Licenças, "Nova licença" referenciando esse ativo. Clicar no ícone de olho para revelar a chave (deve mascarar de novo ao clicar em "olho cortado"). Alocar um assento a um funcionário; tentar alocar além do número de `seats` contratado (deve bloquear com 422 traduzido). Testar "Renovação" (nível approve) e conferir que aparece o ID da Requisição de Compra gerada — validar em Compras → Fila de aprovação que a requisição existe.
+5. **Acessos:** criar uma solicitação `grant` para um funcionário, aprovar, executar. Criar uma solicitação `revoke` para um funcionário que tenha um termo `active` (ver passo 3) e tentar "Executar" — deve bloquear com 422 e a mensagem `pending_terms`; ir em Termos, devolver o termo, voltar e executar de novo (deve suceder).
+6. **Backup:** em `/ti` → Backup, registrar um backup diário com sucesso (painel de saúde deve atualizar); registrar um com falha (deve avisar que um chamado urgente foi gerado — conferir na Fila de Chamados).
+7. **Home:** voltar para `/` e conferir o card "Pendências de TI" somando chamados abertos + licenças vencendo + acessos pendentes.
+
+### O que o Agente QA (ou humano) deve testar
+
+- Usuário sem módulo `ti` deve conseguir acessar `/meus-chamados` normalmente, mas ser redirecionado para "Acesso Negado" ao tentar `/ti` diretamente pela URL.
+- Usuário com módulo `ti` nível `operate` (sem `approve`) deve ver "Marcar perdido"/"Renovação" desabilitados com tooltip, e a API deve rejeitar com 403 se contornado via DevTools.
+- Confirmar que um comentário `is_internal: true` feito na aba de gestão não aparece para o solicitante em `/meus-chamados` (o filtro é no backend, mas vale confirmar ponta a ponta).
+- Confirmar que a elegibilidade alternativa de aprovador de Acessos (gestor do departamento, `authorizeSelfOrModule` com `approverEligibilityCheck`) funciona pela UI — logar como um usuário que é `manager_id` do departamento da solicitação (sem módulo `ti`) e confirmar que "Aprovar"/"Rejeitar" funcionam mesmo sem o módulo.
+- Testar o fluxo de erro de rede/API fora do ar em qualquer uma das 5 abas de `/ti` (deve mostrar `DidacticAlert`/mensagem de erro, nunca tela em branco).
+
+---

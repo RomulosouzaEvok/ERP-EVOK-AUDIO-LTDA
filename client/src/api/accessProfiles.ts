@@ -34,6 +34,7 @@ export type AccessModuleKey =
   | 'garantia'
   | 'rh'
   | 'sst'
+  | 'ti'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'

@@ -283,6 +283,28 @@ backend), widget `sst-pendencias` na Home por Perfil.
 - [ ] PGR/GES e Rotina Preventiva (Inspeções, PT, Brigada, DDS) — CRUD do backend pronto, sem tela ainda.
 - [ ] Criação de Mandato/Processo Eleitoral CIPA — hoje só leitura na UI (criação ficou para o backend/próxima passada de frontend).
 
+## 11b. Addendum — Módulo TI (BLOCO 2, 2026-08-07)
+
+Módulo novo, fora da numeração original FE0-FE7 (departamento 13, backend
+com 57 endpoints `/api/ti/*`, commit `2518d42`). Frontend construído em
+2026-08-07: dois públicos distintos — auto-serviço (`/meus-chamados`,
+qualquer usuário autenticado, sem `module`) e gestão (`/ti`, `module: 'ti'`,
+menu em "Administração"). Chave RBAC `ti` adicionada a `AccessModuleKey` no
+client (já existia no backend). Widget `ti-pendencias` na Home por Perfil
+(chamados abertos + licenças vencendo + acessos pendentes).
+
+### Checklist
+
+- [x] `/meus-chamados`: abrir chamado, listar os próprios (qualquer status), ver detalhe, comentar, confirmar resolução com avaliação (1-5), reabrir.
+- [x] `/ti` aba Fila de Chamados: fila completa com filtro de status/SLA estourado, assumir, colocar em espera/retomar, vincular ordem de manutenção, registrar solução e resolver, reclassificar prioridade com motivo, comentar (inclusive nota interna), cancelar.
+- [x] `/ti` aba Termos de Responsabilidade: registrar entrega, registrar devolução, marcar como perdido (nível approve).
+- [x] `/ti` aba Licenças: listar com alerta de vencimento, cadastrar/editar extensão de licença sobre asset existente, revelar chave com clique explícito (mascarada por padrão), gerenciar assentos (alocar/revogar), solicitar renovação (nível approve, gera Requisição de Compra).
+- [x] `/ti` aba Acessos: criar solicitação grant/change/revoke, aprovar/rejeitar, executar (com bloqueio visível de offboarding por termo ativo), atualizar checklist de desligamento, cancelar.
+- [x] `/ti` aba Backup: painel de saúde (alerta de backup diário/teste de restore atrasado), histórico, registrar execução (com aviso de chamado urgente gerado automaticamente em caso de falha).
+- [ ] `GET /api/ti/dashboard`/KPIs de TI (RF-TI-045) — não existe endpoint dedicado no contrato ainda; fora de escopo desta passada.
+- [ ] Upload real do termo assinado (`signed_document_path` via Multer) — formulário aceita apenas aceite eletrônico nesta passada; assinatura física exige integração de upload futura.
+- [ ] Ficha "equipamentos por funcionário" (RF-TI-022) e listagem dedicada de "termos pendentes para offboarding" (RF-TI-023) — endpoints existem (`GET .../by-employee/:id`, `GET .../pending-for-offboarding/:id`), sem tela dedicada; o bloqueio de execução já aparece no fluxo de Acessos.
+
 ## 12. FE7 - Polimento e UAT do Frontend
 
 ### Checklist
