@@ -1,6 +1,6 @@
 /**
- * Caso de uso: busca de um veículo de frota por id, cobrindo o fluxo do
- * endpoint `GET /api/facilities/vehicles/:id`.
+ * Caso de uso: busca de um veículo de frota por `asset_id`, cobrindo o
+ * fluxo do endpoint `GET /api/facilities/vehicles/:assetId`.
  *
  * @module modules/facilities/application/use-cases/vehicle/GetVehicleByIdUseCase
  */
@@ -20,7 +20,7 @@ class GetVehicleByIdUseCase extends UseCase<GetVehicleByIdInput, any> {
   }
 
   async execute({ id }: GetVehicleByIdInput) {
-    const vehicle = await this.vehicleRepository.findVehicleById(id);
+    const vehicle = await this.vehicleRepository.findVehicleByAssetId(id);
     if (!vehicle) {
       throw new NotFoundError('Veículo não encontrado.');
     }

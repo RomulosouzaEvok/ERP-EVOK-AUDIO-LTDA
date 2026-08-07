@@ -11378,3 +11378,214 @@ grande demais para valer o retrofit.
 - Polimento visual (Tailwind fino, responsividade, hierarquia) — não feito
   nesta passada por desenho (funcional primeiro); próximo passo é o agente
   `webdesiner`.
+
+---
+
+## 2026-08-07 — BLOCO 4 FAC (correção): implementação backend completa dos 60 endpoints — `programador`
+
+**Escopo:** implementação da correção do módulo Facilities aprovada em
+`docs/business/BLOCO_4_FAC_REQUISITOS.md` (60 RF, UC-58 a UC-62),
+`BLOCO_4_FAC_MODELO_DADOS.md` (11 migrations `20260807-000290..300`,
+**NÃO aplicadas** — instrução explícita desta rodada), `BLOCO_4_FAC_API.md`
+(60 endpoints) e `BLOCO_4_FAC_AUDITORIA.md` (veredito APROVADO COM
+RESSALVAS). Substitui integralmente o módulo Facilities original (commit
+`2ad27fd`, 14/17 regras do brief não atendidas).
+
+### 1. Migration endurecida (ressalva da auditoria)
+
+`server/migrations/20260807-000290-migrate-facility-vehicles-to-asset-extension.cjs`:
+o backfill `facility_vehicles → assets + facility_vehicle_details` agora
+roda inteiro dentro de `queryInterface.sequelize.transaction()` (rollback
+atômico em qualquer falha) e verifica idempotência por `plate` (SELECT em
+`facility_vehicle_details` antes de cada `INSERT`), defesa em profundidade
+para reexecuções parciais. `node -c` válido. **Migration continua não
+aplicada** — RNF-FAC-03 exige teste contra cópia de banco com dado real
+antes de aplicar em qualquer ambiente com `facility_vehicles` populada.
+
+### 2. `MaintenanceOrder.ts` corrigido (achado da auditoria)
+
+`asset_id` passou de `allowNull: false` para `allowNull: true`
+(alinhamento com o `DROP NOT NULL` já feito pela migration `000296` —
+antes disso o model bloquearia silenciosamente qualquer chamado predial
+sem ativo). 3 colunas novas: `next_maintenance_km` (INTEGER),
+`facility_specialty` (ENUM 7 valores), `facility_area_id` (INTEGER).
+
+### 3. Models novos/atualizados (`server/src/models/`)
+
+**Novos:** `FacilityVehicleDetail` (substitui `FacilityVehicle`, removido —
+extensão 1:1 de `Asset`, `asset_type='vehicle'`), `FacilityVehicleDocument`,
+`FacilityDriver`, `FacilityVehicleTrip`, `FacilityFine`,
+`FacilityCleaningExecution`, `FacilityVisitor`, `FacilityVisit`,
+`FacilityCorrespondence`, `FacilityResourceReservation`.
+**Atualizados:** `FacilityFuelRecord` (`vehicle_id`→`asset_id`,
++`full_tank`/`invoice_ref`/`trip_id`), `FacilityCleaningSchedule`
+(+`facility_area_id`/`responsible_employee_id`/`active`).
+**`models/index.ts`:** imports + ~25 associações novas (Asset↔Vehicle*,
+Driver↔Trip, Trip↔FuelRecord, Fine↔AccountPayable, FacilityArea↔
+MaintenanceOrder/CleaningSchedule/Reservation, Visitor↔Visit,
+Correspondence↔Employee/Department, Reservation↔Area/Asset/Employee).
+
+### 4. Middleware novo
+
+`server/src/middlewares/authorizeAnyModule.ts` — composição OR de módulos
+(`authorizeModule` só aceitava um `moduleKey` por chamada, achado 9 da
+auditoria). Usado em `GET /api/facilities/maintenance-tickets*` com
+`authorizeAnyModule([{moduleKey:'manutencao'}, {moduleKey:'facilities'}])`.
+
+### 5. RBAC — nível `approve` (RF-FAC-057)
+
+`server/src/shared/domain/accessModules.ts` — comentário estrutural
+atualizado (removida a afirmação de que nenhuma rota usava `approve`).
+`approve` protege: liberação de saída com documento vencido (`.../release`),
+suspensão de condutor (`.../suspend`), indicação de condutor em multa
+(`.../indicate`), pagamento de multa (`.../pay`), criação/atualização de
+plano de limpeza (`POST/PUT /cleaning-schedules`, BREAKING — era `operate`).
+Divergência de odômetro (`departure_km` retroativo) é checada dentro de
+`.../depart` via `hasApproveLevel` derivado de `req.user.permissions.facilities`.
+
+### 6. Módulo `facilities/` reescrito — 60/60 endpoints
+
+**Services/adapters novos** (`application/services/` + `infrastructure/adapters/`,
+nunca Sequelize direto de outro módulo): `AssetService`/`AssetServiceAdapter`
+(cria/lê/atualiza `Asset`), `MaintenanceOrderService`/`...Adapter` (delega a
+`SequelizeMaintenanceRepository` do módulo `maintenance` real),
+`AccountPayableService`/`...Adapter` (delega a `SequelizeFinancialRepository`,
+categoria "Frota"), `InventoryService`/`...Adapter` (delega a
+`CreateInventoryMovementUseCase` do módulo `inventory`, tipo `'out'`).
+
+**Repositórios novos/reescritos** (`domain/repositories/` +
+`infrastructure/sequelize/`): `VehicleRepository` (reescrito, Asset+extensão),
+`VehicleDocumentRepository`, `DriverRepository`, `TripRepository`,
+`FuelRecordRepository` (reescrito), `FineRepository`, `VisitorRepository`,
+`VisitRepository`, `CorrespondenceRepository`, `CleaningExecutionRepository`,
+`ReservationRepository`; `CleaningScheduleRepository`/`AreaRepository`
+mantidos sem mudança de contrato interno.
+
+**Use cases** (`application/use-cases/`, um arquivo por entidade agrupando
+as ações relacionadas — desvio consciente do padrão estrito de 1
+classe/arquivo dos módulos anteriores, para conter o volume de 60
+endpoints dentro do orçamento desta entrega):
+- `vehicle/`: Create (transacional Asset+Detail via `sequelize.transaction`),
+  List, Get, Update (rejeita `current_km` fora dos 2 caminhos legítimos).
+- `vehicleDocument/VehicleDocumentUseCases.ts`: List, Create, Renew, Release.
+- `driver/DriverUseCases.ts`: List, Get, Create, Update, Authorize, Suspend.
+- `trip/TripUseCases.ts`: List, Get, Create, **Depart** (valida E1-E4/A1 do
+  UC-58 numa sequência única: CRLV vencido, seguro vencido sem liberação,
+  condutor não autorizado/CNH vencida, uso já aberto no veículo/condutor,
+  divergência de odômetro com approve), **Return** (transacional,
+  `return_km < departure_km` rejeitado, atualiza `current_km`), Cancel.
+- `fuelRecord/`: Create (reescrito — valida km/tanque, atualiza `current_km`,
+  calcula `consumption_alert` ±30%), Update (reescrito — bloqueia alteração
+  de `km_at_refuel`/`liters`/`asset_id`), List (reescrito — `asset_id`).
+- `fine/FineUseCases.ts`: List/Get (com sincronização automática
+  `pending→expired_nic` ao acessar), Create (calcula `indication_deadline`,
+  sugere condutor inline), SuggestDriver, Indicate (bloqueia se já
+  `expired_nic`), Appeal, Pay (gera título via `AccountPayableService`),
+  ChargeDriver.
+- `maintenanceTicket/MaintenanceTicketUseCases.ts`: List, Get, Create
+  (auto-serviço), Triage, Execute (bloqueia se `personal_safety_risk` sem
+  notificação SST — implementado como marcador em `notes`, simplificação
+  registrada como pendência, ver §8), Close (exige execução registrada),
+  GeneratePreventive.
+- `visitor/VisitorUseCases.ts`: List (mascara `document`/`phone` — LGPD),
+  Create (reaproveita por `document`).
+- `visit/VisitUseCases.ts`: List, Get, Create (check-in), Checkout,
+  OnsiteOverdue (dashboard, horário-limite parametrizável via env).
+- `correspondence/CorrespondenceUseCases.ts`: List, Create, Deliver.
+- `cleaningExecution/CleaningExecutionUseCases.ts`: List, Create (consome
+  insumo via `InventoryService`), Adherence (KPI execuções÷previstas).
+- `reservation/ReservationUseCases.ts`: List, Get, Create (valida
+  sobreposição amigável antes do `EXCLUDE` do banco), Cancel.
+- `area/`, `cleaningSchedule/` (CRUD, validators atualizados com
+  `facility_area_id`/`responsible_employee_id`/`active` e query de
+  `adherence`): mantidos.
+
+**Controllers/validators/routes:** 13 controllers (`vehicleController`
+reescrito com sub-rotas de documento, `fuelRecordController` reescrito,
+`driverController`/`tripController`/`fineController`/
+`maintenanceTicketController`/`visitorController`/`visitController`/
+`correspondenceController`/`cleaningExecutionController`/
+`reservationController` novos, `cleaningScheduleController` estendido com
+`adherence`, `areaController` mantido). Validators Zod `strict()` por
+grupo (mesmo padrão pré-existente). `presentation/routes/facilities.ts`
+reescrito — 60 rotas com RBAC por endpoint conforme contrato §0.2.
+
+### 7. Endpoints implementados: 60/60
+
+Grupo 1 Frota+Documento (8), Grupo 2 Condutor (6), Grupo 3 Trips+Fuel (10),
+Grupo 4 Multa (8), Grupo 5 Manutenção Predial (7), Grupo 6 Insumos (0 —
+reuso de `/api/inventory`/`/api/purchase-requisitions`), Grupo 7
+Visitantes/Correspondência (10), Grupo 8 Limpeza (7), Grupo 9 Reserva (4)
+= 60, mais Áreas (4, mantido, fora da contagem de 60 do contrato).
+
+### 8. Simplificações/riscos residuais registrados
+
+- **Notificação SST em chamado predial de risco pessoal:** implementada
+  como marcador de texto em `MaintenanceOrder.notes`
+  (`'[SST notificado]'`), não uma integração real com o módulo SST — não
+  havia adapter de SST especificado no contrato; se o negócio confirmar
+  que precisa ser uma integração de fato, é trabalho futuro.
+- **Identidade `reserved_by`/`executed_by`:** o contrato de API pede
+  explicitamente `req.user.id` (JWT) para esses campos, mas as colunas são
+  FK para `employees.id` — mesma ambiguidade usuário×funcionário já
+  presente em outras partes do sistema, herdada do contrato, não resolvida
+  aqui.
+- **`PurchaseRequisitionService` (D-3):** interface de serviço não
+  implementada nesta passada — o contrato explicita que não há endpoint
+  próprio de Facilities para reposição de insumo (usa
+  `/api/purchase-requisitions` diretamente, fora do escopo deste módulo).
+
+### 9. Documentações atualizadas
+
+- `docs/database/DATABASE.md` — nova seção "BLOCO 4 FAC (correção) —
+  Módulo Facilities reescrito".
+- `docs/projeto/04-USE_CASES.md` — UC-52 (Facilities) marcado como
+  substituído, nova seção UC-58 a UC-62.
+- `docs/governance/TODO.md` — 4 pendências da auditoria marcadas `[x]`
+  com evidência, nova entrada de implementação.
+- Este arquivo (`HANDOFF_CODEX.md`).
+- **Não tocado nesta passada** (fora de escopo): `docs/administrativo/03-FACILITIES.md`
+  (ainda descreve o desenho antigo) — próxima rodada de documentação
+  funcional deve atualizá-lo para refletir UC-58 a UC-62.
+
+### 10. Validações executadas
+
+- `npm run typecheck` (a partir de `server/`): **limpo, 0 erros**.
+- `node -c` em todas as 11 migrations do bloco (`20260807-000290` a
+  `20260807-000300`): **válido**.
+- `npx jest tests/unit/facilities-*`: **8 suítes, 50 testes, 100%
+  passando** (2 reescritas — vehicle 9, fuel-record 8 — e 4 novas — trip
+  13, driver 6, fine 6, visitor 3 —, mais cleaning-schedule 3 e area 2
+  mantidas sem mudança).
+- `npx jest tests/unit` (suíte completa): **1105/1106 passando** — única
+  falha é a pré-existente e conhecida `onda3-shipping-cockpit-cashflow.test.ts`
+  (não relacionada a este bloco, já documentada como falha pré-existente).
+- Migrations **NÃO aplicadas** (instrução explícita) — nenhum teste de
+  integração real (Postgres) foi executado neste passo.
+
+### 11. Instruções de teste para o próximo agente/humano
+
+1. **Aplicar as migrations** `20260807-000290` a `20260807-000300` em um
+   ambiente de teste com Postgres real (idealmente uma cópia do banco com
+   `facility_vehicles` populada, para validar o backfill — RNF-FAC-03).
+2. Testar o fluxo completo de frota: criar veículo (`POST /vehicles`,
+   confirmar criação de `Asset`+`FacilityVehicleDetail` na mesma
+   transação), cadastrar documento com vencimento, cadastrar condutor,
+   autorizar condutor, criar diário de uso, `.../depart` (testar os 6
+   cenários de bloqueio E1-E4/A1), `.../return`, abastecer (`POST
+   /fuel-records`, conferir `current_km` atualizado e `consumption_alert`).
+3. Testar multa: criar multa com `notice_received_at`, conferir
+   `indication_deadline` calculado, indicar condutor, tentar indicar após
+   o prazo (deve virar `expired_nic` automaticamente e rejeitar), pagar
+   multa (conferir título criado em `/api/finance/accounts-payable`).
+4. Testar chamado predial: abrir com usuário sem nenhum módulo RBAC
+   (auto-serviço deve funcionar), triagem, execução com
+   `personal_safety_risk=true` sem notificação prévia (deve rejeitar 422),
+   fechar.
+5. Testar reserva de recursos: criar duas reservas sobrepostas do mesmo
+   recurso (deve rejeitar 409 antes de chegar no banco) — depois, com a
+   migration aplicada, testar a constraint `EXCLUDE USING gist` real
+   (tentar inserir direto via SQL ignorando a validação de aplicação).
+6. Confirmar telas `client/src/pages/facilities/` quebradas pelos breaking
+   changes (esperado — fora de escopo desta entrega) e agendar correção de
+   frontend com `PromadorFonteEnd`.

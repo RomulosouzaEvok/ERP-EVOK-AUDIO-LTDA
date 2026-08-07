@@ -12,12 +12,15 @@ const ListCleaningSchedulesUseCase = require('../../application/use-cases/cleani
 const GetCleaningScheduleByIdUseCase = require('../../application/use-cases/cleaningSchedule/GetCleaningScheduleByIdUseCase');
 const CreateCleaningScheduleUseCase = require('../../application/use-cases/cleaningSchedule/CreateCleaningScheduleUseCase');
 const UpdateCleaningScheduleUseCase = require('../../application/use-cases/cleaningSchedule/UpdateCleaningScheduleUseCase');
+const SequelizeCleaningExecutionRepository = require('../../infrastructure/sequelize/SequelizeCleaningExecutionRepository');
+const { CleaningAdherenceUseCase } = require('../../application/use-cases/cleaningExecution/CleaningExecutionUseCases');
 const {
-  createCleaningScheduleSchema, updateCleaningScheduleSchema, listCleaningScheduleQuerySchema, handleZodError,
+  createCleaningScheduleSchema, updateCleaningScheduleSchema, listCleaningScheduleQuerySchema, adherenceQuerySchema, handleZodError,
 } = require('../validators/cleaningScheduleValidators');
 const { ValidationError } = require('../../../../errors');
 
 const cleaningScheduleRepository = new SequelizeCleaningScheduleRepository();
+const cleaningExecutionRepository = new SequelizeCleaningExecutionRepository();
 
 /** `GET /api/facilities/cleaning-schedules` — lista paginada, com filtro opcional de `frequency`. */
 exports.list = async (req: Request, res: Response, next: NextFunction) => {
@@ -86,4 +89,17 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
 
     res.json({ success: true, data: schedule });
   } catch (error) { next(error); }
+};
+
+/** `GET /api/facilities/cleaning-schedules/:id/adherence` — KPI de aderência (RF-FAC-050). */
+exports.adherence = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const query = adherenceQuerySchema.parse(req.query);
+    const useCase = new CleaningAdherenceUseCase(cleaningScheduleRepository, cleaningExecutionRepository);
+    const result = await useCase.execute({ id: Number(req.params.id), ...query });
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    if (error?.issues) return next(new ValidationError('Payload inválido.', error.issues));
+    next(error);
+  }
 };

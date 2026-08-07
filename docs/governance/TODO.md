@@ -3983,35 +3983,74 @@ conferidos contra os nomes reais gerados pela migration original,
 `facility_fuel_records.vehicle_id -> asset_id` migrado com ordem correta
 de indice/coluna, idempotencia confirmada.
 
-- [ ] **Risco residual real 1 (migracao D-2):** o loop de backfill do
-  `up()` da migration `20260807-000290` nao roda dentro de uma transacao
-  explicita nem verifica idempotencia por `plate` antes do `INSERT` em
-  `assets` — uma falha no meio do loop deixa estado intermediario orfao e
-  rodar de novo criaria `assets` duplicados para as linhas ja migradas.
-  Achado novo desta auditoria (nao estava declarado nos 2 artefatos de
-  origem). Recomendacao: `AdmDBA`/`programador` envolver o loop numa
-  transacao e adicionar checagem de idempotencia por `plate` antes de
-  aplicar em qualquer ambiente com `facility_vehicles` populada
-  (RNF-FAC-03 tambem exige teste contra copia real do banco, ainda nao
-  feito).
-- [ ] **Risco residual real 2 (nao-regressao MANUT):**
-  `server/src/models/MaintenanceOrder.ts` linha 47 ainda declara
-  `asset_id: { allowNull: false }` no model Sequelize mesmo depois da
-  migration `20260807-000296` remover o `NOT NULL` no banco — nao quebra
-  o fluxo atual de MANUT (que ja valida `asset_id` antes do model), mas
-  vai bloquear silenciosamente qualquer chamado predial so-com-area criado
-  pelo modulo `facilities` ate o `programador` atualizar o model para
-  `allowNull: true`.
-- [ ] **Pendencia de codigo (RF-FAC-057, ja sinalizada nos 3 artefatos de
-  forma consistente, sem inconsistencia entre eles):** adicionar uso real
-  do nivel `approve` nas rotas de `facilities` e atualizar o comentario
-  desatualizado em `server/src/shared/domain/accessModules.ts` (linhas
-  92-93, ainda afirma que nenhuma rota do modulo usa `approve`).
-- [ ] **Pendencia de codigo:** criar middleware
-  `authorizeAnyModule([...])`/equivalente para a leitura cruzada
-  MANUT x FAC de `/api/facilities/maintenance-tickets` (secao 2.9/9 do
-  relatorio) — revisar com `auditor-seguranca` quando implementado.
-- [ ] **Nao coberto por esta auditoria (fora de escopo declarado):**
-  execucao real da migration `000290` contra copia de banco com dado real
-  (RNF-FAC-03); revisao de seguranca do middleware OR de RBAC citado acima
-  (ainda nao existe codigo a revisar).
+- [x] **Risco residual real 1 (migracao D-2):** RESOLVIDO em 2026-08-07
+  (implementacao) — `up()` da migration `20260807-000290` agora roda
+  dentro de `queryInterface.sequelize.transaction()` e verifica
+  idempotencia por `plate` (SELECT em `facility_vehicle_details`) antes de
+  cada INSERT em `assets`. `node -c` validado. RNF-FAC-03 (teste contra
+  copia real do banco) continua pendente — nao foi possivel nesta rodada
+  (ambiente sem `facility_vehicles` populada).
+- [x] **Risco residual real 2 (nao-regressao MANUT):** RESOLVIDO em
+  2026-08-07 — `server/src/models/MaintenanceOrder.ts` `asset_id` agora
+  `allowNull: true`, com 3 colunas novas (`next_maintenance_km`/
+  `facility_specialty`/`facility_area_id`).
+- [x] **Pendencia de codigo (RF-FAC-057):** RESOLVIDO em 2026-08-07 — nivel
+  `approve` aplicado em `facilities` (liberacao de doc vencido, divergencia
+  de odometro, suspensao de condutor, indicacao/pagamento de multa,
+  plano de limpeza); comentario de `accessModules.ts` atualizado.
+- [x] **Pendencia de codigo:** RESOLVIDO em 2026-08-07 — middleware
+  `server/src/middlewares/authorizeAnyModule.ts` criado e aplicado em
+  `GET /api/facilities/maintenance-tickets*`.
+- [ ] **Nao coberto por esta auditoria (fora de escopo declarado), ainda
+  pendente:** execucao real da migration `000290` contra copia de banco
+  com dado real (RNF-FAC-03) — migrations `000290..300` continuam **nao
+  aplicadas**, por instrucao explicita desta rodada; revisao de seguranca
+  do middleware `authorizeAnyModule` pelo `auditor-seguranca`.
+
+### 2026-08-07 (rodada seguinte) — Implementacao BLOCO 4 FAC (correcao) — `programador`
+
+**Escopo:** implementacao completa dos 60 endpoints do contrato
+`docs/business/BLOCO_4_FAC_API.md`, endurecimento da migration `000290`
+(transacao + idempotencia por linha, ver acima), models Sequelize novos/
+atualizados, middleware `authorizeAnyModule`, RBAC `approve` aplicado,
+reescrita do modulo `server/src/modules/facilities/`.
+
+- [x] Migration `20260807-000290` endurecida (transacao explicita +
+  idempotencia por `plate`) — `node -c` valido, NAO aplicada.
+- [x] `MaintenanceOrder.ts`: `asset_id` nullable + `next_maintenance_km`/
+  `facility_specialty`/`facility_area_id`.
+- [x] Models novos: `FacilityVehicleDetail` (substitui `FacilityVehicle`,
+  removido), `FacilityVehicleDocument`, `FacilityDriver`,
+  `FacilityVehicleTrip`, `FacilityFine`, `FacilityCleaningExecution`,
+  `FacilityVisitor`, `FacilityVisit`, `FacilityCorrespondence`,
+  `FacilityResourceReservation`; `FacilityFuelRecord`/
+  `FacilityCleaningSchedule` atualizados. Associacoes em `models/index.ts`.
+- [x] Middleware `authorizeAnyModule` (composicao OR de modulos).
+- [x] RBAC `approve` aplicado nas 5 acoes previstas no contrato §0.2.
+- [x] 60 endpoints implementados (48 novos + 8 breaking + 4 mantidos) —
+  ver detalhamento em `docs/governance/HANDOFF_CODEX.md`.
+- [x] Integracao D-3 (insumos) via `InventoryService`/adapter — sem
+  endpoint proprio de estoque.
+- [x] 50 testes unitarios novos/reescritos (`facilities-*.test.ts`) — foco
+  odometro, CNH, multa/prazos, LGPD, criacao veiculo+asset transacional.
+- [x] `npm run typecheck` limpo; suite unitaria completa: 1105/1106
+  passando (unica falha e a pre-existente `onda3-shipping-cockpit-cashflow`,
+  nao relacionada).
+- [ ] **Pendente (fora de escopo deste passo):** telas
+  `client/src/pages/facilities/` vao quebrar com os breaking changes
+  (`vehicle_id`→`asset_id`, `id` do recurso vehicles passa a ser
+  `asset_id`) — proxima tarefa de `PromadorFonteEnd`.
+- [ ] **Pendente:** aplicar as migrations `20260807-000290..300` em
+  ambiente de teste real (RNF-FAC-03) antes de qualquer deploy; teste de
+  integracao real (Postgres) do fluxo completo (odometro cross-row,
+  EXCLUDE gist de reservas, transicao automatica `expired_nic`).
+- [ ] **Pendente:** `SST` nao tem adapter real — a checagem de
+  `personal_safety_risk`/notificacao SST em `.../execute` usa um marcador
+  em texto livre (`notes`) como simplificacao, nao uma integracao real
+  com o modulo SST — revisar se vira requisito de fato.
+- [ ] **Risco residual (identidade):** `reserved_by`/`executed_by` em
+  Reserva/Execucao de Limpeza sao gravados com `req.user.id` (JWT, tabela
+  `users`) mas as colunas sao FK para `employees.id` — mesma ambiguidade
+  usuario×funcionario ja presente em outros pontos do sistema, nao
+  resolvida por este bloco (herdada do contrato de API, que pede
+  `req.user.id` explicitamente).

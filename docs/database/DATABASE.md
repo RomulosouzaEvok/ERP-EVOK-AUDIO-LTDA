@@ -2173,6 +2173,89 @@ entrega (endpoints, testes, decisões próprias).
 
 ---
 
+## BLOCO 4 FAC (correção) — Módulo Facilities reescrito (2026-08-07)
+
+Correção completa dos GAPS CRÍTICOS apontados em
+`docs/business/BLOCO_4_FAC_VERIFICACAO.md` (14/17 regras do brief não
+atendidas na primeira entrega, acima). Migrations `20260807-000290` a
+`20260807-000300` (11 migrations, `docs/business/BLOCO_4_FAC_MODELO_DADOS.md`)
+**ainda NÃO aplicadas neste passo** (por instrução explícita — aplicação
+fica para uma rodada de implantação separada, após validação em cópia de
+banco real, RNF-FAC-03); models Sequelize e código de aplicação já
+assumem o schema-alvo. `facility_vehicles` (tabela isolada, 4 colunas
+duplicadas de `assets`) será **dropada** pela migration `000290` e
+substituída pela extensão 1:1 `facility_vehicle_details` sobre `assets`
+(`asset_type='vehicle'`), mesmo padrão de `ItSoftwareLicenseDetail`.
+
+### Tabelas novas (10) + 2 tabelas estendidas
+
+| Tabela/extensão | Model Sequelize | Migration |
+|---|---|---|
+| `facility_vehicle_details` (substitui `facility_vehicles`) | `FacilityVehicleDetail` | `000290` |
+| `facility_vehicle_documents` | `FacilityVehicleDocument` | `000291` |
+| `facility_drivers` | `FacilityDriver` | `000292` |
+| `facility_vehicle_trips` | `FacilityVehicleTrip` | `000293` |
+| `facility_fuel_records` (+`full_tank`/`invoice_ref`/`trip_id`, `vehicle_id`→`asset_id`) | `FacilityFuelRecord` | `000290`/`000294` |
+| `facility_fines` | `FacilityFine` | `000295` |
+| `maintenance_orders` (+`next_maintenance_km`/`facility_specialty`/`facility_area_id`, `asset_id` nullable) | `MaintenanceOrder` | `000296` |
+| `facility_cleaning_schedules` (+`facility_area_id`/`responsible_employee_id`/`active`) | `FacilityCleaningSchedule` | `000297` |
+| `facility_cleaning_executions` | `FacilityCleaningExecution` | `000297` |
+| `facility_visitors` / `facility_visits` | `FacilityVisitor` / `FacilityVisit` | `000298` |
+| `facility_correspondence` (singular) | `FacilityCorrespondence` | `000299` |
+| `facility_resource_reservations` (`EXCLUDE USING gist`, extensão `btree_gist`) | `FacilityResourceReservation` | `000300` |
+
+**Endurecimento do backfill `000290` na implementação** (ressalva da
+auditoria `BLOCO_4_FAC_AUDITORIA.md`): todo o backfill
+`facility_vehicles → assets + facility_vehicle_details` roda dentro de UMA
+transação Sequelize explícita (`queryInterface.sequelize.transaction`) —
+falha em qualquer linha reverte tudo; e idempotência por linha (checagem
+de existência por `plate` em `facility_vehicle_details` antes de cada
+INSERT, não só por tabela), para reexecuções parciais seguras.
+
+### RBAC
+
+`facilities` ganhou uso real do nível `approve` (RF-FAC-057): liberação de
+saída com documento vencido, aprovação de divergência de odômetro
+(embutida em `POST .../trips/:id/depart`), suspensão de condutor,
+indicação/pagamento de multa, criação/atualização de plano de limpeza
+(BREAKING — era `operate`). Novo middleware
+`server/src/middlewares/authorizeAnyModule.ts` (composição OR de módulos —
+`authorizeModule` só aceitava um `moduleKey` por chamada, achado 9 da
+auditoria) protege a leitura de `GET /api/facilities/maintenance-tickets`
+com `authorizeAnyModule([{moduleKey:'manutencao'}, {moduleKey:'facilities'}])`.
+Abertura de chamado predial é auto-serviço (`authenticate` apenas, RF-FAC-040,
+precedente de TI).
+
+### Integração cross-módulo (sem Sequelize direto de outro módulo)
+
+`AssetServiceAdapter` (cria/lê/atualiza `Asset` — criação de veículo é
+transacional Asset+extensão), `MaintenanceOrderServiceAdapter` (chamado
+predial sobre `maintenance_orders`, delega a `SequelizeMaintenanceRepository`
+do módulo `maintenance` real), `AccountPayableServiceAdapter` (multa paga
+gera título via `SequelizeFinancialRepository`, categoria "Frota"),
+`InventoryServiceAdapter` (consumo de insumo predial via
+`CreateInventoryMovementUseCase` do módulo `inventory`, D-3).
+
+### Breaking changes (8, sinalizadas no contrato)
+
+`GET/POST/PUT /api/facilities/vehicles` (`id` do recurso passa a ser
+`asset_id`), `POST/PUT /api/facilities/fuel-records` (`vehicle_id` →
+`asset_id`), `POST/PUT /api/facilities/cleaning-schedules` (RBAC
+`operate`→`approve`).
+
+### Pendência conhecida (registrada, não endereçada nesta passada)
+
+`client/src/pages/facilities/FacilitiesPage.tsx`/`client/src/api/facilities.ts`
+ainda consomem o contrato antigo (`vehicle_id`, `facility_vehicles.id`) —
+telas vão quebrar com os breaking changes acima; correção de frontend é
+tarefa separada (`PromadorFonteEnd`), fora do escopo deste passo de
+backend.
+
+Ver `docs/governance/HANDOFF_CODEX.md` para o handoff completo desta
+correção (endpoints, testes, riscos residuais).
+
+---
+
 ## Módulo Marketing — Implementação Backend + Frontend do zero (2026-08-07)
 
 Módulo Marketing (departamento 14, sigla MKT) não tinha NENHUM código antes

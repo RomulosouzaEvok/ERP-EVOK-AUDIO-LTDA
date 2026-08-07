@@ -1,6 +1,8 @@
 /**
- * Schemas Zod (strict) para os endpoints de Programação de Limpeza
- * (`/api/facilities/cleaning-schedules`).
+ * Schemas Zod (strict) para os endpoints de Plano de Limpeza
+ * (`/api/facilities/cleaning-schedules`). `area` (texto livre) continua
+ * obrigatório mesmo quando `facility_area_id` é informado — fallback
+ * consciente para não quebrar telas existentes (§9.1 do contrato de API).
  *
  * @module modules/facilities/presentation/validators/cleaningScheduleValidators
  */
@@ -17,6 +19,9 @@ export const createCleaningScheduleSchema = z.object({
   last_cleaning: z.string().trim().optional(),
   next_cleaning: z.string().trim().optional(),
   notes: z.string().trim().max(2000).optional(),
+  facility_area_id: z.coerce.number().int().positive().optional(),
+  responsible_employee_id: z.coerce.number().int().positive().optional(),
+  active: z.boolean().default(true),
 }).strict();
 
 export const updateCleaningScheduleSchema = z.object({
@@ -26,6 +31,9 @@ export const updateCleaningScheduleSchema = z.object({
   last_cleaning: z.string().trim().optional(),
   next_cleaning: z.string().trim().optional(),
   notes: z.string().trim().max(2000).optional(),
+  facility_area_id: z.coerce.number().int().positive().optional(),
+  responsible_employee_id: z.coerce.number().int().positive().optional(),
+  active: z.boolean().optional(),
 }).strict();
 
 export const listCleaningScheduleQuerySchema = z.object({
@@ -34,7 +42,12 @@ export const listCleaningScheduleQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
 }).strict();
 
-const schemas = { createCleaningScheduleSchema, updateCleaningScheduleSchema, listCleaningScheduleQuerySchema };
+export const adherenceQuerySchema = z.object({
+  from: z.string().trim().min(1, 'from é obrigatório.'),
+  to: z.string().trim().min(1, 'to é obrigatório.'),
+}).strict();
+
+const schemas = { createCleaningScheduleSchema, updateCleaningScheduleSchema, listCleaningScheduleQuerySchema, adherenceQuerySchema };
 
 module.exports = schemas;
 module.exports.handleZodError = (error: any) => {

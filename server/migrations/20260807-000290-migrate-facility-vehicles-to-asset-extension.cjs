@@ -120,8 +120,22 @@ module.exports = {
     }
 
     // ---- Backfill de dado: facility_vehicles -> assets + facility_vehicle_details ----
-    const [vehicles] = await queryInterface.sequelize.query('SELECT * FROM facility_vehicles ORDER BY id ASC');
-
+    // RESSALVA DA AUDITORIA (endurecida na implementação, 2026-08-07):
+    // 1. Todo o backfill roda dentro de UMA transação explícita
+    //    (`queryInterface.sequelize.transaction`) — se qualquer INSERT/UPDATE
+    //    falhar no meio do loop (ex.: violação de constraint numa linha
+    //    específica), NENHUM asset/detalhe órfão fica gravado; a migration
+    //    inteira faz rollback e pode ser reexecutada do zero com segurança.
+    // 2. Idempotência por linha (não só por tabela): cada veículo é
+    //    verificado por `plate` em `facility_vehicle_details` ANTES do
+    //    INSERT — se um veículo específico já tiver sido migrado (ex.: uma
+    //    execução anterior que falhou APÓS já ter migrado parte das linhas,
+    //    num ambiente sem a transação — cenário que a transação acima já
+    //    torna impossível para execuções futuras, mas mantido como defesa
+    //    em profundidade para reexecuções manuais/parciais), a linha é
+    //    pulada e o mapa `vehicleIdToAssetId` é preenchido a partir do
+    //    `asset_id` já existente, para que o passo de `facility_fuel_records`
+    //    abaixo continue correto mesmo num backfill parcial.
     const statusMap = {
       active: 'active',
       maintenance: 'in_maintenance',
@@ -132,101 +146,120 @@ module.exports = {
     /** @type {Map<number, number>} old facility_vehicles.id -> new assets.id */
     const vehicleIdToAssetId = new Map();
 
-    for (const v of vehicles) {
-      const assetStatus = statusMap[v.status] || 'active';
-      const notesParts = [];
-      if (v.status === 'deactivated' || v.status === 'sold') {
-        notesParts.push(`Status original em facility_vehicles (pré-migração D-2): ${v.status}`);
-      }
-      if (v.notes) notesParts.push(v.notes);
-      const assetName = [v.brand, v.model].filter(Boolean).join(' ').trim() || `Veículo ${v.plate}`;
-      const tag = `VEIC-${v.plate}`;
+    await queryInterface.sequelize.transaction(async (transaction) => {
+      const [vehicles] = await queryInterface.sequelize.query('SELECT * FROM facility_vehicles ORDER BY id ASC', { transaction });
 
-      const [assetInsert] = await queryInterface.sequelize.query(
-        `INSERT INTO assets (tag, name, asset_type, brand, model, status, notes, created_at, updated_at)
-         VALUES (:tag, :name, 'vehicle', :brand, :model, :status, :notes, :created_at, :updated_at)
-         RETURNING id`,
-        {
-          replacements: {
-            tag,
-            name: assetName,
-            brand: v.brand || null,
-            model: v.model || null,
-            status: assetStatus,
-            notes: notesParts.length ? notesParts.join(' | ') : null,
-            created_at: v.created_at,
-            updated_at: v.updated_at,
-          },
+      for (const v of vehicles) {
+        const [existingDetail] = await queryInterface.sequelize.query(
+          'SELECT asset_id FROM facility_vehicle_details WHERE plate = :plate',
+          { replacements: { plate: v.plate }, transaction }
+        );
+
+        if (existingDetail.length) {
+          // Já migrado (reexecução parcial) — só popula o mapa para o
+          // passo seguinte de facility_fuel_records, sem duplicar.
+          vehicleIdToAssetId.set(v.id, existingDetail[0].asset_id);
+          continue;
         }
-      );
-      const assetId = assetInsert[0].id;
-      vehicleIdToAssetId.set(v.id, assetId);
 
-      await queryInterface.sequelize.query(
-        `INSERT INTO facility_vehicle_details
-           (asset_id, plate, renavam, chassi, color, year, fuel_type, current_km,
-            last_oil_change, next_oil_change_km, insurance_company, insurance_policy, insurance_expiry,
-            created_at, updated_at)
-         VALUES
-           (:asset_id, :plate, :renavam, :chassi, :color, :year, :fuel_type, :current_km,
-            :last_oil_change, :next_oil_change_km, :insurance_company, :insurance_policy, :insurance_expiry,
-            :created_at, :updated_at)`,
-        {
-          replacements: {
-            asset_id: assetId,
-            plate: v.plate,
-            renavam: v.renavam || null,
-            chassi: v.chassi || null,
-            color: v.color || null,
-            year: v.year || null,
-            fuel_type: v.fuel_type || null,
-            current_km: v.current_km || 0,
-            last_oil_change: v.last_oil_change || null,
-            next_oil_change_km: v.next_oil_change_km || null,
-            insurance_company: v.insurance_company || null,
-            insurance_policy: v.insurance_policy || null,
-            insurance_expiry: v.insurance_expiry || null,
-            created_at: v.created_at,
-            updated_at: v.updated_at,
-          },
+        const assetStatus = statusMap[v.status] || 'active';
+        const notesParts = [];
+        if (v.status === 'deactivated' || v.status === 'sold') {
+          notesParts.push(`Status original em facility_vehicles (pré-migração D-2): ${v.status}`);
         }
-      );
-    }
+        if (v.notes) notesParts.push(v.notes);
+        const assetName = [v.brand, v.model].filter(Boolean).join(' ').trim() || `Veículo ${v.plate}`;
+        const tag = `VEIC-${v.plate}`;
 
-    // ---- Migra facility_fuel_records.vehicle_id -> asset_id ----
-    const fuelColumns = await queryInterface.describeTable('facility_fuel_records');
-    if (fuelColumns.vehicle_id && !fuelColumns.asset_id) {
-      await queryInterface.addColumn('facility_fuel_records', 'asset_id', {
-        type: Sequelize.INTEGER,
-        allowNull: true,
-        references: { model: 'assets', key: 'id' },
-        onDelete: 'RESTRICT',
-        onUpdate: 'CASCADE',
-      });
+        const [assetInsert] = await queryInterface.sequelize.query(
+          `INSERT INTO assets (tag, name, asset_type, brand, model, status, notes, created_at, updated_at)
+           VALUES (:tag, :name, 'vehicle', :brand, :model, :status, :notes, :created_at, :updated_at)
+           RETURNING id`,
+          {
+            replacements: {
+              tag,
+              name: assetName,
+              brand: v.brand || null,
+              model: v.model || null,
+              status: assetStatus,
+              notes: notesParts.length ? notesParts.join(' | ') : null,
+              created_at: v.created_at,
+              updated_at: v.updated_at,
+            },
+            transaction,
+          }
+        );
+        const assetId = assetInsert[0].id;
+        vehicleIdToAssetId.set(v.id, assetId);
 
-      for (const [oldVehicleId, assetId] of vehicleIdToAssetId.entries()) {
         await queryInterface.sequelize.query(
-          'UPDATE facility_fuel_records SET asset_id = :assetId WHERE vehicle_id = :oldVehicleId',
-          { replacements: { assetId, oldVehicleId } }
+          `INSERT INTO facility_vehicle_details
+             (asset_id, plate, renavam, chassi, color, year, fuel_type, current_km,
+              last_oil_change, next_oil_change_km, insurance_company, insurance_policy, insurance_expiry,
+              created_at, updated_at)
+           VALUES
+             (:asset_id, :plate, :renavam, :chassi, :color, :year, :fuel_type, :current_km,
+              :last_oil_change, :next_oil_change_km, :insurance_company, :insurance_policy, :insurance_expiry,
+              :created_at, :updated_at)`,
+          {
+            replacements: {
+              asset_id: assetId,
+              plate: v.plate,
+              renavam: v.renavam || null,
+              chassi: v.chassi || null,
+              color: v.color || null,
+              year: v.year || null,
+              fuel_type: v.fuel_type || null,
+              current_km: v.current_km || 0,
+              last_oil_change: v.last_oil_change || null,
+              next_oil_change_km: v.next_oil_change_km || null,
+              insurance_company: v.insurance_company || null,
+              insurance_policy: v.insurance_policy || null,
+              insurance_expiry: v.insurance_expiry || null,
+              created_at: v.created_at,
+              updated_at: v.updated_at,
+            },
+            transaction,
+          }
         );
       }
 
-      await queryInterface.sequelize.query(
-        'ALTER TABLE facility_fuel_records ALTER COLUMN asset_id SET NOT NULL'
-      );
+      // ---- Migra facility_fuel_records.vehicle_id -> asset_id ----
+      const fuelColumns = await queryInterface.describeTable('facility_fuel_records');
+      if (fuelColumns.vehicle_id && !fuelColumns.asset_id) {
+        await queryInterface.addColumn('facility_fuel_records', 'asset_id', {
+          type: Sequelize.INTEGER,
+          allowNull: true,
+          references: { model: 'assets', key: 'id' },
+          onDelete: 'RESTRICT',
+          onUpdate: 'CASCADE',
+        }, { transaction });
 
-      const fuelIndexes = await queryInterface.showIndex('facility_fuel_records');
-      if (fuelIndexes.some((i) => i.name === 'idx_facility_fuel_records_vehicle_id')) {
-        await queryInterface.removeIndex('facility_fuel_records', 'idx_facility_fuel_records_vehicle_id');
+        for (const [oldVehicleId, assetId] of vehicleIdToAssetId.entries()) {
+          await queryInterface.sequelize.query(
+            'UPDATE facility_fuel_records SET asset_id = :assetId WHERE vehicle_id = :oldVehicleId',
+            { replacements: { assetId, oldVehicleId }, transaction }
+          );
+        }
+
+        await queryInterface.sequelize.query(
+          'ALTER TABLE facility_fuel_records ALTER COLUMN asset_id SET NOT NULL',
+          { transaction }
+        );
+
+        const fuelIndexes = await queryInterface.showIndex('facility_fuel_records', { transaction });
+        if (fuelIndexes.some((i) => i.name === 'idx_facility_fuel_records_vehicle_id')) {
+          await queryInterface.removeIndex('facility_fuel_records', 'idx_facility_fuel_records_vehicle_id', { transaction });
+        }
+        await queryInterface.removeColumn('facility_fuel_records', 'vehicle_id', { transaction });
+        await queryInterface.addIndex('facility_fuel_records', ['asset_id'], { name: 'idx_facility_fuel_records_asset_id', transaction });
       }
-      await queryInterface.removeColumn('facility_fuel_records', 'vehicle_id');
-      await queryInterface.addIndex('facility_fuel_records', ['asset_id'], { name: 'idx_facility_fuel_records_asset_id' });
-    }
 
-    // ---- Dropa a tabela legada ----
-    await queryInterface.dropTable('facility_vehicles');
-    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_facility_vehicles_fuel_type";');
-    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_facility_vehicles_status";');
+      // ---- Dropa a tabela legada ----
+      await queryInterface.dropTable('facility_vehicles', { transaction });
+      await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_facility_vehicles_fuel_type";', { transaction });
+      await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_facility_vehicles_status";', { transaction });
+    });
   },
 
   async down(queryInterface, Sequelize) {

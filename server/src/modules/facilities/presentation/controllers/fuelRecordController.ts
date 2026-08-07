@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 
 /**
  * Controller HTTP de Abastecimento (`/api/facilities/fuel-records`).
+ * BREAKING (D-2): `vehicle_id` renomeado para `asset_id`.
  *
  * @module modules/facilities/presentation/controllers/fuelRecordController
  */
@@ -19,7 +20,7 @@ const { ValidationError } = require('../../../../errors');
 const fuelRecordRepository = new SequelizeFuelRecordRepository();
 const vehicleRepository = new SequelizeVehicleRepository();
 
-/** `GET /api/facilities/fuel-records` — lista paginada, com filtro opcional de `vehicle_id`. */
+/** `GET /api/facilities/fuel-records` — lista paginada, com filtro opcional de `asset_id`. */
 exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const query = listFuelRecordQuerySchema.parse(req.query);
@@ -44,7 +45,7 @@ exports.getById = async (req: Request, res: Response, next: NextFunction) => {
   } catch (error) { next(error); }
 };
 
-/** `POST /api/facilities/fuel-records` — cria um registro de abastecimento (404 se veículo inexistente). */
+/** `POST /api/facilities/fuel-records` — valida km/tanque, atualiza current_km, calcula consumption_alert. */
 exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createFuelRecordSchema.safeParse(req.body);
@@ -57,16 +58,16 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
       action: 'create',
       entityType: 'FacilityFuelRecord',
       entityId: record?.id,
-      entityDescription: `Veículo ${record?.vehicle_id}`,
-      newValues: { vehicle_id: record?.vehicle_id, liters: record?.liters, total_cost: record?.total_cost },
-      description: `Abastecimento registrado para o veículo ${record?.vehicle_id}`,
+      entityDescription: `Veículo asset #${record?.asset_id}`,
+      newValues: { asset_id: record?.asset_id, liters: record?.liters, total_cost: record?.total_cost },
+      description: `Abastecimento registrado para o veículo #${record?.asset_id}`,
     });
 
     res.status(201).json({ success: true, data: record });
   } catch (error) { next(error); }
 };
 
-/** `PUT /api/facilities/fuel-records/:id` — atualiza campos do registro de abastecimento. */
+/** `PUT /api/facilities/fuel-records/:id` — corrige apenas campos não recalculáveis (RNF-FAC-01). */
 exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = updateFuelRecordSchema.safeParse(req.body);
@@ -79,7 +80,7 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
       action: 'update',
       entityType: 'FacilityFuelRecord',
       entityId: record?.id,
-      entityDescription: `Veículo ${record?.vehicle_id}`,
+      entityDescription: `Veículo asset #${record?.asset_id}`,
       newValues: parsed.data,
       description: `Abastecimento ${record?.id} atualizado`,
     });

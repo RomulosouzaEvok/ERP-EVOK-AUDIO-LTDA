@@ -1701,50 +1701,96 @@ RF-TI, 18 BR-TI, RNF-TI-01 a 05) e `docs/business/BLOCO_2_TI_API.md`
 
 ---
 
-## UC-52 (implementado): Módulo Facilities — Frota, Abastecimento, Limpeza, Áreas Físicas
+## UC-52 (SUBSTITUÍDO pelo BLOCO 4 FAC — correção, 2026-08-07): Módulo Facilities
 
-**Departamento:** 17 — Facilities (FAC). Backend implementado do zero
-(nenhum código existia antes, apenas a linha do departamento em `seeds.ts`
-e um esboço `[PENDENTE]` em `docs/administrativo/03-FACILITIES.md`) em
-`server/src/modules/facilities/`, montado em `/api/facilities`. Tela web em
-`/facilities` (`client/src/pages/facilities/FacilitiesPage.tsx`, 4 abas).
+**Status:** 🔴 A implementação original descrita abaixo (14/17 regras do
+brief não atendidas, `docs/business/BLOCO_4_FAC_VERIFICACAO.md`) foi
+**reescrita** na mesma data pelo BLOCO 4 FAC (correção) — ver UC-58 a
+UC-62 logo abaixo, que são os casos de uso REAIS e atuais do módulo. Texto
+original preservado nesta seção apenas como registro histórico do que
+existia antes da correção (não reflete mais o código em produção).
 
-Módulo essencialmente de cadastro/controle, sem máquina de estados nem
-fluxo de aprovação — CRUD create/list/get/update (sem delete, físico ou
-lógico) para 4 entidades independentes entre si (exceto FKs de referência):
+~~Módulo essencialmente de cadastro/controle, sem máquina de estados nem
+fluxo de aprovação — CRUD create/list/get/update (sem delete) para 4
+entidades independentes entre si: Frota de veículos (`facility_vehicles`,
+tabela isolada duplicando `brand`/`model`/`status` de `assets`),
+Abastecimento (`facility_fuel_records`, FK `vehicle_id`), Programação de
+limpeza (`facility_cleaning_schedules`, sem separação plano×execução),
+Áreas físicas (`facility_areas`). Sem condutor, sem diário de uso com
+odômetro, sem documento com vencimento, sem multa, sem chamado predial
+formal, sem visitante, sem correspondência, sem reserva de recursos.~~
 
-- **Frota de veículos** (`facility_vehicles`): placa única, dados do
-  veículo, seguro, status (`active`/`maintenance`/`deactivated`/`sold`).
-  `POST` rejeita placa duplicada com `ConflictError` (409).
-- **Abastecimento** (`facility_fuel_records`): histórico por veículo
-  (FK obrigatória `vehicle_id`, `ON DELETE RESTRICT`), motorista opcional
-  (FK `driver_id → employees`, `ON DELETE SET NULL`). `total_cost`
-  calculado automaticamente (`liters * price_per_liter`) quando não
-  informado. `POST` rejeita `vehicle_id` inexistente com `NotFoundError`
-  (404).
-- **Programação de limpeza** (`facility_cleaning_schedules`): área em texto
-  livre (decisão consciente — não FK para `facility_areas`, cobre áreas
-  informais sem cadastro formal), frequência, responsável, última/próxima
-  limpeza.
-- **Áreas físicas** (`facility_areas`): tipo, m², capacidade de pessoas,
-  departamento opcional (FK `department_id → departments`,
-  `ON DELETE SET NULL`).
+---
 
-**RBAC:** novo módulo `facilities` em
-`server/src/shared/domain/accessModules.ts` (espelhado em
-`client/src/api/accessProfiles.ts`) — leitura em nível padrão (`operate`,
-mesmo padrão de `centros_de_trabalho`/`sst`/`ti`), escrita explicitamente
-`authorizeModule('facilities', 'operate')`. Sem nível `approve`.
+## UC-58 a UC-62 (implementado — BLOCO 4 FAC, correção, 2026-08-07): Módulo Facilities completo
 
-**Testes:** `server/tests/unit/facilities-vehicle-use-cases.test.ts` (6),
-`facilities-fuel-record-use-cases.test.ts` (3),
-`facilities-cleaning-schedule-use-cases.test.ts` (3),
-`facilities-area-use-cases.test.ts` (2) — 14 casos novos, cobrindo os fluxos
-principais (criar veículo, listar frota, criar abastecimento com cálculo
-automático de custo, criar programação de limpeza) e os principais fluxos
-de exceção (placa/veículo duplicados, entidade inexistente). Ver
-`docs/governance/HANDOFF_CODEX.md` e `docs/administrativo/03-FACILITIES.md`
-(contrato completo de 16 endpoints).
+**Departamento:** 17 — Facilities (FAC). Reescrita completa em
+`server/src/modules/facilities/`, montado em `/api/facilities` (60
+endpoints — 48 novos, 8 breaking changes, 4 mantidos sem mudança de
+contrato). Numeração `UC-58..62` conforme
+`docs/business/BLOCO_4_FAC_REQUISITOS.md` (mesma dívida de numeração já
+registrada acima para o trio Facilities/Marketing/Jurídico — UC-52..57 já
+atribuídos a outros módulos no mesmo dia).
+
+- **UC-58 — Frota Legal Completa:** veículo como extensão 1:1 de `Asset`
+  (`asset_type='vehicle'`, D-2 — `FacilityVehicleDetail` substitui a
+  antiga `facility_vehicles`, dropada), documento com vencimento
+  (`FacilityVehicleDocument`: CRLV, seguro, IPVA — bloqueia saída se
+  vencido, exceto liberação explícita nível `approve`), condutor
+  (`FacilityDriver`: CNH, autorização, suspensão nível `approve`), diário
+  de uso (`FacilityVehicleTrip`, máquina de estados
+  `scheduled→out→returned`/`canceled`, odômetro crescente garantido por
+  CHECK + validação de divergência aprovada, no máximo 1 uso aberto por
+  veículo/condutor via índice único parcial), abastecimento
+  (`FacilityFuelRecord`, valida km/tanque, atualiza `current_km`, alerta
+  de anomalia de consumo ±30%).
+- **UC-59 — Multa (Prazo Legal de Indicação de Condutor):** `FacilityFine`,
+  `indication_deadline` calculado automaticamente, transição automática
+  para `expired_nic` ao vencer sem indicação, sugestão de condutor
+  cruzando `infraction_at`+placa com o diário de uso, pagamento gera
+  título em Contas a Pagar via `AccountPayableService` (nunca Sequelize
+  direto).
+- **UC-60 — Manutenção Predial (D-1):** reaproveita `maintenance_orders`
+  existente (`facility_area_id`/`facility_specialty`/`next_maintenance_km`
+  novos, `asset_id` nullable com CHECK garantindo ao menos um vínculo),
+  abertura auto-serviço (qualquer autenticado), leitura com
+  `authorizeAnyModule(['manutencao','facilities'])` (middleware novo —
+  achado 9 da auditoria, `authorizeModule` só aceitava um módulo por vez).
+- **UC-61 — Visitantes e Correspondência:** `FacilityVisitor`/`FacilityVisit`
+  (check-in/check-out, dado pessoal mascarado em listagem — LGPD,
+  RNF-FAC-04), `FacilityCorrespondence` (recebimento/entrega).
+- **UC-62 — Limpeza Plano × Execução:** `FacilityCleaningSchedule` (plano,
+  agora com FK opcional para `facility_areas`/`employees`, criação/edição
+  exige nível `approve` — BREAKING, era `operate`) separado de
+  `FacilityCleaningExecution` (execução), viabilizando KPI de aderência.
+  Reserva de recursos (`FacilityResourceReservation`, P2) com não
+  sobreposição garantida por `EXCLUDE USING gist` no banco.
+
+**Integração D-3 (insumos):** sem estoque próprio — consumo de material em
+chamado predial/execução de limpeza via `InventoryService` (adapter para
+`CreateInventoryMovementUseCase` do módulo `inventory`), reposição via
+`/api/purchase-requisitions` existente (sem endpoint próprio).
+
+**RBAC:** `facilities` ganhou uso real do nível `approve` (RF-FAC-057).
+
+**Testes:** `server/tests/unit/facilities-vehicle-use-cases.test.ts` (9,
+reescrito), `facilities-fuel-record-use-cases.test.ts` (8, reescrito),
+`facilities-trip-use-cases.test.ts` (13, novo — odômetro e elegibilidade
+E1-E4/A1), `facilities-driver-use-cases.test.ts` (6, novo — CNH/suspensão),
+`facilities-fine-use-cases.test.ts` (6, novo — prazo de indicação),
+`facilities-visitor-use-cases.test.ts` (3, novo — mascaramento LGPD),
+`facilities-cleaning-schedule-use-cases.test.ts` (3, mantido),
+`facilities-area-use-cases.test.ts` (2, mantido) — 50 casos, ver
+`docs/governance/HANDOFF_CODEX.md` e `docs/business/BLOCO_4_FAC_API.md`
+(contrato completo).
+
+**Migrations `20260807-000290..300` ainda NÃO aplicadas** (aguardando
+teste contra cópia de banco com dados reais, RNF-FAC-03) — código de
+aplicação já assume o schema-alvo.
+
+**Pendência:** telas web (`client/src/pages/facilities/`) ainda consomem o
+contrato antigo e vão quebrar com os breaking changes — fora do escopo
+deste passo de backend.
 
 ---
 

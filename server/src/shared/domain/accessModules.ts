@@ -87,11 +87,24 @@
  * `facilities` foi adicionado em 2026-08-07 para o módulo Facilities
  * (Facilities/Serviços Gerais, departamento 17, sigla FAC —
  * `docs/administrativo/03-FACILITIES.md`), implementado do zero: frota de
- * veículos, abastecimento, programação de limpeza e áreas físicas. Módulo
- * essencialmente de cadastro/controle, sem fluxo de aprovação crítico —
- * todas as rotas usam `authorizeModule('facilities', 'operate')` para
- * escrita e `authorizeModule('facilities')` (nível `operate` implícito,
- * mesmo padrão de `centros_de_trabalho`/`sst`/`ti`) para leitura.
+ * veículos, abastecimento, programação de limpeza e áreas físicas.
+ * CORRIGIDO no mesmo dia (BLOCO 4 FAC, correção, `docs/business/
+ * BLOCO_4_FAC_REQUISITOS.md`/`BLOCO_4_FAC_API.md`): o módulo GANHOU uso
+ * real do nível `approve` (RF-FAC-057) — `authorizeModule('facilities',
+ * 'approve')` protege liberação de saída com documento de veículo vencido,
+ * aprovação de divergência de odômetro, suspensão de condutor,
+ * indicação/pagamento de multa e criação/atualização de plano de limpeza.
+ * O restante (cadastro de veículo/condutor, saída/retorno normal,
+ * abastecimento, execução de limpeza, chamado predial, visitante,
+ * correspondência, reserva) usa `authorizeModule('facilities', 'operate')`
+ * para escrita e `authorizeModule('facilities')` (nível `operate`
+ * implícito) para leitura. Abertura de chamado predial
+ * (`POST /api/facilities/maintenance-tickets`) é auto-serviço — apenas
+ * `authenticate`, sem `authorizeModule` (mesmo precedente de `ti`, ver
+ * acima). Leitura de chamados prediais usa `authorizeAnyModule([{moduleKey:
+ * 'manutencao'}, {moduleKey: 'facilities'}])` (`server/src/middlewares/
+ * authorizeAnyModule.ts`, novo neste bloco — composição OR de módulos, que
+ * `authorizeModule` sozinho não suportava).
  *
  * `marketing` foi adicionado em 2026-08-07 para o módulo Marketing
  * (Marketing e Comunicação, departamento 14, sigla MKT —

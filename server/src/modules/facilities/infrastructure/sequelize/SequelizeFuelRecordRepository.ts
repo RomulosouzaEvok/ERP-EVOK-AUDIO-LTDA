@@ -5,18 +5,19 @@
  */
 
 const FuelRecordRepository = require('../../domain/repositories/FuelRecordRepository');
-const { FacilityFuelRecord, FacilityVehicle, Employee } = require('../../../../models/index');
+const { FacilityFuelRecord, Asset, Employee } = require('../../../../models/index');
 
 class SequelizeFuelRecordRepository extends FuelRecordRepository {
   async listFuelRecords(filters: Record<string, any> = {}, pagination: Record<string, any> = {}) {
     const where: any = {};
-    if (filters.vehicle_id) where.vehicle_id = filters.vehicle_id;
+    if (filters.asset_id) where.asset_id = filters.asset_id;
+    if (filters.full_tank !== undefined) where.full_tank = filters.full_tank;
 
     const { count, rows } = await FacilityFuelRecord.findAndCountAll({
       where,
       include: [
-        { model: FacilityVehicle, as: 'vehicle', attributes: ['id', 'plate', 'brand', 'model'] },
-        { model: Employee, as: 'driver', attributes: ['id', 'name'] },
+        { model: Asset, as: 'asset', attributes: ['id', 'name', 'tag'] },
+        { model: Employee, as: 'driver', attributes: ['id', 'name'], required: false },
       ],
       limit: pagination.limit,
       offset: pagination.offset,
@@ -29,8 +30,8 @@ class SequelizeFuelRecordRepository extends FuelRecordRepository {
   async findFuelRecordById(id: number) {
     return FacilityFuelRecord.findByPk(id, {
       include: [
-        { model: FacilityVehicle, as: 'vehicle', attributes: ['id', 'plate', 'brand', 'model'] },
-        { model: Employee, as: 'driver', attributes: ['id', 'name'] },
+        { model: Asset, as: 'asset', attributes: ['id', 'name', 'tag'] },
+        { model: Employee, as: 'driver', attributes: ['id', 'name'], required: false },
       ],
     });
   }
@@ -45,6 +46,14 @@ class SequelizeFuelRecordRepository extends FuelRecordRepository {
     if (!record) return null;
     await record.update(data);
     return this.findFuelRecordById(id);
+  }
+
+  async listRecentFullTank(assetId: number, limit: number) {
+    return FacilityFuelRecord.findAll({
+      where: { asset_id: assetId, full_tank: true },
+      order: [['record_date', 'DESC']],
+      limit,
+    });
   }
 }
 

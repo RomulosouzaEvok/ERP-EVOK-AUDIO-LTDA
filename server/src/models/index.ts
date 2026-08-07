@@ -125,10 +125,19 @@ import ItLicenseSeat = require('./ItLicenseSeat');
 import ItAccessRequest = require('./ItAccessRequest');
 import ItBackupLog = require('./ItBackupLog');
 import TiSettings = require('./TiSettings');
-import FacilityVehicle = require('./FacilityVehicle');
+import FacilityVehicleDetail = require('./FacilityVehicleDetail');
+import FacilityVehicleDocument = require('./FacilityVehicleDocument');
+import FacilityDriver = require('./FacilityDriver');
+import FacilityVehicleTrip = require('./FacilityVehicleTrip');
 import FacilityFuelRecord = require('./FacilityFuelRecord');
+import FacilityFine = require('./FacilityFine');
 import FacilityCleaningSchedule = require('./FacilityCleaningSchedule');
+import FacilityCleaningExecution = require('./FacilityCleaningExecution');
 import FacilityArea = require('./FacilityArea');
+import FacilityVisitor = require('./FacilityVisitor');
+import FacilityVisit = require('./FacilityVisit');
+import FacilityCorrespondence = require('./FacilityCorrespondence');
+import FacilityResourceReservation = require('./FacilityResourceReservation');
 import MarketingCampaign = require('./MarketingCampaign');
 import MarketingLead = require('./MarketingLead');
 import MarketingMaterial = require('./MarketingMaterial');
@@ -1032,20 +1041,90 @@ User.hasMany(ItBackupLog, { foreignKey: 'verified_by', as: 'it_backup_logs_verif
 ItBackupLog.belongsTo(User, { foreignKey: 'verified_by', as: 'verifiedByUser' });
 
 // ============================================
-// RELACIONAMENTOS - FACILITIES (departamento 17, FAC)
+// RELACIONAMENTOS - FACILITIES (departamento 17, FAC) — BLOCO 4 (correção)
 // ============================================
 
-// FacilityVehicle ↔ FacilityFuelRecord
-FacilityVehicle.hasMany(FacilityFuelRecord, { foreignKey: 'vehicle_id', as: 'fuelRecords' });
-FacilityFuelRecord.belongsTo(FacilityVehicle, { foreignKey: 'vehicle_id', as: 'vehicle' });
+// Asset ↔ FacilityVehicleDetail (extensão 1:1, asset_type='vehicle')
+Asset.hasOne(FacilityVehicleDetail, { foreignKey: 'asset_id', as: 'vehicleDetail' });
+FacilityVehicleDetail.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
 
-// Employee ↔ FacilityFuelRecord (driver)
+// Asset ↔ FacilityVehicleDocument
+Asset.hasMany(FacilityVehicleDocument, { foreignKey: 'asset_id', as: 'vehicleDocuments' });
+FacilityVehicleDocument.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
+User.hasMany(FacilityVehicleDocument, { foreignKey: 'released_by', as: 'facility_documents_liberados' });
+FacilityVehicleDocument.belongsTo(User, { foreignKey: 'released_by', as: 'releasedByUser' });
+
+// Employee ↔ FacilityDriver
+Employee.hasOne(FacilityDriver, { foreignKey: 'employee_id', as: 'facilityDriver' });
+FacilityDriver.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+User.hasMany(FacilityDriver, { foreignKey: 'authorized_by', as: 'facility_drivers_autorizados' });
+FacilityDriver.belongsTo(User, { foreignKey: 'authorized_by', as: 'authorizedByUser' });
+
+// Asset/FacilityDriver ↔ FacilityVehicleTrip (diário de uso)
+Asset.hasMany(FacilityVehicleTrip, { foreignKey: 'asset_id', as: 'trips' });
+FacilityVehicleTrip.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
+FacilityDriver.hasMany(FacilityVehicleTrip, { foreignKey: 'driver_id', as: 'trips' });
+FacilityVehicleTrip.belongsTo(FacilityDriver, { foreignKey: 'driver_id', as: 'driver' });
+User.hasMany(FacilityVehicleTrip, { foreignKey: 'requested_by', as: 'facility_trips_solicitados' });
+FacilityVehicleTrip.belongsTo(User, { foreignKey: 'requested_by', as: 'requestedByUser' });
+
+// Asset ↔ FacilityFuelRecord
+Asset.hasMany(FacilityFuelRecord, { foreignKey: 'asset_id', as: 'fuelRecords' });
+FacilityFuelRecord.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
+FacilityVehicleTrip.hasMany(FacilityFuelRecord, { foreignKey: 'trip_id', as: 'fuelRecords' });
+FacilityFuelRecord.belongsTo(FacilityVehicleTrip, { foreignKey: 'trip_id', as: 'trip' });
+
+// Employee ↔ FacilityFuelRecord (driver, texto/legado)
 Employee.hasMany(FacilityFuelRecord, { foreignKey: 'driver_id', as: 'facility_fuel_records' });
 FacilityFuelRecord.belongsTo(Employee, { foreignKey: 'driver_id', as: 'driver' });
+
+// Asset ↔ FacilityFine
+Asset.hasMany(FacilityFine, { foreignKey: 'asset_id', as: 'fines' });
+FacilityFine.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
+FacilityDriver.hasMany(FacilityFine, { foreignKey: 'identified_driver_id', as: 'fines' });
+FacilityFine.belongsTo(FacilityDriver, { foreignKey: 'identified_driver_id', as: 'identifiedDriver' });
+AccountPayable.hasOne(FacilityFine, { foreignKey: 'accounts_payable_id', as: 'facilityFine' });
+FacilityFine.belongsTo(AccountPayable, { foreignKey: 'accounts_payable_id', as: 'accountsPayable' });
 
 // Department ↔ FacilityArea
 Department.hasMany(FacilityArea, { foreignKey: 'department_id', as: 'facility_areas' });
 FacilityArea.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+
+// FacilityArea ↔ MaintenanceOrder (chamado predial, D-1)
+FacilityArea.hasMany(MaintenanceOrder, { foreignKey: 'facility_area_id', as: 'maintenanceTickets' });
+MaintenanceOrder.belongsTo(FacilityArea, { foreignKey: 'facility_area_id', as: 'facilityArea' });
+
+// FacilityArea/Employee ↔ FacilityCleaningSchedule (plano)
+FacilityArea.hasMany(FacilityCleaningSchedule, { foreignKey: 'facility_area_id', as: 'cleaningSchedules' });
+FacilityCleaningSchedule.belongsTo(FacilityArea, { foreignKey: 'facility_area_id', as: 'facilityArea' });
+Employee.hasMany(FacilityCleaningSchedule, { foreignKey: 'responsible_employee_id', as: 'facility_cleaning_schedules_responsavel' });
+FacilityCleaningSchedule.belongsTo(Employee, { foreignKey: 'responsible_employee_id', as: 'responsibleEmployee' });
+
+// FacilityCleaningSchedule ↔ FacilityCleaningExecution
+FacilityCleaningSchedule.hasMany(FacilityCleaningExecution, { foreignKey: 'plan_id', as: 'executions' });
+FacilityCleaningExecution.belongsTo(FacilityCleaningSchedule, { foreignKey: 'plan_id', as: 'plan' });
+Employee.hasMany(FacilityCleaningExecution, { foreignKey: 'executed_by', as: 'facility_cleaning_executions' });
+FacilityCleaningExecution.belongsTo(Employee, { foreignKey: 'executed_by', as: 'executedByEmployee' });
+
+// FacilityVisitor ↔ FacilityVisit
+FacilityVisitor.hasMany(FacilityVisit, { foreignKey: 'visitor_id', as: 'visits' });
+FacilityVisit.belongsTo(FacilityVisitor, { foreignKey: 'visitor_id', as: 'visitor' });
+Employee.hasMany(FacilityVisit, { foreignKey: 'host_employee_id', as: 'facility_visits_hospedadas' });
+FacilityVisit.belongsTo(Employee, { foreignKey: 'host_employee_id', as: 'hostEmployee' });
+
+// FacilityCorrespondence ↔ Employee/Department
+Employee.hasMany(FacilityCorrespondence, { foreignKey: 'recipient_employee_id', as: 'facility_correspondence' });
+FacilityCorrespondence.belongsTo(Employee, { foreignKey: 'recipient_employee_id', as: 'recipientEmployee' });
+Department.hasMany(FacilityCorrespondence, { foreignKey: 'recipient_department_id', as: 'facility_correspondence' });
+FacilityCorrespondence.belongsTo(Department, { foreignKey: 'recipient_department_id', as: 'recipientDepartment' });
+
+// FacilityResourceReservation ↔ FacilityArea/Asset/Employee
+FacilityArea.hasMany(FacilityResourceReservation, { foreignKey: 'facility_area_id', as: 'reservations' });
+FacilityResourceReservation.belongsTo(FacilityArea, { foreignKey: 'facility_area_id', as: 'facilityArea' });
+Asset.hasMany(FacilityResourceReservation, { foreignKey: 'asset_id', as: 'reservations' });
+FacilityResourceReservation.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
+Employee.hasMany(FacilityResourceReservation, { foreignKey: 'reserved_by', as: 'facility_reservations' });
+FacilityResourceReservation.belongsTo(Employee, { foreignKey: 'reserved_by', as: 'reservedByEmployee' });
 
 // ============================================
 // RELACIONAMENTOS - MARKETING (departamento 14, MKT)
@@ -1174,7 +1253,9 @@ export {
   SstInspecaoSeguranca, SstInspecaoItem, SstPermissaoTrabalho, SstPtExecutante, SstBrigadista, SstRegistroDds, SstDdsPresenca,
   ItTicketCategory, ItTicket, ItTicketComment, ItTicketPriorityHistory,
   ItResponsibilityTerm, ItSoftwareLicenseDetail, ItLicenseSeat, ItAccessRequest, ItBackupLog, TiSettings,
-  FacilityVehicle, FacilityFuelRecord, FacilityCleaningSchedule, FacilityArea,
+  FacilityVehicleDetail, FacilityVehicleDocument, FacilityDriver, FacilityVehicleTrip,
+  FacilityFuelRecord, FacilityFine, FacilityCleaningSchedule, FacilityCleaningExecution, FacilityArea,
+  FacilityVisitor, FacilityVisit, FacilityCorrespondence, FacilityResourceReservation,
   MarketingCampaign, MarketingLead, MarketingMaterial,
   JurContract, JurContractDocument, JurContractSignatory, JurContractAddendum,
   JurExternalLawyer, JurLegalCase, JurLegalCaseEvent, JurLegalCaseDeadline,
