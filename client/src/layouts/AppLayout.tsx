@@ -100,6 +100,9 @@ const NAV_SECTIONS: NavSection[] = [
       // Meus Chamados: auto-serviço de Helpdesk de TI (BR-TI-001/RNF-TI-02),
       // sem `module` — visível a QUALQUER usuário autenticado, igual /hr.
       { label: 'Meus Chamados', to: '/meus-chamados', icon: LifeBuoy },
+      // Chamado Predial: auto-serviço de Manutenção Predial (RF-FAC-040),
+      // mesmo motivo/padrão de "Meus Chamados" acima — sem `module`.
+      { label: 'Chamado Predial', to: '/chamado-predial', icon: Wrench },
     ],
   },
   {
@@ -239,6 +242,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/': ['Início'],
   '/change-password': ['Início', 'Trocar senha'],
   '/meus-chamados': ['Início', 'Meus Chamados'],
+  '/chamado-predial': ['Início', 'Chamado Predial'],
   '/products': ['Logística', 'Produtos'],
   '/products/inventory-counts': ['Logística', 'Produtos', 'Contagem de inventário'],
   '/products/items': ['Logística', 'Item Mestre'],

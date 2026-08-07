@@ -42,6 +42,7 @@ const SstPage = lazy(() => import('@/pages/sst/SstPage'));
 const TiPage = lazy(() => import('@/pages/ti/TiPage'));
 const MyTicketsPage = lazy(() => import('@/pages/ti/MyTicketsPage'));
 const FacilitiesPage = lazy(() => import('@/pages/facilities/FacilitiesPage'));
+const FacilityTicketPage = lazy(() => import('@/pages/facilities/FacilityTicketPage'));
 const MarketingPage = lazy(() => import('@/pages/marketing/MarketingPage'));
 const JuridicoPage = lazy(() => import('@/pages/juridico/JuridicoPage'));
 const AccountingPage = lazy(() => import('@/pages/accounting/AccountingPage'));
@@ -124,6 +125,23 @@ export default function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <MyTicketsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            /chamado-predial: auto-serviço de abertura de chamado de
+            Manutenção Predial (RF-FAC-040, UC-60) — qualquer usuário
+            autenticado abre um chamado, sem exigir o módulo `facilities`,
+            mesmo precedente de /meus-chamados acima (Bloco 2, TI). A gestão
+            completa (triagem/execução) fica em /facilities, atrás de
+            ModuleRoute module="facilities".
+          */}
+          <Route
+            path="/chamado-predial"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <FacilityTicketPage />
               </Suspense>
             }
           />

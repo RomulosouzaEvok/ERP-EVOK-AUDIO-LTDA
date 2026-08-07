@@ -11589,3 +11589,168 @@ Visitantes/Correspondência (10), Grupo 8 Limpeza (7), Grupo 9 Reserva (4)
 6. Confirmar telas `client/src/pages/facilities/` quebradas pelos breaking
    changes (esperado — fora de escopo desta entrega) e agendar correção de
    frontend com `PromadorFonteEnd`.
+
+---
+
+## PASSO 5 — Frontend do módulo Facilities (BLOCO 4 correção, 2026-08-07) — `PromadorFonteEnd`
+
+### Resumo da feature
+
+Correção de frontend contra o backend reescrito do passo anterior (60
+endpoints `/api/facilities/*`, D-2: veículo como extensão de `Asset`).
+`client/src/api/facilities.ts` foi reescrito do zero cobrindo os 60
+endpoints; as telas antigas (`FleetTab.tsx`, `FuelRecordsTab.tsx`,
+`CleaningSchedulesTab.tsx`) foram reescritas/substituídas; `AreasTab.tsx`
+foi mantida sem alteração (endpoint sem mudança de contrato).
+
+**Divergência de implementação real identificada e documentada no
+client** (não é bug do frontend — é o comportamento real do backend, que
+diverge do exemplo de resposta do contrato `BLOCO_4_FAC_API.md` §2.3):
+`GET /vehicles`/`GET /vehicles/:assetId` retornam a linha crua de
+`facility_vehicle_details` (com `id` = PK própria da tabela de extensão,
+diferente de `asset_id`) em vez do formato `{id: asset_id, asset,
+vehicle_detail}` que o contrato prometia — confirmado lendo
+`SequelizeVehicleRepository.ts`/`GetVehicleByIdUseCase.ts`. O client usa
+sempre `vehicle.asset_id` (nunca `vehicle.id`) para navegar/rotear/montar
+querystring, documentado em comentário no topo de `api/facilities.ts` e no
+tipo `Vehicle`.
+
+### Arquivos criados
+
+- `client/src/api/facilities.ts` (reescrito integralmente — 60 endpoints,
+  tipos verificados contra os models reais em `server/src/models/Facility*.ts`
+  e os validators Zod em `server/src/modules/facilities/presentation/validators/`).
+- `client/src/pages/facilities/facilitiesShared.tsx` — helpers de
+  formatação de data/moeda e badges de status (padrão `juridicoShared.tsx`/
+  `tiShared.tsx`).
+- `client/src/pages/facilities/VehiclesPanel.tsx` — veículos (lista +
+  criação + detalhe com documentos com vencimento, renovação, liberação de
+  saída com seguro vencido nível `approve`).
+- `client/src/pages/facilities/DriversPanel.tsx` — condutores (CNH,
+  autorização, suspensão nível `approve`).
+- `client/src/pages/facilities/TripsPanel.tsx` — diário de uso (agendar,
+  sair com aviso de divergência de odômetro, retornar, cancelar).
+- `client/src/pages/facilities/FuelRecordsPanel.tsx` — abastecimento
+  (`asset_id`, tanque cheio, alerta de anomalia de consumo).
+- `client/src/pages/facilities/FinesPanel.tsx` — multas (semáforo de
+  prazo de indicação, sugestão automática de condutor, indicação nível
+  `approve`, recurso, pagamento nível `approve` com geração de título em
+  AP, repasse ao condutor).
+- `client/src/pages/facilities/FleetTab.tsx` (reescrita) — compõe os 5
+  painéis acima em sub-abas.
+- `client/src/pages/facilities/MaintenanceTicketsTab.tsx` — fila de
+  gestão de chamado predial (triagem/execução/encerramento/geração de
+  preventiva) sobre `maintenance_orders`.
+- `client/src/pages/facilities/VisitorsTab.tsx` — check-in/check-out de
+  visitante, alerta de permanência além do horário-limite.
+- `client/src/pages/facilities/CleaningTab.tsx` (substitui
+  `CleaningSchedulesTab.tsx`) — plano (nível `approve`) × execução (nível
+  `operate`) + KPI de aderência.
+- `client/src/pages/facilities/ReservationsTab.tsx` — reserva de
+  sala/equipamento, tratamento de conflito 409.
+- `client/src/pages/facilities/CorrespondenceTab.tsx` — registro de
+  recebimento/entrega.
+- `client/src/pages/facilities/FacilityTicketPage.tsx` — auto-serviço de
+  abertura de chamado predial (`/chamado-predial`, RF-FAC-040).
+- `client/src/pages/home/widgets/FacilitiesPendenciasWidget.tsx` — widget
+  de vencimentos (documento de veículo, CNH, prazo de multa) para a Home
+  por Perfil.
+
+### Arquivos removidos
+
+- `client/src/pages/facilities/FuelRecordsTab.tsx` (substituído por
+  `FuelRecordsPanel.tsx`, agora sub-aba dentro de `FleetTab.tsx`).
+- `client/src/pages/facilities/CleaningSchedulesTab.tsx` (substituído por
+  `CleaningTab.tsx`, que cobre plano × execução).
+
+### Arquivos modificados
+
+- `client/src/pages/facilities/FacilitiesPage.tsx` — reescrita completa:
+  7 abas (Frota, Manutenção Predial, Visitantes, Limpeza, Reservas, Áreas,
+  Correspondência), substitui as 4 abas antigas.
+- `client/src/pages/facilities/AreasTab.tsx` — sem alteração de lógica
+  (endpoint `/api/facilities/areas` não mudou de contrato neste bloco).
+- `client/src/App.tsx` — nova rota `/chamado-predial` (`FacilityTicketPage`,
+  fora de `ModuleRoute`, mesmo precedente de `/meus-chamados`).
+- `client/src/layouts/AppLayout.tsx` — item de menu "Chamado Predial" na
+  seção inicial (sem `module`, ao lado de "Meus Chamados") + entrada em
+  `BREADCRUMBS`.
+- `client/src/pages/home/widgetRegistry.tsx` — registro do widget
+  `facilities-pendencias` (módulo `facilities`, prioridade 49).
+
+### Decisão do auto-serviço de chamado predial
+
+Seguido o precedente de `/meus-chamados` (Bloco 2, TI): nova rota
+`/chamado-predial` fora de `ModuleRoute`, acessível a qualquer usuário
+autenticado, com item de menu próprio na seção inicial. **Diferença
+deliberada em relação a `/meus-chamados`**: a tela não lista "meus
+chamados prediais" (só abertura + confirmação com o número do chamado),
+porque `GET /api/facilities/maintenance-tickets` exige
+`authorizeAnyModule(['manutencao', 'facilities'])` — o contrato de API não
+abre uma exceção de leitura por solicitante (diferente do TI, que tem
+`GET /api/ti/tickets/my` dedicado ao auto-serviço). Registrado como
+comentário no topo de `FacilityTicketPage.tsx` e como pendência explícita
+no cronograma frontend (`docs/governance/CRONOGRAMA_FRONTEND_2026-07-31.md`,
+seção "11d. Addendum — Módulo Facilities").
+
+### Validações executadas
+
+- `npx tsc --noEmit` (a partir de `client/`): **limpo, 0 erros**.
+- `npx vite build`: **sucesso** (aviso de chunk >500kB no bundle principal
+  `index-*.js`, pré-existente, não relacionado a este bloco).
+- `npx vitest run`: **8 arquivos de teste, 51 testes, 100% passando**
+  (nenhum teste dedicado a Facilities existia antes nem foi criado nesta
+  passada — cobertura de teste automatizado do módulo é uma pendência,
+  ver abaixo).
+- **Nenhum teste de integração real (Postgres) foi executado** — as
+  migrations do bloco anterior não foram aplicadas neste passo (ver
+  instrução 1 da seção anterior, ainda pendente).
+
+### O que o QA/Agente QA deve testar na interface
+
+1. **Frota → Veículos:** criar veículo, abrir detalhe, cadastrar
+   documento CRLV/seguro/IPVA com vencimento, renovar documento, tentar
+   liberar saída com seguro vencido sem nível `approve` (botão deve estar
+   ausente) e com nível `approve` (deve pedir motivo obrigatório).
+2. **Frota → Condutores:** cadastrar condutor, autorizar, tentar suspender
+   sem nível `approve` (botão ausente) e com `approve` (deve pedir
+   motivo).
+3. **Frota → Diário de Uso:** agendar uso, registrar saída (testar
+   mensagem de erro didática quando CRLV/seguro vencido ou condutor não
+   autorizado — `translateApiError` deve traduzir o `BUSINESS_RULE_VIOLATION`/
+   `FORBIDDEN` do backend), registrar retorno, cancelar.
+4. **Frota → Abastecimento:** registrar abastecimento com tanque cheio,
+   conferir que km/litros não são editáveis após criado (`UpdateFuelRecordInput`
+   não expõe esses campos na tela).
+5. **Frota → Multas:** criar multa, conferir cálculo automático do prazo
+   de indicação e o semáforo de cor (`DeadlineBadge`), confirmar indicação
+   (nível `approve`), registrar pagamento (nível `approve`, conferir
+   integração com Contas a Pagar).
+6. **Manutenção Predial:** abrir chamado por `/chamado-predial` com um
+   usuário sem módulo `facilities`/`manutencao` (deve funcionar), depois
+   triar/executar/encerrar com um usuário com o módulo.
+7. **Visitantes:** check-in, conferir que a listagem chega com documento
+   mascarado (`***.***.789-00`), check-out, alerta de permanência além do
+   horário-limite (`onsite-overdue`).
+8. **Limpeza:** criar plano só com nível `approve` (botão ausente para
+   `operate`), registrar execução com `operate`, consultar aderência.
+9. **Reservas:** criar duas reservas sobrepostas do mesmo recurso — deve
+   mostrar erro didático de conflito (409).
+10. **Home:** conferir que o widget "Vencimentos de Facilities" aparece
+    só para quem tem o módulo `facilities` e que o total bate com a soma
+    dos 3 sub-contadores.
+
+### Pendências explícitas (fora de escopo desta passada)
+
+- Listagem "meus chamados prediais" em `/chamado-predial` (ver decisão
+  acima — bloqueada por desenho do contrato de API, não por falta de
+  tempo).
+- Upload real de arquivo (documento de veículo, CNH, foto de visitante) —
+  formulários aceitam apenas URL/caminho (`file_path`/`photo_path`),
+  mesma limitação já registrada nos Blocos 2/3.
+- Cobertura de teste automatizado (Vitest) dedicada ao módulo Facilities
+  — nenhuma foi criada nesta passada (mesmo padrão dos módulos SST/TI/JUR
+  recém-entregues, que também não têm testes de componente dedicados).
+- Teste de integração real (Postgres) do fluxo completo — depende da
+  aplicação das migrations `20260807-000290` a `20260807-000300`,
+  instrução 1 da seção "PASSO backend" acima, ainda pendente.

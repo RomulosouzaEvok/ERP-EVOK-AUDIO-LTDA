@@ -13,6 +13,7 @@ import { KpisExecutivosWidget } from '@/pages/home/widgets/KpisExecutivosWidget'
 import { SstPendenciasWidget } from '@/pages/home/widgets/SstPendenciasWidget';
 import { TiPendenciasWidget } from '@/pages/home/widgets/TiPendenciasWidget';
 import { JuridicoPendenciasWidget } from '@/pages/home/widgets/JuridicoPendenciasWidget';
+import { FacilitiesPendenciasWidget } from '@/pages/home/widgets/FacilitiesPendenciasWidget';
 
 /**
  * Descritor de um widget da Home por Perfil (`HomePage.tsx`). A home monta o
@@ -101,6 +102,13 @@ export const homeWidgets: HomeWidgetDefinition[] = [
     module: 'juridico',
     priority: 48,
     component: JuridicoPendenciasWidget,
+  },
+  {
+    key: 'facilities-pendencias',
+    title: 'Vencimentos de Facilities',
+    module: 'facilities',
+    priority: 49,
+    component: FacilitiesPendenciasWidget,
   },
   {
     key: 'financeiro-resumo',

@@ -1,21 +1,29 @@
 import * as React from 'react';
-import { Building2, Fuel, SprayCan, Truck, Warehouse } from 'lucide-react';
+import { Building2, Mail, SprayCan, Truck, Users, Warehouse, Wrench, CalendarClock } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { FleetTab } from './FleetTab';
-import { FuelRecordsTab } from './FuelRecordsTab';
-import { CleaningSchedulesTab } from './CleaningSchedulesTab';
+import { MaintenanceTicketsTab } from './MaintenanceTicketsTab';
+import { VisitorsTab } from './VisitorsTab';
+import { CleaningTab } from './CleaningTab';
+import { ReservationsTab } from './ReservationsTab';
 import { AreasTab } from './AreasTab';
+import { CorrespondenceTab } from './CorrespondenceTab';
 
-type FacilitiesTab = 'fleet' | 'fuel' | 'cleaning' | 'areas';
+type FacilitiesTab = 'fleet' | 'maintenance' | 'visitors' | 'cleaning' | 'reservations' | 'areas' | 'correspondence';
 
 /**
- * `/facilities` — Facilities (departamento 17, sigla FAC).
+ * `/facilities` — Facilities (departamento 17, sigla FAC), BLOCO 4
+ * (correção 2026-08-07). Cobre Frota (veículo como extensão de Asset, D-2 —
+ * documentos, condutores/CNH, diário de uso com integridade de odômetro,
+ * abastecimento, multas com prazo legal de indicação), Manutenção Predial
+ * (D-1, sobre `maintenance_orders`), Visitantes (check-in/check-out,
+ * mascarado por LGPD), Limpeza (plano×execução com aderência), Reservas de
+ * recursos, Áreas físicas e Correspondência.
  *
- * Cobre o módulo essencialmente de cadastro/controle: Frota de veículos,
- * Abastecimento, Programação de Limpeza e Áreas Físicas — CRUD completo
- * (create/list/get/update, sem delete) sobre `/api/facilities/*`.
+ * A abertura de chamado predial por qualquer funcionário (auto-serviço,
+ * RF-FAC-040) fica fora deste módulo, em `/chamado-predial`.
  */
 export default function FacilitiesPage() {
   const [tab, setTab] = React.useState<FacilitiesTab>('fleet');
@@ -29,7 +37,7 @@ export default function FacilitiesPage() {
         <div>
           <h1 className="text-2xl font-semibold">Facilities</h1>
           <p className="text-sm text-muted-foreground">
-            Frota de veículos, abastecimento, programação de limpeza e áreas físicas.
+            Frota de veículos, manutenção predial, visitantes, limpeza, reservas, áreas físicas e correspondência.
           </p>
         </div>
       </div>
@@ -38,22 +46,34 @@ export default function FacilitiesPage() {
         <TabButton active={tab === 'fleet'} icon={Truck} onClick={() => setTab('fleet')}>
           Frota
         </TabButton>
-        <TabButton active={tab === 'fuel'} icon={Fuel} onClick={() => setTab('fuel')}>
-          Abastecimento
+        <TabButton active={tab === 'maintenance'} icon={Wrench} onClick={() => setTab('maintenance')}>
+          Manutenção Predial
+        </TabButton>
+        <TabButton active={tab === 'visitors'} icon={Users} onClick={() => setTab('visitors')}>
+          Visitantes
         </TabButton>
         <TabButton active={tab === 'cleaning'} icon={SprayCan} onClick={() => setTab('cleaning')}>
           Limpeza
         </TabButton>
+        <TabButton active={tab === 'reservations'} icon={CalendarClock} onClick={() => setTab('reservations')}>
+          Reservas
+        </TabButton>
         <TabButton active={tab === 'areas'} icon={Building2} onClick={() => setTab('areas')}>
           Áreas
+        </TabButton>
+        <TabButton active={tab === 'correspondence'} icon={Mail} onClick={() => setTab('correspondence')}>
+          Correspondência
         </TabButton>
       </div>
 
       <div key={tab} className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
         {tab === 'fleet' && <FleetTab />}
-        {tab === 'fuel' && <FuelRecordsTab />}
-        {tab === 'cleaning' && <CleaningSchedulesTab />}
+        {tab === 'maintenance' && <MaintenanceTicketsTab />}
+        {tab === 'visitors' && <VisitorsTab />}
+        {tab === 'cleaning' && <CleaningTab />}
+        {tab === 'reservations' && <ReservationsTab />}
         {tab === 'areas' && <AreasTab />}
+        {tab === 'correspondence' && <CorrespondenceTab />}
       </div>
     </div>
   );

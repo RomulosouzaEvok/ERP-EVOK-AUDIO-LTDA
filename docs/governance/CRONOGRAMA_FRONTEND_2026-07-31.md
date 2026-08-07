@@ -331,6 +331,38 @@ Relatório Financeiro" (versão sanitizada, RF-JUR-042/BR-JUR-050).
 - [ ] Tabela de alçada de aprovação de contrato por valor/tipo (RF-JUR-003) — pendência de backend (endpoint de configuração ainda não existe); hoje todo `juridico:operate` pode ativar qualquer contrato.
 - [ ] Upload real de documentos/evidências (minuta, aditivo, evidência de cumprimento de prazo) — formulários aceitam apenas URL/caminho, sem integração de upload de arquivo (Multer) nesta passada.
 
+## 11d. Addendum — Módulo Facilities (BLOCO 4, correção 2026-08-07)
+
+Correção de contrato, não greenfield — backend reescrito (commit `64f3cf9`,
+60 endpoints `/api/facilities/*`, departamento 17) com 8 breaking changes,
+principal: veículo passou a ser extensão 1:1 de `Asset` (D-2,
+`asset_type='vehicle'`) — `id` de negócio de veículo em todas as rotas
+(`/vehicles/:assetId`, documentos, diário de uso, abastecimento, multas)
+passou a ser `asset_id`, não mais um id de tabela própria. As telas antigas
+(`client/src/pages/facilities/FleetTab.tsx`, `FuelRecordsTab.tsx`,
+`CleaningSchedulesTab.tsx`) e `client/src/api/facilities.ts` foram
+reescritas do zero contra o contrato pós-auditoria
+(`docs/business/BLOCO_4_FAC_API.md`), com uma divergência de implementação
+real identificada e documentada no client: `GET /vehicles` retorna a linha
+crua de `facility_vehicle_details` (com `id` = PK própria da extensão,
+diferente de `asset_id`) em vez do formato `{id: asset_id, asset,
+vehicle_detail}` prometido pelo contrato — o client usa sempre `asset_id`
+para navegar/rotear.
+
+### Checklist
+
+- [x] Aba Frota (sub-abas Veículos/Condutores/Diário de Uso/Abastecimento/Multas): cadastro de veículo (cria Asset+extensão numa transação), detalhe com documentos com vencimento (CRLV/seguro/IPVA/outro, renovação, liberação de saída com seguro vencido — nível approve), condutores com CNH/autorização/suspensão (nível approve), diário de uso (agendar/sair/retornar/cancelar, com aviso de divergência de odômetro exigindo approve), abastecimento (`asset_id`, tanque, alerta de anomalia de consumo), multas com semáforo de prazo de indicação (sugestão automática de condutor, indicação — nível approve, recurso, pagamento — nível approve, repasse ao condutor).
+- [x] Aba Manutenção Predial: fila de gestão (filtros por especialidade/status), triagem (prioridade + risco à segurança), execução (custos de peças/mão de obra), encerramento, geração de rotina preventiva.
+- [x] Aba Visitantes: check-in (cria/reaproveita visitante por documento) + check-out, listagem com dados mascarados (LGPD, mascaramento aplicado no backend), alerta de visitantes sem check-out além do horário-limite.
+- [x] Aba Limpeza: plano (nível approve, BREAKING — era operate) × execução (nível operate) + KPI de aderência por plano/período.
+- [x] Aba Reservas (P2): reserva de sala/equipamento com rejeição de sobreposição de horário (409), cancelamento.
+- [x] Aba Áreas: mantida sem alteração de contrato.
+- [x] Aba Correspondência: registro de recebimento + entrega, sem workflow de aprovação.
+- [x] `/chamado-predial` (auto-serviço, RF-FAC-040): qualquer usuário autenticado abre um chamado predial, sem exigir o módulo `facilities` — mesmo precedente de `/meus-chamados` (Bloco 2, TI). Menu "Chamado Predial" na seção inicial (sem `module`), ao lado de "Meus Chamados".
+- [x] Widget `facilities-pendencias` na Home por Perfil (documentos de veículo vencendo + CNH vencendo + multas com prazo de indicação vencendo em 7 dias).
+- [ ] Listagem "meus chamados prediais" dentro de `/chamado-predial` — não implementada porque `GET /api/facilities/maintenance-tickets` exige o módulo `facilities` OU `manutencao` (sem exceção de leitura por solicitante no contrato de API); a tela cobre só abertura + confirmação.
+- [ ] Upload real de documento de veículo/CNH/foto de visitante (Multer) — formulários aceitam apenas URL/caminho, sem integração de upload de arquivo nesta passada.
+
 ## 12. FE7 - Polimento e UAT do Frontend
 
 ### Checklist
