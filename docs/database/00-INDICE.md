@@ -72,6 +72,23 @@ nomenclatura isolado (`access_profiles.nome`/`descricao`) registrado em
   a antecipa. Ver changelog narrativo em `DATABASE.md` (seção "BLOCO 1 SST
   — Implementação Backend, 2026-08-07") e
   `docs/governance/HANDOFF_CODEX.md`.
+- **Módulo Jurídico (BLOCO 3, departamento 16)** — 12 migrations
+  preparadas em `server/migrations/20260807-000260-*.cjs` a
+  `20260807-000271-*.cjs` (16 tabelas novas — `jur_contracts` e satélites,
+  `jur_legal_cases`/`jur_legal_case_events`/`jur_legal_case_deadlines`/
+  `jur_legal_case_provisions`, `jur_legal_alerts`, `jur_external_lawyers`,
+  `jur_proxies`, `jur_intellectual_property`/`jur_ip_contract_links`,
+  cluster LGPD `jur_lgpd_*` — mais 2
+  colunas novas em `accounts_payable` e a chave `juridico` em
+  `accessModules.ts`), **ainda não aplicadas** (`migration:up` pendente de
+  aprovação do dono do produto, após revisão do `AuditorIntegrador`).
+  Modelo de dados completo, decisões de imutabilidade/retenção e
+  rastreabilidade RF→tabela em
+  [`docs/business/BLOCO_3_JUR_MODELO_DADOS.md`](../business/BLOCO_3_JUR_MODELO_DADOS.md).
+  `02-MODELO_LOGICO.md`/`04-DICIONARIO_DADOS.md` **não foram atualizados**
+  com essas tabelas (ambos refletem o schema real introspectado do banco
+  aplicado, por convenção desta pasta) — atualizar somente depois de
+  `migration:up`.
 
 ## Auditorias específicas
 

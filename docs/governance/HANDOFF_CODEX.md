@@ -9198,6 +9198,82 @@ sistema durante a implementação.
 
 ---
 
+## BLOCO 3 — Módulo Jurídico (JUR) — Requisitos Prontos (2026-08-07)
+
+**Status:** 🟡 Requisitos formais concluídos. **Nenhum código foi criado.**
+Jurídico não existe hoje em `server/src/` como módulo dedicado — sem model,
+rota ou use-case próprios. Reaproveitamentos verificados: `Supplier`,
+`Client`, `Employee`, `AccountPayable`, `AuditLog`.
+
+**Para `AdmDBA` e `ArquitetoSoftwareAPI`:** os requisitos completos (RF/RNF,
+5 casos de uso detalhados com fluxo de exceção, 21 entidades novas do
+domínio, regras de negócio) estão em:
+
+- **`docs/business/BLOCO_3_JUR_REQUISITOS.md`** — ler primeiro (RF-JUR-001
+  a 046, RNF-JUR-01 a 05, UC-52 a UC-56, matriz de rastreabilidade).
+- `docs/business/briefs/BRIEF_JUR_2026-08-06.md` — brief de domínio
+  original (contratos, contencioso, procurações, LGPD, propriedade
+  intelectual; regras BR-JUR-001 a 051 com justificativa legal, seção (c)).
+
+**Decisões já tomadas (não reabrir sem motivo novo):**
+1. **Prazos processuais NUNCA são calculados pelo sistema** (RF-JUR-023/
+   BR-JUR-012) — a data fatal já vem calculada do advogado. Essa é a
+   decisão de maior risco do módulo: o sistema garante que a data fatal
+   não passe em branco (alertas redundantes D-7/D-3/D-1/D0 não
+   desativáveis, escalonamento automático, dupla confirmação de baixa por
+   usuários distintos), mas nunca assume o cálculo do prazo em si.
+2. **Todo prazo processual exige `responsible_user_id` NOT NULL** — é
+   proibido salvar um prazo sem responsável nomeado, sem exceção
+   (RF-JUR-021/BR-JUR-010). É o bloqueio de maior prioridade de todo o
+   módulo.
+3. **ASO/dados de saúde permanecem no domínio SST** (Bloco 1) — Jurídico
+   nunca lê as tabelas de saúde diretamente; quando precisar de evidência
+   para defesa em reclamatória, consome relatório/exportação específica, não
+   join direto (RF-JUR-046, referência cruzada a BR-SST-036).
+4. **Custos de contencioso (honorários, custas, acordos) lançam em
+   `accounts_payable` existente** — categoria "Jurídico" + vínculo ao
+   processo; nunca uma tabela financeira paralela. Depósito judicial é
+   distinto de despesa (tipo próprio), tratamento contábil fino pendente de
+   confirmação com o contador (RF-JUR-018, §6.3 do bloco).
+5. **Provisão de contingência é histórico append-only** (`legal_case_provisions`)
+   — cada reavaliação de risco (CPC 25: provável/possível/remota) gera nova
+   linha; a série alimenta um relatório para o Financeiro/Controladoria
+   (RF-JUR-016/020), nunca é sobrescrita.
+6. **Contrato tem contraparte polimórfica mutuamente exclusiva**
+   (`supplier_id`/`client_id`/`employee_id`/avulsa) — decisão de constraint
+   (CHECK vs. validação em aplicação) explicitamente repassada ao `AdmDBA`
+   (§6.2 do bloco).
+
+**Pendência de RBAC (crítica, decisão de desenho aberta):** precisa de uma
+nova chave `juridico` em `server/src/shared/domain/accessModules.ts`
+(catálogo com 31 chaves na leitura de 2026-08-07). Diferente de `ti` (que
+tem uma fatia aberta a todos), `juridico` deve seguir o desenho **mais
+restritivo** de `sst` — leitura completa de contencioso/prazos/LGPD exige o
+módulo, nunca basta autenticação. Única exceção: perfil `financeiro` enxerga
+apenas o relatório derivado de provisões/custos (RF-JUR-020), nunca o
+conteúdo do processo (segregação de campo, não de rota — mesmo padrão já
+usado em `rh`).
+
+**Outra pendência de desenho:** alçada de aprovação de contrato por
+valor/tipo (RF-JUR-003) não tem tabela de configuração equivalente
+verificada no ERP hoje — confirmar com `AdmDBA`/`ArquitetoSoftwareAPI` se
+algo similar já existe (ex.: em Compras) antes de propor nova estrutura
+(§6.4 do bloco).
+
+**7 itens `[VERIFICAR COM ASSESSOR JURÍDICO DA EMPRESA]`** consolidados em
+`BLOCO_3_JUR_REQUISITOS.md` §6.5 — nenhum bloqueia a modelagem (todos viram
+campo de configuração), mas incluem o encarregado (DPO) formal da empresa,
+prazo do regulamento da ANPD para incidentes, e alçadas de aprovação.
+
+**Após a modelagem de banco/API, acionar `AuditorIntegrador`** para rodar a
+rastreabilidade Requisito → Banco → API neste módulo novo — em particular
+verificar que a dupla confirmação de prazo fatal (BR-JUR-013, `fulfilled_by
+≠ confirmed_by`) e o bloqueio de alertas de prazo fatal não-desativáveis
+(RNF-JUR-04) não foram enfraquecidos durante a implementação, já que é o
+requisito de maior risco legal/financeiro do módulo.
+
+---
+
 ## BLOCO 2 — Módulo TI (Tecnologia da Informação) — Contrato de API Pronto (2026-08-07, `ArquitetoSoftwareAPI`)
 
 **Status:** 🟡 Contrato de API concluído. **Nenhum código foi criado.**

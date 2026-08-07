@@ -3710,3 +3710,88 @@ para o handoff completo.
 Marketing, Jurídico, Contabilidade, Tesouraria, Controladoria) — todos os
 departamentos/subáreas documentados que não tinham código correspondente
 antes agora têm backend + frontend + RBAC + testes + docs.
+
+## 2026-08-07 (rodada seguinte) — Auditoria Cruzada BLOCO 3 Juridico (Requisitos x Banco x API) e conflito com modulo enxuto ja mesclado — `AuditorIntegrador`
+
+**Escopo:** gate de qualidade pre-codigo do modulo Juridico completo
+(departamento 16, 46 RF-JUR, UC-52 a UC-56), confrontando
+`docs/business/BLOCO_3_JUR_REQUISITOS.md`,
+`docs/business/BLOCO_3_JUR_MODELO_DADOS.md` (12 migrations, renumeradas
+para `20260807-000260` a `000271`) e `docs/business/BLOCO_3_JUR_API.md`
+(71 endpoints, 7 grupos). Durante a auditoria, um `git pull` trouxe os
+commits `2ad27fd`/`aaf6ec5`, que ja tinham implementado um modulo
+Juridico ENXUTO e mesclado ao main (`server/src/modules/legal/`,
+`/api/legal`, migration `20260807-000220-create-legal-module.cjs`) -
+decisao do dono do produto: o Bloco 3 completo substitui o enxuto (plano
+de substituicao formal, nao executado nesta rodada). Relatorio completo
+em `docs/business/BLOCO_3_JUR_AUDITORIA.md`.
+
+**Veredito: [APROVADO COM RESSALVAS]**
+
+**[IMPLEMENTADO]** Rastreabilidade RF-Tabela-Endpoint 100% verificada
+(46/46 RF-JUR, nenhum orfao nas duas pontas).
+
+**[IMPLEMENTADO]** Divergencia de nomenclatura de tabela resolvida:
+`AdmDBA` havia nomeado as 16 tabelas novas sem prefixo (`contracts`,
+`legal_cases`, `proxies`, etc.), divergindo do contrato de API (que ja
+assumia `jur_*` desde a primeira versao). Corrigido nesta auditoria: as
+12 migrations foram renomeadas de tabela (todas para `jur_*`, incluindo
+indices/constraints/enums), renumeradas de `20260807-000160..171` para
+`20260807-000260..271` (para rodar depois da migration `000220` do
+modulo enxuto que chegou pelo pull, pre-requisito da futura migracao de
+dados) e verificadas com `node -c` (todas OK). Docs de Modelo de Dados e
+API atualizados para consistencia.
+
+**[IMPLEMENTADO]** Inconsistencia de nome de coluna corrigida:
+`docs/business/BLOCO_3_JUR_API.md` citava `legal_entry_type` como coluna
+nova de `accounts_payable`, mas a migration real (`20260807-000268`) e o
+Modelo de Dados usam `legal_expense_type` — corrigido nas 4 ocorrencias do
+contrato de API.
+
+**[APROVADO]** Foco critico do modulo (dupla confirmacao de prazo fatal,
+UC-54) verificado em todas as 3 camadas sem nenhuma inconsistencia: CHECK
+de banco `fulfilled_by <> confirmed_by`, rotas separadas fulfill/confirm,
+segundo confirmador sempre do JWT, ausencia estrutural de qualquer campo
+de desativacao de alerta fatal (nem para admin). Tambem sem inconsistencia:
+imutabilidade (triggers x endpoints de escrita), exceção de campo do
+perfil financeiro (`GET /api/jur/reports/financeiro`, shape sanitizado
+verificado campo a campo), contraparte polimorfica do contrato (CHECK do
+banco e validacao da API semanticamente identicas), integracao com
+`accounts_payable` (apos a correcao do §3.1), RBAC (chave `juridico` ja
+presente em `accessModules.ts`, niveis operate/approve consistentes com
+os 5 UCs, excecao `role==='admin'` do `trade_secret` isolada e coerente).
+
+- [ ] **Pendencia real 1 (RF-JUR-030):** `GET/POST /api/jur/corporate-acts`
+  (atos societarios) e um endpoint do contrato de API sem NENHUMA tabela
+  correspondente no Modelo de Dados — gap ja reconhecido por ambos os
+  autores, mas nao resolvido. `AdmDBA` precisa modelar uma tabela minima
+  (`jur_corporate_acts`, sugestao desta auditoria) antes do `programador`
+  implementar essa rota, senao ela fica sem persistencia.
+- [ ] **Pendencia real 2 (RF-JUR-003):** tabela de alcada de aprovacao de
+  contrato por valor/tipo (`jur_approval_thresholds`) permanece nao
+  modelada, decisao de negocio pendente (alcadas reais a confirmar com o
+  assessor juridico) — ja documentado de forma consistente nos 3
+  artefatos, nao bloqueia o nucleo critico do modulo.
+- [ ] **Plano de Substituicao do Modulo Enxuto (secao 6 do relatorio,
+  NAO executado nesta auditoria — entrega para o `programador`):**
+  migration de copia de dados `legal_contracts`/`legal_contract_addendums`/
+  `legal_contract_reminders`/`legal_intellectual_property` para as tabelas
+  `jur_*` (com mapeamento de enum PT-BR para ingles, placeholder para
+  contraparte sem documento, perdas de campo documentadas) antes de dropar
+  as 4 tabelas antigas; migration `20260807-000220` NAO deve ser deletada
+  (pode estar em `SequelizeMeta` de outros ambientes); inventario completo
+  de codigo a remover (models, use-cases, controllers, rotas, validators,
+  testes, api client do `server/src/modules/legal/` e
+  `client/src/api/legal.ts`) e decisao de produto sobre `/api/legal` vs
+  `/api/jur` (alias temporario ou corte direto); telas de
+  `client/src/pages/legal/` parcialmente reaproveitaveis (Contratos ~40-50%,
+  PI ~50-60%, Contencioso/Prazos Fatais/Procuracoes/LGPD sem equivalente,
+  construir do zero).
+- [ ] Fora de escopo desta auditoria (nao coberto, sinalizar se resgatado):
+  qualidade de implementacao do modulo enxuto ja mesclado — recomendado a
+  `auditor` revisar `server/src/modules/legal/` contra
+  `docs/juridico/01-CONTRATOS.md`/`02-PROPRIEDADE_INTELECTUAL.md` se o
+  modulo enxuto continuar em producao por mais tempo antes da
+  substituicao; execucao real da migracao de dados de substituicao;
+  qualquer teste funcional/integracao do Bloco 3 completo (nenhum codigo
+  do Bloco 3 foi escrito ainda, proximo passo e `programador`).

@@ -113,3 +113,34 @@ aqui levado a trigger porque um `UNIQUE`/`CHECK` sozinho não expressa
 processual (cálculo de prazo, notificação, fluxo de aprovação) para o
 banco — essas continuam 100% em `server/src/modules/sst/` quando
 implementado.
+
+## Exceção aplicada — BLOCO 3 Jurídico (2026-08-07)
+
+O módulo Jurídico (migrations
+`server/migrations/20260807-000261/000264/000265/000266-*.cjs`) segue o
+mesmo precedente do Bloco 1 SST: imutabilidade estrutural de registros com
+valor probatório legal (aditivo de contrato, andamento processual, baixa
+de prazo fatal) ou valor contábil histórico (provisão de contingência,
+base CPC 25 consumida pela Controladoria para o balanço) — não decisão de
+fluxo de negócio, não cálculo. Detalhado em
+`docs/business/BLOCO_3_JUR_MODELO_DADOS.md` §10.
+
+| Function/trigger | Tabela | O que impede |
+|---|---|---|
+| `jur_lock_contract_addendum` | `jur_contract_addendums` | UPDATE/DELETE de qualquer linha, desde o INSERT (RF-JUR-008) |
+| `jur_lock_legal_case_event` | `jur_legal_case_events` | UPDATE/DELETE de qualquer linha, desde o INSERT (RF-JUR-014) — correção é sempre um novo andamento |
+| `jur_lock_legal_case_deadline` | `jur_legal_case_deadlines` | DELETE sempre (RF-JUR-044); UPDATE quando `OLD.status IN ('confirmed','confirmed_late')` (RF-JUR-024/025, BR-JUR-013/014) |
+| `jur_lock_legal_case_provision` | `jur_legal_case_provisions` | UPDATE/DELETE de qualquer linha, desde o INSERT (CPC 25, RF-JUR-016) |
+
+Diferente das triggers SST (`sst_lock_acidente`/`sst_lock_cat`, que
+permitem UPDATE pontual de colunas de status pós-confirmação), 3 das 4
+triggers deste bloco são estritamente insert-only, sem nenhuma exceção de
+coluna — reflexo de que aditivo, andamento e provisão são, por natureza,
+séries históricas puras onde toda "correção" é sempre uma linha nova.
+Apenas `jur_legal_case_deadlines` tem ciclo de vida real (pending → fulfilled
+→ confirmed) que precisa evoluir até a baixa final antes de travar. Mesmo
+racional de defesa em profundidade das triggers SST — a primeira linha de
+defesa continua sendo o repositório de aplicação nunca expor
+`update`/`delete` para linha em estado final. Não é precedente para mover
+cálculo de prazo processual (deliberadamente fora de escopo, RF-JUR-023)
+ou qualquer outra regra de processo para o banco.

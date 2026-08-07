@@ -55,6 +55,23 @@
  * de acessos), segue o padrão restritivo de `authorizeModule('ti', ...)`
  * bloqueando a rota inteira, IGUAL a `sst`.
  *
+ * `juridico` foi adicionado em 2026-08-07 (BLOCO 3 do módulo Jurídico,
+ * departamento 16, `docs/business/BLOCO_3_JUR_REQUISITOS.md` §6.1) para
+ * contratos, contencioso, prazos processuais, procurações, propriedade
+ * intelectual e LGPD (RoPA, atendimento a titular, incidentes). Segue o
+ * desenho MAIS RESTRITIVO do catálogo, igual a `sst`: mesmo usuário
+ * autenticado sem o módulo `juridico` não deve enxergar contencioso,
+ * prazos ou solicitações LGPD — `authorizeModule('juridico', ...)`
+ * bloqueando a rota inteira é o padrão para praticamente todo o módulo.
+ * Única exceção conhecida (BR-JUR-050): o perfil `financeiro` enxerga
+ * **apenas** o relatório derivado de provisões/custos de contencioso
+ * (RF-JUR-020) — nunca o conteúdo do processo em si —, mesmo padrão de
+ * segregação de campo (não de rota inteira) já usado em `rh` para dados
+ * sensíveis. Dado sensível reforçado (RNF-JUR-01): contencioso trabalhista
+ * (processo movido por (ex-)empregado) e propriedade intelectual tipo
+ * `trade_secret` (RF-JUR-033) — leitura completa exige módulo `juridico`,
+ * nunca apenas autenticação.
+ *
  * EXCEÇÃO EXPLÍCITA (BR-TI-001/RNF-TI-02, NÃO reproduzir por "consistência"
  * em retrofits futuros): a abertura e o acompanhamento do PRÓPRIO chamado
  * de TI (auto-serviço, ex.: `POST /api/it-tickets`,
