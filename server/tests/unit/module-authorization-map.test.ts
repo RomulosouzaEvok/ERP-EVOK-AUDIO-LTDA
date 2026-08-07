@@ -71,7 +71,7 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   'ti',
   'facilities',
   'marketing',
-  'legal',
+  'juridico',
   'accounting',
   'treasury',
   'budget',

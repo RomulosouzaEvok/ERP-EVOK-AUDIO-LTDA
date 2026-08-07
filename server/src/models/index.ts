@@ -132,10 +132,22 @@ import FacilityArea = require('./FacilityArea');
 import MarketingCampaign = require('./MarketingCampaign');
 import MarketingLead = require('./MarketingLead');
 import MarketingMaterial = require('./MarketingMaterial');
-import LegalContract = require('./LegalContract');
-import LegalContractAddendum = require('./LegalContractAddendum');
-import LegalContractReminder = require('./LegalContractReminder');
-import LegalIntellectualProperty = require('./LegalIntellectualProperty');
+import JurContract = require('./JurContract');
+import JurContractDocument = require('./JurContractDocument');
+import JurContractSignatory = require('./JurContractSignatory');
+import JurContractAddendum = require('./JurContractAddendum');
+import JurExternalLawyer = require('./JurExternalLawyer');
+import JurLegalCase = require('./JurLegalCase');
+import JurLegalCaseEvent = require('./JurLegalCaseEvent');
+import JurLegalCaseDeadline = require('./JurLegalCaseDeadline');
+import JurLegalCaseProvision = require('./JurLegalCaseProvision');
+import JurLegalAlert = require('./JurLegalAlert');
+import JurProxy = require('./JurProxy');
+import JurIntellectualProperty = require('./JurIntellectualProperty');
+import JurIpContractLink = require('./JurIpContractLink');
+import JurLgpdProcessingActivity = require('./JurLgpdProcessingActivity');
+import JurLgpdDataSubjectRequest = require('./JurLgpdDataSubjectRequest');
+import JurLgpdIncident = require('./JurLgpdIncident');
 import AccountingChartOfAccount = require('./AccountingChartOfAccount');
 import AccountingEntry = require('./AccountingEntry');
 import AccountingEntryItem = require('./AccountingEntryItem');
@@ -1052,16 +1064,43 @@ Item.hasMany(MarketingMaterial, { foreignKey: 'product_id', as: 'marketing_mater
 MarketingMaterial.belongsTo(Item, { foreignKey: 'product_id', as: 'product' });
 
 // ============================================
-// RELACIONAMENTOS - JURÍDICO (departamento 16, JUR)
+// RELACIONAMENTOS - JURÍDICO (departamento 16, JUR) — BLOCO 3
 // ============================================
+// Substitui o módulo enxuto (LegalContract*/LegalIntellectualProperty,
+// migration 20260807-000220) — ver plano de substituição em
+// `docs/business/BLOCO_3_JUR_AUDITORIA.md` §6 e a migration de transição
+// `20260807-000280-migrate-legal-lean-to-jur.cjs`.
 
-// LegalContract ↔ LegalContractAddendum
-LegalContract.hasMany(LegalContractAddendum, { foreignKey: 'contract_id', as: 'addendums' });
-LegalContractAddendum.belongsTo(LegalContract, { foreignKey: 'contract_id', as: 'contract' });
+// JurContract ↔ JurContractDocument/JurContractSignatory/JurContractAddendum
+JurContract.hasMany(JurContractDocument, { foreignKey: 'contract_id', as: 'documents' });
+JurContractDocument.belongsTo(JurContract, { foreignKey: 'contract_id', as: 'contract' });
+JurContract.hasMany(JurContractSignatory, { foreignKey: 'contract_id', as: 'signatories' });
+JurContractSignatory.belongsTo(JurContract, { foreignKey: 'contract_id', as: 'contract' });
+JurContract.hasMany(JurContractAddendum, { foreignKey: 'contract_id', as: 'addendums' });
+JurContractAddendum.belongsTo(JurContract, { foreignKey: 'contract_id', as: 'contract' });
 
-// LegalContract ↔ LegalContractReminder
-LegalContract.hasMany(LegalContractReminder, { foreignKey: 'contract_id', as: 'reminders' });
-LegalContractReminder.belongsTo(LegalContract, { foreignKey: 'contract_id', as: 'contract' });
+// JurExternalLawyer ↔ JurLegalCase/JurProxy
+JurExternalLawyer.hasMany(JurLegalCase, { foreignKey: 'external_lawyer_id', as: 'legal_cases' });
+JurLegalCase.belongsTo(JurExternalLawyer, { foreignKey: 'external_lawyer_id', as: 'externalLawyer' });
+JurExternalLawyer.hasMany(JurProxy, { foreignKey: 'external_lawyer_id', as: 'proxies' });
+JurProxy.belongsTo(JurExternalLawyer, { foreignKey: 'external_lawyer_id', as: 'externalLawyer' });
+
+// JurLegalCase ↔ JurLegalCaseEvent/JurLegalCaseDeadline/JurLegalCaseProvision
+JurLegalCase.hasMany(JurLegalCaseEvent, { foreignKey: 'legal_case_id', as: 'events' });
+JurLegalCaseEvent.belongsTo(JurLegalCase, { foreignKey: 'legal_case_id', as: 'legalCase' });
+JurLegalCase.hasMany(JurLegalCaseDeadline, { foreignKey: 'legal_case_id', as: 'deadlines' });
+JurLegalCaseDeadline.belongsTo(JurLegalCase, { foreignKey: 'legal_case_id', as: 'legalCase' });
+JurLegalCase.hasMany(JurLegalCaseProvision, { foreignKey: 'legal_case_id', as: 'provisions' });
+JurLegalCaseProvision.belongsTo(JurLegalCase, { foreignKey: 'legal_case_id', as: 'legalCase' });
+
+// JurProxy (auto-relacionamento — renovação referencia a procuração anterior)
+JurProxy.belongsTo(JurProxy, { foreignKey: 'superseded_proxy_id', as: 'supersededProxy' });
+
+// JurIntellectualProperty ↔ JurContract (N:N via JurIpContractLink)
+JurIntellectualProperty.hasMany(JurIpContractLink, { foreignKey: 'ip_id', as: 'contractLinks' });
+JurIpContractLink.belongsTo(JurIntellectualProperty, { foreignKey: 'ip_id', as: 'ipAsset' });
+JurContract.hasMany(JurIpContractLink, { foreignKey: 'contract_id', as: 'ipLinks' });
+JurIpContractLink.belongsTo(JurContract, { foreignKey: 'contract_id', as: 'contract' });
 
 // ============================================
 // RELACIONAMENTOS - CONTABILIDADE (subárea CONT do Financeiro)
@@ -1137,7 +1176,10 @@ export {
   ItResponsibilityTerm, ItSoftwareLicenseDetail, ItLicenseSeat, ItAccessRequest, ItBackupLog, TiSettings,
   FacilityVehicle, FacilityFuelRecord, FacilityCleaningSchedule, FacilityArea,
   MarketingCampaign, MarketingLead, MarketingMaterial,
-  LegalContract, LegalContractAddendum, LegalContractReminder, LegalIntellectualProperty,
+  JurContract, JurContractDocument, JurContractSignatory, JurContractAddendum,
+  JurExternalLawyer, JurLegalCase, JurLegalCaseEvent, JurLegalCaseDeadline,
+  JurLegalCaseProvision, JurLegalAlert, JurProxy, JurIntellectualProperty,
+  JurIpContractLink, JurLgpdProcessingActivity, JurLgpdDataSubjectRequest, JurLgpdIncident,
   AccountingChartOfAccount, AccountingEntry, AccountingEntryItem,
   TreasuryBankAccount, TreasuryFinancialOperation,
   BudgetLine

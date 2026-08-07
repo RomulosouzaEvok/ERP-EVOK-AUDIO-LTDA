@@ -2227,3 +2227,75 @@ Vendas).
 
 Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo desta
 entrega (endpoints, testes, decisões próprias).
+
+---
+
+## BLOCO 3 Jurídico — Implementação Backend, passada 1/2, e substituição do módulo enxuto (2026-08-07)
+
+Módulo Jurídico (departamento 16, sigla JUR) já tinha um módulo **enxuto**
+mesclado ao `main` (`2ad27fd`, migration `20260807-000220-create-legal-module.cjs`,
+tabelas `legal_contracts`/`legal_contract_addendums`/
+`legal_contract_reminders`/`legal_intellectual_property`) quando o Bloco 3
+completo (46 RF-JUR, 16 tabelas `jur_*`, 71 endpoints) foi desenhado — ver
+`docs/business/BLOCO_3_JUR_AUDITORIA.md` §6 "Plano de Substituição". Decisão
+do dono do produto: o Bloco 3 SUBSTITUI o enxuto por completo.
+
+### Migração de dados e remoção do módulo enxuto
+
+Migration `20260807-000280-migrate-legal-lean-to-jur.cjs` (executada nesta
+passada): copia os dados das 4 tabelas `legal_*` para as `jur_*`
+equivalentes (tradução de enum PT-BR→inglês via `CASE WHEN`, contraparte
+avulsa com placeholder `MIGRADO-SEM-DOC`, perdas de campo documentadas no
+cabeçalho da migration) e só então dropa as 4 tabelas antigas — tudo dentro
+da mesma transação (se a cópia falhar, o `DROP` não executa). Idempotente:
+pula silenciosamente via `queryInterface.showAllTables()` quando as tabelas
+antigas nunca existiram (banco novo). A migration `20260807-000220`
+**não foi deletada** (pode estar registrada em `SequelizeMeta` de outros
+ambientes) — apenas superada em efeito pela `000280`. Código do módulo
+enxuto removido do backend: `server/src/modules/legal/**`, models
+`LegalContract`/`LegalContractAddendum`/`LegalContractReminder`/
+`LegalIntellectualProperty`, referências em `server/src/models/index.ts`,
+rota `/api/legal` em `server/app.ts` (substituída por `/api/jur`), 3 suites
+de teste antigas. `client/src/api/legal.ts`/`client/src/pages/legal/**`
+**não foram tocados** — fora do escopo do `programador` backend.
+
+### Tabelas novas (16) — migrations `20260807-000260` a `20260807-000271`
+
+Ver `docs/business/BLOCO_3_JUR_MODELO_DADOS.md` para o detalhamento
+completo coluna a coluna. Resumo: `jur_contracts`, `jur_contract_documents`,
+`jur_contract_signatories`, `jur_contract_addendums` (append-only, trigger
+`trg_jur_lock_contract_addendum`), `jur_external_lawyers`, `jur_legal_cases`,
+`jur_legal_case_events` (append-only, `trg_jur_lock_legal_case_event`),
+`jur_legal_case_deadlines` (máquina de estados de dupla confirmação,
+`trg_jur_lock_legal_case_deadline` bloqueia DELETE sempre e UPDATE
+pós-confirmação), `jur_legal_case_provisions` (append-only,
+`trg_jur_lock_legal_case_provision`), `jur_legal_alerts` (entidade única de
+alerta, polimórfica), `jur_proxies`, `jur_intellectual_property`,
+`jur_ip_contract_links`, `jur_lgpd_processing_activities`,
+`jur_lgpd_data_subject_requests`, `jur_lgpd_incidents`. `accounts_payable`
+ganhou 2 colunas (`legal_case_id`, `legal_expense_type`, migration
+`20260807-000268`) — agora também refletidas no model `AccountPayable.ts`
+(estavam ausentes do model até esta passada, apesar de a migration já
+existir).
+
+### Models Sequelize (16) e módulo `server/src/modules/juridico/`
+
+Todos os 16 models novos foram criados nesta passada
+(`server/src/models/Jur*.ts`) e registrados em `server/src/models/index.ts`
+com as associações principais (contrato↔documentos/signatários/aditivos,
+processo↔andamentos/prazos/provisões, PI↔contrato N:N, procuração
+self-FK de renovação). Endpoints implementados nesta passada (35/71,
+Clean Architecture, `server/src/modules/juridico/`): Contratos (13,
+UC-52), Contencioso (15, UC-53), Prazos Processuais Fatais (7, UC-54).
+Procurações/PI/LGPD/Transversal (36 endpoints) ficam para a passada 2 —
+os models já existem, faltam use-cases/controllers/rotas.
+
+### Nomenclatura de campo — sem mapper PT-BR↔inglês
+
+Ao contrário de SST, o Bloco 3 **não** precisa de mapper de tradução de
+campo — `docs/business/BLOCO_3_JUR_MODELO_DADOS.md` §0 confirma que os
+nomes de coluna já são os nomes de campo esperados de API (inglês,
+snake_case), decisão tomada antes da implementação.
+
+Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo desta
+entrega (endpoints, testes, decisões próprias, pendências da passada 2).

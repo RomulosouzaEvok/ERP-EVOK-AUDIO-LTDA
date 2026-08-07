@@ -10855,3 +10855,175 @@ abstrato/use case documenta parâmetros e retorno.
    diretamente pela URL.
 
 ---
+
+---
+
+## 2026-08-07 — BLOCO 3 Jurídico: implementação backend passada 1/2 (Contratos, Contencioso, Prazos Fatais) — `programador`
+
+### Resumo da feature
+
+Implementação da passada 1 (de 2) do Bloco 3 — Módulo Jurídico completo,
+substituindo o módulo Jurídico enxuto ("Módulo Jurídico — Implementação do
+zero (Backend + Frontend)", entrada anterior desta mesma seção, commit
+`2ad27fd`) conforme decisão explícita do dono do produto e o plano de
+substituição formal de `docs/business/BLOCO_3_JUR_AUDITORIA.md` §6.
+
+**1. Migration de transição** (`server/migrations/20260807-000280-migrate-legal-lean-to-jur.cjs`):
+copia dados de `legal_contracts`/`legal_contract_addendums`/
+`legal_contract_reminders`/`legal_intellectual_property` para as tabelas
+`jur_*` correspondentes (tradução de enum PT-BR→inglês via `CASE WHEN`,
+placeholder `MIGRADO-SEM-DOC` para contraparte avulsa sem documento — exigido
+pelo `CHECK` de exclusividade mútua —, `responsible_user_id` só preenchido
+quando `status='active'`, perdas de campo documentadas: `owner`/
+`jurisdiction` de PI descartados, `previous_end_date`/`previous_value` de
+aditivos migrados ficam `NULL`) e só então DROPA as 4 tabelas antigas,
+tudo dentro da mesma transação (`sequelize.transaction`). Segura/idempotente
+quando as tabelas antigas nunca existiram (`showAllTables()` antes de agir
+— banco criado do zero após esta mudança pula o bloco inteiro). A migration
+`20260807-000220-create-legal-module.cjs` **não foi deletada** — continua
+existindo (pode estar em `SequelizeMeta` de outros ambientes), apenas tem
+seu resultado removido em runtime por esta migration subsequente. `node -c`
+validado (sem erro de sintaxe). **Esta migration NÃO foi aplicada** —
+`migration:up` é responsabilidade da validação/deploy, fora deste passo.
+
+**2. Remoção do módulo enxuto:**
+- `server/src/modules/legal/**` (removido por completo — use-cases,
+  repositórios, controllers, rotas, validators, middleware de upload).
+- Models `server/src/models/LegalContract.ts`/`LegalContractAddendum.ts`/
+  `LegalContractReminder.ts`/`LegalIntellectualProperty.ts` (removidos).
+- `server/src/models/index.ts`: imports/associações/exports de `Legal*`
+  removidos, substituídos pelos 16 models `Jur*` novos.
+- `server/app.ts`: `app.use('/api/legal', ...)` substituído por
+  `app.use('/api/jur', require('./src/modules/juridico/presentation/routes/juridico'))`.
+- Testes antigos removidos: `legal-addendum-reminder-use-cases.test.ts`,
+  `legal-contract-use-cases.test.ts`, `legal-intellectual-property-use-cases.test.ts`.
+- `server/tests/unit/module-authorization-map.test.ts`: entrada `legal`
+  trocada por `juridico` na lista `MODULES_REQUIRING_AUTHORIZE_MODULE`
+  (o teste de guarda anti-regressão apontava para a pasta antiga).
+- **NÃO tocado (fora do escopo backend):** `client/src/api/legal.ts`,
+  `client/src/pages/legal/**`. As chamadas dessas telas para `/api/legal/*`
+  vão falhar em runtime (404) até a passada de frontend recriar as telas
+  contra `/api/jur/*` — ver pendências abaixo.
+
+**3. Módulo novo `server/src/modules/juridico/`** (Clean Architecture,
+padrão dos módulos `sst`/`ti`):
+
+- **16 models Sequelize** (`server/src/models/Jur*.ts`), um por tabela
+  `jur_*` das migrations `20260807-000260` a `20260807-000271` — todos os
+  16 foram criados nesta passada, mesmo os que só terão endpoint na
+  passada 2 (Procurações, PI, LGPD), para o mapeamento de banco ficar
+  completo desde já.
+- `server/src/models/AccountPayable.ts`: adicionadas as colunas
+  `legal_case_id`/`legal_expense_type` (a migration `20260807-000268` já
+  as criava, mas o model nunca tinha sido atualizado).
+- **35 dos 71 endpoints do contrato** (`docs/business/BLOCO_3_JUR_API.md`):
+
+  | Grupo | Endpoints | UC | Status |
+  |---|---|---|---|
+  | 1 — Contratos | 13/13 | UC-52 (JUR) | Completo |
+  | 2 — Contencioso | 15/15 | UC-53 (JUR) | Completo |
+  | 3 — Prazos Fatais | 7/7 | UC-54 (JUR) | Completo |
+  | 4 — Procurações | 0/6 | UC-55 (JUR) | Passada 2 |
+  | 5 — Propriedade Intelectual | 0/6 | - | Passada 2 |
+  | 6 — LGPD | 0/~17 | UC-56 (JUR) | Passada 2 |
+  | 7 — Transversal (alertas/relatório financeiro/fichas cruzadas) | 0/8 | - | Passada 2 |
+
+- **Decisões de implementação desta passada:**
+  1. **Sem mapper DTO PT-BR↔inglês** — divergência consciente do enunciado
+     do pipeline (que citava "precedente SST"): `docs/business/BLOCO_3_JUR_MODELO_DADOS.md`
+     §0 já documenta que os nomes de coluna do Bloco 3 são os nomes de
+     campo esperados de API (inglês, snake_case, sem tradução) — diferente
+     de SST, que usa nomes de coluna em português. Criar um mapper
+     identidade seria trabalho morto; os controllers passam `req.body`/
+     resultado do repositório quase sem transformação.
+  2. **Alçada de aprovação de contrato (RF-JUR-003) não implementada** —
+     a tabela `jur_approval_thresholds` não foi modelada em nenhum dos 3
+     artefatos do Bloco 3 (pendência explícita, documentada em todos).
+     `ActivateContractUseCase` aceita o parâmetro `approverHasApprove` (não
+     utilizado ainda) para não quebrar a assinatura quando a alçada for
+     implementada — hoje qualquer `juridico:operate` pode ativar qualquer
+     contrato, independentemente do valor.
+  3. **Integração com Contas a Pagar via adapter** — `AccountPayableService`
+     (interface) + `AccountPayableServiceAdapter` (chama
+     `SequelizeFinancialRepository.createPayable`, módulo Financeiro) —
+     nunca `AccountPayable.create()` direto do módulo `juridico`, conforme
+     exigido pelo contrato de API.
+  4. **Dupla confirmação de prazo fatal (UC-54)** implementada em 3 camadas
+     coerentes: CHECK de banco já existente (`ck_jur_legal_case_deadlines_fulfilled_confirmed_distinct`,
+     migration `000265`), rotas HTTP separadas (`fulfill`/`confirm`, nunca
+     um `PUT` genérico) e `ConfirmDeadlineUseCase` rejeitando
+     `confirmedBy === fulfilled_by` com o mesmo contrato de erro exato do
+     `docs/business/BLOCO_3_JUR_API.md` §4.4 (`code: BUSINESS_RULE_VIOLATION`,
+     `details: { rule: 'BR-JUR-013', fulfilled_by, attempted_confirm_by }`).
+  5. **RBAC:** `authorizeModule('juridico', 'operate')` bloqueia o router
+     inteiro (`router.use`); `authorizeModule('juridico', 'approve')`
+     adicional só em `POST /legal-cases/:id/close`; o nível `approve` de
+     `POST /legal-cases/:id/provisions` quando `risk_class=probable` é
+     checado dentro do use case (não na rota), porque depende do corpo
+     da requisição, não é uma propriedade fixa da rota.
+
+### Documentações atualizadas
+
+- `docs/database/DATABASE.md` — nova seção "BLOCO 3 Jurídico — Implementação
+  Backend, passada 1/2, e substituição do módulo enxuto (2026-08-07)".
+- `docs/projeto/04-USE_CASES.md` — nova seção "UC-52-JUR a UC-54-JUR
+  (implementado, passada 1/2)", com nota explícita sobre a colisão de
+  numeração UC-52/53 com Facilities/Marketing (dívida de documentação
+  sinalizada, não resolvida nesta passada — resolução exigiria renumerar
+  os 3 documentos do Bloco 3, fora do escopo de um agente de backend).
+- `docs/governance/TODO.md` — item "Plano de Substituição do Módulo Enxuto"
+  marcado `[x]` com evidência; nova entrada datada
+  "BLOCO 3 Juridico: implementacao backend passada 1/2".
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
+- JSDoc: todo model, repositório, use case, controller e rota novos têm
+  cabeçalho JSDoc explicando RF/UC/regra de negócio associada.
+- **Não atualizado (pendência explícita para o `documentador`/passo 5):**
+  `docs/juridico/01-CONTRATOS.md`/`02-PROPRIEDADE_INTELECTUAL.md` ainda
+  descrevem o módulo enxuto — precisam de reescrita quando o Bloco 3
+  completo (passada 2) estiver pronto, para não ficarem descrevendo um
+  módulo que não existe mais.
+
+### Instruções de teste
+
+1. `cd server && npm run typecheck` — limpo (0 erros).
+2. `cd server && npx jest --config jest.config.cjs --testPathPatterns=unit`
+   — 1024/1025 passando; a única falha
+   (`onda3-shipping-cockpit-cashflow.test.ts`) é pré-existente, dependente
+   de data corrente, não relacionada a este bloco.
+3. `node -c server/migrations/20260807-000280-migrate-legal-lean-to-jur.cjs`
+   — sem erro de sintaxe.
+4. **NÃO validado nesta passada (exige Postgres real):**
+   - `migration:up` da `20260807-000280` contra um banco com dados reais em
+     `legal_contracts`/`legal_contract_addendums`/`legal_contract_reminders`/
+     `legal_intellectual_property` (o cenário de cópia de dados nunca rodou
+     de fato — só foi revisado por leitura).
+   - Fluxo E2E de criação→ativação→aditivo→encerramento de contrato contra
+     o `CHECK` real `ck_jur_contracts_counterparty_exclusive`/
+     `ck_jur_contracts_active_requires_responsible`.
+   - Fluxo E2E de dupla confirmação de prazo fatal contra as triggers reais
+     (`trg_jur_lock_legal_case_deadline`) e os 4 `CHECK`s da migration
+     `000265`.
+   - `GET /api/jur/reports/provisions` contra volume real de processos
+     (a query usa `DISTINCT ON` em SQL bruto — sintaxe específica do
+     PostgreSQL, nunca executada contra o banco real).
+
+### Riscos residuais / pendências
+
+- **Migration de dados nunca aplicada** — maior risco desta passada. Se
+  algum ambiente de desenvolvimento tiver dados reais em `legal_contracts`,
+  a migração precisa ser testada manualmente antes do primeiro `migration:up`
+  em produção.
+- **36 endpoints da passada 2** (Procurações, PI, LGPD, Transversal) —
+  models já existem, use-cases/controllers/rotas não.
+- **Alçada de aprovação (RF-JUR-003)** e **atos societários (RF-JUR-030)**
+  seguem sem tabela modelada — bloqueiam, respectivamente, o enforcement
+  real de alçada em `ActivateContractUseCase` e a implementação de
+  `GET/POST /api/jur/corporate-acts`.
+- **Frontend não tocado** — `client/src/api/legal.ts`/`client/src/pages/legal/**`
+  vão falhar em runtime contra `/api/legal/*` (rota removida); a
+  reconstrução das telas (`ContractsTab`/`IntellectualPropertyTab`
+  parcialmente reaproveitáveis, Contencioso/Prazos Fatais/Procurações/LGPD
+  do zero) é responsabilidade do passo 5 do pipeline.
+- **Numeração de UC colidida** (UC-52/53 já usados por Facilities/Marketing
+  em `04-USE_CASES.md`) — resolvida com sufixo `-JUR` nesta passada, mas a
+  raiz (os 3 documentos do Bloco 3 usam UC-52..56 puros) não foi corrigida.

@@ -1805,4 +1805,86 @@ inexistente, transição de funil inválida, upload sem arquivo). Ver
 
 ---
 
+## UC-52-JUR a UC-54-JUR (implementado, passada 1/2): Módulo Jurídico — Contratos, Contencioso e Prazos Processuais Fatais
+
+**Nota de numeração (dívida de documentação a resolver):** os documentos do
+Bloco 3 (`docs/business/BLOCO_3_JUR_REQUISITOS.md` e correlatos) numeram os
+5 casos de uso do módulo Jurídico como UC-52 a UC-56, sem saber que
+`UC-52`/`UC-53` deste arquivo já haviam sido atribuídos, no mesmo dia
+(2026-08-07), aos módulos Facilities e Marketing (ver seções acima). Os
+títulos abaixo usam o sufixo `-JUR` para não colidir com as seções
+existentes deste documento — a renumeração formal do trio de documentos do
+Bloco 3 (que usa UC-52..56 internamente) fica para uma rodada futura de
+consolidação de documentação, fora do escopo desta implementação.
+
+Substitui o módulo Jurídico enxuto (contratos + PI, sem contencioso, sem
+prazos fatais com dupla confirmação) mesclado anteriormente — ver
+`docs/business/BLOCO_3_JUR_AUDITORIA.md` §6 e
+`docs/governance/HANDOFF_CODEX.md`.
+
+**UC-52-JUR — Gerenciar Contrato Ponta a Ponta com Alertas de Vencimento:**
+`POST /api/jur/contracts` cria em `draft`, contraparte polimórfica
+mutuamente exclusiva (`supplier_id` XOR `client_id` XOR `employee_id` XOR
+`counterparty_name`+`counterparty_doc`, validada em aplicação e reforçada
+por `CHECK` de banco). Minuta versionada
+(`POST .../documents`) e signatários (`POST .../signatories`) precedem a
+ativação. `POST .../activate` bloqueia sem `responsible_user_id` (E1),
+sem 2 signatários parte + versão assinada (E3), ou sem checklist de
+cláusulas respondido para `employment`/`supplier`/`nda`; ao ativar, gera
+automaticamente `JurLegalAlert` de vencimento (antecedência
+`alert_advance_days`), de denúncia (se `renewal_auto`+`notice_days`) e de
+reajuste (se índice ≠ `none`). Aditivos (`POST .../addendums`) preservam
+snapshot de valores anteriores e atualizam o contrato na mesma chamada —
+imutáveis a partir da criação (trigger de banco). `POST .../terminate`
+bloqueia qualquer reversão `expired`/`terminated → active` (E2).
+Alçada de aprovação por valor/tipo (RF-JUR-003) **não implementada** nesta
+passada — tabela `jur_approval_thresholds` ainda não modelada.
+
+**UC-53-JUR — Gerenciar Contencioso (Processo, Andamento, Provisão,
+Advogado Externo):** `POST /api/jur/legal-cases` exige `case_number_cnj`
+único, no máximo uma FK de parte contrária preenchida
+(funcionário XOR fornecedor XOR cliente). Andamentos
+(`POST .../events`) são insert-only (trigger de banco); `event_type=decision`
+dispara reavaliação de risco em 90 dias. Avaliação de risco/provisão
+(`POST .../provisions`, CPC 25, append-only) — `risk_class=probable` exige
+nível `approve` e `provisioned_amount>0`+`rationale` (E1). Custos
+(`POST .../costs`) e acordos com parcelamento (`POST .../close` com
+`resolution=settled`) lançam em `AccountPayable` via
+`AccountPayableServiceAdapter` (nunca Sequelize direto de outro módulo),
+distinguindo despesa de depósito judicial (`legal_expense_type`).
+`GET /api/jur/reports/provisions` nunca omite processo `active` sem
+avaliação — marca `risco_nao_avaliado: true` (E3).
+
+**UC-54-JUR — Baixar Prazo Processual Fatal com Dupla Confirmação (fluxo
+mais crítico do módulo):** `POST /api/jur/legal-cases/:caseId/deadlines`
+rejeita sem `responsible_user_id` — sem exceção, nem para rascunho (E1) —
+e exige `escalation_user_id` quando `is_fatal=true`. `POST .../acknowledge`
+só aceita o próprio responsável (ou o backup, com `as_backup: true`).
+`POST .../fulfill` (1ª confirmação) exige `evidence_file_path`; se o prazo
+já venceu sem baixa, `retroactive_justification` passa a ser obrigatória
+(E3). `POST .../confirm` (2ª confirmação) é a regra central do bloco:
+**rejeita `confirmedBy === fulfilled_by`** (E2, BR-JUR-013) — o mesmo
+usuário nunca pode confirmar a própria baixa — além do `CHECK` de banco já
+existente na migration. Nenhuma rota deste módulo permite desativar um
+alerta de prazo fatal (RNF-JUR-04, garantido por ausência estrutural de
+coluna, não por regra de aplicação).
+
+**RBAC:** chave `juridico` (já existente em `accessModules.ts`, ampliada
+nesta passada — desenho mais restritivo do catálogo, igual a `sst`/`ti`,
+`authorizeModule('juridico', ...)` bloqueando a rota inteira em toda rota).
+`approve` exigido para `risk_class=probable` e para
+`POST /api/jur/legal-cases/:id/close`.
+
+**Testes:** `server/tests/unit/juridico-contract-use-cases.test.ts` (16),
+`juridico-legal-case-use-cases.test.ts` (15),
+`juridico-deadline-use-cases.test.ts` (18) — 49 casos novos, com foco no
+fluxo de dupla confirmação (mesmo usuário tentando confirmar a própria
+baixa, baixa sem evidência, baixa retroativa sem justificativa, escalada
+sem `escalation_user_id`). Ver `docs/governance/HANDOFF_CODEX.md` e
+`docs/business/BLOCO_3_JUR_API.md` (contrato completo, 71 endpoints — 35
+implementados nesta passada, 36 restantes para a passada 2: Procurações,
+Propriedade Intelectual, LGPD, Transversal).
+
+---
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

@@ -3772,21 +3772,25 @@ os 5 UCs, excecao `role==='admin'` do `trade_secret` isolada e coerente).
   modelada, decisao de negocio pendente (alcadas reais a confirmar com o
   assessor juridico) — ja documentado de forma consistente nos 3
   artefatos, nao bloqueia o nucleo critico do modulo.
-- [ ] **Plano de Substituicao do Modulo Enxuto (secao 6 do relatorio,
-  NAO executado nesta auditoria — entrega para o `programador`):**
-  migration de copia de dados `legal_contracts`/`legal_contract_addendums`/
-  `legal_contract_reminders`/`legal_intellectual_property` para as tabelas
-  `jur_*` (com mapeamento de enum PT-BR para ingles, placeholder para
-  contraparte sem documento, perdas de campo documentadas) antes de dropar
-  as 4 tabelas antigas; migration `20260807-000220` NAO deve ser deletada
-  (pode estar em `SequelizeMeta` de outros ambientes); inventario completo
-  de codigo a remover (models, use-cases, controllers, rotas, validators,
-  testes, api client do `server/src/modules/legal/` e
-  `client/src/api/legal.ts`) e decisao de produto sobre `/api/legal` vs
-  `/api/jur` (alias temporario ou corte direto); telas de
-  `client/src/pages/legal/` parcialmente reaproveitaveis (Contratos ~40-50%,
-  PI ~50-60%, Contencioso/Prazos Fatais/Procuracoes/LGPD sem equivalente,
-  construir do zero).
+- [x] **Plano de Substituicao do Modulo Enxuto (secao 6 do relatorio) —
+  EXECUTADO em 2026-08-07 (`programador`, passada 1/2):** migration
+  `20260807-000280-migrate-legal-lean-to-jur.cjs` copia `legal_contracts`/
+  `legal_contract_addendums`/`legal_contract_reminders`/
+  `legal_intellectual_property` para `jur_*` (enum PT-BR→ingles via CASE
+  WHEN, placeholder `MIGRADO-SEM-DOC` para contraparte sem documento,
+  perdas de campo documentadas no cabecalho) e so entao dropa as 4 tabelas
+  antigas, tudo dentro da mesma transacao; idempotente/segura via
+  `showAllTables()` quando as tabelas antigas nunca existiram; migration
+  `20260807-000220` NAO foi deletada (continua existindo, apenas superada
+  em efeito). Codigo do modulo enxuto REMOVIDO:
+  `server/src/modules/legal/**`, models `LegalContract*`/
+  `LegalIntellectualProperty`, referencias em `server/src/models/index.ts`,
+  rota `/api/legal` em `server/app.ts` (substituida por `/api/jur`), 3
+  suites de teste antigas. `client/src/api/legal.ts` e
+  `client/src/pages/legal/**` NAO foram tocados nesta passada (fora do
+  escopo do `programador` backend) — as chamadas a `/api/legal/*` vao
+  falhar em runtime ate a passada de frontend recriar as telas; ver
+  `docs/governance/HANDOFF_CODEX.md`.
 - [ ] Fora de escopo desta auditoria (nao coberto, sinalizar se resgatado):
   qualidade de implementacao do modulo enxuto ja mesclado — recomendado a
   `auditor` revisar `server/src/modules/legal/` contra
@@ -3795,3 +3799,67 @@ os 5 UCs, excecao `role==='admin'` do `trade_secret` isolada e coerente).
   substituicao; execucao real da migracao de dados de substituicao;
   qualquer teste funcional/integracao do Bloco 3 completo (nenhum codigo
   do Bloco 3 foi escrito ainda, proximo passo e `programador`).
+
+---
+
+## 2026-08-07 (rodada seguinte) — BLOCO 3 Juridico: implementacao backend passada 1/2 (Contratos, Contencioso, Prazos Fatais) — `programador`
+
+**Escopo:** passo 4 (implementacao) do pipeline do Bloco 3, passada 1 de 2 —
+P0 + substituicao do modulo enxuto, conforme
+`docs/business/BLOCO_3_JUR_AUDITORIA.md` §6.
+
+**[IMPLEMENTADO]** Migration de transicao `20260807-000280-migrate-legal-lean-to-jur.cjs`
+(copia `legal_*` → `jur_*` + drop das 4 tabelas antigas, mesma transacao,
+idempotente) — ver item acima marcado `[x]`.
+
+**[IMPLEMENTADO]** Modulo enxuto removido por completo do backend
+(`server/src/modules/legal/`, models `Legal*`, rota `/api/legal`) — ver
+item acima.
+
+**[IMPLEMENTADO]** `server/src/modules/juridico/` criado (Clean
+Architecture, padrao `sst`/`ti`): 16 models Sequelize das 16 tabelas
+`jur_*` (`server/src/models/Jur*.ts`) + `AccountPayable.legal_case_id`/
+`legal_expense_type` (colunas da migration `000268`, ausentes do model até
+agora); 35 dos 71 endpoints do contrato implementados:
+- Grupo 1 — Contratos (13/13, UC-52): CRUD, documentos versionados,
+  signatarios, checklist de clausulas, ativacao (validando responsavel,
+  2 signatarios parte + versao assinada, checklist obrigatorio por tipo,
+  geracao automatica de `JurLegalAlert` de vencimento/denuncia/reajuste),
+  aditivos (snapshot de valores anteriores, atualiza contrato na mesma
+  chamada), encerramento (bloqueio de reversao `expired`/`terminated→active`).
+- Grupo 2 — Contencioso (15/15, UC-53): advogados externos, processos
+  (exclusividade de parte contraria), andamentos (insert-only),
+  avaliacao de risco/provisao (append-only, `probable` exige `approve` +
+  valor/rationale), custo/deposito judicial via `AccountPayableService`
+  (adapter, nunca Sequelize direto de outro modulo), encerramento com
+  parcelamento em AP, relatorio de provisoes (`risco_nao_avaliado` para
+  processos ativos sem avaliacao).
+- Grupo 3 — Prazos Fatais (7/7, UC-54, fluxo mais critico): criacao exige
+  `responsible_user_id` sem excecao e `escalation_user_id` quando
+  `is_fatal`; `acknowledge` restrito ao responsavel/backup; `fulfill`
+  exige evidencia e justificativa retroativa quando vencido; `confirm`
+  valida `confirmedBy !== fulfilled_by` (BR-JUR-013) alem do CHECK de
+  banco ja existente na migration `000265`; fila `critical`.
+
+**[PENDENTE — passada 2, nao implementado nesta rodada]**: Procuracoes
+(6 endpoints), Propriedade Intelectual (6), LGPD (17), Transversal —
+alertas/relatorio financeiro sanitizado/fichas cruzadas (8) = 36
+endpoints restantes; alcada de aprovacao de contrato por valor (RF-JUR-003,
+tabela ainda nao modelada); atos societarios (RF-JUR-030, sem tabela);
+mapper DTO PT-BR↔ingles NAO criado (decisao consciente — o Modelo de
+Dados §0 confirma que os nomes de coluna do Bloco 3 ja sao os nomes de
+campo esperados de API, sem traducao a fazer, diferente do precedente
+SST citado no enunciado do pipeline); `client/src/api/legal.ts` e
+`client/src/pages/legal/**` intocados (telas antigas vao quebrar em
+runtime contra `/api/legal`, que nao existe mais — reconstrucao e
+responsabilidade do passo 5/frontend).
+
+**Testes:** 3 suites novas (`server/tests/unit/juridico-contract-use-cases.test.ts`,
+`juridico-legal-case-use-cases.test.ts`, `juridico-deadline-use-cases.test.ts`),
+49 casos, cobrindo os 3 grupos implementados com foco no fluxo de dupla
+confirmacao de prazo fatal (mesmo usuario tentando confirmar a propria
+baixa, baixa sem evidencia, baixa retroativa sem justificativa). Suite
+completa do server: 1024/1025 passando (1 falha pre-existente de data em
+`onda3-shipping-cockpit-cashflow.test.ts`, nao relacionada a este bloco).
+`npm run typecheck` limpo. Detalhes completos em
+`docs/governance/HANDOFF_CODEX.md`.

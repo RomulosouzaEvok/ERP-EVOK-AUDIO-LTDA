@@ -30,6 +30,8 @@ interface AccountPayableAttributes {
   approval_date: string | null;
   invoice_type: 'nfe' | 'nfse' | null;
   cost_center_id: number | null;
+  legal_case_id: number | null;
+  legal_expense_type: 'expense' | 'judicial_deposit' | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -53,7 +55,9 @@ const AccountPayable = sequelize.define('AccountPayable', {
   approved_by: { type: DataTypes.INTEGER, comment: 'FK → users.id' },
   approval_date: DataTypes.DATEONLY,
   invoice_type: { type: DataTypes.ENUM('nfe', 'nfse'), allowNull: true, comment: 'Tipo de nota vinculada: nfe (mercadoria) ou nfse (serviço/licença digital)' },
-  cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = "Sem centro de custo" nos relatórios). Substitui gradualmente o campo livre `cost_center` (STRING)' }
+  cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = "Sem centro de custo" nos relatórios). Substitui gradualmente o campo livre `cost_center` (STRING)' },
+  legal_case_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → jur_legal_cases.id (RF-JUR-018, migration 20260807-000268) — custos de contencioso (honorários, custas, perícias, depósitos)' },
+  legal_expense_type: { type: DataTypes.ENUM('expense', 'judicial_deposit'), allowNull: true, comment: 'Distingue despesa jurídica normal de depósito judicial/recursal (RF-JUR-018) — só preenchido quando legal_case_id não é nulo' }
 }, {
   tableName: 'accounts_payable',
   underscored: true,

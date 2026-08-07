@@ -101,13 +101,16 @@
  * `authorizeModule('marketing', 'operate')`, leitura usa
  * `authorizeModule('marketing')` (nível `operate` implícito).
  *
- * `juridico` foi adicionado em 2026-08-07 para o módulo Jurídico
- * (departamento 16, sigla JUR — `docs/juridico/01-CONTRATOS.md` e
- * `docs/juridico/02-PROPRIEDADE_INTELECTUAL.md`), implementado do zero:
- * contratos (com aditivos, lembretes de prazo e upload de instrumento) e
- * propriedade intelectual. Mesmo padrão de `facilities`/`marketing`: sem
- * nível `approve`, escrita usa `authorizeModule('juridico', 'operate')`,
- * leitura usa `authorizeModule('juridico')` (nível `operate` implícito).
+ * `juridico` foi SUBSTITUÍDO em 2026-08-07 pelo Bloco 3 completo
+ * (`docs/business/BLOCO_3_JUR_REQUISITOS.md`/`BLOCO_3_JUR_API.md`,
+ * `server/src/modules/juridico/`) — o módulo enxuto original (apenas
+ * contratos + PI, `docs/juridico/01-CONTRATOS.md`/
+ * `02-PROPRIEDADE_INTELECTUAL.md`) foi removido (ver plano de substituição
+ * em `docs/business/BLOCO_3_JUR_AUDITORIA.md` §6). Diferente do parágrafo
+ * acima (que já documentava o desenho restritivo alvo), `juridico` TEM
+ * nível `approve` (ativação de contrato acima de alçada, avaliação de risco
+ * `probable`, encerramento de processo, revogação de procuração, decisão
+ * de comunicação LGPD) — ver comentário completo nas linhas 58-73.
  *
  * `contabilidade` foi adicionado em 2026-08-07 para o módulo Contabilidade
  * (subárea CONT do departamento Financeiro, sem linha própria em
@@ -238,7 +241,7 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   { key: 'ti', label: 'Tecnologia da Informação (helpdesk, patrimônio de TI, acessos)' },
   { key: 'facilities', label: 'Facilities (frota, limpeza, manutenção predial)' },
   { key: 'marketing', label: 'Marketing (campanhas, leads, materiais)' },
-  { key: 'juridico', label: 'Jurídico (contratos, propriedade intelectual)' },
+  { key: 'juridico', label: 'Jurídico (contratos, contencioso, procurações, PI, LGPD — dados sensíveis)' },
   { key: 'contabilidade', label: 'Contabilidade (plano de contas, lançamentos, balancete)' },
   { key: 'tesouraria', label: 'Tesouraria (contas bancárias, operações financeiras)' },
   { key: 'controladoria', label: 'Controladoria (orçamento, custos industriais)' },
