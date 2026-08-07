@@ -2013,3 +2013,52 @@ entrega adicionou apenas o CÓDIGO que aponta para esse schema:
 
 Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo da
 entrega (endpoints implementados, testes, pendências).
+
+---
+
+## BLOCO 1 SST — Implementação Backend, passada 2 (2026-08-07)
+
+Continuação da entrega acima: CIPA, PGR/GES, Treinamentos, Rotina
+Preventiva e CRUD dedicado de Ações Corretivas — os 37 endpoints restantes
+do contrato (75/75 endpoints do módulo SST completos). Mesmo princípio da
+passada 1: **nenhuma migration foi criada, alterada ou aplicada** — os
+models abaixo apontam para o schema já existente
+(`server/migrations/20260806-000138` a `-000141`), ainda pendente de
+`migration:up` (aguardando aprovação do dono do produto).
+
+- **20 models Sequelize novos** (`server/src/models/Sst*.ts`), colunas
+  100% em português (nome igual ao da migration), registrados e associados
+  em `server/src/models/index.ts`:
+  - CIPA: `SstMandatoCipa`, `SstMembroCipa`, `SstProcessoEleitoralCipa`,
+    `SstCandidatoCipa`, `SstReuniaoCipa`, `SstReuniaoCipaPresente`.
+  - PGR/GES: `SstGes`, `SstGesFuncionario`, `SstRiscoOcupacional`,
+    `SstRiscoEpi`, `SstRiscoExame`.
+  - Treinamentos: `SstMatrizTreinamento`, `SstTreinamento`.
+  - Rotina Preventiva: `SstInspecaoSeguranca`, `SstInspecaoItem`,
+    `SstPermissaoTrabalho`, `SstPtExecutante`, `SstBrigadista`,
+    `SstRegistroDds`, `SstDdsPresenca`.
+- **5 mappers DTO PT-BR↔inglês novos**
+  (`server/src/modules/sst/infrastructure/mappers/`): `CipaMapper.ts`
+  (`estabilidade_inicio`↔`inicio_candidatura`, `estabilidade_fim`↔
+  `fim_estabilidade`, `mandato_id`↔`mandate_id` em reuniões),
+  `PgrMapper.ts` (`intensidade_concentracao`↔`intensidade`,
+  `proxima_revisao_prevista`↔`data_revisao_prevista`, `medidas_controle`
+  array↔`TEXT` serializado por `|`), `TrainingMapper.ts`
+  (`periodicidade_reciclagem_meses`↔`periodicidade_meses`,
+  `data_realizacao`↔`data`), `SafetyRoutineMapper.ts`
+  (`item_verificado`↔`item`), `CorrectiveActionMapper.ts`
+  (`origem_tipo`↔`origem`, `status: atrasada` derivado na leitura, nunca
+  persistido).
+- **5 repositórios de domínio + Sequelize** novos: `CipaRepository`,
+  `PgrRepository`, `TrainingRepository`, `SafetyRoutineRepository`,
+  `CorrectiveActionRepository` (interfaces em `domain/repositories/`,
+  implementações em `infrastructure/sequelize/`).
+- **NOTA DE DECISÃO DE SCHEMA (transparência, não gap):** `sst_candidatos_cipa`
+  não tem coluna para registrar apuração fora de `votos`/`eleito` — a
+  "apuração" (`POST /cipa/electoral-processes/:id/close`) atualiza os
+  candidatos existentes (`votos`, `eleito`) e consolida
+  `total_votantes`/`data_votacao`/`atas_urls` no processo eleitoral, sem
+  necessidade de tabela adicional.
+
+Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo da
+entrega (endpoints implementados, testes, pendências).

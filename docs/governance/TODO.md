@@ -3076,8 +3076,112 @@ Rotina Preventiva/Ações Corretivas (CRUD) ficam para a próxima passada.
 - [x] `npm run typecheck --prefix server`: 0 erros. `npx jest tests/unit`:
   762/763 passando (1 falha pré-existente e não relacionada, dependente de
   data corrente, confirmada igual no baseline antes desta entrega).
-- [ ] **Não implementado nesta passada** (ver handoff para detalhamento):
+- [x] **Não implementado nesta passada** (ver handoff para detalhamento):
   CIPA, PGR/GES, Treinamentos, Rotina Preventiva, recurso genérico de
   Ações Corretivas (`/api/sst/corrective-actions` — a criação inline via
   investigação de acidente já existe, mas não o CRUD dedicado), testes de
   integração HTTP (Supertest) contra banco real, aplicação das migrations.
+  **Concluído em 2026-08-07 (passada 2)** — ver entrada abaixo. Testes de
+  integração HTTP e `migration:up` continuam pendentes/fora de escopo.
+
+---
+
+## 2026-08-07 — Implementação Backend BLOCO 1 SST, passada 2 (37 endpoints restantes) — `programador`
+
+**Escopo:** completar os 37 endpoints restantes do contrato SST
+(`docs/business/BLOCO_1_SST_API.md`, 75 endpoints totais) a partir da
+passada anterior (commit `8482e79`, 38/75): CIPA, PGR/GES, Treinamentos,
+Rotina Preventiva e CRUD dedicado de Ações Corretivas. **Nenhuma migration
+foi criada/alterada/aplicada** — mesmo princípio da passada 1.
+
+- [x] 20 models Sequelize novos (`server/src/models/Sst*.ts`) registrados
+  e associados em `server/src/models/index.ts`: CIPA (`SstMandatoCipa`,
+  `SstMembroCipa`, `SstProcessoEleitoralCipa`, `SstCandidatoCipa`,
+  `SstReuniaoCipa`, `SstReuniaoCipaPresente`), PGR/GES (`SstGes`,
+  `SstGesFuncionario`, `SstRiscoOcupacional`, `SstRiscoEpi`,
+  `SstRiscoExame`), Treinamentos (`SstMatrizTreinamento`,
+  `SstTreinamento`), Rotina Preventiva (`SstInspecaoSeguranca`,
+  `SstInspecaoItem`, `SstPermissaoTrabalho`, `SstPtExecutante`,
+  `SstBrigadista`, `SstRegistroDds`, `SstDdsPresenca`).
+- [x] Módulo `server/src/modules/sst/` estendido (mesmo padrão
+  Clean Architecture das passadas anteriores, sem recriar EPI/ASO/
+  Acidente/eSocial):
+  - [x] Cluster CIPA (NR-5, CF/88, UC-48): `CipaRepository`/
+    `SequelizeCipaRepository`, `CipaMapper` (`estabilidade_inicio`↔
+    `inicio_candidatura`, `estabilidade_fim`↔`fim_estabilidade`,
+    `mandato_id`↔`mandate_id`), 12 use cases, `cipaController`. Inclui
+    `GET /cipa/dimensioning` (tabela genérica por headcount,
+    `[VERIFICAR CNAE/grau de risco]` documentado — NR-5 Quadro I real
+    depende de parametrização por CNAE, fora de escopo desta passada),
+    `fim_estabilidade` persistido na criação do membro
+    (`mandato.data_fim + 1 ano`, decisão fechada não reaberta), bloqueio
+    de posse sem `TreinamentoSST` tipo `CIPA` (BR-SST-024) e bloqueio de
+    2º mandato consecutivo eleito (BR-SST-021) tanto na adição de membro
+    quanto na inscrição de candidato.
+  - [x] Cluster PGR/GRO + GES (NR-1): `PgrRepository`/
+    `SequelizePgrRepository`, `PgrMapper` (`intensidade_concentracao`↔
+    `intensidade`, `proxima_revisao_prevista`↔`data_revisao_prevista`,
+    `medidas_controle` array↔`TEXT`), 6 use cases, `pgrController`.
+    `CreateRiskUseCase` replica em aplicação o mesmo CHECK de banco
+    `ck_sst_riscos_ocupacionais_ausencia_coerente` (RF-SST-036/BR-SST-026)
+    para devolver `ValidationError` 400 amigável em vez de erro de
+    constraint Postgres. `AddGesMemberUseCase` gera `EventoESocialSST`
+    tipo `S-2240` pendente (RF-SST-040).
+  - [x] Cluster Treinamentos (NRs): `TrainingRepository`/
+    `SequelizeTrainingRepository`, `TrainingMapper`
+    (`periodicidade_reciclagem_meses`↔`periodicidade_meses`,
+    `data_realizacao`↔`data`), 6 use cases, `trainingController`.
+    `GetTrainingBlocklistUseCase` junta matriz × treinamentos ×
+    funcionários ativos (RF-SST-046); `CreateTrainingUseCase` calcula
+    `validade` pela matriz da função ou usa o default bienal (24 meses)
+    confirmado para NR-10.
+  - [x] Cluster Rotina Preventiva (Inspeções, PT, Brigada, DDS):
+    `SafetyRoutineRepository`/`SequelizeSafetyRoutineRepository`,
+    `SafetyRoutineMapper` (`item_verificado`↔`item`), 10 use cases,
+    `safetyRoutineController`. Item de inspeção não-conforme gera
+    `SstAcaoCorretiva` automática (`origem: 'inspecao_seguranca'`,
+    prazo de 1 dia se `risco_grave_iminente`, 15 dias caso contrário —
+    parametrização própria desta passada, não estava no contrato).
+  - [x] CRUD dedicado de Ações Corretivas: `CorrectiveActionRepository`/
+    `SequelizeCorrectiveActionRepository`, `CorrectiveActionMapper`
+    (`origem_tipo`↔`origem`, `status: atrasada` sempre derivado por
+    leitura, nunca setável via `PUT`), 3 use cases,
+    `correctiveActionController`.
+  - [x] Router `server/src/modules/sst/presentation/routes/sst.ts`
+    estendido (não recriado) com os 37 endpoints — **75/75 endpoints do
+    contrato completo** (`BLOCO_1_SST_API.md`). `GET /cipa/stability/:id`
+    reaproveita o middleware `requireSstOrRh` já existente (exceção
+    `sst`|`rh`, mesmo padrão de `GET /aso/status/:id`).
+- [x] Decisões de design tomadas por conta própria (documentadas,
+  não reabrem escopo fechado):
+  - `GetDimensioningUseCase`: tabela genérica de dimensionamento por
+    faixa de headcount (NR-5 Quadro I real depende de CNAE/grau de risco,
+    `[VERIFICAR COM TÉCNICO SST DA EMPRESA]`).
+  - `AddCandidateUseCase`: além do bloqueio por 2 mandatos consecutivos
+    (BR-SST-021, já no contrato), também rejeita inscrição em processo
+    eleitoral já encerrado (apurado) — não estava explícito no contrato,
+    mas é a interpretação natural de "eleger fora do processo aberto".
+  - `ListBrigadeUseCase`: mínimo de brigadistas configurado é uma
+    constante placeholder (`[VERIFICAR COM TÉCNICO SST DA EMPRESA]`,
+    NBR 14276 real varia por população/risco do prédio).
+  - Prazo de ação corretiva automática de inspeção (1 dia se risco grave
+    e iminente, 15 dias caso contrário) — não especificado no contrato,
+    parametrização razoável desta passada.
+- [x] Testes unitários novos (`server/tests/unit/sst-{cipa,pgr,training,
+  safety-routine,corrective-action}.test.ts`, 54 casos): fluxo principal +
+  ao menos 1 fluxo de exceção por grupo (CIPA: 2 mandatos consecutivos
+  eleitos, candidatura fora de processo aberto, posse sem treinamento,
+  reunião ordinária sem ata; PGR: incoerência ausência-de-risco vs.
+  agente informado; Treinamentos: matriz duplicada, blocklist com
+  matrícula vencida; Rotina Preventiva: PT sem campos obrigatórios/datas
+  invertidas, encerrar PT já encerrada; Ações Corretivas: tentativa de
+  setar `status: atrasada` manualmente).
+- [x] `npm run typecheck --prefix server`: 0 erros.
+  `npx jest tests/unit --runInBand`: 816/817 passando (1 falha
+  pré-existente e não relacionada, `onda3-shipping-cockpit-cashflow.test.ts`,
+  confirmada igual à da passada anterior — dependente de data corrente).
+  Antes desta passada: 762/763. Delta: +54 testes novos, 0 regressões.
+- [x] `docs/database/DATABASE.md` atualizado com seção "passada 2".
+- [ ] Segue pendente (fora de escopo desta passada, igual à anterior):
+  testes de integração HTTP (Supertest) contra banco real, aplicação das
+  migrations `migration:up`, telas de frontend para os 5 novos grupos.

@@ -8906,3 +8906,159 @@ em `sst_matriz_treinamento.periodicidade_reciclagem_meses`.
   consultado pelo modulo de Apontamento ainda.
 - Aplicacao das 12 migrations (`migration:up`) — decisao do dono do
   produto, fora do escopo de qualquer agente ate aprovacao explicita.
+
+---
+
+## 2026-08-07 — Implementação Backend do BLOCO 1 SST, passada 2 (37 endpoints restantes) — `programador`
+
+### Resumo da feature
+
+Continuação direta da entrada anterior ("Implementação Backend do BLOCO 1
+SST (P0)", commit `8482e79`, 38/75 endpoints). Esta passada implementou os
+**37 endpoints restantes** do contrato `docs/business/BLOCO_1_SST_API.md`,
+completando **75/75 endpoints** do módulo SST: CIPA (NR-5, CF/88, UC-48,
+12 endpoints), PGR/GRO + GES (NR-1, 6 endpoints), Treinamentos de
+Segurança (6 endpoints), Rotina Preventiva — Inspeções/PT/Brigada/DDS (10
+endpoints) e CRUD dedicado de Ações Corretivas (3 endpoints).
+
+Nenhuma migration foi criada, alterada ou aplicada nesta passada — os 20
+models Sequelize novos apontam exatamente para o schema já revisado
+(`server/migrations/20260806-000138` a `-000141`), que continua pendente
+de `migration:up` aguardando aprovação do dono do produto. Os grupos
+EPI/ASO/Acidente/eSocial da passada anterior não foram tocados.
+
+**Estrutura de arquivos criada** (Clean Architecture, mesmo padrão de
+`epi/`/`aso/`/`accident/`/`esocial/`):
+
+- **Models** (`server/src/models/`): `SstMandatoCipa.ts`,
+  `SstMembroCipa.ts`, `SstProcessoEleitoralCipa.ts`, `SstCandidatoCipa.ts`,
+  `SstReuniaoCipa.ts`, `SstReuniaoCipaPresente.ts`, `SstGes.ts`,
+  `SstGesFuncionario.ts`, `SstRiscoOcupacional.ts`, `SstRiscoEpi.ts`,
+  `SstRiscoExame.ts`, `SstMatrizTreinamento.ts`, `SstTreinamento.ts`,
+  `SstInspecaoSeguranca.ts`, `SstInspecaoItem.ts`,
+  `SstPermissaoTrabalho.ts`, `SstPtExecutante.ts`, `SstBrigadista.ts`,
+  `SstRegistroDds.ts`, `SstDdsPresenca.ts` (20 arquivos) — registrados e
+  associados em `server/src/models/index.ts`.
+- **Domain** (`server/src/modules/sst/domain/repositories/`):
+  `CipaRepository.ts`, `PgrRepository.ts`, `TrainingRepository.ts`,
+  `SafetyRoutineRepository.ts`, `CorrectiveActionRepository.ts`.
+- **Infrastructure** (`server/src/modules/sst/infrastructure/`):
+  `sequelize/SequelizeCipaRepository.ts`,
+  `sequelize/SequelizePgrRepository.ts`,
+  `sequelize/SequelizeTrainingRepository.ts`,
+  `sequelize/SequelizeSafetyRoutineRepository.ts`,
+  `sequelize/SequelizeCorrectiveActionRepository.ts`,
+  `mappers/CipaMapper.ts`, `mappers/PgrMapper.ts`,
+  `mappers/TrainingMapper.ts`, `mappers/SafetyRoutineMapper.ts`,
+  `mappers/CorrectiveActionMapper.ts`.
+- **Application** (`server/src/modules/sst/application/use-cases/`): 37
+  use cases distribuídos em `cipa/` (12), `pgr/` (6), `training/` (6),
+  `safetyRoutine/` (10), `correctiveAction/` (3).
+- **Presentation**: `presentation/controllers/cipaController.ts`,
+  `pgrController.ts`, `trainingController.ts`,
+  `safetyRoutineController.ts`, `correctiveActionController.ts`;
+  `presentation/routes/sst.ts` **estendido** (não recriado) com os 37
+  novos registros de rota.
+
+### Decisões de design tomadas por conta própria
+
+Nenhum destes grupos tinha UC super detalhado (confirmado pela tarefa) —
+as decisões abaixo preencheram lacunas de contrato de forma conservadora,
+sem inventar máquina de estados:
+
+1. **`GetDimensioningUseCase` (CIPA):** a NR-5 (Quadro I) dimensiona
+   titulares/suplentes por CNAE/grau de risco, não só por headcount. Sem
+   uma tabela de CNAE parametrizada no schema, implementei uma tabela
+   genérica por faixa de headcount, documentada como simplificação
+   (`[VERIFICAR COM TÉCNICO SST DA EMPRESA]`), no mesmo espírito do
+   `legalDeadlineService` da passada anterior.
+2. **`AddCandidateUseCase` (CIPA):** além do bloqueio por 2 mandatos
+   consecutivos eleitos (BR-SST-021, já no contrato), também rejeito
+   inscrição de candidato em processo eleitoral já encerrado/apurado
+   (`total_votantes` preenchido). O contrato não detalhava esse caso
+   explicitamente, mas é a leitura direta do requisito do usuário de "não
+   eleger fora do processo eleitoral aberto" — coberto pelo teste
+   dedicado de exceção do grupo CIPA.
+3. **`ListBrigadeUseCase`:** o "mínimo configurado" de brigadistas
+   (NBR 14276, varia por população/risco do prédio) não tem tabela de
+   parametrização no schema desta passada — usei uma constante
+   placeholder documentada, sem persistir nada incorreto.
+4. **Prazo da ação corretiva automática de inspeção
+   (`CreateInspectionUseCase`):** o contrato diz que item não-conforme
+   gera `AcaoCorretiva` automática e que `risco_grave_iminente` "aparece
+   destacada no dashboard", mas não define o prazo. Adotei 1 dia para
+   risco grave/iminente e 15 dias para NC comum — parametrização razoável
+   desta passada, fácil de ajustar depois (constantes no topo do
+   use case).
+5. **`CloseElectoralProcessUseCase`:** o contrato descreve apenas
+   "Registra apuração (votos, eleitos, suplentes, atas)" sem JSON de
+   request. Modelei como `{ resultados: [{employee_id, votos, eleito}],
+   total_votantes?, data_votacao?, atas_urls? }`, atualizando os
+   candidatos existentes e consolidando o processo — evita inventar
+   máquina de estado nova, é só um `UPDATE` em lote + `UPDATE` do
+   processo.
+6. **Bug corrigido durante a implementação (não é regressão):** a
+   primeira versão de `CloseElectoralProcessUseCase` chamava
+   `cipaRepository.updateMember` (que aponta para `SstMembroCipa`) para
+   atualizar `votos`/`eleito` dos CANDIDATOS (`SstCandidatoCipa`, tabela
+   diferente) — corrigido adicionando `updateCandidate` dedicado ao
+   `CipaRepository`/`SequelizeCipaRepository` antes de fechar a tarefa
+   (pego no próprio desenvolvimento, nunca chegou a rodar contra dado
+   real).
+
+### Documentações atualizadas
+
+- `docs/database/DATABASE.md` — nova seção "BLOCO 1 SST — Implementação
+  Backend, passada 2 (2026-08-07)" com os 20 models, 5 mappers e a nota
+  de decisão de schema sobre apuração de CIPA.
+- `docs/projeto/04-USE_CASES.md` — seção "UC-44 a UC-48 + CRUDs enxutos"
+  (renomeada do título anterior "UC-44 a UC-47"), com UC-48 (CIPA)
+  detalhado e os 4 grupos de CRUD enxuto resumidos com fluxo
+  principal/exceção/testes.
+- `docs/governance/TODO.md` — nova entrada "2026-08-07 — Implementação
+  Backend BLOCO 1 SST, passada 2" com checklist completo; item "Não
+  implementado nesta passada" da entrada anterior marcado como concluído
+  com referência cruzada.
+- JSDoc: todo arquivo novo (`models/Sst*.ts`, `modules/sst/domain/**`,
+  `modules/sst/infrastructure/**`, `modules/sst/application/**`,
+  `modules/sst/presentation/**`) tem cabeçalho de módulo explicando
+  responsabilidade e, quando aplicável, a divergência de nome de campo
+  banco↔API resolvida pelo mapper.
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`).
+
+### Instruções de teste
+
+1. `npm run typecheck --prefix server` — 0 erros (confirmado).
+2. `npx jest tests/unit --runInBand` (a partir de `server/`) — 816/817
+   passando. A única falha é `onda3-shipping-cockpit-cashflow.test.ts`,
+   pré-existente e não relacionada (dependente de data corrente),
+   confirmada idêntica ao baseline anterior a esta passada (762/763 →
+   816/817, delta de +54 testes novos, 0 regressões nos 762 pré-existentes).
+3. Testes novos dedicados a esta passada: `npx jest
+   tests/unit/sst-cipa.test.ts tests/unit/sst-pgr.test.ts
+   tests/unit/sst-training.test.ts tests/unit/sst-safety-routine.test.ts
+   tests/unit/sst-corrective-action.test.ts` (54 casos: fluxo principal +
+   ao menos 1 fluxo de exceção por grupo).
+4. Testes de integração HTTP (Supertest) contra banco real continuam NÃO
+   criados (migrations pendentes de `migration:up`, mesma justificativa
+   da passada anterior).
+5. Ao aprovar `migration:up`, revisar também o gap de schema de
+   "encerramento de acidente" sinalizado na passada 1 (ainda não
+   resolvido, fora do escopo desta passada 2).
+
+### Pendências/riscos residuais
+
+- Telas de frontend para os 5 grupos desta passada (CIPA, PGR/GES,
+  Treinamentos, Rotina Preventiva, Ações Corretivas) não existem —
+  responsabilidade de `PromadorFonteEnd`/`ui-ux-styling-expert`, fora do
+  escopo deste agente de backend.
+- `GetDimensioningUseCase` e `ListBrigadeUseCase` usam constantes
+  placeholder documentadas (`[VERIFICAR COM TÉCNICO SST DA EMPRESA]`) —
+  não bloqueiam uso, mas não substituem a parametrização real por
+  CNAE/norma técnica quando o técnico SST da empresa confirmar os
+  valores.
+- RF-SST-009, RF-SST-018, RF-SST-020, RF-SST-050 seguem como pendências
+  explícitas já sinalizadas na passada 1 (não fazem parte do escopo de
+  endpoint desta passada 2).
+- Aplicação das 12 migrations SST (`migration:up`) continua fora do
+  escopo de qualquer agente até aprovação explícita do dono do produto.

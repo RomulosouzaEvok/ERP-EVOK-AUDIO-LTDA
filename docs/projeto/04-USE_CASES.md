@@ -1498,9 +1498,11 @@ permite submeter mesmo com o aviso visível — decisão de UX, não bug).
 
 ---
 
-## UC-44 a UC-47 (P0 implementado): Módulo SST — EPI, ASO/PCMSO, Acidente/CAT, Fila eSocial
+## UC-44 a UC-48 + CRUDs enxutos (implementado): Módulo SST — EPI, ASO/PCMSO, Acidente/CAT, Fila eSocial, CIPA, PGR/GES, Treinamentos, Rotina Preventiva, Ações Corretivas
 
-**Status:** 🟡 Backend implementado (2026-08-07), **migrations pendentes de
+**Status:** 🟢 Backend 100% implementado — 75/75 endpoints do contrato
+(passada 1 em 2026-08-07, commit `8482e79`, 38 endpoints; passada 2 em
+2026-08-07, 37 endpoints restantes). **Migrations continuam pendentes de
 aprovação** (`server/migrations/20260806-000130` a `000141`, `migration:up`
 não executado). Especificação completa em
 `docs/business/BLOCO_1_SST_REQUISITOS.md` (UC-44 a UC-48, 55 RF-SST),
@@ -1577,9 +1579,56 @@ mesma origem → `ConflictError` 409 (defesa em profundidade — o índice
 único parcial do banco é a garantia real).
 **Testes:** `server/tests/unit/sst-esocial.test.ts` (5 casos).
 
+### UC-48: CIPA (NR-5, CF/88)
+**Fluxo Principal:** `GET /cipa/dimensioning` (tabela genérica por
+headcount, `[VERIFICAR CNAE/grau de risco]`) → `POST /cipa/mandates` →
+`POST /cipa/electoral-processes` (edital) → `POST .../candidates`
+(inscrição, bloqueada com 2 mandatos consecutivos eleitos — BR-SST-021) →
+`POST .../close` (apuração: atualiza `votos`/`eleito` dos candidatos e
+consolida `total_votantes`/`atas_urls` no processo) → `POST
+/cipa/mandates/:id/members` (persiste `estabilidade_fim = mandato.data_fim
++ 1 ano` na criação, decisão fechada) → `POST /cipa/members/:id/take-office`
+(exige `TreinamentoSST` tipo `CIPA` válido — BR-SST-024) → `POST
+/cipa/meetings` (ata obrigatória para `ordinaria` — BR-SST-023) → `GET
+/cipa/stability/:employeeId` (exceção `sst`|`rh`, não bloqueia
+desligamento — apenas informa).
+**Fluxos de Exceção:** eleger membro ou inscrever candidato com 2 mandatos
+consecutivos já cumpridos → `BusinessRuleError` 422 (BR-SST-021);
+inscrever candidato em processo eleitoral já encerrado (apurado) →
+`BusinessRuleError` 422 (decisão de design desta passada, não estava
+explícita no contrato); posse sem treinamento CIPA válido →
+`BusinessRuleError` 422 (BR-SST-024); reunião ordinária sem ata →
+`ValidationError` 400 (BR-SST-023).
+**Testes:** `server/tests/unit/sst-cipa.test.ts` (17 casos).
+
+### CRUDs enxutos (sem UC formal detalhado, `BLOCO_1_SST_REQUISITOS.md` §7): PGR/GES, Treinamentos, Rotina Preventiva, Ações Corretivas
+**PGR/GRO + GES (NR-1):** `POST /api/sst/risks` valida em aplicação a
+mesma coerência do `CHECK` de banco entre `ausencia_risco_identificado` e
+`categoria_agente`/`agente` (RF-SST-036/BR-SST-026); `POST
+/ges/:id/members` gera `EventoESocialSST` tipo `S-2240` pendente
+(RF-SST-040). Testes: `server/tests/unit/sst-pgr.test.ts` (9 casos).
+
+**Treinamentos de Segurança (NRs):** `POST /api/sst/trainings` calcula
+`validade` pela `sst_matriz_treinamento` da função/norma ou usa o default
+bienal confirmado para NR-10; `GET /trainings/blocklist` (RF-SST-046) cruza
+matriz × treinamentos × funcionários ativos. Testes:
+`server/tests/unit/sst-training.test.ts` (8 casos).
+
+**Rotina Preventiva (Inspeções, PT, Brigada, DDS):** `POST
+/api/sst/inspections` gera `SstAcaoCorretiva` automática por item
+não-conforme (prazo 1 dia se `risco_grave_iminente`, 15 dias caso
+contrário — parametrização desta passada); `POST /work-permits/:id/close`
+só aceita PT em status `emitida`. Testes:
+`server/tests/unit/sst-safety-routine.test.ts` (13 casos).
+
+**Ações Corretivas (CRUD dedicado, polimórfico):** `PUT
+/corrective-actions/:id` nunca aceita `status: atrasada` diretamente — é
+sempre derivado por leitura (`prazo` × data corrente). Testes:
+`server/tests/unit/sst-corrective-action.test.ts` (7 casos).
+
 **Regras de Negócio:** ver `docs/business/BLOCO_1_SST_REQUISITOS.md` (55
 RF-SST, 36 BR-SST) e `docs/business/BLOCO_1_SST_API.md` (contrato completo
-de 75 endpoints — 38 implementados nesta passada, ver
+de 75 endpoints, 100% implementados — ver
 `docs/governance/HANDOFF_CODEX.md`).
 
 ---

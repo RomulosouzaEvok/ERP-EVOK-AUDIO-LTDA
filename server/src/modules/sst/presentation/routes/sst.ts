@@ -2,16 +2,16 @@
  * Router agregador do módulo SST (Segurança e Saúde do Trabalho, dept. 15).
  * Monta todos os grupos de recurso sob `/api/sst` em `server/src/app.ts`.
  *
- * ESCOPO DESTA PASSADA (P0, `docs/business/BLOCO_1_SST_REQUISITOS.md`):
- * EPI (catálogo, matriz, entrega), ASO/PCMSO, Acidente/CAT, fila eSocial.
- * CIPA, PGR/GES, Treinamentos, Rotina Preventiva e Ações Corretivas (CRUD
- * enxuto) ficam para a próxima passada — ver
+ * ESCOPO: EPI (catálogo, matriz, entrega), ASO/PCMSO, Acidente/CAT, fila
+ * eSocial (passada 1, commit `8482e79`) + CIPA, PGR/GES, Treinamentos,
+ * Rotina Preventiva e Ações Corretivas — CRUD dedicado (passada 2, 37
+ * endpoints restantes, 75/75 endpoints do contrato completos) — ver
  * `docs/governance/HANDOFF_CODEX.md`.
  *
  * RBAC: `authorizeModule('sst', ...)` em todas as rotas, exceto
- * `GET /aso/status/:employeeId` (exceção `sst`|`rh`, checagem inline no
- * controller — mesmo padrão documentado para Requisição de Compra em
- * `docs/arquitetura/API.md` §15).
+ * `GET /aso/status/:employeeId` e `GET /cipa/stability/:employeeId`
+ * (exceção `sst`|`rh`, checagem inline no controller — mesmo padrão
+ * documentado para Requisição de Compra em `docs/arquitetura/API.md` §15).
  *
  * @module modules/sst/presentation/routes/sst
  */
@@ -23,6 +23,11 @@ const epiController = require('../controllers/epiController');
 const asoController = require('../controllers/asoController');
 const accidentController = require('../controllers/accidentController');
 const esocialController = require('../controllers/esocialController');
+const cipaController = require('../controllers/cipaController');
+const pgrController = require('../controllers/pgrController');
+const trainingController = require('../controllers/trainingController');
+const safetyRoutineController = require('../controllers/safetyRoutineController');
+const correctiveActionController = require('../controllers/correctiveActionController');
 
 router.use(authenticate);
 
@@ -74,6 +79,53 @@ router.get('/accidents/:id/investigation', authorizeModule('sst'), accidentContr
 router.get('/esocial-events', authorizeModule('sst'), esocialController.list);
 router.get('/esocial-events/:id', authorizeModule('sst'), esocialController.getById);
 router.post('/esocial-events/:id/resend', authorizeModule('sst', 'approve'), esocialController.resend);
+
+// ---- CIPA (NR-5, CF/88) ----
+router.get('/cipa/dimensioning', authorizeModule('sst'), cipaController.dimensioning);
+router.get('/cipa/mandates', authorizeModule('sst'), cipaController.listMandates);
+router.get('/cipa/mandates/:id', authorizeModule('sst'), cipaController.getMandateById);
+router.post('/cipa/mandates', authorizeModule('sst', 'approve'), cipaController.createMandate);
+router.post('/cipa/mandates/:id/members', authorizeModule('sst', 'approve'), cipaController.addMember);
+router.post('/cipa/members/:id/take-office', authorizeModule('sst', 'approve'), cipaController.takeOffice);
+router.post('/cipa/electoral-processes', authorizeModule('sst', 'approve'), cipaController.openElectoralProcess);
+router.post('/cipa/electoral-processes/:id/candidates', authorizeModule('sst', 'operate'), cipaController.addCandidate);
+router.post('/cipa/electoral-processes/:id/close', authorizeModule('sst', 'approve'), cipaController.closeElectoralProcess);
+router.get('/cipa/meetings', authorizeModule('sst'), cipaController.listMeetings);
+router.post('/cipa/meetings', authorizeModule('sst', 'operate'), cipaController.createMeeting);
+router.get('/cipa/stability/:employeeId', requireSstOrRh, cipaController.stability);
+
+// ---- PGR/GRO e Exposição (NR-1) ----
+router.get('/risks', authorizeModule('sst'), pgrController.listRisks);
+router.post('/risks', authorizeModule('sst', 'operate'), pgrController.createRisk);
+router.put('/risks/:id', authorizeModule('sst', 'operate'), pgrController.updateRisk);
+router.get('/ges', authorizeModule('sst'), pgrController.listGes);
+router.post('/ges', authorizeModule('sst', 'operate'), pgrController.createGes);
+router.post('/ges/:id/members', authorizeModule('sst', 'operate'), pgrController.addGesMember);
+
+// ---- Treinamentos de Segurança (NRs) ----
+router.get('/training-matrix', authorizeModule('sst'), trainingController.listMatrix);
+router.post('/training-matrix', authorizeModule('sst', 'operate'), trainingController.createMatrix);
+router.put('/training-matrix/:id', authorizeModule('sst', 'operate'), trainingController.updateMatrix);
+router.get('/trainings/blocklist', authorizeModule('sst'), trainingController.blocklist);
+router.get('/trainings', authorizeModule('sst'), trainingController.list);
+router.post('/trainings', authorizeModule('sst', 'operate'), trainingController.create);
+
+// ---- Rotina Preventiva — Inspeções, PT, Brigada, DDS ----
+router.get('/inspections', authorizeModule('sst'), safetyRoutineController.listInspections);
+router.post('/inspections', authorizeModule('sst', 'operate'), safetyRoutineController.createInspection);
+router.get('/work-permits', authorizeModule('sst'), safetyRoutineController.listWorkPermits);
+router.post('/work-permits', authorizeModule('sst', 'operate'), safetyRoutineController.createWorkPermit);
+router.post('/work-permits/:id/close', authorizeModule('sst', 'operate'), safetyRoutineController.closeWorkPermit);
+router.get('/brigade', authorizeModule('sst'), safetyRoutineController.listBrigade);
+router.post('/brigade', authorizeModule('sst', 'operate'), safetyRoutineController.createBrigadeMember);
+router.put('/brigade/:id', authorizeModule('sst', 'operate'), safetyRoutineController.updateBrigadeMember);
+router.get('/dds', authorizeModule('sst'), safetyRoutineController.listDds);
+router.post('/dds', authorizeModule('sst', 'operate'), safetyRoutineController.createDds);
+
+// ---- Ações Corretivas (recurso reutilizável, multi-origem) ----
+router.get('/corrective-actions', authorizeModule('sst'), correctiveActionController.list);
+router.post('/corrective-actions', authorizeModule('sst', 'operate'), correctiveActionController.create);
+router.put('/corrective-actions/:id', authorizeModule('sst', 'operate'), correctiveActionController.update);
 
 /**
  * Middleware de exceção `sst`|`rh` (`BLOCO_1_SST_API.md` §0): usado apenas

@@ -95,6 +95,26 @@ import SstInvestigacaoAcidente = require('./SstInvestigacaoAcidente');
 import SstAcidenteComplemento = require('./SstAcidenteComplemento');
 import SstCat = require('./SstCat');
 import SstEventoEsocial = require('./SstEventoEsocial');
+import SstMandatoCipa = require('./SstMandatoCipa');
+import SstMembroCipa = require('./SstMembroCipa');
+import SstProcessoEleitoralCipa = require('./SstProcessoEleitoralCipa');
+import SstCandidatoCipa = require('./SstCandidatoCipa');
+import SstReuniaoCipa = require('./SstReuniaoCipa');
+import SstReuniaoCipaPresente = require('./SstReuniaoCipaPresente');
+import SstGes = require('./SstGes');
+import SstGesFuncionario = require('./SstGesFuncionario');
+import SstRiscoOcupacional = require('./SstRiscoOcupacional');
+import SstRiscoEpi = require('./SstRiscoEpi');
+import SstRiscoExame = require('./SstRiscoExame');
+import SstMatrizTreinamento = require('./SstMatrizTreinamento');
+import SstTreinamento = require('./SstTreinamento');
+import SstInspecaoSeguranca = require('./SstInspecaoSeguranca');
+import SstInspecaoItem = require('./SstInspecaoItem');
+import SstPermissaoTrabalho = require('./SstPermissaoTrabalho');
+import SstPtExecutante = require('./SstPtExecutante');
+import SstBrigadista = require('./SstBrigadista');
+import SstRegistroDds = require('./SstRegistroDds');
+import SstDdsPresenca = require('./SstDdsPresenca');
 
 // ============================================
 // RELACIONAMENTOS
@@ -818,6 +838,96 @@ SstCat.belongsTo(SstAcidente, { foreignKey: 'acidente_id', as: 'acidente' });
 User.hasMany(SstCat, { foreignKey: 'emitente_id', as: 'sst_cats_emitidas' });
 SstCat.belongsTo(User, { foreignKey: 'emitente_id', as: 'emitente' });
 
+// ---- Cluster CIPA (NR-5, CF/88) — BLOCO 1 SST, migration 20260806-000138 ----
+SstMandatoCipa.hasMany(SstMembroCipa, { foreignKey: 'mandato_id', as: 'membros' });
+SstMembroCipa.belongsTo(SstMandatoCipa, { foreignKey: 'mandato_id', as: 'mandato' });
+Employee.hasMany(SstMembroCipa, { foreignKey: 'employee_id', as: 'sst_membros_cipa' });
+SstMembroCipa.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+SstTreinamento.hasMany(SstMembroCipa, { foreignKey: 'treinamento_cipa_id', as: 'membros_cipa_posse' });
+SstMembroCipa.belongsTo(SstTreinamento, { foreignKey: 'treinamento_cipa_id', as: 'treinamentoCipa' });
+
+SstMandatoCipa.hasOne(SstProcessoEleitoralCipa, { foreignKey: 'mandato_id', as: 'processoEleitoral' });
+SstProcessoEleitoralCipa.belongsTo(SstMandatoCipa, { foreignKey: 'mandato_id', as: 'mandato' });
+
+SstProcessoEleitoralCipa.hasMany(SstCandidatoCipa, { foreignKey: 'processo_eleitoral_id', as: 'candidatos', onDelete: 'CASCADE' });
+SstCandidatoCipa.belongsTo(SstProcessoEleitoralCipa, { foreignKey: 'processo_eleitoral_id', as: 'processoEleitoral', onDelete: 'CASCADE' });
+Employee.hasMany(SstCandidatoCipa, { foreignKey: 'employee_id', as: 'sst_candidaturas_cipa' });
+SstCandidatoCipa.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+SstMandatoCipa.hasMany(SstReuniaoCipa, { foreignKey: 'mandato_id', as: 'reunioes' });
+SstReuniaoCipa.belongsTo(SstMandatoCipa, { foreignKey: 'mandato_id', as: 'mandato' });
+User.hasMany(SstReuniaoCipa, { foreignKey: 'created_by', as: 'sst_reunioes_cipa_criadas' });
+SstReuniaoCipa.belongsTo(User, { foreignKey: 'created_by', as: 'createdByUser' });
+
+SstReuniaoCipa.hasMany(SstReuniaoCipaPresente, { foreignKey: 'reuniao_id', as: 'presentes', onDelete: 'CASCADE' });
+SstReuniaoCipaPresente.belongsTo(SstReuniaoCipa, { foreignKey: 'reuniao_id', as: 'reuniao', onDelete: 'CASCADE' });
+SstMembroCipa.hasMany(SstReuniaoCipaPresente, { foreignKey: 'membro_cipa_id', as: 'presencas_reuniao' });
+SstReuniaoCipaPresente.belongsTo(SstMembroCipa, { foreignKey: 'membro_cipa_id', as: 'membro' });
+
+// ---- Cluster PGR/GRO + GES (NR-1) — migration 20260806-000139 ----
+SstGes.hasMany(SstGesFuncionario, { foreignKey: 'ges_id', as: 'funcionarios' });
+SstGesFuncionario.belongsTo(SstGes, { foreignKey: 'ges_id', as: 'ges' });
+Employee.hasMany(SstGesFuncionario, { foreignKey: 'employee_id', as: 'sst_ges_vinculos' });
+SstGesFuncionario.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+SstGes.hasMany(SstPlanoExames, { foreignKey: 'ges_id', as: 'planosExames', onDelete: 'SET NULL' });
+SstPlanoExames.belongsTo(SstGes, { foreignKey: 'ges_id', as: 'ges', onDelete: 'SET NULL' });
+
+Department.hasMany(SstRiscoOcupacional, { foreignKey: 'department_id', as: 'sst_riscos_ocupacionais' });
+SstRiscoOcupacional.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+SstGes.hasMany(SstRiscoOcupacional, { foreignKey: 'ges_id', as: 'riscos', onDelete: 'SET NULL' });
+SstRiscoOcupacional.belongsTo(SstGes, { foreignKey: 'ges_id', as: 'ges', onDelete: 'SET NULL' });
+User.hasMany(SstRiscoOcupacional, { foreignKey: 'created_by', as: 'sst_riscos_criados' });
+SstRiscoOcupacional.belongsTo(User, { foreignKey: 'created_by', as: 'createdByUser' });
+
+SstRiscoOcupacional.hasMany(SstRiscoEpi, { foreignKey: 'risco_id', as: 'riscoEpis', onDelete: 'CASCADE' });
+SstRiscoEpi.belongsTo(SstRiscoOcupacional, { foreignKey: 'risco_id', as: 'risco', onDelete: 'CASCADE' });
+SstTipoEpi.hasMany(SstRiscoEpi, { foreignKey: 'tipo_epi_id', as: 'riscosVinculados' });
+SstRiscoEpi.belongsTo(SstTipoEpi, { foreignKey: 'tipo_epi_id', as: 'tipoEpi' });
+
+SstRiscoOcupacional.hasMany(SstRiscoExame, { foreignKey: 'risco_id', as: 'riscoExames', onDelete: 'CASCADE' });
+SstRiscoExame.belongsTo(SstRiscoOcupacional, { foreignKey: 'risco_id', as: 'risco', onDelete: 'CASCADE' });
+
+// ---- Cluster Treinamentos (NR-1 e específicas) — migration 20260806-000140 ----
+Employee.hasMany(SstTreinamento, { foreignKey: 'employee_id', as: 'sst_treinamentos' });
+SstTreinamento.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+User.hasMany(SstTreinamento, { foreignKey: 'created_by', as: 'sst_treinamentos_criados' });
+SstTreinamento.belongsTo(User, { foreignKey: 'created_by', as: 'createdByUser' });
+
+// ---- Cluster Rotina Preventiva (DDS, Inspeções, PT, Brigada) — migration 20260806-000141 ----
+Department.hasMany(SstInspecaoSeguranca, { foreignKey: 'department_id', as: 'sst_inspecoes_seguranca' });
+SstInspecaoSeguranca.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+User.hasMany(SstInspecaoSeguranca, { foreignKey: 'inspetor_id', as: 'sst_inspecoes_realizadas' });
+SstInspecaoSeguranca.belongsTo(User, { foreignKey: 'inspetor_id', as: 'inspetor' });
+
+SstInspecaoSeguranca.hasMany(SstInspecaoItem, { foreignKey: 'inspecao_id', as: 'itens', onDelete: 'CASCADE' });
+SstInspecaoItem.belongsTo(SstInspecaoSeguranca, { foreignKey: 'inspecao_id', as: 'inspecao', onDelete: 'CASCADE' });
+SstAcaoCorretiva.hasOne(SstInspecaoItem, { foreignKey: 'acao_corretiva_id', as: 'itemInspecao', onDelete: 'SET NULL' });
+SstInspecaoItem.belongsTo(SstAcaoCorretiva, { foreignKey: 'acao_corretiva_id', as: 'acaoCorretiva', onDelete: 'SET NULL' });
+
+Department.hasMany(SstPermissaoTrabalho, { foreignKey: 'department_id', as: 'sst_permissoes_trabalho' });
+SstPermissaoTrabalho.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+User.hasMany(SstPermissaoTrabalho, { foreignKey: 'autorizante_id', as: 'sst_pts_autorizadas' });
+SstPermissaoTrabalho.belongsTo(User, { foreignKey: 'autorizante_id', as: 'autorizante' });
+
+SstPermissaoTrabalho.hasMany(SstPtExecutante, { foreignKey: 'permissao_trabalho_id', as: 'executantes', onDelete: 'CASCADE' });
+SstPtExecutante.belongsTo(SstPermissaoTrabalho, { foreignKey: 'permissao_trabalho_id', as: 'permissaoTrabalho', onDelete: 'CASCADE' });
+Employee.hasMany(SstPtExecutante, { foreignKey: 'employee_id', as: 'sst_pts_executadas' });
+SstPtExecutante.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+Employee.hasOne(SstBrigadista, { foreignKey: 'employee_id', as: 'sst_brigadista' });
+SstBrigadista.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+Department.hasMany(SstRegistroDds, { foreignKey: 'department_id', as: 'sst_registros_dds' });
+SstRegistroDds.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+Employee.hasMany(SstRegistroDds, { foreignKey: 'condutor_id', as: 'sst_dds_conduzidos' });
+SstRegistroDds.belongsTo(Employee, { foreignKey: 'condutor_id', as: 'condutor' });
+
+SstRegistroDds.hasMany(SstDdsPresenca, { foreignKey: 'registro_dds_id', as: 'presencas', onDelete: 'CASCADE' });
+SstDdsPresenca.belongsTo(SstRegistroDds, { foreignKey: 'registro_dds_id', as: 'registroDds', onDelete: 'CASCADE' });
+Employee.hasMany(SstDdsPresenca, { foreignKey: 'employee_id', as: 'sst_dds_presencas' });
+SstDdsPresenca.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -849,5 +959,9 @@ export {
   SstTipoEpi, SstMatrizEpi, SstEntregaEpi, SstDevolucaoEpi, SstAcaoCorretiva,
   SstPlanoExames, SstAso, SstExameComplementar,
   SstAcidente, SstAcidenteTestemunha, SstInvestigacaoAcidente, SstAcidenteComplemento, SstCat,
-  SstEventoEsocial
+  SstEventoEsocial,
+  SstMandatoCipa, SstMembroCipa, SstProcessoEleitoralCipa, SstCandidatoCipa, SstReuniaoCipa, SstReuniaoCipaPresente,
+  SstGes, SstGesFuncionario, SstRiscoOcupacional, SstRiscoEpi, SstRiscoExame,
+  SstMatrizTreinamento, SstTreinamento,
+  SstInspecaoSeguranca, SstInspecaoItem, SstPermissaoTrabalho, SstPtExecutante, SstBrigadista, SstRegistroDds, SstDdsPresenca
 };
