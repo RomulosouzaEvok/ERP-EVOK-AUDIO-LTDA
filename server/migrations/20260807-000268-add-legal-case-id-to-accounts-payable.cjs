@@ -27,6 +27,10 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     const columns = await queryInterface.describeTable('accounts_payable');
 
+    // Nota: NAO usar a propriedade `comment` em addColumn aqui — o gerador de
+    // SQL do Sequelize (postgres) corrompe o ALTER TABLE quando o texto do
+    // comentario contem parenteses. Comentarios aplicados via COMMENT ON
+    // COLUMN explicito abaixo.
     if (!columns.legal_case_id) {
       await queryInterface.addColumn('accounts_payable', 'legal_case_id', {
         type: Sequelize.INTEGER,
@@ -34,7 +38,6 @@ module.exports = {
         references: { model: 'jur_legal_cases', key: 'id' },
         onDelete: 'RESTRICT',
         onUpdate: 'CASCADE',
-        comment: 'FK → legal_cases.id (RF-JUR-018) — custos de contencioso (honorarios, custas, pericias, depositos)',
       });
     }
 
@@ -42,9 +45,15 @@ module.exports = {
       await queryInterface.addColumn('accounts_payable', 'legal_expense_type', {
         type: Sequelize.ENUM('expense', 'judicial_deposit'),
         allowNull: true,
-        comment: 'Distingue despesa juridica normal de deposito judicial/recursal (RF-JUR-018) — so preenchido quando legal_case_id nao e nulo',
       });
     }
+
+    await queryInterface.sequelize.query(
+      `COMMENT ON COLUMN accounts_payable.legal_case_id IS 'FK para jur_legal_cases.id (RF-JUR-018) - custos de contencioso (honorarios, custas, pericias, depositos)';`
+    );
+    await queryInterface.sequelize.query(
+      `COMMENT ON COLUMN accounts_payable.legal_expense_type IS 'Distingue despesa juridica normal de deposito judicial/recursal (RF-JUR-018) - so preenchido quando legal_case_id nao e nulo';`
+    );
 
     const indexes = await queryInterface.showIndex('accounts_payable');
     const indexName = 'idx_accounts_payable_legal_case_id';
