@@ -1,23 +1,28 @@
 import * as React from 'react';
-import { Image, Megaphone, Target } from 'lucide-react';
+import { BarChart3, CalendarDays, Image, Megaphone, Target } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { CampaignsTab } from './CampaignsTab';
 import { LeadsTab } from './LeadsTab';
+import { EventsTab } from './EventsTab';
 import { MaterialsTab } from './MaterialsTab';
+import { ReportsTab } from './ReportsTab';
 
-type MarketingTab = 'campaigns' | 'leads' | 'materials';
+type MarketingTab = 'campaigns' | 'leads' | 'events' | 'materials' | 'reports';
 
 /**
- * `/marketing` — Marketing (departamento 14, sigla MKT).
+ * `/marketing` — Marketing (departamento 14, sigla MKT), BLOCO 5 (correção).
  *
- * Cobre o módulo de campanhas, leads (com funil dedicado) e materiais de
- * divulgação — CRUD completo (create/list/get/update, sem delete) sobre
+ * Cobre campanhas (orçamento solicitado/aprovado, alerta de estouro), leads
+ * (funil com `in_sales_attendance`, handoff Marketing→Vendas com SLA,
+ * conversão atômica dedicada, captação em lote), eventos/feiras (checklist,
+ * leads vinculados, encerramento com custo real) e relatórios/KPIs de funil
+ * — CRUD completo (create/list/get/update, sem delete) sobre
  * `/api/marketing/*`.
  */
 export default function MarketingPage() {
-  const [tab, setTab] = React.useState<MarketingTab>('campaigns');
+  const [tab, setTab] = React.useState<MarketingTab>('leads');
 
   return (
     <div className="flex flex-col gap-4">
@@ -28,27 +33,35 @@ export default function MarketingPage() {
         <div>
           <h1 className="text-2xl font-semibold">Marketing</h1>
           <p className="text-sm text-muted-foreground">
-            Campanhas, funil de leads e materiais de divulgação.
+            Campanhas, funil de leads, eventos/feiras, materiais de divulgação e relatórios de funil.
           </p>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-1 border-b">
+        <TabButton active={tab === 'leads'} icon={Target} onClick={() => setTab('leads')}>
+          Leads
+        </TabButton>
         <TabButton active={tab === 'campaigns'} icon={Megaphone} onClick={() => setTab('campaigns')}>
           Campanhas
         </TabButton>
-        <TabButton active={tab === 'leads'} icon={Target} onClick={() => setTab('leads')}>
-          Leads
+        <TabButton active={tab === 'events'} icon={CalendarDays} onClick={() => setTab('events')}>
+          Eventos/Feiras
         </TabButton>
         <TabButton active={tab === 'materials'} icon={Image} onClick={() => setTab('materials')}>
           Materiais
         </TabButton>
+        <TabButton active={tab === 'reports'} icon={BarChart3} onClick={() => setTab('reports')}>
+          Relatórios
+        </TabButton>
       </div>
 
       <div key={tab} className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
-        {tab === 'campaigns' && <CampaignsTab />}
         {tab === 'leads' && <LeadsTab />}
+        {tab === 'campaigns' && <CampaignsTab />}
+        {tab === 'events' && <EventsTab />}
         {tab === 'materials' && <MaterialsTab />}
+        {tab === 'reports' && <ReportsTab />}
       </div>
     </div>
   );

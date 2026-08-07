@@ -12128,3 +12128,108 @@ nesta rodada (schema-alvo já documentado pelo `AdmDBA` em
   aceita exceção de `notes` pós-conclusão porque a coluna não existe no
   schema (`marketing_events`) — contrato de API previa essa exceção sem
   que o `AdmDBA` tivesse adicionado a coluna correspondente.
+
+## 2026-08-07 (rodada seguinte) — BLOCO 5 MKT (correção): telas do frontend — Passo 5 — `PromadorFonteEnd`
+
+Reescreve `client/src/api/marketing.ts` e as telas de `client/src/pages/marketing/`
+contra os 27 endpoints do backend novo (item anterior deste handoff), fechando
+o Passo 5 do pipeline de correção do Bloco 5. Migrations `000310`..`000315`
+ainda **não aplicadas** no banco — nada foi testado contra API real, só
+`tsc --noEmit`/`vite build`/`vitest run`.
+
+### 1. `client/src/api/marketing.ts` — reescrito por completo
+
+Cobre os 27 endpoints em 5 grupos (Campanhas, Leads, Evento/Feira,
+Relatórios/KPIs, Materiais), tipos verificados contra os models reais
+(`server/src/models/Marketing*.ts`), não só o contrato idealizado:
+`Campaign.budget_requested`/`budget_approved`/`budget_approval_status`/
+`budget_alert_level` (string DECIMAL, nunca `number`); `Lead.status` inclui
+`in_sales_attendance`, `sales_owner_user_id`/`qualified_at`/`handoff_at`/
+`converted_at`/`needs_review` expostos; `changeLeadStatus` não aceita mais
+`converted` (tipo `ChangeableLeadStatus = Exclude<LeadStatus, 'converted'>`);
+`convertLead`/`handoffLead`/`bulkCreateLeads` novos; grupo `events`
+(`listEvents`/`getEvent`/`createEvent`/`updateEvent`/checklist/`closeEvent`/
+`getEventLeads`) e grupo `reports` (`getFunnelReport`/`getEventsReport`)
+inteiramente novos; `Material.stock_item_id` novo, `approveMaterial`
+(`PATCH .../approve`) dedicado, `approved` removido de `create`/`update`.
+
+### 2. Telas — `client/src/pages/marketing/`
+
+- **`marketingShared.tsx`** (novo) — formatação (data/moeda/percentual) e
+  badges/labels de status para os 5 grupos, mesmo padrão de
+  `juridicoShared.tsx`/`facilitiesShared.tsx`.
+- **`LeadsTab.tsx`** (reescrito) — funil kanban com 6 colunas
+  (`new`→`contacted`→`qualified`→`in_sales_attendance`→`converted`/`lost`),
+  ação de handoff dedicada (`HandoffLeadDialog`, busca de usuário) exigida
+  antes de avançar a `in_sales_attendance`, `ConvertLeadDialog` reescrito
+  (cliente existente com busca por nome/CPF-CNPJ via `listClients({ search })`
+  OU cliente novo no mesmo formulário, nunca mais campo numérico livre de
+  id), captação em lote (`BulkCreateLeadsDialog`, textarea `nome; email;
+  telefone` por linha, reporta criados/rejeitados item a item), filtro
+  `sla_breached`, e destaque visual (borda + ícone) para `lead.needs_review`
+  (leads rebaixados pelo saneamento pendente — só sinalização, sem ação).
+- **`CampaignsTab.tsx`** (reescrito) — `budget_requested`/`budget_approved`
+  lado a lado, badges de status de aprovação e de alerta de orçamento
+  (`warning_90`/`over_100`), formulário de edição sem `leads_generated`/
+  `conversions`/`roi` (somem do form, só leitura na listagem), campanha
+  `completed`/`canceled` trava todos os campos exceto `notes`
+  (`isLocked`), botão de recalcular métricas (`recalculateCampaignMetrics`)
+  e diálogo de decisão de orçamento (`BudgetDecisionDialog`, só visível com
+  `permissions.marketing === 'approve'`).
+- **`EventsTab.tsx`** (novo) — CRUD de evento/feira, checklist inline
+  (toggle pendente/concluído), lista de leads vinculados
+  (`getEventLeads`), encerramento exigindo custo real
+  (`closeEvent`, bloqueado se nem o payload nem o evento já tiverem
+  `actual_cost`).
+- **`MaterialsTab.tsx`** (reescrito) — adiciona campo de item de estoque
+  (`stock_item_id`, busca por código/descrição via `itemsApi.listItems`),
+  remove checkbox `approved` do formulário (nasce sempre `false`), botão
+  "Aprovar" dedicado só visível com `permissions.marketing === 'approve'`,
+  aviso no diálogo de upload de que nova versão sobre material aprovado
+  reverte a aprovação.
+- **`ReportsTab.tsx`** (novo) — filtros (campanha/origem/período), 8 KPIs
+  do funil em cards (`GetFunnelReportUseCase`, trata `has_data: false` sem
+  quebrar a tela) e tabela de ROI/custo por lead por evento
+  (`GetEventsReportUseCase`).
+- **`MarketingPage.tsx`** (reescrito) — 5 abas (Leads, Campanhas,
+  Eventos/Feiras, Materiais, Relatórios), aba inicial trocada para "Leads"
+  (fluxo mais operacional do dia a dia). Rota `/marketing` e menu do
+  `AppLayout` não precisaram de alteração (já existiam, módulo `marketing`
+  já cadastrado em `accessProfiles.ts`).
+
+### 3. Permissões (nível `approve`)
+
+Aprovação de orçamento de campanha e aprovação de material só aparecem
+para `hasRole('admin') || permissions?.marketing === 'approve'`, mesmo
+padrão de `permissions?.facilities === 'approve'`/`permissions?.sst ===
+'approve'` já usado nos demais módulos — nenhuma mudança em
+`AuthContext.tsx`/`accessProfiles.ts` foi necessária (`marketing` e o
+nível `approve` já existiam no catálogo desde o backend anterior).
+
+### 4. Validação
+
+- `npx tsc --noEmit` (a partir de `client/`): limpo, 0 erros.
+- `npx vite build`: OK (bundle `MarketingPage` ~60 kB gzip 12 kB).
+- `npx vitest run`: 51/51 (8 arquivos) — nenhum teste existente cobre as
+  telas de Marketing especificamente; nenhuma regressão em outros módulos.
+
+### 5. Pendências / o que o QA (ou humano) deve testar quando as migrations forem aplicadas
+
+- Fluxo completo de conversão de lead (cliente existente E cliente novo,
+  incluindo o caminho de erro de CPF/CNPJ duplicado, UC-63 E1) contra API
+  real — hoje só validado por tipo/build.
+- Handoff exigindo `sales_owner_user_id` antes de `in_sales_attendance`
+  (RF-MKT-012) e o filtro `sla_breached=true`.
+- Captação em lote com mistura de itens válidos/inválidos (processamento
+  parcial, RF-MKT-019, UC-65 E2).
+- Aprovação de orçamento de campanha e de material só visíveis/possíveis
+  para perfil com nível `approve` em `marketing` — testar também com
+  perfil `operate` puro (deve estar oculto, backend deve rejeitar 403 se
+  forçado via chamada direta).
+- Encerramento de evento sem `actual_cost` (nem payload nem já gravado)
+  deve bloquear no backend mesmo que o frontend já desabilite o botão.
+- Relatório de funil com filtro sem dados (`has_data: false`) — tela não
+  deve quebrar nem mostrar `NaN`/`R$ NaN`.
+- Leads com `needs_review=true` (produto do saneamento da migration
+  `000312`) devem aparecer destacados na aba Leads assim que a migration
+  rodar em banco com dado real.
