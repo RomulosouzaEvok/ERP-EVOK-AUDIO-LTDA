@@ -3863,3 +3863,63 @@ completa do server: 1024/1025 passando (1 falha pre-existente de data em
 `onda3-shipping-cockpit-cashflow.test.ts`, nao relacionada a este bloco).
 `npm run typecheck` limpo. Detalhes completos em
 `docs/governance/HANDOFF_CODEX.md`.
+
+## 2026-08-07 (rodada seguinte) — BLOCO 3 Juridico: implementacao backend passada 2/2 (final) — Procuracoes, PI, LGPD, Transversal — `programador`
+
+**Escopo:** passo 4 (implementacao) do pipeline do Bloco 3, passada 2 de 2
+(final) — fecha os 36 endpoints restantes sobre os models `Jur*` ja
+criados na passada 1.
+
+**[IMPLEMENTADO]** Backend do Bloco 3 Juridico = **69/71 endpoints**
+(96%), unicos 2 nao implementados sao `corporate-acts` (RF-JUR-030, sem
+tabela — pendencia real 1 acima permanece `[ ]`, nao resolvida por
+decisao explicita de nao criar migration nova sem necessidade):
+- Grupo 4 — Procuracoes (4/6, UC-55): cadastro, revogacao (nivel
+  `approve`, `communication_record` obrigatorio, efeito imediato),
+  expiracao automatica ao acessar (`GET`/lista), alerta de vencimento
+  automatico quando `expiration_date` informada.
+- Grupo 5 — Propriedade Intelectual (6/6, RF-JUR-031 a 034): CRUD,
+  vinculo N:N com Contrato (`uq_jur_ip_contract_links_ip_contract`),
+  alertas de renovacao/anuidade (`trademark` 12 meses antes da
+  expiracao; demais tipos com `next_annuity_date`), `trade_secret` nunca
+  aceita `attachment_url` e e o UNICO recurso do modulo com RBAC
+  `role==='admin'` (nao `authorizeModule`) — verificado dentro dos use
+  cases, exclui `trade_secret` da listagem/contagem para nao-admin mesmo
+  filtrando explicitamente por `type=trade_secret`.
+- Grupo 6 — LGPD (17/17, UC-56): RoPA (5, revisao anual +1 ano), Solicitacao
+  de Titular (7, `due_date`=recebimento+15 dias, `verify-identity` bloqueia
+  avanco sem `identity_verified=true`, `resolve` exige identidade
+  verificada, `reject` nivel `approve` com justificativa obrigatoria,
+  `pending-critical` nunca oculta vencido), Incidente (5, `decision` nivel
+  `approve` com as DUAS justificativas obrigatorias mesmo com booleano
+  `false`, `close` nivel `approve` bloqueado sem decisao previa — E4).
+- Grupo 7 — Transversal (7/7): Alertas (3, `acknowledge` nunca desativa —
+  `jur_legal_alerts` nao tem coluna para isso, RNF-JUR-04 garantido por
+  ausencia estrutural), Relatorio Financeiro Sanitizado (1,
+  `GET /reports/financeiro` liberado tambem a `financeiro:operate`,
+  shape fixo sem `parte_contraria`/`rationale`/`case_number_cnj`), Fichas
+  Cruzadas (3, `by-supplier`/`by-client`/`by-employee`, leitura pura).
+
+**8 reconciliacoes schema↔contrato documentadas** (sem migration nova):
+`title` de PI derivado de `description`; janela de alerta de PI
+simplificada (`[VERIFICAR COM ASSESSOR JURIDICO]`); DPO/Encarregado sem
+cadastro formal (usa quem registra, se nao informado); decisao de
+incidente LGPD combina 2 booleanos+2 justificativas em 1
+enum+1 campo de texto; `cost_center_id` null em provisoes do relatorio
+financeiro (schema so tem essa coluna em `accounts_payable`); RBAC
+`trade_secret` por `role` dentro do use case; `GET /reports/financeiro`
+com 2 niveis de acesso (rota fora do `router.use(authorizeModule(...))`
+geral). Detalhes completos, incluindo os 8 pontos numerados, em
+`docs/governance/HANDOFF_CODEX.md`.
+
+**Testes:** 2 suites novas (`server/tests/unit/juridico-proxy-ip-use-cases.test.ts`,
+`juridico-lgpd-alert-use-cases.test.ts`), 45 casos novos, cobrindo os 4
+grupos desta passada. Suite completa do server: 1069/1070 passando (1
+falha pre-existente de data em `onda3-shipping-cockpit-cashflow.test.ts`,
+nao relacionada a este bloco). `npm run typecheck` limpo.
+
+**Pendencias que seguem em aberto** (nao resolvidas nesta passada, ja
+listadas nos itens `[ ]` acima): `corporate-acts` (RF-JUR-030, sem
+tabela) e alcada de aprovacao de contrato por valor (RF-JUR-003, sem
+tabela). Frontend completo do Bloco 3 (Procuracoes/PI/LGPD/Alertas)
+segue como proximo passo do pipeline.

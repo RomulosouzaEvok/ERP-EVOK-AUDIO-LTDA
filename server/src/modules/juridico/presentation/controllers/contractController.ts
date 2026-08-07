@@ -25,6 +25,7 @@ const ActivateContractUseCase = require('../../application/use-cases/contract/Ac
 const CreateContractAddendumUseCase = require('../../application/use-cases/contract/CreateContractAddendumUseCase');
 const ListContractAddendumsUseCase = require('../../application/use-cases/contract/ListContractAddendumsUseCase');
 const TerminateContractUseCase = require('../../application/use-cases/contract/TerminateContractUseCase');
+const CrossReferenceContractsUseCase = require('../../application/use-cases/contract/CrossReferenceContractsUseCase');
 
 const contractRepository = new SequelizeContractRepository();
 const alertRepository = new SequelizeLegalAlertRepository();
@@ -157,5 +158,31 @@ exports.terminate = async (req: Request, res: Response, next: NextFunction) => {
     const contract = await new TerminateContractUseCase(contractRepository).execute({ id: Number(req.params.id), ...req.body });
     logAction(req, { action: 'terminate', entityType: 'JurContract', entityId: Number(req.params.id), newValues: req.body });
     res.json({ success: true, data: contract });
+  } catch (error) { next(error); }
+};
+
+// ---- fichas cruzadas (RF-JUR-045, §8.3) ----
+
+/** `GET /api/jur/contracts/by-supplier/:supplierId` */
+exports.bySupplier = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await new CrossReferenceContractsUseCase(contractRepository).execute({ type: 'supplier', id: req.params.supplierId });
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
+/** `GET /api/jur/contracts/by-client/:clientId` */
+exports.byClient = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await new CrossReferenceContractsUseCase(contractRepository).execute({ type: 'client', id: req.params.clientId });
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
+/** `GET /api/jur/contracts/by-employee/:employeeId` */
+exports.byEmployee = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await new CrossReferenceContractsUseCase(contractRepository).execute({ type: 'employee', id: req.params.employeeId });
+    res.json({ success: true, data });
   } catch (error) { next(error); }
 };

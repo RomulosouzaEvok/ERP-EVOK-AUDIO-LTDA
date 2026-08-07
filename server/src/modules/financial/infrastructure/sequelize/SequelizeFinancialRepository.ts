@@ -178,6 +178,20 @@ class SequelizeFinancialRepository extends FinancialRepository {
       overduePayable: parseFloat(overduePayableRow?.total ?? 0)
     };
   }
+
+  /**
+   * Lista contas a pagar vinculadas a processo jurídico (`legal_case_id IS
+   * NOT NULL`) — alimenta `GET /api/jur/reports/financeiro` (RF-JUR-018/020).
+   *
+   * @returns {Promise<Object[]>}
+   */
+  async listPayablesByLegalCase() {
+    return AccountPayable.findAll({
+      where: { legal_case_id: { [Op.ne]: null } },
+      attributes: ['id', 'legal_case_id', 'legal_expense_type', 'amount', 'due_date', 'status', 'cost_center_id'],
+      order: [['due_date', 'ASC']],
+    });
+  }
 }
 
 module.exports = SequelizeFinancialRepository;

@@ -29,6 +29,14 @@ export interface IFinancialRepository {
     overdueReceivable: number;
     overduePayable: number;
   }>;
+  /**
+   * Lista contas a pagar vinculadas a processo jurídico (`legal_case_id IS
+   * NOT NULL`) — alimenta `GET /api/jur/reports/financeiro` (RF-JUR-018/020,
+   * `docs/business/BLOCO_3_JUR_API.md` §8.2), consumido via
+   * `AccountPayableServiceAdapter` do módulo `juridico` (nunca Sequelize
+   * direto do módulo Jurídico).
+   */
+  listPayablesByLegalCase(): Promise<any[]>;
 }
 
 /**
@@ -187,6 +195,16 @@ class FinancialRepository {
    */
   async getOpenTitlesForProjection(days: number) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.getOpenTitlesForProjection não implementado.');
+  }
+
+  /**
+   * Lista contas a pagar vinculadas a processo jurídico.
+   *
+   * @abstract
+   * @returns {Promise<Object[]>}
+   */
+  async listPayablesByLegalCase() {
+    throw new Error('FinancialRepository.listPayablesByLegalCase não implementado.');
   }
 }
 

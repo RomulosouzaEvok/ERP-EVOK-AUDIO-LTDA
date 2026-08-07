@@ -57,6 +57,17 @@ class ContractRepository {
   public async countAddendums(_contractId: number | string): Promise<number> {
     throw new Error('ContractRepository.countAddendums não implementado.');
   }
+
+  // ---- fichas cruzadas (RF-JUR-045) ----
+  public async listBySupplier(_supplierId: number | string): Promise<any[]> {
+    throw new Error('ContractRepository.listBySupplier não implementado.');
+  }
+  public async listByClient(_clientId: number | string): Promise<any[]> {
+    throw new Error('ContractRepository.listByClient não implementado.');
+  }
+  public async listByEmployee(_employeeId: number | string): Promise<any[]> {
+    throw new Error('ContractRepository.listByEmployee não implementado.');
+  }
 }
 
 export = ContractRepository;

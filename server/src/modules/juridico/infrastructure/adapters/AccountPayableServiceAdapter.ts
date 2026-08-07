@@ -31,6 +31,11 @@ class AccountPayableServiceAdapter extends AccountPayableService {
       legal_expense_type: data.legal_expense_type ?? null,
     });
   }
+
+  /** @inheritdoc */
+  public async listByLegalCase(): Promise<any[]> {
+    return financialRepository.listPayablesByLegalCase();
+  }
 }
 
 export = AccountPayableServiceAdapter;

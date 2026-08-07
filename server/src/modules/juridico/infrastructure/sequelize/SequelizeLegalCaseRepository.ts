@@ -80,6 +80,10 @@ class SequelizeLegalCaseRepository extends LegalCaseRepository {
   public async getCurrentProvision(legalCaseId: number | string): Promise<any | null> {
     return JurLegalCaseProvision.findOne({ where: { legal_case_id: legalCaseId }, order: [['assessed_at', 'DESC']] });
   }
+  public async listAllReferences(): Promise<any[]> {
+    return JurLegalCase.findAll({ attributes: ['id', 'case_number', 'case_type'] });
+  }
+
   public async listAllCurrentProvisions(): Promise<any[]> {
     const { sequelize } = require('../../../../config/database');
     const { QueryTypes } = require('sequelize');

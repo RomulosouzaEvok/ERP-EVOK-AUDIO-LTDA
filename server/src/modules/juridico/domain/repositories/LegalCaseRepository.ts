@@ -46,6 +46,15 @@ class LegalCaseRepository {
   public async listAllCurrentProvisions(): Promise<any[]> {
     throw new Error('LegalCaseRepository.listAllCurrentProvisions não implementado.');
   }
+
+  /**
+   * Lista `{ id, case_number, case_type }` de todos os processos — usado
+   * para resolver `legal_case_reference` em `GET /api/jur/reports/financeiro`
+   * (§8.2) sem expor `case_number_cnj`.
+   */
+  public async listAllReferences(): Promise<any[]> {
+    throw new Error('LegalCaseRepository.listAllReferences não implementado.');
+  }
 }
 
 export = LegalCaseRepository;

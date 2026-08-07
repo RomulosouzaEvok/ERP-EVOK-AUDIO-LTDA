@@ -20,6 +20,15 @@ class AccountPayableService {
   public async create(_data: CreatePayableData): Promise<any> {
     throw new Error('AccountPayableService.create não implementado.');
   }
+
+  /**
+   * Lista contas a pagar vinculadas a processo jurídico — alimenta
+   * `GET /api/jur/reports/financeiro` (§8.2), sem Sequelize direto de
+   * `AccountPayable` no módulo `juridico`.
+   */
+  public async listByLegalCase(): Promise<any[]> {
+    throw new Error('AccountPayableService.listByLegalCase não implementado.');
+  }
 }
 
 export = AccountPayableService;

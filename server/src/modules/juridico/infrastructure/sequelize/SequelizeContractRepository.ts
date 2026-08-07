@@ -104,6 +104,19 @@ class SequelizeContractRepository extends ContractRepository {
   public async countAddendums(contractId: number | string): Promise<number> {
     return JurContractAddendum.count({ where: { contract_id: contractId } });
   }
+
+  // ---- fichas cruzadas (RF-JUR-045, §8.3) ----
+  private static readonly CROSS_REFERENCE_ATTRIBUTES = ['id', 'contract_number', 'contract_type', 'status', 'value', 'start_date', 'end_date'];
+
+  public async listBySupplier(supplierId: number | string): Promise<any[]> {
+    return JurContract.findAll({ where: { supplier_id: supplierId }, attributes: SequelizeContractRepository.CROSS_REFERENCE_ATTRIBUTES, order: [['createdAt', 'DESC']] });
+  }
+  public async listByClient(clientId: number | string): Promise<any[]> {
+    return JurContract.findAll({ where: { client_id: clientId }, attributes: SequelizeContractRepository.CROSS_REFERENCE_ATTRIBUTES, order: [['createdAt', 'DESC']] });
+  }
+  public async listByEmployee(employeeId: number | string): Promise<any[]> {
+    return JurContract.findAll({ where: { employee_id: employeeId }, attributes: SequelizeContractRepository.CROSS_REFERENCE_ATTRIBUTES, order: [['createdAt', 'DESC']] });
+  }
 }
 
 export = SequelizeContractRepository;

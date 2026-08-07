@@ -11027,3 +11027,212 @@ padrão dos módulos `sst`/`ti`):
 - **Numeração de UC colidida** (UC-52/53 já usados por Facilities/Marketing
   em `04-USE_CASES.md`) — resolvida com sufixo `-JUR` nesta passada, mas a
   raiz (os 3 documentos do Bloco 3 usam UC-52..56 puros) não foi corrigida.
+
+## 2026-08-07 — BLOCO 3 Jurídico: implementação backend passada 2/2 (final) — Procurações, PI, LGPD, Transversal — `programador`
+
+### Resumo da feature
+
+Conclui o backend do Bloco 3 (Módulo Jurídico), fechando os 36 endpoints
+restantes do contrato (`docs/business/BLOCO_3_JUR_API.md`) sobre os models
+`Jur*` já criados na passada 1 (commit anterior desta mesma entrada):
+Procurações (Grupo 4, 4 dos 6 endpoints — `corporate-acts` pendente, ver
+abaixo), Propriedade Intelectual (Grupo 5, 6/6), LGPD — RoPA/Solicitação de
+Titular/Incidente (Grupo 6, 17/17) e Transversal — Alertas/Relatório
+Financeiro Sanitizado/Fichas Cruzadas (Grupo 7, 7/7).
+
+**Contagem final por grupo (71 endpoints do contrato):**
+
+| Grupo | Endpoints | UC/RF | Status |
+|---|---|---|---|
+| 1 — Contratos | 13/13 | UC-52 (JUR) | Completo (passada 1) |
+| 2 — Contencioso | 15/15 | UC-53 (JUR) | Completo (passada 1) |
+| 3 — Prazos Fatais | 7/7 | UC-54 (JUR) | Completo (passada 1) |
+| 4 — Procurações | 4/6 | UC-55 (JUR) | Procurações completas; `corporate-acts` pendente (RF-JUR-030, sem tabela) |
+| 5 — Propriedade Intelectual | 6/6 | RF-JUR-031 a 034 | Completo |
+| 6 — LGPD | 17/17 | UC-56 (JUR) | Completo (RoPA 5 + Solicitação 7 + Incidente 5) |
+| 7 — Transversal | 7/7 | RF-JUR-005/006/020/022/027/032/038/042/045 | Completo |
+| **Total implementado** | **69/71** | | 2 endpoints de `corporate-acts` documentados como pendência (sem tabela) |
+
+**Arquivos novos (Clean Architecture, mesmo padrão da passada 1 — sem
+diretório `mappers/` separado; tradução de nome de campo API↔coluna é feita
+inline nos use cases, mesma decisão registrada na passada 1):**
+
+- `domain/entities/`: `ProxyTypes.ts`, `IpAssetTypes.ts`, `LgpdTypes.ts`.
+- `domain/repositories/`: `ProxyRepository.ts`, `IpAssetRepository.ts`,
+  `LgpdActivityRepository.ts`, `LgpdRequestRepository.ts`,
+  `LgpdIncidentRepository.ts`; `LegalAlertRepository.ts` estendido
+  (`findAndCount`/`findById`/`update`); `ContractRepository.ts` estendido
+  (`listBySupplier`/`listByClient`/`listByEmployee`); `LegalCaseRepository.ts`
+  estendido (`listAllReferences`).
+- `infrastructure/sequelize/`: `SequelizeProxyRepository.ts`,
+  `SequelizeIpAssetRepository.ts`, `SequelizeLgpdActivityRepository.ts`,
+  `SequelizeLgpdRequestRepository.ts`, `SequelizeLgpdIncidentRepository.ts`;
+  `SequelizeLegalAlertRepository.ts`/`SequelizeContractRepository.ts`/
+  `SequelizeLegalCaseRepository.ts` estendidos com os métodos acima.
+- `application/use-cases/proxy/`: `CreateProxyUseCase`, `ListProxiesUseCase`,
+  `GetProxyByIdUseCase`, `RevokeProxyUseCase`.
+- `application/use-cases/ipAsset/`: `CreateIpAssetUseCase`,
+  `UpdateIpAssetUseCase`, `ListIpAssetsUseCase`, `GetIpAssetByIdUseCase`,
+  `LinkIpContractUseCase`, `ListIpContractLinksUseCase`.
+- `application/use-cases/lgpd/`: `CreateProcessingActivityUseCase`,
+  `UpdateProcessingActivityUseCase`, `ListProcessingActivitiesUseCase`,
+  `GetProcessingActivityByIdUseCase`, `ReviewProcessingActivityUseCase`,
+  `CreateDataSubjectRequestUseCase`, `VerifyIdentityUseCase`,
+  `ResolveDataSubjectRequestUseCase`, `RejectDataSubjectRequestUseCase`,
+  `ListDataSubjectRequestsUseCase`, `GetDataSubjectRequestByIdUseCase`,
+  `PendingCriticalDataSubjectRequestsUseCase`, `CreateIncidentUseCase`,
+  `DecideIncidentUseCase`, `CloseIncidentUseCase`, `ListIncidentsUseCase`,
+  `GetIncidentByIdUseCase`.
+- `application/use-cases/alert/`: `ListAlertsUseCase`, `GetAlertByIdUseCase`,
+  `AcknowledgeAlertUseCase`.
+- `application/use-cases/report/`: `FinancialReportUseCase`.
+- `application/use-cases/contract/CrossReferenceContractsUseCase.ts` (novo,
+  fichas cruzadas).
+- `presentation/controllers/`: `proxyController.ts`, `ipAssetController.ts`,
+  `lgpdController.ts`, `alertController.ts`, `reportController.ts`;
+  `contractController.ts` estendido (`bySupplier`/`byClient`/`byEmployee`).
+- `presentation/routes/juridico.ts` — todas as rotas novas montadas, com
+  `GET /reports/financeiro` deliberadamente ANTES do
+  `router.use(authorizeModule('juridico', 'operate'))` (única rota do
+  módulo aberta também a `financeiro`).
+- Fora do módulo `juridico` (extensão necessária no módulo Financeiro, sem
+  Sequelize direto de `AccountPayable` a partir de `juridico`):
+  `server/src/modules/financial/domain/repositories/FinancialRepository.ts`
+  (+ `listPayablesByLegalCase`), `SequelizeFinancialRepository.ts` (query
+  real), `server/src/modules/juridico/application/services/AccountPayableService.ts`
+  (+ `listByLegalCase`) e `AccountPayableServiceAdapter.ts` (implementação).
+- Teste novo: `server/tests/unit/juridico-proxy-ip-use-cases.test.ts` (25
+  testes), `server/tests/unit/juridico-lgpd-alert-use-cases.test.ts` (20
+  testes) — 45 testes novos.
+
+### Decisões de reconciliação schema↔contrato desta passada (nenhuma migration nova)
+
+1. **`corporate-acts` (RF-JUR-030) não implementado** — não existe tabela
+   `jur_corporate_acts` entre as migrations `20260807-000260` a `-000271`
+   aplicadas (16 tabelas `jur_*`, todas mapeadas na passada 1). Os 2
+   endpoints (`GET`/`POST /api/jur/corporate-acts`) do Grupo 4 ficam sem
+   rota — documentado como pendência explícita (instrução recebida: "não
+   implementar, apenas registrar"), consistente com a pendência já citada
+   na passada 1.
+2. **`jur_intellectual_property.title` (NOT NULL) não existe no contrato de
+   API** (`BLOCO_3_JUR_API.md` §6.1 não lista `title` no payload de
+   `POST /ip-assets`) — `CreateIpAssetUseCase` deriva `title` de `title`
+   explícito (se enviado) ou de `description` truncada a 200 caracteres.
+   Documentado em `IpAssetTypes.ts`.
+3. **Alertas de renovação/anuidade de PI (RF-JUR-032)** implementados de
+   forma simplificada: `trademark` com `expiration_date` → alerta 12 meses
+   antes; qualquer tipo com `next_annuity_date` informado → alerta na
+   própria data. A janela exata por tipo (`industrial_design` quinquenal,
+   `patent` anual a partir de `grant_date`) segue
+   `[VERIFICAR COM ASSESSOR JURÍDICO DA EMPRESA]` — mesma pendência já
+   sinalizada no contrato de API, não resolvida nesta passada.
+4. **LGPD — Encarregado/DPO (RF-JUR-041) sem cadastro formal** — como já
+   sinalizado na pendência #2 do próprio `BLOCO_3_JUR_API.md` (handoff do
+   contrato), `dpo_user_id` (NOT NULL em `jur_lgpd_data_subject_requests`/
+   `jur_lgpd_incidents`) é resolvido, quando não informado explicitamente no
+   payload, como o usuário que registra a solicitação/incidente
+   (`req.user.id`). Documentado em `CreateDataSubjectRequestUseCase.ts`/
+   `CreateIncidentUseCase.ts`.
+5. **Decisão de incidente LGPD — dois booleanos/duas justificativas
+   (contrato de API) vs. um único `communication_decision`/
+   `communication_justification` (schema real)** — `DecideIncidentUseCase`
+   combina `notify_anpd`+`notify_data_subjects` no enum
+   (`communicate_anpd`/`communicate_subjects`/`communicate_both`/
+   `not_communicate`) e concatena as duas justificativas com prefixo por
+   destinatário (`"ANPD: ... | Titulares: ..."`), preservando as duas
+   evidências textuais em um único campo. Ambas continuam obrigatórias
+   mesmo com o booleano `false` (BR-JUR-042), validado antes da combinação.
+6. **`cost_center_id` em `GET /reports/financeiro`** — o exemplo de
+   contrato (§8.2) mostra `cost_center_id` também no array `provisions`,
+   mas `jur_legal_case_provisions` não tem essa coluna (só
+   `accounts_payable` tem). `FinancialReportUseCase` retorna
+   `cost_center_id: null` para toda linha de `provisions` (limitação de
+   schema, documentada no próprio use case) e o valor real
+   (`accounts_payable.cost_center_id`) para `costs`.
+7. **RBAC de `trade_secret` (§6.3, RF-JUR-033)** implementado por
+   `role==='admin'` verificado dentro dos use cases
+   (`GetIpAssetByIdUseCase` lança `ForbiddenError`;
+   `ListIpAssetsUseCase`/`SequelizeIpAssetRepository.findAndCount` recebem
+   `excludeTradeSecret` e filtram/ zeram o resultado mesmo se o usuário
+   filtrar explicitamente por `type=trade_secret`), não na camada de rota —
+   é o único desvio do padrão `authorizeModule('juridico', nível)` do
+   módulo, conforme já antecipado pelo contrato.
+8. **`GET /reports/financeiro` com dois níveis de acesso** — montada
+   ANTES de `router.use(authorizeModule('juridico', 'operate'))` no router
+   agregador, com checagem inline no `reportController`
+   (`role==='admin' || permissions.financeiro || permissions.juridico`),
+   mesmo padrão de checagem redundante já usado em rotas cross-módulo de
+   SST/TI.
+
+### Documentações atualizadas
+
+- `docs/governance/HANDOFF_CODEX.md` — esta seção (passada 2/2, backend
+  completo do Bloco 3, exceto `corporate-acts`).
+- `docs/governance/TODO.md` — item do Bloco 3 atualizado para "backend
+  69/71 (100% do que tem tabela modelada) — resta frontend + `corporate-acts`
+  (sem tabela, fora de escopo)".
+- JSDoc: todo repositório, use case, controller e rota novos desta passada
+  têm cabeçalho JSDoc explicando RF/UC/regra de negócio associada, incluindo
+  as 8 reconciliações de schema↔contrato acima (comentadas nos próprios
+  arquivos, não só aqui).
+- **Não atualizado nesta passada** (fora do escopo de um agente de
+  backend, mesma pendência já sinalizada na passada 1):
+  `docs/juridico/01-CONTRATOS.md`/`02-PROPRIEDADE_INTELECTUAL.md`,
+  `docs/projeto/04-USE_CASES.md` (novas seções UC-55-JUR/UC-56-JUR),
+  `docs/database/DATABASE.md` (nenhuma migration nova nesta passada, então
+  não há mudança de schema a documentar ali — mantém a nota da passada 1).
+
+### Instruções de teste
+
+1. `cd server && npm run typecheck` — limpo (0 erros).
+2. `cd server && npx jest tests/unit --runInBand` — 1069/1070 passando; a
+   única falha (`onda3-shipping-cockpit-cashflow.test.ts`) é pré-existente,
+   dependente de data corrente, não relacionada a este bloco (mesma falha
+   já documentada na passada 1).
+3. Testes novos: `juridico-proxy-ip-use-cases.test.ts` (25 testes: criação/
+   revogação/expiração automática de procuração, criação/RBAC `trade_secret`
+   de PI, vínculo N:N contrato) e `juridico-lgpd-alert-use-cases.test.ts`
+   (20 testes: RoPA, verificação de identidade/resolução/rejeição de
+   solicitação de titular, decisão/encerramento de incidente LGPD,
+   `acknowledge` de alerta nunca desativa).
+4. **NÃO validado nesta passada (exige Postgres real, mesma ressalva da
+   passada 1):**
+   - Fluxo E2E completo de qualquer um dos 4 grupos novos contra o banco
+     real (só testes unitários com repositório mockado rodaram).
+   - `CHECK`s reais de `jur_lgpd_data_subject_requests`
+     (`ck_jur_lgpd_dsr_in_progress_requires_verification`,
+     `ck_jur_lgpd_dsr_rejected_requires_justification`) e
+     `jur_lgpd_incidents` (`ck_jur_lgpd_incidents_closed_requires_decision`)
+     — os use cases replicam a mesma regra em aplicação (dupla camada
+     intencional), mas o `CHECK` do banco em si nunca foi exercitado.
+   - `GET /api/jur/reports/financeiro` contra volume real de
+     `accounts_payable`/`jur_legal_case_provisions` (a query faz `Promise.all`
+     de 3 fontes — `listAllCurrentProvisions` em SQL bruto,
+     `listAllReferences`, `listPayablesByLegalCase` — nunca combinadas
+     contra dados reais).
+   - `uq_jur_ip_contract_links_ip_contract` (par único) — `LinkIpContractUseCase`
+     captura `SequelizeUniqueConstraintError` e converte para `ConflictError`,
+     mas nunca disparado contra o banco real.
+
+### Riscos residuais / pendências
+
+- **`corporate-acts` (RF-JUR-030) sem tabela** — 2 endpoints do Grupo 4 não
+  implementados; se o próximo passo do produto decidir modelar
+  `jur_corporate_acts`, é uma extensão pequena (mesmo padrão CRUD simples
+  de `JurExternalLawyer`).
+- **Alçada de aprovação de contrato (RF-JUR-003)** segue sem tabela — igual
+  à passada 1, não avançado nesta passada (fora do escopo — pertence ao
+  Grupo 1, já entregue).
+- **Frontend do Bloco 3 completo ainda não existe** — o backend fecha
+  69/71 endpoints; a reconstrução/criação das telas
+  (Contratos/Contencioso/Prazos Fatais parcialmente já previstas na
+  passada 1, e as 4 telas novas — Procurações, PI, LGPD com 3 sub-abas,
+  Alertas) é responsabilidade do próximo passo do pipeline (frontend).
+- **Reconciliações #2/#5/#6 acima** (título de PI derivado, decisão LGPD
+  combinada em campo único, `cost_center_id` nulo em provisões do relatório
+  financeiro) são desvios deliberados do contrato de API literal para caber
+  no schema já aplicado — se o schema for revisado no futuro (nova
+  migration), os use cases devem ser revisitados junto.
+- **DPO/Encarregado (RF-JUR-041) sem cadastro formal** — herdado do próprio
+  contrato de API (pendência #2 do handoff de `BLOCO_3_JUR_API.md`), não
+  resolvido nesta passada.
