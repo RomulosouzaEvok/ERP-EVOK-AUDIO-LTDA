@@ -3,10 +3,14 @@ import type { ItemResponse } from './types';
 
 /**
  * Chave estável de módulo — espelha `server/src/shared/domain/accessModules.ts`
- * (29 módulos). `manutencao`/`garantia` adicionados no Bloco A/E
+ * (30 módulos). `manutencao`/`garantia` adicionados no Bloco A/E
  * (`docs/governance/TODO_REORGANIZACAO_DEPARTAMENTOS.md`), cobrindo os
  * departamentos novos "Manutenção" e "Ativos & Garantia". `comex` adicionado
- * em 2026-08-06 (UC-19) para o módulo de Importação/COMEX.
+ * em 2026-08-06 (UC-19) para o módulo de Importação/COMEX. `facilities`
+ * adicionado em 2026-08-07 para o módulo Facilities (departamento 17, FAC).
+ * `marketing` adicionado em 2026-08-07 para o módulo Marketing
+ * (departamento 14, MKT). `juridico` adicionado em 2026-08-07 para o
+ * módulo Jurídico (departamento 16, JUR).
  */
 export type AccessModuleKey =
   | 'dashboard'
@@ -35,6 +39,9 @@ export type AccessModuleKey =
   | 'rh'
   | 'sst'
   | 'ti'
+  | 'facilities'
+  | 'marketing'
+  | 'juridico'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'

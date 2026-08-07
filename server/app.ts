@@ -188,6 +188,9 @@ app.use('/api/traceability', require('./src/modules/traceability/presentation/ro
 app.use('/api/webhooks', require('./src/modules/webhooks/presentation/routes/webhooks'));
 app.use('/api/sst', require('./src/modules/sst/presentation/routes/sst'));
 app.use('/api/ti', require('./src/modules/ti/presentation/routes/ti'));
+app.use('/api/facilities', require('./src/modules/facilities/presentation/routes/facilities'));
+app.use('/api/marketing', require('./src/modules/marketing/presentation/routes/marketing'));
+app.use('/api/legal', require('./src/modules/legal/presentation/routes/legal'));
 
 app.use('/uploads', express.static('uploads'));
 

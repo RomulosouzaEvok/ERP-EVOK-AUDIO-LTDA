@@ -125,6 +125,17 @@ import ItLicenseSeat = require('./ItLicenseSeat');
 import ItAccessRequest = require('./ItAccessRequest');
 import ItBackupLog = require('./ItBackupLog');
 import TiSettings = require('./TiSettings');
+import FacilityVehicle = require('./FacilityVehicle');
+import FacilityFuelRecord = require('./FacilityFuelRecord');
+import FacilityCleaningSchedule = require('./FacilityCleaningSchedule');
+import FacilityArea = require('./FacilityArea');
+import MarketingCampaign = require('./MarketingCampaign');
+import MarketingLead = require('./MarketingLead');
+import MarketingMaterial = require('./MarketingMaterial');
+import LegalContract = require('./LegalContract');
+import LegalContractAddendum = require('./LegalContractAddendum');
+import LegalContractReminder = require('./LegalContractReminder');
+import LegalIntellectualProperty = require('./LegalIntellectualProperty');
 
 // ============================================
 // RELACIONAMENTOS
@@ -1002,6 +1013,50 @@ ItBackupLog.belongsTo(ItTicket, { foreignKey: 'generated_ticket_id', as: 'genera
 User.hasMany(ItBackupLog, { foreignKey: 'verified_by', as: 'it_backup_logs_verificados' });
 ItBackupLog.belongsTo(User, { foreignKey: 'verified_by', as: 'verifiedByUser' });
 
+// ============================================
+// RELACIONAMENTOS - FACILITIES (departamento 17, FAC)
+// ============================================
+
+// FacilityVehicle ↔ FacilityFuelRecord
+FacilityVehicle.hasMany(FacilityFuelRecord, { foreignKey: 'vehicle_id', as: 'fuelRecords' });
+FacilityFuelRecord.belongsTo(FacilityVehicle, { foreignKey: 'vehicle_id', as: 'vehicle' });
+
+// Employee ↔ FacilityFuelRecord (driver)
+Employee.hasMany(FacilityFuelRecord, { foreignKey: 'driver_id', as: 'facility_fuel_records' });
+FacilityFuelRecord.belongsTo(Employee, { foreignKey: 'driver_id', as: 'driver' });
+
+// Department ↔ FacilityArea
+Department.hasMany(FacilityArea, { foreignKey: 'department_id', as: 'facility_areas' });
+FacilityArea.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+
+// ============================================
+// RELACIONAMENTOS - MARKETING (departamento 14, MKT)
+// ============================================
+
+// MarketingCampaign ↔ MarketingLead
+MarketingCampaign.hasMany(MarketingLead, { foreignKey: 'campaign_id', as: 'leads' });
+MarketingLead.belongsTo(MarketingCampaign, { foreignKey: 'campaign_id', as: 'campaign' });
+
+// Client ↔ MarketingLead (conversão de lead em cliente real)
+Client.hasMany(MarketingLead, { foreignKey: 'converted_to_customer_id', as: 'marketing_leads' });
+MarketingLead.belongsTo(Client, { foreignKey: 'converted_to_customer_id', as: 'convertedCustomer' });
+
+// Item ↔ MarketingMaterial
+Item.hasMany(MarketingMaterial, { foreignKey: 'product_id', as: 'marketing_materials' });
+MarketingMaterial.belongsTo(Item, { foreignKey: 'product_id', as: 'product' });
+
+// ============================================
+// RELACIONAMENTOS - JURÍDICO (departamento 16, JUR)
+// ============================================
+
+// LegalContract ↔ LegalContractAddendum
+LegalContract.hasMany(LegalContractAddendum, { foreignKey: 'contract_id', as: 'addendums' });
+LegalContractAddendum.belongsTo(LegalContract, { foreignKey: 'contract_id', as: 'contract' });
+
+// LegalContract ↔ LegalContractReminder
+LegalContract.hasMany(LegalContractReminder, { foreignKey: 'contract_id', as: 'reminders' });
+LegalContractReminder.belongsTo(LegalContract, { foreignKey: 'contract_id', as: 'contract' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -1039,5 +1094,8 @@ export {
   SstMatrizTreinamento, SstTreinamento,
   SstInspecaoSeguranca, SstInspecaoItem, SstPermissaoTrabalho, SstPtExecutante, SstBrigadista, SstRegistroDds, SstDdsPresenca,
   ItTicketCategory, ItTicket, ItTicketComment, ItTicketPriorityHistory,
-  ItResponsibilityTerm, ItSoftwareLicenseDetail, ItLicenseSeat, ItAccessRequest, ItBackupLog, TiSettings
+  ItResponsibilityTerm, ItSoftwareLicenseDetail, ItLicenseSeat, ItAccessRequest, ItBackupLog, TiSettings,
+  FacilityVehicle, FacilityFuelRecord, FacilityCleaningSchedule, FacilityArea,
+  MarketingCampaign, MarketingLead, MarketingMaterial,
+  LegalContract, LegalContractAddendum, LegalContractReminder, LegalIntellectualProperty
 };

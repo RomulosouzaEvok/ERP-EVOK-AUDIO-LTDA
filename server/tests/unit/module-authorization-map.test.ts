@@ -69,6 +69,9 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   'engineering',
   'sst',
   'ti',
+  'facilities',
+  'marketing',
+  'legal',
 ];
 
 /**

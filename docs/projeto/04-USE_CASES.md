@@ -1701,4 +1701,108 @@ RF-TI, 18 BR-TI, RNF-TI-01 a 05) e `docs/business/BLOCO_2_TI_API.md`
 
 ---
 
+## UC-52 (implementado): Módulo Facilities — Frota, Abastecimento, Limpeza, Áreas Físicas
+
+**Departamento:** 17 — Facilities (FAC). Backend implementado do zero
+(nenhum código existia antes, apenas a linha do departamento em `seeds.ts`
+e um esboço `[PENDENTE]` em `docs/administrativo/03-FACILITIES.md`) em
+`server/src/modules/facilities/`, montado em `/api/facilities`. Tela web em
+`/facilities` (`client/src/pages/facilities/FacilitiesPage.tsx`, 4 abas).
+
+Módulo essencialmente de cadastro/controle, sem máquina de estados nem
+fluxo de aprovação — CRUD create/list/get/update (sem delete, físico ou
+lógico) para 4 entidades independentes entre si (exceto FKs de referência):
+
+- **Frota de veículos** (`facility_vehicles`): placa única, dados do
+  veículo, seguro, status (`active`/`maintenance`/`deactivated`/`sold`).
+  `POST` rejeita placa duplicada com `ConflictError` (409).
+- **Abastecimento** (`facility_fuel_records`): histórico por veículo
+  (FK obrigatória `vehicle_id`, `ON DELETE RESTRICT`), motorista opcional
+  (FK `driver_id → employees`, `ON DELETE SET NULL`). `total_cost`
+  calculado automaticamente (`liters * price_per_liter`) quando não
+  informado. `POST` rejeita `vehicle_id` inexistente com `NotFoundError`
+  (404).
+- **Programação de limpeza** (`facility_cleaning_schedules`): área em texto
+  livre (decisão consciente — não FK para `facility_areas`, cobre áreas
+  informais sem cadastro formal), frequência, responsável, última/próxima
+  limpeza.
+- **Áreas físicas** (`facility_areas`): tipo, m², capacidade de pessoas,
+  departamento opcional (FK `department_id → departments`,
+  `ON DELETE SET NULL`).
+
+**RBAC:** novo módulo `facilities` em
+`server/src/shared/domain/accessModules.ts` (espelhado em
+`client/src/api/accessProfiles.ts`) — leitura em nível padrão (`operate`,
+mesmo padrão de `centros_de_trabalho`/`sst`/`ti`), escrita explicitamente
+`authorizeModule('facilities', 'operate')`. Sem nível `approve`.
+
+**Testes:** `server/tests/unit/facilities-vehicle-use-cases.test.ts` (6),
+`facilities-fuel-record-use-cases.test.ts` (3),
+`facilities-cleaning-schedule-use-cases.test.ts` (3),
+`facilities-area-use-cases.test.ts` (2) — 14 casos novos, cobrindo os fluxos
+principais (criar veículo, listar frota, criar abastecimento com cálculo
+automático de custo, criar programação de limpeza) e os principais fluxos
+de exceção (placa/veículo duplicados, entidade inexistente). Ver
+`docs/governance/HANDOFF_CODEX.md` e `docs/administrativo/03-FACILITIES.md`
+(contrato completo de 16 endpoints).
+
+---
+
+## UC-53 (implementado): Módulo Marketing — Campanhas, Leads (funil), Materiais de Divulgação
+
+**Departamento:** 14 — Marketing (MKT). Backend implementado do zero
+(nenhum código existia antes, apenas a linha do departamento em `seeds.ts`
+e um esboço de 3 tabelas em sintaxe MySQL, nunca migradas, em
+`docs/comercial/02-MARKETING.md`) em `server/src/modules/marketing/`,
+montado em `/api/marketing`. Tela web em `/marketing`
+(`client/src/pages/marketing/MarketingPage.tsx`, 3 abas).
+
+CRUD create/list/get/update (sem delete, físico ou lógico) para 3
+entidades:
+
+- **Campanhas** (`marketing_campaigns`): tipo (`ads`/`social`/`email`/
+  `event`/`trade`/`content`), datas, orçamento/custo real, contadores
+  `leads_generated`/`conversions` (incrementados automaticamente pelo
+  fluxo de Lead, não exigem atualização manual), ROI informado
+  manualmente, status (`planned`/`active`/`paused`/`completed`/
+  `canceled`). `POST`/`PUT` rejeitam `end_date` anterior a `start_date`
+  com `ValidationError` (400).
+- **Leads** (`marketing_leads`): FK opcional `campaign_id` (`ON DELETE
+  SET NULL`), origem, score, FK opcional `converted_to_customer_id` →
+  `clients` (`ON DELETE SET NULL`). O funil é uma **ação dedicada**
+  (`ChangeLeadStatusUseCase`, `POST /api/marketing/leads/:id/status`),
+  não um `PUT` genérico irrestrito — mesmo espírito de
+  `ChangeSaleStatusUseCase`, porém mais simples (sem efeito colateral de
+  estoque/financeiro): `new -> contacted -> qualified -> converted/lost`,
+  `lost` alcançável de qualquer etapa aberta, `converted`/`lost`
+  terminais, transições fora do mapa retornam 422 (`BusinessRuleError`).
+  Ao converter, incrementa `marketing_campaigns.conversions` se houver
+  campanha de origem.
+- **Materiais de divulgação** (`marketing_materials`): tipo (`catalog`/
+  `flyer`/`banner`/`video`/`manual`/`technical_sheet`/`presentation`), FK
+  opcional `product_id` → `items.id` (**UUID**, não INT — diferença
+  deliberada do esboço original em MySQL). Upload de arquivo separado da
+  criação dos metadados (`POST /api/marketing/materials/:id/file`,
+  multipart, campo `file`, até 50MB, extensões
+  imagem/PDF/vídeo/apresentação/documento).
+
+**RBAC:** novo módulo `marketing` em
+`server/src/shared/domain/accessModules.ts` (espelhado em
+`client/src/api/accessProfiles.ts`) — leitura em nível padrão (`operate`,
+mesmo padrão de `facilities`/`centros_de_trabalho`/`sst`/`ti`), escrita
+explicitamente `authorizeModule('marketing', 'operate')`. Sem nível
+`approve`.
+
+**Testes:** `server/tests/unit/marketing-campaign-use-cases.test.ts` (7),
+`marketing-lead-use-cases.test.ts` (11),
+`marketing-material-use-cases.test.ts` (7) — 25 casos novos, cobrindo os
+fluxos principais (criar campanha, criar lead com/sem campanha, avançar o
+funil, converter lead, criar/aprovar material, upload de arquivo) e os
+principais fluxos de exceção (datas inválidas, campanha/lead/material
+inexistente, transição de funil inválida, upload sem arquivo). Ver
+`docs/governance/HANDOFF_CODEX.md` e `docs/comercial/02-MARKETING.md`
+(contrato completo de 13 endpoints).
+
+---
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

@@ -2124,3 +2124,106 @@ qualquer módulo futuro com a mesma necessidade (RNF-TI-02).
 
 Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo desta
 entrega (endpoints implementados, testes, pendências, decisões próprias).
+
+---
+
+## Módulo Facilities — Implementação Backend + Frontend do zero (2026-08-07)
+
+Módulo Facilities (departamento 17, sigla FAC) não tinha NENHUM código
+antes desta entrega — apenas a linha do departamento em `departments`
+(seed) e um esboço `[PENDENTE]` em sintaxe MySQL em
+`docs/administrativo/03-FACILITIES.md`. Implementado do zero: 4 tabelas,
+4 models Sequelize, módulo Clean Architecture completo
+(`server/src/modules/facilities/`), CRUD create/list/get/update (sem
+delete) e tela web com 4 abas.
+
+### Tabelas novas (4)
+
+Migration única `20260807-000200-create-facilities-module.cjs` (idempotente).
+
+| Tabela | Model Sequelize | Observação |
+|---|---|---|
+| `facility_vehicles` | `FacilityVehicle` | Nome prefixado `facility_` (não `fleet_vehicles`, nome do spec original) para evitar colisão com uma futura frota de logística/expedição. `plate` único. |
+| `facility_fuel_records` | `FacilityFuelRecord` | FK `vehicle_id` → `facility_vehicles` (`ON DELETE RESTRICT`), FK opcional `driver_id` → `employees` (`ON DELETE SET NULL`). Coluna `record_date` (não `date`, nome do spec original — evita nome ambíguo/reservado). |
+| `facility_cleaning_schedules` | `FacilityCleaningSchedule` | `area` é texto livre (não FK para `facility_areas` — cobre áreas informais não cadastradas formalmente). |
+| `facility_areas` | `FacilityArea` | FK opcional `department_id` → `departments` (`ON DELETE SET NULL`). |
+
+Nenhuma das 4 tabelas tem soft delete (`CLAUDE.md` §7 reserva soft delete
+apenas para `Category`) — não há endpoint de delete físico ou lógico neste
+módulo (escopo: create/list/get/update).
+
+### RBAC
+
+Novo módulo `facilities` em `server/src/shared/domain/accessModules.ts`
+(espelhado em `client/src/api/accessProfiles.ts`) — todas as rotas usam
+`authorizeModule('facilities', ...)`, leitura no nível padrão (`operate`,
+mesmo padrão de `centros_de_trabalho`/`sst`/`ti`) e escrita explicitamente
+com `authorizeModule('facilities', 'operate')`. Sem nível `approve` — módulo
+essencialmente de cadastro/controle.
+
+### Frontend
+
+`client/src/pages/facilities/FacilitiesPage.tsx` (4 abas: Frota,
+Abastecimento, Limpeza, Áreas), `client/src/api/facilities.ts`. Rota
+`/facilities` protegida por `ModuleRoute module="facilities"`, item de menu
+em "Administração" (junto de TI).
+
+Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo desta
+entrega (endpoints, testes, decisões próprias).
+
+---
+
+## Módulo Marketing — Implementação Backend + Frontend do zero (2026-08-07)
+
+Módulo Marketing (departamento 14, sigla MKT) não tinha NENHUM código antes
+desta entrega — apenas a linha do departamento em `departments` (seed) e 3
+tabelas apresentadas em sintaxe MySQL como se fossem reais em
+`docs/comercial/02-MARKETING.md` (nunca migradas). Implementado do zero: 3
+tabelas, 3 models Sequelize, módulo Clean Architecture completo
+(`server/src/modules/marketing/`), CRUD create/list/get/update (sem delete),
+funil de leads como ação dedicada e upload de arquivo de material, com tela
+web de 3 abas.
+
+### Tabelas novas (3)
+
+Migration única `20260807-000210-create-marketing-module.cjs` (idempotente).
+
+| Tabela | Model Sequelize | Observação |
+|---|---|---|
+| `marketing_campaigns` | `MarketingCampaign` | `campaign_type` (`ads`/`social`/`email`/`event`/`trade`/`content`), `status` (`planned`/`active`/`paused`/`completed`/`canceled`), contadores `leads_generated`/`conversions` incrementados automaticamente pelos casos de uso de Lead (não editáveis livremente via `PUT`, mas aceitos no payload para correção manual). |
+| `marketing_leads` | `MarketingLead` | FK opcional `campaign_id` → `marketing_campaigns` (`ON DELETE SET NULL`), FK opcional `converted_to_customer_id` → `clients` (`ON DELETE SET NULL`, populada quando o funil atinge `converted`). Funil (`status`) via ação dedicada `POST /api/marketing/leads/:id/status`, não `PUT` genérico. |
+| `marketing_materials` | `MarketingMaterial` | FK opcional `product_id` → `items.id` — **`UUID`, não `INTEGER`** (diferença deliberada do spec original em MySQL: `items.id` é UUID no schema real, mesmo padrão de `sst_tipo_epi.item_id`). `file_path` populado via `POST /api/marketing/materials/:id/file` (upload separado da criação dos metadados). |
+
+Nenhuma das 3 tabelas tem soft delete (`CLAUDE.md` §7 reserva soft delete
+apenas para `Category`) — `marketing_campaigns`/`marketing_leads` têm ciclo
+de vida via `status` enum; não há endpoint de delete físico ou lógico neste
+módulo (escopo: create/list/get/update).
+
+### Funil de leads (`ChangeLeadStatusUseCase`)
+
+`new -> contacted -> qualified -> converted/lost`. `lost` pode ser atingido
+de qualquer etapa aberta (desistência a qualquer momento); `converted`/
+`lost` são terminais. Transições fora do mapa (pular etapa, voltar etapa)
+são bloqueadas com 422 (`BusinessRuleError`). Ao converter, `converted_to_customer_id`
+é opcional (pode ser vinculado depois) e, se a campanha de origem existir,
+`marketing_campaigns.conversions` é incrementado na mesma operação.
+
+### RBAC
+
+Novo módulo `marketing` em `server/src/shared/domain/accessModules.ts`
+(espelhado em `client/src/api/accessProfiles.ts`) — todas as rotas usam
+`authorizeModule('marketing', ...)`, leitura no nível padrão (`operate`,
+mesmo padrão de `facilities`/`centros_de_trabalho`/`sst`/`ti`) e escrita
+explicitamente com `authorizeModule('marketing', 'operate')`. Sem nível
+`approve` — módulo essencialmente de cadastro/controle de funil.
+
+### Frontend
+
+`client/src/pages/marketing/MarketingPage.tsx` (3 abas: Campanhas, Leads —
+kanban simples por status com botões de avanço/perda —, Materiais),
+`client/src/api/marketing.ts`. Rota `/marketing` protegida por
+`ModuleRoute module="marketing"`, item de menu no grupo "Vendas" (junto de
+Vendas).
+
+Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo desta
+entrega (endpoints, testes, decisões próprias).

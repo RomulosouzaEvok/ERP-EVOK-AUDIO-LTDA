@@ -1,5 +1,15 @@
 # Marketing e Comunicação - Módulo Comercial
 
+> **[IMPLEMENTADO em 2026-08-07]** As tabelas abaixo são reais em
+> PostgreSQL (migration `20260807-000210-create-marketing-module.cjs`),
+> com endpoints REST em `/api/marketing/*` e tela web em `/marketing`.
+> Ver `server/src/modules/marketing/` (Clean Architecture) e
+> `docs/database/DATABASE.md` (seção "Módulo Marketing"). Antes desta
+> entrega, o departamento existia apenas como linha em `departments`
+> (seed) — o bloco SQL que existia aqui era apenas um esboço em sintaxe
+> MySQL, nunca migrado; foi substituído pelo contrato real (schema
+> PostgreSQL + endpoints) na seção "Escopo implementado" abaixo.
+
 ## Departamento de Marketing (MKT)
 
 ### Estrutura do Departamento
@@ -47,57 +57,71 @@
 | Driver de Compressão | EVOK-DR-250 | Profissional (caixas acústicas) | R$ 199,90 |
 | Subwoofer 18" 1000W | EVOK-SW-18 | PSW, grandes eventos | R$ 599,90 |
 
-### Tabelas SQL
+### Escopo implementado (2026-08-07)
 
-```sql
--- CAMPANHAS DE MARKETING
-CREATE TABLE marketing_campaigns (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(200) NOT NULL,
-    description TEXT,
-    campaign_type ENUM('ads','social','email','event','trade','content'),
-    start_date DATE NOT NULL,
-    end_date DATE,
-    budget DECIMAL(15,2),
-    actual_cost DECIMAL(15,2),
-    target_audience VARCHAR(255),
-    channel VARCHAR(100),
-    leads_generated INT DEFAULT 0,
-    conversions INT DEFAULT 0,
-    roi DECIMAL(10,2),
-    status ENUM('planned','active','paused','completed','canceled'),
-    created_at DATETIME,
-    updated_at DATETIME
-);
+CRUD completo (create/list/get/update — **sem delete**, físico ou lógico)
+para 3 entidades. RBAC via módulo `marketing` (`authorizeModule`), leitura
+em nível padrão (`operate`) e escrita explicitamente em `operate` — sem
+fluxo de aprovação (`approve`) neste módulo.
 
--- LEADS DE MARKETING
-CREATE TABLE marketing_leads (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    campaign_id INT,
-    name VARCHAR(200) NOT NULL,
-    email VARCHAR(100),
-    phone VARCHAR(20),
-    company VARCHAR(200),
-    interest VARCHAR(255),
-    lead_source ENUM('website','instagram','facebook','google','email','event','indication','other'),
-    lead_score INT DEFAULT 0,
-    status ENUM('new','contacted','qualified','converted','lost'),
-    converted_to_customer_id INT,
-    created_at DATETIME
-);
+#### 1. Campanhas (`marketing_campaigns`)
 
--- MATERIAL DE DIVULGAÇÃO
-CREATE TABLE marketing_materials (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    title VARCHAR(200) NOT NULL,
-    material_type ENUM('catalog','flyer','banner','video','manual','technical_sheet','presentation'),
-    product_id INT,
-    file_path VARCHAR(255),
-    version VARCHAR(10) DEFAULT '01',
-    approved BOOLEAN DEFAULT false,
-    created_at DATETIME
-);
-```
+Nome, descrição, tipo (`ads`/`social`/`email`/`event`/`trade`/`content`),
+datas início/fim, orçamento previsto, custo real, público-alvo, canal,
+contadores `leads_generated`/`conversions` (incrementados automaticamente
+quando um lead é criado vinculado à campanha ou avança para `converted`),
+ROI (informado manualmente — o backend não impõe fórmula de cálculo),
+status (`planned`/`active`/`paused`/`completed`/`canceled`).
+
+| Endpoint | Descrição |
+|---|---|
+| `GET /api/marketing/campaigns` | Lista paginada, filtros opcionais `status`/`campaign_type` |
+| `GET /api/marketing/campaigns/:id` | Busca por id |
+| `POST /api/marketing/campaigns` | Cria (422 se `end_date` anterior a `start_date`) |
+| `PUT /api/marketing/campaigns/:id` | Atualiza |
+
+#### 2. Leads (`marketing_leads`)
+
+FK opcional `campaign_id` (lead pode não vir de uma campanha formal), nome,
+email, telefone, empresa, interesse, origem (`website`/`instagram`/
+`facebook`/`google`/`email`/`event`/`indication`/`other`), score,
+`converted_to_customer_id` (FK opcional para `clients`, populada quando o
+lead vira cliente real). O funil (`status`: `new -> contacted -> qualified
+-> converted/lost`) é uma **ação dedicada**, não um `PUT` genérico
+irrestrito — `lost` pode ser atingido de qualquer etapa aberta; `converted`/
+`lost` são terminais; transições fora do mapa retornam 422.
+
+| Endpoint | Descrição |
+|---|---|
+| `GET /api/marketing/leads` | Lista paginada, filtros opcionais `status`/`campaign_id`/`lead_source` |
+| `GET /api/marketing/leads/:id` | Busca por id |
+| `POST /api/marketing/leads` | Cria (404 se `campaign_id` informado e inexistente) |
+| `PUT /api/marketing/leads/:id` | Atualiza dados cadastrais (não altera `status`) |
+| `POST /api/marketing/leads/:id/status` | Avança o lead no funil (422 se transição inválida) |
+
+#### 3. Materiais de divulgação (`marketing_materials`)
+
+Título, tipo (`catalog`/`flyer`/`banner`/`video`/`manual`/
+`technical_sheet`/`presentation`), FK opcional `product_id` → `items.id`
+(**UUID**, não INT — material pode não ser de um produto específico, ex.
+material institucional/de marca), caminho do arquivo, versão, aprovado. O
+arquivo em si é enviado separadamente da criação dos metadados.
+
+| Endpoint | Descrição |
+|---|---|
+| `GET /api/marketing/materials` | Lista paginada, filtros opcionais `material_type`/`product_id`/`approved` |
+| `GET /api/marketing/materials/:id` | Busca por id |
+| `POST /api/marketing/materials` | Cria os metadados (arquivo enviado depois) |
+| `PUT /api/marketing/materials/:id` | Atualiza metadados |
+| `POST /api/marketing/materials/:id/file` | Envia/substitui o arquivo (multipart, campo `file`; imagem/PDF/vídeo/apresentação/documento, até 50MB) |
+
+### Fora do escopo desta entrega
+
+- Cálculo automático de ROI (informado manualmente pelo usuário).
+- Histórico multi-arquivo por material (só a versão atual é mantida —
+  `version` é texto livre informativo, sem trilha de versões anteriores).
+- Integração com ferramentas externas de email marketing/Ads (Google
+  Ads, RD Station, etc.) — cadastro manual apenas.
 
 ### Eventos e Feiras do Setor de Áudio
 
@@ -125,3 +149,7 @@ CREATE TABLE marketing_materials (
 | Outubro | Expo Áudio & Pro | Equipe |
 | Novembro | Black Friday | Analista MKT |
 | Dezembro | Balanço, planejamento do próximo ano | Coordenador MKT |
+
+---
+
+**Última atualização:** 2026-08-07

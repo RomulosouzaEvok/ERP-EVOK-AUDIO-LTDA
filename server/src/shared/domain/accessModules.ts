@@ -1,7 +1,7 @@
 /**
  * 🔐 Catálogo fixo de módulos atribuíveis a um Perfil de Acesso (área/departamento).
  *
- * Fonte única de verdade (SSOT) da lista de 28 `module keys` válidos usada
+ * Fonte única de verdade (SSOT) da lista de 29 `module keys` válidos usada
  * por:
  * - `server/src/middlewares/auth.ts` (`authorizeModule`), para resolver e
  *   validar o módulo dono de uma ação;
@@ -67,6 +67,31 @@
  * do `ArquitetoSoftwareAPI`; este comentário só registra que `ti` não é, e
  * nunca deve ser, usado para bloquear a rota de auto-serviço.
  *
+ * `facilities` foi adicionado em 2026-08-07 para o módulo Facilities
+ * (Facilities/Serviços Gerais, departamento 17, sigla FAC —
+ * `docs/administrativo/03-FACILITIES.md`), implementado do zero: frota de
+ * veículos, abastecimento, programação de limpeza e áreas físicas. Módulo
+ * essencialmente de cadastro/controle, sem fluxo de aprovação crítico —
+ * todas as rotas usam `authorizeModule('facilities', 'operate')` para
+ * escrita e `authorizeModule('facilities')` (nível `operate` implícito,
+ * mesmo padrão de `centros_de_trabalho`/`sst`/`ti`) para leitura.
+ *
+ * `marketing` foi adicionado em 2026-08-07 para o módulo Marketing
+ * (Marketing e Comunicação, departamento 14, sigla MKT —
+ * `docs/comercial/02-MARKETING.md`), implementado do zero: campanhas, leads
+ * (com funil dedicado) e materiais de divulgação (com upload de arquivo).
+ * Mesmo padrão de `facilities`: sem nível `approve`, escrita usa
+ * `authorizeModule('marketing', 'operate')`, leitura usa
+ * `authorizeModule('marketing')` (nível `operate` implícito).
+ *
+ * `juridico` foi adicionado em 2026-08-07 para o módulo Jurídico
+ * (departamento 16, sigla JUR — `docs/juridico/01-CONTRATOS.md` e
+ * `docs/juridico/02-PROPRIEDADE_INTELECTUAL.md`), implementado do zero:
+ * contratos (com aditivos, lembretes de prazo e upload de instrumento) e
+ * propriedade intelectual. Mesmo padrão de `facilities`/`marketing`: sem
+ * nível `approve`, escrita usa `authorizeModule('juridico', 'operate')`,
+ * leitura usa `authorizeModule('juridico')` (nível `operate` implícito).
+ *
  * @module shared/domain/accessModules
  */
 
@@ -98,6 +123,9 @@ export type AccessModuleKey =
   | 'rh'
   | 'sst'
   | 'ti'
+  | 'facilities'
+  | 'marketing'
+  | 'juridico'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'
@@ -146,6 +174,9 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   { key: 'rh', label: 'Recursos Humanos (dados sensíveis)' },
   { key: 'sst', label: 'Segurança e Saúde do Trabalho (dados sensíveis)' },
   { key: 'ti', label: 'Tecnologia da Informação (helpdesk, patrimônio de TI, acessos)' },
+  { key: 'facilities', label: 'Facilities (frota, limpeza, manutenção predial)' },
+  { key: 'marketing', label: 'Marketing (campanhas, leads, materiais)' },
+  { key: 'juridico', label: 'Jurídico (contratos, propriedade intelectual)' },
   { key: 'rastreabilidade', label: 'Rastreabilidade' },
   { key: 'financeiro', label: 'Financeiro' },
   { key: 'relatorios.producao', label: 'Relatórios de Produção' },

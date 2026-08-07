@@ -3295,3 +3295,150 @@ completo.
   `GET /backup-logs/health` funciona como fallback determinístico,
   conforme já previsto pela API); dashboard/KPI consolidado (RF-TI-045, sem
   endpoint neste bloco, pendência já declarada).
+
+## 2026-08-07 — Módulo Facilities implementado do zero (backend + frontend) — `programador`
+
+**Escopo:** departamento 17 (Facilities, FAC) não tinha NENHUM código antes
+desta entrega — apenas a linha em `departments` (seed) e um esboço
+`[PENDENTE]` em sintaxe MySQL em `docs/administrativo/03-FACILITIES.md`.
+Implementado do zero: migration PostgreSQL, 4 models Sequelize, módulo
+Clean Architecture completo (`server/src/modules/facilities/`), 16
+endpoints REST em `/api/facilities`, tela web `/facilities` (4 abas). Ver
+`docs/database/DATABASE.md` seção "Módulo Facilities" e
+`docs/governance/HANDOFF_CODEX.md` para o handoff completo.
+
+- [x] Migration `20260807-000200-create-facilities-module.cjs` criada e
+  **aplicada** ao Postgres local (`npm run migration:up --prefix server`,
+  confirmado com `migration:status`) — `facility_vehicles`,
+  `facility_fuel_records`, `facility_cleaning_schedules`, `facility_areas`.
+- [x] CRUD completo (create/list/get/update, sem delete) para as 4
+  entidades, RBAC via novo módulo `facilities` em `accessModules.ts`
+  (espelhado no client), leitura em nível padrão/escrita em `operate`.
+- [x] Tela web `client/src/pages/facilities/FacilitiesPage.tsx` (Frota,
+  Abastecimento, Limpeza, Áreas), API client `client/src/api/facilities.ts`,
+  rota `/facilities` protegida por `ModuleRoute module="facilities"`, item
+  de menu em Administração.
+- [x] `npm run typecheck --prefix server`: 0 erros.
+- [x] `npx tsc --noEmit --project client` (a partir de `client/`): 0 erros.
+- [x] `npx jest tests/unit --runInBand --prefix server`: 889/890 passando
+  (1 falha pré-existente e conhecida em
+  `onda3-shipping-cockpit-cashflow.test.ts`, não relacionada a este
+  módulo) — 14 testes novos do módulo Facilities
+  (`facilities-vehicle-use-cases`, `facilities-fuel-record-use-cases`,
+  `facilities-cleaning-schedule-use-cases`, `facilities-area-use-cases`),
+  0 regressões. `tests/unit/module-authorization-map.test.ts` atualizado
+  para incluir `facilities` na lista de módulos que exigem
+  `authorizeModule` (guarda anti-regressão).
+- [ ] Fora de escopo desta entrega (decisões conscientes, ver
+  `docs/administrativo/03-FACILITIES.md`): Controle de EPIs (já coberto
+  pelo módulo SST, não duplicado); Segurança/CFTV/alarme (sem cadastro
+  dedicado); vínculo formal entre `facility_cleaning_schedules.area` (texto
+  livre) e `facility_areas` (cadastro estruturado).
+
+## 2026-08-07 — Módulo Marketing implementado do zero (backend + frontend) — `programador`
+
+**Escopo:** departamento 14 (Marketing, MKT) não tinha NENHUM código antes
+desta entrega — apenas a linha em `departments` (seed) e um esboço de 3
+tabelas em sintaxe MySQL em `docs/comercial/02-MARKETING.md`, apresentadas
+como reais mas nunca migradas. Implementado do zero: migration PostgreSQL,
+3 models Sequelize, módulo Clean Architecture completo
+(`server/src/modules/marketing/`), 13 endpoints REST em `/api/marketing`,
+tela web `/marketing` (3 abas). Ver `docs/database/DATABASE.md` seção
+"Módulo Marketing" e `docs/governance/HANDOFF_CODEX.md` para o handoff
+completo.
+
+- [x] Migration `20260807-000210-create-marketing-module.cjs` criada e
+  **aplicada** ao Postgres local (`npm run migration:up --prefix server`,
+  confirmado com `migration:status`) — `marketing_campaigns`,
+  `marketing_leads`, `marketing_materials`.
+- [x] CRUD completo (create/list/get/update, sem delete) para as 3
+  entidades, RBAC via novo módulo `marketing` em `accessModules.ts`
+  (espelhado no client), leitura em nível padrão/escrita em `operate`.
+- [x] Funil de leads como ação dedicada (`ChangeLeadStatusUseCase`,
+  `POST /api/marketing/leads/:id/status`), não `PUT` genérico irrestrito —
+  `new -> contacted -> qualified -> converted/lost`, incrementa contadores
+  `leads_generated`/`conversions` da campanha vinculada automaticamente.
+- [x] Upload de arquivo de material dedicado
+  (`POST /api/marketing/materials/:id/file`, multipart, campo `file`, até
+  50MB) — `UploadMaterialFileUseCase` própria (não reaproveita
+  `UploadEntityPhotoUseCase`, que é fixada em imagem/`photo_path`).
+- [x] Tela web `client/src/pages/marketing/MarketingPage.tsx` (Campanhas,
+  Leads — kanban simples por status —, Materiais), API client
+  `client/src/api/marketing.ts`, rota `/marketing` protegida por
+  `ModuleRoute module="marketing"`, item de menu no grupo Vendas.
+- [x] `npm run typecheck --prefix server`: 0 erros.
+- [x] `npx tsc --noEmit --project client` (a partir de `client/`): 0 erros.
+- [x] `npx jest tests/unit --runInBand --prefix server`: 917/918 passando
+  (1 falha pré-existente e conhecida em
+  `onda3-shipping-cockpit-cashflow.test.ts`, não relacionada a este
+  módulo) — 25 testes novos do módulo Marketing
+  (`marketing-campaign-use-cases`, `marketing-lead-use-cases`,
+  `marketing-material-use-cases`), 0 regressões.
+  `tests/unit/module-authorization-map.test.ts` atualizado para incluir
+  `marketing` na lista de módulos que exigem `authorizeModule` (guarda
+  anti-regressão).
+- [ ] Fora de escopo desta entrega (decisões conscientes, ver
+  `docs/comercial/02-MARKETING.md`): cálculo automático de ROI (informado
+  manualmente); histórico multi-arquivo por material (só a versão atual é
+  mantida); integração com ferramentas externas de email marketing/Ads.
+
+## 2026-08-07 — Módulo Jurídico implementado do zero (backend + frontend) — `programador`
+
+**Escopo:** departamento 16 (Jurídico, JUR) não tinha NENHUM código antes
+desta entrega — apenas a linha em `departments` (seed) e dois specs
+(`docs/juridico/01-CONTRATOS.md`, `docs/juridico/02-PROPRIEDADE_INTELECTUAL.md`)
+com 3 tabelas em sintaxe MySQL apresentadas como reais, nunca migradas.
+Implementado do zero: migration PostgreSQL, 4 models Sequelize, módulo
+Clean Architecture completo (`server/src/modules/legal/`), 19 endpoints
+REST em `/api/legal`, tela web `/legal` (2 abas). Ver
+`docs/juridico/01-CONTRATOS.md`/`docs/juridico/02-PROPRIEDADE_INTELECTUAL.md`
+(atualizados nesta entrega) e `docs/governance/HANDOFF_CODEX.md` para o
+handoff completo.
+
+- [x] Migration `20260807-000220-create-legal-module.cjs` criada e
+  **aplicada** ao Postgres local (`npm run migration:up --prefix server`,
+  confirmado com `migration:status`) — `legal_contracts` (NOVA, não existia
+  no spec original — os aditivos/lembretes dependiam de um `contract_id`
+  que nunca teve tabela própria), `legal_contract_addendums`,
+  `legal_contract_reminders`, `legal_intellectual_property`.
+- [x] CRUD completo (create/list/get/update, sem delete) para as 4
+  entidades, RBAC via novo módulo `juridico` em `accessModules.ts`
+  (espelhado no client), leitura em nível padrão/escrita em `operate`.
+- [x] Caso de uso central do spec (gestão de prazos): `GET
+  /api/legal/contracts/expiring?days=30` e `GET
+  /api/legal/intellectual-property/expiring?days=30` — vencendo em até
+  `days` dias ou já vencidos, excluindo `status` `terminated`/
+  `expired`/`abandoned`.
+- [x] Upload de instrumento dedicado (`POST /api/legal/contracts/:id/file` e
+  `POST /api/legal/contract-addendums/:id/file`, multipart, campo `file`,
+  PDF/DOC/DOCX até 20MB) — `UploadContractFileUseCase`/
+  `UploadAddendumFileUseCase` próprios, mesmo padrão de
+  `UploadMaterialFileUseCase` (Marketing).
+- [x] Tela web `client/src/pages/legal/LegalPage.tsx` (Contratos —
+  aditivos/lembretes como sub-seção do dialog de detalhe, não abas
+  próprias —, Propriedade Intelectual), com badge de alerta de
+  vencimento próximo em ambas as abas. API client `client/src/api/legal.ts`,
+  rota `/legal` protegida por `ModuleRoute module="juridico"`, item de menu
+  no grupo Administração.
+- [x] `npm run typecheck --prefix server`: 0 erros.
+- [x] Smoke test de runtime dos models (`node -e "require('tsx/cjs');
+  require('./src/models/index.ts')"`, a partir de `server/`): OK — os 4
+  models novos usam `type X = ...` (sem `export`) + `export = Model`, nunca
+  `export type` misturado com `export =` no mesmo arquivo (bug de
+  `tsx`/esbuild identificado em módulos anteriores da mesma sessão).
+- [x] `npx tsc --noEmit --project client` (a partir de `client/`): 0 erros.
+- [x] `npx jest tests/unit --runInBand --prefix server`: 942/943 passando
+  (1 falha pré-existente e conhecida em
+  `onda3-shipping-cockpit-cashflow.test.ts`, não relacionada a este
+  módulo) — 24 testes novos do módulo Jurídico
+  (`legal-contract-use-cases`, `legal-addendum-reminder-use-cases`,
+  `legal-intellectual-property-use-cases`), 0 regressões.
+  `tests/unit/module-authorization-map.test.ts` atualizado para incluir
+  `legal` na lista de módulos que exigem `authorizeModule` (guarda
+  anti-regressão).
+- [ ] Fora de escopo desta entrega (decisões conscientes, ver
+  `docs/juridico/01-CONTRATOS.md`/`docs/juridico/02-PROPRIEDADE_INTELECTUAL.md`):
+  notificação automática (email/push) quando um lembrete vence — `notified`
+  é hoje marcado manualmente pelo usuário; geração de contrato a partir de
+  template; vínculo formal de `party_a`/`party_b` com `suppliers`/`clients`/
+  `employees` (texto livre por decisão de design, ver migration).

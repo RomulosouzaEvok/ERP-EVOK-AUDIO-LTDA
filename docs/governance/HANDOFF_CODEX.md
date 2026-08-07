@@ -9525,3 +9525,555 @@ espalhado — cada página já assume seu público.
 - Testar o fluxo de erro de rede/API fora do ar em qualquer uma das 5 abas de `/ti` (deve mostrar `DidacticAlert`/mensagem de erro, nunca tela em branco).
 
 ---
+
+## Módulo Facilities — Implementação do zero (Backend + Frontend)
+
+**Data**: 2026-08-07
+**Escopo**: departamento 17 (Facilities, FAC) não tinha NENHUM código antes
+desta entrega — apenas a linha do departamento em `departments` (seed) e um
+esboço `[PENDENTE]` em sintaxe MySQL em `docs/administrativo/03-FACILITIES.md`.
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+CRUD completo (create/list/get/update — sem delete, físico ou lógico) para
+4 entidades independentes de cadastro/controle:
+
+1. **Frota de veículos** (`facility_vehicles`) — placa única, marca,
+   modelo, ano, combustível, RENAVAM, seguro, km atual, status.
+2. **Abastecimento** (`facility_fuel_records`) — histórico por veículo,
+   litros/preço/total (calculado automaticamente se omitido), motorista
+   opcional.
+3. **Programação de limpeza** (`facility_cleaning_schedules`) — área
+   (texto livre), frequência, responsável, última/próxima limpeza.
+4. **Áreas físicas** (`facility_areas`) — tipo, m², capacidade,
+   departamento opcional.
+
+Backend: `server/src/modules/facilities/` (Clean Architecture —
+`domain/repositories`, `application/use-cases/{vehicle,fuelRecord,
+cleaningSchedule,area}`, `infrastructure/sequelize`,
+`presentation/{controllers,routes,validators}`), 16 endpoints REST em
+`/api/facilities/*`, montado em `server/app.ts`. Frontend:
+`client/src/pages/facilities/FacilitiesPage.tsx` (4 abas), API client
+`client/src/api/facilities.ts`, rota `/facilities` protegida por
+`ModuleRoute module="facilities"`, item de menu em Administração (junto de
+TI).
+
+### Decisões de design tomadas por conta própria
+
+- **Nomes de tabela prefixados `facility_*`** (não `fleet_vehicles`/
+  `fuel_records`/`cleaning_schedule`, nomes do spec original em
+  `docs/administrativo/03-FACILITIES.md`) — evita colisão com um futuro
+  cadastro de frota de logística/expedição e deixa o módulo dono explícito
+  no nome da tabela (mesmo padrão de `it_*`/`sst_*`).
+- **`facility_fuel_records.record_date`** (não `date`, nome do spec
+  original) — evita nome ambíguo/potencialmente reservado.
+- **`facility_cleaning_schedules.area` como texto livre**, não FK para
+  `facility_areas` — a programação de limpeza cobre áreas informais (ex.
+  "banheiro do 2º andar") que nem sempre correspondem a uma
+  `facility_area` cadastrada formalmente. Pode evoluir para FK opcional se
+  o negócio pedir análise cruzada área×limpeza.
+- **`total_cost` de abastecimento calculado automaticamente**
+  (`liters * price_per_liter`) quando não informado explicitamente no
+  payload — conveniência, o cliente pode enviar o total já calculado se
+  preferir (ex.: nota fiscal com valor levemente diferente do cálculo
+  puro).
+- **Sem soft delete** em nenhuma das 4 tabelas (`CLAUDE.md` §7 reserva
+  soft delete apenas para `Category`) e **sem endpoint de delete** algum
+  (físico ou lógico) — fora do escopo pedido (create/list/get/update).
+- **RBAC sem nível `approve`** — módulo essencialmente de
+  cadastro/controle, nenhuma ação foi considerada crítica o suficiente
+  para exigir aprovação (ex.: desativar um veículo é só `PUT .../status`
+  em nível `operate`, mesmo padrão de `centros_de_trabalho`).
+
+### Arquivos criados
+
+**Backend:**
+- `server/migrations/20260807-000200-create-facilities-module.cjs`
+- `server/src/models/{FacilityVehicle,FacilityFuelRecord,FacilityCleaningSchedule,FacilityArea}.ts`
+- `server/src/modules/facilities/domain/repositories/{Vehicle,FuelRecord,CleaningSchedule,Area}Repository.ts`
+- `server/src/modules/facilities/infrastructure/sequelize/Sequelize{Vehicle,FuelRecord,CleaningSchedule,Area}Repository.ts`
+- `server/src/modules/facilities/application/use-cases/vehicle/{Create,List,GetById,Update}VehicleUseCase.ts`
+- `server/src/modules/facilities/application/use-cases/fuelRecord/{Create,List,GetById,Update}FuelRecordUseCase.ts`
+- `server/src/modules/facilities/application/use-cases/cleaningSchedule/{Create,List,GetById,Update}CleaningScheduleUseCase.ts`
+- `server/src/modules/facilities/application/use-cases/area/{Create,List,GetById,Update}AreaUseCase.ts`
+- `server/src/modules/facilities/presentation/validators/{vehicle,fuelRecord,cleaningSchedule,area}Validators.ts`
+- `server/src/modules/facilities/presentation/controllers/{vehicle,fuelRecord,cleaningSchedule,area}Controller.ts`
+- `server/src/modules/facilities/presentation/routes/facilities.ts`
+- `server/tests/unit/facilities-{vehicle,fuel-record,cleaning-schedule,area}-use-cases.test.ts` (14 casos)
+
+**Frontend:**
+- `client/src/api/facilities.ts`
+- `client/src/pages/facilities/{FacilitiesPage,FleetTab,FuelRecordsTab,CleaningSchedulesTab,AreasTab}.tsx`
+
+### Arquivos modificados
+
+- `server/src/models/index.ts` — imports dos 4 models novos + associações
+  (`FacilityVehicle↔FacilityFuelRecord`, `Employee↔FacilityFuelRecord`
+  driver, `Department↔FacilityArea`).
+- `server/src/shared/domain/accessModules.ts` — módulo `facilities`
+  adicionado a `AccessModuleKey`/`ACCESS_MODULES` (29→30 chaves).
+- `server/app.ts` — `app.use('/api/facilities', ...)`.
+- `server/tests/unit/module-authorization-map.test.ts` — `facilities`
+  adicionado a `MODULES_REQUIRING_AUTHORIZE_MODULE` (guarda
+  anti-regressão, senão o teste falha por módulo novo não coberto).
+- `client/src/api/accessProfiles.ts` — `facilities` adicionado ao tipo
+  `AccessModuleKey` espelhado.
+- `client/src/App.tsx` — lazy import `FacilitiesPage` + rota `/facilities`
+  atrás de `ModuleRoute module="facilities"`.
+- `client/src/layouts/AppLayout.tsx` — item de menu "Facilities (Frota &
+  Predial)" em Administração + entrada em `BREADCRUMBS`.
+- `docs/administrativo/03-FACILITIES.md` — removido aviso `[PENDENTE]`,
+  documentado o contrato real de 16 endpoints.
+- `docs/database/DATABASE.md` — nova seção "Módulo Facilities".
+- `docs/projeto/04-USE_CASES.md` — novo `UC-52`.
+- `docs/governance/TODO.md` — nova entrada datada 2026-08-07.
+
+### Documentações atualizadas
+
+`docs/administrativo/03-FACILITIES.md`, `docs/database/DATABASE.md`,
+`docs/projeto/04-USE_CASES.md`, `docs/governance/TODO.md`, e este arquivo
+(`docs/governance/HANDOFF_CODEX.md`). Todo arquivo TypeScript novo tem
+cabeçalho JSDoc explicando responsabilidade, e cada método de repositório
+abstrato/use case documenta parâmetros e retorno.
+
+### Validação
+
+- `npm run typecheck --prefix server` — 0 erros.
+- `npx tsc --noEmit --project client` (a partir de `client/`) — 0 erros.
+- `npm run migration:up --prefix server` — migration `20260807-000200`
+  aplicada com sucesso contra o Postgres local (`evok-postgres`, Docker);
+  confirmado com `npm run migration:status --prefix server`.
+- `npx jest tests/unit --runInBand --prefix server` — 889/890 passando (1
+  falha pré-existente e conhecida em
+  `onda3-shipping-cockpit-cashflow.test.ts`, não relacionada a este
+  módulo); 14 testes novos do módulo Facilities, 0 regressões (incluindo o
+  ajuste necessário em `module-authorization-map.test.ts`).
+
+### Riscos residuais / fora do escopo desta entrega
+
+- Sem teste de integração HTTP real (Supertest) contra o banco — apenas
+  unitários com repositório mockado, mesmo padrão dos módulos SST/TI mais
+  recentes.
+- `facility_cleaning_schedules.area` (texto livre) não valida contra
+  `facility_areas` cadastradas — cadastros podem divergir textualmente
+  (ex.: "Refeitório" vs. "refeitorio").
+- Sem seed inicial de veículos/áreas — telas nascem vazias, primeiro uso
+  exige cadastro manual.
+- Sem relatório/dashboard de custo de frota (ex.: custo por km, consumo
+  médio) — apenas listagem crua de abastecimentos; pode ser pedido futuro
+  se o negócio precisar.
+
+### Instruções de teste manual
+
+1. Logar como `admin` (ou usuário com perfil que inclua o módulo
+   `facilities` em nível `operate`) e acessar `/facilities` pelo menu
+   Administração.
+2. Aba **Frota**: criar um veículo (placa obrigatória e única — tentar
+   repetir a placa deve dar erro 409 traduzido). Editar o veículo criado,
+   mudando o status para "Em manutenção".
+3. Aba **Abastecimento**: criar um registro de abastecimento para o
+   veículo criado, informando litros e preço/litro mas SEM informar o
+   custo total — confirmar que o total é calculado automaticamente na
+   listagem. Selecionar um motorista (funcionário ativo).
+4. Aba **Limpeza**: criar uma programação de limpeza para uma área livre
+   (ex.: "Refeitório"), frequência diária, com última/próxima limpeza.
+5. Aba **Áreas**: criar uma área física do tipo "Almoxarifado", com m² e
+   capacidade, vinculando a um departamento existente.
+6. Confirmar que um usuário sem o módulo `facilities` no perfil de acesso
+   é redirecionado para "Acesso Negado" ao tentar `/facilities` diretamente
+   pela URL.
+7. Confirmar que um usuário com o módulo `facilities` mas sem role
+   `admin`/`operator` (RBAC de UI, `hasRole('admin','operator')`) consegue
+   ver as 4 abas em modo somente leitura (sem botões "Novo"/"Editar").
+
+---
+
+## Módulo Marketing — Implementação do zero (Backend + Frontend)
+
+**Data**: 2026-08-07
+**Escopo**: departamento 14 (Marketing, MKT) não tinha NENHUM código antes
+desta entrega — apenas a linha do departamento em `departments` (seed) e um
+esboço de 3 tabelas em sintaxe MySQL apresentadas como reais em
+`docs/comercial/02-MARKETING.md`, nunca migradas.
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+CRUD completo (create/list/get/update — sem delete, físico ou lógico) para
+3 entidades:
+
+1. **Campanhas** (`marketing_campaigns`) — tipo, datas, orçamento/custo
+   real, contadores `leads_generated`/`conversions` (incrementados
+   automaticamente pelo fluxo de Lead), ROI (informado manualmente),
+   status.
+2. **Leads** (`marketing_leads`) — FK opcional para campanha, origem,
+   score, FK opcional `converted_to_customer_id` → `clients`. Funil de
+   status como **ação dedicada** (`ChangeLeadStatusUseCase`), não `PUT`
+   genérico.
+3. **Materiais de divulgação** (`marketing_materials`) — tipo, FK opcional
+   `product_id` → `items.id` (UUID), upload de arquivo separado da criação
+   dos metadados.
+
+Backend: `server/src/modules/marketing/` (Clean Architecture —
+`domain/repositories`, `application/use-cases/{campaign,lead,material}`,
+`infrastructure/sequelize`, `presentation/{controllers,routes,validators,
+middlewares}`), 13 endpoints REST em `/api/marketing/*`, montado em
+`server/app.ts`. Frontend: `client/src/pages/marketing/MarketingPage.tsx`
+(3 abas), API client `client/src/api/marketing.ts`, rota `/marketing`
+protegida por `ModuleRoute module="marketing"`, item de menu no grupo
+"Vendas" (junto de Vendas).
+
+### Decisões de design tomadas por conta própria
+
+- **`marketing_materials.product_id` é `UUID`, não `INTEGER`** — diferença
+  deliberada do esboço original em MySQL: `items.id` é UUID no schema real
+  (`server/src/models/Item.ts`), mesmo padrão já usado por
+  `sst_tipo_epi.item_id`. Descoberto durante a implementação (o spec só
+  tinha `INT` solto, sem `REFERENCES`) — corrigido antes de rodar a
+  migration contra o Postgres real.
+- **Funil de leads como ação dedicada** (`POST
+  /api/marketing/leads/:id/status`), não `PUT` genérico irrestrito — mesmo
+  espírito de `ChangeSaleStatusUseCase` (módulo `sales`), porém deliberadamente
+  mais simples: `new -> contacted -> qualified -> converted/lost`, `lost`
+  alcançável de qualquer etapa aberta (desistência a qualquer momento),
+  `converted`/`lost` terminais, sem efeito colateral de estoque/financeiro
+  (só incrementa `conversions` da campanha de origem, se houver).
+- **Upload de material com caso de uso próprio**
+  (`UploadMaterialFileUseCase`), não reaproveitando o helper compartilhado
+  `UploadEntityPhotoUseCase` — este é fixado em `IMAGE_MIMES`/campo
+  `photo_path`; materiais de marketing também podem ser PDF, vídeo ou
+  apresentação, então foi criado um caso de uso análogo com lista de
+  extensões mais ampla e campo `file_path`.
+- **`allowedMimes` vazio na chamada a `uploadFile` do material** — decisão
+  documentada no próprio código
+  (`UploadMaterialFileUseCase.ts`): o mapa de magic bytes de
+  `Validators.FILE_MAGIC_BYTES` não tem assinatura para vídeo/apresentação/
+  documento do Office, então a extensão é o filtro primário para esses
+  tipos (a validação de magic bytes continua funcionando normalmente para
+  imagem/PDF, que têm assinatura conhecida).
+- **Contadores de campanha (`leads_generated`/`conversions`) incrementados
+  automaticamente** pelos casos de uso de Lead (criação vinculada a
+  campanha e conversão), mas ainda aceitos no payload de `PUT
+  /api/marketing/campaigns/:id` para correção manual eventual (ex.:
+  reconciliação com uma ferramenta externa).
+- **Sem soft delete** em nenhuma das 3 tabelas (`CLAUDE.md` §7 reserva
+  soft delete apenas para `Category`) e **sem endpoint de delete** algum —
+  fora do escopo pedido (create/list/get/update).
+- **RBAC sem nível `approve`** — módulo essencialmente de cadastro/
+  controle de funil, mesmo padrão de `facilities`.
+
+### Arquivos criados
+
+**Backend:**
+- `server/migrations/20260807-000210-create-marketing-module.cjs`
+- `server/src/models/{MarketingCampaign,MarketingLead,MarketingMaterial}.ts`
+- `server/src/modules/marketing/domain/repositories/{Campaign,Lead,Material}Repository.ts`
+- `server/src/modules/marketing/infrastructure/sequelize/Sequelize{Campaign,Lead,Material}Repository.ts`
+- `server/src/modules/marketing/application/use-cases/campaign/{List,GetById,Create,Update}CampaignUseCase.ts`
+- `server/src/modules/marketing/application/use-cases/lead/{List,GetById,Create,Update,ChangeStatus}LeadUseCase.ts`
+- `server/src/modules/marketing/application/use-cases/material/{List,GetById,Create,Update,UploadFile}MaterialUseCase.ts`
+- `server/src/modules/marketing/presentation/validators/{campaign,lead,material}Validators.ts`
+- `server/src/modules/marketing/presentation/controllers/{campaign,lead,material}Controller.ts`
+- `server/src/modules/marketing/presentation/routes/marketing.ts`
+- `server/src/modules/marketing/presentation/middlewares/materialFileUpload.ts`
+- `server/tests/unit/marketing-{campaign,lead,material}-use-cases.test.ts` (25 casos)
+
+**Frontend:**
+- `client/src/api/marketing.ts`
+- `client/src/pages/marketing/{MarketingPage,CampaignsTab,LeadsTab,MaterialsTab}.tsx`
+
+### Arquivos modificados
+
+- `server/src/models/index.ts` — imports dos 3 models novos + associações
+  (`MarketingCampaign↔MarketingLead`, `Client↔MarketingLead` conversão,
+  `Item↔MarketingMaterial`).
+- `server/src/shared/domain/accessModules.ts` — módulo `marketing`
+  adicionado a `AccessModuleKey`/`ACCESS_MODULES` (30→31 chaves).
+- `server/app.ts` — `app.use('/api/marketing', ...)`.
+- `server/tests/unit/module-authorization-map.test.ts` — `marketing`
+  adicionado a `MODULES_REQUIRING_AUTHORIZE_MODULE` (guarda
+  anti-regressão, senão o teste falha por módulo novo não coberto).
+- `client/src/api/accessProfiles.ts` — `marketing` adicionado ao tipo
+  `AccessModuleKey` espelhado.
+- `client/src/App.tsx` — lazy import `MarketingPage` + rota `/marketing`
+  atrás de `ModuleRoute module="marketing"`.
+- `client/src/layouts/AppLayout.tsx` — item de menu "Marketing" no grupo
+  Vendas + entrada em `BREADCRUMBS`.
+- `docs/comercial/02-MARKETING.md` — removida a apresentação do esboço SQL
+  como se fosse real, documentado o contrato real de 13 endpoints.
+- `docs/database/DATABASE.md` — nova seção "Módulo Marketing".
+- `docs/projeto/04-USE_CASES.md` — novo `UC-53`.
+- `docs/governance/TODO.md` — nova entrada datada 2026-08-07.
+
+### Documentações atualizadas
+
+`docs/comercial/02-MARKETING.md`, `docs/database/DATABASE.md`,
+`docs/projeto/04-USE_CASES.md`, `docs/governance/TODO.md`, e este arquivo
+(`docs/governance/HANDOFF_CODEX.md`). Todo arquivo TypeScript novo tem
+cabeçalho JSDoc explicando responsabilidade, e cada método de repositório
+abstrato/use case documenta parâmetros e retorno.
+
+### Validação
+
+- `npm run typecheck --prefix server` — 0 erros.
+- `npx tsc --noEmit --project client` (a partir de `client/`) — 0 erros.
+- `npm run migration:up --prefix server` — migration `20260807-000210`
+  aplicada com sucesso contra o Postgres local (`evok-postgres`, Docker);
+  confirmado com `npm run migration:status --prefix server`.
+- `npx jest tests/unit --runInBand --prefix server` — 917/918 passando (1
+  falha pré-existente e conhecida em
+  `onda3-shipping-cockpit-cashflow.test.ts`, não relacionada a este
+  módulo); 25 testes novos do módulo Marketing, 0 regressões (incluindo o
+  ajuste necessário em `module-authorization-map.test.ts`).
+
+### Riscos residuais / fora do escopo desta entrega
+
+- Sem teste de integração HTTP real (Supertest) contra o banco — apenas
+  unitários com repositório mockado, mesmo padrão de Facilities/SST/TI.
+- Cálculo de ROI é manual (o backend não deriva de custo/receita
+  automaticamente).
+- Sem histórico multi-versão de arquivo por material — `version` é campo
+  texto informativo, sem trilha de arquivos anteriores; um novo upload
+  substitui e apaga o arquivo antigo do disco.
+- Sem integração com ferramentas externas de email marketing/Ads (Google
+  Ads, RD Station, Mailchimp, etc.) — cadastro manual apenas, sem
+  sincronização automática de métricas de campanha.
+- Sem seed inicial de campanhas/leads/materiais — telas nascem vazias.
+
+### Instruções de teste manual
+
+1. Logar como `admin` (ou usuário com perfil que inclua o módulo
+   `marketing` em nível `operate`) e acessar `/marketing` pelo menu Vendas.
+2. Aba **Campanhas**: criar uma campanha (tipo "Redes sociais", datas de
+   início/fim válidas). Tentar criar uma com `end_date` anterior a
+   `start_date` e confirmar o erro 422 traduzido.
+3. Aba **Leads**: criar um lead vinculado à campanha criada — confirmar
+   que `leads_generated` da campanha (visível na aba Campanhas) foi
+   incrementado. No kanban de Leads, avançar o lead de "Novo" para
+   "Contatado" e depois "Qualificado". Ao clicar em "Convertido", informar
+   (ou deixar em branco) um id de cliente e confirmar a conversão —
+   verificar que `conversions` da campanha também incrementou.
+4. Tentar avançar um lead "Convertido" (estado terminal) — não deve haver
+   botão de ação disponível (funil bloqueia no backend com 422 se forçado
+   via API).
+5. Aba **Materiais**: criar um material (tipo "Catálogo"), opcionalmente
+   vinculado a um produto (busca por código/descrição). Usar o botão de
+   upload para enviar um arquivo PDF/imagem e confirmar o link "Ver
+   arquivo" na listagem.
+6. Confirmar que um usuário sem o módulo `marketing` no perfil de acesso é
+   redirecionado para "Acesso Negado" ao tentar `/marketing` diretamente
+   pela URL.
+7. Confirmar que um usuário com o módulo `marketing` mas sem role
+   `admin`/`operator` (RBAC de UI) consegue ver as 3 abas em modo somente
+   leitura (sem botões "Novo"/"Editar"/upload).
+
+---
+
+## Módulo Jurídico — Implementação do zero (Backend + Frontend)
+
+**Data**: 2026-08-07
+**Escopo**: departamento 16 (Jurídico, JUR) não tinha NENHUM código antes
+desta entrega — apenas a linha do departamento em `departments` (seed) e
+dois specs (`docs/juridico/01-CONTRATOS.md`,
+`docs/juridico/02-PROPRIEDADE_INTELECTUAL.md`) com 3 tabelas em sintaxe
+MySQL apresentadas como reais, nunca migradas.
+**Status**: ✅ Concluído
+
+### Resumo da feature
+
+CRUD completo (create/list/get/update — sem delete, físico ou lógico) para
+4 entidades:
+
+1. **Contratos** (`legal_contracts`) — NOVA (não existia no spec original,
+   que só documentava aditivo/lembrete/PI dependendo de um `contract_id`
+   sem tabela própria). Número único, tipo amplo (trabalhista + comercial),
+   partes A/B (texto livre), objeto, valor, vigência, renovação automática,
+   aviso prévio, upload de instrumento (PDF/DOC/DOCX), status.
+2. **Aditivos contratuais** (`legal_contract_addendums`) — FK obrigatória
+   para contrato (404 se inexistente), tipo de mudança, nova data
+   fim/valor, upload de arquivo próprio.
+3. **Lembretes de prazo contratual** (`legal_contract_reminders`) — FK
+   obrigatória para contrato, tipo, data, antecedência, `notified`
+   (marcado manualmente hoje).
+4. **Propriedade Intelectual** (`legal_intellectual_property`) — marca,
+   patente, desenho industrial, direito autoral, segredo industrial;
+   depósito/concessão/expiração, titular (default EVOK ÁUDIO LTDA), status,
+   jurisdição.
+
+Caso de uso central do spec (gestão de prazos): `GET
+/api/legal/contracts/expiring?days=30` e `GET
+/api/legal/intellectual-property/expiring?days=30`.
+
+Backend: `server/src/modules/legal/` (Clean Architecture —
+`domain/repositories`, `application/use-cases/{contract,addendum,reminder,
+intellectualProperty}`, `infrastructure/sequelize`,
+`presentation/{controllers,routes,validators,middlewares}`), 19 endpoints
+REST em `/api/legal/*`, montado em `server/app.ts`. Frontend:
+`client/src/pages/legal/LegalPage.tsx` (2 abas — Contratos, Propriedade
+Intelectual), API client `client/src/api/legal.ts`, rota `/legal`
+protegida por `ModuleRoute module="juridico"`, item de menu no grupo
+"Administração" (junto de TI/Facilities).
+
+### Decisões de design tomadas por conta própria
+
+- **`legal_contracts` é uma tabela nova**, não presente no spec original —
+  o spec só trazia `contract_addendums`/`contract_reminders` (e
+  `intellectual_property`, sem relação com contrato), ambas dependendo de
+  um `contract_id` que nunca teve cadastro central. Sem essa tabela, o
+  caso de uso central do spec (gestão de prazos contratuais) seria
+  impossível de implementar de forma consistente.
+- **`party_a`/`party_b` são texto livre**, não FK de
+  `suppliers`/`clients`/`employees` — contratos jurídicos cobrem
+  trabalhista (candidato/funcionário nem sempre formalizado no sistema no
+  momento da assinatura), representante autônomo e terceiros diversos sem
+  cadastro formal em nenhuma outra tabela. Mesma decisão de design de
+  `facility_cleaning_schedules.area` (Facilities).
+- **Aditivos e lembretes expostos como recursos de topo-nível filtráveis
+  por `contract_id`** (`/legal/contract-addendums?contract_id=`,
+  `/legal/contract-reminders?contract_id=`), não aninhados sob
+  `/contracts/:id/...` — mesmo padrão de `marketing_leads`
+  (`campaign_id`)/`marketing_materials` (`product_id`).
+- **FK `ON DELETE CASCADE`** de aditivo/lembrete para contrato (diferente
+  de `RESTRICT` usado em Facilities para abastecimento×veículo) — não há
+  endpoint de delete de contrato nesta rodada de qualquer forma, e um
+  aditivo/lembrete não faz sentido sem o contrato pai.
+- **Upload de instrumento com casos de uso próprios**
+  (`UploadContractFileUseCase`/`UploadAddendumFileUseCase`), restritos a
+  PDF/DOC/DOCX (20MB) — mesmo padrão de `UploadMaterialFileUseCase`
+  (Marketing), mas com lista de extensões mais restrita (documento
+  jurídico, não vídeo/apresentação).
+- **No frontend, aditivos e lembretes são sub-seção do dialog de detalhe do
+  contrato** (`ContractDetailDialog`), não abas próprias em `LegalPage` —
+  pedido explícito do enunciado da tarefa. Os 3 componentes de
+  formulário/linha internos (`ReminderRow`, `AddendumInlineForm`,
+  `ReminderInlineForm`) foram definidos como funções de topo de módulo
+  (não aninhadas dentro de `ContractDetailDialog`) deliberadamente: uma
+  função de componente redefinida a cada render do pai perde a identidade
+  React e remonta a cada render, resetando o estado local do formulário
+  (`useState`) sempre que o diálogo pai re-renderiza por qualquer motivo
+  (ex.: refetch de query em background).
+- **Sem soft delete** em nenhuma das 4 tabelas (`CLAUDE.md` §7 reserva soft
+  delete apenas para `Category`) e **sem endpoint de delete** algum — fora
+  do escopo pedido (create/list/get/update).
+- **RBAC sem nível `approve`** — módulo essencialmente de cadastro/controle
+  de contrato e PI, mesmo padrão de `facilities`/`marketing`.
+
+### Arquivos criados
+
+**Backend:**
+- `server/migrations/20260807-000220-create-legal-module.cjs`
+- `server/src/models/{LegalContract,LegalContractAddendum,LegalContractReminder,LegalIntellectualProperty}.ts`
+- `server/src/modules/legal/domain/repositories/{Contract,ContractAddendum,ContractReminder,IntellectualProperty}Repository.ts`
+- `server/src/modules/legal/infrastructure/sequelize/Sequelize{Contract,ContractAddendum,ContractReminder,IntellectualProperty}Repository.ts`
+- `server/src/modules/legal/application/use-cases/contract/{List,GetById,Create,Update,UploadFile,ListExpiring}ContractUseCase.ts`
+- `server/src/modules/legal/application/use-cases/addendum/{List,GetById,Create,Update,UploadFile}AddendumUseCase.ts`
+- `server/src/modules/legal/application/use-cases/reminder/{List,GetById,Create,Update}ReminderUseCase.ts`
+- `server/src/modules/legal/application/use-cases/intellectualProperty/{List,GetById,Create,Update,ListExpiring}IntellectualPropertyUseCase.ts`
+- `server/src/modules/legal/presentation/validators/{contract,contractAddendum,contractReminder,intellectualProperty}Validators.ts`
+- `server/src/modules/legal/presentation/controllers/{contract,contractAddendum,contractReminder,intellectualProperty}Controller.ts`
+- `server/src/modules/legal/presentation/routes/legal.ts`
+- `server/src/modules/legal/presentation/middlewares/contractFileUpload.ts`
+- `server/tests/unit/legal-{contract,addendum-reminder,intellectual-property}-use-cases.test.ts` (24 casos)
+
+**Frontend:**
+- `client/src/api/legal.ts`
+- `client/src/pages/legal/{LegalPage,ContractsTab,IntellectualPropertyTab}.tsx`
+
+### Arquivos modificados
+
+- `server/src/models/index.ts` — imports dos 4 models novos + associações
+  (`LegalContract↔LegalContractAddendum`, `LegalContract↔LegalContractReminder`).
+- `server/src/shared/domain/accessModules.ts` — módulo `juridico`
+  adicionado a `AccessModuleKey`/`ACCESS_MODULES`.
+- `server/app.ts` — `app.use('/api/legal', ...)`.
+- `server/tests/unit/module-authorization-map.test.ts` — `legal`
+  adicionado a `MODULES_REQUIRING_AUTHORIZE_MODULE` (guarda
+  anti-regressão, senão o teste falha por módulo novo não coberto).
+- `client/src/api/accessProfiles.ts` — `juridico` adicionado ao tipo
+  `AccessModuleKey` espelhado.
+- `client/src/App.tsx` — lazy import `LegalPage` + rota `/legal` atrás de
+  `ModuleRoute module="juridico"`.
+- `client/src/layouts/AppLayout.tsx` — item de menu "Jurídico (Contratos &
+  PI)" no grupo Administração + entrada em `BREADCRUMBS`.
+- `docs/juridico/01-CONTRATOS.md` — removida a apresentação do esboço SQL
+  de aditivo/lembrete como se fosse real, documentado o contrato real de
+  `legal_contracts`/`legal_contract_addendums`/`legal_contract_reminders`.
+- `docs/juridico/02-PROPRIEDADE_INTELECTUAL.md` — removida a apresentação
+  do esboço SQL como se fosse real, documentado o contrato real de
+  `legal_intellectual_property`.
+- `docs/governance/TODO.md` — nova entrada datada 2026-08-07.
+
+### Documentações atualizadas
+
+`docs/juridico/01-CONTRATOS.md`, `docs/juridico/02-PROPRIEDADE_INTELECTUAL.md`,
+`docs/governance/TODO.md`, e este arquivo (`docs/governance/HANDOFF_CODEX.md`).
+Todo arquivo TypeScript novo tem cabeçalho JSDoc explicando
+responsabilidade, e cada método de repositório abstrato/use case documenta
+parâmetros e retorno.
+
+### Validação
+
+- `npm run typecheck --prefix server` — 0 erros.
+- Smoke test de runtime dos models (`node -e "require('tsx/cjs');
+  require('./src/models/index.ts')"`, a partir de `server/`) — OK, "OK
+  models carregam em runtime". Confirmado também para `server/app.ts`
+  completo e para `src/modules/legal/presentation/routes/legal.ts`
+  isoladamente.
+- `npx tsc --noEmit --project client` (a partir de `client/`) — 0 erros.
+- `npm run migration:up --prefix server` — migration `20260807-000220`
+  aplicada com sucesso contra o Postgres local (`evok-postgres`, Docker);
+  confirmado com `npm run migration:status --prefix server`.
+- `npx jest tests/unit --runInBand --prefix server` — 942/943 passando (1
+  falha pré-existente e conhecida em
+  `onda3-shipping-cockpit-cashflow.test.ts`, não relacionada a este
+  módulo); 24 testes novos do módulo Jurídico, 0 regressões (incluindo o
+  ajuste necessário em `module-authorization-map.test.ts`).
+
+### Riscos residuais / fora do escopo desta entrega
+
+- Sem teste de integração HTTP real (Supertest) contra o banco — apenas
+  unitários com repositório mockado, mesmo padrão de Facilities/Marketing.
+- `notified` de lembrete é marcado manualmente pelo usuário — sem
+  notificação automática (email/push/cron) quando um lembrete vence.
+- Sem geração de contrato a partir de template/modelo — apenas cadastro e
+  upload do instrumento já assinado/digitalizado.
+- `party_a`/`party_b` sem vínculo formal com `suppliers`/`clients`/
+  `employees` — decisão de design consciente (ver seção acima), mas
+  significa que não há como consultar "todos os contratos de um
+  fornecedor X" via JOIN, só por busca textual manual.
+- Sem seed inicial de contratos/PI — telas nascem vazias (a lista narrativa
+  de marcas/patentes/desenhos em `docs/juridico/02-PROPRIEDADE_INTELECTUAL.md`
+  §"Ativos de Propriedade Intelectual da EVOK ÁUDIO" continua sendo
+  documentação de referência, não dado seedado no banco).
+
+### Instruções de teste manual
+
+1. Logar como `admin` (ou usuário com perfil que inclua o módulo
+   `juridico` em nível `operate`) e acessar `/legal` pelo menu
+   Administração.
+2. Aba **Contratos**: criar um contrato (tipo "Prestação de serviços",
+   partes A/B, datas de início/fim). Se houver algum contrato com `end_date`
+   nos próximos 30 dias, confirmar que o banner de alerta amarelo aparece
+   no topo da aba.
+3. Abrir "Detalhes" do contrato criado — confirmar as duas sub-seções
+   (Aditivos, Lembretes) vazias. Criar um aditivo (tipo "Prazo") e um
+   lembrete (tipo "Renovação", data futura) usando os formulários inline —
+   confirmar que aparecem nas respectivas tabelas sem fechar o diálogo.
+4. Na tabela de lembretes, clicar em "Marcar notificado" e confirmar que o
+   badge muda de "Não" para "Sim".
+5. Usar o botão de upload (ícone) na listagem de contratos para enviar um
+   PDF — confirmar que não há erro (o link de visualização não é exposto
+   nesta aba, mas a chamada deve retornar 200).
+6. Aba **Propriedade Intelectual**: criar um ativo (tipo "Marca", titular
+   default "EVOK ÁUDIO LTDA"), com `expiration_date` nos próximos 30 dias —
+   confirmar que o banner de alerta aparece.
+7. Confirmar que um usuário sem o módulo `juridico` no perfil de acesso é
+   redirecionado para "Acesso Negado" ao tentar `/legal` diretamente pela
+   URL.
+8. Confirmar que um usuário com o módulo `juridico` mas sem role
+   `admin`/`operator` (RBAC de UI) consegue ver as 2 abas em modo somente
+   leitura (sem botões "Novo"/"Editar"/upload/"Detalhes"→ainda visível,
+   mas sem ações de escrita dentro do diálogo).
+
+---

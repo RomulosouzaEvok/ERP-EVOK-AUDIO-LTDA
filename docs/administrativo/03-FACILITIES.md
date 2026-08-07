@@ -1,12 +1,10 @@
 # Facilities - Módulo Administrativo
 
-> **[PENDENTE]** As tabelas `fleet_vehicles`, `fuel_records`,
-> `cleaning_schedule` e `facility_areas` abaixo são planejamento — não
-> existem no schema real (ver `docs/database/DATABASE.md`). O que **é real hoje**: o
-> departamento Facilities (código `17` em `departments`,
-> `server/src/config/seeds.ts`) e o módulo de Patrimônio (`assets`, ver
-> `docs/patrimonio/00-README.md`) para controle de máquinas/equipamentos/
-> veículos como ativos.
+> **[IMPLEMENTADO em 2026-08-07]** As tabelas abaixo são reais em
+> PostgreSQL (migration `20260807-000200-create-facilities-module.cjs`),
+> com endpoints REST em `/api/facilities/*` e tela web em `/facilities`.
+> Ver `server/src/modules/facilities/` (Clean Architecture) e
+> `docs/database/DATABASE.md` (seção "Módulo Facilities").
 
 ## Departamento de Facilities (FAC)
 
@@ -29,71 +27,81 @@
 | Jardinagem | Área externa |
 | Controle de EPIs | Estoque e distribuição |
 
-## Tabelas SQL
+## Escopo implementado (2026-08-07)
 
-```sql
--- CONTROLE DE FROTA
-CREATE TABLE fleet_vehicles (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    plate VARCHAR(10) UNIQUE NOT NULL,
-    brand VARCHAR(50),
-    model VARCHAR(50),
-    year INT,
-    color VARCHAR(30),
-    fuel_type ENUM('gasoline','ethanol','diesel','flex','electric'),
-    renavam VARCHAR(30),
-    chassi VARCHAR(50),
-    insurance_company VARCHAR(100),
-    insurance_policy VARCHAR(50),
-    insurance_expiry DATE,
-    last_oil_change DATE,
-    next_oil_change_km INT,
-    current_km INT,
-    status ENUM('active','maintenance','deactivated','sold'),
-    notes TEXT,
-    created_at DATETIME,
-    updated_at DATETIME
-);
+CRUD completo (create/list/get/update — **sem delete**, físico ou lógico)
+para 4 entidades. RBAC via módulo `facilities` (`authorizeModule`),
+leitura em nível padrão (`operate`) e escrita explicitamente em `operate`
+— sem fluxo de aprovação (`approve`) neste módulo.
 
--- ABASTECIMENTO
-CREATE TABLE fuel_records (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    vehicle_id INT NOT NULL,
-    date DATETIME NOT NULL,
-    km_at_refuel INT,
-    liters DECIMAL(10,2),
-    price_per_liter DECIMAL(10,2),
-    total_cost DECIMAL(10,2),
-    fuel_station VARCHAR(100),
-    driver_id INT,
-    created_at DATETIME
-);
+### 1. Frota de veículos (`facility_vehicles`)
 
--- CONTROLE DE LIMPEZA
-CREATE TABLE cleaning_schedule (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    area VARCHAR(100) NOT NULL,
-    frequency ENUM('daily','alternate','weekly','biweekly','monthly'),
-    responsible_person VARCHAR(100),
-    last_cleaning DATE,
-    next_cleaning DATE,
-    notes TEXT,
-    created_at DATETIME
-);
+Cadastro de veículo administrativo/interno: placa (única), marca, modelo,
+ano, cor, tipo de combustível (`gasoline`/`ethanol`/`diesel`/`flex`/
+`electric`), RENAVAM, chassi, seguro (empresa/apólice/vencimento), última
+troca de óleo, km da próxima troca, km atual, status
+(`active`/`maintenance`/`deactivated`/`sold`), observações.
 
--- ÁREA FÍSICA DA FÁBRICA
-CREATE TABLE facility_areas (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(100) NOT NULL,
-    area_type ENUM('production','warehouse','office','lab','amenities','external'),
-    square_meters DECIMAL(10,2),
-    department_id INT,
-    capacity_persons INT,
-    notes TEXT,
-    created_at DATETIME
-);
-```
+| Endpoint | Descrição |
+|---|---|
+| `GET /api/facilities/vehicles` | Lista paginada, filtro opcional `status` |
+| `GET /api/facilities/vehicles/:id` | Busca por id |
+| `POST /api/facilities/vehicles` | Cria (409 se placa duplicada) |
+| `PUT /api/facilities/vehicles/:id` | Atualiza |
+
+### 2. Abastecimento (`facility_fuel_records`)
+
+Histórico de abastecimento por veículo: data/hora, km no abastecimento,
+litros, preço/litro, custo total (calculado automaticamente se não
+informado: `liters * price_per_liter`), posto, motorista (`driver_id`,
+opcional, FK `employees`).
+
+| Endpoint | Descrição |
+|---|---|
+| `GET /api/facilities/fuel-records` | Lista paginada, filtro opcional `vehicle_id` |
+| `GET /api/facilities/fuel-records/:id` | Busca por id |
+| `POST /api/facilities/fuel-records` | Cria (404 se veículo inexistente) |
+| `PUT /api/facilities/fuel-records/:id` | Atualiza |
+
+### 3. Programação de limpeza (`facility_cleaning_schedules`)
+
+Programação recorrente por área (texto livre — não FK para
+`facility_areas`, cobre áreas informais): frequência
+(`daily`/`alternate`/`weekly`/`biweekly`/`monthly`), responsável, última/
+próxima limpeza.
+
+| Endpoint | Descrição |
+|---|---|
+| `GET /api/facilities/cleaning-schedules` | Lista paginada, filtro opcional `frequency` |
+| `GET /api/facilities/cleaning-schedules/:id` | Busca por id |
+| `POST /api/facilities/cleaning-schedules` | Cria |
+| `PUT /api/facilities/cleaning-schedules/:id` | Atualiza |
+
+### 4. Áreas físicas (`facility_areas`)
+
+Cadastro de área física: nome, tipo (`production`/`warehouse`/`office`/
+`lab`/`amenities`/`external`), m², departamento (`department_id`,
+opcional, FK `departments`), capacidade de pessoas.
+
+| Endpoint | Descrição |
+|---|---|
+| `GET /api/facilities/areas` | Lista paginada, filtros opcionais `area_type`/`department_id` |
+| `GET /api/facilities/areas/:id` | Busca por id |
+| `POST /api/facilities/areas` | Cria |
+| `PUT /api/facilities/areas/:id` | Atualiza |
+
+## Fora do escopo desta entrega
+
+- Controle de EPIs (já coberto pelo módulo SST — `sst_matriz_epi`/
+  `sst_entrega_epi`, não duplicado aqui).
+- Segurança/CFTV/alarme (sem cadastro dedicado hoje).
+- Vínculo formal entre `facility_cleaning_schedules.area` (texto livre) e
+  `facility_areas` — decisão consciente, ver `docs/database/DATABASE.md`.
+- Para controle de máquinas/equipamentos como ativos depreciáveis/QR Code,
+  ver o módulo de Patrimônio (`assets`, `docs/patrimonio/00-README.md`) —
+  `facility_vehicles` é focado em operação de frota (abastecimento, seguro,
+  manutenção preventiva por km), não em depreciação contábil.
 
 ---
 
-**Última atualização:** 2026-08-06
+**Última atualização:** 2026-08-07
