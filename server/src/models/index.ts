@@ -81,6 +81,20 @@ import CnabRemittance = require('./CnabRemittance');
 import CnabRemittanceItem = require('./CnabRemittanceItem');
 import CnabReturnFile = require('./CnabReturnFile');
 import CnabReturnOccurrence = require('./CnabReturnOccurrence');
+import SstTipoEpi = require('./SstTipoEpi');
+import SstMatrizEpi = require('./SstMatrizEpi');
+import SstEntregaEpi = require('./SstEntregaEpi');
+import SstDevolucaoEpi = require('./SstDevolucaoEpi');
+import SstAcaoCorretiva = require('./SstAcaoCorretiva');
+import SstPlanoExames = require('./SstPlanoExames');
+import SstAso = require('./SstAso');
+import SstExameComplementar = require('./SstExameComplementar');
+import SstAcidente = require('./SstAcidente');
+import SstAcidenteTestemunha = require('./SstAcidenteTestemunha');
+import SstInvestigacaoAcidente = require('./SstInvestigacaoAcidente');
+import SstAcidenteComplemento = require('./SstAcidenteComplemento');
+import SstCat = require('./SstCat');
+import SstEventoEsocial = require('./SstEventoEsocial');
 
 // ============================================
 // RELACIONAMENTOS
@@ -735,6 +749,75 @@ CnabReturnOccurrence.belongsTo(CnabReturnFile, { foreignKey: 'return_file_id', a
 CnabRemittanceItem.hasMany(CnabReturnOccurrence, { foreignKey: 'remittance_item_id', as: 'return_occurrences' });
 CnabReturnOccurrence.belongsTo(CnabRemittanceItem, { foreignKey: 'remittance_item_id', as: 'remittanceItem' });
 
+// ============================================
+// RELACIONAMENTOS — BLOCO 1 SST (Segurança e Saúde do Trabalho, dept. 15)
+// ============================================
+
+// EPI (NR-6)
+Item.hasOne(SstTipoEpi, { foreignKey: 'item_id', as: 'sst_tipo_epi' });
+SstTipoEpi.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+User.hasMany(SstTipoEpi, { foreignKey: 'created_by', as: 'sst_tipos_epi_criados' });
+SstTipoEpi.belongsTo(User, { foreignKey: 'created_by', as: 'createdByUser' });
+
+Department.hasMany(SstMatrizEpi, { foreignKey: 'department_id', as: 'sst_matriz_epi' });
+SstMatrizEpi.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+SstTipoEpi.hasMany(SstMatrizEpi, { foreignKey: 'tipo_epi_id', as: 'matriz' });
+SstMatrizEpi.belongsTo(SstTipoEpi, { foreignKey: 'tipo_epi_id', as: 'tipoEpi' });
+
+Employee.hasMany(SstEntregaEpi, { foreignKey: 'employee_id', as: 'sst_entregas_epi' });
+SstEntregaEpi.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+SstTipoEpi.hasMany(SstEntregaEpi, { foreignKey: 'tipo_epi_id', as: 'entregas' });
+SstEntregaEpi.belongsTo(SstTipoEpi, { foreignKey: 'tipo_epi_id', as: 'tipoEpi' });
+User.hasMany(SstEntregaEpi, { foreignKey: 'entregue_por', as: 'sst_entregas_epi_realizadas' });
+SstEntregaEpi.belongsTo(User, { foreignKey: 'entregue_por', as: 'entreguePor' });
+InventoryMovement.hasOne(SstEntregaEpi, { foreignKey: 'inventory_movement_id', as: 'sst_entrega_epi' });
+SstEntregaEpi.belongsTo(InventoryMovement, { foreignKey: 'inventory_movement_id', as: 'inventoryMovement' });
+
+SstEntregaEpi.hasMany(SstDevolucaoEpi, { foreignKey: 'entrega_epi_id', as: 'devolucoes' });
+SstDevolucaoEpi.belongsTo(SstEntregaEpi, { foreignKey: 'entrega_epi_id', as: 'entrega' });
+User.hasMany(SstDevolucaoEpi, { foreignKey: 'registrado_por', as: 'sst_devolucoes_registradas' });
+SstDevolucaoEpi.belongsTo(User, { foreignKey: 'registrado_por', as: 'registradoPor' });
+
+// Ações corretivas (polimórfico — sem FK real de origem)
+Employee.hasMany(SstAcaoCorretiva, { foreignKey: 'responsavel_id', as: 'sst_acoes_corretivas' });
+SstAcaoCorretiva.belongsTo(Employee, { foreignKey: 'responsavel_id', as: 'responsavel' });
+User.hasMany(SstAcaoCorretiva, { foreignKey: 'created_by', as: 'sst_acoes_corretivas_criadas' });
+SstAcaoCorretiva.belongsTo(User, { foreignKey: 'created_by', as: 'createdByUser' });
+
+// ASO/PCMSO (NR-7)
+Employee.hasMany(SstAso, { foreignKey: 'employee_id', as: 'sst_asos' });
+SstAso.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+User.hasMany(SstAso, { foreignKey: 'registrado_por', as: 'sst_asos_registrados' });
+SstAso.belongsTo(User, { foreignKey: 'registrado_por', as: 'registradoPor' });
+SstAso.hasMany(SstExameComplementar, { foreignKey: 'aso_id', as: 'exames_complementares', onDelete: 'CASCADE' });
+SstExameComplementar.belongsTo(SstAso, { foreignKey: 'aso_id', as: 'aso', onDelete: 'CASCADE' });
+
+// Acidente/CAT (Lei 8.213/91)
+Employee.hasMany(SstAcidente, { foreignKey: 'employee_id', as: 'sst_acidentes' });
+SstAcidente.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+User.hasMany(SstAcidente, { foreignKey: 'registrado_por', as: 'sst_acidentes_registrados' });
+SstAcidente.belongsTo(User, { foreignKey: 'registrado_por', as: 'registradoPor' });
+
+SstAcidente.hasMany(SstAcidenteTestemunha, { foreignKey: 'acidente_id', as: 'testemunhas', onDelete: 'CASCADE' });
+SstAcidenteTestemunha.belongsTo(SstAcidente, { foreignKey: 'acidente_id', as: 'acidente', onDelete: 'CASCADE' });
+Employee.hasMany(SstAcidenteTestemunha, { foreignKey: 'employee_id', as: 'sst_testemunhos' });
+SstAcidenteTestemunha.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+SstAcidente.hasOne(SstInvestigacaoAcidente, { foreignKey: 'acidente_id', as: 'investigacao' });
+SstInvestigacaoAcidente.belongsTo(SstAcidente, { foreignKey: 'acidente_id', as: 'acidente' });
+User.hasMany(SstInvestigacaoAcidente, { foreignKey: 'created_by', as: 'sst_investigacoes_criadas' });
+SstInvestigacaoAcidente.belongsTo(User, { foreignKey: 'created_by', as: 'createdByUser' });
+
+SstAcidente.hasMany(SstAcidenteComplemento, { foreignKey: 'acidente_id', as: 'complementos' });
+SstAcidenteComplemento.belongsTo(SstAcidente, { foreignKey: 'acidente_id', as: 'acidente' });
+User.hasMany(SstAcidenteComplemento, { foreignKey: 'registrado_por', as: 'sst_acidente_complementos_registrados' });
+SstAcidenteComplemento.belongsTo(User, { foreignKey: 'registrado_por', as: 'registradoPor' });
+
+SstAcidente.hasMany(SstCat, { foreignKey: 'acidente_id', as: 'cats' });
+SstCat.belongsTo(SstAcidente, { foreignKey: 'acidente_id', as: 'acidente' });
+User.hasMany(SstCat, { foreignKey: 'emitente_id', as: 'sst_cats_emitidas' });
+SstCat.belongsTo(User, { foreignKey: 'emitente_id', as: 'emitente' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -762,5 +845,9 @@ export {
   ImportProcess, ImportProcessItem,
   SaleInvoice,
   CompanyBankingConfig,
-  CnabRemittance, CnabRemittanceItem, CnabReturnFile, CnabReturnOccurrence
+  CnabRemittance, CnabRemittanceItem, CnabReturnFile, CnabReturnOccurrence,
+  SstTipoEpi, SstMatrizEpi, SstEntregaEpi, SstDevolucaoEpi, SstAcaoCorretiva,
+  SstPlanoExames, SstAso, SstExameComplementar,
+  SstAcidente, SstAcidenteTestemunha, SstInvestigacaoAcidente, SstAcidenteComplemento, SstCat,
+  SstEventoEsocial
 };

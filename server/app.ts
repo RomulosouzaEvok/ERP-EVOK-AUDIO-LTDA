@@ -186,6 +186,7 @@ app.use('/api/items', require('./src/modules/items/presentation/routes/items'));
 app.use('/api/mrp', require('./src/modules/mrp/presentation/routes/mrp'));
 app.use('/api/traceability', require('./src/modules/traceability/presentation/routes/traceability'));
 app.use('/api/webhooks', require('./src/modules/webhooks/presentation/routes/webhooks'));
+app.use('/api/sst', require('./src/modules/sst/presentation/routes/sst'));
 
 app.use('/uploads', express.static('uploads'));
 

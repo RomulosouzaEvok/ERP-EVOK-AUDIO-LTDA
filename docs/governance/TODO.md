@@ -2997,3 +2997,87 @@ auditoria, embora ambos `BLOCO_1_SST_REQUISITOS.md` §5.3 e
 documentação desatualizada em relação ao código já escrito; não é um
 problema, só uma informação para quem for commitar (a chave deve ir junto
 do commit de implementação do módulo SST, não separada).
+
+---
+
+## 2026-08-07 — Implementação Backend BLOCO 1 SST (P0) — `programador`
+
+**Escopo:** implementação do backend do módulo SST a partir dos artefatos
+já auditados/aprovados (`docs/business/BLOCO_1_SST_{REQUISITOS,MODELO_DADOS,API}.md`,
+commit `fed55f8`). Ordem de prioridade seguida conforme instrução: P0
+primeiro (EPI, ASO, Acidente/CAT, fila eSocial); CIPA/PGR/Treinamentos/
+Rotina Preventiva/Ações Corretivas (CRUD) ficam para a próxima passada.
+
+- [x] `server/src/shared/domain/accessModules.ts` — chave `sst` já
+  existia (adicionada pela auditoria anterior), confirmada sem alteração
+  necessária.
+- [x] 14 models Sequelize (`server/src/models/Sst*.ts`) registrados e
+  associados em `server/src/models/index.ts`, refletindo exatamente o
+  schema das 12 migrations pendentes (`server/migrations/20260806-000130`
+  a `000141`) — **nenhuma migration foi tocada/aplicada** (`migration:up`
+  continua pendente de aprovação do dono do produto, instrução explícita
+  da tarefa).
+- [x] Módulo `server/src/modules/sst/` em Clean Architecture (domain/
+  application/infrastructure/presentation), seguindo o padrão de
+  `nonConformities`/`maintenance`:
+  - [x] Cluster EPI (NR-6, UC-44): `EpiRepository`/`SequelizeEpiRepository`,
+    `EpiMapper` (mapper DTO PT-BR↔inglês, primeiro do projeto — `ca`↔
+    `ca_numero`, `ativo`↔`active`, `tamanhos_variacoes`↔`tamanhos`,
+    `tipo_epi_id`↔`epi_type_id`), 16 use cases, `epiController`, rotas em
+    `sst.ts`. `ConfirmEpiDeliveryUseCase` integra com
+    `/api/inventory/movements` via adapter
+    `InventoryMovementServiceAdapter` (interface `InventoryMovementService`
+    injetada — nenhum import direto de Sequelize/Model do módulo
+    `inventory`), reaproveitando `reference_type: 'sst_epi_delivery'` já
+    habilitado pela auditoria anterior.
+  - [x] Cluster ASO/PCMSO (NR-7, UC-45): `AsoRepository`/
+    `SequelizeAsoRepository`, `AsoMapper` (rename `risco_exigente`↔
+    `risco_exigido`, divergência não documentada nos blocos anteriores),
+    9 use cases, `asoController` (log de leitura RNF-SST-05 via
+    `logAction` fire-and-forget), rota de status enxuto
+    `GET /aso/status/:employeeId` com checagem `sst`|`rh` inline
+    (`requireSstOrRh`, mesmo padrão de Requisição de Compra).
+  - [x] Cluster Acidente/CAT (Lei 8.213/91, UC-46): `AccidentRepository`/
+    `SequelizeAccidentRepository`, `AccidentMapper`, `legalDeadlineService`
+    (cálculo de `prazo_limite` — 1º dia útil seguinte, imediato em óbito;
+    **simplificado**: considera só sábado/domingo, sem calendário de
+    feriados nacionais parametrizável — melhoria futura documentada),
+    10 use cases, `accidentController`.
+  - [x] Fila eSocial (S-2210/S-2220/S-2240, UC-47): `EsocialEventRepository`/
+    `SequelizeEsocialEventRepository`, 3 use cases, `esocialController` —
+    fila 100% passiva (só nasce como efeito colateral de `POST /aso` e
+    `POST /accidents/:id/cat`; `POST /:id/resend` é a única escrita
+    direta, restrita a evento `rejeitado`).
+  - [x] Router agregador `server/src/modules/sst/presentation/routes/sst.ts`
+    montado em `server/app.ts` sob `/api/sst` — **38 dos 75 endpoints do
+    contrato completo** (`BLOCO_1_SST_API.md`) implementados nesta
+    passada (grupos 1-4: EPI, ASO, Acidente/CAT, eSocial). Grupos 5-9
+    (CIPA, PGR/GES, Treinamentos, Rotina Preventiva, Ações Corretivas)
+    **não implementados nesta passada** — ver pendências no handoff.
+  - [x] Middleware de erro: `server/src/middlewares/errorHandler.ts`
+    ganhou mapeamento dedicado (409 `CONFLICT` amigável) para a exceção
+    Postgres dos triggers de imutabilidade SST
+    (`sst_lock_entrega_epi`/`sst_lock_acidente`/`sst_lock_cat`/
+    `sst_block_delete_evento_esocial`), caso algum bypass escape da
+    validação de aplicação (defesa em profundidade, instrução explícita
+    da tarefa).
+- [x] **Gap de schema documentado (não é bug desta entrega):**
+  `sst_acidentes` não tem coluna de status de encerramento — `POST
+  /accidents/:id/close` funciona como portão de validação (RF-SST-026)
+  sem persistir uma nova transição de estado. Registrado em
+  `docs/database/DATABASE.md` e no handoff.
+- [x] Testes unitários (`server/tests/unit/sst-{epi,aso,accident,esocial,rbac}.test.ts`,
+  55 casos): fluxo principal + fluxo de exceção de cada caso de uso P0
+  (CA vencido, evidência ausente, reconfirmação, 2ª CAT inicial,
+  encerramento sem investigação/ação corretiva, reenvio de evento não-
+  rejeitado, corrida de evento ativo duplicado) + RBAC (`requireSstOrRh`
+  libera `sst`/`rh`/admin, bloqueia demais com 403; guarda genérico
+  `module-authorization-map.test.ts` estendido com `sst`).
+- [x] `npm run typecheck --prefix server`: 0 erros. `npx jest tests/unit`:
+  762/763 passando (1 falha pré-existente e não relacionada, dependente de
+  data corrente, confirmada igual no baseline antes desta entrega).
+- [ ] **Não implementado nesta passada** (ver handoff para detalhamento):
+  CIPA, PGR/GES, Treinamentos, Rotina Preventiva, recurso genérico de
+  Ações Corretivas (`/api/sst/corrective-actions` — a criação inline via
+  investigação de acidente já existe, mas não o CRUD dedicado), testes de
+  integração HTTP (Supertest) contra banco real, aplicação das migrations.

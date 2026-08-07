@@ -1498,4 +1498,90 @@ permite submeter mesmo com o aviso visível — decisão de UX, não bug).
 
 ---
 
+## UC-44 a UC-47 (P0 implementado): Módulo SST — EPI, ASO/PCMSO, Acidente/CAT, Fila eSocial
+
+**Status:** 🟡 Backend implementado (2026-08-07), **migrations pendentes de
+aprovação** (`server/migrations/20260806-000130` a `000141`, `migration:up`
+não executado). Especificação completa em
+`docs/business/BLOCO_1_SST_REQUISITOS.md` (UC-44 a UC-48, 55 RF-SST),
+`docs/business/BLOCO_1_SST_MODELO_DADOS.md` e `docs/business/BLOCO_1_SST_API.md`.
+Módulo: `server/src/modules/sst/` (Clean Architecture: domain/application/
+infrastructure/presentation), rotas sob `/api/sst/*`
+(`server/src/modules/sst/presentation/routes/sst.ts`, montada em
+`server/app.ts`). RBAC: `authorizeModule('sst', ...)` em todas as rotas,
+exceto `GET /api/sst/aso/status/:employeeId` (exceção `sst`|`rh`).
+
+### UC-44: Ficha de EPI (NR-6)
+**Fluxo Principal:** `POST /api/sst/epi-types` (catálogo) →
+`POST /api/sst/epi-matrix` (exigência por função/setor) →
+`POST /api/sst/epi-deliveries` (cria em `rascunho`, valida CA não vencido
+na `data_entrega` — BR-SST-001) → `PATCH .../evidence` (evidência de
+recebimento — BR-SST-002) → `POST .../confirm` (revalida CA e evidência,
+dispara saída de estoque via `InventoryMovementService` quando o TipoEPI
+tem `item_id`, torna a entrega imutável por trigger Postgres) →
+`GET .../ficha/:employeeId` (Ficha de EPI consolidada, join com
+`sst_devolucoes_epi`).
+**Fluxos de Exceção:** E1 (CA vencido na confirmação) e E2 (evidência
+ausente) bloqueiam com `BusinessRuleError` 422 sem confirmar nada;
+reconfirmar uma entrega já confirmada retorna `ValidationError` 400
+(idempotência negativa); devolução (`POST .../return`) só é aceita para
+entrega `confirmada`, nunca reabre a entrega original.
+**Testes:** `server/tests/unit/sst-epi.test.ts` (13 casos).
+
+### UC-45: ASO/PCMSO (NR-7)
+**Fluxo Principal:** `POST /api/sst/aso` calcula `data_vencimento` via
+`PlanoExames` aplicável (obrigatório para `tipo=periodico`, BR-SST-011) e
+enfileira `EventoESocialSST` tipo `S-2220` `pendente` na mesma transação.
+`GET /api/sst/aso/status/:employeeId` (RF-SST-021) retorna status enxuto
+(sem `restricoes`/`medico_examinador`/`arquivo_url`) para o RH consumir no
+gate de admissão/retorno.
+**Fluxos de Exceção:** ASO `periodico` sem `PlanoExames` aplicável →
+`BusinessRuleError` 422. Leitura de detalhe completo (`GET /:id`) e da
+rota de status geram log de leitura (RNF-SST-05).
+**Pendência declarada (próximo bloco):** RF-SST-018 (bloqueio automático
+de apontamento de funcionário `inapto`) não tem mecanismo de flag
+implementado nesta passada — apenas o dado (`resultado` do ASO) já existe
+para uma integração futura.
+**Testes:** `server/tests/unit/sst-aso.test.ts` (7 casos).
+
+### UC-46: Acidente e CAT (Lei 8.213/91)
+**Fluxo Principal:** `POST /api/sst/accidents` registra o acidente já
+imutável (trigger `sst_lock_acidente`) → `POST .../cat` emite CAT inicial,
+calcula `prazo_limite` (1º dia útil seguinte; imediato em óbito) e
+enfileira `S-2210` → `POST .../investigation` (com `acoes_corretivas`
+opcionais) → `POST .../close` valida que acidentes com afastamento (ou
+mais graves) têm investigação + ao menos 1 ação corretiva antes de
+encerrar (RF-SST-026/BR-SST-018, E2).
+**Fluxos de Exceção:** 2ª CAT `inicial` para o mesmo acidente →
+`BusinessRuleError` 422 (usar `POST /cat/:catId/reopen`); encerramento sem
+investigação/ação corretiva → `BusinessRuleError` 422; complementos de
+`dias_perdidos`/`houve_cat` (`POST .../complements`) gravam trilha de
+auditoria (`sst_acidente_complementos`) e atualizam a coluna consolidada
+na mesma transação — nunca um `UPDATE` livre.
+**Gap de schema documentado:** `sst_acidentes` não tem status de
+encerramento dedicado; `CloseAccidentUseCase` valida a regra mas não
+persiste uma nova transição de estado (ver `docs/database/DATABASE.md`
+seção "BLOCO 1 SST — Implementação Backend").
+**Testes:** `server/tests/unit/sst-accident.test.ts` (15 casos).
+
+### UC-47: Fila de Eventos eSocial SST (S-2210/S-2220/S-2240)
+**Fluxo Principal:** fila 100% passiva — eventos nascem como efeito
+colateral de `POST /api/sst/aso`, `POST /api/sst/accidents/:id/cat` e (no
+próximo bloco) `POST /api/sst/ges/:id/members`. `POST .../resend` reenvia
+um evento `rejeitado` criando uma NOVA linha `pendente` (idempotência por
+`origem_tipo`+`origem_id`, garantida também pelo índice único parcial do
+banco).
+**Fluxos de Exceção:** reenviar evento que não está `rejeitado` →
+`ValidationError` 400; corrida rara de já existir evento ativo para a
+mesma origem → `ConflictError` 409 (defesa em profundidade — o índice
+único parcial do banco é a garantia real).
+**Testes:** `server/tests/unit/sst-esocial.test.ts` (5 casos).
+
+**Regras de Negócio:** ver `docs/business/BLOCO_1_SST_REQUISITOS.md` (55
+RF-SST, 36 BR-SST) e `docs/business/BLOCO_1_SST_API.md` (contrato completo
+de 75 endpoints — 38 implementados nesta passada, ver
+`docs/governance/HANDOFF_CODEX.md`).
+
+---
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

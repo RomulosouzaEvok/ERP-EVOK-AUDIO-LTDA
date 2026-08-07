@@ -8758,3 +8758,151 @@ RESTRICT/CASCADE, em
 12 migrations novas como `down` (pendentes), sem quebrar o comando —
 nenhuma foi aplicada.
   tratamento de `hasFullEmployeeAccess`.
+
+---
+
+## 2026-08-07 — Implementação Backend do BLOCO 1 SST (P0) — `programador`
+
+### Resumo da feature
+
+Implementado o backend do módulo SST (Segurança e Saúde do Trabalho,
+departamento 15) para o escopo P0 definido em
+`docs/business/BLOCO_1_SST_REQUISITOS.md`: EPI (catálogo, matriz e
+entrega, UC-44), ASO/PCMSO (UC-45, com status enxuto para o RH),
+Acidente/CAT (UC-46, com prazo legal), e fila de eventos eSocial
+(UC-47, efeito colateral passivo + reenvio manual).
+
+Estrutura de módulo criada (Clean Architecture, mesmo padrão de
+`nonConformities`/`maintenance`):
+
+```
+server/src/modules/sst/
+  domain/{repositories,services}          - 4 interfaces de repositorio + legalDeadlineService
+  application/{use-cases,services}        - 38 use cases (epi/aso/accident/esocial) + InventoryMovementService (interface)
+  infrastructure/{sequelize,mappers,adapters}
+  presentation/{controllers,routes}       - 4 controllers + router agregador sst.ts
+```
+
+14 models Sequelize novos (`server/src/models/Sst*.ts`), registrados e
+associados em `server/src/models/index.ts`: `SstTipoEpi`, `SstMatrizEpi`,
+`SstEntregaEpi`, `SstDevolucaoEpi`, `SstAcaoCorretiva`, `SstPlanoExames`,
+`SstAso`, `SstExameComplementar`, `SstAcidente`, `SstAcidenteTestemunha`,
+`SstInvestigacaoAcidente`, `SstAcidenteComplemento`, `SstCat`,
+`SstEventoEsocial`. Todos apontam para o schema das 12 migrations ja
+auditadas (`20260806-000130` a `000141`) — nenhuma migration foi criada,
+alterada ou aplicada nesta entrega (instrucao explicita: migrations
+continuam pendentes de aprovacao do dono do produto).
+
+Mapper DTO PT-BR ↔ ingles (primeiro do projeto, conforme sinalizado pela
+auditoria): `server/src/modules/sst/infrastructure/mappers/EpiMapper.ts`,
+`AsoMapper.ts`, `AccidentMapper.ts`. Traducoes implementadas: `ca` ↔
+`ca_numero`, `ativo` ↔ `active`, `tamanhos_variacoes` (string livre P/M/G)
+↔ `tamanhos` (array), `tipo_epi_id` ↔ `epi_type_id`, `setor_local` ↔
+`local_setor`, `parte_corpo_atingida` ↔ `parte_corpo`, e uma divergencia
+nao detectada nos documentos de design anteriores: `risco_exigente`
+(banco, `sst_planos_exames`) ↔ `risco_exigido` (contrato de API).
+
+Endpoints implementados: 38 de 75 do contrato completo
+(`docs/business/BLOCO_1_SST_API.md`) — grupos 1 a 4 (EPI, ASO/PCMSO,
+Acidente/CAT, fila eSocial). Router agregador
+`server/src/modules/sst/presentation/routes/sst.ts`, montado em
+`server/app.ts` sob `/api/sst`.
+
+RBAC: `authorizeModule('sst', ...)` (leituras nivel `operate` implicito,
+escritas comuns `operate`, confirmacao de EntregaEPI/emissao-reabertura de
+CAT/encerramento de acidente grave/reenvio de evento `approve`), exceto
+`GET /api/sst/aso/status/:employeeId` — excecao `sst`|`rh` via middleware
+inline `requireSstOrRh` (exportado do proprio router para teste direto).
+
+Integracao com estoque (EPI): `ConfirmEpiDeliveryUseCase` usa a interface
+`InventoryMovementService` (domain/application, baixo acoplamento)
+implementada por `InventoryMovementServiceAdapter` (infrastructure), que
+delega a `CreateInventoryMovementUseCase` do modulo `inventory` — nenhum
+import direto de Sequelize/Model do `inventory`. Reaproveita
+`reference_type: 'sst_epi_delivery'` (ja habilitado em
+`InventoryMovement.ts`/`inventoryValidators.ts`/`InventoryMovementEntity.ts`
+pela auditoria anterior — nao repetido aqui).
+
+Defesa em profundidade contra os triggers de imutabilidade:
+`server/src/middlewares/errorHandler.ts` ganhou um mapeamento dedicado que
+traduz a excecao Postgres de `sst_lock_entrega_epi`/`sst_lock_acidente`/
+`sst_lock_cat`/`sst_block_delete_evento_esocial` para 409 CONFLICT
+amigavel, caso algum bypass da API chegue a acionar o trigger (a API em si
+nunca expoe PUT/DELETE livre nesses recursos — imutabilidade e modelada
+como transicao de estado, conforme o contrato).
+
+### Gap de schema identificado durante a implementacao (nao e bug)
+
+`sst_acidentes` nao tem uma coluna de status de encerramento dedicada —
+apenas `confirmado` (que ja nasce `true` na criacao, ja que a API nao
+expoe uma fase de rascunho para Acidente, diferente de EntregaEPI).
+`POST /api/sst/accidents/:id/close` foi implementado como portao de
+validacao (RF-SST-026/BR-SST-018: bloqueia com 422 se gravidade grave sem
+investigacao + acao corretiva) mas nao persiste uma nova transicao de
+estado — nao ha coluna para isso no schema atual. Se o produto precisar
+de um "encerrado_em"/status auditavel, e necessaria uma migration
+adicional (fora do escopo desta passada, migrations ja travadas).
+Detalhado em `docs/database/DATABASE.md` secao "BLOCO 1 SST —
+Implementacao Backend".
+
+Outro ajuste pragmatico: `legalDeadlineService` (calculo de
+`prazo_limite` da CAT, RNF-SST-04) considera apenas sabado/domingo como
+nao-uteis — nao ha calendario de feriados nacionais parametrizavel nesta
+passada, mesmo padrao de "constante configuravel, nao hard-code" ja usado
+em `sst_matriz_treinamento.periodicidade_reciclagem_meses`.
+
+### Documentacoes atualizadas
+
+- `docs/database/DATABASE.md` — nova secao "BLOCO 1 SST — Implementacao
+  Backend (2026-08-07)" com o resumo dos models, mapper e o gap de
+  schema.
+- `docs/database/00-INDICE.md` — nota atualizada na secao "Pendencias de
+  aplicacao" apontando para a implementacao de codigo feita nesta
+  passada.
+- `docs/projeto/04-USE_CASES.md` — secao nova "UC-44 a UC-47 (P0
+  implementado)" com fluxo principal, fluxos de excecao e testes de cada
+  caso de uso.
+- `docs/governance/TODO.md` — entrada "2026-08-07 — Implementacao
+  Backend BLOCO 1 SST (P0) — programador" com checklist detalhado do que
+  foi feito e do que ficou de fora.
+- JSDoc: todo arquivo novo (`models/Sst*.ts`, `modules/sst/**/*.ts`) tem
+  cabecalho de modulo explicando responsabilidade, decisoes e
+  divergencias em relacao aos documentos de design.
+
+### Instrucoes de teste para o proximo agente/humano
+
+1. `npm run typecheck --prefix server` — deve continuar em 0 erros.
+2. `npx jest tests/unit` (a partir de `server/`) — 762/763 (a unica
+   falha, `onda3-shipping-cockpit-cashflow.test.ts`, e pre-existente,
+   dependente de data corrente, e falha igual no baseline sem esta
+   entrega — nao relacionada ao modulo SST).
+3. Testes novos dedicados: `npx jest tests/unit/sst-epi.test.ts
+   tests/unit/sst-aso.test.ts tests/unit/sst-accident.test.ts
+   tests/unit/sst-esocial.test.ts tests/unit/sst-rbac.test.ts` (55
+   casos, cobrindo fluxo principal + excecao de cada caso de uso P0 +
+   RBAC).
+4. Testes de integracao HTTP (Supertest) contra banco real NAO foram
+   criados nesta passada — as migrations continuam pendentes de
+   `migration:up`, entao nao ha como rodar testes de integracao reais
+   contra o schema SST ainda (os testes unitarios cobrem os use cases
+   com repositorios mockados, sem precisar do banco).
+5. Antes de aprovar `migration:up` das 12 migrations SST, revisar
+   novamente o gap de schema do encerramento de acidente (acima) — pode
+   valer a pena adicionar a coluna agora, antes de aplicar, para evitar
+   uma 2a rodada de migration so para isso.
+
+### Pendencias explicitas para a proxima passada
+
+- Grupos de endpoint nao implementados: CIPA (NR-5), PGR/GES (NR-1),
+  Treinamentos, Rotina Preventiva (DDS, Inspecoes, PT, Brigada), e o CRUD
+  dedicado de Acoes Corretivas (`/api/sst/corrective-actions` — hoje so
+  existe a criacao inline via `CreateAccidentInvestigationUseCase`, nao
+  um controller proprio).
+- RF-SST-009 (checklist de devolucao de EPI disparado por desligamento do
+  RH) — gatilho RH→SST ainda nao especificado como endpoint interno ou
+  evento assincrono (pendencia ja sinalizada pela auditoria de design).
+- RF-SST-018 (bloqueio automatico de apontamento de funcionario inapto)
+  — o dado (`resultado` do ASO) existe, mas nao ha flag/mecanismo
+  consultado pelo modulo de Apontamento ainda.
+- Aplicacao das 12 migrations (`migration:up`) — decisao do dono do
+  produto, fora do escopo de qualquer agente ate aprovacao explicita.

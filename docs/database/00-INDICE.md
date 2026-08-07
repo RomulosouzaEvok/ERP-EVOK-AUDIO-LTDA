@@ -63,6 +63,15 @@ nomenclatura isolado (`access_profiles.nome`/`descricao`) registrado em
   com essas tabelas (ambos refletem o schema real introspectado do banco
   aplicado, por convenção desta pasta) — atualizar somente depois de
   `migration:up`.
+  **Atualização 2026-08-07 (implementação backend, P0):** os 14 models
+  Sequelize (`server/src/models/Sst*.ts`) e o módulo Clean Architecture
+  `server/src/modules/sst/` (EPI, ASO/PCMSO, Acidente/CAT, fila eSocial —
+  P0 de `docs/business/BLOCO_1_SST_REQUISITOS.md`) já foram implementados
+  e **apontam para o schema das migrations acima, que continuam
+  pendentes de `migration:up`** — o código não altera essa pendência, só
+  a antecipa. Ver changelog narrativo em `DATABASE.md` (seção "BLOCO 1 SST
+  — Implementação Backend, 2026-08-07") e
+  `docs/governance/HANDOFF_CODEX.md`.
 
 ## Auditorias específicas
 

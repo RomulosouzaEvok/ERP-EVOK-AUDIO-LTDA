@@ -67,6 +67,7 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   'mobileInventory',
   'laboratory',
   'engineering',
+  'sst',
 ];
 
 /**

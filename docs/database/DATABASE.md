@@ -1969,3 +1969,47 @@ confirmado por query real em `information_schema.role_table_grants`, ver
 **Contagens atualizadas (2026-08-06, pós-COMEX):** 66 migrations
 aplicadas, 80 tabelas de negócio, 175 foreign keys. Ver
 `docs/database/03-MODELO_FISICO.md` para o detalhamento completo.
+
+---
+
+## BLOCO 1 SST — Implementação Backend (2026-08-07)
+
+Módulo SST (Segurança e Saúde do Trabalho, departamento 15). Schema
+completo (12 migrations, `20260806-000130` a `20260806-000141`) já
+projetado e auditado em 2026-08-06 (`docs/business/BLOCO_1_SST_*.md`) —
+**migrations continuam pendentes de `migration:up`** (aguardando
+aprovação explícita do dono do produto, convenção do projeto). Esta
+entrega adicionou apenas o CÓDIGO que aponta para esse schema:
+
+- **14 models Sequelize** (`server/src/models/Sst*.ts`): `SstTipoEpi`,
+  `SstMatrizEpi`, `SstEntregaEpi`, `SstDevolucaoEpi`, `SstAcaoCorretiva`,
+  `SstPlanoExames`, `SstAso`, `SstExameComplementar`, `SstAcidente`,
+  `SstAcidenteTestemunha`, `SstInvestigacaoAcidente`,
+  `SstAcidenteComplemento`, `SstCat`, `SstEventoEsocial` — colunas 100%
+  em português (nome igual ao da migration), registrados e associados em
+  `server/src/models/index.ts`.
+- **Mapper DTO PT-BR↔inglês** (primeiro do projeto,
+  `docs/business/BLOCO_1_SST_MODELO_DADOS.md` §0): vive em
+  `server/src/modules/sst/infrastructure/mappers/` (`EpiMapper.ts`,
+  `AsoMapper.ts`, `AccidentMapper.ts`) — traduz `ca`↔`ca_numero`,
+  `ativo`↔`active`, `tamanhos_variacoes` (string `P/M/G`) ↔ `tamanhos`
+  (array), `tipo_epi_id`↔`epi_type_id`, `setor_local`↔`local_setor`,
+  `parte_corpo_atingida`↔`parte_corpo`, `risco_exigente`↔`risco_exigido`
+  (esta última divergência não estava mapeada em nenhum documento do
+  bloco anterior — descoberta na implementação).
+- **Nenhuma migration foi criada, alterada ou aplicada** nesta entrega —
+  os models refletem exatamente o schema já revisado pelo
+  `AuditorIntegrador`. Se o schema mudar antes da aprovação, os models
+  precisam ser atualizados manualmente (não há introspecção automática).
+- **NOTA DE GAP DE SCHEMA (transparência para a próxima passada):**
+  `sst_acidentes` não tem uma coluna de status de encerramento dedicada
+  (`POST /accidents/:id/close` da API publicada) — apenas `confirmado`,
+  que já nasce `true` na criação (a API não expõe uma fase de rascunho
+  para Acidente, diferente de EntregaEPI). `CloseAccidentUseCase` hoje
+  funciona como um PORTÃO DE VALIDAÇÃO (RF-SST-026/BR-SST-018) sem
+  persistir uma nova transição de estado. Se o produto precisar de um
+  status de encerramento auditável, é necessária uma migration adicional
+  (fora do escopo desta passada).
+
+Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo da
+entrega (endpoints implementados, testes, pendências).

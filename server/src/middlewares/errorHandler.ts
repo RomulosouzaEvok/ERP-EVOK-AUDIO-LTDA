@@ -88,8 +88,22 @@ const errorHandler = (err: ExtendedError, req: Request, res: Response, _next: Ne
     });
   }
 
-  // 6. Database errors
+  // 6. Database errors — mapeamento dedicado para os triggers de
+  // imutabilidade do módulo SST (RNF-SST-01, ver
+  // docs/business/BLOCO_1_SST_MODELO_DADOS.md §10): o repositório NUNCA
+  // deveria expor update/delete de um registro confirmado (a API modela
+  // isso como transição de estado, não CRUD livre), mas esta é a defesa
+  // em profundidade contra um bypass — o Postgres RAISE EXCEPTION do
+  // trigger é traduzido para 409 amigável em vez de vazar a mensagem SQL
+  // crua ou responder 500 genérico.
   if (err instanceof Sequelize.DatabaseError) {
+    const dbMessage = (err as any).original?.message ?? err.message ?? '';
+    if (/sst_(entregas_epi|acidentes|cats|eventos_esocial)/i.test(dbMessage) && /imutav|ja confirmad|nao pode ser exclu/i.test(dbMessage)) {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'CONFLICT', message: 'Este registro é imutável e não pode ser alterado/excluído (valor probatório legal, RNF-SST-01).' }
+      });
+    }
     return res.status(500).json({
       success: false,
       error: ERROR_MESSAGES.SequelizeDatabaseError
