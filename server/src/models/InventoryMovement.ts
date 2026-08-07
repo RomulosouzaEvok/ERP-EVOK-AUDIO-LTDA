@@ -21,7 +21,7 @@ interface InventoryMovementAttributes {
   unit_cost: number;
   description: string | null;
   reference_id: number | null;
-  reference_type: 'sale' | 'purchase' | 'production' | 'adjustment' | 'transfer' | null;
+  reference_type: 'sale' | 'purchase' | 'production' | 'adjustment' | 'transfer' | 'sst_epi_delivery' | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -37,7 +37,10 @@ const InventoryMovement = sequelize.define('InventoryMovement', {
   unit_cost: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, comment: 'Custo unitário no momento' },
   description: DataTypes.TEXT,
   reference_id: DataTypes.INTEGER,
-  reference_type: { type: DataTypes.ENUM('sale', 'purchase', 'production', 'adjustment', 'transfer') }
+  reference_type: {
+    type: DataTypes.ENUM('sale', 'purchase', 'production', 'adjustment', 'transfer', 'sst_epi_delivery'),
+    comment: "'sst_epi_delivery' adicionado em 20260806-000131-create-sst-entrega-epi.cjs (BLOCO 1 SST, confirmação de EntregaEPI) — sincronizado aqui na auditoria cruzada, pois o valor já existia no ENUM do Postgres mas faltava neste model TS.",
+  }
 }, {
   tableName: 'inventory_movements',
   underscored: true,

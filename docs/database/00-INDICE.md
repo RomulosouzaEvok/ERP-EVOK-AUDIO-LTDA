@@ -49,6 +49,21 @@ nomenclatura isolado (`access_profiles.nome`/`descricao`) registrado em
   editar manualmente; regenerar a cada mudança relevante de schema (ver
   comando em `03-MODELO_FISICO.md`).
 
+## Pendências de aplicação
+
+- **Módulo SST (BLOCO 1, departamento 15)** — 12 migrations preparadas em
+  `server/migrations/20260806-000130-*.cjs` a `20260806-000141-*.cjs` (34
+  tabelas novas + extensão do ENUM `inventory_movements.reference_type` +
+  chave `sst` em `accessModules.ts`), **ainda não aplicadas**
+  (`migration:up` pendente de aprovação do dono do produto, após revisão
+  do `AuditorIntegrador`). Modelo de dados completo, decisões de
+  imutabilidade/retenção e rastreabilidade RF→tabela em
+  [`docs/business/BLOCO_1_SST_MODELO_DADOS.md`](../business/BLOCO_1_SST_MODELO_DADOS.md).
+  `02-MODELO_LOGICO.md`/`04-DICIONARIO_DADOS.md` **não foram atualizados**
+  com essas tabelas (ambos refletem o schema real introspectado do banco
+  aplicado, por convenção desta pasta) — atualizar somente depois de
+  `migration:up`.
+
 ## Auditorias específicas
 
 - **[AUDITORIA_DEPARTAMENTOS_2026-08-06.md](AUDITORIA_DEPARTAMENTOS_2026-08-06.md)**

@@ -2876,3 +2876,124 @@ avaliar):**
 
 **Território:** `docs/` apenas. `client/`, `server/`, migrations não foram
 tocados por este agente.
+
+---
+
+## 2026-08-06 — Auditoria Cruzada BLOCO 1 SST (Requisitos × Banco × API) — `AuditorIntegrador`
+
+**Escopo:** gate de qualidade pré-código do módulo SST (departamento 15),
+confrontando `docs/business/BLOCO_1_SST_REQUISITOS.md` (55 RF-SST, UC-44 a
+UC-48), `docs/business/BLOCO_1_SST_MODELO_DADOS.md` (12 migrations,
+`20260806-000130` a `000141`) e `docs/business/BLOCO_1_SST_API.md` (75
+endpoints), com `docs/business/briefs/BRIEF_SST_2026-08-06.md` como fonte
+de verdade do domínio.
+
+**Veredito: `APROVADO PARA IMPLEMENTAÇÃO`** — rastreabilidade RF→Tabela e
+RF→Endpoint 100% verificada (nenhum RF-SST-001..055 órfão nas duas
+direções), imutabilidade de `EntregaEPI`/`Acidente`/`CAT` confirmada por
+trigger e sem PUT/DELETE incompatível na API, RBAC `sst` consistente
+(mais restritivo que `rh`, 2 exceções de leitura enxuta documentadas). 9
+inconsistências reais encontradas e já corrigidas nos próprios artefatos
+(documentos + 2 arquivos de código) durante a auditoria — nenhuma ficou
+pendente sem decisão registrada.
+
+**Correções aplicadas diretamente pelo `AuditorIntegrador` (autoridade de
+decisão em pontos ambíguos, sem round-trip com os agentes anteriores):**
+
+1. `[IMPLEMENTADO]` **Bug de schema real (bloqueador se não corrigido):**
+   `sst_riscos_ocupacionais.categoria_agente`/`.agente` nasceram `NOT NULL`,
+   tornando impossível representar RF-SST-036/BR-SST-026 ("registro
+   explícito de ausência de risco identificado"). Tornados `NULL`-áveis +
+   `CHECK ck_sst_riscos_ocupacionais_ausencia_coerente` em
+   `server/migrations/20260806-000139-create-sst-pgr-ges.cjs` (migration
+   ainda não aplicada — `status: down` — correção segura).
+2. `[IMPLEMENTADO]` **Tabela de auditoria ausente:** `POST
+   /api/sst/accidents/:id/complements` (contrato já publicado) prometia
+   trilha de auditoria por lançamento (BR-SST-017, Lei 8.213/91), mas a
+   migration só permitia `UPDATE` direto de `dias_perdidos`/`houve_cat` sem
+   histórico de quem/quando/motivo. Criada `sst_acidente_complementos`
+   (insert-only) em `server/migrations/20260806-000135-create-sst-acidente.cjs`.
+3. `[IMPLEMENTADO]` **Bug de runtime certo (3 arquivos):** o valor
+   `'sst_epi_delivery'` foi adicionado ao ENUM do Postgres
+   (`enum_inventory_movements_reference_type`) mas não sincronizado em
+   código — `server/src/models/InventoryMovement.ts` (tipo TS + `DataTypes.ENUM`),
+   `server/src/modules/inventory/presentation/validators/inventoryValidators.ts`
+   (`z.enum`), `server/src/modules/inventory/domain/entities/InventoryMovementEntity.ts`
+   (`REFERENCE_TYPES`) — os 3 rejeitariam a baixa de estoque de EntregaEPI
+   em runtime. Corrigidos.
+4. `[IMPLEMENTADO]` **API doc desatualizada vs. decisão real do banco:**
+   `BLOCO_1_SST_API.md` §1.3 ainda descrevia devolução de EPI como "grava
+   em coluna própria" na própria `sst_entregas_epi`, mas o `AdmDBA` já
+   havia decidido tabela dedicada (`sst_devolucoes_epi`, insert-only) — a
+   pergunta pendente do `ArquitetoSoftwareAPI` no rodapé do documento já
+   estava respondida no documento do `AdmDBA`, só não tinha sido
+   propagada. Texto e pendência marcados como resolvidos.
+5. `[IMPLEMENTADO]` **Enum divergente `papel` da CIPA:** exemplo usava
+   `"vice"`, mas o ENUM real é `vice_presidente`
+   (`sst_membros_cipa.papel`, migration `000138`) — corrigido no exemplo.
+6. `[IMPLEMENTADO]` **Enum inválido nos exemplos de evidência de EntregaEPI:**
+   `"assinatura_eletronica"` não é um dos 3 valores de
+   `sst_entregas_epi.evidencia_tipo`; corrigido para `aceite_eletronico`
+   em 2 exemplos (PATCH evidence e GET ficha).
+7. `[IMPLEMENTADO]` **Enum divergente `norma` de treinamento:** exemplos
+   usavam `brigada`/`cipa` (minúsculo), mas o ENUM real é
+   `NR-23_brigada`/`CIPA` (`sst_treinamentos.norma`, migration `000140`).
+8. `[IMPLEMENTADO]` **Tipo incompatível `setor` (string) vs. `department_id`
+   (FK obrigatória):** `POST /api/sst/risks` e `POST /api/sst/inspections`
+   enviavam `"setor": "Injeção"` (texto livre) mas os campos reais são
+   `department_id INTEGER NOT NULL FK`. Corrigido para `department_id` nos
+   dois payloads — decisão: não fazer lookup de nome de setor no backend
+   (frágil), cliente deve enviar o id como em Manutenção/Patrimônio.
+9. `[IMPLEMENTADO]` **Contagem de endpoints incorreta:** "Resumo — Handoff"
+   afirmava 65 endpoints; contagem real de linhas de rota nas tabelas é 75.
+   Corrigido.
+
+**`[PENDENTE]` — decisão de expectativa registrada, não uma correção de
+schema/código, mas deve orientar o dimensionamento de esforço do
+`programador`:** a nota do `AdmDBA` de que a tradução PT-BR (banco) ↔
+inglês (API) "é responsabilidade do repositório/DTO, como em qualquer
+módulo Clean Architecture do projeto" foi **verificada como falsa** contra
+os módulos maduros citados como referência
+(`server/src/modules/nonConformities/`, model `NonConformity.ts`): hoje o
+projeto **não tem nenhum mapper de tradução de nome de campo** — os
+repositórios retornam a instância Sequelize com os mesmos nomes de coluna
+do banco (ambos em inglês). SST será o **primeiro módulo do projeto** a
+exigir um mapper DTO real (tradução de idioma, não só de convenção de
+caixa) para `TipoEPI`/`ASO`/`Acidente`/etc. — o `programador` deve
+orçar isso como trabalho novo, não reuso de padrão existente.
+
+**`[PENDENTE]` — fora do escopo desta auditoria, herdado do próprio
+`BLOCO_1_SST_API.md` §Resumo (itens 5 e 6), não bloqueia início de
+implementação do P0:** RF-SST-009 (checklist de devolução de EPI disparado
+por desligamento do RH) sem endpoint/gatilho formalizado entre módulos;
+RF-SST-020 (relatório anual PCMSO) e RF-SST-050 (consumo de status de
+extintores do Patrimônio/Manutenção) sem endpoint detalhado. Recomenda-se
+UC dedicado antes de implementar essas 3 integrações específicas — não
+impede o restante do Bloco 1.
+
+**Auditoria parcial (declarado, não omitido):** não foram lidas as 4
+migrations restantes do cluster (`000130`, `000132`, `000133`, `000140`,
+`000141`) linha a linha com o mesmo rigor dado a
+`000131`/`000135`/`000136`/`000137`/`000138`/`000139` — verificação foi por
+amostragem dirigida aos pontos de maior risco (imutabilidade, polimorfismo,
+FK). Migration `000130` (`sst_tipos_epi`/`sst_matriz_epi`) não foi lida
+linha a linha nesta rodada. Recomenda-se conferência humana rápida dessas
+antes do `programador` iniciar, ainda que o risco resida majoritariamente
+nas já revisadas (triggers e chaves polimórficas).
+
+**Arquivos alterados nesta auditoria:**
+- `docs/business/BLOCO_1_SST_MODELO_DADOS.md` (6 notas de correção)
+- `docs/business/BLOCO_1_SST_API.md` (9 correções de texto/exemplo)
+- `server/migrations/20260806-000139-create-sst-pgr-ges.cjs` (schema)
+- `server/migrations/20260806-000135-create-sst-acidente.cjs` (schema)
+- `server/src/models/InventoryMovement.ts` (bug de ENUM)
+- `server/src/modules/inventory/presentation/validators/inventoryValidators.ts` (bug de ENUM)
+- `server/src/modules/inventory/domain/entities/InventoryMovementEntity.ts` (bug de ENUM)
+
+**Nota:** `server/src/shared/domain/accessModules.ts` já tinha a chave
+`sst` adicionada (mudança não commitada, working tree) antes desta
+auditoria, embora ambos `BLOCO_1_SST_REQUISITOS.md` §5.3 e
+`BLOCO_1_SST_API.md` a descrevam como "pendência para o `programador`" —
+documentação desatualizada em relação ao código já escrito; não é um
+problema, só uma informação para quem for commitar (a chave deve ir junto
+do commit de implementação do módulo SST, não separada).

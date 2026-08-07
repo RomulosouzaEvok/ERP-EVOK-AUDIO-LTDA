@@ -85,3 +85,31 @@ deliberada**, documentada nesta seção com o racional específico (ex.:
 "invariante que precisa ser atômica sob concorrência extrema e a
 aplicação não consegue garantir isso de forma performática") — não como
 prática padrão.
+
+## Exceção aplicada — BLOCO 1 SST (2026-08-06)
+
+O módulo SST (Segurança e Saúde do Trabalho, migrations
+`server/migrations/20260806-000131/000135/000136/000137-*.cjs`) introduz os
+**primeiros triggers do projeto**, todos com o mesmo racional estreito:
+imutabilidade estrutural de registros com valor probatório legal
+(EntregaEPI, Acidente, CAT) e garantia de não-descarte de eventos eSocial
+em fila — não decisão de fluxo de negócio, não cálculo. Detalhado em
+`docs/business/BLOCO_1_SST_MODELO_DADOS.md` §10.
+
+| Function/trigger | Tabela | O que impede |
+|---|---|---|
+| `sst_lock_entrega_epi` | `sst_entregas_epi` | UPDATE/DELETE de linha com `confirmada = true` (RNF-SST-01, BR-SST-006) |
+| `sst_lock_acidente` | `sst_acidentes` | UPDATE de qualquer coluna exceto `dias_perdidos`/`houve_cat`, e DELETE, quando `confirmado = true` (RNF-SST-01, BR-SST-017) |
+| `sst_lock_cat` | `sst_cats` | UPDATE de conteúdo legal (tudo exceto colunas de status eSocial) e DELETE, desde a emissão (RNF-SST-01) |
+| `sst_block_delete_evento_esocial` | `sst_eventos_esocial` | DELETE em qualquer estado (RNF-SST-03, RF-SST-043 — "nenhum evento perdido ou descartado silenciosamente") |
+
+Enforcement de aplicação (repositório nunca expõe `update`/`delete` para
+linha confirmada/emitida) continua sendo a primeira linha de defesa; a
+trigger é defesa em profundidade contra bypass direto via `psql`/acesso
+administrativo — mesmo racional já aceito para
+`uq_production_downtimes_open_per_work_center` (índice único parcial),
+aqui levado a trigger porque um `UNIQUE`/`CHECK` sozinho não expressa
+"imutável após confirmado". Não é precedente para mover regra de negócio
+processual (cálculo de prazo, notificação, fluxo de aprovação) para o
+banco — essas continuam 100% em `server/src/modules/sst/` quando
+implementado.

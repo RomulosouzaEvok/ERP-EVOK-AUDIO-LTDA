@@ -34,6 +34,17 @@
  * `server/src/modules/employees/domain/services/employeeSensitiveFields.ts`).
  * `role === 'admin'` sempre vê os campos completos (mesmo padrão dos demais
  * módulos).
+ * `sst` foi adicionado em 2026-08-06 (BLOCO 1 do módulo SST — Segurança e
+ * Saúde do Trabalho, departamento 15,
+ * `docs/business/BLOCO_1_SST_REQUISITOS.md` §5.3) para o mesmo domínio de
+ * dados sensíveis de saúde (ASO, exames, restrições clínicas, acidentes,
+ * CAT) — LGPD art. 5º, II (dado sensível) e art. 11. Diferente de `rh`,
+ * `sst` é MAIS restritivo por decisão explícita do bloco: para a maioria
+ * das entidades do módulo (ASO, Acidente, CAT), a leitura completa exige o
+ * módulo `sst` via `authorizeModule` bloqueando a rota inteira (não basta
+ * autenticação, como ocorre hoje em `GET /api/employees`); o RH consome
+ * apenas um status derivado (apto/vencido/inapto), nunca o conteúdo
+ * clínico — ver RF-SST-021/BR-SST-010/036 no bloco de requisitos.
  *
  * @module shared/domain/accessModules
  */
@@ -64,6 +75,7 @@ export type AccessModuleKey =
   | 'manutencao'
   | 'garantia'
   | 'rh'
+  | 'sst'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'
@@ -110,6 +122,7 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   { key: 'manutencao', label: 'Manutenção' },
   { key: 'garantia', label: 'Garantia/Assistência Técnica' },
   { key: 'rh', label: 'Recursos Humanos (dados sensíveis)' },
+  { key: 'sst', label: 'Segurança e Saúde do Trabalho (dados sensíveis)' },
   { key: 'rastreabilidade', label: 'Rastreabilidade' },
   { key: 'financeiro', label: 'Financeiro' },
   { key: 'relatorios.producao', label: 'Relatórios de Produção' },

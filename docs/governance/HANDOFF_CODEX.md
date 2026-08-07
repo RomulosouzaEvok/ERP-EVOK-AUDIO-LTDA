@@ -8658,4 +8658,103 @@ Isso segue o padrão RBAC existente (perfil configurável, mesma matriz
 - `EmployeeDocument`, `JobPosition`, `EmployeeJobHistory` e outras
   entidades futuras do brief (P4–P17) ainda não existem — quando forem
   criadas, revisar se também carregam campos 🔒 que precisam do mesmo
+  tratamento.
+
+---
+
+## BLOCO 1 — Módulo SST (Segurança e Saúde do Trabalho) — Requisitos Prontos (2026-08-06)
+
+**Status:** 🟡 Requisitos formais concluídos. **Nenhum código foi criado.**
+SST não existe hoje em `server/src/` — sem model, sem rota, sem use-case.
+
+**Para `AdmDBA` e `ArquitetoSoftwareAPI`:** os requisitos completos (RF/RNF,
+7 casos de uso P0 detalhados com fluxo de exceção, 23 entidades do domínio,
+regras de negócio com base legal) estão em:
+
+- **`docs/business/BLOCO_1_SST_REQUISITOS.md`** — ler primeiro (RF-SST-001
+  a 055, RNF-SST-01 a 06, UC-44 a UC-48, matriz de rastreabilidade).
+- `docs/business/briefs/BRIEF_SST_2026-08-06.md` — brief de domínio
+  original (23 entidades com cardinalidades em linguagem natural, seção
+  (b); 36 regras BR-SST-001 a 036 com base legal, seção (c)).
+
+**Decisões já tomadas (não reabrir sem motivo novo):**
+1. **ASO é entidade própria do módulo SST**, não um documento genérico de
+   RH (`employee_documents`). RH consome apenas um status de aptidão via
+   endpoint de leitura dedicado (RF-SST-021) — ver
+   `BLOCO_1_SST_REQUISITOS.md` §5.1 para a justificativa completa
+   (decisão consistente entre `BRIEF_SST_2026-08-06.md` e
+   `BRIEF_RH_2026-08-06.md`, sem divergência real a arbitrar).
+2. **TipoEPI vincula opcionalmente 1:1 a um `Item`** de estoque já
+   existente; a baixa de estoque na entrega reaproveita o fluxo de
+   `/api/inventory/movements` (motivo "entrega EPI") — não criar um
+   segundo controle de saldo dentro do módulo SST.
+3. Terminologia legal corrigida: usar **PGR/GRO (NR-1)** em todo o módulo,
+   nunca "PPRA" (extinto em 2022).
+
+**Pendência de RBAC:** precisa de uma nova chave `sst` em
+`server/src/shared/domain/accessModules.ts` (catálogo hoje com 30 chaves,
+`rh` foi o último adicionado em 2026-08-06). Recomendação: `sst` deve ser
+**mais restritivo** que `rh` — a maioria das entidades (ASO, Acidente, CAT)
+exige o módulo para leitura completa, diferente de `GET /api/employees`
+que hoje é liberado a qualquer autenticado.
+
+**Após a modelagem de banco/API, acionar `AuditorIntegrador`** para rodar a
+rastreabilidade Requisito → Banco → API neste módulo novo, antes de
+considerar o ciclo fechado (não há schema/API pré-existente de SST para
+conflitar, mas a superfície de RBAC/LGPD sobre dados de saúde exige
+verificação cruzada dedicada).
+
+---
+
+## BLOCO 1 — Módulo SST — Modelagem de Banco Concluída (2026-08-06, `AdmDBA`)
+
+**Status:** 🟡 Migrations criadas, **não aplicadas** (`migration:up`
+pendente de aprovação do dono do produto, após revisão do
+`AuditorIntegrador`). Nenhum model Sequelize/use-case/controller foi
+criado — isso é do `programador`, no próximo passo.
+
+**12 migrations novas** (`server/migrations/20260806-000130-*.cjs` a
+`20260806-000141-*.cjs`), 34 tabelas (`sst_tipos_epi`, `sst_matriz_epi`,
+`sst_entregas_epi` + `sst_devolucoes_epi` + `sst_estornos_entrega_epi`,
+`sst_acoes_corretivas`, `sst_planos_exames`, `sst_asos` +
+`sst_exames_complementares`, `sst_acidentes` +
+`sst_acidente_testemunhas` + `sst_investigacoes_acidente`, `sst_cats`,
+`sst_eventos_esocial`, cluster CIPA (6 tabelas), cluster PGR/GES (5
+tabelas), cluster Treinamentos (2 tabelas), cluster Rotina Preventiva (7
+tabelas)). Detalhe completo, coluna a coluna, com justificativa de FK
+RESTRICT/CASCADE, em
+**[`docs/business/BLOCO_1_SST_MODELO_DADOS.md`](../business/BLOCO_1_SST_MODELO_DADOS.md)**.
+
+**Mudanças fora das tabelas novas:**
+1. `server/src/shared/domain/accessModules.ts` — chave `sst` adicionada
+   (30 → 31 chaves).
+2. `inventory_movements.reference_type` (ENUM) — valor
+   `'sst_epi_delivery'` adicionado (migration `20260806-000131`).
+3. `docs/database/06-ESTRUTURAS_PROGRAMAVEIS.md` — atualizado com os
+   **primeiros triggers do projeto** (`sst_lock_entrega_epi`,
+   `sst_lock_acidente`, `sst_lock_cat`,
+   `sst_block_delete_evento_esocial`), exceção arquitetural documentada e
+   estreita para imutabilidade de registros com valor probatório legal
+   (RNF-SST-01) — nunca lógica de processo, só travas estruturais.
+
+**Para o `programador`, quando a migração for aprovada e aplicada:**
+- Models Sequelize novos devem respeitar `underscored: true` e os nomes de
+  coluna em português já usados nas migrations (ex.: `ca`, `ativo`,
+  `data_prevista_troca`) — ver nota de nomenclatura §0 do documento de
+  modelo de dados (decisão delegada pelo brief ao `AdmDBA`).
+- `sst_entregas_epi` e `sst_acidentes` seguem um fluxo
+  rascunho→confirmação: o repositório NUNCA deve tentar `UPDATE`/`DELETE`
+  numa linha já confirmada — o Postgres vai rejeitar com
+  `RAISE EXCEPTION` (trigger); o use-case de confirmação é a ÚNICA
+  transição de UPDATE válida.
+- `sst_acoes_corretivas` e `sst_eventos_esocial` são polimórficas
+  (`origem_tipo`+`origem_id`, sem FK real) — resolver a origem em
+  aplicação, sem depender de `include` automático do Sequelize.
+- 5 itens de pendência específicos de nomenclatura/fluxo estão listados em
+  `BLOCO_1_SST_MODELO_DADOS.md` §14 ("Pendências para o
+  `ArquitetoSoftwareAPI`") — ler antes de implementar o contrato REST.
+
+**Confirmado:** `npm run migration:status --prefix server` lista todas as
+12 migrations novas como `down` (pendentes), sem quebrar o comando —
+nenhuma foi aplicada.
   tratamento de `hasFullEmployeeAccess`.
