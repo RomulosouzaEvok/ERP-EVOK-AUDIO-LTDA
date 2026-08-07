@@ -38,8 +38,8 @@ class SequelizeClientsRepository extends ClientsRepository {
   }
 
   /** @inheritdoc */
-  public async create(data: Record<string, unknown>): Promise<any> {
-    return Client.create(data);
+  public async create(data: Record<string, unknown>, transaction?: unknown): Promise<any> {
+    return Client.create(data, transaction ? { transaction } : undefined);
   }
 
   /** @inheritdoc */

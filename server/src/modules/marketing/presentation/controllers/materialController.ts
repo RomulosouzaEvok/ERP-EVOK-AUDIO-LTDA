@@ -21,6 +21,7 @@ const GetMaterialByIdUseCase = require('../../application/use-cases/material/Get
 const CreateMaterialUseCase = require('../../application/use-cases/material/CreateMaterialUseCase');
 const UpdateMaterialUseCase = require('../../application/use-cases/material/UpdateMaterialUseCase');
 const UploadMaterialFileUseCase = require('../../application/use-cases/material/UploadMaterialFileUseCase');
+const ApproveMaterialUseCase = require('../../application/use-cases/material/ApproveMaterialUseCase');
 const { createMaterialSchema, updateMaterialSchema, listMaterialQuerySchema, handleZodError } = require('../validators/materialValidators');
 const { ValidationError } = require('../../../../errors');
 
@@ -112,6 +113,25 @@ exports.uploadFile = async (req: RequestWithFile, res: Response, next: NextFunct
       entityDescription: material?.title,
       newValues: { file_path: material?.file_path },
       description: `Arquivo do material "${material?.title}" enviado`,
+    });
+
+    res.json({ success: true, data: material });
+  } catch (error) { next(error); }
+};
+
+/** `PATCH /api/marketing/materials/:id/approve` — aprova o material (RF-MKT-039, nível `approve`). */
+exports.approve = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const useCase = new ApproveMaterialUseCase(materialRepository);
+    const material = await useCase.execute({ id: Number(req.params.id), approvedByUserId: (req as any).user?.id });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'MarketingMaterial',
+      entityId: material?.id,
+      entityDescription: material?.title,
+      newValues: { approved: true },
+      description: `Material "${material?.title}" aprovado`,
     });
 
     res.json({ success: true, data: material });

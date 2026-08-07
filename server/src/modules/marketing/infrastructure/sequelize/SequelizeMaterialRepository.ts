@@ -12,6 +12,7 @@ class SequelizeMaterialRepository extends MaterialRepository {
     const where: any = {};
     if (filters.material_type) where.material_type = filters.material_type;
     if (filters.product_id) where.product_id = filters.product_id;
+    if (filters.stock_item_id) where.stock_item_id = filters.stock_item_id;
     if (typeof filters.approved === 'boolean') where.approved = filters.approved;
 
     const { count, rows } = await MarketingMaterial.findAndCountAll({

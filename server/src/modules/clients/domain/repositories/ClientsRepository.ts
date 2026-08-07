@@ -17,8 +17,14 @@ class ClientsRepository {
     throw new Error('ClientsRepository.findById não implementado.');
   }
 
-  /** @param data - Dados do cliente. @returns Cliente criado. @throws {Error} Se nao implementado. */
-  public async create(data: Record<string, unknown>): Promise<any> { // eslint-disable-line @typescript-eslint/no-unused-vars
+  /**
+   * @param data - Dados do cliente.
+   * @param transaction - Transação Sequelize opcional (para criação atômica
+   * a partir de outro módulo, ex. `modules/marketing/.../ConvertLeadUseCase`).
+   * @returns Cliente criado.
+   * @throws {Error} Se nao implementado.
+   */
+  public async create(data: Record<string, unknown>, transaction?: unknown): Promise<any> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('ClientsRepository.create não implementado.');
   }
 

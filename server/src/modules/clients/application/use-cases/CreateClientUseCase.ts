@@ -21,11 +21,14 @@ class CreateClientUseCase extends UseCase<Record<string, any>, any> {
 
   /**
    * @param input - Dados do cliente a criar.
+   * @param transaction - Transação Sequelize opcional — usada por
+   * `modules/marketing/.../ConvertLeadUseCase` (RF-MKT-002) para criar o
+   * `Client` e atualizar o `MarketingLead` na mesma transação de banco.
    * @returns Cliente criado.
    * @throws {ValidationError} Se `name`/`cpf_cnpj` estiverem ausentes ou o documento for invalido.
    * @throws {ConflictError} Com mensagem `'CPF/CNPJ já cadastrado'` se o documento ja existir.
    */
-  public async execute(input: Record<string, any>): Promise<any> {
+  public async execute(input: Record<string, any>, transaction?: unknown): Promise<any> {
     const entity = new ClientEntity(input as any);
 
     const docValidation = Validators.validateDocument(entity.cpf_cnpj);
@@ -53,7 +56,7 @@ class CreateClientUseCase extends UseCase<Record<string, any>, any> {
         ie: entity.ie,
         im: entity.im,
         status: 'active'
-      });
+      }, transaction);
     } catch (error: any) {
       if (error.name === 'SequelizeUniqueConstraintError') {
         throw new ConflictError('CPF/CNPJ já cadastrado');

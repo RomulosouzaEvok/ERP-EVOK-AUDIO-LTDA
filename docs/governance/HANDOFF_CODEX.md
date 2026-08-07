@@ -11956,3 +11956,175 @@ regras BR-RH-001 a 024, 9 processos P1-P9, 15 entidades novas).
    RBAC reforçado para `Absence.cid`/`PayrollImportItem`.
 3. `AuditorIntegrador` — ao final do ciclo, checar se este bloco fecha o
    pipeline completo de 6 blocos (Bloco 0 a 6) sem BR/RF órfão.
+
+## 2026-08-07 (rodada seguinte) — BLOCO 5 MKT (correção): backend implementado — Passo 4 — `programador`
+
+**Escopo:** implementação do backend a partir dos artefatos aprovados
+(`docs/business/BLOCO_5_MKT_REQUISITOS.md` — 40 RF-MKT, UC-63 a UC-66;
+`BLOCO_5_MKT_MODELO_DADOS.md` + migrations `server/migrations/20260807-000310`
+a `000315`, **não aplicadas** — instrução explícita, não tocadas nesta
+rodada; `BLOCO_5_MKT_API.md` — 27 endpoints do contrato pós-auditoria;
+`BLOCO_5_MKT_AUDITORIA.md`). Substitui o código anterior do módulo
+Marketing (`server/src/modules/marketing/`, entregue em 2026-08-07 na
+rodada "Módulo Marketing — Implementação do zero").
+
+### 1. Models atualizados/criados (`server/src/models/`)
+
+**Atualizados:** `MarketingLead` (novo enum `status` com
+`in_sales_attendance`; `qualified_at`, `sales_owner_user_id`, `handoff_at`,
+`first_response_at`, `converted_at`, `needs_review`, `event_id`,
+`consent_given`/`consent_date`/`consent_channel`), `MarketingCampaign`
+(`budget`→`budget_requested`; `budget_approved`/`budget_approval_status`/
+`budget_approved_by`/`budget_approved_at`; `notes`;
+`metrics_recalculated_at` — `leads_generated`/`conversions`/`roi`
+permanecem como cache, não removidas), `MarketingMaterial`
+(`stock_item_id`, `approved_by`, `approved_at`).
+**Novos:** `MarketingEvent`, `MarketingEventChecklistItem`,
+`MarketingLeadSaneamentoLog`. `server/src/models/index.ts` atualizado
+(imports + ~10 associações novas + barrel de exports).
+
+### 2. Módulo `clients/` — mudança pontual para viabilizar transação atômica
+
+`ClientsRepository.create`/`SequelizeClientsRepository.create`/
+`CreateClientUseCase.execute` ganharam parâmetro `transaction` opcional
+(compatível para trás, nenhuma chamada existente quebrada) — usado por
+`ConvertLeadUseCase` (RF-MKT-002) para criar `Client` e atualizar o
+`MarketingLead` na mesma transação Sequelize.
+
+### 3. Conversão atômica Lead → Cliente (UC-63)
+
+`POST /api/marketing/leads/:id/convert` (`ConvertLeadUseCase`) — opção A
+(`client_id` de cliente existente, via `ClientService.findById`) ou opção B
+(`new_client`, via `ClientService.create()` reaproveitando
+`CreateClientUseCase` do módulo `clients` **na mesma transação**);
+`ClientServiceAdapter` (`infrastructure/adapters/`) é o único ponto de
+acesso ao módulo `clients`, nunca Sequelize direto. Falha na criação do
+cliente (ex. CPF/CNPJ duplicado) reverte a transação inteira — lead
+permanece no status anterior. `PUT /leads/:id` e `POST /leads/:id/status`
+continuam rejeitando `status='converted'` (`ChangeLeadStatusUseCase` lança
+`BusinessRuleError` redirecionando para `/convert`).
+
+### 4. Métricas de campanha somente derivadas (BR-MKT-004)
+
+`createCampaignSchema`/`updateCampaignSchema` (Zod `.strict()`) não aceitam
+mais `leads_generated`/`conversions`/`roi`/`budget` — 400 explícito, nunca
+ignorado silenciosamente. `POST /campaigns/:id/recalculate-metrics`
+(`RecalculateCampaignMetricsUseCase`) é idempotente: `leads_generated`/
+`conversions` por `COUNT` real sobre `marketing_leads`, `roi` por receita
+atribuída somada POR LEAD convertido (janela de 90 dias a partir de
+`converted_at` de cada lead — `REVENUE_ATTRIBUTION_WINDOW_DAYS`,
+`server/src/modules/marketing/domain/constants.ts`).
+
+### 5. Handoff Marketing → Vendas (UC-64)
+
+`POST /leads/:id/handoff` (`HandoffLeadUseCase`) com
+`authorizeAnyModule([{moduleKey:'marketing'}, {moduleKey:'vendas'}])`
+(middleware já existente do Bloco 4 FAC, reaproveitado — não recriado).
+`ChangeLeadStatusUseCase` aceita `sales_owner_user_id` só quando
+`status='qualified'` e exige responsável já atribuído para avançar a
+`in_sales_attendance` (RF-MKT-012).
+
+### 6. Evento/Feira (UC-65) — NOVO
+
+CRUD completo (`CreateEventUseCase`/`UpdateEventUseCase`/
+`ListEventsUseCase`/`GetEventByIdUseCase`), checklist
+(`AddChecklistItemUseCase`/`UpdateChecklistItemUseCase`), encerramento
+exigindo `actual_cost` (`CloseEventUseCase`, RF-MKT-025) e relatório de
+ROI/custo por lead por evento (`GetEventsReportUseCase`,
+`GET /reports/events`). **Decisão registrada no código:**
+`PUT /events/:id` bloqueia TODA edição quando `completed`/`canceled` (sem
+a exceção de `notes` sugerida pelo contrato de API) — `marketing_events`
+(migration `000313`) não tem coluna `notes`; documentado em
+`UpdateEventUseCase.ts` como divergência consciente entre contrato e
+schema real, não corrigível sem migration aditiva futura.
+
+### 7. KPIs de funil (UC-66) — NOVO
+
+`GET /reports/funnel` (`GetFunnelReportUseCase` — CPL, taxa de
+qualificação, conversão, receita atribuída/ROI, SLA de handoff (%),
+mediana de ciclo do lead, orçado×realizado) e `GET /reports/events`;
+ambos retornam sempre `200`, com `has_data:false` e todos os campos
+numéricos `null` (nunca `0`/`NaN`) quando o filtro não encontra dado
+(UC-66 E1).
+
+### 8. RBAC `approve` pontual + material/estoque
+
+`POST /campaigns/:id/budget-decision` (`BudgetDecisionUseCase`) e
+`PATCH /materials/:id/approve` (`ApproveMaterialUseCase`) usam
+`authorizeModule('marketing', 'approve')` — resto do módulo em
+`operate`/leitura padrão. `budget_approved_by`/`approved_by` sempre de
+`req.user.id`, nunca do body. `stock_item_id` em `MarketingMaterial` é FK
+opcional só de referência — nenhum endpoint de estoque criado pelo módulo
+MKT (BR-MKT-011 mantida). Upload de nova versão de material aprovado
+reverte `approved`/`approved_by`/`approved_at` (RF-MKT-040).
+
+### 9. Estrutura de módulo (Clean Architecture)
+
+Novos: `application/services/` (`ClientService`, `SalesRevenueService`,
+`UserLookupService` — interfaces) + `infrastructure/adapters/`
+(`ClientServiceAdapter`, `SalesRevenueServiceAdapter`,
+`UserLookupServiceAdapter` — implementações, mesmo precedente de
+`MaintenanceOrderServiceAdapter` do módulo `ti`), `domain/constants.ts`
+(`REVENUE_ATTRIBUTION_WINDOW_DAYS=90`, `HANDOFF_SLA_DAYS=2`,
+`BUDGET_ALERT_WARNING_THRESHOLD=0.9`), `domain/repositories/EventRepository.ts`
++ `infrastructure/sequelize/SequelizeEventRepository.ts`,
+`presentation/controllers/eventController.ts` +
+`presentation/controllers/reportController.ts`,
+`presentation/validators/eventValidators.ts` +
+`presentation/validators/reportValidators.ts`. Router
+`presentation/routes/marketing.ts` reescrito com as 27 rotas do contrato.
+
+### 10. Documentações atualizadas
+
+`docs/governance/TODO.md` (nova entrada datada com o detalhamento
+completo desta implementação) e este arquivo. `docs/database/DATABASE.md`
+não precisou de nova entrada — nenhuma migration foi tocada/aplicada
+nesta rodada (schema-alvo já documentado pelo `AdmDBA` em
+`BLOCO_5_MKT_MODELO_DADOS.md`).
+
+### 11. Validação
+
+- `npm run typecheck` (a partir de `server/`): limpo, 0 erros.
+- `npm run test:unit`: **1177/1178** — única falha é a pré-existente
+  `onda3-shipping-cockpit-cashflow.test.ts` (falha de data conhecida,
+  documentada em outras entradas deste handoff, não relacionada a este
+  bloco).
+- 98 testes novos/reescritos do módulo Marketing: `marketing-lead-use-cases.test.ts`
+  (52, reescrito), `marketing-campaign-use-cases.test.ts` (reescrito),
+  `marketing-material-use-cases.test.ts` (reescrito),
+  `marketing-convert-lead-use-case.test.ts` (10, novo),
+  `marketing-handoff-lead-use-case.test.ts` (novo),
+  `marketing-funnel-report-use-case.test.ts` (novo),
+  `marketing-event-use-cases.test.ts` (22, novo),
+  `marketing-lead-saneamento.test.ts` (novo — cobre o efeito de aplicação
+  de `needs_review`/`data_issue_flag`, já que o saneamento em si roda em
+  SQL dentro da migration `000312`, fora do escopo de teste unitário).
+
+### 12. Pendências / riscos residuais
+
+- **Telas `client/src/pages/marketing/` (`MarketingPage.tsx` e afins,
+  entregues em 2026-08-06 contra o contrato ANTIGO) VÃO QUEBRAR** com os
+  breaking changes deste passo (`budget`→`budget_requested`,
+  `status='converted'` via `POST /leads/:id/status` removido, `approved`
+  removido de `POST /materials`, funil com `in_sales_attendance` novo,
+  etc.) — fora do escopo deste agente (backend); responsabilidade do
+  Passo 5 (`PromadorFonteEnd`).
+- Migrations `20260807-000310` a `000315` continuam **não aplicadas** —
+  pré-requisito de infraestrutura antes de qualquer deploy deste backend.
+- Volume real de leads `converted` órfãos que serão saneados pela migration
+  `000312` ainda não foi contado em banco real —
+  `[VERIFICAR COM MARKETING]` permanece pendente (decisão de negócio, não
+  técnica).
+- `REVENUE_ATTRIBUTION_WINDOW_DAYS`/`HANDOFF_SLA_DAYS`/
+  `BUDGET_ALERT_WARNING_THRESHOLD` implementados como constantes de código
+  (`domain/constants.ts`), não editáveis via API nesta rodada —
+  `[DEFINIR COM COORDENADOR]` do documento de requisitos permanece como
+  parametrização fina pendente, não bloqueante.
+- Nenhum teste de integração real (Postgres) foi executado para o fluxo
+  completo (conversão atômica, handoff, saneamento, recálculo de
+  métricas) — só unitário com repositórios/serviços mockados, consistente
+  com as migrations ainda não aplicadas.
+- Divergência consciente documentada em código: `PUT /events/:id` não
+  aceita exceção de `notes` pós-conclusão porque a coluna não existe no
+  schema (`marketing_events`) — contrato de API previa essa exceção sem
+  que o `AdmDBA` tivesse adicionado a coluna correspondente.

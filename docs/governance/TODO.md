@@ -4179,3 +4179,111 @@ não ação pendente):
   validação em banco real (Postgres) do volume de leads órfãos e das 6
   migrations rodando de fato (só validadas por `node -c` + leitura
   estática nesta passada, nenhuma foi aplicada).
+
+## 2026-08-07 (rodada seguinte) — Backend da correção do BLOCO 5 MKT implementado (Passo 4) — `programador`
+
+**Escopo:** implementação do backend (`server/src/modules/marketing/`,
+`server/src/models/Marketing*.ts`) a partir dos artefatos aprovados
+(`docs/business/BLOCO_5_MKT_REQUISITOS.md`, `BLOCO_5_MKT_MODELO_DADOS.md`,
+`BLOCO_5_MKT_API.md`, `BLOCO_5_MKT_AUDITORIA.md`, commits `704e8e2` +
+`ec1ac57`). **Migrations `20260807-000310` a `000315` NÃO foram aplicadas**
+(continuam como estavam, responsabilidade de um passo de deploy futuro) —
+os models Sequelize foram escritos para o schema-alvo dessas migrations.
+
+- [x] Models atualizados/criados: `MarketingLead` (novo enum de status com
+  `in_sales_attendance`, `sales_owner_user_id`, `handoff_at`,
+  `qualified_at`, `first_response_at`, `converted_at`, `needs_review`,
+  campos LGPD, `event_id`), `MarketingCampaign` (`budget_requested`,
+  `budget_approved*`, `notes`, `metrics_recalculated_at` —
+  `leads_generated`/`conversions`/`roi` mantidas como cache),
+  `MarketingMaterial` (`stock_item_id`, `approved_by`, `approved_at`),
+  `MarketingEvent`/`MarketingEventChecklistItem`/
+  `MarketingLeadSaneamentoLog` (novos) — `server/src/models/index.ts`
+  atualizado (imports + associações + barrel de exports).
+- [x] Conversão atômica (UC-63): `POST /api/marketing/leads/:id/convert`
+  (`ConvertLeadUseCase`) — opção A (cliente existente, via
+  `ClientService.findById`) ou B (cliente novo, via
+  `ClientService.create()` reaproveitando `CreateClientUseCase` do módulo
+  `clients` **na mesma transação Sequelize**); `PUT /leads/:id` e
+  `POST /leads/:id/status` continuam rejeitando `status='converted'`
+  (`ChangeLeadStatusUseCase` lança `BusinessRuleError` redirecionando para
+  `/convert`). `ClientsRepository.create`/`SequelizeClientsRepository.create`/
+  `CreateClientUseCase.execute` ganharam parâmetro `transaction` opcional
+  (mudança pontual no módulo `clients` para viabilizar a atomicidade —
+  compatível para trás).
+- [x] Métricas não-editáveis (BR-MKT-004): `createCampaignSchema`/
+  `updateCampaignSchema` (Zod `.strict()`) não aceitam mais
+  `leads_generated`/`conversions`/`roi`/`budget` — envio retorna `400`
+  (chave desconhecida, nunca ignorado silenciosamente).
+  `POST /campaigns/:id/recalculate-metrics` (`RecalculateCampaignMetricsUseCase`)
+  é idempotente — recalcula `leads_generated`/`conversions` por `COUNT`
+  real e `roi` por receita atribuída somada por lead convertido (janela de
+  90 dias a partir de `converted_at` de cada lead, não da campanha).
+- [x] Handoff (UC-64): `POST /leads/:id/handoff` (`HandoffLeadUseCase`)
+  com `authorizeAnyModule([{moduleKey:'marketing'}, {moduleKey:'vendas'}])`
+  (middleware reaproveitado, não recriado); `ChangeLeadStatusUseCase`
+  aceita `sales_owner_user_id` só quando `status='qualified'` e exige
+  responsável já atribuído para avançar a `in_sales_attendance`
+  (RF-MKT-012).
+- [x] Eventos/Feiras (UC-65): CRUD completo
+  (`CreateEventUseCase`/`UpdateEventUseCase`/`ListEventsUseCase`/
+  `GetEventByIdUseCase`), checklist
+  (`AddChecklistItemUseCase`/`UpdateChecklistItemUseCase`), encerramento
+  exigindo `actual_cost` (`CloseEventUseCase`, RF-MKT-025) e relatório de
+  ROI/custo por lead por evento (`GetEventsReportUseCase`,
+  `GET /reports/events`). **Decisão registrada:** `PUT /events/:id` bloqueia
+  TODA edição quando `completed`/`canceled` (sem exceção de `notes`, como
+  sugerido no contrato de API) — `marketing_events` não tem coluna `notes`
+  na migration `000313`; documentado no código
+  (`UpdateEventUseCase.ts`) como divergência consciente entre contrato e
+  schema real.
+- [x] KPIs de funil (UC-66): `GET /reports/funnel`
+  (`GetFunnelReportUseCase` — CPL, taxa de qualificação, conversão, receita
+  atribuída/ROI, SLA de handoff, mediana de ciclo, orçado×realizado) e
+  `GET /reports/events`; ambos retornam `200` com `has_data:false` e todos
+  os campos numéricos `null` quando o filtro não encontra dado (nunca
+  divisão por zero).
+- [x] RBAC `approve` pontual: `POST /campaigns/:id/budget-decision`
+  (`BudgetDecisionUseCase`) e `PATCH /materials/:id/approve`
+  (`ApproveMaterialUseCase`) usam `authorizeModule('marketing', 'approve')`
+  — resto do módulo continua em `operate`/leitura padrão.
+  `budget_approved_by`/`approved_by` sempre vêm de `req.user.id`, nunca do
+  body.
+- [x] `stock_item_id` em `MarketingMaterial` é FK opcional só de leitura —
+  nenhum endpoint de estoque criado pelo módulo MKT (BR-MKT-011 mantida).
+- [x] 27 endpoints do contrato implementados em
+  `server/src/modules/marketing/presentation/routes/marketing.ts` (8 leads,
+  6 campanhas, 8 eventos/checklist, 2 relatórios, 6 materiais — a soma
+  aritmética das seções do contrato é 30, mas a rota
+  `PUT /events/:id/checklist/:itemId` e `GET /events/:id/leads` já
+  constavam do grupo de eventos original de 8; todos os endpoints
+  descritos em `BLOCO_5_MKT_API.md` §4 a §8 foram implementados 1:1, sem
+  omissão).
+- [x] Testes unitários novos/reescritos (52 + 10 + 10 + 22 + 4 = 98 testes
+  do módulo Marketing, suíte completa 1177/1178 — única falha é a
+  pré-existente `onda3-shipping-cockpit-cashflow`, não relacionada):
+  `tests/unit/marketing-lead-use-cases.test.ts`,
+  `marketing-campaign-use-cases.test.ts`,
+  `marketing-material-use-cases.test.ts` (reescritos para o novo
+  comportamento), `marketing-convert-lead-use-case.test.ts`,
+  `marketing-handoff-lead-use-case.test.ts`,
+  `marketing-funnel-report-use-case.test.ts`,
+  `marketing-event-use-cases.test.ts`, `marketing-lead-saneamento.test.ts`
+  (novos).
+- [x] `npm run typecheck` limpo (`server/`).
+- [ ] **Pendência conhecida, fora deste passo:** as telas
+  `client/src/pages/marketing/` (`MarketingPage.tsx` e afins, entregues em
+  2026-08-06 contra o contrato ANTIGO) vão quebrar com os breaking changes
+  deste passo (`budget`→`budget_requested`, `status='converted'` via
+  `/status` removido, `approved` removido de `POST /materials`, etc.) —
+  responsabilidade do Passo 5 (frontend), não deste passo de backend.
+- [ ] **Pendência herdada, não resolvida por este passo (é decisão de
+  negócio/infra, não de código):** migrations `000310`-`000315` seguem não
+  aplicadas; volume real de leads `converted` órfãos ainda não contado
+  (`[VERIFICAR COM MARKETING]`); parâmetros
+  `REVENUE_ATTRIBUTION_WINDOW_DAYS`/`HANDOFF_SLA_DAYS`/
+  `BUDGET_ALERT_WARNING_THRESHOLD` implementados como constantes de código
+  (`server/src/modules/marketing/domain/constants.ts`), não editáveis via
+  API nesta rodada; teste de integração real (Postgres) do fluxo completo
+  (conversão atômica, handoff, saneamento) ainda não executado — só
+  unitário com repositórios mockados.

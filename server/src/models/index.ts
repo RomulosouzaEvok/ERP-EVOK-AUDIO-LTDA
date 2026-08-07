@@ -141,6 +141,9 @@ import FacilityResourceReservation = require('./FacilityResourceReservation');
 import MarketingCampaign = require('./MarketingCampaign');
 import MarketingLead = require('./MarketingLead');
 import MarketingMaterial = require('./MarketingMaterial');
+import MarketingEvent = require('./MarketingEvent');
+import MarketingEventChecklistItem = require('./MarketingEventChecklistItem');
+import MarketingLeadSaneamentoLog = require('./MarketingLeadSaneamentoLog');
 import JurContract = require('./JurContract');
 import JurContractDocument = require('./JurContractDocument');
 import JurContractSignatory = require('./JurContractSignatory');
@@ -1142,6 +1145,44 @@ MarketingLead.belongsTo(Client, { foreignKey: 'converted_to_customer_id', as: 'c
 Item.hasMany(MarketingMaterial, { foreignKey: 'product_id', as: 'marketing_materials' });
 MarketingMaterial.belongsTo(Item, { foreignKey: 'product_id', as: 'product' });
 
+// Item ↔ MarketingMaterial (stock_item_id, BLOCO 5 MKT correção, RF-MKT-038)
+Item.hasMany(MarketingMaterial, { foreignKey: 'stock_item_id', as: 'marketing_materials_as_stock_item' });
+MarketingMaterial.belongsTo(Item, { foreignKey: 'stock_item_id', as: 'stockItem' });
+
+// User ↔ MarketingMaterial (approved_by, RF-MKT-039)
+User.hasMany(MarketingMaterial, { foreignKey: 'approved_by', as: 'marketing_materials_approved' });
+MarketingMaterial.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedByUser' });
+
+// ---- BLOCO 5 MKT (correção) — handoff, evento/feira, orçamento ----
+
+// User ↔ MarketingLead (sales_owner_user_id, RF-MKT-011, UC-64)
+User.hasMany(MarketingLead, { foreignKey: 'sales_owner_user_id', as: 'marketing_leads_owned' });
+MarketingLead.belongsTo(User, { foreignKey: 'sales_owner_user_id', as: 'salesOwner' });
+
+// User ↔ MarketingCampaign (budget_approved_by, RF-MKT-030/031)
+User.hasMany(MarketingCampaign, { foreignKey: 'budget_approved_by', as: 'marketing_campaigns_approved' });
+MarketingCampaign.belongsTo(User, { foreignKey: 'budget_approved_by', as: 'budgetApprovedByUser' });
+
+// MarketingCampaign ↔ MarketingEvent (campanha guarda-chuva opcional, RF-MKT-020)
+MarketingCampaign.hasMany(MarketingEvent, { foreignKey: 'campaign_id', as: 'events' });
+MarketingEvent.belongsTo(MarketingCampaign, { foreignKey: 'campaign_id', as: 'campaign' });
+
+// MarketingEvent ↔ MarketingLead (captação em campo, RF-MKT-022/023/024)
+MarketingEvent.hasMany(MarketingLead, { foreignKey: 'event_id', as: 'leads' });
+MarketingLead.belongsTo(MarketingEvent, { foreignKey: 'event_id', as: 'event' });
+
+// MarketingEvent ↔ MarketingEventChecklistItem (RF-MKT-021)
+MarketingEvent.hasMany(MarketingEventChecklistItem, { foreignKey: 'event_id', as: 'checklist' });
+MarketingEventChecklistItem.belongsTo(MarketingEvent, { foreignKey: 'event_id', as: 'event' });
+
+// User ↔ MarketingEventChecklistItem (responsible_user_id)
+User.hasMany(MarketingEventChecklistItem, { foreignKey: 'responsible_user_id', as: 'marketing_event_checklist_items' });
+MarketingEventChecklistItem.belongsTo(User, { foreignKey: 'responsible_user_id', as: 'responsibleUser' });
+
+// MarketingLead ↔ MarketingLeadSaneamentoLog (auditoria de rebaixamento, §2/§3.2)
+MarketingLead.hasMany(MarketingLeadSaneamentoLog, { foreignKey: 'lead_id', as: 'saneamento_log' });
+MarketingLeadSaneamentoLog.belongsTo(MarketingLead, { foreignKey: 'lead_id', as: 'lead' });
+
 // ============================================
 // RELACIONAMENTOS - JURÍDICO (departamento 16, JUR) — BLOCO 3
 // ============================================
@@ -1257,6 +1298,7 @@ export {
   FacilityFuelRecord, FacilityFine, FacilityCleaningSchedule, FacilityCleaningExecution, FacilityArea,
   FacilityVisitor, FacilityVisit, FacilityCorrespondence, FacilityResourceReservation,
   MarketingCampaign, MarketingLead, MarketingMaterial,
+  MarketingEvent, MarketingEventChecklistItem, MarketingLeadSaneamentoLog,
   JurContract, JurContractDocument, JurContractSignatory, JurContractAddendum,
   JurExternalLawyer, JurLegalCase, JurLegalCaseEvent, JurLegalCaseDeadline,
   JurLegalCaseProvision, JurLegalAlert, JurProxy, JurIntellectualProperty,

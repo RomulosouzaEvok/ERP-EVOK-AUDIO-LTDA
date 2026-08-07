@@ -5,6 +5,20 @@
  * bem mais simples: é só um funil, sem efeitos colaterais de estoque/
  * financeiro).
  *
+ * BLOCO 5 MKT (correção):
+ * - Funil corrigido (RF-MKT-005): `new -> contacted -> qualified ->
+ *   in_sales_attendance -> converted`, `lost` de qualquer etapa aberta.
+ * - `converted` NÃO é mais uma transição aceita por este endpoint
+ *   (RF-MKT-001) — redireciona para `POST /leads/:id/convert`
+ *   (`ConvertLeadUseCase`, conversão atômica com cliente obrigatório).
+ * - `sales_owner_user_id` só é aceito quando `status='qualified'`
+ *   (atribuição simultânea à qualificação, UC-64 A1): grava
+ *   `qualified_at=now()` e, se informado, também `handoff_at=now()`
+ *   (RF-MKT-011/012/013).
+ * - Transição para `in_sales_attendance` EXIGE que o lead já tenha
+ *   `sales_owner_user_id` preenchido (de handoff anterior ou desta mesma
+ *   chamada de qualificação) — RF-MKT-012.
+ *
  * @module modules/marketing/application/use-cases/lead/ChangeLeadStatusUseCase
  */
 
@@ -12,18 +26,19 @@ import UseCase from '../../../../../shared/application/UseCase';
 import { NotFoundError, ValidationError, BusinessRuleError } from '../../../../../errors';
 import LeadRepository from '../../../domain/repositories/LeadRepository';
 import CampaignRepository from '../../../domain/repositories/CampaignRepository';
+import UserLookupService from '../../services/UserLookupService';
 
 /**
- * Funil de leads: `new -> contacted -> qualified -> converted/lost`.
- * `lost` pode ser atingido a partir de qualquer etapa aberta (desistência
- * pode acontecer em qualquer ponto do funil). `converted`/`lost` são
- * terminais. Transições não listadas (ex. pular etapa, voltar etapa) são
- * bloqueadas com 422 — funil simples, sem necessidade de reabertura.
+ * Funil de leads: `new -> contacted -> qualified -> in_sales_attendance ->
+ * lost`. `converted` NÃO consta aqui — é transição exclusiva de
+ * `ConvertLeadUseCase` (RF-MKT-001). `lost` pode ser atingido a partir de
+ * qualquer etapa aberta. Transições não listadas são bloqueadas com 422.
  */
 const VALID_TRANSITIONS: Record<string, string[]> = {
   new: ['contacted', 'lost'],
   contacted: ['qualified', 'lost'],
-  qualified: ['converted', 'lost'],
+  qualified: ['in_sales_attendance', 'lost'],
+  in_sales_attendance: ['lost'],
   converted: [],
   lost: [],
 };
@@ -31,27 +46,33 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 type ChangeLeadStatusInput = {
   id: number;
   status: string;
-  converted_to_customer_id?: number;
+  sales_owner_user_id?: number;
 };
 
 class ChangeLeadStatusUseCase extends UseCase<ChangeLeadStatusInput, any> {
   private readonly leadRepository: LeadRepository;
   private readonly campaignRepository: CampaignRepository;
+  private readonly userLookupService?: UserLookupService;
 
-  constructor(leadRepository: LeadRepository, campaignRepository: CampaignRepository) {
+  constructor(leadRepository: LeadRepository, campaignRepository: CampaignRepository, userLookupService?: UserLookupService) {
     super();
     this.leadRepository = leadRepository;
     this.campaignRepository = campaignRepository;
+    this.userLookupService = userLookupService;
   }
 
   /**
-   * @throws {NotFoundError} Se o lead não existir.
+   * @throws {NotFoundError} Se o lead (ou `sales_owner_user_id`) não existir.
    * @throws {ValidationError} Se `status` não for informado.
-   * @throws {BusinessRuleError} Se a transição não for permitida pelo funil.
+   * @throws {BusinessRuleError} Se a transição não for permitida pelo funil, se `status='converted'`, ou se `in_sales_attendance` for solicitado sem `sales_owner_user_id` prévio.
    */
-  async execute({ id, status, converted_to_customer_id }: ChangeLeadStatusInput) {
+  async execute({ id, status, sales_owner_user_id }: ChangeLeadStatusInput) {
     if (!status) {
       throw new ValidationError('status é obrigatório.');
+    }
+
+    if (status === 'converted') {
+      throw new BusinessRuleError('Use POST /leads/:id/convert para converter um lead.');
     }
 
     const lead = await this.leadRepository.findLeadById(id);
@@ -71,22 +92,40 @@ class ChangeLeadStatusUseCase extends UseCase<ChangeLeadStatusInput, any> {
     }
 
     const updateData: Record<string, unknown> = { status };
-    if (status === 'converted' && converted_to_customer_id) {
-      updateData.converted_to_customer_id = converted_to_customer_id;
-    }
 
-    const updated = await this.leadRepository.updateLead(id, updateData);
+    if (status === 'qualified') {
+      updateData.qualified_at = new Date();
 
-    if (status === 'converted' && lead.campaign_id) {
-      const campaign = await this.campaignRepository.findCampaignById(lead.campaign_id);
-      if (campaign) {
-        await this.campaignRepository.updateCampaign(campaign.id, {
-          conversions: (campaign.conversions || 0) + 1,
-        });
+      if (sales_owner_user_id) {
+        if (this.userLookupService) {
+          const user = await this.userLookupService.findActiveById(sales_owner_user_id);
+          if (!user) {
+            throw new NotFoundError('Usuário de vendas não encontrado ou inativo.');
+          }
+        }
+        updateData.sales_owner_user_id = sales_owner_user_id;
+        updateData.handoff_at = new Date();
       }
     }
 
-    return updated;
+    if (status === 'in_sales_attendance') {
+      const hasSalesOwner = sales_owner_user_id || lead.sales_owner_user_id;
+      if (!hasSalesOwner) {
+        throw new BusinessRuleError('Lead precisa de um responsável de vendas (handoff) antes de avançar para in_sales_attendance.');
+      }
+      if (sales_owner_user_id && sales_owner_user_id !== lead.sales_owner_user_id) {
+        if (this.userLookupService) {
+          const user = await this.userLookupService.findActiveById(sales_owner_user_id);
+          if (!user) {
+            throw new NotFoundError('Usuário de vendas não encontrado ou inativo.');
+          }
+        }
+        updateData.sales_owner_user_id = sales_owner_user_id;
+        updateData.handoff_at = new Date();
+      }
+    }
+
+    return this.leadRepository.updateLead(id, updateData);
   }
 }
 

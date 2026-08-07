@@ -54,7 +54,16 @@ class UploadMaterialFileUseCase {
     });
 
     const previousFilePath = material.file_path;
-    await materialRepository.updateMaterial(id, { file_path: result.path });
+    // RF-MKT-040: nova versão sobre material já aprovado reverte a
+    // aprovação — exige nova aprovação dedicada. Se ainda não estava
+    // aprovado, `approved` permanece `false` (nenhuma mudança).
+    const updateData: Record<string, unknown> = { file_path: result.path };
+    if (material.approved) {
+      updateData.approved = false;
+      updateData.approved_by = null;
+      updateData.approved_at = null;
+    }
+    await materialRepository.updateMaterial(id, updateData);
 
     if (previousFilePath && previousFilePath !== result.path) {
       try {
