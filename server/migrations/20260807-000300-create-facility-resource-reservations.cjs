@@ -13,7 +13,7 @@
  * seguir a diretriz "verdade no banco" (CLAUDE.md §7) num requisito onde
  * isso é diretamente viável em Postgres. Exige a extensão `btree_gist`
  * (permite comparar `=` de colunas escalares dentro do `EXCLUDE`, além do
- * `&&` de `tsrange`).
+ * `&&` de `tstzrange`).
  *
  * Risco/observação: `CREATE EXTENSION` requer privilégio (`CREATEDB`/
  * superuser, ou a extensão já estar na allowlist do Postgres gerenciado);
@@ -89,7 +89,7 @@ module.exports = {
       EXCLUDE USING gist (
         COALESCE(facility_area_id, -1) WITH =,
         COALESCE(asset_id, -1) WITH =,
-        tsrange(starts_at, ends_at, '[)') WITH &&
+        tstzrange(starts_at, ends_at, '[)') WITH &&
       ) WHERE (status = 'confirmed');
     `);
 
