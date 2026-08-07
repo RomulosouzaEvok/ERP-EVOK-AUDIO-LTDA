@@ -9130,3 +9130,151 @@ anteriores (commits `8482e79`/`3696734`). Foco em funcionalidade/integração
 - Usuário sem módulo `sst` nem `rh` deve ser redirecionado para "Acesso Negado" ao acessar `/sst` diretamente pela URL.
 - Caminho feliz completo de EPI (confirmação com baixa de estoque real) — o ambiente de teste precisa ter um item de estoque com saldo positivo vinculado ao TipoEPI.
 - Tradução de erro 409 (estoque insuficiente) e 422 (CA vencido/evidência ausente) no dialog de confirmação de entrega.
+
+---
+
+## BLOCO 2 — Módulo TI (Tecnologia da Informação) — Requisitos Prontos (2026-08-07)
+
+**Status:** 🟡 Requisitos formais concluídos. **Nenhum código foi criado.**
+TI não existe hoje em `server/src/` como módulo dedicado — sem model, rota
+ou use-case próprios; só a reutilização já verificada de `Asset`
+(`asset_type: 'it'|'license'`, `license_expires_at`) e `MaintenanceOrder`.
+
+**Para `AdmDBA` e `ArquitetoSoftwareAPI`:** os requisitos completos (RF/RNF,
+3 casos de uso P0 detalhados com fluxo de exceção, 8 entidades novas do
+domínio, regras de negócio) estão em:
+
+- **`docs/business/BLOCO_2_TI_REQUISITOS.md`** — ler primeiro (RF-TI-001
+  a 046, RNF-TI-01 a 05, UC-49 a UC-51, matriz de rastreabilidade).
+- `docs/business/briefs/BRIEF_TI_2026-08-06.md` — brief de domínio
+  original (8 entidades novas, seção (b); 18 regras BR-TI-001 a 018 com
+  justificativa, seção (c)).
+
+**Decisões já tomadas (não reabrir sem motivo novo):**
+1. **Inventário de TI e licenças são visões/extensões de `Asset`**
+   (`asset_type IN ('it','license')`) — proibida tabela paralela de
+   equipamentos (BR-TI-008). Extensão 1:1 `ItSoftwareLicenseDetail` só
+   adiciona seats/custo/chave; `assets.license_expires_at` continua sendo a
+   data de vencimento canônica.
+2. **Helpdesk dimensionado para 1,5 atendentes**: fila única, sem N1/N2/N3,
+   triagem implícita ao assumir o chamado, SLA simples por prioridade com
+   pausa em `waiting`, auto-close parametrizável. CAB/catálogo de
+   serviços/CMDB ficam fora de escopo deliberadamente.
+3. **`/api/service-orders` é do módulo Garantia** — não confundir com
+   chamados de TI (`ItTicket`, sugestão de rota `/api/it-tickets`).
+4. **Gestão de acessos é processo, não tecnologia nova**: `ItAccessRequest`
+   (grant/change/revoke) documenta pedido/aprovação/execução e culmina nas
+   operações RBAC já existentes (`PUT /api/users/:id/access-profile`,
+   `logAction`) — não duplica autorização nem `AuditLog` (BR-TI-013).
+   Offboarding dispensa aprovação prévia, meta de execução no mesmo dia, e
+   fica bloqueado enquanto houver `ItResponsibilityTerm` ativo do
+   funcionário sem tratamento (BR-TI-011/012).
+
+**Pendência de RBAC (crítica, decisão de desenho aberta):** precisa de uma
+nova chave `ti` em `server/src/shared/domain/accessModules.ts` (catálogo
+com 31 chaves na leitura de 2026-08-07, `sst` foi a penúltima adicionada em
+2026-08-06). Diferente de `rh`/`sst` (dado sensível bloqueado mesmo para
+autenticados), `ti` precisa do **oposto** em uma fatia: qualquer usuário
+autenticado deve poder abrir e acompanhar os **próprios** chamados sem ter
+o módulo `ti` (BR-TI-001). Proposta registrada em
+`BLOCO_2_TI_REQUISITOS.md` §5.1: rotas de auto-serviço fora do gate
+`authorizeModule('ti')`, autorizadas por posse do registro
+(`ticket.requester_id === req.user.id`) em vez de módulo — o desenho exato
+(rota separada vs. middleware `authorizeSelfOrModule` reutilizável) fica
+para o arquiteto decidir antes de implementar.
+
+**Outra pendência de desenho:** aprovador de `ItAccessRequest`
+grant/change (módulo `ti:approve` fixo vs. gestor do departamento do
+funcionário-alvo) não está decidido no brief nem neste bloco — ver
+`BLOCO_2_TI_REQUISITOS.md` §5.2, decisão explicitamente repassada ao
+`AdmDBA`/`ArquitetoSoftwareAPI` porque afeta FK de schema e tela de
+aprovação.
+
+**Após a modelagem de banco/API, acionar `AuditorIntegrador`** para rodar a
+rastreabilidade Requisito → Banco → API neste módulo novo — em particular
+verificar que a exceção de auto-serviço do helpdesk (BR-TI-001) não foi
+"corrigida" por engano para o padrão `authorizeModule` genérico do resto do
+sistema durante a implementação.
+
+---
+
+## BLOCO 2 — Módulo TI (Tecnologia da Informação) — Contrato de API Pronto (2026-08-07, `ArquitetoSoftwareAPI`)
+
+**Status:** 🟡 Contrato de API concluído. **Nenhum código foi criado.**
+Segue estritamente o padrão de `docs/business/BLOCO_1_SST_API.md` e a
+implementação real madura de `server/src/modules/sst/` (Clean Architecture
++ mapper DTO PT-BR↔inglês).
+
+**Para `programador`, quando a implementação começar, siga estes arquivos
+nesta ordem:**
+
+1. **`docs/business/BLOCO_2_TI_API.md`** — contrato mestre deste módulo:
+   57 endpoints em `/api/ti/*` (Chamados/Helpdesk 20, Termo de
+   Responsabilidade 7, Licenças 10, Solicitação de Acesso 8, Backup 3, mais
+   sub-rotas), request/response shapes, códigos de erro, estrutura Clean
+   Architecture completa de `server/src/modules/ti/`, diagrama de sequência
+   do offboarding com bloqueio por termo ativo (fluxo mais crítico do
+   módulo) e rastreabilidade RF-TI-001 a 046 → endpoint.
+2. **`docs/business/BLOCO_2_TI_REQUISITOS.md`** — RF/RNF/BR de origem (não
+   reabrir decisões já tomadas lá).
+3. `docs/business/briefs/BRIEF_TI_2026-08-06.md` — brief de domínio.
+
+**Decisão central deste contrato — middleware novo
+`authorizeSelfOrModule`:** especificado (não implementado) em
+`server/src/middlewares/authorizeSelfOrModule.ts`. Resolve BR-TI-001 de
+forma diferente de `rh` (filtra campo, rota aberta) e de `sst` (checagem
+inline `sst||rh` em 2 rotas de status agregado): aqui a **rota inteira do
+próprio registro** (chamado de TI) precisa ficar aberta a quem não tem
+módulo nenhum, restringindo por posse (`ticket.requester_id ===
+req.user.id`). Aplicado em `GET /api/ti/tickets/:id`,
+`POST /api/ti/tickets/:id/comments`, `.../confirm`, `.../reopen`. Não
+substitui `authorizeModule` — compõe com ele (mesma cadeia de
+middlewares). `POST /api/ti/tickets` (abertura) e
+`GET /api/ti/tickets/mine` usam apenas `authenticate` puro (sem checagem de
+posse — ainda não há recurso, ou o filtro já é implícito pelo próprio
+`req.user.id`).
+
+**3 categorias de autorização do módulo (não confundir):**
+1. **Público-autenticado/self-service** — `authenticate` puro ou
+   `authorizeSelfOrModule`.
+2. **`ti:operate`** — fila completa, termos, licenças, backup, execução de
+   acesso.
+3. **`ti:approve`** — marcar termo `lost`, aprovar `grant`/`change` de
+   acesso, confirmar renovação de licença (gera Requisição de Compra),
+   revelar `license_key` combinado com `role='admin'` como alternativa.
+
+**Decisões de tipo de dado (correção deliberada em relação ao brief):**
+`Asset.id`/`Employee.id`/`User.id` são `INTEGER autoIncrement` (verificado
+em `server/src/models/Asset.ts`, `Employee.ts`, `User.ts`) — todas as FKs
+novas do módulo TI no contrato JSON são `integer`, nunca `UUID`/`string`
+genérica.
+
+**Pendências explícitas para `AdmDBA` (schema em paralelo) — ver seção
+"Resumo — Handoff" de `BLOCO_2_TI_API.md` para o texto completo:**
+1. Histórico de reclassificação de prioridade de chamado — tabela própria
+   vs. comentário de sistema (`ItTicketComment` com `system_generated`).
+2. `departments.manager_user_id` — confirmar se existe ou se a primeira
+   versão do aprovador de `ItAccessRequest` implementa apenas
+   `ti:approve`/admin (TODO explícito para gestor de departamento, sem
+   implementação silenciosa parcial) — decisão §5.2 do requisito repassada
+   também ao `AdmDBA`.
+3. Tabela de configuração de parâmetros do módulo (`ti_settings` sugerido)
+   para SLA/auto-close/reabertura/janelas de alerta/frequência de restore —
+   nenhum destes pode ser hard-coded (RF-TI-046/RNF-TI-05).
+4. `ItTicket.requester_id` nullable + flag `system_generated` (ou usuário
+   de serviço seedado) para o chamado `urgent` automático de falha de
+   backup (RF-TI-040).
+5. Índice único parcial em `ItLicenseSeat` (`employee_id`,
+   `license_detail_id`, `revoked_at IS NULL`) — mesmo padrão de
+   `uq_sst_eventos_esocial_origem_ativo` do módulo SST.
+
+**Após a modelagem de banco, acionar `AuditorIntegrador`** para validar: (a)
+que `authorizeSelfOrModule` checa posse sempre no use case (nunca confia em
+filtro de query string manipulável); (b) que a integração RH→TI de
+offboarding (chamada direta de use case a use case, sem endpoint HTTP
+dedicado — decisão §2.4 do contrato, dado que o módulo RH ainda não tem
+camada de eventos) é consistente com a decisão §5.4 do
+`BLOCO_2_TI_REQUISITOS.md`; (c) que `POST
+/api/ti/licenses/:assetId/request-renewal` delega 100% da regra de negócio
+de requisição ao módulo real `/api/purchase-requisitions`, sem duplicar
+validação.

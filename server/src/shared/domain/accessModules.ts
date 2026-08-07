@@ -46,6 +46,27 @@
  * apenas um status derivado (apto/vencido/inapto), nunca o conteúdo
  * clínico — ver RF-SST-021/BR-SST-010/036 no bloco de requisitos.
  *
+ * `ti` foi adicionado em 2026-08-07 (BLOCO 2 do módulo TI — Tecnologia da
+ * Informação, departamento 13, `docs/business/BLOCO_2_TI_REQUISITOS.md`
+ * §5.1/5.3) para o helpdesk, termo de responsabilidade de equipamento,
+ * licenças e solicitações de acesso. `ti` é operado por 1-2 pessoas
+ * (Analista de TI/suporte terceirizado, níveis `operate`/`approve`) e, para
+ * a maior parte de suas rotas (gestão da fila, termos, licenças, execução
+ * de acessos), segue o padrão restritivo de `authorizeModule('ti', ...)`
+ * bloqueando a rota inteira, IGUAL a `sst`.
+ *
+ * EXCEÇÃO EXPLÍCITA (BR-TI-001/RNF-TI-02, NÃO reproduzir por "consistência"
+ * em retrofits futuros): a abertura e o acompanhamento do PRÓPRIO chamado
+ * de TI (auto-serviço, ex.: `POST /api/it-tickets`,
+ * `GET /api/it-tickets/mine`, comentar o próprio chamado) NÃO passam por
+ * `authorizeModule('ti')` — qualquer usuário autenticado tem acesso, mesmo
+ * sem nenhum módulo RBAC atribuído, com autorização por POSSE do registro
+ * (`ticket.requester_id === req.user.id`), não por módulo. Esta chave `ti`
+ * cobre apenas a GESTÃO da fila e os demais recursos do módulo — o desenho
+ * exato do middleware de auto-serviço (rota fora do gate) é responsabilidade
+ * do `ArquitetoSoftwareAPI`; este comentário só registra que `ti` não é, e
+ * nunca deve ser, usado para bloquear a rota de auto-serviço.
+ *
  * @module shared/domain/accessModules
  */
 
@@ -76,6 +97,7 @@ export type AccessModuleKey =
   | 'garantia'
   | 'rh'
   | 'sst'
+  | 'ti'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'
@@ -123,6 +145,7 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   { key: 'garantia', label: 'Garantia/Assistência Técnica' },
   { key: 'rh', label: 'Recursos Humanos (dados sensíveis)' },
   { key: 'sst', label: 'Segurança e Saúde do Trabalho (dados sensíveis)' },
+  { key: 'ti', label: 'Tecnologia da Informação (helpdesk, patrimônio de TI, acessos)' },
   { key: 'rastreabilidade', label: 'Rastreabilidade' },
   { key: 'financeiro', label: 'Financeiro' },
   { key: 'relatorios.producao', label: 'Relatórios de Produção' },

@@ -3185,3 +3185,67 @@ foi criada/alterada/aplicada** — mesmo princípio da passada 1.
 - [ ] Segue pendente (fora de escopo desta passada, igual à anterior):
   testes de integração HTTP (Supertest) contra banco real, aplicação das
   migrations `migration:up`, telas de frontend para os 5 novos grupos.
+
+## 2026-08-07 — Auditoria Cruzada BLOCO 2 TI (Requisitos × Banco × API) — `AuditorIntegrador`
+
+**Escopo:** gate de qualidade pré-código do módulo TI (departamento 13),
+confrontando `docs/business/BLOCO_2_TI_REQUISITOS.md` (46 RF-TI, UC-49 a
+UC-51), `docs/business/BLOCO_2_TI_MODELO_DADOS.md` (6 migrations,
+`20260807-000150` a `000155`) e `docs/business/BLOCO_2_TI_API.md` (57
+endpoints, middleware `authorizeSelfOrModule`), com
+`docs/business/briefs/BRIEF_TI_2026-08-06.md` como fonte primária.
+Relatório completo em `docs/business/BLOCO_2_TI_AUDITORIA.md`.
+
+**[IMPLEMENTADO]** Rastreabilidade RF→Tabela→Endpoint 100% verificada
+(46/46 RF-TI, nenhum órfão nas duas pontas).
+
+**[IMPLEMENTADO]** 7 inconsistências reais encontradas e corrigidas
+diretamente nos artefatos (docs + migrations, ainda não aplicadas ao
+banco) nesta mesma passada — nenhuma pendência de auditoria remanescente
+para o `programador` começar `server/src/modules/ti/`:
+1. Conflito de parametrização (RF-TI-046): `AdmDBA` havia decidido "sem
+   tabela", citando RF-SST-019 como precedente — verificado que RF-SST-019
+   nunca foi implementado em código (não é precedente válido). Criada
+   `ti_settings` (migration `20260807-000156`), seguindo o precedente real
+   `production_cost_settings` (já em produção).
+2. Aprovador de `grant`/`change` de acesso: `BLOCO_2_TI_API.md` §4.1
+   afirmava incorretamente que não existia FK de gestor de departamento —
+   `departments.manager_id → employees.id` e `employees.user_id →
+   users.id` já existem e foram verificados em código; doc corrigido, sem
+   migração de schema necessária.
+3. `it_tickets.requester_id` estava `NOT NULL`, mas a API contrata um
+   chamado automático sem requester humano (RF-TI-040, falha de backup) —
+   migration `20260807-000150` corrigida: `requester_id` agora nullable +
+   nova coluna `system_generated` + CHECK.
+4. `it_ticket_priority_history` já existia (migration `20260807-000151`),
+   mas `BLOCO_2_TI_API.md` ainda tratava a tabela como incerta —
+   documentação corrigida (falso positivo de desalinhamento entre agentes
+   paralelos).
+5. Índice único parcial de license seats: confirmado já existente
+   (`uq_it_license_seats_active_per_employee`, migration `20260807-000153`)
+   — outro falso positivo de pendência na API doc, corrigido.
+6. `urgency_perceived` (payload de abertura de chamado) vs. `urgency`
+   (coluna SMALLINT de triagem): nota explícita adicionada esclarecendo
+   que não são a mesma coisa e que `urgency_perceived` não é persistido —
+   ambiguidade de nomenclatura documentada, não bloqueante.
+7. `it_access_requests.corporate_email`/`equipment_needed`: campos já
+   contratados no payload de `grant` (RF-TI-031) mas ausentes na migration
+   original — colunas adicionadas em `20260807-000154`.
+
+**[APROVADO]** Verificações sem inconsistência: FK adiada
+`it_tickets.access_request_id` (ordem de aplicação e `down()` corretos),
+nenhuma tabela paralela de assets (BR-TI-008 respeitada), especificação de
+`authorizeSelfOrModule` completa e sem vazamento de rota de gestão para
+fora do gate `ti`, `npm run migration:status --prefix server` (7
+migrations do bloco listam sem erro, `down`/não aplicadas conforme
+esperado), `npm run typecheck --prefix server` (0 erros).
+
+- [ ] Próximo passo: `programador` implementa
+  `server/src/modules/ti/` (Clean Architecture) + middleware
+  `authorizeSelfOrModule` + aplica as 7 migrations (`20260807-000150` a
+  `000156`) — nenhum bloqueador de auditoria pendente.
+- [ ] Fora de escopo desta auditoria (não coberto, sinalizar se resgatado):
+  validação de implementação real do `authorizeSelfOrModule` contra
+  manipulação de `:id` (recomendado a `iterative-review`/`auditor-seguranca`
+  quando o código existir); dashboard/KPI consolidado de TI (RF-TI-045,
+  pendência já declarada nos 3 documentos, sem endpoint neste bloco).
