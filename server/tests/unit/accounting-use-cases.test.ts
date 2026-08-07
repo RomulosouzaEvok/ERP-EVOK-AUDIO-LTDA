@@ -108,7 +108,7 @@ describe('CreateEntryUseCase', () => {
 
   it('FLUXO PRINCIPAL: cria lançamento sempre como draft, com número sequencial LC-XXXXXX', async () => {
     const repo = makeAccountingRepository({
-      findAccountById: jest.fn(async (id: number) => ({ id, code: String(id), name: `Conta ${id}`, accept_entries: true })),
+      findAccountById: jest.fn(async (id: number) => ({ id, code: String(id), name: `Conta ${id}`, accept_entries: true, active: true })),
       countEntries: jest.fn(async () => 4),
     });
 
@@ -132,7 +132,7 @@ describe('CreateEntryUseCase', () => {
 
   it('FLUXO DE EXCECAO: rejeita item com débito e crédito ao mesmo tempo', async () => {
     const repo = makeAccountingRepository({
-      findAccountById: jest.fn(async (id: number) => ({ id, code: String(id), accept_entries: true })),
+      findAccountById: jest.fn(async (id: number) => ({ id, code: String(id), accept_entries: true, active: true })),
     });
 
     await expect(
@@ -149,6 +149,17 @@ describe('CreateEntryUseCase', () => {
     await expect(
       new CreateEntryUseCase(repo).execute({ entry_date: '2026-08-07', description: 'Teste', entry_type: 'adjustment', items: [], userId: 1, transaction: FAKE_TRANSACTION }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
+  });
+
+  it('FLUXO DE EXCECAO: rejeita conta desativada (active=false) com BusinessRuleError, mesmo aceitando lançamento direto (P1-2 da auditoria CONT/TES/CTR)', async () => {
+    const repo = makeAccountingRepository({
+      findAccountById: jest.fn(async (id: number) => ({ id, code: '1.1.1', name: 'Caixa Geral', accept_entries: true, active: false })),
+    });
+
+    await expect(
+      new CreateEntryUseCase(repo).execute({ entry_date: '2026-08-07', description: 'Teste', entry_type: 'adjustment', items: twoBalancedItems, userId: 1, transaction: FAKE_TRANSACTION }),
+    ).rejects.toBeInstanceOf(BusinessRuleError);
+    expect(repo.createEntry).not.toHaveBeenCalled();
   });
 });
 
@@ -172,7 +183,7 @@ describe('UpdateEntryUseCase', () => {
   it('FLUXO PRINCIPAL: substitui integralmente os itens de um lançamento em draft', async () => {
     const repo = makeAccountingRepository({
       findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', status: 'draft' })),
-      findAccountById: jest.fn(async (id: number) => ({ id, code: String(id), accept_entries: true })),
+      findAccountById: jest.fn(async (id: number) => ({ id, code: String(id), accept_entries: true, active: true })),
     });
 
     await new UpdateEntryUseCase(repo).execute({
@@ -181,6 +192,20 @@ describe('UpdateEntryUseCase', () => {
 
     expect(repo.deleteEntryItems).toHaveBeenCalledWith(1, FAKE_TRANSACTION);
     expect(repo.createEntryItem).toHaveBeenCalledTimes(2);
+  });
+
+  it('FLUXO DE EXCECAO: rejeita conta desativada (active=false) ao editar itens, mesmo aceitando lançamento direto (P1-2 da auditoria CONT/TES/CTR)', async () => {
+    const repo = makeAccountingRepository({
+      findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', status: 'draft' })),
+      findAccountById: jest.fn(async (id: number) => ({ id, code: String(id), name: `Conta ${id}`, accept_entries: true, active: false })),
+    });
+
+    await expect(
+      new UpdateEntryUseCase(repo).execute({
+        id: 1, items: [{ account_id: 1, debit: 200 }, { account_id: 2, credit: 200 }], transaction: FAKE_TRANSACTION,
+      }),
+    ).rejects.toBeInstanceOf(BusinessRuleError);
+    expect(repo.deleteEntryItems).not.toHaveBeenCalled();
   });
 });
 

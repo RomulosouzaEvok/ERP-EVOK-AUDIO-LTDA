@@ -11754,3 +11754,205 @@ seção "11d. Addendum — Módulo Facilities").
 - Teste de integração real (Postgres) do fluxo completo — depende da
   aplicação das migrations `20260807-000290` a `20260807-000300`,
   instrução 1 da seção "PASSO backend" acima, ainda pendente.
+
+## 2026-08-07 — Correção dos 2 achados P1 da auditoria CONT/TES/CTR — `programador`
+
+### Resumo da feature
+
+Correção pontual dos 2 achados P1 de
+`docs/governance/auditorias/AUDITORIA_CONT_TES_CTR_2026-08-07.md` (0
+achados P0). Nenhuma migration nova foi necessária.
+
+**P1-2 (Contabilidade) — conta desativada aceitava lançamento:**
+`CreateEntryUseCase`/`UpdateEntryUseCase` validavam apenas
+`account.accept_entries` (sintética vs. folha), nunca `account.active`.
+Adicionada checagem `if (!account.active) throw new BusinessRuleError(...)`
+logo após a checagem existente de `accept_entries`, mesmo padrão de
+mensagem (`"A conta \"{code} - {name}\" está desativada e não aceita novo
+lançamento."`). Agora `PUT /api/accounting/accounts/:id` com
+`active: false` de fato impede novo lançamento na conta, como já era
+documentado na migration `20260807-000230` mas não era imposto pelo código.
+
+**P1-1 (Controladoria) — "realizado" usava `due_date` (vencimento) em vez
+de data de pagamento efetiva:** a investigação encontrou que a premissa da
+auditoria estava desatualizada — `accounts_payable`/`accounts_receivable`
+**já possuem** a coluna `payment_date` (`DATEONLY`, nullable), populada em
+todo evento real de baixa (`PayPayableUseCase`, `ReceivePaymentUseCase`,
+`MatchEntryUseCase` da conciliação bancária OFX, `ProcessReturnFileUseCase`
+do retorno CNAB de boleto). Não foi necessário adicionar migration. A
+correção foi trocar o filtro SQL de `realized_amount` em
+`SequelizeCostCenterRepository.getCostCenterTotalsByPayable`/
+`getCostCenterTotalsByReceivable`, de `due_date BETWEEN :from AND :to` para
+`COALESCE(payment_date, due_date) BETWEEN :from AND :to` (fallback só para
+registro legado sem `payment_date` preenchido), com o `WHERE` da query
+ampliado para `due_date BETWEEN :from AND :to OR COALESCE(payment_date,
+due_date) BETWEEN :from AND :to` — sem essa ampliação, uma conta com
+vencimento fora do período mas paga dentro dele desapareceria da consulta
+inteiramente (o `GROUP BY` nem geraria a linha). `open_amount` (saldo em
+aberto) permanece filtrado por `due_date`, comportamento correto e
+inalterado — é o "realizado" que estava semanticamente errado. Como o
+repositório é compartilhado, a correção resolve ao mesmo tempo o relatório
+orçado×realizado da Controladoria (`GetBudgetVsActualReportUseCase`) e o
+relatório de Centro de Custo do módulo Financeiro
+(`GetCostCenterReportUseCase`), sem duplicar lógica.
+
+**Limitação estrutural conhecida e não resolvida por este P1 (documentada,
+não corrigida):** `amount_paid` é um acumulador único por conta, sem
+histórico por baixa parcial — uma conta com múltiplas baixas parciais em
+meses diferentes tem seu `realized_amount` inteiro atribuído ao mês do
+**último** `payment_date`, não distribuído entre os meses de cada baixa.
+Isso é uma melhoria real sobre o comportamento anterior (100% correto para
+o caso comum de pagamento único por título) mas não é uma reconstrução
+exata de baixas parciais fracionadas — exigiria uma tabela de histórico de
+pagamentos (`account_payable_payments`), fora do escopo deste P1 pontual;
+registrado como risco residual em `docs/governance/TODO.md`.
+
+### Documentações atualizadas
+
+- `docs/governance/TODO.md` — nova entrada "2026-08-07 (rodada seguinte) —
+  Correção dos 2 achados P1 da auditoria CONT/TES/CTR", ambos os P1
+  marcados `[x]` com evidência de teste/arquivo.
+- JSDoc revisado/atualizado em:
+  - `server/src/modules/accounting/application/use-cases/entry/CreateEntryUseCase.ts`
+  - `server/src/modules/accounting/application/use-cases/entry/UpdateEntryUseCase.ts`
+  - `server/src/modules/financial/infrastructure/sequelize/SequelizeCostCenterRepository.ts`
+  - `server/src/modules/financial/domain/repositories/CostCenterRepository.ts`
+  - `server/src/modules/budget/application/use-cases/report/GetBudgetVsActualReportUseCase.ts`
+  - `server/src/modules/financial/application/use-cases/GetCostCenterReportUseCase.ts`
+- `docs/database/DATABASE.md` **não alterado** — nenhuma migration nova
+  (coluna `payment_date` já existia e já estava documentada no schema).
+- `docs/projeto/04-USE_CASES.md` **não alterado** — não houve mudança de
+  regra de negócio nova, apenas correção de um filtro que já deveria
+  aplicar a regra existente ("realizado" = efetivamente pago).
+
+### Arquivos de código alterados
+
+- `server/src/modules/accounting/application/use-cases/entry/CreateEntryUseCase.ts`
+- `server/src/modules/accounting/application/use-cases/entry/UpdateEntryUseCase.ts`
+- `server/src/modules/financial/infrastructure/sequelize/SequelizeCostCenterRepository.ts`
+- `server/src/modules/financial/domain/repositories/CostCenterRepository.ts`
+- `server/src/modules/budget/application/use-cases/report/GetBudgetVsActualReportUseCase.ts`
+- `server/src/modules/financial/application/use-cases/GetCostCenterReportUseCase.ts`
+- Testes novos/ajustados: `server/tests/unit/accounting-use-cases.test.ts`
+  (mocks de conta ganharam `active: true` nos casos de sucesso; 2 casos
+  novos de rejeição por `active: false`), `server/tests/unit/
+  cost-center-realized-payment-date.test.ts` (novo arquivo, valida a SQL
+  gerada pelo repositório via mock de `sequelize.query`).
+
+### Instruções de teste para o próximo agente/humano
+
+1. `npm run typecheck --prefix server` → deve continuar limpo (confirmado
+   nesta entrega).
+2. `npx jest tests/unit --runInBand --prefix server` (ou de dentro de
+   `server/`) → esperado 1110/1111 passando, única falha pré-existente e
+   não relacionada: `tests/unit/onda3-shipping-cockpit-cashflow.test.ts`.
+3. Teste funcional manual (Plano de Contas): desativar uma conta folha via
+   `PUT /api/accounting/accounts/:id` com `{"active": false}`, depois
+   tentar `POST /api/accounting/entries` referenciando essa conta —
+   esperado `422 BusinessRuleError` com a mensagem "está desativada e não
+   aceita novo lançamento".
+4. Teste funcional manual (Controladoria): criar uma conta a pagar com
+   `due_date` em um mês e pagá-la (`POST /api/finance/payables/:id/pay`)
+   em outro mês; consultar `GET /api/budget/report?year=&month=` para
+   ambos os meses e conferir que o `realized_amount` aparece no mês do
+   pagamento, não no mês de vencimento.
+5. **Pendente (não coberto nesta correção, registrado em
+   `docs/governance/TODO.md`):** teste de integração real (Postgres) do
+   cenário acima, hoje coberto apenas por teste unitário com mock de
+   repositório.
+
+### Riscos residuais
+
+- Limitação estrutural de `amount_paid` como acumulador único sem
+  histórico por baixa parcial (ver seção "Resumo da feature" acima) — não
+  bloqueante, documentado.
+- Nenhum teste de integração real (Postgres) foi executado nesta correção
+  (ambiente sem banco disponível nesta sessão); validação em banco real
+  fica pendente para o próximo ciclo de QA/DBA.
+
+---
+
+## 2026-08-07 — BLOCO 6 RH: Requisitos formais prontos para modelagem — `AnalistaNegocios`
+
+**PASSO 1 do pipeline do Bloco 6 (RH, lacunas, departamento 02) concluído.**
+Este é o **sexto e último bloco** da iniciativa de módulos novos
+(Bloco 0 LGPD → SST → TI → JUR → FAC → MKT → **RH, este bloco**).
+
+**Arquivo produzido:** `docs/business/BLOCO_6_RH_REQUISITOS.md` (81 RF-RH,
+25 P0 / 40 P1 / 12 P2, 5 UC novos UC-67 a UC-71, RNF-RH-01 a 05).
+
+**Insumo consumido:** `docs/business/briefs/BRIEF_RH_2026-08-06.md` (24
+regras BR-RH-001 a 024, 9 processos P1-P9, 15 entidades novas).
+
+### O que muda em relação ao módulo `employees` existente
+- `employees`/`departments` (CRUD básico) já existem e **não são
+  reabertos** — apenas renumerados de `RF-RH-01..05` (legado, 2 dígitos)
+  para `RF-RH-001..005` (padrão de 3 dígitos), sem mudança de escopo.
+- `BR-RH-020` (segregação de campo sensível — salário/CPF/dados bancários
+  em `GET /api/employees`) **já está remediada em produção-candidata**
+  (2026-08-06) — este bloco apenas referencia (RF-RH-006), não reabre.
+
+### Foco P0 explícito (risco legal imediato)
+- **Férias** (RF-RH-031 a 043, UC-67): período aquisitivo aberto
+  automaticamente, cálculo de redução por faltas, período concessivo com
+  alertas escalonados 6/3/1 mês, dobra nunca silenciosa (alerta crítico a
+  RH e CFO), fracionamento (até 3 frações, uma ≥14 dias), abono pecuniário
+  (limite 1/3, prazo 15 dias), programação por equipe com limite de %
+  simultâneo por departamento.
+- **Contrato de experiência** (RF-RH-013 a 016, UC-68): limite de 90 dias
+  total, uma única prorrogação, alertas D-10/D-3, vencimento sem decisão
+  vira `indeterminado_automatico` automaticamente com alerta crítico.
+
+### O que ficou de fora por ser BUY/INTEGRAR (não desenvolvido)
+- **Folha de pagamento** (cálculo INSS/IRRF/FGTS/13º/rescisão): fora de
+  build — RNF-RH-03 e §6.1 do bloco. O ERP constrói apenas
+  `PayrollImportBatch`/`PayrollImportItem` (RF-RH-070 a 073) para
+  **importar** o resultado já calculado pelo provedor de folha, com acesso
+  reforçado a `bruto`/`liquido` (mais restrito que a segregação padrão de
+  `rh` — ver §6.3 do bloco).
+- **Ponto eletrônico (REP)**: fora de build — RNF-RH-03 e §6.2 do bloco
+  (Portaria MTP 671/2021 exige registro/certificação, inviável para uso
+  interno). O ERP constrói apenas `TimeSheetSummary` (RF-RH-060 a 063)
+  para **importar** o espelho consolidado mensal do fornecedor de ponto.
+
+### Decisões-chave para o próximo agente (`AdmDBA` / `ArquitetoSoftwareAPI`)
+1. Duas exceções de acesso **mais restritivas** que o padrão de campo do
+   módulo `rh` (BR-RH-020): `Absence.cid` (dado de saúde, RNF-RH-01, §6.4)
+   e `PayrollImportItem.bruto`/`liquido` (dado financeiro individual,
+   RF-RH-072, §6.3) — ambas seguem o precedente de `sst`/`juridico`
+   (bloqueio de rota, não só omissão de campo). Nível exato de
+   implementação (`rh:payroll`? exigir `rh`+`admin`/`financeiro`?) é
+   decisão do `ArquitetoSoftwareAPI`, não deste bloco.
+2. `Employee.pcd` (bool) é campo novo a adicionar ao modelo existente
+   (RF-RH-067) — nullable, não quebra registros atuais. `work_regime`
+   já cobre o indicador de aprendiz, sem campo novo.
+3. `Employee.position` (hoje texto livre) ganha referência opcional a
+   `JobPosition` (RF-RH-025) — migração incremental, texto livre continua
+   válido como fallback.
+4. Histórico contratual (`EmployeeContract`, `EmployeeJobHistory`,
+   `VacationAccrualPeriod`, `TerminationProcess`) é imutável por desenho —
+   toda alteração relevante cria novo registro com vigência, nunca
+   `UPDATE` destrutivo (RNF-RH-04, CLT art. 468).
+
+### Pendências
+- 7 grupos de RF sem UC formal detalhado nesta passada (Cargos, Benefícios,
+  Treinamentos, Espelho de ponto, Transferência/histórico contratual,
+  Quotas PCD/aprendiz, Avaliação/Recrutamento) — recomendado UC-72/73/74
+  na próxima passada do `AnalistaNegocios`, mesmo critério já usado no
+  Bloco 4 (Facilities) para os grupos de menor complexidade (§9 do bloco).
+- 6 itens `[VERIFICAR COM RH DA EMPRESA]` (versão do MOS, % máximo de
+  equipe em férias por departamento, formato do arquivo de movimento para
+  o provedor de folha ainda não contratado, adesão ao Empresa Cidadã,
+  confirmação da faixa de quota PCD/aprendiz, estado atual do controle de
+  ponto) — bloqueiam apenas a parametrização fina, não a modelagem.
+- Contratação do provedor de folha + REP é pré-requisito organizacional
+  (não de sistema) para as integrações de §6.1/6.2 — segue como pendência
+  de negócio, fora do escopo deste bloco.
+
+### Próximos passos sugeridos no pipeline
+1. `AdmDBA` — modelar as 15 entidades novas (schema/migrations),
+   confirmar caminho de segregação de acesso reforçado (§6.3/6.4).
+2. `ArquitetoSoftwareAPI` — contrato de API dos 81 RF-RH, decidir nível de
+   RBAC reforçado para `Absence.cid`/`PayrollImportItem`.
+3. `AuditorIntegrador` — ao final do ciclo, checar se este bloco fecha o
+   pipeline completo de 6 blocos (Bloco 0 a 6) sem BR/RF órfão.

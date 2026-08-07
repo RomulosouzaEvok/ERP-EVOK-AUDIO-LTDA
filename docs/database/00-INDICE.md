@@ -89,6 +89,27 @@ nomenclatura isolado (`access_profiles.nome`/`descricao`) registrado em
   com essas tabelas (ambos refletem o schema real introspectado do banco
   aplicado, por convenção desta pasta) — atualizar somente depois de
   `migration:up`.
+- **Módulo Marketing (BLOCO 5, correção, departamento 14)** — 6 migrations
+  preparadas em `server/migrations/20260807-000310-*.cjs` a
+  `20260807-000315-*.cjs` (2 tabelas novas — `marketing_events`,
+  `marketing_event_checklist_items` — mais a tabela de auditoria
+  `marketing_lead_saneamento_log`; extensão do ENUM
+  `marketing_leads.status` com `in_sales_attendance`; colunas novas de
+  handoff/LGPD/saneamento em `marketing_leads`, de orçamento/aprovação/
+  métricas em `marketing_campaigns` e de vínculo com Almoxarifado/
+  aprovação em `marketing_materials`; 5 novas `CHECK` constraints),
+  **ainda não aplicadas** (`migration:up` pendente de aprovação do dono do
+  produto, após revisão do `AuditorIntegrador`). Corrige gaps críticos
+  identificados em `docs/business/BLOCO_5_MKT_VERIFICACAO.md` (conversão
+  lead→cliente não obrigatória no banco, métricas de campanha editáveis,
+  ausência de handoff/evento/consentimento LGPD). Modelo de dados
+  completo, decisões de saneamento/retenção e rastreabilidade RF→tabela
+  em
+  [`docs/business/BLOCO_5_MKT_MODELO_DADOS.md`](../business/BLOCO_5_MKT_MODELO_DADOS.md).
+  `02-MODELO_LOGICO.md`/`04-DICIONARIO_DADOS.md` **não foram atualizados**
+  com essas tabelas/colunas (ambos refletem o schema real introspectado do
+  banco aplicado, por convenção desta pasta) — atualizar somente depois de
+  `migration:up`.
 
 ## Auditorias específicas
 

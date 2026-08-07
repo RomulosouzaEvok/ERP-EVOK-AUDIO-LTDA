@@ -47,7 +47,7 @@ class UpdateEntryUseCase extends UseCase<UpdateEntryInput, any> {
 
   /**
    * @throws {NotFoundError} Se o lançamento (ou alguma conta/centro de custo referenciado nos novos itens) não existir.
-   * @throws {BusinessRuleError} Se o lançamento não estiver `draft`, ou se os novos itens violarem a forma de partida dobrada (ver `validateEntryItemsShape`).
+   * @throws {BusinessRuleError} Se o lançamento não estiver `draft`, se os novos itens violarem a forma de partida dobrada (ver `validateEntryItemsShape`), ou se alguma conta referenciada não aceitar lançamento direto (`accept_entries=false`) ou estiver desativada (`active=false`).
    */
   async execute({ id, entry_date, description, entry_type, items, transaction }: UpdateEntryInput) {
     const current = await this.accountingRepository.findEntryByIdForUpdate(id, transaction);
@@ -76,6 +76,9 @@ class UpdateEntryUseCase extends UseCase<UpdateEntryInput, any> {
         }
         if (!account.accept_entries) {
           throw new BusinessRuleError(`A conta "${account.code} - ${account.name}" é sintética (accept_entries=false) e não aceita lançamento direto.`);
+        }
+        if (!account.active) {
+          throw new BusinessRuleError(`A conta "${account.code} - ${account.name}" está desativada e não aceita novo lançamento.`);
         }
       }
 

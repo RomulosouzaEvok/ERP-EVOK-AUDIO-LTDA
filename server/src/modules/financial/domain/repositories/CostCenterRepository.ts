@@ -97,9 +97,15 @@ class CostCenterRepository {
   }
 
   /**
-   * Agrega `accounts_receivable` (não cancelada, `due_date` no período
-   * `[from, to]`) por `cost_center_id`, retornando saldo em aberto
-   * (`amount - amount_paid`) e valor já realizado (`amount_paid`).
+   * Agrega `accounts_receivable` (não cancelada) por `cost_center_id`,
+   * retornando saldo em aberto (`amount - amount_paid`, filtrado por
+   * `due_date` no período `[from, to]`) e valor já realizado (`amount_paid`,
+   * filtrado pela data real de pagamento `payment_date` no período — com
+   * fallback para `due_date` em registros legados sem `payment_date`
+   * preenchido). Correção do achado P1-1 de
+   * `docs/governance/auditorias/AUDITORIA_CONT_TES_CTR_2026-08-07.md`
+   * (antes, `realized` usava `due_date`, misturando vencimento com
+   * pagamento efetivo).
    *
    * @abstract
    * @param {string} from - Data inicial (YYYY-MM-DD).
@@ -111,7 +117,7 @@ class CostCenterRepository {
   }
 
   /**
-   * Mesma agregação de {@link getCostCenterTotalsByReceivable}, para `accounts_payable`.
+   * Mesma agregação e semântica de {@link getCostCenterTotalsByReceivable}, para `accounts_payable`.
    *
    * @abstract
    * @param {string} from - Data inicial (YYYY-MM-DD).

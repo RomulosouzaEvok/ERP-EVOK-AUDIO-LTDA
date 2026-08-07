@@ -11,10 +11,12 @@ const NO_COST_CENTER_LABEL = 'Sem centro de custo';
  * o fluxo do endpoint `GET /api/finance/cost-centers/report?from=&to=`.
  *
  * Para cada centro de custo (mais um grupo "Sem centro de custo" agregando
- * `cost_center_id IS NULL`), retorna o total em aberto e o total já
- * realizado de contas a receber e a pagar, com `due_date` no período
- * `[from, to]`. Duas queries agregadas (uma por tabela) — sem N+1 por
- * centro de custo.
+ * `cost_center_id IS NULL`), retorna o total em aberto (filtrado por
+ * `due_date` no período `[from, to]`) e o total já realizado (filtrado pela
+ * data real de pagamento `payment_date` no período, com fallback para
+ * `due_date` em registros legados sem `payment_date` — ver
+ * `SequelizeCostCenterRepository`) de contas a receber e a pagar. Duas
+ * queries agregadas (uma por tabela) — sem N+1 por centro de custo.
  */
 class GetCostCenterReportUseCase extends UseCase {
   costCenterRepository: ICostCenterRepository;

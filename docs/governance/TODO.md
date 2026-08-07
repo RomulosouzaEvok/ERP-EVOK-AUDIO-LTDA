@@ -4054,3 +4054,60 @@ reescrita do modulo `server/src/modules/facilities/`.
   usuario×funcionario ja presente em outros pontos do sistema, nao
   resolvida por este bloco (herdada do contrato de API, que pede
   `req.user.id` explicitamente).
+
+## 2026-08-07 (rodada seguinte) — Correção dos 2 achados P1 da auditoria CONT/TES/CTR — `programador`
+
+**Escopo:** correção dos 2 achados P1 de
+`docs/governance/auditorias/AUDITORIA_CONT_TES_CTR_2026-08-07.md`.
+
+- [x] **P1-2 (Contabilidade) — CORRIGIDO.** Conta com `active=false` agora
+  é rejeitada em novo lançamento, com o mesmo padrão de erro já usado para
+  `accept_entries=false`. Alterado
+  `server/src/modules/accounting/application/use-cases/entry/CreateEntryUseCase.ts`
+  e `.../UpdateEntryUseCase.ts` (checagem `if (!account.active) throw new
+  BusinessRuleError(...)` logo após a checagem de `accept_entries`).
+  Testes novos em `server/tests/unit/accounting-use-cases.test.ts`
+  ("rejeita conta desativada... P1-2 da auditoria CONT/TES/CTR", 2 casos:
+  create e update) — passando.
+- [x] **P1-1 (Controladoria) — CORRIGIDO, sem migration.** Investigação
+  mostrou que a premissa da auditoria ("`accounts_payable` não tem coluna
+  de data de pagamento") estava desatualizada: `accounts_payable` e
+  `accounts_receivable` **já têm** `payment_date` (`DATEONLY`, nullable),
+  populada em todo evento real de baixa (`PayPayableUseCase`,
+  `ReceivePaymentUseCase`, `MatchEntryUseCase` da conciliação bancária,
+  `ProcessReturnFileUseCase` do retorno CNAB) — não foi necessária nova
+  migration. A correção foi trocar o filtro de "realizado" em
+  `SequelizeCostCenterRepository.getCostCenterTotalsByPayable`/
+  `getCostCenterTotalsByReceivable` de `due_date` para
+  `COALESCE(payment_date, due_date)` (fallback para `due_date` só em
+  registro legado sem `payment_date`), com `WHERE` ampliado para `due_date
+  BETWEEN :from AND :to OR COALESCE(payment_date, due_date) BETWEEN :from
+  AND :to` — sem essa ampliação uma conta vencida fora do período mas paga
+  dentro dele desapareceria da consulta inteira. `open_amount` continua
+  filtrado por `due_date` (saldo em aberto no período, comportamento
+  correto e inalterado). Isso corrige tanto o relatório orçado×realizado
+  da Controladoria (`GetBudgetVsActualReportUseCase`) quanto o relatório
+  de Centro de Custo do Financeiro (`GetCostCenterReportUseCase`), que
+  compartilham o mesmo repositório. Arquivos alterados: `.../financial/
+  infrastructure/sequelize/SequelizeCostCenterRepository.ts`, `.../
+  financial/domain/repositories/CostCenterRepository.ts` (JSDoc),
+  `.../budget/application/use-cases/report/GetBudgetVsActualReportUseCase.ts`
+  (JSDoc), `.../financial/application/use-cases/GetCostCenterReportUseCase.ts`
+  (JSDoc). Teste novo dedicado (mock de `sequelize.query`, valida a SQL
+  gerada) em `server/tests/unit/cost-center-realized-payment-date.test.ts`
+  — passando.
+- [x] `npm run typecheck` limpo (`server/`). Suíte unitária completa:
+  1110/1111 passando (única falha é a pré-existente
+  `onda3-shipping-cockpit-cashflow`, não relacionada a esta correção).
+- [ ] **Fora de escopo desta correção (registrado como P2 residual, já
+  citado na auditoria):** teste de integração real (Postgres) criando uma
+  conta a pagar com vencimento em um mês e baixa em outro, confirmando
+  contra banco real que o relatório atribui o valor ao mês de pagamento.
+  Validação de limitação estrutural conhecida e não resolvida: `amount_paid`
+  é um acumulador único (não há linha por baixa parcial), então uma conta
+  com múltiplas baixas parciais em meses diferentes tem seu
+  `realized_amount` inteiro atribuído ao mês do **último** `payment_date`
+  — mais correto que o comportamento anterior (100% dos casos comuns de
+  pagamento único por título), mas ainda não é uma reconstrução exata de
+  cada baixa parcial individual (exigiria uma tabela de histórico de
+  pagamentos, fora do escopo deste P1 pontual).

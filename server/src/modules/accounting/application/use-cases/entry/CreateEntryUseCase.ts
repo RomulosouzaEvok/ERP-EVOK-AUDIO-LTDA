@@ -51,7 +51,7 @@ class CreateEntryUseCase extends UseCase<CreateEntryInput, any> {
   }
 
   /**
-   * @throws {BusinessRuleError} Se `items` estiver vazio, se alguma linha tiver débito e crédito preenchidos (ou nenhum dos dois), ou se alguma conta referenciada não aceitar lançamento direto.
+   * @throws {BusinessRuleError} Se `items` estiver vazio, se alguma linha tiver débito e crédito preenchidos (ou nenhum dos dois), se alguma conta referenciada não aceitar lançamento direto (`accept_entries=false`) ou estiver desativada (`active=false`).
    * @throws {NotFoundError} Se algum `account_id`/`cost_center_id` referenciado não existir.
    */
   async execute({ entry_date, description, entry_type, items, userId, transaction }: CreateEntryInput) {
@@ -64,6 +64,9 @@ class CreateEntryUseCase extends UseCase<CreateEntryInput, any> {
       }
       if (!account.accept_entries) {
         throw new BusinessRuleError(`A conta "${account.code} - ${account.name}" é sintética (accept_entries=false) e não aceita lançamento direto.`);
+      }
+      if (!account.active) {
+        throw new BusinessRuleError(`A conta "${account.code} - ${account.name}" está desativada e não aceita novo lançamento.`);
       }
     }
 

@@ -22,7 +22,11 @@ function lastDayOfMonth(year: number, month: number): string {
  * "Realizado" NÃO reimplementa a agregação de contas a pagar por centro de
  * custo: reaproveita `CostCenterRepository.getCostCenterTotalsByPayable`
  * (mesma fonte de dados de `GetCostCenterReportUseCase`, módulo Financeiro),
- * usando o valor já PAGO (`realized_amount` = soma de `amount_paid`) como
+ * usando o valor já PAGO (`realized_amount` = soma de `amount_paid`,
+ * filtrado pela data REAL de pagamento `payment_date` no período — não por
+ * `due_date`; correção do achado P1-1 de
+ * `docs/governance/auditorias/AUDITORIA_CONT_TES_CTR_2026-08-07.md`, com
+ * fallback para `due_date` em registros legados sem `payment_date`) como
  * "realizado" — Controladoria acompanha custos/despesas, não receitas,
  * então apenas o lado de contas a PAGAR entra no comparativo (contas a
  * receber ficam fora do escopo deste relatório por design).
