@@ -34,6 +34,7 @@ import {
   FileSpreadsheet,
   Container,
   Layers,
+  HardHat,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -133,6 +134,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Requisições de Qualidade', to: '/quality/requisitions', icon: ClipboardList, module: 'qualidade' },
       { label: 'Laboratório', to: '/laboratory', icon: FlaskConical, module: 'laboratorio' },
       { label: 'Engenharia', to: '/engineering', icon: DraftingCompass, module: 'engenharia' },
+      { label: 'Segurança do Trabalho (SST)', to: '/sst', icon: HardHat, module: 'sst' },
     ],
   },
   {

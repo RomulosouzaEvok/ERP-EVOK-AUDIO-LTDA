@@ -9062,3 +9062,71 @@ sem inventar máquina de estados:
   endpoint desta passada 2).
 - Aplicação das 12 migrations SST (`migration:up`) continua fora do
   escopo de qualquer agente até aprovação explícita do dono do produto.
+
+## 2026-08-07 — Frontend do BLOCO 1 SST (`client/`) — `PromadorFonteEnd`
+
+Telas funcionais do módulo SST (departamento 15), consumindo os 75
+endpoints `/api/sst/*` implementados nas duas passadas de backend
+anteriores (commits `8482e79`/`3696734`). Foco em funcionalidade/integração
+— polimento visual fino (classes Tailwind, hierarquia) fica para o
+`webdesiner` numa passada seguinte, seguindo o padrão já estabelecido
+(banner `bg-brand/10`, `DidacticAlert`, `TableSkeletonRows`).
+
+### Arquivos criados
+
+- `client/src/api/sst.ts` — tipos TS + funções para EPI (tipos/matriz/entregas/ficha/pendências), ASO (list/detalhe/status/upcoming/create), Acidente/CAT (list/detalhe/create/complements/close/cat/investigation), fila eSocial (list/resend), CIPA (dimensioning/mandates/meetings/stability) e Treinamentos (list/create/blocklist). Não cobre os 75 endpoints do contrato — apenas o que as telas desta passada consomem (PGR/GES, Inspeções/PT/Brigada/DDS e Ações Corretivas ficaram de fora, ver Pendências).
+- `client/src/pages/sst/SstPage.tsx` — página com 6 abas (padrão `TabButton` de `InventoryPage.tsx`).
+- `client/src/pages/sst/EpiTab.tsx` — 3 sub-visões: Entregas (lista + dialog nova entrega + dialog evidência + confirmar + registrar devolução + banner de pendência crítica), Tipos de EPI (catálogo com destaque de CA vencido), Matriz Função×EPI (lista + criar vínculo).
+- `client/src/pages/sst/AsoTab.tsx` — cards de vencimento 30/60/90 dias + lista + dialog de registro com aviso inline quando resultado = inapto/apto com restrições (bloqueio de apontamento, efeito colateral do backend).
+- `client/src/pages/sst/AccidentsTab.tsx` — lista + dialog de registro (imutável) + dialog de detalhe com emissão de CAT (prazo legal em destaque), abertura de investigação (obrigatória para acidentes com afastamento ou pior) e encerramento.
+- `client/src/pages/sst/EsocialTab.tsx` — fila somente leitura (filtros tipo/status) + botão de reenvio para eventos `rejeitado`.
+- `client/src/pages/sst/CipaTab.tsx` — dimensionamento (cards), mandatos (leitura), reuniões (lista + dialog de criação com validação client-side de ata obrigatória em reunião ordinária).
+- `client/src/pages/sst/TrainingsTab.tsx` — lista + dialog de registro (campo `identificacao_operador` só aparece para norma NR-11) + banner de lista de bloqueio operacional.
+- `client/src/pages/sst/sstShared.tsx` — helpers de formatação de data (`formatDate`/`formatDateTime`/`toDateInputValue`) e badges de status/enum reutilizados pelas abas.
+- `client/src/pages/home/widgets/SstPendenciasWidget.tsx` — widget da Home por Perfil (ASOs vencendo em 30 dias + pendências críticas de EPI), registrado em `widgetRegistry.tsx` com `module: 'sst'`, `priority: 45`.
+
+### Arquivos alterados
+
+- `client/src/api/accessProfiles.ts` — união `AccessModuleKey` ganhou `rh`/`sst` (já existiam no backend, `server/src/shared/domain/accessModules.ts`, mas o client estava defasado).
+- `client/src/App.tsx` — rota `/sst` (lazy) dentro de `ModuleRoute` com `module="sst"`.
+- `client/src/layouts/AppLayout.tsx` — item "Segurança do Trabalho (SST)" na seção "Qualidade & Engenharia", ícone `HardHat`, `module: 'sst'`.
+- `client/src/pages/home/widgetRegistry.tsx` — registro do widget `sst-pendencias`.
+
+### Regras de imutabilidade respeitadas na UI
+
+- Entrega de EPI confirmada não mostra botão de editar/excluir — apenas "Registrar devolução" (sub-recurso separado). Botões de ação sensível (Confirmar entrega, Emitir CAT, Encerrar acidente, Reenviar evento eSocial) ficam desabilitados (com `title` explicando o motivo) quando o usuário não tem nível `approve` no módulo `sst` — o backend já rejeitaria com 403, a UI só evita o clique morto.
+- Acidente não tem edição alguma após criado — apenas ações filhas (CAT, investigação, encerramento); complementos não têm UI nesta passada (ver Pendências).
+- CAT já emitida esconde o botão "Emitir CAT inicial" (mostra a lista de CATs existentes com prazo legal em destaque); reabertura de CAT não tem UI nesta passada.
+
+### O que ficou de fora desta passada (declarado, não omissão)
+
+1. PGR/GES (`/api/sst/risks`, `/api/sst/ges`) — sem tela; CRUD simples, backend pronto.
+2. Rotina Preventiva — Inspeções, Permissão de Trabalho, Brigada, DDS (`/api/sst/inspections`, `/work-permits`, `/brigade`, `/dds`) — sem tela.
+3. Ações Corretivas (`/api/sst/corrective-actions`) como tela própria — hoje só é criada implicitamente pela investigação de acidente; não há tela de listagem/atualização de status independente.
+4. CIPA — escrita de mandato/processo eleitoral (`POST /cipa/mandates`, `/electoral-processes*`, `/mandates/:id/members`, `/members/:id/take-office`) sem dialog — a aba CIPA desta passada é leitura de dimensionamento/mandatos + criação de reunião apenas.
+5. `POST /accidents/:id/complements` (lançamento de complemento, ex. dias perdidos atualizados) sem UI — só a criação inicial do acidente.
+6. Ficha de EPI consolidada/imprimível (`GET /epi-deliveries/ficha/:employeeId`) — coberta na API client (`getEpiFicha`), mas sem tela de impressão/exportação dedicada ainda.
+
+### Validação
+
+- `npx tsc -p tsconfig.app.json --noEmit` — 0 erros.
+- `npx vitest run` — 51/51 testes passando (8 arquivos), nenhuma suíte quebrada.
+- `npm run build` — build de produção OK, `SstPage` em chunk lazy próprio.
+
+### Instruções de teste manual (usuário admin vê tudo)
+
+1. Login como admin. Menu lateral, seção "Qualidade & Engenharia", item "Segurança do Trabalho (SST)" (`/sst`).
+2. EPI: aba "Tipos de EPI (catálogo)", "Novo tipo de EPI" (nome/CA/validade/vida útil). Voltar a "Entregas", "Nova entrega" com o EPI recém-criado (fica em rascunho). "Anexar evidência" (qualquer URL) e depois "Confirmar" (dispara baixa de estoque real via `/api/inventory/movements` — exige `item_id` vinculado ao TipoEPI com saldo, senão retorna 409 traduzido). Fluxo de exceção: cadastrar TipoEPI com CA vencido e tentar confirmar a entrega — deve bloquear com mensagem clara.
+3. ASO: "Novo ASO" com resultado "Inapto" deve mostrar o aviso inline de bloqueio de apontamento antes de salvar.
+4. Acidentes: registrar acidente com gravidade "Com afastamento", abrir o detalhe, "Emitir CAT inicial" (prazo legal em destaque), tentar "Encerrar acidente" sem investigação (bloqueia com 422 traduzido), "Abrir investigação" com uma ação corretiva, encerrar de novo (deve funcionar).
+5. eSocial: após os passos acima, a fila deve mostrar os eventos S-2220 (do ASO) e S-2210 (da CAT) como pendentes.
+6. CIPA: card de dimensionamento; criar reunião exige mandato existente (mandato só é criável hoje via API, não pela UI desta passada).
+7. Treinamentos: registrar treinamento norma NR-11 e conferir o campo de identificação do operador.
+8. Home: voltar para `/` e conferir o card "Pendências de SST" somando ASOs vencendo em 30 dias e pendências críticas de EPI.
+
+### O que o Agente QA (ou humano) deve testar
+
+- Usuário com perfil `sst` nível `operate` (sem `approve`) deve ver os botões de ação sensível desabilitados com tooltip, e a API deve rejeitar com 403 se contornado via DevTools.
+- Usuário sem módulo `sst` nem `rh` deve ser redirecionado para "Acesso Negado" ao acessar `/sst` diretamente pela URL.
+- Caminho feliz completo de EPI (confirmação com baixa de estoque real) — o ambiente de teste precisa ter um item de estoque com saldo positivo vinculado ao TipoEPI.
+- Tradução de erro 409 (estoque insuficiente) e 422 (CA vencido/evidência ausente) no dialog de confirmação de entrega.

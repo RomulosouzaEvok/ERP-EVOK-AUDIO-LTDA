@@ -32,6 +32,8 @@ export type AccessModuleKey =
   | 'patrimonio'
   | 'manutencao'
   | 'garantia'
+  | 'rh'
+  | 'sst'
   | 'rastreabilidade'
   | 'financeiro'
   | 'relatorios.producao'

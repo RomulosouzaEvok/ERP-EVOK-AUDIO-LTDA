@@ -264,6 +264,25 @@ tela funciona.
 - [ ] Tela de audit log (somente leitura, `admin`) com filtro por `entity_type`/`entity_id`/ação/período.
 - [ ] Tela de administração de usuários (`admin`): listar, criar, editar, inativar, e botão de "revogar sessões" (`POST /api/users/:id/revoke-sessions`, SEC-12).
 
+## 11a. Addendum — Módulo SST (BLOCO 1, 2026-08-07)
+
+Módulo novo, fora da numeração original FE0-FE7 (departamento 15, backend
+com 75 endpoints `/api/sst/*` implementado em 2026-08-06). Frontend
+construído em 2026-08-07: rota `/sst`, menu em "Qualidade & Engenharia",
+chave RBAC `sst` adicionada a `AccessModuleKey` no client (já existia no
+backend), widget `sst-pendencias` na Home por Perfil.
+
+### Checklist
+
+- [x] Aba EPI: catálogo de TipoEPI (CA/validade), Matriz Função×EPI, entregas com fluxo rascunho→evidência→confirmação (imutável) e devolução.
+- [x] Aba ASO: registro com bloqueio visual de resultado inapto/restrições, cards de vencimento 30/60/90 dias.
+- [x] Aba Acidentes: registro imutável, emissão de CAT com prazo legal em destaque, investigação obrigatória para encerrar acidente grave.
+- [x] Aba eSocial: fila somente leitura (S-2210/S-2220/S-2240) + reenvio de eventos rejeitados.
+- [x] Aba CIPA: dimensionamento, mandatos (leitura), reuniões com ata.
+- [x] Aba Treinamentos: registro + lista de bloqueio operacional (NR-11/NR-10 etc.).
+- [ ] PGR/GES e Rotina Preventiva (Inspeções, PT, Brigada, DDS) — CRUD do backend pronto, sem tela ainda.
+- [ ] Criação de Mandato/Processo Eleitoral CIPA — hoje só leitura na UI (criação ficou para o backend/próxima passada de frontend).
+
 ## 12. FE7 - Polimento e UAT do Frontend
 
 ### Checklist

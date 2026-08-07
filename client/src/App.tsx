@@ -38,6 +38,7 @@ const QualityPage = lazy(() => import('@/pages/quality/QualityPage'));
 const QualityRequisitionsPage = lazy(() => import('@/pages/quality/QualityRequisitionsPage'));
 const LaboratoryPage = lazy(() => import('@/pages/laboratory/LaboratoryPage'));
 const EngineeringPage = lazy(() => import('@/pages/engineering/EngineeringPage'));
+const SstPage = lazy(() => import('@/pages/sst/SstPage'));
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'));
 const AssetsPage = lazy(() => import('@/pages/patrimonio/AssetsPage'));
 const MaintenanceRequisitionsPage = lazy(() => import('@/pages/maintenance/MaintenanceRequisitionsPage'));
@@ -376,6 +377,17 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <EngineeringPage />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route element={<ModuleRoute module="sst" />}>
+            <Route
+              path="/sst"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SstPage />
                 </Suspense>
               }
             />

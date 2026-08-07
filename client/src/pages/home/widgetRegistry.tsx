@@ -10,6 +10,7 @@ import { QualidadePendenciasWidget } from '@/pages/home/widgets/QualidadePendenc
 import { EstoqueCriticoWidget } from '@/pages/home/widgets/EstoqueCriticoWidget';
 import { FinanceiroResumoWidget } from '@/pages/home/widgets/FinanceiroResumoWidget';
 import { KpisExecutivosWidget } from '@/pages/home/widgets/KpisExecutivosWidget';
+import { SstPendenciasWidget } from '@/pages/home/widgets/SstPendenciasWidget';
 
 /**
  * Descritor de um widget da Home por Perfil (`HomePage.tsx`). A home monta o
@@ -77,6 +78,13 @@ export const homeWidgets: HomeWidgetDefinition[] = [
     priority: 50,
     size: 'wide',
     component: EstoqueCriticoWidget,
+  },
+  {
+    key: 'sst-pendencias',
+    title: 'Pendências de SST',
+    module: 'sst',
+    priority: 45,
+    component: SstPendenciasWidget,
   },
   {
     key: 'financeiro-resumo',
