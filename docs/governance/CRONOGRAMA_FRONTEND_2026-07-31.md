@@ -305,6 +305,32 @@ client (já existia no backend). Widget `ti-pendencias` na Home por Perfil
 - [ ] Upload real do termo assinado (`signed_document_path` via Multer) — formulário aceita apenas aceite eletrônico nesta passada; assinatura física exige integração de upload futura.
 - [ ] Ficha "equipamentos por funcionário" (RF-TI-022) e listagem dedicada de "termos pendentes para offboarding" (RF-TI-023) — endpoints existem (`GET .../by-employee/:id`, `GET .../pending-for-offboarding/:id`), sem tela dedicada; o bloqueio de execução já aparece no fluxo de Acessos.
 
+## 11c. Addendum — Módulo Jurídico (BLOCO 3, 2026-08-07)
+
+Módulo novo, fora da numeração original FE0-FE7 (departamento 16, backend
+com 69/71 endpoints `/api/jur/*`, commits `0d97b12`+`c25f572`). O módulo
+Jurídico enxuto anterior (`/api/legal`, `client/src/pages/legal/`) foi
+REMOVIDO — substituído por completo. Frontend reconstruído em 2026-08-07:
+rota `/juridico` (`/legal` agora redireciona), menu em "Administração",
+chave RBAC `juridico` já existia (`AccessModuleKey`), widget
+`juridico-pendencias` na Home por Perfil (prazos fatais críticos + alertas
+pendentes). Rota liberada por `AnyModuleRoute(['juridico', 'financeiro'])`
+— quem só tem `financeiro` (sem `juridico`) enxerga apenas a aba "Alertas &
+Relatório Financeiro" (versão sanitizada, RF-JUR-042/BR-JUR-050).
+
+### Checklist
+
+- [x] Aba Contratos: lista/filtros (status/tipo), criação em `draft`, detalhe com documentos versionados, signatários, checklist de cláusulas (employment/supplier/nda), ativação (bloqueio sem responsável/2 partes/versão assinada), aditivos (prazo/valor/cláusula/parte), encerramento (rescisão com motivo ou vencimento natural).
+- [x] Aba Contencioso: processos (CNJ único), advogados externos (mini-CRUD em diálogo), andamentos (insert-only), avaliação de risco/provisão (CPC 25, `probable` exige valor+justificativa), lançamento de custos (despesa/depósito judicial → Conta a Pagar), encerramento (won/lost/settled com parcelamento/archived).
+- [x] Aba Prazos Fatais (fluxo mais crítico): lista com semáforo de urgência por dias restantes, filtro "só críticos" (`GET .../critical`), criação exigindo responsável+escalonamento, reconhecimento de alerta, dupla confirmação em 2 rotas separadas (`fulfill` com evidência → `confirm` por usuário distinto, com aviso explícito se o usuário logado é quem cumpriu).
+- [x] Aba Procurações: listagem (default exclui revogadas/vencidas), cadastro, revogação com registro de comunicação obrigatório.
+- [x] Aba Propriedade Intelectual: listagem/cadastro por tipo (marca/patente/modelo/desenho/direito autoral/segredo industrial — segredo industrial nunca aceita anexo), vínculo N:N com contratos (NDA/licenciamento).
+- [x] Aba LGPD: RoPA (cadastro + revisão anual), Solicitações de Titular (SLA de 15 dias calculado no backend, contador de dias, filtro "só críticas" D-5/vencidas, verificação de identidade obrigatória antes de avançar, resolução, recusa justificada nível approve), Incidentes (abertura, decisão de comunicação ANPD/titulares com justificativa obrigatória em ambos os sentidos, encerramento bloqueado sem decisão).
+- [x] Aba Alertas & Relatório Financeiro: lista de alertas pendentes com reconhecimento (nunca desativação — RNF-JUR-04 não tem esse caminho em nenhuma rota), relatório financeiro sanitizado (provisão vigente + custos, visível também ao perfil `financeiro`).
+- [ ] `corporate-acts` (atos societários, RF-JUR-030) — sem tela porque o backend também não implementou (sem tabela modelada nesta passada).
+- [ ] Tabela de alçada de aprovação de contrato por valor/tipo (RF-JUR-003) — pendência de backend (endpoint de configuração ainda não existe); hoje todo `juridico:operate` pode ativar qualquer contrato.
+- [ ] Upload real de documentos/evidências (minuta, aditivo, evidência de cumprimento de prazo) — formulários aceitam apenas URL/caminho, sem integração de upload de arquivo (Multer) nesta passada.
+
 ## 12. FE7 - Polimento e UAT do Frontend
 
 ### Checklist

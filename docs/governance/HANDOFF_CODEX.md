@@ -11236,3 +11236,145 @@ inline nos use cases, mesma decisão registrada na passada 1):**
 - **DPO/Encarregado (RF-JUR-041) sem cadastro formal** — herdado do próprio
   contrato de API (pendência #2 do handoff de `BLOCO_3_JUR_API.md`), não
   resolvido nesta passada.
+
+---
+
+## PASSO 5 — Frontend do módulo Jurídico (BLOCO 3, 2026-08-07)
+
+**Agente:** `PromadorFonteEnd`.
+**Escopo:** reconstrução completa do frontend do módulo Jurídico contra o
+contrato real de `/api/jur/*` (69/71 endpoints implementados, ver
+`docs/business/BLOCO_3_JUR_API.md`). O módulo enxuto anterior (`/api/legal`,
+`client/src/api/legal.ts`, `client/src/pages/legal/*`) estava quebrado em
+runtime (rota removida do backend) e foi removido por completo, não
+reaproveitado — a divergência de contrato (nomes de campo, enums, rotas) era
+grande demais para valer o retrofit.
+
+### Arquivos criados
+
+- `client/src/api/juridico.ts` — cliente HTTP completo cobrindo os 69
+  endpoints reais (7 grupos: Contratos, Contencioso, Prazos Fatais,
+  Procurações, PI, LGPD, Transversal/Alertas/Relatório). Tipagem verificada
+  campo a campo contra `server/src/models/Jur*.ts` e os use-cases reais —
+  não contra o exemplo idealizado do documento de contrato, que diverge em
+  vários pontos (ex.: resposta usa `contract_number`/`contract_type`,
+  `case_number`/`case_type`/`case_role`, não os nomes `number`/`type`/`role`
+  do exemplo JSON do contrato — só o payload de entrada de criação segue os
+  nomes do documento, porque é isso que os use-cases aceitam).
+- `client/src/pages/juridico/juridicoShared.tsx` — formatadores (data,
+  data/hora, moeda) e badges/labels de todos os enums do módulo.
+- `client/src/pages/juridico/JuridicoPage.tsx` — página `/juridico` com 7
+  abas; some com 6 delas se o usuário só tem módulo `financeiro` (sem
+  `juridico`), sobrando só "Alertas & Relatório Financeiro".
+- `client/src/pages/juridico/ContractsTab.tsx` — UC-52 completo: lista/
+  filtros, criação (validação client-side de contraparte polimórfica
+  espelhando `counterparty_type`), detalhe com documentos/signatários/
+  checklist/ativação/aditivos/encerramento.
+- `client/src/pages/juridico/LegalCasesTab.tsx` — UC-53: processos,
+  advogados externos (mini-CRUD em diálogo, sem aba dedicada por escopo),
+  andamentos, avaliação de risco/provisão, custos (gera Conta a Pagar),
+  encerramento.
+- `client/src/pages/juridico/DeadlinesTab.tsx` — UC-54, o fluxo mais
+  crítico: semáforo de urgência por dias restantes (`daysUntil` em
+  `juridicoShared.tsx`), filtro "só críticos" (`GET .../critical`), criação
+  exigindo `responsible_user_id`/`escalation_user_id`, `acknowledge`,
+  `fulfill` (1ª confirmação com evidência + justificativa retroativa se
+  `missed`) e `confirm` (2ª confirmação — a UI avisa em tela se
+  `req.user.id === fulfilled_by` antes mesmo de tentar, embora o bloqueio
+  real seja sempre da API, BR-JUR-013).
+- `client/src/pages/juridico/ProxiesTab.tsx` — UC-55: listagem (default
+  exclui revogadas/vencidas, replicando o comportamento do backend),
+  cadastro, revogação com `communication_record` obrigatório.
+- `client/src/pages/juridico/IpAssetsTab.tsx` — RF-JUR-031 a 034: CRUD por
+  tipo, formulário de `trade_secret` sem campo de anexo, vínculo N:N com
+  contrato.
+- `client/src/pages/juridico/LgpdTab.tsx` — UC-56 com 3 sub-abas internas
+  (RoPA, Solicitações de Titular com contador de SLA + filtro "só críticas",
+  Incidentes com decisão de comunicação de justificativa dupla obrigatória e
+  encerramento bloqueado sem decisão).
+- `client/src/pages/juridico/AlertsReportsTab.tsx` — lista de alertas
+  pendentes com `acknowledge` (nunca desativação — não existe esse caminho
+  em nenhuma rota do módulo, RNF-JUR-04) + relatório financeiro sanitizado
+  (`GET /api/jur/reports/financeiro`), a única seção visível a
+  `financeiro`-only.
+- `client/src/pages/home/widgets/JuridicoPendenciasWidget.tsx` — prazos
+  fatais críticos + alertas pendentes, registrado em `widgetRegistry.tsx`
+  com `module: 'juridico'`.
+
+### Arquivos removidos
+
+- `client/src/api/legal.ts`
+- `client/src/pages/legal/ContractsTab.tsx`
+- `client/src/pages/legal/IntellectualPropertyTab.tsx`
+- `client/src/pages/legal/LegalPage.tsx`
+
+### Arquivos modificados
+
+- `client/src/App.tsx` — troca `LegalPage` por `JuridicoPage`, rota
+  `/juridico` liberada por `AnyModuleRoute(['juridico', 'financeiro'])` (não
+  mais `ModuleRoute` simples, porque `financeiro` precisa entrar sem ter o
+  módulo `juridico`); `/legal` agora é um redirecionamento para `/juridico`.
+- `client/src/layouts/AppLayout.tsx` — item de menu atualizado
+  (label/rota), breadcrumb `/juridico`.
+- `client/src/pages/home/widgetRegistry.tsx` — nova entrada
+  `juridico-pendencias` (`priority: 48`, entre SST e TI).
+
+### Instruções de teste
+
+1. `cd client && npx tsc --noEmit -p tsconfig.app.json` — 13 erros, todos
+   pré-existentes e alheios a este bloco (facilities/marketing/treasury/
+   accounting, confirmado por `git stash`/typecheck comparativo: baseline
+   tinha 17 erros, incluindo 4 do módulo `legal` antigo agora removido — o
+   Jurídico novo não introduz nenhum erro).
+2. `cd client && npx vite build` — build de produção OK (`JuridicoPage`
+   compila em chunk próprio, 85.45 kB / 14.61 kB gzip). `npm run build`
+   completo (`tsc -b && vite build`) falha no gate `tsc -b` por causa dos
+   mesmos 13 erros pré-existentes de outros módulos — não é regressão desta
+   passada, mas registra-se aqui porque impede rodar o build "oficial" via
+   `npm run build` até esses módulos serem corrigidos.
+3. `cd client && npx vitest run` — 51/51 testes passando (nenhum teste
+   dedicado ao Jurídico ainda — cobertura é só de fumaça via typecheck/
+   build; QA/humano deve validar os fluxos manualmente contra a API real).
+
+### O que o QA/Agente QA deve testar na interface
+
+1. Contratos: criar um contrato `supplier` com `supplier_id` válido, anexar
+   documento não assinado, tentar ativar (deve bloquear por falta de 2
+   signatários/documento assinado/responsável), completar o fluxo até
+   `active`, criar aditivo de prazo e confirmar que a vigência exibida no
+   detalhe atualiza, encerrar por rescisão (motivo obrigatório).
+2. Prazos Fatais — o fluxo mais crítico: criar um prazo sem
+   `responsible_user_id` (o form já bloqueia o submit; validar a mensagem de
+   erro se forçado via API), cumprir com evidência como usuário A, tentar
+   confirmar como o mesmo usuário A (deve mostrar o aviso em tela e a API
+   deve rejeitar com 422 `SAME_USER_DOUBLE_CONFIRMATION`), confirmar como
+   usuário B (deve funcionar).
+3. LGPD — Solicitação de Titular: criar solicitação, verificar que só
+   aparece o botão de verificação de identidade antes do de resolução,
+   verificar identidade, resolver.
+4. LGPD — Incidente: criar incidente, confirmar que o botão de encerrar só
+   aparece após a decisão ser registrada, registrar decisão com ambas as
+   justificativas obrigatórias mesmo com os dois checkboxes desmarcados
+   ("não comunicar"), encerrar.
+5. RBAC: logar com usuário `financeiro`-only (sem `juridico`) e confirmar
+   que só a aba "Alertas & Relatório Financeiro" aparece, sem o bloco de
+   alertas (que exige `juridico`) — só o relatório financeiro sanitizado.
+   Logar com usuário sem nenhum dos dois módulos e confirmar
+   `AccessDeniedPage` em `/juridico`.
+6. Propriedade Intelectual — `trade_secret`: com usuário não admin,
+   confirmar que ativos `trade_secret` não aparecem na listagem mesmo tendo
+   `juridico:approve`; com `role=admin`, confirmar que aparecem.
+
+### Pendências explícitas (fora de escopo desta passada)
+
+- `corporate-acts` (RF-JUR-030) — sem tela, porque o backend também não
+  implementou (sem tabela modelada).
+- Tabela de alçada de aprovação de contrato por valor/tipo (RF-JUR-003) —
+  pendência de backend; hoje qualquer `juridico:operate` pode ativar
+  qualquer contrato independentemente do valor.
+- Upload real de arquivo (minuta, aditivo, evidência de cumprimento de
+  prazo) — todos os formulários aceitam apenas URL/caminho de texto, sem
+  integração de upload (Multer) nesta passada.
+- Polimento visual (Tailwind fino, responsividade, hierarquia) — não feito
+  nesta passada por desenho (funcional primeiro); próximo passo é o agente
+  `webdesiner`.

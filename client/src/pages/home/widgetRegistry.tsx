@@ -12,6 +12,7 @@ import { FinanceiroResumoWidget } from '@/pages/home/widgets/FinanceiroResumoWid
 import { KpisExecutivosWidget } from '@/pages/home/widgets/KpisExecutivosWidget';
 import { SstPendenciasWidget } from '@/pages/home/widgets/SstPendenciasWidget';
 import { TiPendenciasWidget } from '@/pages/home/widgets/TiPendenciasWidget';
+import { JuridicoPendenciasWidget } from '@/pages/home/widgets/JuridicoPendenciasWidget';
 
 /**
  * Descritor de um widget da Home por Perfil (`HomePage.tsx`). A home monta o
@@ -93,6 +94,13 @@ export const homeWidgets: HomeWidgetDefinition[] = [
     module: 'ti',
     priority: 47,
     component: TiPendenciasWidget,
+  },
+  {
+    key: 'juridico-pendencias',
+    title: 'Pendências de Jurídico',
+    module: 'juridico',
+    priority: 48,
+    component: JuridicoPendenciasWidget,
   },
   {
     key: 'financeiro-resumo',

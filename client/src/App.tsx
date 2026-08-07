@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { Route, Routes } from 'react-router';
+import { Navigate, Route, Routes } from 'react-router';
 
 import { ProtectedRoute, RoleRoute, ModuleRoute, AnyModuleRoute } from '@/routes/ProtectedRoute';
 import AppLayout from '@/layouts/AppLayout';
@@ -43,7 +43,7 @@ const TiPage = lazy(() => import('@/pages/ti/TiPage'));
 const MyTicketsPage = lazy(() => import('@/pages/ti/MyTicketsPage'));
 const FacilitiesPage = lazy(() => import('@/pages/facilities/FacilitiesPage'));
 const MarketingPage = lazy(() => import('@/pages/marketing/MarketingPage'));
-const LegalPage = lazy(() => import('@/pages/legal/LegalPage'));
+const JuridicoPage = lazy(() => import('@/pages/juridico/JuridicoPage'));
 const AccountingPage = lazy(() => import('@/pages/accounting/AccountingPage'));
 const TreasuryPage = lazy(() => import('@/pages/treasury/TreasuryPage'));
 const BudgetPage = lazy(() => import('@/pages/budget/BudgetPage'));
@@ -450,16 +450,18 @@ export default function App() {
             />
           </Route>
 
-          <Route element={<ModuleRoute module="juridico" />}>
+          <Route element={<AnyModuleRoute modules={['juridico', 'financeiro']} />}>
             <Route
-              path="/legal"
+              path="/juridico"
               element={
                 <Suspense fallback={<PageFallback />}>
-                  <LegalPage />
+                  <JuridicoPage />
                 </Suspense>
               }
             />
           </Route>
+          {/* Rota antiga do módulo Jurídico enxuto (removido, BLOCO 3) — redireciona para a nova. */}
+          <Route path="/legal" element={<Navigate to="/juridico" replace />} />
 
           <Route element={<ModuleRoute module="contabilidade" />}>
             <Route

@@ -191,7 +191,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'RH (Funcionários/Departamentos)', to: '/hr', icon: Contact },
       { label: 'TI (Helpdesk & Ativos)', to: '/ti', icon: Server, module: 'ti' },
       { label: 'Facilities (Frota & Predial)', to: '/facilities', icon: Building2, module: 'facilities' },
-      { label: 'Jurídico (Contratos & PI)', to: '/legal', icon: Scale, module: 'juridico' },
+      { label: 'Jurídico (Contratos, Contencioso, LGPD)', to: '/juridico', icon: Scale, module: 'juridico' },
       { label: 'Configuração Fiscal', to: '/settings/fiscal', icon: Landmark, roles: ['admin'] },
       { label: 'Auditor Inteligente', to: '/reports/auditor', icon: ShieldCheck, roles: ['admin'] },
     ],
@@ -280,7 +280,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/hr': ['Administração', 'RH'],
   '/ti': ['Administração', 'TI'],
   '/facilities': ['Administração', 'Facilities'],
-  '/legal': ['Administração', 'Jurídico'],
+  '/juridico': ['Administração', 'Jurídico'],
   '/settings/fiscal': ['Administração', 'Configuração Fiscal'],
   '/reports/auditor': ['Administração', 'Auditor Inteligente'],
 };
