@@ -1633,4 +1633,72 @@ de 75 endpoints, 100% implementados — ver
 
 ---
 
+## UC-49 a UC-51 (implementado): Módulo TI — Helpdesk, Termo de Responsabilidade, Solicitação de Acesso
+
+**Departamento:** 13 — TI. Backend completo em `server/src/modules/ti/`
+(57 endpoints, `docs/business/BLOCO_2_TI_API.md`), montado em `/api/ti`.
+
+**UC-49 — Abrir, Atender e Encerrar Chamado de TI (Helpdesk):** qualquer
+usuário autenticado abre e acompanha os PRÓPRIOS chamados sem precisar do
+módulo `ti` (BR-TI-001/RNF-TI-02, novo middleware
+`authorizeSelfOrModule` — `server/src/middlewares/authorizeSelfOrModule.ts`);
+gestão da fila completa (triagem, atribuição, resolução, fechamento de
+chamado de terceiro) exige `ti:operate`. SLA (`sla_response_due_at`/
+`sla_resolution_due_at`) calculado na abertura a partir de `ti_settings`
+(nunca hard-code), sinaliza mas nunca bloqueia transição (RNF-TI-03).
+Máquina de estados: `open→in_progress|canceled`,
+`in_progress→waiting|resolved`, `waiting→in_progress`,
+`resolved→closed|in_progress` (reabertura dentro do prazo parametrizável).
+**Fluxo de exceção coberto em teste:** fechar sem passar por `resolved`
+(E1/BR-TI-004), reabrir chamado `closed` fora do prazo de
+`ti_settings.reopen_window_days` (E3), nota interna (`is_internal=true`)
+negada a quem não tem módulo `ti` (RF-TI-014). Falha de backup
+(`ItBackupLog.success=false`) abre chamado `urgent` automático com
+`requester_id: null`/`system_generated: true` (RF-TI-040/BR-TI-017).
+
+**UC-50 — Entregar e Devolver Equipamento com Termo de Responsabilidade:**
+`POST /api/ti/responsibility-terms` cria o termo `active` e atualiza
+`Asset.responsible_id` na MESMA transação (RF-TI-018), via
+`AssetLookupService` (interface injetada, sem import direto do model
+`Asset`). Invariante "1 termo `active` por asset" garantida por índice
+único parcial no banco (BR-TI-010). **Fluxo de exceção coberto em teste:**
+segunda entrega ativa do mesmo asset (E1 → `ConflictError`), asset que não
+é `asset_type='it'` (BR-TI-008 aplicado por analogia), aceite físico
+(`physical_signature`) sem upload do termo assinado (E3).
+
+**UC-51 — Processar Solicitação de Acesso (Onboarding/Change/Offboarding):**
+`grant`/`change` exigem aprovação (`ti:approve` OU gestor do departamento
+via `departments.manager_id → employees.user_id`, resolvido em
+`domain/services/approverEligibilityService.ts` e exposto na rota via
+`authorizeSelfOrModule('ti','approve', approverEligibilityCheck)`);
+`revoke` dispensa aprovação prévia. Execução delega 100% a operações RBAC
+reais já auditadas (`AssignAccessProfileUseCase`/`DeactivateUserUseCase`/
+`CreateUserUseCase` do módulo `users`, via `AccessProfileExecutionService`)
+— nunca duplica `AuditLog` (RF-TI-036/BR-TI-013). **Fluxo de exceção mais
+crítico do bloco, coberto em teste:** `POST /:id/execute` de um `revoke`
+é BLOQUEADO (`BusinessRuleError` 422, `details.pending_terms`) enquanto
+houver `ItResponsibilityTerm` `active` do funcionário sem tratamento
+(E1/RF-TI-037/BR-TI-011) — checagem síncrona via
+`CheckOffboardingBlockersUseCase`, reaproveitando o mesmo repositório de
+`GET /responsibility-terms/pending-for-offboarding/:employeeId`, sem HTTP
+loopback.
+
+**Licenças (P3) e Backup (P5) — CRUD enxuto sem UC formal dedicado**
+(mesmo padrão de "CRUDs enxutos" do SST acima): `license_key` mascarada por
+padrão, revelada apenas a `ti:operate`/`role=admin` com log de leitura
+(BR-TI-014/RNF-TI-01); bloqueio de assento excedente contra `seats`
+contratado (RF-TI-026); renovação de licença gera `PurchaseRequisition`
+via `PurchaseRequisitionService` (nunca compra direta, BR-TI-015).
+
+**Regras de Negócio:** ver `docs/business/BLOCO_2_TI_REQUISITOS.md` (46
+RF-TI, 18 BR-TI, RNF-TI-01 a 05) e `docs/business/BLOCO_2_TI_API.md`
+(contrato completo de 57 endpoints). **Testes:**
+`server/tests/unit/ti-authorize-self-or-module.test.ts` (7),
+`ti-ticket-use-cases.test.ts` (15), `ti-term-use-cases.test.ts` (7),
+`ti-license-use-cases.test.ts` (10), `ti-access-request-use-cases.test.ts`
+(9), `ti-backup-use-cases.test.ts` (6) — 54 casos novos, ver
+`docs/governance/HANDOFF_CODEX.md`.
+
+---
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

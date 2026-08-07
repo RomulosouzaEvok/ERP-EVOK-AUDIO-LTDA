@@ -115,6 +115,16 @@ import SstPtExecutante = require('./SstPtExecutante');
 import SstBrigadista = require('./SstBrigadista');
 import SstRegistroDds = require('./SstRegistroDds');
 import SstDdsPresenca = require('./SstDdsPresenca');
+import ItTicketCategory = require('./ItTicketCategory');
+import ItTicket = require('./ItTicket');
+import ItTicketComment = require('./ItTicketComment');
+import ItTicketPriorityHistory = require('./ItTicketPriorityHistory');
+import ItResponsibilityTerm = require('./ItResponsibilityTerm');
+import ItSoftwareLicenseDetail = require('./ItSoftwareLicenseDetail');
+import ItLicenseSeat = require('./ItLicenseSeat');
+import ItAccessRequest = require('./ItAccessRequest');
+import ItBackupLog = require('./ItBackupLog');
+import TiSettings = require('./TiSettings');
 
 // ============================================
 // RELACIONAMENTOS
@@ -928,6 +938,70 @@ SstDdsPresenca.belongsTo(SstRegistroDds, { foreignKey: 'registro_dds_id', as: 'r
 Employee.hasMany(SstDdsPresenca, { foreignKey: 'employee_id', as: 'sst_dds_presencas' });
 SstDdsPresenca.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
 
+// ---- BLOCO 2 TI (departamento 13) — helpdesk, termos, licenças, acessos, backup ----
+ItTicketCategory.hasMany(ItTicket, { foreignKey: 'category_id', as: 'tickets' });
+ItTicket.belongsTo(ItTicketCategory, { foreignKey: 'category_id', as: 'category' });
+User.hasMany(ItTicket, { foreignKey: 'requester_id', as: 'it_tickets_solicitados' });
+ItTicket.belongsTo(User, { foreignKey: 'requester_id', as: 'requester' });
+User.hasMany(ItTicket, { foreignKey: 'assigned_to', as: 'it_tickets_atribuidos' });
+ItTicket.belongsTo(User, { foreignKey: 'assigned_to', as: 'assignedToUser' });
+Employee.hasMany(ItTicket, { foreignKey: 'opened_on_behalf_of', as: 'it_tickets_em_nome' });
+ItTicket.belongsTo(Employee, { foreignKey: 'opened_on_behalf_of', as: 'onBehalfOfEmployee' });
+Asset.hasMany(ItTicket, { foreignKey: 'asset_id', as: 'it_tickets' });
+ItTicket.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
+MaintenanceOrder.hasMany(ItTicket, { foreignKey: 'maintenance_order_id', as: 'it_tickets' });
+ItTicket.belongsTo(MaintenanceOrder, { foreignKey: 'maintenance_order_id', as: 'maintenanceOrder' });
+ItAccessRequest.hasMany(ItTicket, { foreignKey: 'access_request_id', as: 'tickets' });
+ItTicket.belongsTo(ItAccessRequest, { foreignKey: 'access_request_id', as: 'accessRequest' });
+
+ItTicket.hasMany(ItTicketComment, { foreignKey: 'ticket_id', as: 'comments', onDelete: 'CASCADE' });
+ItTicketComment.belongsTo(ItTicket, { foreignKey: 'ticket_id', as: 'ticket', onDelete: 'CASCADE' });
+User.hasMany(ItTicketComment, { foreignKey: 'author_id', as: 'it_ticket_comments' });
+ItTicketComment.belongsTo(User, { foreignKey: 'author_id', as: 'author' });
+
+ItTicket.hasMany(ItTicketPriorityHistory, { foreignKey: 'ticket_id', as: 'priorityHistory', onDelete: 'CASCADE' });
+ItTicketPriorityHistory.belongsTo(ItTicket, { foreignKey: 'ticket_id', as: 'ticket', onDelete: 'CASCADE' });
+User.hasMany(ItTicketPriorityHistory, { foreignKey: 'changed_by', as: 'it_ticket_priority_changes' });
+ItTicketPriorityHistory.belongsTo(User, { foreignKey: 'changed_by', as: 'changedByUser' });
+
+Asset.hasMany(ItResponsibilityTerm, { foreignKey: 'asset_id', as: 'it_responsibility_terms' });
+ItResponsibilityTerm.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
+Employee.hasMany(ItResponsibilityTerm, { foreignKey: 'employee_id', as: 'it_responsibility_terms' });
+ItResponsibilityTerm.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+User.hasMany(ItResponsibilityTerm, { foreignKey: 'delivered_by', as: 'it_terms_entregues' });
+ItResponsibilityTerm.belongsTo(User, { foreignKey: 'delivered_by', as: 'deliveredByUser' });
+User.hasMany(ItResponsibilityTerm, { foreignKey: 'received_by', as: 'it_terms_recebidos' });
+ItResponsibilityTerm.belongsTo(User, { foreignKey: 'received_by', as: 'receivedByUser' });
+ItTicket.hasMany(ItResponsibilityTerm, { foreignKey: 'related_ticket_id', as: 'relatedTerms' });
+ItResponsibilityTerm.belongsTo(ItTicket, { foreignKey: 'related_ticket_id', as: 'relatedTicket' });
+MaintenanceOrder.hasMany(ItResponsibilityTerm, { foreignKey: 'related_maintenance_order_id', as: 'relatedTerms' });
+ItResponsibilityTerm.belongsTo(MaintenanceOrder, { foreignKey: 'related_maintenance_order_id', as: 'relatedMaintenanceOrder' });
+
+Asset.hasOne(ItSoftwareLicenseDetail, { foreignKey: 'asset_id', as: 'licenseDetail' });
+ItSoftwareLicenseDetail.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
+ItSoftwareLicenseDetail.hasMany(ItLicenseSeat, { foreignKey: 'license_detail_id', as: 'seatAllocations' });
+ItLicenseSeat.belongsTo(ItSoftwareLicenseDetail, { foreignKey: 'license_detail_id', as: 'licenseDetail' });
+Employee.hasMany(ItLicenseSeat, { foreignKey: 'employee_id', as: 'it_license_seats' });
+ItLicenseSeat.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+Employee.hasMany(ItAccessRequest, { foreignKey: 'employee_id', as: 'it_access_requests' });
+ItAccessRequest.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+User.hasMany(ItAccessRequest, { foreignKey: 'requested_by', as: 'it_access_requests_solicitadas' });
+ItAccessRequest.belongsTo(User, { foreignKey: 'requested_by', as: 'requestedByUser' });
+Department.hasMany(ItAccessRequest, { foreignKey: 'department_id', as: 'it_access_requests' });
+ItAccessRequest.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+AccessProfile.hasMany(ItAccessRequest, { foreignKey: 'requested_profile_id', as: 'it_access_requests' });
+ItAccessRequest.belongsTo(AccessProfile, { foreignKey: 'requested_profile_id', as: 'requestedProfile' });
+User.hasMany(ItAccessRequest, { foreignKey: 'approved_by', as: 'it_access_requests_aprovadas' });
+ItAccessRequest.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedByUser' });
+User.hasMany(ItAccessRequest, { foreignKey: 'executed_by', as: 'it_access_requests_executadas' });
+ItAccessRequest.belongsTo(User, { foreignKey: 'executed_by', as: 'executedByUser' });
+
+ItTicket.hasMany(ItBackupLog, { foreignKey: 'generated_ticket_id', as: 'backupLogs' });
+ItBackupLog.belongsTo(ItTicket, { foreignKey: 'generated_ticket_id', as: 'generatedTicket' });
+User.hasMany(ItBackupLog, { foreignKey: 'verified_by', as: 'it_backup_logs_verificados' });
+ItBackupLog.belongsTo(User, { foreignKey: 'verified_by', as: 'verifiedByUser' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -963,5 +1037,7 @@ export {
   SstMandatoCipa, SstMembroCipa, SstProcessoEleitoralCipa, SstCandidatoCipa, SstReuniaoCipa, SstReuniaoCipaPresente,
   SstGes, SstGesFuncionario, SstRiscoOcupacional, SstRiscoEpi, SstRiscoExame,
   SstMatrizTreinamento, SstTreinamento,
-  SstInspecaoSeguranca, SstInspecaoItem, SstPermissaoTrabalho, SstPtExecutante, SstBrigadista, SstRegistroDds, SstDdsPresenca
+  SstInspecaoSeguranca, SstInspecaoItem, SstPermissaoTrabalho, SstPtExecutante, SstBrigadista, SstRegistroDds, SstDdsPresenca,
+  ItTicketCategory, ItTicket, ItTicketComment, ItTicketPriorityHistory,
+  ItResponsibilityTerm, ItSoftwareLicenseDetail, ItLicenseSeat, ItAccessRequest, ItBackupLog, TiSettings
 };

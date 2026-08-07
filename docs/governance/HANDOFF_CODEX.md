@@ -9278,3 +9278,168 @@ camada de eventos) é consistente com a decisão §5.4 do
 /api/ti/licenses/:assetId/request-renewal` delega 100% da regra de negócio
 de requisição ao módulo real `/api/purchase-requisitions`, sem duplicar
 validação.
+
+---
+
+## BLOCO 2 TI — Implementação Backend Completa (2026-08-07) — `programador`
+
+**Resumo da feature:** implementação completa do backend do módulo TI
+(Tecnologia da Informação, departamento 13) — helpdesk, termo de
+responsabilidade de equipamento, licenças de software, solicitações de
+acesso (onboarding/change/offboarding) e backup/continuidade. 57/57
+endpoints do contrato (`docs/business/BLOCO_2_TI_API.md`), seguindo
+estritamente o desenho aprovado em `docs/business/BLOCO_2_TI_AUDITORIA.md`
+(veredito: APROVADO PARA IMPLEMENTAÇÃO, 7 correções já aplicadas antes
+desta passada).
+
+### Escopo entregue
+
+- **10 models Sequelize** (`server/src/models/`): `ItTicketCategory`,
+  `ItTicket`, `ItTicketComment`, `ItTicketPriorityHistory`,
+  `ItResponsibilityTerm`, `ItSoftwareLicenseDetail`, `ItLicenseSeat`,
+  `ItAccessRequest`, `ItBackupLog`, `TiSettings` — colunas 100% em inglês
+  (mesmo nome da coluna do banco, sem tradução — diferente do padrão PT-BR
+  do SST), registrados e associados em `server/src/models/index.ts`
+  (incluindo a correção de colisão de nome de associação `seats`/coluna
+  `seats` em `ItSoftwareLicenseDetail`, renomeada para `seatAllocations`).
+- **Módulo `server/src/modules/ti/`** completo em Clean Architecture:
+  - `domain/entities/*Types.ts` (5 arquivos de DTOs, sem lógica).
+  - `domain/repositories/` (6 interfaces: `TicketRepository`,
+    `ResponsibilityTermRepository`, `LicenseRepository`,
+    `AccessRequestRepository`, `BackupLogRepository`,
+    `TiSettingsRepository`).
+  - `domain/services/ticketPolicyService.ts` (SLA/prazos, funções puras,
+    sempre parametrizadas por `ti_settings`) e
+    `approverEligibilityService.ts` (elegibilidade de aprovador §4.1).
+  - `application/services/` (4 interfaces injetadas: `AssetLookupService`,
+    `MaintenanceOrderService`, `AccessProfileExecutionService`,
+    `PurchaseRequisitionService`).
+  - `application/use-cases/{ticket,term,license,accessRequest,backup}/`
+    — 49 use cases (1 classe por arquivo, mesmo padrão do SST).
+  - `infrastructure/{adapters,mappers,sequelize}/` — 4 adapters, 5
+    mappers, 6 repositórios Sequelize.
+  - `presentation/{controllers,routes}/` — 5 controllers, 1 router
+    agregador (`ti.ts`), montado em `/api/ti` (`server/app.ts`).
+- **Middleware novo `server/src/middlewares/authorizeSelfOrModule.ts`**:
+  libera a requisição se `role=admin`, OU módulo com nível suficiente, OU
+  `ownershipCheck(req)` (posse do recurso, resolvida SEMPRE no
+  controller/use case, nunca em parâmetro de rota cru). Aplicado a 6 rotas
+  de auto-serviço do helpdesk e à elegibilidade de aprovador de
+  `ItAccessRequest`.
+
+### Decisões próprias tomadas (não estavam 100% especificadas)
+
+1. **Transações explícitas com `sequelize` de `config/database`** (não
+   `models/index`), padrão `try { ... await t.commit(); } catch { await
+   t.rollback(); throw }` — replicado de
+   `ConfirmEpiDeliveryUseCase` (SST) em vez do estilo `sequelize.transaction(async
+   t => {...})`, para consistência e testabilidade (mock simples de
+   `config/database`).
+2. **`waiting_minutes`**: sem coluna dedicada de "início da espera", o
+   cálculo em `ResumeTicketUseCase` usa a diferença entre `updatedAt` (o
+   momento do `POST /:id/wait` anterior) e o instante do `resume` —
+   aproximação aceitável documentada no código; se o chamado sofrer outro
+   `update` no meio da espera (não deveria, mas não é bloqueado por
+   schema), a métrica fica levemente imprecisa. Sinalizado para revisão
+   futura se o negócio pedir precisão de segundo.
+3. **`ticket_number`/`term_number`/`request_number`**: gerados por
+   `countByYear()+1` formatado (`TI-2026-0001`), não por sequence de banco
+   — mesmo risco teórico de corrida já aceito em `RQ-${Date.now()}` do
+   módulo `purchaseRequisitions`, mitigado pela constraint `UNIQUE` da
+   coluna (uma colisão rara vira erro 500 tratável, não dado corrompido).
+4. **`AccessProfileExecutionServiceAdapter.provisionAccess`**: quando o
+   funcionário-alvo de um `grant` ainda não tem `Employee.user_id`, o
+   adapter CRIA o usuário (senha temporária aleatória via
+   `crypto.randomBytes`) usando `corporate_email` do payload (ou
+   `employee.email` como fallback) e grava `Employee.user_id` — decisão
+   necessária porque a API/requisitos descrevem "cria usuário (se ainda
+   não existir)" em `POST /:id/execute` sem detalhar o mecanismo exato;
+   documentado no código para revisão de segurança (senha temporária nunca
+   é devolvida na resposta HTTP, só existe internamente até o
+   reset/primeiro login — fluxo de "enviar senha ao usuário" fica fora de
+   escopo deste bloco, mesma pendência aceita do brief original).
+5. **`PurchaseRequisitionServiceAdapter.createRenewalRequisition`**: a
+   renovação de licença não referencia `item_id` (não é material de
+   estoque) — a requisição nasce sem itens (`items: []`), com o contexto
+   (ativo, custo estimado, justificativa) apenas em `notes`. Se o negócio
+   precisar de rastreabilidade estruturada por campo, é evolução futura
+   (nova coluna dedicada em `purchase_requisitions`, fora de escopo deste
+   bloco).
+6. **`POST /access-requests/:id/approve|reject`**: a rota usa
+   `authorizeSelfOrModule('ti', 'approve', approverEligibilityCheck)` em
+   vez de `authorizeModule('ti', 'operate')` simples — decisão necessária
+   porque o §4.1 da API exige liberar a aprovação para o GESTOR do
+   departamento mesmo que ele não tenha módulo `ti` nenhum atribuído
+   (apenas `ti:approve` OU gestor); usar `authorizeModule` bloquearia
+   incorretamente um gestor sem módulo `ti`.
+7. **RF-TI-045 (dashboard consolidado)** permanece SEM endpoint, conforme
+   pendência aceita explicitamente pelo contrato de API — não inventado
+   nesta passada.
+
+### Documentações atualizadas
+
+- `docs/database/DATABASE.md` — nova seção "BLOCO 2 TI — Implementação
+  Backend (2026-08-07)": tabela das 10 tabelas novas × model × observação,
+  estrutura do módulo, middleware novo.
+- `docs/projeto/04-USE_CASES.md` — nova seção "UC-49 a UC-51 (implementado):
+  Módulo TI", no mesmo padrão compacto usado para o SST (UC-44 a UC-48).
+- `docs/governance/TODO.md` — item de auditoria anterior marcado `[x]`
+  (implementado) + nova entrada datada "BLOCO 2 TI — Implementação
+  Backend (57/57 endpoints)".
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`) — esta seção.
+- JSDoc: todo arquivo novo (models, use cases, repositórios, mappers,
+  adapters, controllers, rotas, middleware) tem cabeçalho `@module`
+  explicando responsabilidade; use cases documentam `@throws` por tipo de
+  erro.
+
+### Instruções de teste para o próximo agente/humano
+
+1. `cd server && npm run typecheck` → deve retornar 0 erros (validado
+   nesta entrega).
+2. `cd server && npx jest tests/unit --runInBand` → 871/872 passando (a
+   falha em `onda3-shipping-cockpit-cashflow.test.ts` é pré-existente,
+   relacionada a data, e está fora do escopo deste bloco — não regredida
+   nem corrigida aqui, conforme instrução explícita da tarefa).
+3. Testes novos deste bloco (todos mockados, sem exigir banco):
+   `ti-authorize-self-or-module.test.ts` (7),
+   `ti-ticket-use-cases.test.ts` (15), `ti-term-use-cases.test.ts` (7),
+   `ti-license-use-cases.test.ts` (10),
+   `ti-access-request-use-cases.test.ts` (9),
+   `ti-backup-use-cases.test.ts` (6) — 54 casos, cobrindo fluxo principal +
+   exceções de cada UC (posse negada em chamado alheio; offboarding
+   bloqueado por termo ativo; ticket automático de falha de backup sem
+   requester; licença sobre asset de tipo errado; RBAC self-service vs.
+   gestão).
+4. **Antes de habilitar em produção/QA**, o dono do produto precisa
+   aprovar `npm run migration:up --prefix server` para as 7 migrations
+   `20260807-000150` a `-000156` — **nenhuma migration foi aplicada nesta
+   entrega**, em nenhum banco (nem dev, nem teste); os testes unitários
+   usam exclusivamente repositórios mockados.
+5. Se/quando as migrations forem aplicadas, recomenda-se um teste de
+   integração manual do fluxo mais crítico (E1 de offboarding): criar um
+   `ItResponsibilityTerm` `active`, abrir um `ItAccessRequest` tipo
+   `revoke` para o mesmo funcionário, e confirmar que `POST
+   /api/ti/access-requests/:id/execute` retorna 422
+   `BUSINESS_RULE_VIOLATION` com `details.pending_terms` populado — só
+   depois disso, registrar a devolução do termo e confirmar que o retry de
+   `execute` sucede.
+
+### Riscos residuais
+
+- Seed idempotente das 8 categorias de chamado (RF-TI-001) não foi criado
+  nesta passada (fora do escopo de "backend + testes", mesma decisão já
+  tomada para `sst_tipos_epi` no Bloco 1) — a aplicação funciona sem seed
+  (categorias são criadas via `POST /ticket-categories`), mas a UX de
+  abertura de chamado fica pobre até o seed existir.
+- Nenhum job agendado real para auto-close (RF-TI-011) e alerta de backup
+  diário fora do ciclo HTTP (RF-TI-041) foi criado — `GET
+  /backup-logs/health` cobre o caso de alerta como fallback determinístico
+  (mesmo texto já previsto pela API), mas o auto-close de chamados
+  `resolved` sem confirmação depende de um cron/job futuro (nenhum
+  mecanismo de scheduler existe hoje no projeto para isso — mesma lacuna
+  identificada para RF-SST-019 no Bloco 1).
+- `AccessProfileExecutionServiceAdapter.provisionAccess` cria senha
+  temporária mas não a comunica ao usuário — fluxo de "primeiro acesso"
+  (reset de senha) não foi desenhado neste bloco.
+- Dashboard/KPI consolidado de TI (RF-TI-045) permanece sem endpoint,
+  pendência aceita.

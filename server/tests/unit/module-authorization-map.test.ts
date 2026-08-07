@@ -68,6 +68,7 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   'laboratory',
   'engineering',
   'sst',
+  'ti',
 ];
 
 /**

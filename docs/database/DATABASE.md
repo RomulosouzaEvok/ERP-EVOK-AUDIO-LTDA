@@ -2062,3 +2062,65 @@ models abaixo apontam para o schema já existente
 
 Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo da
 entrega (endpoints implementados, testes, pendências).
+
+---
+
+## BLOCO 2 TI — Implementação Backend (2026-08-07)
+
+Módulo TI (Tecnologia da Informação, departamento 13): helpdesk, termo de
+responsabilidade de equipamento, licenças de software, solicitações de
+acesso (onboarding/change/offboarding) e backup/continuidade. Migrations já
+existiam (`server/migrations/20260807-000150` a `-000156`, criadas e
+auditadas em passada anterior) — **ainda pendentes de `migration:up`**
+(aguardando aprovação do dono do produto para o banco de dev; nenhuma
+migration foi aplicada nesta entrega). Diferente do SST, as tabelas `it_*`
+usam nomes em **inglês** (colunas e tabelas), então os mappers deste módulo
+são mais finos (achatam a instância Sequelize, sem tradução PT-BR↔inglês).
+
+### Tabelas novas (10)
+
+| Tabela | Migration | Model Sequelize | Observação |
+|---|---|---|---|
+| `it_ticket_categories` | `20260807-000150` | `ItTicketCategory` | Catálogo leve, seed idempotente feito pela aplicação (não pela migration) |
+| `it_tickets` | `20260807-000150` | `ItTicket` | `requester_id` nullable + `system_generated` (CHECK) para chamado automático de falha de backup |
+| `it_ticket_comments` | `20260807-000151` | `ItTicketComment` | `ticket_id` CASCADE (composição pura) |
+| `it_ticket_priority_history` | `20260807-000151` | `ItTicketPriorityHistory` | Trilha de reclassificação de prioridade |
+| `it_responsibility_terms` | `20260807-000152` | `ItResponsibilityTerm` | Índice único parcial `uq_it_responsibility_terms_active_per_asset` (1 termo `active` por asset) |
+| `it_software_license_details` | `20260807-000153` | `ItSoftwareLicenseDetail` | Extensão 1:1 de `assets` (`asset_type='license'`, validado em app) |
+| `it_license_seats` | `20260807-000153` | `ItLicenseSeat` | Índice único parcial `uq_it_license_seats_active_per_employee` |
+| `it_access_requests` | `20260807-000154` | `ItAccessRequest` | Fecha a FK adiada `it_tickets.access_request_id` |
+| `it_backup_logs` | `20260807-000155` | `ItBackupLog` | `generated_ticket_id` aponta para o chamado automático de falha (RF-TI-040) |
+| `ti_settings` | `20260807-000156` | `TiSettings` | Singleton (`id=1`, `CHECK`), mesmo padrão de `production_cost_settings` — SLA por prioridade, dias de auto-close/reabertura, janelas de alerta de licença, frequência de teste de restore |
+
+Nenhuma tabela paralela de ativos/licenças foi criada (BR-TI-008) —
+`it_software_license_details`/`it_responsibility_terms` sempre referenciam
+`assets` por FK. Nenhuma FK nova de "gestor de departamento" foi criada —
+`departments.manager_id` (já existente) resolve a elegibilidade de
+aprovador de `ItAccessRequest` (ver `approverEligibilityService.ts`).
+
+### Estrutura do módulo (Clean Architecture)
+
+`server/src/modules/ti/` segue exatamente o padrão de `modules/sst/`:
+`domain/{entities,repositories,services}`, `application/{services,use-cases}`
+(ticket, term, license, accessRequest, backup), `infrastructure/{adapters,
+mappers,sequelize}`, `presentation/{controllers,routes}`. 4 interfaces de
+serviço injetadas evitam import direto de outro módulo:
+`AssetLookupService`, `MaintenanceOrderService`,
+`AccessProfileExecutionService` (delega a
+`AssignAccessProfileUseCase`/`DeactivateUserUseCase`/`CreateUserUseCase`
+reais do módulo `users`, nunca duplica `AuditLog`) e
+`PurchaseRequisitionService` (delega a `CreatePurchaseRequisitionUseCase`
+real do módulo `purchaseRequisitions`).
+
+### Novo middleware `authorizeSelfOrModule`
+
+`server/src/middlewares/authorizeSelfOrModule.ts` — libera a requisição se
+`role=admin`, OU módulo com nível suficiente, OU posse do recurso
+(`ownershipCheck(req)` assíncrono fornecido pelo chamador). Único uso hoje:
+6 rotas de auto-serviço do helpdesk de TI (abrir/ver/comentar/confirmar/
+reabrir o PRÓPRIO chamado) e a elegibilidade de aprovador de
+`ItAccessRequest` (`ti:approve` OU gestor do departamento). Reutilizável por
+qualquer módulo futuro com a mesma necessidade (RNF-TI-02).
+
+Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo desta
+entrega (endpoints implementados, testes, pendências, decisões próprias).

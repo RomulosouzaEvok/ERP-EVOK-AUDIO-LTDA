@@ -3240,12 +3240,58 @@ fora do gate `ti`, `npm run migration:status --prefix server` (7
 migrations do bloco listam sem erro, `down`/não aplicadas conforme
 esperado), `npm run typecheck --prefix server` (0 erros).
 
-- [ ] Próximo passo: `programador` implementa
+- [x] Próximo passo: `programador` implementa
   `server/src/modules/ti/` (Clean Architecture) + middleware
-  `authorizeSelfOrModule` + aplica as 7 migrations (`20260807-000150` a
-  `000156`) — nenhum bloqueador de auditoria pendente.
+  `authorizeSelfOrModule` — **[IMPLEMENTADO 2026-08-07]**, ver seção
+  "BLOCO 2 TI — Implementação Backend" abaixo. Migrations
+  (`20260807-000150` a `000156`) **permanecem não aplicadas** em qualquer
+  banco (dev ou teste) — os testes unitários desta entrega usam
+  repositórios mockados (mesmo padrão do módulo SST), sem exigir schema
+  real; aplicação real fica para quando o dono do produto aprovar.
 - [ ] Fora de escopo desta auditoria (não coberto, sinalizar se resgatado):
   validação de implementação real do `authorizeSelfOrModule` contra
   manipulação de `:id` (recomendado a `iterative-review`/`auditor-seguranca`
   quando o código existir); dashboard/KPI consolidado de TI (RF-TI-045,
   pendência já declarada nos 3 documentos, sem endpoint neste bloco).
+
+## 2026-08-07 — BLOCO 2 TI — Implementação Backend (57/57 endpoints) — `programador`
+
+**Escopo:** implementação completa de `server/src/modules/ti/` (Clean
+Architecture), 10 models Sequelize (`It*`/`TiSettings`), middleware
+`authorizeSelfOrModule`, e montagem em `/api/ti` (`server/app.ts`). Ver
+`docs/database/DATABASE.md` seção "BLOCO 2 TI" para o detalhamento de
+schema/estrutura e `docs/governance/HANDOFF_CODEX.md` para o handoff
+completo.
+
+- [x] 57/57 endpoints do contrato (`docs/business/BLOCO_2_TI_API.md`)
+  implementados: Helpdesk (20, incl. categorias), Termo de Responsabilidade
+  (7), Licenças (10), Solicitação de Acesso (8), Backup (3) + sub-rotas de
+  comentários/seats/checklist.
+- [x] Middleware `authorizeSelfOrModule` novo, aplicado às 6 rotas de
+  auto-serviço do helpdesk + à elegibilidade de aprovador de
+  `ItAccessRequest` (`ti:approve` OU gestor do departamento, §4.1 da API).
+- [x] `CheckOffboardingBlockersUseCase` bloqueia `POST
+  /access-requests/:id/execute` (revoke) enquanto houver
+  `ItResponsibilityTerm` `active` sem tratamento (E1/RF-TI-037/BR-TI-011).
+- [x] `AccessProfileExecutionServiceAdapter` delega 100% a
+  `AssignAccessProfileUseCase`/`DeactivateUserUseCase`/`CreateUserUseCase`
+  reais do módulo `users` — nenhuma duplicação de `AuditLog` (RF-TI-036).
+- [x] `PurchaseRequisitionServiceAdapter` delega a
+  `CreatePurchaseRequisitionUseCase` real — renovação de licença nunca é
+  compra direta (BR-TI-015).
+- [x] `npm run typecheck --prefix server`: 0 erros.
+- [x] `npx jest tests/unit --runInBand`: 871/872 passando (1 falha
+  pré-existente e conhecida em `onda3-shipping-cockpit-cashflow.test.ts`,
+  não relacionada a este bloco) — 54 testes novos do módulo TI, 0
+  regressões.
+- [ ] Migrations `20260807-000150` a `000156` **não aplicadas ao banco de
+  dev** — aguardando aprovação do dono do produto (mesma convenção do
+  Bloco 1 SST).
+- [ ] Fora de escopo desta entrega (pendências aceitas, ver
+  `docs/governance/HANDOFF_CODEX.md`): seed idempotente das 8 categorias de
+  chamado (hardware, software, rede, e-mail, sistema ERP, telefonia,
+  acesso, outros — RF-TI-001); job agendado de auto-close (RF-TI-011) e de
+  alerta de backup diário (RF-TI-041) fora do ciclo HTTP (a rota
+  `GET /backup-logs/health` funciona como fallback determinístico,
+  conforme já previsto pela API); dashboard/KPI consolidado (RF-TI-045, sem
+  endpoint neste bloco, pendência já declarada).
