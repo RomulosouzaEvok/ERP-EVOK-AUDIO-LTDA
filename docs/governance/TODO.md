@@ -3923,3 +3923,95 @@ listadas nos itens `[ ]` acima): `corporate-acts` (RF-JUR-030, sem
 tabela) e alcada de aprovacao de contrato por valor (RF-JUR-003, sem
 tabela). Frontend completo do Bloco 3 (Procuracoes/PI/LGPD/Alertas)
 segue como proximo passo do pipeline.
+
+## 2026-08-07 (rodada seguinte) — Auditoria Cruzada BLOCO 4 Facilities (Requisitos x Banco x API) — `AuditorIntegrador`
+
+**Escopo:** gate de qualidade pre-codigo do bloco de correcao do modulo
+Facilities (departamento 17, 60 RF-FAC, UC-58 a UC-62), confrontando
+`docs/business/BLOCO_4_FAC_REQUISITOS.md`,
+`docs/business/BLOCO_4_FAC_MODELO_DADOS.md` (11 migrations,
+`server/migrations/20260807-000290` a `000300`, nao aplicadas) e
+`docs/business/BLOCO_4_FAC_API.md` (60 endpoints, 9 grupos). Correcao do
+modulo Facilities existente (commit `2ad27fd`), motivada por
+`docs/business/BLOCO_4_FAC_VERIFICACAO.md` (14/17 regras do brief
+NAO ATENDIDAs). Relatorio completo em `docs/business/BLOCO_4_FAC_AUDITORIA.md`.
+
+**Veredito: [APROVADO COM RESSALVAS]**
+
+**[IMPLEMENTADO]** Rastreabilidade RF-Tabela-Endpoint 100% verificada
+(60/60 RF-FAC, nenhum orfao nas duas pontas).
+
+**[IMPLEMENTADO]** 8 inconsistencias de nomenclatura/schema entre o
+Modelo de Dados/migrations e o Contrato de API corrigidas diretamente nos
+artefatos: (1) tabela `facility_correspondence` singular vs.
+`facility_correspondences` plural assumido pela API — mesmo padrao de
+divergencia de prefixo do Bloco 3; (2) ENUM `fuel_type` da migration
+(`gasoline/ethanol/diesel/flex/electric`) divergente do citado na API
+(`flex/gasoline/diesel/electric/hybrid/other` — omitia `ethanol`,
+inventava `hybrid`/`other`); (3) campo `chassis` no payload de exemplo vs.
+coluna real `chassi`; (4) campos `manufacture_year`/`model_year`
+duplicados no payload vs. coluna unica `year` em `facility_vehicle_details`;
+(5) campo `responsible_employee_id` no payload vs. `responsible_id`, nome
+real usado por `CreateAssetUseCase`; (6) campo `area_free_text` vs. coluna
+real `area` em `facility_cleaning_schedules`; (7) caminho de modulo do
+`MaintenanceOrder` nao confirmado (API citava
+`server/src/modules/manufacturing/`, caminho real e
+`server/src/modules/maintenance/`, com precedente de adapter ja usado por
+`server/src/modules/ti/`); (8) `authorizeModule('manutencao') OR
+authorizeModule('facilities')` citado como se fosse primitivo existente —
+`authorizeModule()` so aceita um `moduleKey` por chamada, sem precedente
+de composicao OR no projeto; documentado como middleware NOVO a criar.
+
+**[IMPLEMENTADO]** Gap real de schema corrigido: `trip_id` (vinculo
+opcional de abastecimento ao diario de uso) ja aparecia no payload de
+`POST /fuel-records` da API, mas nenhuma das 11 migrations criava essa
+coluna em `facility_fuel_records` — adicionada a
+`20260807-000294-add-full-tank-invoice-ref-to-facility-fuel-records.cjs`
+(INTEGER nullable, FK -> `facility_vehicle_trips.id`, `SET NULL`),
+`node -c` validado.
+
+**[IMPLEMENTADO]** Erro de contagem corrigido em
+`BLOCO_4_FAC_REQUISITOS.md`: cabecalho e secao 7 diziam "37 P0/19 P1/4 P2";
+recontagem linha a linha da coluna Prioridade das 12 subtabelas resulta em
+**38 P0/17 P1/5 P2** (RF-FAC-042 estava marcado P0 na tabela de origem mas
+tratado como P1 no resumo consolidado).
+
+**[APROVADO]** Migracao D-2 (`20260807-000290`, maior risco do bloco) lida
+linha a linha: backfill `facility_vehicles -> assets + facility_vehicle_details`
+cobre os 18 campos originais sem perda de dado, enums `DROP TYPE`
+conferidos contra os nomes reais gerados pela migration original,
+`facility_fuel_records.vehicle_id -> asset_id` migrado com ordem correta
+de indice/coluna, idempotencia confirmada.
+
+- [ ] **Risco residual real 1 (migracao D-2):** o loop de backfill do
+  `up()` da migration `20260807-000290` nao roda dentro de uma transacao
+  explicita nem verifica idempotencia por `plate` antes do `INSERT` em
+  `assets` — uma falha no meio do loop deixa estado intermediario orfao e
+  rodar de novo criaria `assets` duplicados para as linhas ja migradas.
+  Achado novo desta auditoria (nao estava declarado nos 2 artefatos de
+  origem). Recomendacao: `AdmDBA`/`programador` envolver o loop numa
+  transacao e adicionar checagem de idempotencia por `plate` antes de
+  aplicar em qualquer ambiente com `facility_vehicles` populada
+  (RNF-FAC-03 tambem exige teste contra copia real do banco, ainda nao
+  feito).
+- [ ] **Risco residual real 2 (nao-regressao MANUT):**
+  `server/src/models/MaintenanceOrder.ts` linha 47 ainda declara
+  `asset_id: { allowNull: false }` no model Sequelize mesmo depois da
+  migration `20260807-000296` remover o `NOT NULL` no banco — nao quebra
+  o fluxo atual de MANUT (que ja valida `asset_id` antes do model), mas
+  vai bloquear silenciosamente qualquer chamado predial so-com-area criado
+  pelo modulo `facilities` ate o `programador` atualizar o model para
+  `allowNull: true`.
+- [ ] **Pendencia de codigo (RF-FAC-057, ja sinalizada nos 3 artefatos de
+  forma consistente, sem inconsistencia entre eles):** adicionar uso real
+  do nivel `approve` nas rotas de `facilities` e atualizar o comentario
+  desatualizado em `server/src/shared/domain/accessModules.ts` (linhas
+  92-93, ainda afirma que nenhuma rota do modulo usa `approve`).
+- [ ] **Pendencia de codigo:** criar middleware
+  `authorizeAnyModule([...])`/equivalente para a leitura cruzada
+  MANUT x FAC de `/api/facilities/maintenance-tickets` (secao 2.9/9 do
+  relatorio) — revisar com `auditor-seguranca` quando implementado.
+- [ ] **Nao coberto por esta auditoria (fora de escopo declarado):**
+  execucao real da migration `000290` contra copia de banco com dado real
+  (RNF-FAC-03); revisao de seguranca do middleware OR de RBAC citado acima
+  (ainda nao existe codigo a revisar).
