@@ -466,7 +466,7 @@ de schema necessária além das duas colunas de auditoria acima.
 
 | RF-MKT | Tabela(s)/coluna(s) | Migration |
 |---|---|---|
-| 001 a 004 | `marketing_leads.converted_to_customer_id` + CHECK `ck_marketing_leads_converted_requires_client` | `000312` |
+| 001 a 004 | `marketing_leads.converted_to_customer_id`, `converted_at` (AuditorIntegrador) + CHECK `ck_marketing_leads_converted_requires_client` | `000312` |
 | 005 | `enum_marketing_leads_status` (+`in_sales_attendance`) | `000310` |
 | 006 | Fora de escopo de schema — validação Zod (`ArquitetoSoftwareAPI`) | — |
 | 007, 009 | `marketing_campaigns.metrics_recalculated_at` (cache mantido, decisão §5.3) | `000314` |

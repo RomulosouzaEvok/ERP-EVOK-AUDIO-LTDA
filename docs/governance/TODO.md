@@ -4111,3 +4111,71 @@ reescrita do modulo `server/src/modules/facilities/`.
   pagamento único por título), mas ainda não é uma reconstrução exata de
   cada baixa parcial individual (exigiria uma tabela de histórico de
   pagamentos, fora do escopo deste P1 pontual).
+
+## 2026-08-07 (rodada seguinte) — Auditoria Cruzada BLOCO 5 MKT (Requisitos × Banco × API) — `AuditorIntegrador`
+
+**Escopo:** `docs/business/BLOCO_5_MKT_REQUISITOS.md` (40 RF-MKT) ×
+`docs/business/BLOCO_5_MKT_MODELO_DADOS.md` + migrations
+`server/migrations/20260807-000310` a `000315` ×
+`docs/business/BLOCO_5_MKT_API.md`. Relatório completo:
+`docs/business/BLOCO_5_MKT_AUDITORIA.md`. **Status: `[REPROVADO COM
+RESSALVAS]`** — 6 inconsistências reais encontradas e **já corrigidas
+nesta mesma passada** (não ficaram como pendência de correção futura,
+diferente do padrão usual deste TODO — os 6 itens abaixo são histórico,
+não ação pendente):
+
+- [x] **Corrigido.** `converted_client_id` (nome inventado pelo contrato
+  de API) → `converted_to_customer_id` (nome real, decidido pelo `AdmDBA`
+  para não forçar rename de coluna com FK/índice já ativos em produção) —
+  8 ocorrências em `BLOCO_5_MKT_API.md`.
+- [x] **Corrigido.** `responsible_sales_user_id`/`sales_handoff_at` (nomes
+  conceituais do RF) → `sales_owner_user_id`/`handoff_at` (nomes reais da
+  migration `000310`) — ~11 ocorrências em `BLOCO_5_MKT_API.md`.
+- [x] **Corrigido.** Contrato de API descrevia `authorizeAnyModule` como
+  middleware "a criar" pelo `programador` — na verdade **já existe**
+  (`server/src/middlewares/authorizeAnyModule.ts`, Bloco 4 FAC). Corrigido
+  em `BLOCO_5_MKT_API.md` §4.5/§10.5.
+- [x] **Corrigido (achado potencialmente mais grave dos 6).** RBAC dupla
+  do handoff (`POST /leads/:id/handoff`, RF-MKT-015) usava a chave
+  `authorizeModule('sales', ...)` — **`sales` não existe** no catálogo
+  RBAC (`server/src/shared/domain/accessModules.ts`); a chave real do
+  módulo de Vendas é `vendas`. Se implementado como escrito, nenhum perfil
+  de Vendas teria conseguido usar o endpoint (a intenção central de
+  RF-MKT-015). Corrigido para `authorizeAnyModule([{ moduleKey:
+  'marketing' }, { moduleKey: 'vendas' }])`.
+- [x] **Corrigido.** `SalesRevenueServiceAdapter` do contrato agregava
+  receita via `Sale.client_id` — coluna inexistente; `server/src/models/
+  Sale.ts` usa `customer_id`. Corrigido em `BLOCO_5_MKT_API.md` §2.
+- [x] **Corrigido, com mudança de schema.** Contrato de API usa
+  `converted_at` (payload de `POST /leads/:id/convert`, KPI
+  `median_lead_cycle_days`) — coluna **não existia em nenhuma migration
+  nem no model**. Adicionada `marketing_leads.converted_at` (TIMESTAMPTZ,
+  nullable, sem backfill retroativo) na migration `20260807-000312`,
+  validada com `node -c`; `BLOCO_5_MKT_MODELO_DADOS.md` atualizado (MER +
+  §3.2b + §8).
+- [x] **Corrigido (robustez, não achado de nomenclatura).** Migration
+  `20260807-000312` (a mais delicada do bloco — saneamento de leads
+  `converted` órfãos) não executava seus 5 passos dentro de uma transação
+  explícita (`sequelize-cli` não envolve `up()` em transação
+  automaticamente). Como nenhum passo desta migration usa `ALTER TYPE`
+  (restrição real está na migration `000310`, não nesta), não havia
+  impedimento técnico — envolvida em `queryInterface.sequelize.transaction`.
+  Ordem de execução (log → UPDATE → CHECK) e idempotência (guards
+  `if (!columns.x)`/`WHERE` que zera após a 1ª execução) foram conferidas
+  linha a linha e estão corretas, sem alteração necessária.
+- [ ] **Risco de negócio residual, não mitigável por engenharia (declarado
+  pelo próprio `AdmDBA`, confirmado por esta auditoria):** a migration
+  `000312` rebaixa TODO lead `converted` órfão para
+  `qualified`/`needs_review=true`, sem diferenciar erro operacional
+  recente de venda fechada há meses (schema não tem histórico de status
+  para inferir). Antes de rodar em qualquer banco com dado real de
+  Marketing, o volume afetado (impresso via `console.log` no `up()`)
+  precisa ser contado e revisado por Marketing/Vendas —
+  `[VERIFICAR COM MARKETING]` já registrado em
+  `BLOCO_5_MKT_REQUISITOS.md` §5.2 item 6, não resolvido por esta
+  auditoria (decisão de negócio, não técnica).
+- [ ] **Não coberto por esta auditoria (fora de escopo declarado):**
+  `client/` (telas) — módulo ainda não tem frontend desta correção;
+  validação em banco real (Postgres) do volume de leads órfãos e das 6
+  migrations rodando de fato (só validadas por `node -c` + leitura
+  estática nesta passada, nenhuma foi aplicada).
