@@ -111,6 +111,31 @@ nomenclatura isolado (`access_profiles.nome`/`descricao`) registrado em
   banco aplicado, por convenção desta pasta) — atualizar somente depois de
   `migration:up`.
 
+- **Módulo RH (BLOCO 6, departamento 02, último bloco do pipeline)** — 16
+  migrations preparadas em `server/migrations/20260808-000010-*.cjs` a
+  `20260808-000025-*.cjs` (18 tabelas novas — `hr_job_positions`,
+  `hr_job_vacancies`/`hr_candidates`, `hr_employee_job_history`,
+  `hr_employee_contracts`, `hr_admission_processes`,
+  `hr_termination_processes`, `hr_employee_documents`,
+  `hr_vacation_accrual_periods`/`hr_vacation_schedules`, `hr_absences`,
+  `hr_benefit_types`/`hr_employee_benefits`, `hr_training_courses`/
+  `hr_job_position_trainings`/`hr_employee_trainings`,
+  `hr_time_sheet_summaries`, `hr_payroll_import_batches`/
+  `hr_payroll_import_items`, `hr_performance_reviews` — mais `pcd`/
+  `job_position_id` em `employees` e 5 triggers de imutabilidade), **ainda
+  não aplicadas** (`migration:up` pendente de aprovação do dono do produto,
+  após revisão do `AuditorIntegrador`). Cobre apenas as lacunas do módulo
+  RH (`employees`/`departments` já existentes não são recriados) —
+  folha de pagamento e ponto eletrônico são explicitamente BUY/INTEGRAR,
+  não modelados aqui além da fronteira de importação. Modelo de dados
+  completo, decisões de imutabilidade/retenção e rastreabilidade RF→tabela
+  em
+  [`docs/business/BLOCO_6_RH_MODELO_DADOS.md`](../business/BLOCO_6_RH_MODELO_DADOS.md).
+  `02-MODELO_LOGICO.md`/`04-DICIONARIO_DADOS.md` **não foram atualizados**
+  com essas tabelas/colunas (ambos refletem o schema real introspectado do
+  banco aplicado, por convenção desta pasta) — atualizar somente depois de
+  `migration:up`.
+
 ## Auditorias específicas
 
 - **[AUDITORIA_DEPARTAMENTOS_2026-08-06.md](AUDITORIA_DEPARTAMENTOS_2026-08-06.md)**

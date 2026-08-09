@@ -84,7 +84,13 @@ sensibilidade) — ver §3 e §6.4.
 | **Ponto eletrônico (REP)** | **BUY/INTEGRAR — NÃO desenvolver** | fora de build | ver §6.2 (RNF, não RF) |
 
 **Total: 81 RF-RH catalogados** (3 já implementados/renumerados, 1 já
-remediado, 25 P0, 40 P1, 12 P2 — detalhamento exato em §7).
+remediado, **19 P0, 49 P1, 8 P2** — números corrigidos pelo
+`AuditorIntegrador` em 2026-08-09: a versão original deste documento dizia
+"25 P0, 40 P1, 12 P2", mas a contagem real de linhas `RF-RH-NNN` marcadas
+com cada prioridade em §1 é 19/49/8 (mais os 5 legados renumerados de
+§1.0, que não carregam tag de prioridade própria — 19+49+8+5=81, confere
+com o total). Detalhamento exato em §7 — ambas as seções foram corrigidas
+juntas para não deixar dois números divergentes no mesmo documento.
 
 ---
 
@@ -676,12 +682,21 @@ mínimo viável). Nenhum RF acima cobre esses itens.
 
 ## 7. Priorização Consolidada
 
-### P0 — bloqueante (risco legal imediato), 25 RFs
-Segregação de acesso já remediada (RF-RH-006); Contrato de experiência
-completo (RF-RH-013 a 016); Férias completo (RF-RH-031 a 043); Alertas
-"nunca esquecidos silenciosamente" como princípio geral (RF-RH-076).
+**Nota de correção (`AuditorIntegrador`, 2026-08-09):** os totais por
+prioridade abaixo foram recontados diretamente das 81 linhas `RF-RH-NNN`
+de §1 (grep determinístico, não estimativa) — a versão original desta
+seção citava 25/40/12, que não batia com a contagem real de tags `P0`/
+`P1`/`P2` em cada linha. Números corretos: **19 P0, 49 P1, 8 P2** (mais 5
+RFs legados renumerados em §1.0, sem tag de prioridade própria — total
+19+49+8+5=81).
 
-### P1 — eficiência/controle/conformidade, 40 RFs
+### P0 — bloqueante (risco legal imediato), 19 RFs
+Segregação de acesso já remediada (RF-RH-006); Contrato de experiência
+completo (RF-RH-013 a 016, 4 RFs); Férias completo (RF-RH-031 a 043, 13
+RFs); Alertas "nunca esquecidos silenciosamente" como princípio geral
+(RF-RH-076). Total: 1+4+13+1 = 19.
+
+### P1 — eficiência/controle/conformidade, 49 RFs
 Admissão/demissão como workflow com gates (RF-RH-007 a 012, 017 a 023);
 Documentos do funcionário (RF-RH-027 a 030); Afastamentos (RF-RH-044 a
 049); Benefícios (RF-RH-050 a 054); Treinamentos com validade (RF-RH-055 a
@@ -689,7 +704,7 @@ Documentos do funcionário (RF-RH-027 a 030); Afastamentos (RF-RH-044 a
 contratual (RF-RH-064 a 066); Quotas PCD/aprendiz (RF-RH-067 a 069);
 PayrollImport (RF-RH-070 a 073); Painel de KPIs (RF-RH-074/075).
 
-### P2 — conveniência/valor gerencial sem prazo legal, 12 RFs
+### P2 — conveniência/valor gerencial sem prazo legal, 8 RFs
 Cargos formais — `JobPosition` (RF-RH-024 a 026); Avaliação de desempenho
 (RF-RH-077); Recrutamento mínimo (RF-RH-078 a 081).
 

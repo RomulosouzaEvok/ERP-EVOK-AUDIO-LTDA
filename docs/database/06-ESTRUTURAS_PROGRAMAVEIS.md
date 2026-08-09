@@ -144,3 +144,27 @@ defesa continua sendo o repositório de aplicação nunca expor
 `update`/`delete` para linha em estado final. Não é precedente para mover
 cálculo de prazo processual (deliberadamente fora de escopo, RF-JUR-023)
 ou qualquer outra regra de processo para o banco.
+
+## Exceção aplicada — BLOCO 6 RH (2026-08-08)
+
+O módulo RH (migrations `server/migrations/20260808-000013/000014/000018/
+000019/000021-*.cjs`) segue o mesmo precedente estreito dos Blocos 1 (SST)
+e 3 (Jurídico): imutabilidade estrutural de registro com valor probatório
+trabalhista (histórico contratual, contrato de experiência, período
+aquisitivo de férias) — CLT art. 468, RNF-RH-04. Detalhado em
+`docs/business/BLOCO_6_RH_MODELO_DADOS.md` §10.
+
+| Function/trigger | Tabela | O que impede |
+|---|---|---|
+| `hr_lock_job_history` | `hr_employee_job_history` | UPDATE de qualquer coluna exceto `effective_to`/`esocial_event_confirmed_at`/`esocial_event_confirmed_by`, e DELETE, sempre (RNF-RH-04, CLT art. 468) |
+| `hr_lock_employee_contract` | `hr_employee_contracts` | UPDATE de campos estruturais (`employee_id`/`type`/`start_date`/`period_1_end_date`/`created_by`/`created_at`), e DELETE, sempre; `period_2_end_date` só pode ser preenchido uma vez (RF-RH-015) |
+| `hr_lock_vacation_accrual_period` | `hr_vacation_accrual_periods` | UPDATE de `employee_id`/`period_start`/`period_end`/`concessive_end`, e DELETE, sempre (BR-RH-004 — período aquisitivo nunca "some" antes do alerta de dobra) |
+| `hr_block_delete_vacation_schedule` | `hr_vacation_schedules` | DELETE sempre (RF-RH-040 — correção de programação já aprovada é sempre um novo registro, com `superseded_by_id` apontando para a versão anterior) |
+| `hr_block_delete_employee_benefit` | `hr_employee_benefits` | DELETE sempre (RF-RH-054 — cancelamento usa `enrollment_status='cancelado'`) |
+
+Igual aos blocos anteriores: enforcement de aplicação (repositório nunca
+expõe `update`/`delete` destrutivo) é a primeira linha de defesa; a trigger
+é defesa em profundidade contra bypass via `psql`/acesso administrativo.
+Não é precedente para mover cálculo de férias/rescisão/folha ou qualquer
+regra de processo trabalhista para o banco — esse cálculo é explicitamente
+fora de escopo do ERP (RNF-RH-03, BUY/INTEGRAR de folha e ponto).

@@ -4357,3 +4357,58 @@ regras de negócio decididas pelo dono do produto em 2026-08-08.
   Societários e o botão de aprovação de contrato ficam para o próximo passo
   de frontend); sem teste de integração real (Postgres) do fluxo completo
   approve→activate — só unitário com repositórios mockados.
+
+## 2026-08-09 — BLOCO 6 RH: auditoria cruzada Requisito x Banco x API — `AuditorIntegrador`
+
+**Escopo:** auditoria cruzada dos 3 artefatos do Bloco 6 (RH, ultimo bloco
+do pipeline de modulos novos) antes da implementacao. Relatorio completo em
+`docs/business/BLOCO_6_RH_AUDITORIA.md`. Veredito: **REPROVADO COM
+RESSALVAS**.
+
+- [x] 5 lacunas objetivas de schema corrigidas diretamente nas migrations
+  (nao aplicadas ao banco) e no Modelo de Dados: `hr_admission_processes`
+  (faltavam `department_id`/`job_position_id`/`candidate_cpf`/
+  `planned_start_date`), `hr_absences` (faltava `extended_program`),
+  `hr_employee_benefits` (faltava `suspended_days`),
+  `hr_employee_job_history` (faltava `pending_aso_risk_change` + ajuste no
+  trigger `hr_lock_job_history`), `hr_termination_processes` (faltava
+  `trct_paid_at`).
+- [x] Inconsistencia interna corrigida em `BLOCO_6_RH_API.md` secao 2 sobre
+  o escopo real de `SstAsoService` (nao e usado como gate de conclusao, so
+  no momento da solicitacao do ASO — a checagem real e via snapshot em
+  `EmployeeDocument`, alinhado ao que o `AdmDBA` ja havia modelado).
+- [x] Contagem de tabelas corrigida em `BLOCO_6_RH_MODELO_DADOS.md`
+  ("18 tabelas novas" -> 20, confirmado contra as 16 migrations).
+- [x] Contagem de prioridade corrigida em `BLOCO_6_RH_REQUISITOS.md`
+  ("25 P0, 40 P1, 12 P2" -> 19 P0, 49 P1, 8 P2, confirmado por grep
+  deterministico das 81 linhas RF-RH).
+- [ ] **[PENDENCIA DE DECISAO DO DONO DO PRODUTO]** RBAC `rh:approve` usado
+  com dois significados nao relacionados (autorizar demissao/rescisao E
+  liberar leitura de `Absence.cid`/`PayrollImportItem.bruto`/`liquido`) —
+  3 opcoes documentadas em `BLOCO_6_RH_API.md` secao 0, recomendacao do
+  `AuditorIntegrador`: Opcao C (intersecao de modulo so para os 2 campos
+  sensiveis, manter `approve` so para as 2 acoes de alto impacto).
+- [ ] **[PENDENCIA DE DECISAO DO DONO DO PRODUTO]** Risco de duplicacao
+  RH x SST em treinamento normativo (`is_normative=true`) — SST ja tem
+  matriz funcao x norma + blocklist proprios (`server/src/modules/sst/`);
+  RH cria um segundo registro de conclusao e um segundo relatorio "quem
+  nao pode operar" sem sincronizacao automatica. Recomendacao: delegar ao
+  blocklist do SST para cursos normativos.
+- [ ] **[PENDENCIA DE DECISAO DO DONO DO PRODUTO]** `DELETE
+  /api/employees/:id` (ja em producao, `status='inactive'`) nao foi
+  reconciliado com o novo `TerminationProcess` (`status='fired'`) — dois
+  caminhos concorrentes de desligamento sem os gates do fluxo formal
+  (ASO demissional, devolucao de ativos) no caminho antigo.
+- [ ] **[PENDENCIA DE IMPLEMENTACAO, passo 4 `programador`]** Adicionar
+  `'pcd'` a `SENSITIVE_EMPLOYEE_FIELDS`
+  (`server/src/modules/employees/domain/services/employeeSensitiveFields.ts`)
+  na mesma migration/PR que cria `employees.pcd` — sem isso, condicao de
+  PCD fica visivel a qualquer autenticado via `GET /api/employees`.
+- [ ] **Cobertura de auditoria declarada parcial:** 7 tabelas P1/P2 de
+  menor risco legal (`hr_job_positions`, `hr_job_vacancies`/
+  `hr_candidates`, `hr_training_courses`/`hr_job_position_trainings`/
+  `hr_employee_trainings`, `hr_time_sheet_summaries`,
+  `hr_payroll_import_batches`/`items`, `hr_performance_reviews`,
+  `hr_vacation_accrual_periods`) nao foram auditadas coluna-a-coluna
+  contra a migration bruta nesta rodada — recomenda-se segunda passada
+  antes do `programador` iniciar a implementacao dessas tabelas.
