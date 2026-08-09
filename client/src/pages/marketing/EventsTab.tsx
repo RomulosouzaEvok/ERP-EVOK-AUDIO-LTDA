@@ -148,7 +148,7 @@ function CreateEventDialog({ open, onClose, onCreated }: { open: boolean; onClos
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateEventFormData>({
+  } = useForm<z.input<typeof createEventSchema>, unknown, CreateEventFormData>({
     resolver: zodResolver(createEventSchema),
     defaultValues: { name: '', event_type: 'feira', start_date: '' },
   });

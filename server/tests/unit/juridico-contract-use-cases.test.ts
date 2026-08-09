@@ -13,6 +13,7 @@
 const CreateContractUseCase = require('../../src/modules/juridico/application/use-cases/contract/CreateContractUseCase');
 const ActivateContractUseCase = require('../../src/modules/juridico/application/use-cases/contract/ActivateContractUseCase');
 const ApproveContractUseCase = require('../../src/modules/juridico/application/use-cases/contract/ApproveContractUseCase');
+const ListContractApprovalsUseCase = require('../../src/modules/juridico/application/use-cases/contract/ListContractApprovalsUseCase');
 const TerminateContractUseCase = require('../../src/modules/juridico/application/use-cases/contract/TerminateContractUseCase');
 const CreateContractAddendumUseCase = require('../../src/modules/juridico/application/use-cases/contract/CreateContractAddendumUseCase');
 const { ValidationError, NotFoundError, BusinessRuleError } = require('../../src/errors');
@@ -328,5 +329,57 @@ describe('CreateContractAddendumUseCase', () => {
     });
     expect(addendum.previous_end_date).toBe('2027-08-31');
     expect(repo.update).toHaveBeenCalledWith(900, expect.objectContaining({ end_date: '2028-08-31' }));
+  });
+});
+
+describe('ListContractApprovalsUseCase (RF-JUR-003)', () => {
+  it('retorna alçada vazia e completa para contrato abaixo do threshold', async () => {
+    const repo = makeContractRepository({ initialContract: makeContract({ value: '10000.00' }) });
+    const approvalRepo = makeApprovalRepository();
+    const result = await new ListContractApprovalsUseCase(repo, approvalRepo).execute({ contractId: 900 });
+    expect(result.required_roles).toEqual([]);
+    expect(result.missing_roles).toEqual([]);
+    expect(result.approval_complete).toBe(true);
+  });
+
+  it('aponta diretor como pendente na faixa intermediária sem aprovação', async () => {
+    const repo = makeContractRepository({ initialContract: makeContract({ value: '150000.00' }) });
+    const approvalRepo = makeApprovalRepository();
+    const result = await new ListContractApprovalsUseCase(repo, approvalRepo).execute({ contractId: 900 });
+    expect(result.required_roles).toEqual(['diretor']);
+    expect(result.missing_roles).toEqual(['diretor']);
+    expect(result.approval_complete).toBe(false);
+  });
+
+  it('reflete aprovação já registrada, deixando só o papel restante como pendente', async () => {
+    const repo = makeContractRepository({ initialContract: makeContract({ value: '500000.00' }) });
+    const approvalRepo = makeApprovalRepository({
+      initialApprovals: [{ id: 1, contract_id: 900, approver_role: 'diretor', approver_user_id: 5 }],
+    });
+    const result = await new ListContractApprovalsUseCase(repo, approvalRepo).execute({ contractId: 900 });
+    expect(result.required_roles).toEqual(['diretor', 'financeiro']);
+    expect(result.missing_roles).toEqual(['financeiro']);
+    expect(result.approval_complete).toBe(false);
+    expect(result.approvals).toHaveLength(1);
+  });
+
+  it('marca alçada como completa quando todos os papéis exigidos aprovaram', async () => {
+    const repo = makeContractRepository({ initialContract: makeContract({ value: '500000.00' }) });
+    const approvalRepo = makeApprovalRepository({
+      initialApprovals: [
+        { id: 1, contract_id: 900, approver_role: 'diretor', approver_user_id: 5 },
+        { id: 2, contract_id: 900, approver_role: 'financeiro', approver_user_id: 7 },
+      ],
+    });
+    const result = await new ListContractApprovalsUseCase(repo, approvalRepo).execute({ contractId: 900 });
+    expect(result.missing_roles).toEqual([]);
+    expect(result.approval_complete).toBe(true);
+  });
+
+  it('lança NotFoundError para contrato inexistente', async () => {
+    const repo = makeContractRepository({ findById: jest.fn(async () => null) });
+    await expect(
+      new ListContractApprovalsUseCase(repo, makeApprovalRepository()).execute({ contractId: 999 }),
+    ).rejects.toThrow(NotFoundError);
   });
 });

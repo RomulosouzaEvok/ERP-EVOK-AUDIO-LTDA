@@ -24,6 +24,7 @@ const ListContractSignatoriesUseCase = require('../../application/use-cases/cont
 const UpdateContractChecklistUseCase = require('../../application/use-cases/contract/UpdateContractChecklistUseCase');
 const ActivateContractUseCase = require('../../application/use-cases/contract/ActivateContractUseCase');
 const ApproveContractUseCase = require('../../application/use-cases/contract/ApproveContractUseCase');
+const ListContractApprovalsUseCase = require('../../application/use-cases/contract/ListContractApprovalsUseCase');
 const CreateContractAddendumUseCase = require('../../application/use-cases/contract/CreateContractAddendumUseCase');
 const ListContractAddendumsUseCase = require('../../application/use-cases/contract/ListContractAddendumsUseCase');
 const TerminateContractUseCase = require('../../application/use-cases/contract/TerminateContractUseCase');
@@ -166,6 +167,20 @@ exports.approve = async (req: Request, res: Response, next: NextFunction) => {
     });
     logAction(req, { action: 'approve', entityType: 'JurContract', entityId: Number(req.params.id), newValues: approval });
     res.status(201).json({ success: true, data: approval });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `GET /api/jur/contracts/:id/approvals` — situação da alçada (RF-JUR-003):
+ * papéis exigidos pela faixa de valor, aprovações já registradas e o que
+ * falta. Somente leitura, sem efeito colateral.
+ */
+exports.listApprovals = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await new ListContractApprovalsUseCase(contractRepository, approvalRepository).execute({
+      contractId: Number(req.params.id),
+    });
+    res.json({ success: true, data });
   } catch (error) { next(error); }
 };
 

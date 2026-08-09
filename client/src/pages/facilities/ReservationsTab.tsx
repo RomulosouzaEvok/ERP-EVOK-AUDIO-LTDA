@@ -150,7 +150,10 @@ function CreateReservationDialog({ open, onClose }: { open: boolean; onClose: ()
     reset,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<ReservationFormData>({ resolver: zodResolver(reservationSchema), defaultValues: { resource_type: 'room' } });
+  } = useForm<z.input<typeof reservationSchema>, unknown, ReservationFormData>({
+    resolver: zodResolver(reservationSchema),
+    defaultValues: { resource_type: 'room' },
+  });
 
   const resourceType = watch('resource_type');
 

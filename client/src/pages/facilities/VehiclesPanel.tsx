@@ -176,7 +176,10 @@ function CreateVehicleDialog({ open, onClose, onCreated }: { open: boolean; onCl
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateVehicleFormData>({ resolver: zodResolver(createVehicleSchema), defaultValues: { current_km: 0 } });
+  } = useForm<z.input<typeof createVehicleSchema>, unknown, CreateVehicleFormData>({
+    resolver: zodResolver(createVehicleSchema),
+    defaultValues: { current_km: 0 },
+  });
 
   const mutation = useMutation({
     mutationFn: (values: CreateVehicleFormData) => facilitiesApi.createVehicle(values as facilitiesApi.CreateVehicleInput),
@@ -479,7 +482,10 @@ function NewVehicleDocumentForm({ assetId, onDone }: { assetId: number; onDone: 
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<DocumentFormData>({ resolver: zodResolver(documentSchema), defaultValues: { doc_type: 'crlv_licenciamento' } });
+  } = useForm<z.input<typeof documentSchema>, unknown, DocumentFormData>({
+    resolver: zodResolver(documentSchema),
+    defaultValues: { doc_type: 'crlv_licenciamento' },
+  });
 
   const mutation = useMutation({
     mutationFn: (values: DocumentFormData) => {

@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import type {
   ContractStatus,
   ContractType,
+  ContractApproverRole,
   CaseStatus,
   CaseType,
   RiskClass,
@@ -12,6 +13,8 @@ import type {
   DataSubjectRequestStatus,
   IncidentStatus,
   AlertStatus,
+  CorporateActType,
+  CorporateActStatus,
 } from '@/api/juridico';
 
 /** Formata uma data ISO (`YYYY-MM-DD` ou timestamp) para `dd/mm/aaaa` (pt-BR). Retorna "-" se ausente/vazia. */
@@ -318,3 +321,29 @@ export function AlertStatusBadge({ status }: { status: AlertStatus }) {
       return <Badge variant="outline">{status}</Badge>;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Atos Societários (RF-JUR-030)
+// ---------------------------------------------------------------------------
+
+export const CORPORATE_ACT_TYPE_LABELS: Record<CorporateActType, string> = {
+  general_assembly: 'Assembleia Geral',
+  partners_meeting: 'Reunião de Sócios',
+  bylaw_amendment: 'Alteração de Contrato Social',
+  board_resolution: 'Deliberação de Diretoria',
+  other: 'Outro',
+};
+
+export function CorporateActStatusBadge({ status }: { status: CorporateActStatus }) {
+  if (status === 'registered') return <Badge variant="success">Registrado</Badge>;
+  return <Badge variant="outline">Rascunho</Badge>;
+}
+
+// ---------------------------------------------------------------------------
+// Alçada de aprovação de contrato por valor (RF-JUR-003)
+// ---------------------------------------------------------------------------
+
+export const APPROVER_ROLE_LABELS: Record<ContractApproverRole, string> = {
+  diretor: 'Diretor',
+  financeiro: 'Financeiro',
+};

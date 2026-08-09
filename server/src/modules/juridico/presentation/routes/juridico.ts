@@ -70,6 +70,16 @@ router.get('/reports/financeiro', reportController.financeiro);
 // diretor/financeiro) no lugar de `authorizeModule('juridico', ...)`.
 router.post('/contracts/:id/approve', authorizeAnyModule([{ moduleKey: 'diretor' }, { moduleKey: 'financeiro' }]), contractController.approve);
 
+// `GET /contracts/:id/approvals` acompanha a exceção acima: o aprovador
+// (`diretor`/`financeiro`, que pode não ter o módulo `juridico`) precisa
+// consultar a situação da alçada antes de decidir aprovar — por isso o OR
+// inclui `juridico` além dos dois papéis de aprovador.
+router.get(
+  '/contracts/:id/approvals',
+  authorizeAnyModule([{ moduleKey: 'juridico' }, { moduleKey: 'diretor' }, { moduleKey: 'financeiro' }]),
+  contractController.listApprovals,
+);
+
 router.use(authorizeModule('juridico', 'operate'));
 
 // ---- Grupo 1 — Contratos (UC-52, 13 endpoints) ----

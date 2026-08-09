@@ -138,7 +138,7 @@ function CreateFineDialog({ open, onClose, onCreated }: { open: boolean; onClose
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<FineFormData>({ resolver: zodResolver(fineSchema) });
+  } = useForm<z.input<typeof fineSchema>, unknown, FineFormData>({ resolver: zodResolver(fineSchema) });
 
   const mutation = useMutation({
     mutationFn: (values: FineFormData) => facilitiesApi.createFine(values),

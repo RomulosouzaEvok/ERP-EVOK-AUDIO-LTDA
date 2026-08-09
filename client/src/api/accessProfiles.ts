@@ -14,7 +14,10 @@ import type { ItemResponse } from './types';
  * 2026-08-07 para o módulo Contabilidade (subárea CONT do Financeiro).
  * `tesouraria` adicionado em 2026-08-07 para o módulo Tesouraria (subárea
  * TES do Financeiro). `controladoria` adicionado em 2026-08-07 para o
- * módulo Controladoria (subárea CTR do Financeiro, orçamento).
+ * módulo Controladoria (subárea CTR do Financeiro, orçamento). `diretor`
+ * adicionado em 2026-08-08 (correção RF-JUR-003 do módulo Jurídico) — papel
+ * de aprovador de alçada de contrato por valor, sem tela/rota própria, só
+ * concede o direito de aprovar via `POST /api/jur/contracts/:id/approve`.
  */
 export type AccessModuleKey =
   | 'dashboard'
@@ -46,6 +49,7 @@ export type AccessModuleKey =
   | 'facilities'
   | 'marketing'
   | 'juridico'
+  | 'diretor'
   | 'contabilidade'
   | 'tesouraria'
   | 'controladoria'

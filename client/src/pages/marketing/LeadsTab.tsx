@@ -271,7 +271,7 @@ function LeadDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<LeadFormData>({
+  } = useForm<z.input<typeof leadSchema>, unknown, LeadFormData>({
     resolver: zodResolver(leadSchema),
     defaultValues: { name: '', lead_source: 'website' },
   });

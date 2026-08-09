@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Plus } from 'lucide-react';
 
 import * as jurApi from '@/api/juridico';
+import { useAuth } from '@/context/AuthContext';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { extractApiErrorMessage } from '@/api/httpClient';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Button } from '@/components/ui/button';
@@ -14,7 +16,7 @@ import { SelectNative } from '@/components/ui/select-native';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CONTRACT_STATUS_LABELS, CONTRACT_TYPE_LABELS, ContractStatusBadge, formatCurrency, formatDate } from './juridicoShared';
+import { APPROVER_ROLE_LABELS, CONTRACT_STATUS_LABELS, CONTRACT_TYPE_LABELS, ContractStatusBadge, formatCurrency, formatDate } from './juridicoShared';
 
 const COUNTERPARTY_TYPE_LABELS: Record<jurApi.CounterpartyType, string> = {
   supplier: 'Fornecedor',
@@ -315,6 +317,7 @@ function CreateContractDialog({ open, onClose, onCreated }: { open: boolean; onC
 
 function ContractDetailDialog({ contractId, onClose }: { contractId: number | null; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const { hasModuleAccess } = useAuth();
   const [error, setError] = React.useState<DidacticError | null>(null);
 
   const [docUrl, setDocUrl] = React.useState('');
@@ -333,6 +336,13 @@ function ContractDetailDialog({ contractId, onClose }: { contractId: number | nu
     enabled: contractId != null,
   });
 
+  /** Alçada de aprovação (RF-JUR-003) — fonte da verdade: `GET /contracts/:id/approvals`. */
+  const { data: approvalStatus } = useQuery({
+    queryKey: ['jur-contract-approvals', contractId],
+    queryFn: () => jurApi.getContractApprovals(contractId!),
+    enabled: contractId != null,
+  });
+
   React.useEffect(() => {
     if (contractId != null) {
       setError(null);
@@ -348,6 +358,7 @@ function ContractDetailDialog({ contractId, onClose }: { contractId: number | nu
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['jur-contract-detail', contractId] });
+    queryClient.invalidateQueries({ queryKey: ['jur-contract-approvals', contractId] });
     queryClient.invalidateQueries({ queryKey: ['jur-contracts'] });
   };
 
@@ -370,7 +381,34 @@ function ContractDetailDialog({ contractId, onClose }: { contractId: number | nu
     () => jurApi.addContractSignatory(contractId!, { party_type: sigRole, name: sigName }),
     'Não foi possível adicionar o signatário',
   );
-  const activateMutation = useAction(() => jurApi.activateContract(contractId!), 'Não foi possível ativar o contrato');
+
+  // Enquanto `GET /approvals` não respondeu, cai no cálculo client-side dos
+  // papéis exigidos (só desenha a seção; o estado de cada papel vem da query).
+  const requiredApproverRoles = approvalStatus?.required_roles ?? (contract ? jurApi.requiredApproverRoles(contract.value) : []);
+  const approvedRoles = new Set(approvalStatus?.approvals.map((approval) => approval.approver_role) ?? []);
+  const canApproveRole = (role: jurApi.ContractApproverRole) => hasModuleAccess(role === 'diretor' ? 'diretor' : 'financeiro');
+
+  /** `POST /contracts/:id/approve` — registra 1 aprovação de alçada por valor (RF-JUR-003). */
+  const approveMutation = useAction(
+    (role: jurApi.ContractApproverRole) => jurApi.approveContract(contractId!, role),
+    'Não foi possível registrar a aprovação',
+  );
+
+  /**
+   * `POST /contracts/:id/activate` — quando bloqueado por alçada pendente
+   * (RF-JUR-003), mostramos a mensagem exata do backend (que já nomeia os
+   * papéis faltantes), sem traduzir/reescrever.
+   */
+  const activateMutation = useMutation({
+    mutationFn: () => jurApi.activateContract(contractId!),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => {
+      setError({ title: 'Não foi possível ativar o contrato', reasons: [extractApiErrorMessage(err)] });
+    },
+  });
   const addAddendumMutation = useAction(
     () =>
       jurApi.addContractAddendum(contractId!, {
@@ -484,6 +522,47 @@ function ContractDetailDialog({ contractId, onClose }: { contractId: number | nu
                     </SelectNative>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Alçada de aprovação por valor (RF-JUR-003) */}
+            {requiredApproverRoles.length > 0 && ['draft', 'in_approval', 'approved'].includes(contract.status) && (
+              <div className="flex flex-col gap-2 rounded-md border p-3">
+                <p className="text-sm font-semibold">Alçada de aprovação (RF-JUR-003)</p>
+                <p className="text-xs text-muted-foreground">
+                  Contrato de {formatCurrency(contract.value)} — exige aprovação de:{' '}
+                  {requiredApproverRoles.map((role) => APPROVER_ROLE_LABELS[role]).join(', ')}.
+                </p>
+                <ul className="flex flex-col gap-1.5">
+                  {requiredApproverRoles.map((role) => {
+                    const approved = approvedRoles.has(role);
+                    return (
+                      <li key={role} className="flex items-center justify-between gap-2 text-sm">
+                        <span>{APPROVER_ROLE_LABELS[role]}</span>
+                        <div className="flex items-center gap-2">
+                          {approved ? (
+                            <Badge variant="success">Aprovado</Badge>
+                          ) : (
+                            <>
+                              <Badge variant="outline">Pendente</Badge>
+                              {canApproveRole(role) && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={approveMutation.isPending}
+                                  onClick={() => approveMutation.mutate(role)}
+                                >
+                                  Aprovar como {APPROVER_ROLE_LABELS[role]}
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
 

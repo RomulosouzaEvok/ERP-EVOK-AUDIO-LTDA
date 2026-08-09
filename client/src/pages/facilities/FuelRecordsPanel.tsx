@@ -121,7 +121,10 @@ function CreateFuelRecordDialog({ open, onClose }: { open: boolean; onClose: () 
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<FuelRecordFormData>({ resolver: zodResolver(fuelRecordSchema), defaultValues: { full_tank: false } });
+  } = useForm<z.input<typeof fuelRecordSchema>, unknown, FuelRecordFormData>({
+    resolver: zodResolver(fuelRecordSchema),
+    defaultValues: { full_tank: false },
+  });
 
   const mutation = useMutation({
     mutationFn: (values: FuelRecordFormData) => facilitiesApi.createFuelRecord(values),

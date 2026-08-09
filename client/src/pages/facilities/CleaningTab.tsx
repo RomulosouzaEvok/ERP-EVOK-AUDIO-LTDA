@@ -180,7 +180,7 @@ function PlanDialog({
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<PlanFormData>({ resolver: zodResolver(planSchema), defaultValues: { frequency: 'weekly', active: true } });
+  } = useForm<z.input<typeof planSchema>, unknown, PlanFormData>({ resolver: zodResolver(planSchema), defaultValues: { frequency: 'weekly', active: true } });
 
   const mutation = useMutation({
     mutationFn: (values: PlanFormData) =>

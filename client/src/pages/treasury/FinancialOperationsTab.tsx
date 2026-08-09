@@ -217,6 +217,7 @@ const updateOperationSchema = operationSchema.omit({ contract_number: true }).pa
 });
 
 type OperationFormData = z.infer<typeof operationSchema>;
+type UpdateOperationFormData = z.infer<typeof updateOperationSchema>;
 
 function OperationDialog({
   mode,
@@ -237,8 +238,8 @@ function OperationDialog({
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<OperationFormData>({
-    resolver: zodResolver(mode === 'create' ? operationSchema : (updateOperationSchema as typeof operationSchema)),
+  } = useForm<OperationFormData | UpdateOperationFormData>({
+    resolver: zodResolver(mode === 'create' ? operationSchema : updateOperationSchema),
     defaultValues: {
       operation_type: 'loan', institution: '', contract_number: '', amount: 0,
       interest_rate: 0, start_date: '', end_date: '', guarantee_type: 'none', notes: '',
@@ -246,7 +247,7 @@ function OperationDialog({
   });
 
   const mutation = useMutation({
-    mutationFn: (values: OperationFormData) =>
+    mutationFn: (values: OperationFormData | UpdateOperationFormData) =>
       mode === 'create'
         ? treasuryApi.createOperation(values as treasuryApi.CreateOperationInput)
         : treasuryApi.updateOperation(operation!.id, values as treasuryApi.UpdateOperationInput),

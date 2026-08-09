@@ -141,7 +141,7 @@ function AreaDialog({
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<AreaFormData>({
+  } = useForm<z.input<typeof areaSchema>, unknown, AreaFormData>({
     resolver: zodResolver(areaSchema),
     defaultValues: { name: '', area_type: 'production' },
   });

@@ -213,7 +213,7 @@ function CampaignDialog({
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CampaignFormData>({
+  } = useForm<z.input<typeof campaignSchema>, unknown, CampaignFormData>({
     resolver: zodResolver(campaignSchema),
     defaultValues: { name: '', campaign_type: 'social', start_date: '', status: 'planned' },
   });

@@ -11,6 +11,14 @@ import type { ItemResponse, ListResponse } from './types';
  * SUBSTITUI o módulo Jurídico enxuto (`/api/legal`, `client/src/api/legal.ts`,
  * removido) — a rota antiga não existe mais no backend.
  *
+ * CORREÇÃO 2026-08-08 (backend commit `97628ae`): adiciona os 2 clusters que
+ * faltavam — Atos Societários (`corporate-acts`, RF-JUR-030, CRUD completo)
+ * e alçada de aprovação de contrato por valor (RF-JUR-003,
+ * `POST /contracts/:id/approve`). Ver `server/src/modules/juridico/domain/constants.ts`
+ * para os thresholds oficiais (espelhados abaixo só para exibição —
+ * `requiredApproverRoles` no client NUNCA decide autorização, apenas ajuda a
+ * montar a UI; a autorização real é sempre do backend).
+ *
  * Nota de tipos importante: como o backend deste bloco NÃO usa um mapper de
  * DTO na resposta (os controllers devolvem a instância Sequelize crua), os
  * campos de RESPOSTA seguem o nome de coluna do banco (`contract_number`,
@@ -210,13 +218,83 @@ export async function updateContractChecklist(contractId: number, checklist: Rec
 
 /**
  * `POST /api/jur/contracts/:id/activate`.
- * @throws {AxiosError} 422 BUSINESS_RULE_VIOLATION — sem `responsible_user_id` (E1), sem 2 partes/versão assinada (E3), ou checklist pendente.
- * @throws {AxiosError} 403 FORBIDDEN — valor acima da alçada `operate` (quando a tabela de alçada existir).
+ * @throws {AxiosError} 422 BUSINESS_RULE_VIOLATION — sem `responsible_user_id` (E1), sem 2 partes/versão assinada (E3), checklist pendente, ou aprovação(ões) de alçada por valor ainda pendente(s) (RF-JUR-003 — `error.details.missingRoles` lista os papéis faltantes).
  */
 export async function activateContract(id: number, responsibleUserId?: number) {
   const { data } = await httpClient.post<ItemResponse<ContractDetail>>(`/api/jur/contracts/${id}/activate`, {
     responsible_user_id: responsibleUserId,
   });
+  return data.data;
+}
+
+// ---------------------------------------------------------------------------
+// Alçada de aprovação de contrato por valor (RF-JUR-003, 2026-08-08)
+// ---------------------------------------------------------------------------
+
+export type ContractApproverRole = 'diretor' | 'financeiro';
+
+/** Espelha `server/src/modules/juridico/domain/constants.ts` — só para montar a UI, NUNCA usado para decidir autorização (isso é sempre do backend/RBAC). */
+export const JUR_APPROVAL_THRESHOLD_DIRECTOR = 50000;
+/** Espelha `server/src/modules/juridico/domain/constants.ts` — só para montar a UI, NUNCA usado para decidir autorização (isso é sempre do backend/RBAC). */
+export const JUR_APPROVAL_THRESHOLD_FINANCE = 300000;
+
+/**
+ * Resolve (client-side, só para exibição) quais papéis de aprovador o valor
+ * do contrato exige, espelhando `requiredApproverRoles` do backend
+ * (`server/src/modules/juridico/domain/constants.ts`). Usado para desenhar
+ * a seção "Alçada de aprovação" antes de qualquer tentativa de ativação —
+ * a situação real (quem já aprovou, o que falta) vem de
+ * {@link getContractApprovals}, que é a fonte de verdade.
+ */
+export function requiredApproverRoles(value: string | number | null | undefined): ContractApproverRole[] {
+  const numericValue = value === null || value === undefined || value === '' ? 0 : Number(value);
+  if (Number.isNaN(numericValue) || numericValue <= JUR_APPROVAL_THRESHOLD_DIRECTOR) return [];
+  if (numericValue <= JUR_APPROVAL_THRESHOLD_FINANCE) return ['diretor'];
+  return ['diretor', 'financeiro'];
+}
+
+export interface ContractApproval {
+  id: number;
+  contract_id: number;
+  approver_user_id: number;
+  approver_role: ContractApproverRole;
+  approved_at: string;
+}
+
+/** Situação da alçada de um contrato (`GET /api/jur/contracts/:id/approvals`). */
+export interface ContractApprovalStatus {
+  /** Papéis exigidos pela faixa de valor do contrato (vazio = sem alçada extra). */
+  required_roles: ContractApproverRole[];
+  /** Aprovações já registradas. */
+  approvals: ContractApproval[];
+  /** Papéis exigidos que ainda não aprovaram. */
+  missing_roles: ContractApproverRole[];
+  /** `true` quando a alçada está satisfeita (inclui o caso de não haver alçada). */
+  approval_complete: boolean;
+}
+
+/**
+ * `GET /api/jur/contracts/:id/approvals` — situação da alçada (RF-JUR-003):
+ * papéis exigidos, aprovações já registradas e o que falta. Somente leitura,
+ * sem efeito colateral. Acessível a `juridico`, `diretor` ou `financeiro`
+ * (o aprovador precisa consultar antes de decidir aprovar).
+ */
+export async function getContractApprovals(id: number) {
+  const { data } = await httpClient.get<ItemResponse<ContractApprovalStatus>>(`/api/jur/contracts/${id}/approvals`);
+  return data.data;
+}
+
+/**
+ * `POST /api/jur/contracts/:id/approve` — registra 1 aprovação de alçada
+ * (RF-JUR-003). Protegida por `authorizeAnyModule([diretor, financeiro])` —
+ * quem chama precisa ter pelo menos um dos 2 módulos de acesso; `role` só
+ * desambigua quando o usuário logado tem os dois papéis simultaneamente
+ * (a autorização real vem do RBAC no backend, nunca do body).
+ * @throws {AxiosError} 400 VALIDATION_ERROR — usuário tem os 2 papéis e não informou `role`.
+ * @throws {AxiosError} 422 BUSINESS_RULE_VIOLATION — papel sem permissão, contrato não exige aprovação deste papel para o valor atual, ou papel já aprovou este contrato.
+ */
+export async function approveContract(id: number, role?: ContractApproverRole) {
+  const { data } = await httpClient.post<ItemResponse<ContractApproval>>(`/api/jur/contracts/${id}/approve`, { role });
   return data.data;
 }
 
@@ -1131,5 +1209,81 @@ export interface FinancialReport {
  */
 export async function getFinancialReport() {
   const { data } = await httpClient.get<ItemResponse<FinancialReport>>('/api/jur/reports/financeiro');
+  return data.data;
+}
+
+// ---------------------------------------------------------------------------
+// Atos Societários (RF-JUR-030, 2026-08-08)
+// ---------------------------------------------------------------------------
+
+export type CorporateActType = 'general_assembly' | 'partners_meeting' | 'bylaw_amendment' | 'board_resolution' | 'other';
+export type CorporateActStatus = 'draft' | 'registered';
+
+export interface CorporateAct {
+  id: number;
+  act_type: CorporateActType;
+  title: string;
+  description: string | null;
+  act_date: string;
+  registration_protocol: string | null;
+  registered_at: string | null;
+  status: CorporateActStatus;
+  document_file_path: string | null;
+  created_by: number;
+  createdAt?: string;
+}
+
+export interface ListCorporateActsParams {
+  act_type?: CorporateActType;
+  status?: CorporateActStatus;
+  page?: number;
+  limit?: number;
+}
+
+export async function listCorporateActs(params: ListCorporateActsParams = {}) {
+  const { data } = await httpClient.get<ListResponse<CorporateAct>>('/api/jur/corporate-acts', { params });
+  return data;
+}
+
+export async function getCorporateAct(id: number) {
+  const { data } = await httpClient.get<ItemResponse<CorporateAct>>(`/api/jur/corporate-acts/${id}`);
+  return data.data;
+}
+
+export interface CreateCorporateActInput {
+  act_type: CorporateActType;
+  title: string;
+  description?: string | null;
+  act_date: string;
+  registration_protocol?: string | null;
+  registered_at?: string | null;
+  document_file_path?: string | null;
+}
+
+/** `POST /api/jur/corporate-acts` — sempre cria em `status='draft'` (mesmo que `registration_protocol`/`registered_at` sejam enviados) — a transição para `registered` só acontece via `updateCorporateAct`. */
+export async function createCorporateAct(input: CreateCorporateActInput) {
+  const { data } = await httpClient.post<ItemResponse<CorporateAct>>('/api/jur/corporate-acts', input);
+  return data.data;
+}
+
+export interface UpdateCorporateActInput {
+  act_type?: CorporateActType;
+  title?: string;
+  description?: string | null;
+  act_date?: string;
+  registration_protocol?: string | null;
+  registered_at?: string | null;
+  document_file_path?: string | null;
+}
+
+/**
+ * `PUT /api/jur/corporate-acts/:id` — bloqueado depois que `status` vira
+ * `registered` (imutabilidade de ato registrado). A transição
+ * `draft -> registered` ocorre quando `registration_protocol` e
+ * `registered_at` são informados juntos nesta chamada.
+ * @throws {AxiosError} 422 BUSINESS_RULE_VIOLATION — ato já `registered` (imutável).
+ */
+export async function updateCorporateAct(id: number, input: UpdateCorporateActInput) {
+  const { data } = await httpClient.put<ItemResponse<CorporateAct>>(`/api/jur/corporate-acts/${id}`, input);
   return data.data;
 }

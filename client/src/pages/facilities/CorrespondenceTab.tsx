@@ -188,7 +188,10 @@ function CreateCorrespondenceDialog({ open, onClose }: { open: boolean; onClose:
     handleSubmit,
     reset,
     formState: { isSubmitting },
-  } = useForm<CorrespondenceFormData>({ resolver: zodResolver(correspondenceSchema), defaultValues: { type: 'other' } });
+  } = useForm<z.input<typeof correspondenceSchema>, unknown, CorrespondenceFormData>({
+    resolver: zodResolver(correspondenceSchema),
+    defaultValues: { type: 'other' },
+  });
 
   const mutation = useMutation({
     mutationFn: (values: CorrespondenceFormData) => facilitiesApi.createCorrespondence(values),

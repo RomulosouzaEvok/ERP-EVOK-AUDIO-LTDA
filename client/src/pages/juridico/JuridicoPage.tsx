@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { FileText, Gavel, Scale, ScrollText, Copyright, ShieldAlert, Bell } from 'lucide-react';
+import { FileText, Gavel, Scale, ScrollText, Copyright, ShieldAlert, Bell, Landmark } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -8,11 +8,12 @@ import { ContractsTab } from './ContractsTab';
 import { LegalCasesTab } from './LegalCasesTab';
 import { DeadlinesTab } from './DeadlinesTab';
 import { ProxiesTab } from './ProxiesTab';
+import { CorporateActsTab } from './CorporateActsTab';
 import { IpAssetsTab } from './IpAssetsTab';
 import { LgpdTab } from './LgpdTab';
 import { AlertsReportsTab } from './AlertsReportsTab';
 
-type JurTab = 'contracts' | 'legal-cases' | 'deadlines' | 'proxies' | 'ip-assets' | 'lgpd' | 'reports';
+type JurTab = 'contracts' | 'legal-cases' | 'deadlines' | 'proxies' | 'corporate-acts' | 'ip-assets' | 'lgpd' | 'reports';
 
 /**
  * `/juridico` — Jurídico (departamento 16), BLOCO 3. Substitui `/legal`
@@ -59,6 +60,9 @@ export default function JuridicoPage() {
             <TabButton active={tab === 'proxies'} icon={ScrollText} onClick={() => setTab('proxies')}>
               Procurações
             </TabButton>
+            <TabButton active={tab === 'corporate-acts'} icon={Landmark} onClick={() => setTab('corporate-acts')}>
+              Atos Societários
+            </TabButton>
             <TabButton active={tab === 'ip-assets'} icon={Copyright} onClick={() => setTab('ip-assets')}>
               Propriedade Intelectual
             </TabButton>
@@ -77,6 +81,7 @@ export default function JuridicoPage() {
         {hasFullAccess && tab === 'legal-cases' && <LegalCasesTab />}
         {hasFullAccess && tab === 'deadlines' && <DeadlinesTab />}
         {hasFullAccess && tab === 'proxies' && <ProxiesTab />}
+        {hasFullAccess && tab === 'corporate-acts' && <CorporateActsTab />}
         {hasFullAccess && tab === 'ip-assets' && <IpAssetsTab />}
         {hasFullAccess && tab === 'lgpd' && <LgpdTab />}
         {tab === 'reports' && <AlertsReportsTab hasFullAccess={hasFullAccess} />}
