@@ -49,6 +49,19 @@ class SequelizeDeadlineRepository extends DeadlineRepository {
     return deadline;
   }
 
+  /**
+   * Prazos críticos: perdidos (`missed`) + pendentes vencendo em ≤3 dias.
+   *
+   * NOTA: consultava também `status='escalated'`, valor que **não existe**
+   * no enum (`pending`/`fulfilled_pending_confirmation`/`confirmed`/
+   * `missed`/`confirmed_late`) — o Postgres rejeitava a query inteira com
+   * `invalid input value for enum`, devolvendo 500 e quebrando o widget
+   * "Pendências de Jurídico" da home. Escalada é rastreada pela coluna
+   * `escalated_at`, não por status; como o job de escalada automática em
+   * D-3 (BR-JUR-011) ainda não existe, nada popula essa coluna e não há o
+   * que filtrar por ela — quando o job for implementado, incluir aqui a
+   * condição `escalated_at IS NOT NULL`.
+   */
   public async listCritical(): Promise<any[]> {
     const { Op } = require('sequelize');
     const limitDate = new Date();
@@ -57,7 +70,7 @@ class SequelizeDeadlineRepository extends DeadlineRepository {
     return JurLegalCaseDeadline.findAll({
       where: {
         [Op.or]: [
-          { status: { [Op.in]: ['escalated', 'missed'] } },
+          { status: 'missed' },
           { status: 'pending', due_date: { [Op.lte]: limitDate.toISOString().slice(0, 10) } },
         ],
       },

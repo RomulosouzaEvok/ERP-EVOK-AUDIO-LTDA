@@ -5,8 +5,8 @@ import * as jurApi from '@/api/juridico';
 import { WidgetCard } from '@/pages/home/WidgetCard';
 
 /**
- * Widget `juridico-pendencias` — prazos fatais críticos (`escalated`/
- * `missed`/`pending` vencendo em ≤3 dias, `GET /api/jur/legal-case-deadlines/critical`)
+ * Widget `juridico-pendencias` — prazos fatais críticos (`missed` +
+ * `pending` vencendo em ≤3 dias, `GET /api/jur/legal-case-deadlines/critical`)
  * + alertas pendentes (`GET /api/jur/alerts?status=pending`). Só aparece
  * para quem tem o módulo `juridico` (gestão) — visão de gestão, não de
  * auto-serviço (não existe auto-serviço neste módulo, diferente de TI).
