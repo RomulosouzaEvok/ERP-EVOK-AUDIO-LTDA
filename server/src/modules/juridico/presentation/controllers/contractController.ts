@@ -10,6 +10,7 @@ import type { Request, Response, NextFunction } from 'express';
 
 const SequelizeContractRepository = require('../../infrastructure/sequelize/SequelizeContractRepository');
 const SequelizeLegalAlertRepository = require('../../infrastructure/sequelize/SequelizeLegalAlertRepository');
+const SequelizeContractApprovalRepository = require('../../infrastructure/sequelize/SequelizeContractApprovalRepository');
 const { logAction } = require('../../../../services/auditLogService');
 
 const CreateContractUseCase = require('../../application/use-cases/contract/CreateContractUseCase');
@@ -22,6 +23,7 @@ const AddContractSignatoryUseCase = require('../../application/use-cases/contrac
 const ListContractSignatoriesUseCase = require('../../application/use-cases/contract/ListContractSignatoriesUseCase');
 const UpdateContractChecklistUseCase = require('../../application/use-cases/contract/UpdateContractChecklistUseCase');
 const ActivateContractUseCase = require('../../application/use-cases/contract/ActivateContractUseCase');
+const ApproveContractUseCase = require('../../application/use-cases/contract/ApproveContractUseCase');
 const CreateContractAddendumUseCase = require('../../application/use-cases/contract/CreateContractAddendumUseCase');
 const ListContractAddendumsUseCase = require('../../application/use-cases/contract/ListContractAddendumsUseCase');
 const TerminateContractUseCase = require('../../application/use-cases/contract/TerminateContractUseCase');
@@ -29,10 +31,26 @@ const CrossReferenceContractsUseCase = require('../../application/use-cases/cont
 
 const contractRepository = new SequelizeContractRepository();
 const alertRepository = new SequelizeLegalAlertRepository();
+const approvalRepository = new SequelizeContractApprovalRepository();
 
 function hasApprove(req: Request): boolean {
   const user = (req as any).user;
   return user?.role === 'admin' || user?.permissions?.juridico === 'approve';
+}
+
+/**
+ * Resolve os papéis de aprovador (`diretor`/`financeiro`) que o usuário
+ * logado efetivamente possui — RBAC real (RF-JUR-003), nunca aceito do
+ * body. `role === 'admin'` é tratado como tendo os dois papéis (mesmo
+ * curto-circuito de `authorizeModule`/`authorizeAnyModule`).
+ */
+function resolveAvailableApproverRoles(req: Request): Array<'diretor' | 'financeiro'> {
+  const user = (req as any).user;
+  if (user?.role === 'admin') return ['diretor', 'financeiro'];
+  const roles: Array<'diretor' | 'financeiro'> = [];
+  if (user?.permissions?.diretor) roles.push('diretor');
+  if (user?.permissions?.financeiro) roles.push('financeiro');
+  return roles;
 }
 
 /** `GET /api/jur/contracts` */
@@ -121,13 +139,33 @@ exports.updateChecklist = async (req: Request, res: Response, next: NextFunction
 /** `POST /api/jur/contracts/:id/activate` */
 exports.activate = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const contract = await new ActivateContractUseCase(contractRepository, alertRepository).execute({
+    const contract = await new ActivateContractUseCase(contractRepository, alertRepository, approvalRepository).execute({
       id: Number(req.params.id),
       responsible_user_id: req.body?.responsible_user_id ?? null,
       approverHasApprove: hasApprove(req),
     });
     logAction(req, { action: 'activate', entityType: 'JurContract', entityId: Number(req.params.id) });
     res.json({ success: true, data: contract });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `POST /api/jur/contracts/:id/approve` — RF-JUR-003 (alçada de aprovação
+ * por valor). Rota protegida por `authorizeAnyModule` (diretor OU
+ * financeiro) — `approver_user_id` sempre vem do JWT, `approver_role`
+ * sempre resolvido por RBAC (`resolveAvailableApproverRoles`); `role` no
+ * body só desambigua quando o usuário tem os dois perfis.
+ */
+exports.approve = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const approval = await new ApproveContractUseCase(contractRepository, approvalRepository).execute({
+      contractId: Number(req.params.id),
+      approverUserId: (req as any).user.id,
+      availableRoles: resolveAvailableApproverRoles(req),
+      desiredRole: req.body?.role ?? null,
+    });
+    logAction(req, { action: 'approve', entityType: 'JurContract', entityId: Number(req.params.id), newValues: approval });
+    res.status(201).json({ success: true, data: approval });
   } catch (error) { next(error); }
 };
 

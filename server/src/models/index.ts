@@ -160,6 +160,8 @@ import JurIpContractLink = require('./JurIpContractLink');
 import JurLgpdProcessingActivity = require('./JurLgpdProcessingActivity');
 import JurLgpdDataSubjectRequest = require('./JurLgpdDataSubjectRequest');
 import JurLgpdIncident = require('./JurLgpdIncident');
+import JurCorporateAct = require('./JurCorporateAct');
+import JurContractApproval = require('./JurContractApproval');
 import AccountingChartOfAccount = require('./AccountingChartOfAccount');
 import AccountingEntry = require('./AccountingEntry');
 import AccountingEntryItem = require('./AccountingEntryItem');
@@ -1216,6 +1218,10 @@ JurLegalCaseProvision.belongsTo(JurLegalCase, { foreignKey: 'legal_case_id', as:
 // JurProxy (auto-relacionamento — renovação referencia a procuração anterior)
 JurProxy.belongsTo(JurProxy, { foreignKey: 'superseded_proxy_id', as: 'supersededProxy' });
 
+// JurContract ↔ JurContractApproval (RF-JUR-003, alçada de aprovação por valor)
+JurContract.hasMany(JurContractApproval, { foreignKey: 'contract_id', as: 'approvals' });
+JurContractApproval.belongsTo(JurContract, { foreignKey: 'contract_id', as: 'contract' });
+
 // JurIntellectualProperty ↔ JurContract (N:N via JurIpContractLink)
 JurIntellectualProperty.hasMany(JurIpContractLink, { foreignKey: 'ip_id', as: 'contractLinks' });
 JurIpContractLink.belongsTo(JurIntellectualProperty, { foreignKey: 'ip_id', as: 'ipAsset' });
@@ -1303,6 +1309,7 @@ export {
   JurExternalLawyer, JurLegalCase, JurLegalCaseEvent, JurLegalCaseDeadline,
   JurLegalCaseProvision, JurLegalAlert, JurProxy, JurIntellectualProperty,
   JurIpContractLink, JurLgpdProcessingActivity, JurLgpdDataSubjectRequest, JurLgpdIncident,
+  JurCorporateAct, JurContractApproval,
   AccountingChartOfAccount, AccountingEntry, AccountingEntryItem,
   TreasuryBankAccount, TreasuryFinancialOperation,
   BudgetLine

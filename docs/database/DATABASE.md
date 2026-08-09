@@ -2382,3 +2382,63 @@ snake_case), decisão tomada antes da implementação.
 
 Ver `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo desta
 entrega (endpoints, testes, decisões próprias, pendências da passada 2).
+
+## BLOCO 3 Jurídico — correção das 2 pendências reais: Atos Societários e alçada de aprovação (2026-08-08)
+
+Fecha as 2 pendências deixadas explícitas ao final da passada 2 (RF-JUR-030
+e RF-JUR-003), com regras de negócio definidas pelo dono do produto.
+
+### Tabela nova — `jur_corporate_acts` (migration `20260808-000001`)
+
+Ato societário (assembleia geral, reunião de sócios, alteração
+contratual/estatutária, deliberação de diretoria, outros). Entidade própria
+da Secretaria/Governança, **sem FK** para contrato/caso (diferente do
+restante do módulo, que sempre referencia `jur_contracts`/`jur_legal_cases`).
+Colunas: `act_type` (enum), `title`, `description` (nullable), `act_date`,
+`registration_protocol` (nullable — número na Junta Comercial),
+`registered_at` (nullable — pode ficar pendente após `act_date`), `status`
+(`draft`/`registered`, imutável depois de `registered`),
+`document_file_path` (nullable, mesmo padrão de referência de arquivo de
+`jur_contract_documents`, sem upload real), `created_by` FK `users`
+(`RESTRICT`).
+
+### Tabela nova — `jur_contract_approvals` (migration `20260808-000002`)
+
+Alçada de aprovação de contrato por valor (RF-JUR-003). Colunas:
+`contract_id` FK `jur_contracts` (`CASCADE`), `approver_user_id` FK `users`
+(`RESTRICT`, sempre de `req.user.id`), `approver_role` (enum
+`diretor`/`financeiro`, sempre resolvido por RBAC — nunca aceito do body),
+`approved_at`. Unique `(contract_id, approver_role)`
+(`uq_jur_contract_approvals_contract_role`) — um único approval por papel
+por contrato, impede duplicidade.
+
+Regra de negócio (thresholds como constante de código, não tabela de
+configuração editável nesta rodada —
+`server/src/modules/juridico/domain/constants.ts`):
+- `jur_contracts.value <= 50000`: ativação direta, sem aprovação extra
+  (comportamento já existente, não alterado).
+- `50000 < value <= 300000`: exige 1 approval `diretor`.
+- `value > 300000`: exige 1 approval `diretor` E 1 `financeiro`.
+
+`ActivateContractUseCase` consulta `jur_contract_approvals` (via novo
+`ContractApprovalRepository`) antes de transicionar para `active`.
+
+### Models Sequelize novos
+
+`JurCorporateAct` (`server/src/models/JurCorporateAct.ts`) e
+`JurContractApproval` (`server/src/models/JurContractApproval.ts`),
+registrados em `server/src/models/index.ts` com associação
+`JurContract.hasMany(JurContractApproval, { as: 'approvals' })`.
+
+### RBAC — novo módulo de acesso `diretor`
+
+`server/src/shared/domain/accessModules.ts` ganhou a chave `diretor`
+(`financeiro` já existia). Usado exclusivamente por
+`POST /api/jur/contracts/:id/approve`, montado ANTES do gate geral
+`authorizeModule('juridico', 'operate')` do router, com
+`authorizeAnyModule([{moduleKey:'diretor'},{moduleKey:'financeiro'}])` —
+aprovadores de alçada não necessariamente têm o módulo `juridico`.
+
+Ver `docs/governance/TODO.md` (entrada 2026-08-08) e
+`docs/governance/HANDOFF_CODEX.md` para o detalhamento completo (endpoints,
+testes, decisões de inferência).

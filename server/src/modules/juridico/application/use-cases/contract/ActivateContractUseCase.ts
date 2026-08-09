@@ -2,12 +2,16 @@
  * `POST /api/jur/contracts/:id/activate` — transição para `active` (UC-52,
  * fluxo principal passo 5, RF-JUR-005).
  *
- * NOTA (pendência explícita, `docs/business/BLOCO_3_JUR_API.md` §2.7): a
- * checagem de alçada por valor/tipo (RF-JUR-003) depende de uma tabela de
- * configuração (`jur_approval_thresholds`) ainda não modelada neste bloco —
- * esta passada 1 NÃO bloqueia por alçada (todo `juridico:operate` pode
- * ativar); o parâmetro `approverHasApprove` é aceito para não quebrar o
- * contrato do controller quando a alçada for implementada na passada 2.
+ * RF-JUR-003 (alçada de aprovação por valor, decisão do dono do produto em
+ * 2026-08-08, IMPLEMENTADO): valor <= `JUR_APPROVAL_THRESHOLD_DIRECTOR`
+ * (R$ 50.000) ativa direto, sem aprovação extra (comportamento já
+ * existente, não alterado). Acima disso, exige aprovação(ões) prévias
+ * registradas em `jur_contract_approvals`
+ * (`ApproveContractUseCase`/`POST /api/jur/contracts/:id/approve`) — ver
+ * `server/src/modules/juridico/domain/constants.ts` para os thresholds e
+ * papéis exigidos por faixa. `approvalRepository` é opcional no construtor
+ * apenas por compatibilidade retroativa de teste unitário — o controller de
+ * produção sempre injeta a implementação Sequelize.
  *
  * @module modules/juridico/application/use-cases/contract/ActivateContractUseCase
  */
@@ -15,7 +19,9 @@
 import UseCase from '../../../../../shared/application/UseCase';
 import ContractRepository from '../../../domain/repositories/ContractRepository';
 import LegalAlertRepository from '../../../domain/repositories/LegalAlertRepository';
+import ContractApprovalRepository from '../../../domain/repositories/ContractApprovalRepository';
 import { NotFoundError, BusinessRuleError, ValidationError } from '../../../../../errors';
+import { requiredApproverRoles } from '../../../domain/constants';
 import type { ActivateContractInput } from '../../../domain/entities/ContractTypes';
 
 const CHECKLIST_REQUIRED_TYPES = ['employment', 'supplier', 'nda'];
@@ -30,17 +36,19 @@ function addDays(date: Date, days: number): string {
 class ActivateContractUseCase extends UseCase<ActivateContractInput, any> {
   private readonly repository: ContractRepository;
   private readonly alertRepository: LegalAlertRepository;
+  private readonly approvalRepository?: ContractApprovalRepository;
 
-  public constructor(repository: ContractRepository, alertRepository: LegalAlertRepository) {
+  public constructor(repository: ContractRepository, alertRepository: LegalAlertRepository, approvalRepository?: ContractApprovalRepository) {
     super();
     this.repository = repository;
     this.alertRepository = alertRepository;
+    this.approvalRepository = approvalRepository;
   }
 
   /**
    * @throws {NotFoundError} Contrato não encontrado (404).
    * @throws {ValidationError} Contrato não está em `draft`/`in_approval` (400).
-   * @throws {BusinessRuleError} Falta responsável (E1), assinatura (E3) ou checklist (RF-JUR-010) (422).
+   * @throws {BusinessRuleError} Falta responsável (E1), assinatura (E3), checklist (RF-JUR-010) ou aprovação de alçada por valor (RF-JUR-003) (422).
    */
   public async execute(input: ActivateContractInput): Promise<any> {
     const contract = await this.repository.findById(input.id);
@@ -48,6 +56,20 @@ class ActivateContractUseCase extends UseCase<ActivateContractInput, any> {
 
     if (!['draft', 'in_approval', 'approved'].includes(contract.status)) {
       throw new ValidationError('Contrato não está em draft/in_approval/approved — não pode ser ativado.');
+    }
+
+    // RF-JUR-003: alçada de aprovação por valor.
+    const requiredRoles = requiredApproverRoles(contract.value);
+    if (requiredRoles.length > 0 && this.approvalRepository) {
+      const approvals = await this.approvalRepository.listByContract(input.id);
+      const approvedRoles = new Set(approvals.map((a: any) => a.approver_role));
+      const missing = requiredRoles.filter((role) => !approvedRoles.has(role));
+      if (missing.length > 0) {
+        throw new BusinessRuleError(
+          `Ativação exige aprovação de alçada por valor ainda pendente: ${missing.join(', ')}.`,
+          { rule: 'RF-JUR-003', missingRoles: missing },
+        );
+      }
     }
 
     const responsibleUserId = input.responsible_user_id ?? contract.responsible_user_id;

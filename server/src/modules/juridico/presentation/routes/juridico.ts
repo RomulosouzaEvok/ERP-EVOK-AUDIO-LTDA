@@ -2,13 +2,18 @@
  * Router agregador do módulo Jurídico (departamento 16, JUR).
  * Monta todos os grupos de recurso sob `/api/jur` em `server/app.ts`.
  *
- * PASSADA 2/2 (final): completa os 71 endpoints do contrato
- * (`docs/business/BLOCO_3_JUR_API.md`) — Procurações (Grupo 4, 4 dos 6
- * endpoints do grupo; `corporate-acts` fica pendente, RF-JUR-030, sem
- * tabela), Propriedade Intelectual (Grupo 5, 6), LGPD — RoPA/Solicitação de
+ * PASSADA 2/2 (final, 2026-08-07): completou os 71 endpoints do contrato
+ * (`docs/business/BLOCO_3_JUR_API.md`) — Procurações (Grupo 4),
+ * Propriedade Intelectual (Grupo 5, 6), LGPD — RoPA/Solicitação de
  * Titular/Incidente (Grupo 6, 17) e Transversal — Alertas/Relatório
  * Financeiro/Fichas Cruzadas (Grupo 7, 7). A passada 1 (commit `0d97b12`)
- * entregou Contratos (13), Contencioso (15) e Prazos Fatais (7) — 35/71.
+ * entregou Contratos (13), Contencioso (15) e Prazos Fatais (7).
+ *
+ * CORREÇÃO 2026-08-08 (decisão do dono do produto, fecha as 2 pendências
+ * reais deixadas na passada 2): `corporate-acts` (RF-JUR-030, Grupo 4, 4
+ * endpoints — tabela `jur_corporate_acts` criada) e alçada de aprovação de
+ * contrato por valor (RF-JUR-003, `POST /contracts/:id/approve`, tabela
+ * `jur_contract_approvals`).
  *
  * SUBSTITUI o módulo Jurídico enxuto (`/api/legal`, commit `2ad27fd`) — ver
  * plano de substituição em `docs/business/BLOCO_3_JUR_AUDITORIA.md` §6.
@@ -16,16 +21,21 @@
  * RBAC: `authorizeModule('juridico', ...)` bloqueando a rota inteira em
  * TODAS as rotas (desenho mais restritivo do projeto, igual a `sst`/`ti` —
  * nenhuma exceção de auto-serviço neste módulo, diferente de `ti`), com
- * DUAS exceções documentadas no contrato: `GET /reports/financeiro` (também
+ * TRÊS exceções documentadas no contrato: `GET /reports/financeiro` (também
  * aceita `authorizeModule('financeiro', 'operate')`, checagem inline no
- * controller — §8.2) e o recurso `trade_secret` de PI (`role==='admin'`,
- * verificado no use case — §6.3). `approve` é exigido para: avaliação de
- * risco `probable` (RF-JUR-015), encerramento de processo (`close`),
- * revogação de procuração, e rejeição de solicitação de titular/decisão e
- * encerramento de incidente LGPD; a alçada de ativação de contrato por
- * valor (RF-JUR-003) fica pendente da tabela de configuração ainda não
- * modelada (ver `docs/business/BLOCO_3_JUR_API.md` §2.7) — todo
- * `juridico:operate` pode ativar nesta passada.
+ * controller — §8.2), `POST /contracts/:id/approve` (RF-JUR-003, aceita
+ * `authorizeAnyModule([{moduleKey:'diretor'},{moduleKey:'financeiro'}])` —
+ * aprovadores de alçada não necessariamente têm o módulo `juridico`, NOVO
+ * 2026-08-08) e o recurso `trade_secret` de PI (`role==='admin'`,
+ * verificado no use case — §6.3). `approve` (nível `authorizeModule`) é
+ * exigido para: avaliação de risco `probable` (RF-JUR-015), encerramento de
+ * processo (`close`), revogação de procuração, e rejeição de solicitação de
+ * titular/decisão e encerramento de incidente LGPD; a ATIVAÇÃO de contrato
+ * (`POST /contracts/:id/activate`) continua exigindo apenas
+ * `juridico:operate` — a alçada por valor (RF-JUR-003) é verificada DENTRO
+ * do use case (`ActivateContractUseCase`), consultando os approvals já
+ * registrados via `POST /contracts/:id/approve`, não um nível de RBAC
+ * adicional na rota de ativação.
  *
  * @module modules/juridico/presentation/routes/juridico
  */
@@ -37,10 +47,12 @@ const contractController = require('../controllers/contractController');
 const legalCaseController = require('../controllers/legalCaseController');
 const deadlineController = require('../controllers/deadlineController');
 const proxyController = require('../controllers/proxyController');
+const corporateActController = require('../controllers/corporateActController');
 const ipAssetController = require('../controllers/ipAssetController');
 const lgpdController = require('../controllers/lgpdController');
 const alertController = require('../controllers/alertController');
 const reportController = require('../controllers/reportController');
+const { authorizeAnyModule } = require('../../../../middlewares/authorizeAnyModule');
 
 router.use(authenticate);
 
@@ -50,6 +62,13 @@ router.use(authenticate);
 // `authorizeModule('juridico', 'operate')` abaixo, que bloquearia
 // `financeiro` sem módulo `juridico`.
 router.get('/reports/financeiro', reportController.financeiro);
+
+// `POST /contracts/:id/approve` (RF-JUR-003, alçada de aprovação por
+// valor, correção 2026-08-08) é a SEGUNDA exceção do módulo: aprovadores
+// `diretor`/`financeiro` não necessariamente têm o módulo `juridico` —
+// por isso é montada ANTES do gate geral, com `authorizeAnyModule` (OR
+// diretor/financeiro) no lugar de `authorizeModule('juridico', ...)`.
+router.post('/contracts/:id/approve', authorizeAnyModule([{ moduleKey: 'diretor' }, { moduleKey: 'financeiro' }]), contractController.approve);
 
 router.use(authorizeModule('juridico', 'operate'));
 
@@ -96,14 +115,16 @@ router.post('/legal-case-deadlines/:id/acknowledge', deadlineController.acknowle
 router.post('/legal-case-deadlines/:id/fulfill', deadlineController.fulfill);
 router.post('/legal-case-deadlines/:id/confirm', deadlineController.confirm);
 
-// ---- Grupo 4 — Procurações (UC-55, 4 dos 6 endpoints do grupo) ----
-// `corporate-acts` (2 endpoints, RF-JUR-030) NÃO implementado nesta passada
-// — sem tabela modelada (`jur_corporate_acts` não existe nas 16 migrations
-// aplicadas). Pendência explícita, ver `docs/governance/HANDOFF_CODEX.md`.
+// ---- Grupo 4 — Procurações (UC-55, 4 endpoints) + Atos Societários (RF-JUR-030, 4 endpoints, IMPLEMENTADO em 2026-08-08) ----
 router.get('/proxies', proxyController.list);
 router.get('/proxies/:id', proxyController.getById);
 router.post('/proxies', proxyController.create);
 router.post('/proxies/:id/revoke', authorizeModule('juridico', 'approve'), proxyController.revoke);
+
+router.get('/corporate-acts', corporateActController.list);
+router.get('/corporate-acts/:id', corporateActController.getById);
+router.post('/corporate-acts', corporateActController.create);
+router.put('/corporate-acts/:id', corporateActController.update);
 
 // ---- Grupo 5 — Propriedade Intelectual (RF-JUR-031 a 034, 6 endpoints) ----
 // `trade_secret` exige role==='admin' — verificado dentro do use case

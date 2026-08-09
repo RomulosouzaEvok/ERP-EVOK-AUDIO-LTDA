@@ -12233,3 +12233,75 @@ nível `approve` já existiam no catálogo desde o backend anterior).
 - Leads com `needs_review=true` (produto do saneamento da migration
   `000312`) devem aparecer destacados na aba Leads assim que a migration
   rodar em banco com dado real.
+
+---
+
+## BLOCO 3 Jurídico — correção das 2 pendências reais: Atos Societários (RF-JUR-030) e alçada de aprovação de contrato por valor (RF-JUR-003) — 2026-08-08
+
+**Data**: 2026-08-08
+**Escopo**: Backend (`server/`) apenas — implementa as 2 pendências deixadas explícitas ao final da passada 2 do Bloco 3 Jurídico (`docs/governance/TODO.md`, seções "Pendencia real 1/2", e o cabeçalho de `ActivateContractUseCase.ts`), com regras de negócio decididas pelo dono do produto.
+**Status**: Concluído (backend); migrations não aplicadas ao banco (deixadas para revisão manual, conforme instrução da tarefa); sem tela nova em `client/` (fora de escopo).
+
+### Resumo da feature
+
+1. **RF-JUR-030 — Atos Societários (`corporate-acts`)**: CRUD mínimo (create/list/getById/update) sobre nova tabela `jur_corporate_acts`, sem FK para contrato/caso (entidade própria da Secretaria/Governança). Edição bloqueada após `status='registered'`; a transição `draft -> registered` ocorre quando `registration_protocol` e `registered_at` são informados juntos no `PUT`.
+2. **RF-JUR-003 — Alçada de aprovação de contrato por valor**: 3 faixas sobre `jur_contracts.value` — `<= R$ 50.000` ativa direto (comportamento existente); `R$ 50.000 < valor <= R$ 300.000` exige 1 aprovação `diretor`; `> R$ 300.000` exige `diretor` e `financeiro`. Novo endpoint `POST /api/jur/contracts/:id/approve` grava em `jur_contract_approvals` (unique por `contract_id`+`approver_role`); `ActivateContractUseCase` passa a validar os approvals antes de transicionar para `active`.
+
+### Arquivos criados
+
+RF-JUR-030 (Atos Societários):
+- `server/migrations/20260808-000001-create-jur-corporate-acts.cjs`
+- `server/src/models/JurCorporateAct.ts`
+- `server/src/modules/juridico/domain/entities/CorporateActTypes.ts`
+- `server/src/modules/juridico/domain/repositories/CorporateActRepository.ts`
+- `server/src/modules/juridico/infrastructure/sequelize/SequelizeCorporateActRepository.ts`
+- `server/src/modules/juridico/application/use-cases/corporateAct/CreateCorporateActUseCase.ts`
+- `server/src/modules/juridico/application/use-cases/corporateAct/ListCorporateActsUseCase.ts`
+- `server/src/modules/juridico/application/use-cases/corporateAct/GetCorporateActByIdUseCase.ts`
+- `server/src/modules/juridico/application/use-cases/corporateAct/UpdateCorporateActUseCase.ts`
+- `server/src/modules/juridico/presentation/controllers/corporateActController.ts`
+- `server/tests/unit/juridico-corporate-act-use-cases.test.ts` (10 casos)
+
+RF-JUR-003 (alçada de aprovação de contrato):
+- `server/migrations/20260808-000002-create-jur-contract-approvals.cjs`
+- `server/src/models/JurContractApproval.ts`
+- `server/src/modules/juridico/domain/constants.ts` (thresholds `JUR_APPROVAL_THRESHOLD_DIRECTOR`/`JUR_APPROVAL_THRESHOLD_FINANCE` + `requiredApproverRoles()`)
+- `server/src/modules/juridico/domain/repositories/ContractApprovalRepository.ts`
+- `server/src/modules/juridico/infrastructure/sequelize/SequelizeContractApprovalRepository.ts`
+- `server/src/modules/juridico/application/use-cases/contract/ApproveContractUseCase.ts`
+
+### Arquivos modificados
+
+- `server/src/models/index.ts` — imports/registro de `JurCorporateAct`/`JurContractApproval`, associação `JurContract.hasMany(JurContractApproval, { as: 'approvals' })`.
+- `server/src/shared/domain/accessModules.ts` — novo módulo de acesso `diretor` (chave + label + comentário de cabeçalho documentando a decisão); `financeiro` já existia no catálogo (Contas a Pagar/Receber) e passou a ser reaproveitado como segundo papel de aprovador.
+- `server/src/modules/juridico/application/use-cases/contract/ActivateContractUseCase.ts` — construtor ganhou 3º parâmetro opcional `approvalRepository`; antes de ativar, se `requiredApproverRoles(contract.value)` não for vazio, consulta `jur_contract_approvals` e bloqueia com `BusinessRuleError` (regra `RF-JUR-003`) listando os papéis faltantes; comentário de cabeçalho atualizado removendo a nota de pendência.
+- `server/src/modules/juridico/presentation/controllers/contractController.ts` — injeta `SequelizeContractApprovalRepository` em `ActivateContractUseCase`; novo `exports.approve` (`POST .../approve`); novo helper `resolveAvailableApproverRoles(req)` (lê `req.user.permissions.diretor`/`.financeiro`, `role==='admin'` conta como tendo os dois).
+- `server/src/modules/juridico/presentation/routes/juridico.ts` — nova rota `GET/POST /corporate-acts` + `GET/PUT /corporate-acts/:id` (dentro do gate geral `authorizeModule('juridico','operate')`); nova rota `POST /contracts/:id/approve` montada ANTES do gate geral, com `authorizeAnyModule([{moduleKey:'diretor'},{moduleKey:'financeiro'}])` (aprovador de alçada não necessariamente tem o módulo `juridico`); cabeçalho do arquivo atualizado.
+- `server/tests/unit/juridico-contract-use-cases.test.ts` — `makeContract()` teve o `value` padrão reduzido de `150000.00` para `10000.00` (para não quebrar os testes de `ActivateContractUseCase` já existentes, que não testam alçada — valor agora fica dentro da faixa "sem aprovação extra"); mais 11 casos novos (`ActivateContractUseCase` — RF-JUR-003: as 3 faixas, com e sem approvals; `ApproveContractUseCase`: fluxo principal, desambiguação de papel, anti-spoofing de papel, papel não exigido pelo valor, duplicidade, contrato inexistente).
+
+### Documentações atualizadas
+
+- `docs/governance/TODO.md` — as 2 "Pendencia real" marcadas `[x]` com evidência; nova entrada datada "2026-08-08 — BLOCO 3 Jurídico: correção das 2 pendências reais".
+- `docs/database/DATABASE.md` — nova seção "BLOCO 3 Jurídico — correção das 2 pendências reais: Atos Societários e alçada de aprovação (2026-08-08)" com as 2 tabelas novas documentadas coluna a coluna (resumo) e a regra de negócio das 3 faixas.
+- `docs/projeto/04-USE_CASES.md` — nota de RF-JUR-003 na seção UC-52-JUR atualizada de "não implementada" para referência à nova seção; nova seção "UC-52-JUR / UC-55-JUR (correção, 2026-08-08)" com o detalhamento funcional das 2 features.
+- Este arquivo (`docs/governance/HANDOFF_CODEX.md`).
+
+### Decisões tomadas onde algo não estava 100% especificado
+
+1. **Nome do campo de valor do contrato**: confirmado como `value` (não `contract_value`/`total_value`) — `jur_contracts.value` (`DECIMAL(18,6)`), conforme `server/src/models/JurContract.ts` e `ContractTypes.ts`.
+2. **Módulo de acesso `financeiro`**: já existia no catálogo (`accessModules.ts`) — reaproveitado como está, sem criar um módulo novo. Apenas `diretor` foi criado do zero.
+3. **`requiredLevel` em `authorizeAnyModule`**: usado com o default (`operate`) para os dois candidatos — não há distinção de nível `approve` dentro do papel de aprovador nesta rodada (o próprio ato de possuir o módulo `diretor`/`financeiro` já caracteriza o papel; não há uma segunda trava de nível dentro de cada um).
+4. **Desambiguação de papel (`desiredRole`/`role` no body)**: implementado como campo auxiliar `role` no body de `POST .../approve`, obrigatório apenas quando `availableRoles.length > 1` (usuário tem os dois perfis simultaneamente) — decisão de UX simples seguindo a orientação do enunciado ("isso é auxiliar, a autorização real vem do RBAC").
+5. **Contrato exigir o papel para poder aprovar**: `ApproveContractUseCase` rejeita (`BusinessRuleError`) uma aprovação de um papel que `requiredApproverRoles(contract.value)` não exige para o valor atual do contrato (ex.: tentar aprovar como `financeiro` um contrato de R$ 100.000, que só exige `diretor`) — interpretação estrita de "exige 1 aprovação de X" como também significando "não faz sentido aceitar aprovação de um papel que a faixa não pede", para evitar registro de approvals órfãos/sem efeito.
+6. **`ActivateContractInput.approverHasApprove`**: mantido no tipo/contrato do controller por compatibilidade (não usado pela nova lógica de alçada — a checagem de alçada agora é 100% baseada em `jur_contract_approvals`, não em "quem está clicando em ativar tem approve no módulo juridico").
+7. **Numeração das migrations**: seguiu literalmente a sugestão do enunciado (`20260808-000001`/`20260808-000002`), mesmo havendo migrations já numeradas até `20260807-000315` (Marketing) — não há conflito de timestamp/ordem de execução (data posterior).
+8. **`document_file_path` de `jur_corporate_acts`**: sem upload real nesta rodada (mesmo padrão do resto do módulo) — campo é só referência de string.
+
+### Instruções de teste para o próximo agente/humano
+
+1. **Migrations**: revisar e aplicar manualmente `20260808-000001-create-jur-corporate-acts.cjs` e `20260808-000002-create-jur-contract-approvals.cjs` (não aplicadas automaticamente, conforme instrução da tarefa) — `npm run migration:up` a partir de `server/`.
+2. **RBAC**: criar/editar um Perfil de Acesso com módulo `diretor` (e outro com `financeiro`) via `/api/access-profiles` para testar `POST /api/jur/contracts/:id/approve` de ponta a ponta contra banco real.
+3. **Fluxo completo approve -> activate**: criar um contrato com `value` em cada uma das 3 faixas (ex.: 40000, 150000, 500000), tentar ativar sem aprovação (deve bloquear nas faixas 2/3), aprovar com os papéis certos, ativar novamente (deve liberar). Testar duplicidade (2º approve do mesmo papel deve rejeitar) e desambiguação (usuário com os dois perfis, sem informar `role`, deve pedir para desambiguar).
+4. **Atos Societários**: criar em `draft`, editar campos livremente, definir `registration_protocol`+`registered_at` juntos (deve virar `registered`), tentar editar depois (deve bloquear com 422).
+5. **Regressão**: `npm run typecheck` (limpo) e `npm run test:unit` (1198/1198 passando, incluindo os 21 casos novos) já validados nesta rodada — reexecutar após aplicar as migrations para garantir que não há erro de schema real (só foi validado com repositórios mockados).
+6. **Fora de escopo, não testado**: nenhuma tela nova em `client/` (Atos Societários, aprovação de contrato) — endpoints prontos, aguardando o passo de frontend.

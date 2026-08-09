@@ -3761,17 +3761,32 @@ banco e validacao da API semanticamente identicas), integracao com
 presente em `accessModules.ts`, niveis operate/approve consistentes com
 os 5 UCs, excecao `role==='admin'` do `trade_secret` isolada e coerente).
 
-- [ ] **Pendencia real 1 (RF-JUR-030):** `GET/POST /api/jur/corporate-acts`
-  (atos societarios) e um endpoint do contrato de API sem NENHUMA tabela
-  correspondente no Modelo de Dados — gap ja reconhecido por ambos os
-  autores, mas nao resolvido. `AdmDBA` precisa modelar uma tabela minima
-  (`jur_corporate_acts`, sugestao desta auditoria) antes do `programador`
-  implementar essa rota, senao ela fica sem persistencia.
-- [ ] **Pendencia real 2 (RF-JUR-003):** tabela de alcada de aprovacao de
-  contrato por valor/tipo (`jur_approval_thresholds`) permanece nao
-  modelada, decisao de negocio pendente (alcadas reais a confirmar com o
-  assessor juridico) — ja documentado de forma consistente nos 3
-  artefatos, nao bloqueia o nucleo critico do modulo.
+- [x] **Pendencia real 1 (RF-JUR-030) — RESOLVIDA em 2026-08-08:**
+  `GET/POST /api/jur/corporate-acts` + `GET/PUT /api/jur/corporate-acts/:id`
+  implementados com tabela `jur_corporate_acts` (migration
+  `20260808-000001-create-jur-corporate-acts.cjs`, model `JurCorporateAct`,
+  CRUD completo `Create/List/GetById/UpdateCorporateActUseCase`,
+  `corporateActController.ts`). Edicao bloqueada apos `status='registered'`
+  (imutabilidade pos-registro, mesmo espirito de outras entidades do
+  modulo). Testes: `server/tests/unit/juridico-corporate-act-use-cases.test.ts`
+  (10 casos).
+- [x] **Pendencia real 2 (RF-JUR-003) — RESOLVIDA em 2026-08-08:** alcada de
+  aprovacao de contrato por valor implementada com 3 faixas definidas pelo
+  dono do produto (constantes de codigo em
+  `server/src/modules/juridico/domain/constants.ts`, sem tabela de
+  configuracao editavel nesta rodada): valor <= R$ 50.000 ativa direto
+  (comportamento existente); R$ 50.000 < valor <= R$ 300.000 exige 1
+  aprovacao `diretor`; valor > R$ 300.000 exige `diretor` + `financeiro`.
+  Tabela `jur_contract_approvals` (migration
+  `20260808-000002-create-jur-contract-approvals.cjs`, unique
+  `contract_id`+`approver_role`), novo endpoint
+  `POST /api/jur/contracts/:id/approve` (`ApproveContractUseCase`,
+  `authorizeAnyModule([{moduleKey:'diretor'},{moduleKey:'financeiro'}])`,
+  `approver_user_id`/`approver_role` sempre resolvidos do JWT/RBAC, nunca do
+  body), `ActivateContractUseCase` ajustado para consultar os approvals
+  antes de ativar. Novo modulo de acesso `diretor` adicionado a
+  `accessModules.ts` (`financeiro` ja existia). Testes: 11 casos novos em
+  `server/tests/unit/juridico-contract-use-cases.test.ts`.
 - [x] **Plano de Substituicao do Modulo Enxuto (secao 6 do relatorio) —
   EXECUTADO em 2026-08-07 (`programador`, passada 1/2):** migration
   `20260807-000280-migrate-legal-lean-to-jur.cjs` copia `legal_contracts`/
@@ -4287,3 +4302,58 @@ os models Sequelize foram escritos para o schema-alvo dessas migrations.
   API nesta rodada; teste de integração real (Postgres) do fluxo completo
   (conversão atômica, handoff, saneamento) ainda não executado — só
   unitário com repositórios mockados.
+
+## 2026-08-08 — BLOCO 3 Jurídico: correção das 2 pendências reais (RF-JUR-030, RF-JUR-003) — `programador`
+
+**Escopo:** fecha as 2 pendências deixadas explícitas no cabeçalho de
+`ActivateContractUseCase.ts` e nas seções "Pendencia real 1/2" acima, com
+regras de negócio decididas pelo dono do produto em 2026-08-08.
+
+- [x] **RF-JUR-030 (Atos Societários):** tabela `jur_corporate_acts`
+  (migration `20260808-000001-create-jur-corporate-acts.cjs`), model
+  `JurCorporateAct` (`server/src/models/JurCorporateAct.ts`), CRUD completo
+  (`CreateCorporateActUseCase`, `ListCorporateActsUseCase`,
+  `GetCorporateActByIdUseCase`, `UpdateCorporateActUseCase`) e
+  `corporateActController.ts`. Rotas `GET/POST /api/jur/corporate-acts` e
+  `GET/PUT /api/jur/corporate-acts/:id`, `authorizeModule('juridico', 'operate')`
+  igual ao resto do módulo. Edição bloqueada quando `status='registered'`
+  (`BusinessRuleError`); transição `draft→registered` acontece no `PUT`
+  quando `registration_protocol`+`registered_at` são informados juntos.
+- [x] **RF-JUR-003 (alçada de aprovação de contrato por valor):** 3 faixas
+  definidas pelo dono do produto — valor <= R$ 50.000 ativa direto
+  (comportamento existente, não alterado); R$ 50.000 < valor <= R$ 300.000
+  exige 1 aprovação `diretor`; valor > R$ 300.000 exige `diretor` E
+  `financeiro`. Thresholds como constantes de código
+  (`server/src/modules/juridico/domain/constants.ts`,
+  `JUR_APPROVAL_THRESHOLD_DIRECTOR`/`JUR_APPROVAL_THRESHOLD_FINANCE`), mesmo
+  padrão de `marketing/domain/constants.ts` (sem tabela de configuração
+  editável nesta rodada). Nova tabela `jur_contract_approvals` (migration
+  `20260808-000002-create-jur-contract-approvals.cjs`, unique
+  `contract_id`+`approver_role`), model `JurContractApproval`, novo
+  endpoint `POST /api/jur/contracts/:id/approve`
+  (`ApproveContractUseCase`) montado ANTES do gate geral do módulo com
+  `authorizeAnyModule([{moduleKey:'diretor'},{moduleKey:'financeiro'}])`
+  (aprovadores de alçada não necessariamente têm o módulo `juridico`).
+  `approver_user_id` sempre de `req.user.id`; `approver_role` sempre
+  resolvido do RBAC (`req.user.permissions.diretor`/`.financeiro` no
+  controller), nunca aceito do body — `role` no body só desambigua quando o
+  aprovador tem os dois perfis. `ActivateContractUseCase` ajustado para
+  consultar `jur_contract_approvals` via novo `ContractApprovalRepository`
+  antes de ativar, lançando `BusinessRuleError` listando os papéis
+  faltantes quando aplicável.
+- [x] Novo módulo de acesso `diretor` adicionado a
+  `server/src/shared/domain/accessModules.ts` (`financeiro` já existia no
+  catálogo e passou a ser reaproveitado como segundo papel de aprovador).
+- [x] Testes: `server/tests/unit/juridico-corporate-act-use-cases.test.ts`
+  (10 casos, novo) + 11 casos novos em
+  `server/tests/unit/juridico-contract-use-cases.test.ts`
+  (`ActivateContractUseCase` — RF-JUR-003, `ApproveContractUseCase`).
+  Suíte completa do server: 1198/1198 unitários passando. `npm run
+  typecheck` limpo.
+- [ ] **Pendência residual, fora deste passo:** migrations
+  `20260808-000001`/`20260808-000002` ainda não aplicadas no banco (deixadas
+  para revisão/aplicação manual, conforme instrução da tarefa); nenhuma
+  tela nova em `client/` (fora de escopo — telas de Procurações/Atos
+  Societários e o botão de aprovação de contrato ficam para o próximo passo
+  de frontend); sem teste de integração real (Postgres) do fluxo completo
+  approve→activate — só unitário com repositórios mockados.

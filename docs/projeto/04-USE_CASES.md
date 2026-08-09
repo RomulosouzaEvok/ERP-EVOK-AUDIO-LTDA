@@ -1883,8 +1883,9 @@ reajuste (se índice ≠ `none`). Aditivos (`POST .../addendums`) preservam
 snapshot de valores anteriores e atualizam o contrato na mesma chamada —
 imutáveis a partir da criação (trigger de banco). `POST .../terminate`
 bloqueia qualquer reversão `expired`/`terminated → active` (E2).
-Alçada de aprovação por valor/tipo (RF-JUR-003) **não implementada** nesta
-passada — tabela `jur_approval_thresholds` ainda não modelada.
+Alçada de aprovação por valor (RF-JUR-003) **IMPLEMENTADA em 2026-08-08**
+(correção) — ver seção "UC-52-JUR / UC-55-JUR (correção, 2026-08-08)"
+abaixo.
 
 **UC-53-JUR — Gerenciar Contencioso (Processo, Andamento, Provisão,
 Advogado Externo):** `POST /api/jur/legal-cases` exige `case_number_cnj`
@@ -1930,6 +1931,49 @@ sem `escalation_user_id`). Ver `docs/governance/HANDOFF_CODEX.md` e
 `docs/business/BLOCO_3_JUR_API.md` (contrato completo, 71 endpoints — 35
 implementados nesta passada, 36 restantes para a passada 2: Procurações,
 Propriedade Intelectual, LGPD, Transversal).
+
+## UC-52-JUR / UC-55-JUR (correção, 2026-08-08): alçada de aprovação de contrato por valor + Atos Societários
+
+Fecha as 2 pendências reais deixadas na passada 2 do Bloco 3 (ver nota de
+numeração acima — mesmo sufixo `-JUR`), com regras de negócio decididas
+pelo dono do produto.
+
+**RF-JUR-003 — Alçada de aprovação de contrato por valor (extensão de
+UC-52-JUR):** 3 faixas sobre `jur_contracts.value` (constantes de código,
+`server/src/modules/juridico/domain/constants.ts`): `<= R$ 50.000` ativa
+direto (comportamento já existente); `R$ 50.000 < valor <= R$ 300.000`
+exige 1 aprovação `diretor`; `> R$ 300.000` exige `diretor` **e**
+`financeiro`. Novo endpoint `POST /api/jur/contracts/:id/approve`
+(`ApproveContractUseCase`) grava em `jur_contract_approvals` (unique
+`contract_id`+`approver_role` — nunca duplicado). `approver_user_id` sempre
+de `req.user.id`; `approver_role` sempre resolvido pelo módulo de acesso do
+aprovador (`diretor`/`financeiro`, novo módulo `diretor` em
+`accessModules.ts`), nunca aceito do body — `role` no body só desambigua
+quando o usuário tem os dois perfis. Rota protegida por
+`authorizeAnyModule([{moduleKey:'diretor'},{moduleKey:'financeiro'}])`,
+montada antes do gate geral `authorizeModule('juridico', ...)` (aprovador
+de alçada não necessariamente tem o módulo `juridico`).
+`POST /api/jur/contracts/:id/activate` passa a consultar os approvals
+registrados antes de transicionar para `active`, bloqueando com
+`BusinessRuleError` (regra `RF-JUR-003`) e listando os papéis faltantes.
+
+**RF-JUR-030 — Atos Societários (extensão de UC-55-JUR, Procurações):**
+`GET/POST /api/jur/corporate-acts` e `GET/PUT /api/jur/corporate-acts/:id`
+sobre nova tabela `jur_corporate_acts` (assembleia geral, reunião de
+sócios, alteração contratual/estatutária, deliberação de diretoria,
+outros) — entidade própria da Secretaria/Governança, sem FK para
+contrato/caso. Criado sempre em `status='draft'`; `PUT` bloqueado depois de
+`status='registered'` (imutabilidade pós-registro, `BusinessRuleError`); a
+transição `draft → registered` acontece quando `registration_protocol` e
+`registered_at` são informados juntos (o registro na Junta Comercial pode
+ficar pendente por um tempo após `act_date`). RBAC igual ao resto do
+módulo: `authorizeModule('juridico', 'operate')`.
+
+**Testes:** `server/tests/unit/juridico-corporate-act-use-cases.test.ts`
+(10 casos, novo) + 11 casos novos em
+`server/tests/unit/juridico-contract-use-cases.test.ts`. Ver
+`docs/governance/TODO.md` (entrada 2026-08-08) e
+`docs/governance/HANDOFF_CODEX.md` para o detalhamento completo.
 
 ---
 

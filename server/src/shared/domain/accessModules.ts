@@ -154,6 +154,17 @@
  * bancárias, criação/edição de operação em `active`) e a leitura usa o
  * nível padrão (`authorizeModule('tesouraria')`, `operate` implícito).
  *
+ * `diretor` foi adicionado em 2026-08-08 (correção RF-JUR-003, decisão do
+ * dono do produto) para representar o papel de aprovador de alçada de
+ * contrato — usado exclusivamente por `ApproveContractUseCase`
+ * (`server/src/modules/juridico/`) para determinar `approver_role` a partir
+ * do perfil de acesso do usuário logado (nunca aceito do body). Não é usado
+ * para bloquear rota inteira de nenhum outro módulo — é um papel
+ * transversal de aprovação, não um domínio de dados. `financeiro` já
+ * existia no catálogo (Contas a Pagar/Receber) e passou a ser reaproveitado
+ * também como o segundo papel de aprovador nas faixas de maior valor
+ * (RF-JUR-003, `server/src/modules/juridico/domain/constants.ts`).
+ *
  * `controladoria` foi adicionado em 2026-08-07 para o módulo Controladoria
  * (subárea CTR do departamento Financeiro, sem linha própria em
  * `departments` — `docs/financeiro/00-README.md`, escopo "Custos
@@ -195,6 +206,7 @@ export type AccessModuleKey =
   | 'patrimonio'
   | 'manutencao'
   | 'garantia'
+  | 'diretor'
   | 'rh'
   | 'sst'
   | 'ti'
@@ -249,6 +261,7 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   { key: 'patrimonio', label: 'Patrimônio' },
   { key: 'manutencao', label: 'Manutenção' },
   { key: 'garantia', label: 'Garantia/Assistência Técnica' },
+  { key: 'diretor', label: 'Diretoria (aprovador de alçada, RF-JUR-003)' },
   { key: 'rh', label: 'Recursos Humanos (dados sensíveis)' },
   { key: 'sst', label: 'Segurança e Saúde do Trabalho (dados sensíveis)' },
   { key: 'ti', label: 'Tecnologia da Informação (helpdesk, patrimônio de TI, acessos)' },
