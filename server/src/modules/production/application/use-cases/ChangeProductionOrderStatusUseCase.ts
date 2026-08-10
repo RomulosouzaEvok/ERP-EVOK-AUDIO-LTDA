@@ -150,7 +150,19 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * @throws {ConflictError} Se estoque/custo falhar.
    */
   private async completeOrder(order: any, previousStatus: string, producedQty: number, input: ChangeProductionOrderStatusInput, transaction: any): Promise<void> {
-    if (producedQty <= 0) return;
+    // Concluir com quantidade zero nao e conclusao — e cancelamento. Ate
+    // 2026-08-09 este `return` silencioso marcava a OP como `completed` sem
+    // consumir nada, sem criar lote e, pior, sem liberar a reserva de
+    // material (a liberacao mora dentro do bloco da explosao, abaixo), que
+    // ficava presa indefinidamente (gap G2 da auditoria da cadeia do produto).
+    if (producedQty <= 0) {
+      throw new BusinessRuleError(
+        `Nao e possivel concluir a OP ${order.order_number} com quantidade produzida zero. `
+        + 'Informe a quantidade produzida, ou cancele a OP (status `canceled`) — o cancelamento libera '
+        + 'o material reservado, a conclusao com zero deixaria a reserva presa.',
+        { rule: 'G2', orderNumber: order.order_number, quantityProduced: producedQty },
+      );
+    }
 
     try {
       // Roteamento de deposito (Bloco 4, BUSINESS_RULES.md §12 item 7):
@@ -159,11 +171,24 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       const insumosWarehouse = await WarehouseStockService.getWarehouseByCode('INSUMOS', transaction);
       const acabadosWarehouse = await WarehouseStockService.getWarehouseByCode('ACABADOS', transaction);
 
+      // A explosao da BOM governa TUDO na conclusao: consumo de componentes,
+      // baixa de lote e o custo que entra no estoque. Ate 2026-08-09 o 404 de
+      // "sem BOM ativa" era engolido aqui, e a OP concluia mesmo assim — nada
+      // era consumido, nenhum lote baixado, e o produto acabado entrava em
+      // estoque com custo ZERO, contaminando o custo medio de todo o resto
+      // (gap G2 da auditoria da cadeia do produto). Concluir sem BOM ativa
+      // passa a ser erro de negocio explicito.
       let explosion: any = null;
       try {
         explosion = await BomService.explodeBOM(order.product_id, producedQty, { includeCost: true });
       } catch (bomError: any) {
         if (bomError.statusCode !== 404) throw bomError;
+        throw new BusinessRuleError(
+          `Nao e possivel concluir a OP ${order.order_number}: o produto nao tem estrutura (BOM) ativa. `
+          + 'Sem ela o sistema nao sabe o que consumir nem quanto o produto custa — concluir assim faria o '
+          + 'produto acabado entrar em estoque com custo zero. Ative uma BOM para este produto e conclua novamente.',
+          { rule: 'G2', productId: order.product_id, orderNumber: order.order_number },
+        );
       }
 
       if (explosion) {

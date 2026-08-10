@@ -1,6 +1,13 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    // `expo/tsconfig.base` ainda define `moduleResolution: "node"` (node10),
+    // descontinuado no TypeScript 5.x e removido no 7.0. Metro resolve como
+    // bundler, entao `bundler` e o modo correto aqui — e o mesmo ja usado em
+    // `client/tsconfig.app.json`. `module: esnext` e pre-requisito de
+    // `moduleResolution: bundler`.
+    "module": "esnext",
+    "moduleResolution": "bundler"
   }
 }

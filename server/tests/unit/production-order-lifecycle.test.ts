@@ -274,6 +274,10 @@ describe('Production Order Lifecycle (F.10)', () => {
           order_number: 'OP-2026-0001',
           product_id: 1,
           quantity: 10,
+          // Sem `due_date` este mock estourava ValidationError ja no construtor da
+          // entidade, e o teste passava sem nunca exercitar a regra de
+          // rastreabilidade que ele promete cobrir (verde pelo motivo errado).
+          due_date: new Date('2026-08-20'),
         })),
         update: jest.fn(),
         findByIdWithProductSummary: jest.fn(async () => ({ id: 1, status: 'completed' })),
@@ -694,6 +698,66 @@ describe('Production Order Lifecycle (F.10)', () => {
       );
 
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('Conclusao de OP — gap G2 (produto entrando em estoque com custo zero)', () => {
+    // `due_date` e obrigatorio na validacao da entidade (ProductionOrderEntity.validate).
+    // Sem ele o construtor estoura ValidationError e o teste nunca chega na regra
+    // que pretende exercitar — cuidado ao copiar mocks de OP daqui.
+    const makeRepo = () => ({
+      listTrackingByOrderForUpdate: jest.fn(async () => []),
+      findByIdForUpdate: jest.fn(async () => ({
+        id: 1,
+        status: 'in_progress',
+        order_number: 'OP-2026-0001',
+        product_id: 1,
+        quantity: 10,
+        quantity_produced: 0,
+        due_date: '2026-12-31',
+      })),
+      update: jest.fn(),
+      findByIdWithProductSummary: jest.fn(async () => ({ id: 1, status: 'completed' })),
+    });
+
+    it('bloqueia conclusao quando o produto nao tem BOM ativa, em vez de entrar com custo zero', async () => {
+      const repo = makeRepo();
+      const bomNotFound: any = new Error('BOM ativa nao encontrada');
+      bomNotFound.statusCode = 404;
+      BomService.explodeBOM.mockRejectedValueOnce(bomNotFound);
+
+      await expect(
+        new ChangeProductionOrderStatusUseCase(repo).execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
+      ).rejects.toBeInstanceOf(BusinessRuleError);
+
+      // Nada pode ter entrado em estoque nem sido custeado, e a OP nao pode ter sido marcada concluida.
+      expect(InventoryService.receive).not.toHaveBeenCalled();
+      expect(CostingService.registerWeightedAverageCost).not.toHaveBeenCalled();
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('propaga erro de BOM que nao seja 404 sem transformar em regra de negocio', async () => {
+      const repo = makeRepo();
+      const bomBoom: any = new Error('falha inesperada na explosao');
+      bomBoom.statusCode = 500;
+      BomService.explodeBOM.mockRejectedValueOnce(bomBoom);
+
+      await expect(
+        new ChangeProductionOrderStatusUseCase(repo).execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
+      ).rejects.toThrow('falha inesperada na explosao');
+      expect(InventoryService.receive).not.toHaveBeenCalled();
+    });
+
+    it('bloqueia conclusao com quantidade produzida zero (deixaria a reserva de material presa)', async () => {
+      const repo = makeRepo();
+
+      await expect(
+        new ChangeProductionOrderStatusUseCase(repo).execute({ id: 1, status: 'completed', quantity_produced: 0, user_id: 1 })
+      ).rejects.toBeInstanceOf(BusinessRuleError);
+
+      expect(InventoryService.receive).not.toHaveBeenCalled();
+      expect(InventoryService.releaseReservation).not.toHaveBeenCalled();
+      expect(repo.update).not.toHaveBeenCalled();
     });
   });
 });
