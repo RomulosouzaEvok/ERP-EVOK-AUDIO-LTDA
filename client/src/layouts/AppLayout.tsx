@@ -41,6 +41,7 @@ import {
   Scale,
   Calculator,
   PiggyBank,
+  ListOrdered,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -141,6 +142,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Produção', to: '/production', icon: Factory, module: 'producao' },
       { label: 'Chão de Fábrica', to: '/production/shop-floor', icon: ClipboardList, module: 'chao_de_fabrica' },
+      { label: 'Roteiros de Fabricação', to: '/production/routes', icon: ListOrdered, module: 'producao' },
       { label: 'Centros de Trabalho', to: '/production/work-centers', icon: Factory, module: 'centros_de_trabalho' },
       { label: 'MRP', to: '/production/mrp', icon: ListTree, module: 'mrp' },
       { label: 'Requisições de Produção', to: '/production/requisitions', icon: ClipboardList, module: 'producao' },
@@ -262,6 +264,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/production': ['Produção'],
   '/production/bom': ['Produção', 'Estrutura de produto (BOM)'],
   '/production/shop-floor': ['Produção', 'Chão de Fábrica'],
+  '/production/routes': ['Produção', 'Roteiros de Fabricação'],
   '/production/work-centers': ['Produção', 'Centros de Trabalho'],
   '/production/mrp': ['Produção', 'MRP'],
   '/production/requisitions': ['Produção', 'Requisições de Produção'],

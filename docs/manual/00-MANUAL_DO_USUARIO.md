@@ -121,7 +121,7 @@ filas de recebimento, requisições, expedição e qualidade — ver
 
 ---
 
-## 4. Compras / Suprimentos (`/purchases`, `/purchases/suppliers`, `/purchases/rfqs`, `/purchases/requisitions`) — conteúdo completo
+## 4. Compras / Suprimentos (`/purchases`, `/purchases/suppliers`, `/purchases/rfqs`, `/purchases/comex`, `/purchases/requisitions`) — conteúdo completo
 
 Fluxo completo ponta a ponta: **requisição → (opcional) RFQ/cotação →
 pedido de compra → recebimento**, refletindo a decisão arquitetural de que
@@ -183,7 +183,45 @@ toda compra nasce em uma requisição (`CLAUDE.md` §7).
 5. A conta a pagar é gerada **automaticamente só depois do recebimento**,
    nunca no momento da aprovação do pedido.
 
-### 4.6 Cadastrar e avaliar fornecedores
+### 4.6 Importar do exterior (Comex, UC-19)
+Menu **Compras → Importação (Comex)** (`/purchases/comex`). É um fluxo
+**paralelo** ao pedido de compra nacional: não gera pedido de compra, tem
+número próprio (`IMP-<ano>-XXXX`) e termina dando entrada no estoque com o
+custo já nacionalizado.
+
+1. **Registrar o processo** — "Novo processo": fornecedor, moeda FOB,
+   câmbio, frete, seguro e outras despesas (em R$) e os itens com preço FOB
+   unitário e as alíquotas de II/IPI/PIS/COFINS/ICMS. As alíquotas são
+   **digitadas pelo analista** — o sistema não consulta Siscomex/NCM. O
+   processo nasce em **Rascunho** e os tributos e o custo nacionalizado por
+   item já aparecem calculados.
+2. **Aprovação da diretoria (obrigatória, qualquer valor)** — abra o
+   processo e use o bloco "Aprovação da diretoria". Só um usuário com o
+   papel **Diretoria** registra a aprovação (para enxergar o processo, esse
+   usuário precisa ter também o módulo **Importação (Comex)** no perfil de
+   acesso). Enquanto ela não existir, o botão de embarque fica bloqueado e a
+   tela explica o que falta. Não existe aprovação retroativa: depois do
+   embarque a diretoria não consegue mais aprovar.
+3. **Embarque** — "Registrar embarque" aceita apenas data e observação.
+   Câmbio, frete, seguro e outras despesas ficam **congelados** aqui: é o
+   valor que a diretoria aprovou. Para corrigi-los, cancele o processo e
+   recrie.
+4. **Chegada e desembaraço** — "Registrar chegada ao país" e "Registrar
+   desembaraço aduaneiro" aceitam despesas reais (armazenagem, capatazia,
+   câmbio final); ao informá-las, todos os itens são recalculados na hora.
+5. **Receber** — com o processo `Desembaraçado`, "Receber (entrada em
+   estoque)" dá entrada com o custo nacionalizado. O lote nasce em
+   **quarentena**, igual ao recebimento nacional (§4.5), e só é consumido
+   pela produção depois da liberação da Qualidade. Se algum item não tiver
+   produto correspondente cadastrado, o sistema recusa e indica o código —
+   cadastre o produto antes.
+6. **Cancelar** — possível em qualquer estado antes de `Recebido`,
+   informando o motivo.
+
+> Ainda **não** gera conta a pagar dos tributos automaticamente (pendência
+> G13, mesma decisão que vale para a compra nacional).
+
+### 4.7 Cadastrar e avaliar fornecedores
 1. Menu **Compras → Fornecedores** (`/purchases/suppliers`).
 2. Cadastro com dados fiscais, prazos e termos de pagamento.
 3. `rating` é preenchido manualmente pelo comprador; `quality_score` é
@@ -257,7 +295,7 @@ qualquer comportamento inesperado em campo.
 
 ---
 
-## 6. Produção / PCP (`/production`, `/production/bom`, `/production/mrp`, `/production/shop-floor`, `/production/work-centers`) — conteúdo completo
+## 6. Produção / PCP (`/production`, `/production/bom`, `/production/routes`, `/production/mrp`, `/production/shop-floor`, `/production/work-centers`) — conteúdo completo
 
 ### 6.1 Criar uma Ordem de Produção (OP) (UC-12)
 1. Menu **Produção** (`/production`) → "Nova OP".
@@ -321,6 +359,66 @@ qualquer comportamento inesperado em campo.
 1. Menu **Produção → Centros de Trabalho** (`/production/work-centers`).
 2. Cadastro de capacidade, turnos e custo/hora — usados tanto no cálculo
    de OEE (§6.5) quanto no custeio real de mão de obra da OP.
+
+### 6.7 Roteiro de fabricação — cadastrar as operações do produto (gap G5)
+Menu **Produção → Roteiros de Fabricação** (`/production/routes`).
+
+O roteiro é a sequência de operações que a fábrica executa em um produto —
+e é contra ele que o operador aponta a produção (§6.4). Sem roteiro
+cadastrado não há contra o que apontar, por isso esta tela é
+pré-requisito do apontamento por etapa exigido pelo **Bloco K do SPED
+Fiscal**.
+
+**Montar um roteiro novo**
+1. "Novo roteiro": escolha o produto (só aparecem **produto acabado** e
+   **subconjunto** ativos — é só isso que se fabrica), informe o código do
+   roteiro e, se quiser, a revisão (padrão `00`) e uma descrição. Ele
+   nasce em **rascunho**.
+2. No painel que abre embaixo, monte as operações:
+   - **Código da operação** é o número que o chão de fábrica conhece
+     (10, 20, 30...) — texto livre. O botão "Preencher códigos vazios de
+     10 em 10" numera sozinho as linhas que você deixou em branco.
+   - **Operação** é o nome (ex.: "Bobinar voice coil").
+   - **Centro de trabalho** é opcional; sem ele a operação simplesmente
+     não entra na carga-máquina nem no custeio por hora-máquina.
+   - **Tempo padrão** é por peça; **Setup** é por lote. São somados
+     separadamente de propósito (somar setup ao tempo padrão distorceria
+     o OEE).
+3. **A ordem das operações é a posição na lista** — 1, 2, 3... Use as
+   setas ↑ ↓ para mover e "Inserir abaixo" para encaixar uma operação no
+   meio: a numeração se refaz sozinha, você nunca digita o número da
+   sequência. (O número de fábrica, esse sim, fica no código da operação.)
+4. "Salvar operações". A liberação usa o que está **gravado**, não o que
+   está na tela — a tela avisa quando há alteração não salva.
+
+**Liberar (só gerência de produção)**
+1. Confira o quadro "Antes de liberar": ele mostra o que ainda falta
+   (roteiro sem operação, operação apontando para centro de trabalho
+   desativado, alteração não salva) e avisa qual revisão será substituída.
+2. "Liberar roteiro". O sistema grava quem liberou e quando.
+3. Se a liberação for recusada por **centro de trabalho desativado**,
+   reative o centro em §6.6 ou troque o centro da operação — o sistema
+   confere os centros de novo na liberação de propósito, porque roteiro
+   liberado apontando para centro desativado zera o custo de mão de obra
+   sem avisar.
+
+**Alterar um roteiro já liberado — use "Criar nova revisão"**
+Roteiro liberado é **congelado**: nenhum campo aceita alteração. Isso não
+é travamento do sistema, é o que mantém as OPs já apontadas coerentes com
+o roteiro que a fábrica realmente executou.
+1. Com o roteiro liberado selecionado, clique em **"Criar nova revisão"**.
+   Deixe revisão e código em branco para o sistema sugerir sozinho.
+2. O sistema cria um **rascunho novo** com uma cópia de todas as
+   operações. Altere o que precisa e salve.
+3. Ao liberar a revisão nova, a anterior passa a **Substituído** — fica
+   guardada com as etapas intactas, sustentando os apontamentos já feitos.
+   Só pode existir **um roteiro liberado por produto**.
+
+**Situações do roteiro:** Rascunho (editável) → Liberado (congelado, é o
+que a fábrica executa) → Substituído (histórico, não volta). "Aposentado"
+é a liberação desfeita manualmente: o produto fica sem roteiro válido até
+que alguma revisão seja liberada. Rascunho nunca apontado pode ser
+excluído; roteiro liberado, não — se aposenta, não se apaga.
 
 ---
 
