@@ -148,6 +148,7 @@ describe('Cadeia completa: amostra aprovada -> convertida em pedido -> recebida 
             id: 550,
             item_id: 'item-amostra',
             item: { id: 'item-amostra', codigo: 'ITEM-AMOSTRA' },
+            status: 'pending', // saldo a comprar (default da coluna); exigido desde a correcao do gap G12
             quantity: '1.000000',
             unit_price_estimated: 100,
             suggested_supplier_id: 3,

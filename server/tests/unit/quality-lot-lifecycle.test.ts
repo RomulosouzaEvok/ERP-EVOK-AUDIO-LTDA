@@ -339,7 +339,142 @@ describe('Quality Lot Lifecycle (item 8)', () => {
 
       expect(nonConformitiesRepository.findLotForNonConformity).not.toHaveBeenCalled();
     });
+  });
 
+  /**
+   * Gap G10 (2026-08-09): quando a RNC nao consegue bloquear lote nenhum,
+   * ela era criada exatamente igual a uma que bloqueou — sem nenhum sinal.
+   * Agora grava aviso explicito em `non_conformities.notes`, que volta no
+   * payload da resposta (o endpoint devolve a RNC inteira).
+   */
+  describe('CreateNonConformityUseCase — aviso quando nenhum lote e bloqueado (G10)', () => {
+    /** Marcador estavel do aviso, o mesmo usado pelo caso de uso. */
+    const WARNING = '[ATENCAO: NENHUM LOTE BLOQUEADO]';
+
+    /** Extrai o payload passado ao `create` do repositorio. */
+    const createdPayload = (repo: any) => repo.create.mock.calls[0][0];
+
+    it('avisa quando o lote informado nao existe para o produto', async () => {
+      const nonConformitiesRepository = {
+        create: jest.fn(async () => ({ id: 60, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => null),
+      };
+
+      const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
+      await useCase.execute({
+        description: 'RNC com lote inexistente',
+        product_id: 70,
+        lot_number: 'LOTE-INEXISTENTE',
+        reportedBy: 3,
+      });
+
+      const payload = createdPayload(nonConformitiesRepository);
+      expect(payload.notes).toContain(WARNING);
+      expect(payload.notes).toContain('LOTE-INEXISTENTE');
+    });
+
+    it('avisa quando a RNC e de um produto mas nenhum lote foi informado', async () => {
+      const nonConformitiesRepository = {
+        create: jest.fn(async () => ({ id: 61, status: 'open' })),
+        findLotForNonConformity: jest.fn(),
+      };
+
+      const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
+      await useCase.execute({
+        description: 'RNC de produto sem lote',
+        product_id: 80,
+        reportedBy: 4,
+      });
+
+      const payload = createdPayload(nonConformitiesRepository);
+      expect(payload.notes).toContain(WARNING);
+      expect(payload.notes).toMatch(/nenhum lote foi informado/i);
+    });
+
+    it('avisa quando o lote existe mas esta em status nao bloqueavel (ex.: consumed)', async () => {
+      const lotUpdate = jest.fn();
+      const nonConformitiesRepository = {
+        create: jest.fn(async () => ({ id: 62, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 9, lot_number: 'LOT-CONSUMIDO', status: 'consumed', supplier_id: null, notes: null, update: lotUpdate,
+        })),
+      };
+
+      const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
+      await useCase.execute({
+        description: 'RNC de lote ja consumido na producao',
+        product_id: 81,
+        lot_number: 'LOT-CONSUMIDO',
+        reportedBy: 5,
+      });
+
+      const payload = createdPayload(nonConformitiesRepository);
+      expect(payload.notes).toContain(WARNING);
+      expect(payload.notes).toContain('consumed');
+      expect(lotUpdate).not.toHaveBeenCalled();
+    });
+
+    it('avisa quando lot_number foi informado sem product_id (busca impossivel)', async () => {
+      const nonConformitiesRepository = {
+        create: jest.fn(async () => ({ id: 63, status: 'open' })),
+        findLotForNonConformity: jest.fn(),
+      };
+
+      const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
+      await useCase.execute({
+        description: 'RNC com lote mas sem produto',
+        lot_number: 'LOT-SEM-PRODUTO',
+        reportedBy: 6,
+      });
+
+      // A busca nem chega a ser tentada — e exatamente por isso que o
+      // silencio anterior era grave: nada era bloqueado e nada era dito.
+      expect(nonConformitiesRepository.findLotForNonConformity).not.toHaveBeenCalled();
+      expect(createdPayload(nonConformitiesRepository).notes).toContain(WARNING);
+    });
+
+    it('NAO avisa quando o lote foi efetivamente bloqueado', async () => {
+      const lotUpdate = jest.fn(async () => ({}));
+      const nonConformitiesRepository = {
+        create: jest.fn(async () => ({ id: 64, status: 'open' })),
+        findLotForNonConformity: jest.fn(async () => ({
+          id: 10, lot_number: 'LOT-OK', status: 'available', supplier_id: null, notes: null, update: lotUpdate,
+        })),
+      };
+
+      const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
+      await useCase.execute({
+        description: 'RNC que contem o material',
+        product_id: 82,
+        lot_number: 'LOT-OK',
+        reportedBy: 7,
+      });
+
+      expect(createdPayload(nonConformitiesRepository).notes).toBeNull();
+      expect(lotUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'blocked' }),
+        expect.anything()
+      );
+    });
+
+    it('NAO avisa em RNC que nao se refere a produto (ex.: ativo/auditoria)', async () => {
+      const nonConformitiesRepository = {
+        create: jest.fn(async () => ({ id: 65, status: 'open' })),
+        findLotForNonConformity: jest.fn(),
+      };
+
+      const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);
+      await useCase.execute({
+        description: 'Nao conformidade de auditoria interna',
+        origin: 'audit',
+        reportedBy: 8,
+      });
+
+      expect(createdPayload(nonConformitiesRepository).notes).toBeNull();
+    });
+  });
+
+  describe('CreateNonConformityUseCase — validacao de entrada', () => {
     it('rejeita criacao sem description antes de abrir transacao', async () => {
       const nonConformitiesRepository = { create: jest.fn() };
       const useCase = new CreateNonConformityUseCase(nonConformitiesRepository as any);

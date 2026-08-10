@@ -4,9 +4,17 @@
  * @module modules/production/infrastructure/sequelize/SequelizeProductionOrderRepository
  */
 
-import { Op } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import ProductionOrderRepository from '../../domain/repositories/ProductionOrderRepository';
-const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRouteStep, WorkCenter, Item }: any = require('../../../../models/index');
+const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRouteStep, WorkCenter, Item, sequelize }: any = require('../../../../models/index');
+
+/**
+ * Namespace (`classid`) do advisory lock que serializa a geracao do numero
+ * de OP por ano. Valor arbitrario porem fixo: dois processos so competem
+ * pelo lock se usarem o MESMO par (classid, ano) — nao colide com locks de
+ * outras rotinas do sistema.
+ */
+const ORDER_NUMBER_LOCK_CLASS_ID = 41001;
 
 class SequelizeProductionOrderRepository extends ProductionOrderRepository {
   /**
@@ -79,9 +87,47 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
     return ProductionOrder.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
   }
 
-  /** @param yearPrefix - Prefixo anual. @param transaction - Transacao opcional. @returns Total encontrado. */
-  public async countByOrderNumberPrefix(yearPrefix: string, transaction?: any): Promise<number> {
-    return ProductionOrder.count({ where: { order_number: { [Op.like]: `${yearPrefix}%` } }, transaction });
+  /**
+   * Gera o proximo numero de OP do ano (`OP-YYYY-NNNN`).
+   *
+   * Duas garantias, ambas ausentes no antigo `countByOrderNumberPrefix`
+   * (gap G16 da auditoria da cadeia do produto):
+   * 1. **Serializacao**: um advisory lock de transacao por ano
+   *    (`pg_advisory_xact_lock(classid, ano)`) impede que duas transacoes
+   *    concorrentes leiam o mesmo "ultimo numero". O lock e liberado
+   *    automaticamente no commit/rollback e e reentrante — o laco de
+   *    conversao do MRP pode chamar este metodo N vezes na mesma transacao.
+   * 2. **MAX em vez de COUNT**: o sufixo sai do maior numero ja emitido, nao
+   *    da contagem de linhas. `COUNT` regride quando uma OP e removida
+   *    (`RemoveProductionOrderUseCase`) e reemite um numero ja usado; `MAX`
+   *    so cresce. Numeros fora do padrao (`SUBSTRING` sem match) viram NULL e
+   *    sao ignorados pelo `MAX`, entao dado legado nao quebra a geracao.
+   *
+   * Dentro da mesma transacao, as OPs ja inseridas sao enxergadas pelo
+   * `MAX` (leitura da propria transacao), o que resolve tambem a colisao
+   * dentro do laco.
+   *
+   * @param yearPrefix - Prefixo anual (ex.: `OP-2026`).
+   * @param transaction - Transacao Sequelize ativa (obrigatoria para o lock).
+   * @returns Proximo numero completo (ex.: `OP-2026-0004`).
+   */
+  public async nextOrderNumberForYear(yearPrefix: string, transaction: any): Promise<string> {
+    const year = Number(yearPrefix.split('-').pop());
+
+    await sequelize.query(
+      'SELECT pg_advisory_xact_lock(:classId, :year)',
+      { replacements: { classId: ORDER_NUMBER_LOCK_CLASS_ID, year }, transaction }
+    );
+
+    const rows: any[] = await sequelize.query(
+      `SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM '([0-9]+)$') AS INTEGER)), 0) AS max_sequence
+         FROM production_orders
+        WHERE order_number LIKE :prefix`,
+      { replacements: { prefix: `${yearPrefix}-%` }, type: QueryTypes.SELECT, transaction }
+    );
+
+    const nextSequence = Number(rows[0]?.max_sequence ?? 0) + 1;
+    return `${yearPrefix}-${String(nextSequence).padStart(4, '0')}`;
   }
 
   /** @param data - Dados. @param transaction - Transacao opcional. @returns OP criada. */

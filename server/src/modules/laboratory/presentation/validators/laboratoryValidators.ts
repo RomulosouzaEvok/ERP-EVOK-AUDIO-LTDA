@@ -33,6 +33,10 @@ export const createTestSchema = z.object({
   specification_max: z.coerce.number().optional(),
   curve_data: z.union([z.record(z.string(), z.any()), z.array(z.any())]).optional(),
   notes: z.string().trim().max(4000).optional(),
+  // ACEITO E IGNORADO desde 2026-08-09 (gap G8): reprovacao sempre abre RNC,
+  // nao ha mais opt-in. Mantido no schema (que e `.strict()`) apenas para nao
+  // rejeitar com 400 o payload que a tela de Laboratorio ainda envia; remover
+  // quando a caixinha correspondente sair do `client/`.
   create_rnc_on_fail: z.coerce.boolean().optional(),
   // Bloco 4/UC-42-E: quantidade consumida (destruída) do produto testado.
   // Quando informada (> 0), o débito automático do Depósito LABORATORIO

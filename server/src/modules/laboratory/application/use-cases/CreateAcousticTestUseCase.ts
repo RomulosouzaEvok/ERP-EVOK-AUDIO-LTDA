@@ -11,10 +11,16 @@
  *   nenhum limite de especificacao for informado, lanca {@link ValidationError}
  *   (nao ha como determinar aprovacao/reprovacao sem faixa nem medida), com
  *   `details: { product_id, test_type, missing_fields }`.
- * - Se `passed = false` e `create_rnc_on_fail = true`, cria uma
- *   Nao-Conformidade via {@link CreateNonConformityUseCase} (reaproveitado,
- *   sem duplicar logica de bloqueio de lote) e grava `non_conformity_id`
- *   no teste.
+ * - Se `passed = false`, cria SEMPRE uma Nao-Conformidade via
+ *   {@link CreateNonConformityUseCase} (reaproveitado, sem duplicar logica de
+ *   bloqueio de lote) e grava `non_conformity_id` no teste. Ate 2026-08-09
+ *   isso dependia de `create_rnc_on_fail = true` no payload — quem digitava o
+ *   teste decidia, numa caixinha de tela, se a reprovacao viraria RNC ou nao,
+ *   e o default de quem chamava a API direto (flag ausente) era NAO abrir.
+ *   Reprovacao registrada sem RNC deixa o produto sem tratativa, sem
+ *   bloqueio de lote e fora do indicador de qualidade (gap G8 da auditoria
+ *   da cadeia do produto). A flag continua ACEITA no payload apenas por
+ *   compatibilidade, e e IGNORADA — ver {@link CreateAcousticTestInput}.
  * - Bloco 4/UC-42-E (docs/governance/TODO.md; BUSINESS_RULES.md §12/§13):
  *   quando `consumed_quantity` e informado (> 0) — teste destrutivo — o
  *   registro do teste e o debito automatico do Deposito LABORATORIO
@@ -54,6 +60,13 @@ type CreateAcousticTestInput = {
   specification_max?: number;
   curve_data?: Record<string, unknown>;
   notes?: string;
+  /**
+   * @deprecated Gap G8 (2026-08-09): a abertura de RNC na reprovacao deixou
+   * de ser opcional. O campo continua sendo aceito pelo schema `strict` do
+   * endpoint para nao quebrar o payload que a tela de Laboratorio ja envia,
+   * mas NAO tem mais nenhum efeito. Remover junto com a caixinha "Abrir RNC
+   * automaticamente se reprovar" em `client/src/pages/laboratory/RegisterTestTab.tsx`.
+   */
   create_rnc_on_fail?: boolean;
   /** Quantidade consumida (destruida) do produto testado, em teste destrutivo (UC-42-E). */
   consumed_quantity?: number;
@@ -106,7 +119,6 @@ class CreateAcousticTestUseCase extends UseCase<CreateAcousticTestInput, any> {
       specification_max,
       curve_data,
       notes,
-      create_rnc_on_fail,
       consumed_quantity,
       testerId,
     } = input;
@@ -159,7 +171,19 @@ class CreateAcousticTestUseCase extends UseCase<CreateAcousticTestInput, any> {
       return created;
     });
 
-    if (!passed && create_rnc_on_fail) {
+    // G8: reprovacao SEMPRE abre RNC. Antes de 2026-08-09 a condicao era
+    // `!passed && create_rnc_on_fail` — sem a flag no payload, a reprovacao
+    // era gravada e morria ali: nenhuma tratativa aberta, nenhum lote
+    // bloqueado (o bloqueio mora em CreateNonConformityUseCase) e nada no
+    // indicador de qualidade.
+    //
+    // Risco residual conhecido (nao introduzido aqui): a RNC nasce em
+    // transacao PROPRIA, depois do commit do teste — CreateNonConformityUseCase
+    // abre a sua. Se ela falhar, o teste reprovado ja esta gravado e a
+    // resposta e 500. Fechar isso exige que aquele caso de uso aceite uma
+    // transacao externa, o que afeta todos os seus chamadores e esta fora
+    // do escopo deste gap.
+    if (!passed) {
       const nonConformitiesRepository = new SequelizeNonConformitiesRepository();
       const createNonConformityUseCase = new CreateNonConformityUseCase(nonConformitiesRepository);
 

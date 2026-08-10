@@ -41,8 +41,26 @@ class ProductionOrderRepository {
     throw new Error('Nao implementado');
   }
 
-  /** @param yearPrefix - Prefixo anual. @param transaction - Transacao opcional. @returns Total encontrado. @throws {Error} Se nao implementado. */
-  public async countByOrderNumberPrefix(yearPrefix: string, transaction?: any): Promise<number> { // eslint-disable-line @typescript-eslint/no-unused-vars
+  /**
+   * Gera o proximo numero de OP do ano (`OP-YYYY-NNNN`) de forma serializada,
+   * segura contra colisao.
+   *
+   * Substitui o antigo `countByOrderNumberPrefix` (removido em 2026-08-09,
+   * gap G16 da auditoria da cadeia do produto): o numero era montado com
+   * `COUNT(*) + 1` lido pelo caso de uso ANTES de cada `create`, o que
+   * colidia em dois cenarios reais — (a) duas criacoes concorrentes liam a
+   * mesma contagem e geravam o mesmo numero, e (b) o laco de conversao do
+   * MRP relia a contagem a cada iteracao dentro da mesma transacao. Alem
+   * disso, `COUNT` regride quando uma OP e removida
+   * (`RemoveProductionOrderUseCase`), reemitindo um numero ja usado.
+   *
+   * @abstract
+   * @param yearPrefix - Prefixo anual (ex.: `OP-2026`).
+   * @param transaction - Transacao Sequelize ativa (obrigatoria para a serializacao).
+   * @returns Proximo numero completo (ex.: `OP-2026-0004`).
+   * @throws {Error} Se nao implementado.
+   */
+  public async nextOrderNumberForYear(yearPrefix: string, transaction: any): Promise<string> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('Nao implementado');
   }
 

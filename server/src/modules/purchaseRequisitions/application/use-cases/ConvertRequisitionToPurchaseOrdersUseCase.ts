@@ -6,6 +6,9 @@
  * Regras:
  * - A requisicao deve existir (404) e estar em status `approved` (422
  *   `BusinessRuleError` caso contrario).
+ * - Apenas os itens com SALDO (`purchase_requisition_items.status =
+ *   'pending'`) sao convertidos; sem nenhum item com saldo, 422 (gap G12 —
+ *   a adjudicacao de cotacao tambem consome saldo desta requisicao).
  * - Cada item da requisicao tem seu fornecedor resolvido, nesta ordem de
  *   prioridade: (1) `suggested_supplier_id` do item; (2) fornecedor
  *   preferencial ativo em `item_suppliers` (`findPreferredByItem`);
@@ -47,6 +50,9 @@ import PurchaseRequisitionRepository from '../../domain/repositories/PurchaseReq
 
 const PurchaseRepository = require('../../../purchases/domain/repositories/PurchaseRepository');
 const ItemSupplierRepository = require('../../../items/domain/repositories/ItemSupplierRepository');
+
+/** Status de item de requisicao que ainda tem saldo a comprar (gap G12). */
+const PENDING_ITEM_STATUS = 'pending';
 
 interface ConvertRequisitionInput {
   id: number;
@@ -99,9 +105,22 @@ class ConvertRequisitionToPurchaseOrdersUseCase extends UseCase<ConvertRequisiti
       );
     }
 
-    const items: any[] = requisition.items ?? [];
-    if (items.length === 0) {
+    const allItems: any[] = requisition.items ?? [];
+    if (allItems.length === 0) {
       throw new BusinessRuleError('Requisicao nao possui itens para converter.');
+    }
+
+    // G12: converte apenas os itens com SALDO. Desde 2026-08-09 a adjudicacao
+    // de uma cotacao (`AwardRfqUseCase`) tambem consome itens desta
+    // requisicao, marcando-os `ordered` e deixando a requisicao `approved`
+    // quando sobra saldo. Sem este filtro, converter depois de uma
+    // adjudicacao parcial geraria um segundo pedido dos itens ja comprados.
+    const items = allItems.filter((item: any) => item.status === PENDING_ITEM_STATUS);
+    if (items.length === 0) {
+      throw new BusinessRuleError(
+        `Todos os itens da requisicao ${requisition.requisition_number} ja foram pedidos ou cancelados — nao ha saldo a converter.`,
+        { requisition_id: requisition.id },
+      );
     }
 
     // 1) Resolve fornecedor de cada item.
@@ -255,7 +274,10 @@ class ConvertRequisitionToPurchaseOrdersUseCase extends UseCase<ConvertRequisiti
       createdPurchases.push({ ...purchase.toJSON(), items: createdItems.map((i: any) => i.toJSON ? i.toJSON() : i) });
     }
 
-    // 5) Atualiza requisicao e itens para `ordered`.
+    // 5) Atualiza requisicao e itens para `ordered`. Todos os itens com saldo
+    // foram convertidos aqui (item sem fornecedor resolvivel derruba a
+    // operacao inteira acima), entao nao sobra pendencia e a requisicao pode
+    // ser fechada.
     for (const { item } of resolvedItems) {
       await this.requisitionRepository.updateRequisitionItem(item.id, { status: 'ordered' }, transaction);
     }

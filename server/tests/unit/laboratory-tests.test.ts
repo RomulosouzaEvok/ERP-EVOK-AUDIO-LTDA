@@ -82,7 +82,14 @@ describe('Use cases do modulo de Laboratorio', () => {
       });
 
       expect(result.passed).toBe(false);
-      expect(laboratoryRepository.updateTest).not.toHaveBeenCalled();
+      expect(laboratoryRepository.createTest).toHaveBeenCalledWith(
+        expect.objectContaining({ passed: false, result: 15 }),
+        expect.anything()
+      );
+      // G8: a reprovacao tambem abre RNC (coberto no bloco "criacao de RNC
+      // no fail"). Ate 2026-08-09 este teste afirmava aqui que `updateTest`
+      // NAO era chamado — o que so era verdade porque a RNC dependia da flag
+      // `create_rnc_on_fail`, o proprio gap.
     });
 
     it('passed=true quando result respeita apenas specification_min informado', async () => {
@@ -148,7 +155,7 @@ describe('Use cases do modulo de Laboratorio', () => {
   });
 
   describe('CreateAcousticTestUseCase — criacao de RNC no fail', () => {
-    it('cria RNC via CreateNonConformityUseCase quando passed=false e create_rnc_on_fail=true, e grava non_conformity_id', async () => {
+    it('cria RNC via CreateNonConformityUseCase quando passed=false, e grava non_conformity_id', async () => {
       const laboratoryRepository = {
         createTest: jest.fn(async (data: any) => ({ id: 10, ...data })),
         updateTest: jest.fn(async (id: number, data: any) => ({ id, non_conformity_id: data.non_conformity_id })),
@@ -182,10 +189,40 @@ describe('Use cases do modulo de Laboratorio', () => {
       expect(result.non_conformity_id).toBe(777);
     });
 
-    it('NAO cria RNC quando passed=false mas create_rnc_on_fail nao foi informado', async () => {
+    /**
+     * Gap G8: ate 2026-08-09 este caso era o inverso — "NAO cria RNC quando
+     * passed=false mas create_rnc_on_fail nao foi informado". Reprovacao sem
+     * RNC nao tem tratativa, nao bloqueia lote e nao entra no indicador de
+     * qualidade; deixou de ser opcional.
+     */
+    it('cria RNC na reprovacao mesmo SEM create_rnc_on_fail no payload (G8)', async () => {
       const laboratoryRepository = {
         createTest: jest.fn(async (data: any) => ({ id: 11, ...data })),
-        updateTest: jest.fn(),
+        updateTest: jest.fn(async (id: number, data: any) => ({ id, non_conformity_id: data.non_conformity_id })),
+      };
+
+      const useCase = new CreateAcousticTestUseCase(laboratoryRepository as any);
+      const result = await useCase.execute({
+        product_id: 1,
+        test_type: 'thd',
+        result: 20,
+        specification_min: 0,
+        specification_max: 10,
+        testerId: 7,
+      });
+
+      expect(CreateNonConformityUseCaseMock).toHaveBeenCalledTimes(1);
+      expect(CreateNonConformityUseCaseMock.mock.results[0].value.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ product_id: 1, origin: 'final', reportedBy: 7 })
+      );
+      expect(laboratoryRepository.updateTest).toHaveBeenCalledWith(11, { non_conformity_id: 777 });
+      expect(result.non_conformity_id).toBe(777);
+    });
+
+    it('cria RNC na reprovacao mesmo com create_rnc_on_fail=false — a flag e ignorada (G8)', async () => {
+      const laboratoryRepository = {
+        createTest: jest.fn(async (data: any) => ({ id: 13, ...data })),
+        updateTest: jest.fn(async (id: number, data: any) => ({ id, non_conformity_id: data.non_conformity_id })),
       };
 
       const useCase = new CreateAcousticTestUseCase(laboratoryRepository as any);
@@ -195,11 +232,11 @@ describe('Use cases do modulo de Laboratorio', () => {
         result: 20,
         specification_min: 0,
         specification_max: 10,
+        create_rnc_on_fail: false,
         testerId: 7,
       });
 
-      expect(CreateNonConformityUseCaseMock).not.toHaveBeenCalled();
-      expect(laboratoryRepository.updateTest).not.toHaveBeenCalled();
+      expect(CreateNonConformityUseCaseMock).toHaveBeenCalledTimes(1);
     });
 
     it('NAO cria RNC quando passed=true mesmo com create_rnc_on_fail=true', async () => {

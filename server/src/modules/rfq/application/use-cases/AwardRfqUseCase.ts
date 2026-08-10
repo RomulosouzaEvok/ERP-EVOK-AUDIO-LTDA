@@ -8,6 +8,9 @@
  * cotado do vencedor (upsert — e assim que o historico de cotacao atualiza
  * o catalogo item x fornecedor para as proximas requisicoes/conversoes).
  *
+ * Quando a RFQ nasceu de uma Requisicao de Compra, a adjudicacao tambem
+ * consome o SALDO daquela requisicao (gap G12) — ver {@link AwardRfqUseCase.execute}.
+ *
  * Toda a operacao roda em uma unica transacao, com a RFQ travada via
  * `SELECT ... FOR UPDATE` (repositorio) para impedir adjudicacoes
  * concorrentes duplicadas.
@@ -19,6 +22,17 @@ import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError, BusinessRuleError } from '../../../../errors';
 import { generatePurchaseOrderNumber } from '../../../../shared/utils/strings';
 import RfqRepository from '../../domain/repositories/RfqRepository';
+import PurchaseRequisitionRepository from '../../../purchaseRequisitions/domain/repositories/PurchaseRequisitionRepository';
+
+/**
+ * Unico status de requisicao que autoriza virar pedido de compra — mesma
+ * regra de `ConvertRequisitionToPurchaseOrdersUseCase` (gap G12: adjudicar
+ * era um caminho paralelo que gerava pedido sem passar por essa porta).
+ */
+const REQUISITION_STATUS_READY_TO_ORDER = 'approved';
+
+/** Status de item de requisicao que ainda tem saldo a comprar. */
+const PENDING_REQUISITION_ITEM_STATUS = 'pending';
 
 interface AwardEntryInput {
   rfq_item_id: number;
@@ -37,19 +51,59 @@ class AwardRfqUseCase extends UseCase<AwardRfqInput, any> {
   private readonly rfqRepository: RfqRepository;
   private readonly purchaseRepository: any;
   private readonly itemSupplierRepository: any;
+  private readonly requisitionRepository: PurchaseRequisitionRepository;
 
-  public constructor(rfqRepository: RfqRepository, purchaseRepository: any, itemSupplierRepository: any) {
+  /**
+   * @param rfqRepository - Repositorio de cotacoes.
+   * @param purchaseRepository - Repositorio de pedidos de compra (modulo `purchases`).
+   * @param itemSupplierRepository - Repositorio do catalogo item x fornecedor (modulo `items`).
+   * @param requisitionRepository - Repositorio de requisicoes (modulo `purchaseRequisitions`), usado para consumir o saldo da requisicao de origem (G12).
+   */
+  public constructor(
+    rfqRepository: RfqRepository,
+    purchaseRepository: any,
+    itemSupplierRepository: any,
+    requisitionRepository: PurchaseRequisitionRepository,
+  ) {
     super();
     this.rfqRepository = rfqRepository;
     this.purchaseRepository = purchaseRepository;
     this.itemSupplierRepository = itemSupplierRepository;
+    this.requisitionRepository = requisitionRepository;
   }
 
   /**
+   * Adjudica a cotacao e gera o(s) pedido(s) de compra.
+   *
+   * Gap G12 (auditoria da cadeia do produto, 2026-08-09): a adjudicacao
+   * criava pedidos de compra sem NUNCA olhar a requisicao de origem, embora
+   * gravasse `requisition_id` neles. Como `ConvertRequisitionToPurchaseOrdersUseCase`
+   * tambem cria pedidos da mesma requisicao e so ele mexia no status dela,
+   * os mesmos itens viravam DOIS pedidos de compra — pelos dois caminhos, em
+   * qualquer ordem. Agora, quando a RFQ vem de requisicao, a adjudicacao:
+   *
+   * 1. trava a requisicao (`FOR UPDATE`) na mesma transacao;
+   * 2. exige que ela esteja `approved` — mesma porta da conversao direta,
+   *    o que tambem impede o pulo `draft/pending -> ordered` (adjudicar uma
+   *    requisicao nao aprovada era um desvio do gate de aprovacao);
+   * 3. exige que os itens adjudicados ainda tenham saldo (`pending`);
+   * 4. consome o saldo: os itens adjudicados viram `ordered` e, so quando
+   *    NAO sobra nenhum item pendente, a requisicao inteira vira `ordered`.
+   *    Sobrando saldo, ela permanece `approved` (aberta), e o restante pode
+   *    ser comprado por outra cotacao ou pela conversao direta.
+   *
+   * O status `partial` de `purchase_requisitions` NAO e usado aqui de
+   * proposito: o enum da tabela (`...ordered, partial, received...`) espelha
+   * o de `purchase_orders`, onde `partial` significa "parcialmente
+   * RECEBIDO". Reaproveita-lo para "parcialmente pedido" colidiria com a
+   * rotina de recebimento (gap G15, fora do escopo desta correcao). O saldo
+   * por item ja vive em `purchase_requisition_items.status`, cujo enum
+   * (`pending|ordered|canceled`) e inequivoco.
+   *
    * @param input - Id da RFQ, lista de adjudicacoes `{ rfq_item_id, supplier_id }`, notas opcionais, id do usuario logado e a transacao ativa (com lock).
-   * @returns `{ purchase_orders, rfq_id, rfq_status }`.
-   * @throws {NotFoundError} Se a RFQ nao existir.
-   * @throws {BusinessRuleError} Se a RFQ nao estiver `quoted` (422), se algum `rfq_item_id` for duplicado/nao pertencer a RFQ, se nao houver cotacao registrada para o par item/fornecedor informado, ou se algum item nao tiver produto legado correspondente (`items.codigo` sem `products.code`).
+   * @returns `{ purchase_orders, rfq_id, rfq_status, requisition_id, requisition_status }`.
+   * @throws {NotFoundError} Se a RFQ nao existir, ou se a requisicao de origem nao existir mais.
+   * @throws {BusinessRuleError} Se a RFQ nao estiver `quoted` (422), se algum `rfq_item_id` for duplicado/nao pertencer a RFQ, se nao houver cotacao registrada para o par item/fornecedor informado, se algum item nao tiver produto legado correspondente (`items.codigo` sem `products.code`), se a requisicao de origem nao estiver `approved` ou se algum item adjudicado nao tiver mais saldo nela.
    */
   public async execute(input: AwardRfqInput): Promise<any> {
     const rfq = await this.rfqRepository.findRfqByIdForUpdate(input.id, input.transaction);
@@ -146,6 +200,46 @@ class AwardRfqUseCase extends UseCase<AwardRfqInput, any> {
       );
     }
 
+    // G12: consome o saldo da requisicao de origem, se houver. Trava a
+    // requisicao ANTES de criar qualquer pedido — se ela nao admitir mais
+    // compra, nada e criado.
+    const requisitionId: number | null = rfqDetailJson.requisition_id ?? null;
+    const awardedItemIds = new Set(resolvedAwards.map((award) => String(award.itemId)));
+    let requisition: any = null;
+    let requisitionItemsToOrder: any[] = [];
+
+    if (requisitionId) {
+      requisition = await this.requisitionRepository.findRequisitionByIdForUpdate(requisitionId, input.transaction);
+      if (!requisition) {
+        throw new NotFoundError(`Requisicao ${requisitionId} (origem desta cotacao) nao encontrada.`);
+      }
+
+      if (requisition.status !== REQUISITION_STATUS_READY_TO_ORDER) {
+        throw new BusinessRuleError(
+          `A requisicao ${requisition.requisition_number ?? requisitionId} precisa estar aprovada para virar pedido de compra `
+          + `(status atual: ${requisition.status}). Adjudicar aqui geraria pedido sem passar pela aprovacao da requisicao, `
+          + 'ou um segundo pedido dos itens que ja foram pedidos.',
+          { requisition_id: requisitionId, current_status: requisition.status },
+        );
+      }
+
+      const requisitionItems: any[] = requisition.items ?? [];
+      requisitionItemsToOrder = requisitionItems.filter((item: any) => awardedItemIds.has(String(item.item_id)));
+
+      const withoutBalance = requisitionItemsToOrder.filter(
+        (item: any) => item.status !== PENDING_REQUISITION_ITEM_STATUS
+      );
+      if (withoutBalance.length > 0) {
+        throw new BusinessRuleError(
+          'Um ou mais itens adjudicados ja foram pedidos (ou cancelados) na requisicao de origem — nao ha saldo para gerar outro pedido de compra.',
+          {
+            requisition_id: requisitionId,
+            requisition_item_ids_without_balance: withoutBalance.map((item: any) => item.id),
+          },
+        );
+      }
+    }
+
     // Agrupa adjudicacoes por fornecedor vencedor.
     const groupsBySupplier = new Map<number, ResolvedAward[]>();
     for (const award of resolvedAwards) {
@@ -184,7 +278,7 @@ class AwardRfqUseCase extends UseCase<AwardRfqInput, any> {
         order_number: orderNumber,
         supplier_id: supplierId,
         requester_id: input.userId,
-        requisition_id: rfqDetailJson.requisition_id ?? null,
+        requisition_id: requisitionId,
         total_amount: totalAmount,
         order_date: new Date(),
         expected_date: null,
@@ -244,10 +338,43 @@ class AwardRfqUseCase extends UseCase<AwardRfqInput, any> {
 
     await this.rfqRepository.updateRfq(input.id, { status: 'awarded' }, input.transaction);
 
+    // G12: baixa o saldo da requisicao de origem na MESMA transacao dos
+    // pedidos. Sem isso, os mesmos itens podiam ser pedidos de novo — por
+    // outra cotacao ou pela conversao direta da requisicao.
+    let requisitionStatus: string | null = null;
+    if (requisition) {
+      for (const item of requisitionItemsToOrder) {
+        await this.requisitionRepository.updateRequisitionItem(
+          item.id,
+          { status: 'ordered' },
+          input.transaction,
+        );
+      }
+
+      const orderedItemIds = new Set(requisitionItemsToOrder.map((item: any) => item.id));
+      const remainingPending = (requisition.items ?? []).filter(
+        (item: any) => item.status === PENDING_REQUISITION_ITEM_STATUS && !orderedItemIds.has(item.id)
+      );
+
+      // So fecha a requisicao quando nao sobra saldo. Sobrando, ela continua
+      // `approved` (aberta) — ver na doc de `execute` por que `partial` NAO e
+      // usado aqui.
+      requisitionStatus = remainingPending.length === 0 ? 'ordered' : requisition.status;
+      if (requisitionStatus !== requisition.status) {
+        await this.requisitionRepository.updateRequisition(
+          requisition.id,
+          { status: requisitionStatus },
+          input.transaction,
+        );
+      }
+    }
+
     return {
       purchase_orders: createdPurchases,
       rfq_id: input.id,
       rfq_status: 'awarded',
+      requisition_id: requisitionId,
+      requisition_status: requisitionStatus,
     };
   }
 }

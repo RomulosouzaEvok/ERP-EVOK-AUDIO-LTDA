@@ -2166,6 +2166,19 @@ Cria uma cotação — **avulsa** (`items`) OU **a partir de uma requisição**
 ```
 Gera `rfq_number` no formato `RFQ-<ano>-XXXX`, status inicial `draft`.
 
+**Saldo e estado da requisição de origem (gap G12, 2026-08-09).** Ao cotar a
+partir de `requisition_id`:
+- a requisição precisa estar em estado que ainda admita compra —
+  `draft`/`pending`/`approved`. Com `ordered`/`partial`/`received`/`canceled`,
+  responde **422** (cotar e adjudicar uma requisição já atendida geraria um
+  segundo pedido de compra dos mesmos itens);
+- só são puxados os itens com **saldo** (`purchase_requisition_items.status =
+  'pending'`); itens já pedidos ou cancelados são ignorados. Se nenhum item
+  tiver saldo, responde **422**.
+
+Cotar antes de aprovar continua permitido de propósito (o preço cotado é o que
+embasa a aprovação) — o gate de aprovação é aplicado na **adjudicação**.
+
 ### POST /api/rfqs/:id/suppliers
 Convida fornecedores a cotar (transiciona `draft → sent` no primeiro convite).
 
@@ -2220,6 +2233,13 @@ que cotaram (podendo dividir itens entre fornecedores diferentes). Exige
    vencedor (realimenta o catálogo item × fornecedor para as próximas
    requisições/conversões).
 4. Marca a RFQ `awarded`.
+5. **Consome o saldo da requisição de origem, quando houver** (gap G12,
+   2026-08-09): os itens adjudicados viram `ordered` em
+   `purchase_requisition_items` e, **somente quando não sobra nenhum item
+   pendente**, a requisição inteira vira `ordered`. Sobrando saldo, ela
+   permanece `approved` (aberta) e o restante pode ser comprado por outra
+   cotação ou pela conversão direta. A requisição é travada
+   (`SELECT ... FOR UPDATE`) antes da criação de qualquer pedido.
 
 **Response (201):**
 ```json
@@ -2228,14 +2248,22 @@ que cotaram (podendo dividir itens entre fornecedores diferentes). Exige
   "data": {
     "purchase_orders": [ { "id": 88, "order_number": "PO-1754...-1", "supplier_id": 3, "total_amount": 6250.00, "items": [ ... ] } ],
     "rfq_id": 12,
-    "rfq_status": "awarded"
+    "rfq_status": "awarded",
+    "requisition_id": 45,
+    "requisition_status": "ordered"
   }
 }
 ```
+`requisition_id`/`requisition_status` são `null` em RFQ avulsa.
+
 **Erros (422, `BusinessRuleError`):** RFQ não está `quoted`; item duplicado
 na adjudicação; `rfq_item_id` não pertence à RFQ; não há cotação
 registrada para o par item/fornecedor informado; item sem produto legado
-correspondente (`items.codigo` sem `products.code`).
+correspondente (`items.codigo` sem `products.code`); **requisição de origem
+não está `approved`** (adjudicar não é atalho para pular a aprovação da
+requisição); **item adjudicado sem saldo na requisição** (já pedido ou
+cancelado) — `details.requisition_item_ids_without_balance`. Erro **404** se a
+requisição de origem não existir mais.
 
 **Nota de concorrência:** a RFQ é travada via `SELECT ... FOR UPDATE`
 (repositório) durante a adjudicação, para impedir duas adjudicações
@@ -2524,8 +2552,14 @@ por fornecedor resolvido), transacional com lock pessimista
 }
 ```
 **Erro (404)** — requisição inexistente. **Erro (422)** — requisição não
-está `approved`, ou algum item não tem fornecedor resolvível
-(`BusinessRuleError`).
+está `approved`, algum item não tem fornecedor resolvível, ou **nenhum item
+tem saldo a converter** (`BusinessRuleError`).
+
+> **Saldo por item (gap G12, 2026-08-09):** só são convertidos os itens com
+> `purchase_requisition_items.status = 'pending'`. Itens já pedidos pela
+> adjudicação de uma cotação (`POST /api/rfqs/:id/award`) ou cancelados são
+> ignorados — sem esse filtro, os mesmos itens virariam **dois** pedidos de
+> compra pelos dois caminhos.
 
 > Ver também `POST /api/mrp/planned-orders/convert` (seção 13, MRP) — a
 > outra origem de criação de requisições, e `POST /api/rfqs` (seção 11.1)
@@ -2581,8 +2615,17 @@ body). Único campo obrigatório em runtime é `description`
 1. Se `lot_number` + `product_id` referenciam um lote existente em status
    bloqueável (`available`/`quarantine`/`reserved`), o lote é bloqueado
    (→ `blocked`) — ver `POST /api/inventory/lots/:id/block` (seção 8.3).
-   Lote não encontrado: a RNC ainda é criada (pode referenciar lote
-   externo/legado).
+   **Quando nenhum lote é bloqueado, a RNC é criada assim mesmo (pode
+   referenciar lote externo/legado) porém com aviso explícito** gravado em
+   `notes`, prefixado por `[ATENCAO: NENHUM LOTE BLOQUEADO]`, e que portanto
+   volta no payload da resposta (gap G10, 2026-08-09). Os quatro casos que
+   geram aviso: lote não encontrado para o produto; `lot_number` informado sem
+   `product_id` (a busca é por par produto × lote, não resolve); lote em
+   status não bloqueável (ex.: `consumed`/`expired`/já `blocked`); RNC de
+   produto sem `lot_number`. RNC que não referencia produto (ex.: `audit`,
+   `asset_id`) não gera aviso — não há lote a conter.
+   Até 2026-08-09 esse caminho era **mudo**: uma RNC que não conteve material
+   nenhum era indistinguível de uma que bloqueou o lote.
 2. Se o lote referenciado tem `supplier_id` preenchido (veio de um
    recebimento), `suppliers.quality_score` daquele fornecedor é
    recalculado de forma síncrona (`MAX(0, 100 - rncs_count/receipts_count*100)`)
@@ -2647,7 +2690,10 @@ Registra um resultado de teste. `authorizeModule('laboratorio', 'operate')`
 ```
 `test_type` (enum): `impedance`/`frequency_response`/`thd`/`power_rms`/
 `power_peak`/`life`/`polarity`/`noise`/`thiele_small`. `create_rnc_on_fail`
-(opcional): quando `true` e o teste reprova, abre uma RNC automaticamente.
+(opcional): **aceito e ignorado desde 2026-08-09 (gap G8)** — teste reprovado
+(`passed = false`) abre RNC SEMPRE, não é mais opt-in. O campo segue no schema
+apenas para não rejeitar o payload que a tela ainda envia; será removido junto
+com a caixinha correspondente no `client/`.
 `consumed_quantity` (opcional, Bloco 4/UC-42-E): quando > 0, debita
 automaticamente o Depósito `LABORATORIO` na mesma transação (teste
 destrutivo); ausente/0 = teste não-destrutivo, sem débito de estoque.

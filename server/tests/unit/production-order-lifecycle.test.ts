@@ -85,7 +85,7 @@ describe('Production Order Lifecycle (F.10)', () => {
     it('bloqueia criacao quando BomService.checkAvailability retorna indisponibilidade', async () => {
       const productionOrderRepository = {
         findProductById: jest.fn(async () => ({ id: 1, status: 'active', product_type: 'finished', name: 'Produto A' })),
-        countByOrderNumberPrefix: jest.fn(async () => 0),
+        nextOrderNumberForYear: jest.fn(async (prefix: string) => `${prefix}-0001`),
         create: jest.fn(),
       };
 
@@ -107,7 +107,7 @@ describe('Production Order Lifecycle (F.10)', () => {
     it('cria OP normalmente quando material esta disponivel', async () => {
       const productionOrderRepository = {
         findProductById: jest.fn(async () => ({ id: 1, status: 'active', product_type: 'finished', name: 'Produto A' })),
-        countByOrderNumberPrefix: jest.fn(async () => 0),
+        nextOrderNumberForYear: jest.fn(async (prefix: string) => `${prefix}-0001`),
         create: jest.fn(async () => ({ id: 1, order_number: 'OP-2026-0001', status: 'planned' })),
       };
 
@@ -122,6 +122,28 @@ describe('Production Order Lifecycle (F.10)', () => {
 
       expect(result).toBeDefined();
       expect(productionOrderRepository.create).toHaveBeenCalled();
+    });
+
+    // G16: a numeracao nao pode mais ser montada no caso de uso a partir de
+    // uma contagem (`COUNT(*) + 1`, sem serializacao e regressiva apos
+    // remocao de OP). Ela e delegada ao repositorio, que serializa por ano.
+    it('delega a numeracao da OP ao repositorio, dentro da transacao (G16)', async () => {
+      const productionOrderRepository = {
+        findProductById: jest.fn(async () => ({ id: 1, status: 'active', product_type: 'finished', name: 'Produto A' })),
+        nextOrderNumberForYear: jest.fn(async () => 'OP-2026-0042'),
+        create: jest.fn(async (data: any) => ({ id: 1, ...data })),
+      };
+
+      BomService.checkAvailability.mockResolvedValueOnce({ available: true, max_possible_quantity: 20, missing_items: [] });
+
+      const useCase = new CreateProductionOrderUseCase(productionOrderRepository);
+      await useCase.execute({ product_id: 1, quantity: 10, due_date: '2026-08-20', created_by: 1 });
+
+      expect(productionOrderRepository.nextOrderNumberForYear).toHaveBeenCalledWith(
+        `OP-${new Date().getFullYear()}`,
+        expect.objectContaining({ id: 'tx-1' }),
+      );
+      expect(productionOrderRepository.create.mock.calls[0][0]).toMatchObject({ order_number: 'OP-2026-0042' });
     });
   });
 

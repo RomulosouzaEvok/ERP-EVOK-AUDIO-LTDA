@@ -18,6 +18,9 @@
  *   latente de schema documentada em docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md,
  *   sec. 3 — `production_orders.product_id` ainda e a FK obrigatoria de
  *   criacao, `item_id` e dual-write).
+ * - O produto deve ter estrutura (BOM) ativa e material minimo disponivel
+ *   para a quantidade planejada — MESMA validacao do caminho manual
+ *   (`CreateProductionOrderUseCase`). Ver nota de G16 em {@link execute}.
  * - Uma OP e criada por ordem planejada convertida (1:1, ao contrario da
  *   requisicao que agrupa N ordens em 1 cabecalho — OP nao tem conceito de
  *   "OP consolidada").
@@ -32,6 +35,7 @@ import MrpRepository from '../../domain/repositories/MrpRepository';
 import ItemRepository from '../../../items/domain/repositories/ItemRepository';
 
 const { sequelize } = require('../../../../models/index');
+const BomService: any = require('../../../../services/bomService');
 
 /** Status de ordem planejada elegiveis para conversao em Ordem de Producao. */
 const CONVERTIBLE_STATUSES = ['RASCUNHO', 'APROVADA'];
@@ -69,12 +73,28 @@ class ConvertPlannedOrdersToProductionOrderUseCase extends UseCase<ConvertPlanne
   /**
    * Executa a conversao de ordens planejadas em Ordens de Producao.
    *
+   * Gap G16 (auditoria da cadeia do produto, 2026-08-09): ate esta data os
+   * dois caminhos de criacao de OP tinham rigor diferente. O manual
+   * (`CreateProductionOrderUseCase`) exige produto ativo, BOM ativa e
+   * material minimo disponivel; este, via MRP, nao validava disponibilidade
+   * nenhuma — criava OP sem material, que depois nao conseguia ser concluida
+   * (a conclusao consome a BOM e falha sem estoque/sem BOM, ver G2). Agora a
+   * disponibilidade e checada aqui tambem, com a mesma regra.
+   *
+   * Diferenca **intencional** que permanece entre os dois caminhos: aqui
+   * `semi_finished` continua aceito alem de `finished`. Produzir subconjunto
+   * e legitimo e e exatamente o que o MRP planeja quando explode a
+   * necessidade de um `SUBCONJUNTO`; o caminho manual, mais restrito, nao
+   * foi afrouxado nesta correcao (afrouxar controle esta fora do escopo do
+   * gap, que e sobre o caminho permissivo demais).
+   *
    * @param input - Ids das ordens planejadas, notas opcionais e id do solicitante logado.
    * @returns OPs criadas e ids das ordens planejadas convertidas.
    * @throws NotFoundError se alguma ordem planejada nao existir.
    * @throws BusinessRuleError se alguma ordem nao estiver em status convertivel,
-   *   se o item nao for de fabricacao propria, ou se nao houver produto legado
-   *   correspondente ativo e produzivel.
+   *   se o item nao for de fabricacao propria, se nao houver produto legado
+   *   correspondente ativo e produzivel, se o produto nao tiver BOM ativa ou
+   *   se faltar material para a quantidade planejada.
    */
   public async execute(input: ConvertPlannedOrdersToProductionOrderInput): Promise<any> {
     const uniqueIds = Array.from(new Set(input.planned_order_ids));
@@ -134,10 +154,49 @@ class ConvertPlannedOrdersToProductionOrderUseCase extends UseCase<ConvertPlanne
           );
         }
 
-        const year = new Date().getFullYear();
-        const yearPrefix = `OP-${year}`;
-        const count = await this.productionOrderRepository.countByOrderNumberPrefix(yearPrefix, transaction);
-        const order_number = `${yearPrefix}-${String(count + 1).padStart(4, '0')}`;
+        // G16: disponibilidade de material, igual ao caminho manual. A
+        // ausencia de BOM ativa chega aqui como 404 de `explodeBOM` (dentro
+        // de `checkAvailability`) — convertida em erro de negocio didatico,
+        // no mesmo espirito de G2, para nao vazar um 404 generico de servico.
+        const plannedQuantity = parseFloat(String(plannedOrder.quantidade_planejada));
+        let availability: any;
+        try {
+          availability = await BomService.checkAvailability(product.id, plannedQuantity);
+        } catch (bomError: any) {
+          if (bomError?.statusCode !== 404) throw bomError;
+          throw new BusinessRuleError(
+            `Produto '${product.name}' (codigo ${item.codigo}) nao tem estrutura (BOM) ativa e nao pode gerar Ordem de Producao. `
+            + 'Sem BOM o sistema nao sabe o que consumir nem quanto o produto custa — a OP nasceria impossivel de concluir.',
+            { planned_order_id: plannedOrder.id, item_id: item.id, product_id: product.id },
+          );
+        }
+
+        if (!availability.available) {
+          throw new BusinessRuleError(
+            `Nao ha material minimo disponivel para produzir ${plannedQuantity} de '${product.name}' (codigo ${item.codigo}). `
+            + 'Converta primeiro as ordens planejadas de materia-prima em Requisicao de Compra '
+            + '(POST /api/mrp/planned-orders/convert) e gere a OP quando o material entrar em estoque.',
+            {
+              planned_order_id: plannedOrder.id,
+              item_id: item.id,
+              product_id: product.id,
+              requested_quantity: plannedQuantity,
+              max_possible_quantity: availability.max_possible_quantity,
+              missing_items: availability.missing_items,
+            },
+          );
+        }
+
+        // Numeracao serializada no repositorio (advisory lock por ano + MAX
+        // do sufixo). Ate 2026-08-09 o numero saia de um `COUNT(*) + 1` lido
+        // dentro deste laco (gap G16). Dentro da transacao o laco em si
+        // funcionava — a contagem enxerga as proprias insercoes —, mas nada
+        // protegia contra uma conversao/criacao manual CONCORRENTE lendo a
+        // mesma contagem, e `COUNT` ainda regride quando uma OP e removida,
+        // reemitindo um numero ja usado. `order_number` e UNIQUE: a colisao
+        // nao corrompe dado, derruba a conversao inteira em runtime.
+        const yearPrefix = `OP-${new Date().getFullYear()}`;
+        const order_number = await this.productionOrderRepository.nextOrderNumberForYear(yearPrefix, transaction);
 
         const order = await this.productionOrderRepository.create({
           order_number,

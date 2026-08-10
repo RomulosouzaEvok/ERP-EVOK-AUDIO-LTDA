@@ -69,6 +69,20 @@ function makePurchaseRepository(overrides: Partial<Record<string, any>> = {}) {
   };
 }
 
+/**
+ * Repositorio de requisicoes usado pela adjudicacao desde a correcao do gap
+ * G12 (consumo do saldo da requisicao de origem). O default nao devolve
+ * requisicao nenhuma — RFQ avulsa, o caso mais comum dos testes abaixo.
+ */
+function makeRequisitionRepository(overrides: Partial<Record<string, any>> = {}) {
+  return {
+    findRequisitionByIdForUpdate: jest.fn(async () => null),
+    updateRequisition: jest.fn(async () => undefined),
+    updateRequisitionItem: jest.fn(async () => undefined),
+    ...overrides,
+  };
+}
+
 describe('CreateRfqUseCase', () => {
   it('cria RFQ avulsa com items informados diretamente, gerando o numero RFQ-<ano>-XXXX', async () => {
     const rfqRepository = makeRfqRepository({ countRfqsInYear: jest.fn(async () => 0) });
@@ -99,7 +113,13 @@ describe('CreateRfqUseCase', () => {
     const rfqRepository = makeRfqRepository({
       findRequisitionWithItems: jest.fn(async () => ({
         id: 5,
-        items: [{ item_id: 'item-2', quantity: '3.000000', unit: 'UN' }],
+        requisition_number: 'RQ-5',
+        // `status` da requisicao e do item fazem parte do fixture desde a
+        // correcao do gap G12: a criacao da RFQ agora exige requisicao em
+        // estado cotavel e so puxa item com saldo (`pending`, que e o default
+        // da coluna). Sem eles o mock nao representa uma linha real.
+        status: 'approved',
+        items: [{ id: 50, item_id: 'item-2', quantity: '3.000000', unit: 'UN', status: 'pending' }],
       })),
     });
     const itemRepository = makeItemRepository();
@@ -147,6 +167,79 @@ describe('CreateRfqUseCase', () => {
         transaction: baseTransaction,
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  /**
+   * Gap G12: a criacao da RFQ puxava os itens da requisicao sem olhar status
+   * nenhum — nem da requisicao, nem dos itens. Cotar uma requisicao ja
+   * convertida em pedido era o primeiro passo para gerar um SEGUNDO pedido
+   * dos mesmos itens na adjudicacao.
+   */
+  describe('saldo e estado da requisicao de origem (G12)', () => {
+    it.each(['ordered', 'partial', 'received', 'canceled'])(
+      'recusa cotar requisicao com status "%s"',
+      async (status) => {
+        const rfqRepository = makeRfqRepository({
+          findRequisitionWithItems: jest.fn(async () => ({
+            id: 5,
+            requisition_number: 'RQ-5',
+            status,
+            items: [{ id: 50, item_id: 'item-2', quantity: '3.000000', status: 'ordered' }],
+          })),
+        });
+        const useCase = new CreateRfqUseCase(rfqRepository as any, makeItemRepository() as any);
+
+        // Erro vem da REGRA de estado da requisicao (e nao da ausencia de
+        // itens): o fixture tem item, e a mensagem cita o status.
+        await expect(
+          useCase.execute({ requisition_id: 5, created_by: 1, transaction: baseTransaction }),
+        ).rejects.toThrow(new RegExp(`status "${status}" e nao pode mais ser cotada`));
+
+        expect(rfqRepository.createRfq).not.toHaveBeenCalled();
+      },
+    );
+
+    it('cota apenas os itens com saldo, ignorando os ja pedidos/cancelados', async () => {
+      const rfqRepository = makeRfqRepository({
+        findRequisitionWithItems: jest.fn(async () => ({
+          id: 5,
+          requisition_number: 'RQ-5',
+          status: 'approved',
+          items: [
+            { id: 50, item_id: 'item-com-saldo', quantity: '3.000000', unit: 'UN', status: 'pending' },
+            { id: 51, item_id: 'item-ja-pedido', quantity: '7.000000', unit: 'UN', status: 'ordered' },
+            { id: 52, item_id: 'item-cancelado', quantity: '1.000000', unit: 'UN', status: 'canceled' },
+          ],
+        })),
+      });
+      const useCase = new CreateRfqUseCase(rfqRepository as any, makeItemRepository() as any);
+
+      await useCase.execute({ requisition_id: 5, created_by: 1, transaction: baseTransaction });
+
+      expect(rfqRepository.createRfqItem).toHaveBeenCalledTimes(1);
+      expect(rfqRepository.createRfqItem).toHaveBeenCalledWith(
+        expect.objectContaining({ item_id: 'item-com-saldo' }),
+        baseTransaction,
+      );
+    });
+
+    it('recusa quando a requisicao esta aprovada mas nenhum item tem saldo', async () => {
+      const rfqRepository = makeRfqRepository({
+        findRequisitionWithItems: jest.fn(async () => ({
+          id: 5,
+          requisition_number: 'RQ-5',
+          status: 'approved',
+          items: [{ id: 50, item_id: 'item-2', quantity: '3.000000', status: 'ordered' }],
+        })),
+      });
+      const useCase = new CreateRfqUseCase(rfqRepository as any, makeItemRepository() as any);
+
+      await expect(
+        useCase.execute({ requisition_id: 5, created_by: 1, transaction: baseTransaction }),
+      ).rejects.toThrow(/nao ha saldo a cotar/i);
+
+      expect(rfqRepository.createRfq).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -346,7 +439,7 @@ describe('AwardRfqUseCase', () => {
     const itemSupplierRepository = makeItemSupplierRepository({
       findByItemAndSupplier: jest.fn(async () => null),
     });
-    const useCase = new AwardRfqUseCase(rfqRepository as any, purchaseRepository as any, itemSupplierRepository as any);
+    const useCase = new AwardRfqUseCase(rfqRepository as any, purchaseRepository as any, itemSupplierRepository as any, makeRequisitionRepository() as any);
 
     const result = await useCase.execute({
       id: 1,
@@ -381,7 +474,7 @@ describe('AwardRfqUseCase', () => {
     const itemSupplierRepository = makeItemSupplierRepository({
       findByItemAndSupplier: jest.fn(async () => ({ id: 33 })),
     });
-    const useCase = new AwardRfqUseCase(rfqRepository as any, purchaseRepository as any, itemSupplierRepository as any);
+    const useCase = new AwardRfqUseCase(rfqRepository as any, purchaseRepository as any, itemSupplierRepository as any, makeRequisitionRepository() as any);
 
     await useCase.execute({ id: 1, awards: [{ rfq_item_id: 200, supplier_id: 7 }], userId: 5, transaction: baseTransaction });
 
@@ -393,7 +486,7 @@ describe('AwardRfqUseCase', () => {
     const rfqRepository = makeRfqRepository({
       findRfqByIdForUpdate: jest.fn(async () => ({ id: 1, status: 'sent' })),
     });
-    const useCase = new AwardRfqUseCase(rfqRepository as any, makePurchaseRepository() as any, makeItemSupplierRepository() as any);
+    const useCase = new AwardRfqUseCase(rfqRepository as any, makePurchaseRepository() as any, makeItemSupplierRepository() as any, makeRequisitionRepository() as any);
 
     await expect(
       useCase.execute({ id: 1, awards: [{ rfq_item_id: 200, supplier_id: 7 }], userId: 5, transaction: baseTransaction }),
@@ -405,7 +498,7 @@ describe('AwardRfqUseCase', () => {
       findRfqByIdForUpdate: jest.fn(async () => ({ id: 1, status: 'quoted' })),
       findRfqById: jest.fn(async () => makeQuotedRfqDetail()),
     });
-    const useCase = new AwardRfqUseCase(rfqRepository as any, makePurchaseRepository() as any, makeItemSupplierRepository() as any);
+    const useCase = new AwardRfqUseCase(rfqRepository as any, makePurchaseRepository() as any, makeItemSupplierRepository() as any, makeRequisitionRepository() as any);
 
     await expect(
       useCase.execute({ id: 1, awards: [{ rfq_item_id: 200, supplier_id: 999 }], userId: 5, transaction: baseTransaction }),
@@ -419,7 +512,7 @@ describe('AwardRfqUseCase', () => {
     const rfqRepository = makeRfqRepository({
       findRfqByIdForUpdate: jest.fn(async () => ({ id: 1, status: 'quoted' })),
     });
-    const useCase = new AwardRfqUseCase(rfqRepository as any, makePurchaseRepository() as any, makeItemSupplierRepository() as any);
+    const useCase = new AwardRfqUseCase(rfqRepository as any, makePurchaseRepository() as any, makeItemSupplierRepository() as any, makeRequisitionRepository() as any);
 
     await expect(
       useCase.execute({
@@ -437,11 +530,170 @@ describe('AwardRfqUseCase', () => {
       findRfqById: jest.fn(async () => makeQuotedRfqDetail()),
     });
     const purchaseRepository = makePurchaseRepository({ findProductByCode: jest.fn(async () => null) });
-    const useCase = new AwardRfqUseCase(rfqRepository as any, purchaseRepository as any, makeItemSupplierRepository() as any);
+    const useCase = new AwardRfqUseCase(rfqRepository as any, purchaseRepository as any, makeItemSupplierRepository() as any, makeRequisitionRepository() as any);
 
     await expect(
       useCase.execute({ id: 1, awards: [{ rfq_item_id: 200, supplier_id: 7 }], userId: 5, transaction: baseTransaction }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
     expect(purchaseRepository.createPurchase).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Gap G12: a adjudicacao criava pedido de compra gravando `requisition_id`
+   * sem NUNCA ler nem alterar a requisicao. Como a conversao direta
+   * (`ConvertRequisitionToPurchaseOrdersUseCase`) tambem cria pedido da mesma
+   * requisicao e so ela mexia no status, os mesmos itens viravam DOIS
+   * pedidos de compra.
+   */
+  describe('consumo do saldo da requisicao de origem (G12)', () => {
+    /** RFQ `quoted` nascida da requisicao 5, com 1 item cotado. */
+    const rfqFromRequisition = () => makeQuotedRfqDetail({ requisition_id: 5 });
+
+    /** Requisicao aprovada com os itens informados. */
+    const approvedRequisition = (items: any[]) => ({
+      id: 5,
+      requisition_number: 'RQ-5',
+      status: 'approved',
+      items,
+    });
+
+    const awardSetup = (requisitionRepository: any) => {
+      const rfqRepository = makeRfqRepository({
+        findRfqByIdForUpdate: jest.fn(async () => ({ id: 1, status: 'quoted' })),
+        findRfqById: jest.fn(async () => rfqFromRequisition()),
+      });
+      const purchaseRepository = makePurchaseRepository();
+      const useCase = new AwardRfqUseCase(
+        rfqRepository as any,
+        purchaseRepository as any,
+        makeItemSupplierRepository() as any,
+        requisitionRepository as any,
+      );
+      return { rfqRepository, purchaseRepository, useCase };
+    };
+
+    it('marca o item da requisicao como "ordered" e fecha a requisicao quando nao sobra saldo', async () => {
+      const requisitionRepository = makeRequisitionRepository({
+        findRequisitionByIdForUpdate: jest.fn(async () => approvedRequisition([
+          { id: 50, item_id: 'item-1', status: 'pending' },
+        ])),
+      });
+      const { purchaseRepository, useCase } = awardSetup(requisitionRepository);
+
+      const result = await useCase.execute({
+        id: 1,
+        awards: [{ rfq_item_id: 200, supplier_id: 7 }],
+        userId: 5,
+        transaction: baseTransaction,
+      });
+
+      expect(purchaseRepository.createPurchase).toHaveBeenCalledTimes(1);
+      expect(requisitionRepository.updateRequisitionItem).toHaveBeenCalledWith(50, { status: 'ordered' }, baseTransaction);
+      expect(requisitionRepository.updateRequisition).toHaveBeenCalledWith(5, { status: 'ordered' }, baseTransaction);
+      expect(result).toMatchObject({ requisition_id: 5, requisition_status: 'ordered' });
+    });
+
+    it('mantem a requisicao "approved" quando ainda sobra item com saldo (adjudicacao parcial)', async () => {
+      const requisitionRepository = makeRequisitionRepository({
+        findRequisitionByIdForUpdate: jest.fn(async () => approvedRequisition([
+          { id: 50, item_id: 'item-1', status: 'pending' },
+          { id: 51, item_id: 'item-nao-cotado', status: 'pending' },
+        ])),
+      });
+      const { useCase } = awardSetup(requisitionRepository);
+
+      const result = await useCase.execute({
+        id: 1,
+        awards: [{ rfq_item_id: 200, supplier_id: 7 }],
+        userId: 5,
+        transaction: baseTransaction,
+      });
+
+      expect(requisitionRepository.updateRequisitionItem).toHaveBeenCalledWith(50, { status: 'ordered' }, baseTransaction);
+      expect(requisitionRepository.updateRequisitionItem).not.toHaveBeenCalledWith(51, expect.anything(), expect.anything());
+      // Requisicao continua aberta: o saldo restante ainda pode ser comprado.
+      expect(requisitionRepository.updateRequisition).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ requisition_status: 'approved' });
+    });
+
+    it('recusa adjudicar item que ja virou pedido na requisicao, sem criar pedido nenhum', async () => {
+      const requisitionRepository = makeRequisitionRepository({
+        findRequisitionByIdForUpdate: jest.fn(async () => approvedRequisition([
+          { id: 50, item_id: 'item-1', status: 'ordered' },
+        ])),
+      });
+      const { purchaseRepository, useCase } = awardSetup(requisitionRepository);
+
+      await expect(
+        useCase.execute({ id: 1, awards: [{ rfq_item_id: 200, supplier_id: 7 }], userId: 5, transaction: baseTransaction }),
+      ).rejects.toMatchObject({
+        constructor: BusinessRuleError,
+        details: { requisition_id: 5, requisition_item_ids_without_balance: [50] },
+      });
+
+      expect(purchaseRepository.createPurchase).not.toHaveBeenCalled();
+      expect(requisitionRepository.updateRequisitionItem).not.toHaveBeenCalled();
+    });
+
+    it.each(['draft', 'pending', 'ordered', 'canceled'])(
+      'recusa adjudicar quando a requisicao de origem esta "%s" (so `approved` vira pedido)',
+      async (status) => {
+        const requisitionRepository = makeRequisitionRepository({
+          findRequisitionByIdForUpdate: jest.fn(async () => ({
+            id: 5,
+            requisition_number: 'RQ-5',
+            status,
+            items: [{ id: 50, item_id: 'item-1', status: 'pending' }],
+          })),
+        });
+        const { purchaseRepository, useCase } = awardSetup(requisitionRepository);
+
+        // Falha pela regra de estado da REQUISICAO — a RFQ esta `quoted` e a
+        // cotacao do par item/fornecedor existe, entao o fluxo chega ate aqui.
+        await expect(
+          useCase.execute({ id: 1, awards: [{ rfq_item_id: 200, supplier_id: 7 }], userId: 5, transaction: baseTransaction }),
+        ).rejects.toThrow(/precisa estar aprovada para virar pedido de compra/);
+
+        expect(purchaseRepository.createPurchase).not.toHaveBeenCalled();
+      },
+    );
+
+    it('lanca NotFoundError se a requisicao de origem nao existir mais', async () => {
+      const requisitionRepository = makeRequisitionRepository({
+        findRequisitionByIdForUpdate: jest.fn(async () => null),
+      });
+      const { purchaseRepository, useCase } = awardSetup(requisitionRepository);
+
+      await expect(
+        useCase.execute({ id: 1, awards: [{ rfq_item_id: 200, supplier_id: 7 }], userId: 5, transaction: baseTransaction }),
+      ).rejects.toBeInstanceOf(NotFoundError);
+
+      expect(purchaseRepository.createPurchase).not.toHaveBeenCalled();
+    });
+
+    it('RFQ avulsa (sem requisicao) nao toca em requisicao nenhuma', async () => {
+      const requisitionRepository = makeRequisitionRepository();
+      const rfqRepository = makeRfqRepository({
+        findRfqByIdForUpdate: jest.fn(async () => ({ id: 1, status: 'quoted' })),
+        findRfqById: jest.fn(async () => makeQuotedRfqDetail()), // requisition_id: null
+      });
+      const useCase = new AwardRfqUseCase(
+        rfqRepository as any,
+        makePurchaseRepository() as any,
+        makeItemSupplierRepository() as any,
+        requisitionRepository as any,
+      );
+
+      const result = await useCase.execute({
+        id: 1,
+        awards: [{ rfq_item_id: 200, supplier_id: 7 }],
+        userId: 5,
+        transaction: baseTransaction,
+      });
+
+      expect(requisitionRepository.findRequisitionByIdForUpdate).not.toHaveBeenCalled();
+      expect(requisitionRepository.updateRequisition).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ requisition_id: null, requisition_status: null });
+    });
   });
 });

@@ -6,6 +6,9 @@
  * - **A partir de uma requisicao** (`requisition_id` informado): os itens
  *   sao puxados automaticamente de `purchase_requisition_items` (nao aceita
  *   `items` no payload nesse caso — validado no schema Zod, `.refine`).
+ *   Somente itens com SALDO (status `pending`) sao puxados, e a requisicao
+ *   precisa estar num estado que ainda admita compra — ver G12 em
+ *   {@link CreateRfqUseCase.execute}.
  * - **Avulsa** (`requisition_id` ausente): os itens vem diretamente do
  *   payload (`items`, obrigatorio e nao vazio nesse caso).
  *
@@ -20,6 +23,22 @@ import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError, BusinessRuleError } from '../../../../errors';
 import RfqRepository from '../../domain/repositories/RfqRepository';
 import ItemRepository from '../../../items/domain/repositories/ItemRepository';
+
+/**
+ * Estados de requisicao que NAO admitem mais uma cotacao: a compra daqueles
+ * itens ja aconteceu (`ordered`/`partial`/`received`) ou a requisicao morreu
+ * (`canceled`). Cotar aqui e o primeiro passo do caminho que gerava pedido
+ * de compra em duplicidade (gap G12).
+ *
+ * `draft`/`pending`/`approved` continuam permitidos de proposito: cotar
+ * ANTES de aprovar e pratica normal de compras (o preco cotado e justamente
+ * o que embasa a aprovacao). O que a cotacao nao pode e virar pedido sem
+ * aprovacao — esse gate fica na adjudicacao (`AwardRfqUseCase`).
+ */
+const NON_QUOTABLE_REQUISITION_STATUSES = ['ordered', 'partial', 'received', 'canceled'];
+
+/** Status de item de requisicao que ainda tem saldo a comprar. */
+const PENDING_REQUISITION_ITEM_STATUS = 'pending';
 
 interface RfqItemInput {
   item_id: string;
@@ -49,10 +68,17 @@ class CreateRfqUseCase extends UseCase<CreateRfqInput, any> {
   /**
    * Cria a cotacao com seus itens.
    *
+   * Gap G12 (auditoria da cadeia do produto, 2026-08-09): a criacao puxava
+   * os itens da requisicao sem olhar NEM o status da requisicao NEM o status
+   * de cada item. Dava para cotar uma requisicao ja convertida em pedido de
+   * compra (ou cancelada) e, adjudicando a cotacao, gerar um SEGUNDO pedido
+   * dos mesmos itens. Agora a requisicao precisa estar num estado que ainda
+   * admita compra e so os itens com saldo (`pending`) sao cotados.
+   *
    * @param input - Payload validado pelo controller + `created_by`/`transaction` injetados.
    * @returns A cotacao criada, com itens/fornecedores/cotacoes carregados (vazios na criacao).
    * @throws {NotFoundError} Se `requisition_id` nao corresponder a uma requisicao existente, ou se algum `item_id` nao existir.
-   * @throws {BusinessRuleError} Se a requisicao informada nao tiver itens.
+   * @throws {BusinessRuleError} Se a requisicao estiver em estado que nao admite mais cotacao, ou se nao houver item com saldo a cotar.
    */
   public async execute(input: CreateRfqInput): Promise<any> {
     let itemsToCreate: RfqItemInput[];
@@ -64,13 +90,33 @@ class CreateRfqUseCase extends UseCase<CreateRfqInput, any> {
         throw new NotFoundError(`Requisicao ${input.requisition_id} nao encontrada.`);
       }
 
+      if (NON_QUOTABLE_REQUISITION_STATUSES.includes(requisition.status)) {
+        throw new BusinessRuleError(
+          `A requisicao ${requisition.requisition_number ?? requisition.id} esta com status "${requisition.status}" e nao pode mais ser cotada. `
+          + 'Cotar e adjudicar uma requisicao ja atendida geraria um segundo pedido de compra dos mesmos itens.',
+          { requisition_id: requisition.id, current_status: requisition.status },
+        );
+      }
+
       const requisitionItems: any[] = requisition.items ?? [];
       if (requisitionItems.length === 0) {
         throw new BusinessRuleError('A requisicao informada nao possui itens para cotar.');
       }
 
+      // G12: so entram na cotacao os itens com saldo. Itens ja convertidos
+      // em pedido (`ordered`) ou cancelados nao podem ser cotados de novo.
+      const pendingItems = requisitionItems.filter(
+        (item: any) => item.status === PENDING_REQUISITION_ITEM_STATUS
+      );
+      if (pendingItems.length === 0) {
+        throw new BusinessRuleError(
+          `Todos os itens da requisicao ${requisition.requisition_number ?? requisition.id} ja foram pedidos ou cancelados — nao ha saldo a cotar.`,
+          { requisition_id: requisition.id },
+        );
+      }
+
       requisitionId = requisition.id;
-      itemsToCreate = requisitionItems.map((item: any) => ({
+      itemsToCreate = pendingItems.map((item: any) => ({
         item_id: String(item.item_id),
         quantity: parseFloat(item.quantity),
         unit: item.unit ?? undefined,

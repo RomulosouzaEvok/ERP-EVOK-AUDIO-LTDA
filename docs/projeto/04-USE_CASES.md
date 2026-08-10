@@ -227,6 +227,25 @@
 - Sistema exibe "Materiais insuficientes" com lista
 - Sugere gerar requisicao de compra automaticamente
 
+**Regras de Negócio (gap G16, 2026-08-09):**
+- Existem **dois caminhos** de criação de OP e ambos aplicam as mesmas
+  validações de produção: produto ativo, estrutura (BOM) ativa e material
+  mínimo disponível para a quantidade. O caminho manual é
+  `POST /api/production/orders` (`CreateProductionOrderUseCase`); o caminho
+  do planejamento é `POST /api/mrp/planned-orders/convert-to-production`
+  (`ConvertPlannedOrdersToProductionOrderUseCase`). Até 2026-08-09 o caminho
+  do MRP **não validava disponibilidade nenhuma** e criava OP sem material —
+  OP que depois não conseguia ser concluída (a conclusão consome a BOM e
+  falha sem estoque/sem BOM, ver gap G2).
+- Diferença intencional entre os dois: o caminho do MRP aceita produto
+  `finished` **e** `semi_finished` (produzir subconjunto é legítimo e é o que
+  o MRP planeja ao explodir a necessidade de um `SUBCONJUNTO`); o caminho
+  manual aceita apenas `finished`.
+- A numeração `OP-YYYY-NNNN` é gerada de forma serializada no repositório
+  (advisory lock por ano + `MAX` do sufixo já emitido), não por contagem de
+  linhas: `COUNT` colidia entre criações concorrentes e regredia quando uma
+  OP era removida, reemitindo um número já usado (`order_number` é `UNIQUE`).
+
 ---
 
 ## UC-13: Apontar Producao (Chao de Fabrica)
@@ -313,9 +332,20 @@
 6. **Se a NC informar `lot_number` + `product_id`:** o sistema localiza o
    `LotControl` correspondente e, na MESMA transacao da criacao da NC, move
    o lote para `blocked` (a partir de `available`, `quarantine` ou
-   `reserved`), registrando `"Bloqueado pela RNC #<id>"` em `notes`. Se o
-   lote nao for encontrado, a NC e criada normalmente (pode referenciar
-   lote de sistema externo).
+   `reserved`), registrando `"Bloqueado pela RNC #<id>"` em `notes`.
+6b. **Se a NC NAO bloquear lote nenhum:** ela e criada assim mesmo (pode
+   referenciar lote de sistema externo), porem com **aviso explicito**
+   gravado em `non_conformities.notes`, prefixado por
+   `[ATENCAO: NENHUM LOTE BLOQUEADO]` e dizendo o motivo — lote nao
+   encontrado para o produto, `lot_number` sem `product_id` (a busca e por
+   par produto x lote), lote em status nao bloqueavel
+   (`consumed`/`expired`/ja `blocked`), ou NC de produto sem `lot_number`.
+   Como o endpoint devolve a RNC inteira, o aviso volta no payload da
+   resposta. NC que nao se refere a produto (ex.: `origin='audit'`,
+   `asset_id`) nao gera aviso — nao ha lote a conter.
+   *(Gap G10, 2026-08-09: ate essa data uma RNC que nao conteve material
+   nenhum era indistinguivel de uma que bloqueou o lote — quem abriu a RNC
+   acreditava ter contido o material, e nao tinha.)*
 7. **Fechamento da NC:** ao mudar `status` para `closed` com
    `effectiveness_result = 'effective'`, o sistema **nao desbloqueia** o
    lote automaticamente — a liberacao pos-tratativa e sempre uma decisao
@@ -323,7 +353,11 @@
 
 **Validacoes/Gatilhos:**
 - Bloqueio de lote e best-effort e nao bloqueante: NC sempre e criada mesmo
-  que o lote nao exista ou ja esteja em status terminal (ex.: `consumed`).
+  que o lote nao exista ou ja esteja em status terminal (ex.: `consumed`) —
+  mas **nunca em silencio**: nesse caso a NC carrega o aviso do passo 6b.
+  A NC e registro de qualidade e evidencia de auditoria (ISO 9001 8.7);
+  recusa-la porque o lote nao foi localizado faria o sistema perder o
+  registro do defeito para proteger um controle secundario.
 - Nenhum outro campo do lote (quantidades, custo) e alterado pelo bloqueio.
 
 ---
@@ -647,7 +681,14 @@ evento relevante, não em batch agendado" (`CLAUDE.md` §7).
    lock pessimista (`SELECT ... FOR UPDATE`), para evitar conversão
    concorrente da mesma requisição
 3. Sistema valida que a requisição existe e está em `status='approved'`
-4. Para cada item da requisição, sistema resolve o fornecedor nesta ordem
+3b. Sistema seleciona **apenas os itens com saldo**
+   (`purchase_requisition_items.status = 'pending'`). Itens já pedidos pela
+   adjudicação de uma cotação (UC-25b, `POST /api/rfqs/:id/award`) ou
+   cancelados são ignorados; se nenhum item tiver saldo, 422
+   BUSINESS_RULE_VIOLATION. *(Gap G12, 2026-08-09: sem este filtro, os mesmos
+   itens viravam dois pedidos de compra — um por este caminho, outro pela
+   adjudicação da cotação.)*
+4. Para cada item **com saldo**, sistema resolve o fornecedor nesta ordem
    de prioridade: (1) `suggested_supplier_id` do item; (2) fornecedor
    preferencial ativo em `item_suppliers` (`preferred=true`,
    `active=true`); (3) `fallback_supplier_id` do body
@@ -662,8 +703,10 @@ evento relevante, não em batch agendado" (`CLAUDE.md` §7).
 7. Para cada item do pedido, `unit_price` é resolvido nesta ordem: preço do
    vínculo `item_suppliers` para o fornecedor daquele pedido → 
    `unit_price_estimated` do item da requisição → `0`
-8. Sistema atualiza a requisição para `status='ordered'` e todos os seus
-   itens para `status='ordered'`
+8. Sistema atualiza os itens convertidos para `status='ordered'`; como todos
+   os itens com saldo são convertidos neste fluxo (item sem fornecedor
+   derruba a operação inteira), não sobra pendência e a requisição também
+   vai para `status='ordered'`
 9. Sistema confirma a transação (`commit`) e retorna os pedidos de compra
    criados (com itens), o `requisition_id` e o novo `requisition_status`
 10. Sistema registra log de auditoria (`logAction`, ação `convert`)
@@ -859,20 +902,26 @@ ou atualizada, usada por engenharia/qualidade para validar testes acústicos
    `thd`, `power_rms`, `power_peak`, `life`, `polarity`, `noise`,
    `thiele_small`), e opcionalmente `serial_number`, `lot_number`,
    `production_order_id`, `parameters`, `result`, `unit`, `specification_min`,
-   `specification_max`, `curve_data`, `notes`, `create_rnc_on_fail`
+   `specification_max`, `curve_data`, `notes`
 2. Sistema calcula `passed` automaticamente: `true` quando `result` foi
    informado e está dentro de `[specification_min, specification_max]`
    (comparação parcial se apenas um dos limites for informado)
 3. Sistema grava `tester_id` como o usuário autenticado (nunca aceito do
    corpo da requisição)
-4. Se `passed = false` e `create_rnc_on_fail = true`, sistema cria uma
-   Não-Conformidade (reaproveitando `CreateNonConformityUseCase` do módulo de
-   qualidade: `origin = 'final'`, `defect_type = 'acoustic'`,
-   `severity = 'major'`, descrição automática com teste/medido/faixa,
-   `product_id`, `lot_number`) e grava `non_conformity_id` no teste. Quando o
-   `lot_number` informado corresponde a um lote existente (`LotControl`), a
-   RNC bloqueia automaticamente esse lote (regra já existente no módulo de
-   qualidade, sem duplicação de lógica)
+4. Se `passed = false`, o sistema **sempre** cria uma Não-Conformidade
+   (reaproveitando `CreateNonConformityUseCase` do módulo de qualidade:
+   `origin = 'final'`, `defect_type = 'acoustic'`, `severity = 'major'`,
+   descrição automática com teste/medido/faixa, `product_id`, `lot_number`) e
+   grava `non_conformity_id` no teste. Quando o `lot_number` informado
+   corresponde a um lote existente (`LotControl`), a RNC bloqueia
+   automaticamente esse lote (regra já existente no módulo de qualidade, sem
+   duplicação de lógica); quando **não** bloqueia lote nenhum, a RNC nasce com
+   um aviso explícito em `notes` (ver UC de não conformidade, gap G10).
+   > **Mudança 2026-08-09 (gap G8):** até essa data a abertura da RNC dependia
+   > de `create_rnc_on_fail = true` no payload — reprovação era opcional e, por
+   > omissão de quem chamava a API, morria sem tratativa e sem bloqueio de
+   > lote. O campo continua sendo aceito pelo endpoint (schema `strict`, para
+   > não quebrar o payload da tela atual) mas é **ignorado**.
 
 **Fluxo Alternativo (sem dado suficiente para aprovação):**
 - Sistema retorna 422 (`ValidationError`) se `result` não foi informado e

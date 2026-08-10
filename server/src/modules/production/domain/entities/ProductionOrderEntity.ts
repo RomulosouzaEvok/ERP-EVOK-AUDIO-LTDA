@@ -163,6 +163,25 @@ class ProductionOrderEntity extends Entity {
     if (!allowed.includes(nextStatus)) throw new BusinessRuleError(`Transicao invalida: ${this.status} -> ${nextStatus}`);
 
     const changes: ProductionTransitionChanges = { status: nextStatus };
+
+    // Gap G6 (auditoria da cadeia do produto, 2026-08-09) — ANALISADO, NAO
+    // ALTERADO. O achado e que iniciar a producao "so grava a data". A
+    // pre-condicao que de fato importa ja e coberta antes: `in_progress` so e
+    // alcancavel a partir de `released` ou `paused`, e a entrada em
+    // `released` valida disponibilidade e RESERVA o material
+    // (`ChangeProductionOrderStatusUseCase.reserveMaterials`). As validacoes
+    // sugeridas no achado nao tem onde se apoiar hoje:
+    // - centro de trabalho: `production_orders` nao tem coluna de centro de
+    //   trabalho (ele vive nas etapas de roteiro/apontamento) — exigir isso e
+    //   mudanca de schema, fora do escopo desta correcao;
+    // - operador/responsavel: `responsible_id` e opcional por desenho em todo
+    //   o modulo, e nenhuma regra documentada o torna obrigatorio;
+    // - apontamento iniciado: contradiz a decisao explicita de
+    //   `reconcileTrackingOnCompletion` ("OP sem apontamento por etapa: fluxo
+    //   simples permanece valido") e e exatamente a pergunta em aberto do gap
+    //   G4 (apontamento obrigatorio?), que depende de decisao do dono.
+    // Qualquer regra alem disso seria requisito inventado — ver relatorio da
+    // Onda 1 e docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md.
     if (nextStatus === 'in_progress') changes.start_date = new Date();
     if (nextStatus === 'completed') {
       const produced = quantityProduced !== undefined ? Number(quantityProduced) : this.quantity;

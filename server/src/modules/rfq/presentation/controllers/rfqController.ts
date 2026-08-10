@@ -11,6 +11,10 @@ import SequelizeItemSupplierRepository = require('../../../items/infrastructure/
 // namespace (nao construtivel) em `import X = require(...)` — mesmo
 // contorno ja usado em `purchaseRequisitionController.ts`.
 const SequelizePurchaseRepository = require('../../../purchases/infrastructure/sequelize/SequelizePurchaseRepository');
+// Repositorio de requisicoes: a adjudicacao consome o saldo da requisicao de
+// origem na mesma transacao (gap G12), impedindo que os mesmos itens virem
+// dois pedidos de compra (aqui e em `ConvertRequisitionToPurchaseOrdersUseCase`).
+import SequelizePurchaseRequisitionRepository = require('../../../purchaseRequisitions/infrastructure/sequelize/SequelizePurchaseRequisitionRepository');
 import CreateRfqUseCase = require('../../application/use-cases/CreateRfqUseCase');
 import ListRfqsUseCase = require('../../application/use-cases/ListRfqsUseCase');
 import GetRfqByIdUseCase = require('../../application/use-cases/GetRfqByIdUseCase');
@@ -32,6 +36,7 @@ const rfqRepository = new SequelizeRfqRepository();
 const itemRepository = new SequelizeItemRepository();
 const itemSupplierRepository = new SequelizeItemSupplierRepository();
 const purchaseRepository = new SequelizePurchaseRepository();
+const requisitionRepository = new SequelizePurchaseRequisitionRepository();
 
 /**
  * Requisicao autenticada: `req.user` e populado pelo middleware
@@ -217,7 +222,7 @@ exports.award = async (req: AuthenticatedRequest, res: Response, next: NextFunct
     const parsed = awardRfqSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
 
-    const useCase = new AwardRfqUseCase(rfqRepository, purchaseRepository, itemSupplierRepository);
+    const useCase = new AwardRfqUseCase(rfqRepository, purchaseRepository, itemSupplierRepository, requisitionRepository);
     const result = await useCase.execute({
       id: Number(req.params.id),
       awards: parsed.data.awards,
@@ -232,7 +237,14 @@ exports.award = async (req: AuthenticatedRequest, res: Response, next: NextFunct
       action: 'award',
       entityType: 'Rfq',
       entityId: result.rfq_id,
-      newValues: { status: result.rfq_status, purchase_orders: result.purchase_orders.map((p: { order_number: string }) => p.order_number) },
+      newValues: {
+        status: result.rfq_status,
+        purchase_orders: result.purchase_orders.map((p: { order_number: string }) => p.order_number),
+        // G12: rastreia no log de auditoria o efeito da adjudicacao sobre a
+        // requisicao de origem (saldo consumido / requisicao fechada).
+        requisition_id: result.requisition_id,
+        requisition_status: result.requisition_status,
+      },
       description: `Cotacao ${result.rfq_id} adjudicada, gerando ${result.purchase_orders.length} pedido(s) de compra`,
     });
 

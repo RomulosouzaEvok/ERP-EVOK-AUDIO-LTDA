@@ -53,10 +53,14 @@ class CreateProductionOrderUseCase extends UseCase<Record<string, any>, Promise<
         );
       }
 
-      const year = new Date().getFullYear();
-      const yearPrefix = `OP-${year}`;
-      const count = await this.productionOrderRepository.countByOrderNumberPrefix(yearPrefix, t);
-      const order_number = `${yearPrefix}-${String(count + 1).padStart(4, '0')}`;
+      // Numeracao serializada no repositorio (advisory lock por ano + MAX do
+      // sufixo). Ate 2026-08-09 o numero era montado aqui com `COUNT(*) + 1`
+      // sem nenhuma serializacao: duas criacoes concorrentes liam a mesma
+      // contagem e geravam o mesmo `order_number` (UNIQUE, 500 em runtime), e
+      // a contagem ainda regredia quando uma OP era removida, reemitindo um
+      // numero ja usado (gap G16 da auditoria da cadeia do produto).
+      const yearPrefix = `OP-${new Date().getFullYear()}`;
+      const order_number = await this.productionOrderRepository.nextOrderNumberForYear(yearPrefix, t);
       const order = await this.productionOrderRepository.create(
         entity.toCreatePersistence({ order_number, created_by: input.created_by ?? null }),
         t
