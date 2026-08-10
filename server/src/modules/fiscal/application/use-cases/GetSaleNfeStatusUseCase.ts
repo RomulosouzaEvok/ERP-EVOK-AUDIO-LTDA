@@ -18,6 +18,14 @@
  * disponível em `sale_invoices.items` (histórico multi-NF-e) mesmo depois
  * que o processo que iniciou a emissão já retornou a resposta HTTP.
  *
+ * BAIXA DE ESTOQUE (gap G9, 2026-08-10): este caminho também baixa o
+ * estoque da quantidade autorizada, pelo mesmo serviço do caminho síncrono
+ * (`services/saleStockService.ts`), na mesma transação que incrementa
+ * `invoiced_quantity`. Se este use case só acumulasse a quantidade faturada
+ * sem baixar, uma venda faturada por provedor real (assíncrono) ficaria com
+ * NF-e autorizada e mercadoria ainda em estoque — exatamente a divergência
+ * que o G9 existe para eliminar.
+ *
  * @module modules/fiscal/application/use-cases/GetSaleNfeStatusUseCase
  */
 
@@ -29,9 +37,11 @@ const { sequelize } = require('../../../../config/database');
 const { NotFoundError, BusinessRuleError } = require('../../../../errors');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
 const SaleInvoiceAccumulator = require('../../domain/services/SaleInvoiceAccumulator');
+const SaleStockService = require('../../../../services/saleStockService');
 
 interface GetSaleNfeStatusInput {
   saleId: number | string;
+  userId?: number;
 }
 
 class GetSaleNfeStatusUseCase extends UseCase {
@@ -46,9 +56,10 @@ class GetSaleNfeStatusUseCase extends UseCase {
   /**
    * @param {Object} input
    * @param {number} input.saleId
+   * @param {number} [input.userId] - Usuário responsável (do JWT), autor do `InventoryMovement` de saída (G9). Ausente no caminho de webhook (não há usuário autenticado); cai no vendedor da venda (`Sale.user_id`, sempre NOT NULL).
    * @returns {Promise<Object>} A venda com o status de NF-e reconciliado.
    */
-  async execute({ saleId }: GetSaleNfeStatusInput) {
+  async execute({ saleId, userId }: GetSaleNfeStatusInput) {
     const sale = await this.fiscalRepository.findSaleById(saleId);
     if (!sale) throw new NotFoundError('Venda não encontrada');
 
@@ -122,6 +133,21 @@ class GetSaleNfeStatusUseCase extends UseCase {
           );
           const allItems = await this.fiscalRepository.findSaleItemsBySaleId(saleId, { transaction, lock: transaction.LOCK.UPDATE });
           const { updates, anyRemaining } = SaleInvoiceAccumulator.applyInvoicedQuantities(allItems, qtyToInvoiceByItemId);
+
+          // Gap G9: baixa de estoque da quantidade efetivamente autorizada,
+          // na mesma transação do acúmulo (mesmo serviço e mesma garantia
+          // do caminho síncrono — "faturado sem baixar" não pode existir).
+          await SaleStockService.commitInvoicedStock(
+            locked.id,
+            updates.map(({ item }: { item: any }) => ({
+              productId: item.product_id,
+              quantity: qtyToInvoiceByItemId.get(item.id) as number,
+            })),
+            userId ?? locked.user_id,
+            transaction,
+            { description: `NF-e ${locked.nfe_series}/${locked.nfe_number} - Venda #${locked.id}` }
+          );
+
           for (const { item, newInvoicedQuantity } of updates) {
             item.invoiced_quantity = newInvoicedQuantity;
             await item.save({ transaction });

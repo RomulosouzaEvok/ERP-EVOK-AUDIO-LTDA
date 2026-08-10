@@ -32,23 +32,41 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 /**
  * Altera o status de uma venda respeitando `VALID_TRANSITIONS`.
  *
- * Ao cancelar (`status === 'canceled'`), restaura o estoque de cada item
- * via `InventoryService.receive` e cancela todas as `AccountReceivable`
- * pendentes/nao pagas da venda dentro da mesma transacao.
- *
  * F22 — confirmacao de orcamento (`quote -> confirmed`): e neste momento
- * (e nao mais na criacao) que o estoque de cada item e debitado via
- * `InventoryService.consume` (com a mesma revalidacao de estoque
- * insuficiente sob lock que ja existia na criacao) e as parcelas em
- * `AccountReceivable` sao geradas, usando os mesmos dados persistidos na
- * venda (`total_amount`, `installments`, `payment_method`) e nos itens
- * (`SaleItem`) criados junto do orcamento.
+ * (e nao mais na criacao) que o estoque de cada item e comprometido e as
+ * parcelas em `AccountReceivable` sao geradas, usando os mesmos dados
+ * persistidos na venda (`total_amount`, `installments`, `payment_method`) e
+ * nos itens (`SaleItem`) criados junto do orcamento.
  *
- * Bloco 4 (multiplos depositos, BUSINESS_RULES.md §12 item 7): expedicao/
- * venda sempre debita/credita o deposito 'ACABADOS'. Toda alteracao de
- * `products.quantity` feita aqui via `InventoryService.consume`/`receive`
- * e acompanhada, na MESMA transacao, do dual-write correspondente em
- * `WarehouseStockService.removeFromWarehouse`/`addToWarehouse` para o
+ * GAP G9 (2026-08-10) — confirmar RESERVA, faturar BAIXA. A confirmacao
+ * chamava `InventoryService.consume` e dava baixa imediata em
+ * `products.quantity`; agora chama `InventoryService.reserve({ saleId })`.
+ * Motivo (Ajuste SINIEF 07/05, clausula 1a §1o e clausula 9a §1o): a NF-e e
+ * autorizada antes do fato gerador e a mercadoria so transita depois da
+ * autorizacao de uso — enquanto o pedido esta apenas `confirmed` a
+ * mercadoria continua fisicamente na empresa. A baixa efetiva passou para a
+ * autorizacao da NF-e, proporcional a quantidade faturada
+ * (`services/saleStockService.ts`).
+ *
+ * Cancelamento (`status === 'canceled'`) apos o G9 tem DOIS efeitos
+ * distintos, porque parte do pedido pode ja ter virado NF-e:
+ *  - o saldo ainda **reservado** (nao faturado) e liberado
+ *    (`releaseAllReservationsForSale`) e volta a ficar disponivel — nada
+ *    entra em `products.quantity`, porque nada tinha saido;
+ *  - o saldo ja **faturado** (`SaleItem.invoiced_quantity`, que so existe em
+ *    venda `partially_invoiced`/`invoiced`) esse sim saiu do estoque e e
+ *    devolvido via `InventoryService.receive` + credito no deposito
+ *    ACABADOS.
+ * Antes do G9 o cancelamento devolvia `item.quantity` INTEIRA em qualquer
+ * situacao — inclusive ao cancelar um `quote`, que nunca tinha debitado
+ * nada e portanto ganhava estoque fantasma. Esse defeito desaparece com a
+ * regra nova (um `quote` nao tem reserva nem quantidade faturada, entao o
+ * cancelamento nao mexe em estoque nenhum).
+ *
+ * Bloco 4 (multiplos depositos, BUSINESS_RULES.md §12 item 7): reserva NAO
+ * movimenta deposito. Toda alteracao de `products.quantity` feita aqui via
+ * `InventoryService.receive` continua acompanhada, na MESMA transacao, do
+ * dual-write correspondente em `WarehouseStockService.addToWarehouse` para o
  * deposito 'ACABADOS', preservando a invariante de soma por deposito.
  *
  * Tratamento diferenciado da transicao `invoiced -> shipped` (pendencia
@@ -137,44 +155,52 @@ class ChangeSaleStatusUseCase extends UseCase {
     const previousStatus = sale.status;
 
     if (status === 'canceled') {
-      // Resolve o deposito ACABADOS uma unica vez para todos os itens
-      // (mesmo padrao de ChangeProductionOrderStatusUseCase/
-      // ReceivePurchaseItemsUseCase).
-      const acabadosWarehouse = await WarehouseStockService.getWarehouseByCode('ACABADOS', transaction);
+      // (1) Saldo ainda reservado (nao faturado) volta a ficar disponivel.
+      // Nao entra nada em `products.quantity`: reserva nao tinha saido.
+      await InventoryService.releaseAllReservationsForSale(sale.id, userId, transaction, {
+        description: `Cancelamento venda #${sale.id} - reserva liberada`
+      });
 
+      // (2) Saldo ja faturado (NF-e emitida) foi de fato baixado do estoque
+      // e precisa ser devolvido. `invoiced_quantity` e 0 em venda
+      // `quote`/`confirmed`, entao nesses casos este laco nao movimenta
+      // nada — o que corrige o estoque fantasma que o cancelamento de
+      // orcamento gerava antes do G9.
+      let acabadosWarehouse = null;
       for (const item of sale.items) {
-        await InventoryService.receive(item.product_id, item.quantity, userId, transaction, {
-          description: `Cancelamento venda #${sale.id} - estoque restaurado`,
+        const invoicedQuantity = Number(item.invoiced_quantity || 0);
+        if (invoicedQuantity <= 0) continue;
+
+        // Resolvido sob demanda (e uma unica vez) para nao pagar a consulta
+        // no caso comum de cancelamento sem nada faturado.
+        if (!acabadosWarehouse) {
+          acabadosWarehouse = await WarehouseStockService.getWarehouseByCode('ACABADOS', transaction);
+        }
+
+        await InventoryService.receive(item.product_id, invoicedQuantity, userId, transaction, {
+          description: `Cancelamento venda #${sale.id} - estoque faturado restaurado`,
           referenceId: sale.id,
           referenceType: 'adjustment'
         });
 
         // Dual-write (Bloco 4, BUSINESS_RULES.md §12 item 3/7): cancelamento
         // de venda credita de volta o deposito ACABADOS na mesma transacao.
-        await WarehouseStockService.addToWarehouse(item.product_id, acabadosWarehouse.id, item.quantity, transaction);
+        await WarehouseStockService.addToWarehouse(item.product_id, acabadosWarehouse.id, invoicedQuantity, transaction);
       }
 
       await this.saleRepository.cancelPendingReceivables(sale.id, transaction);
     }
 
     if (previousStatus === 'quote' && status === 'confirmed') {
-      // Resolve o deposito ACABADOS uma unica vez para todos os itens.
-      const acabadosWarehouse = await WarehouseStockService.getWarehouseByCode('ACABADOS', transaction);
-
-      // Debita estoque de cada item agora, revalidando disponibilidade sob
-      // lock (mesma regra de erro 404/409 que ja existia na criacao da
-      // venda confirmada diretamente).
+      // Reserva o estoque de cada item agora (G9), revalidando a
+      // disponibilidade (`quantity - reserved_quantity`) sob lock — mesma
+      // regra de erro 404/422 que a criacao de venda ja confirmada aplica.
+      // A baixa efetiva so acontece na autorizacao da NF-e.
       for (const item of sale.items) {
-        await InventoryService.consume(item.product_id, item.quantity, userId, transaction, {
-          description: `Confirmacao de orcamento - Venda #${sale.id}`,
-          referenceId: sale.id,
-          referenceType: 'sale'
+        await InventoryService.reserve(item.product_id, item.quantity, userId, transaction, {
+          saleId: sale.id,
+          description: `Confirmacao de orcamento - Venda #${sale.id}`
         });
-
-        // Dual-write (Bloco 4, BUSINESS_RULES.md §12 item 3/7): confirmacao
-        // de orcamento (expedicao/venda) sempre debita o deposito ACABADOS
-        // na mesma transacao.
-        await WarehouseStockService.removeFromWarehouse(item.product_id, acabadosWarehouse.id, item.quantity, transaction);
       }
 
       // Gera as parcelas em AccountReceivable adiadas da criacao (F22),

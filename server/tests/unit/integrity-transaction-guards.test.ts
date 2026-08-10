@@ -19,6 +19,9 @@ jest.mock('../../src/config/database', () => ({
 
 jest.mock('../../src/services/inventoryService', () => ({
   receive: jest.fn(async () => ({ product: { id: 10, quantity: 15 } })),
+  // G9 (2026-08-10): cancelar venda libera a reserva do saldo nao faturado
+  // e so devolve ao estoque o que ja tinha virado NF-e.
+  releaseAllReservationsForSale: jest.fn(async () => []),
 }));
 
 jest.mock('../../src/services/warehouseStockService', () => ({
@@ -58,13 +61,15 @@ describe('Integrity transaction guards', () => {
     jest.clearAllMocks();
   });
 
-  it('cancela venda usando leitura com lock e restaura estoque uma vez', async () => {
+  it('cancela venda usando leitura com lock e restaura estoque faturado uma vez', async () => {
     const save = jest.fn(async () => ({}));
     const saleRepository = {
+      // Venda parcialmente faturada: 2 unidades ja viraram NF-e (sairam do
+      // estoque) e precisam voltar exatamente uma vez.
       findSaleWithItemsForUpdate: jest.fn(async () => ({
         id: 99,
         status: 'confirmed',
-        items: [{ product_id: 10, quantity: 2 }],
+        items: [{ product_id: 10, quantity: 2, invoiced_quantity: 2 }],
         save,
       })),
       cancelPendingReceivables: jest.fn(async () => ({})),
@@ -81,6 +86,7 @@ describe('Integrity transaction guards', () => {
     });
 
     expect(saleRepository.findSaleWithItemsForUpdate).toHaveBeenCalledWith(99, transaction);
+    expect(InventoryService.releaseAllReservationsForSale).toHaveBeenCalledTimes(1);
     expect(InventoryService.receive).toHaveBeenCalledTimes(1);
     expect(saleRepository.cancelPendingReceivables).toHaveBeenCalledWith(99, transaction);
     expect(save).toHaveBeenCalledWith({ transaction });

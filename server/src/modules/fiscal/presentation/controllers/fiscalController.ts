@@ -25,6 +25,11 @@ const fiscalRepository = new SequelizeFiscalRepository();
  * Faturamento parcial (gap 3/3 do módulo `sales`): aceita payload opcional
  * `{ items: [{ sale_item_id, quantity }] }`; omitido/vazio preserva o
  * comportamento anterior (fatura o saldo pendente inteiro).
+ *
+ * Gap G9 (2026-08-10): é esta rota que baixa o estoque da venda (antes a
+ * baixa era na confirmação do pedido). O `userId` vai SEMPRE do JWT, nunca
+ * do body — é ele que assina o `InventoryMovement` de saída (remediação de
+ * anti-spoofing de identidade, 2026-08-02).
  */
 exports.issueSaleNfe = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -32,7 +37,11 @@ exports.issueSaleNfe = async (req: Request, res: Response, next: NextFunction) =
     if (!parsed.success) return handleZodError(parsed.error);
 
     const useCase = new IssueSaleNfeUseCase(fiscalRepository);
-    const sale = await useCase.execute({ saleId: req.params.id, items: parsed.data.items });
+    const sale = await useCase.execute({
+      saleId: req.params.id,
+      items: parsed.data.items,
+      userId: (req as any).user?.id,
+    });
 
     logAction(req, {
       action: 'status_change',
@@ -47,11 +56,17 @@ exports.issueSaleNfe = async (req: Request, res: Response, next: NextFunction) =
   } catch (error) { next(error); }
 };
 
-/** `GET /api/sales/:id/nfe` — consulta/reconcilia o status da NF-e da venda. */
+/**
+ * `GET /api/sales/:id/nfe` — consulta/reconcilia o status da NF-e da venda.
+ *
+ * Gap G9: quando a reconciliação encontra a NF-e autorizada (provedor
+ * assíncrono), é aqui que a baixa de estoque é efetivada — por isso o
+ * `userId` do JWT também é repassado.
+ */
 exports.getSaleNfeStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new GetSaleNfeStatusUseCase(fiscalRepository);
-    const sale = await useCase.execute({ saleId: req.params.id });
+    const sale = await useCase.execute({ saleId: req.params.id, userId: (req as any).user?.id });
     res.json({ success: true, data: sale });
   } catch (error) { next(error); }
 };

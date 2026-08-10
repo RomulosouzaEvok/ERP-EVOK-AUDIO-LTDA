@@ -20,6 +20,12 @@ jest.mock('../../src/config/database', () => ({
   },
 }));
 
+// G9 (2026-08-10): a autorização (também a assíncrona) baixa estoque.
+// Dublado aqui para isolar o use case fiscal da stack de estoque.
+jest.mock('../../src/services/saleStockService', () => ({
+  commitInvoicedStock: jest.fn(async () => []),
+}));
+
 jest.mock('../../src/modules/fiscal/infrastructure/providers/NfeProviderFactory', () =>
   jest.fn(() => ({
     queryStatus: jest.fn(async () => queryStatusResult),
@@ -27,6 +33,8 @@ jest.mock('../../src/modules/fiscal/infrastructure/providers/NfeProviderFactory'
 );
 
 import GetSaleNfeStatusUseCase = require('../../src/modules/fiscal/application/use-cases/GetSaleNfeStatusUseCase');
+
+const SaleStockService = require('../../src/services/saleStockService');
 
 let queryStatusResult: any;
 
@@ -69,6 +77,9 @@ function buildRepository({
   const sale: any = {
     id: 900,
     status: saleStatus,
+    // Vendedor da venda — no caminho assíncrono (webhook) não há usuário
+    // autenticado, então é ele quem assina o InventoryMovement do G9.
+    user_id: 7,
     nfe_status: saleNfeStatus,
     nfe_provider_ref: 'sale-900-1-1',
     nfe_issued_at: null,
@@ -86,6 +97,8 @@ function buildRepository({
 }
 
 describe('GetSaleNfeStatusUseCase - reconciliação assíncrona (provedor real)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
   it('autorização assíncrona incrementa invoiced_quantity a partir do snapshot da emissão e marca partially_invoiced', async () => {
     const item = buildSaleItem({ quantity: 10, invoiced_quantity: 0 });
     const saleInvoice = buildSaleInvoice({ items: [{ sale_item_id: 1, quantity: 6, product_id: 10 }] });
@@ -98,6 +111,14 @@ describe('GetSaleNfeStatusUseCase - reconciliação assíncrona (provedor real)'
     expect(item.invoiced_quantity).toBe(6);
     expect(sale.status).toBe('partially_invoiced');
     expect(saleInvoice.nfe_status).toBe('authorized');
+    // G9: o caminho assincrono tambem baixa estoque, na quantidade da emissao.
+    expect(SaleStockService.commitInvoicedStock).toHaveBeenCalledWith(
+      900,
+      [{ productId: 10, quantity: 6 }],
+      7, // sem usuário autenticado (webhook), assina o vendedor da venda
+      expect.anything(),
+      expect.any(Object)
+    );
   });
 
   it('autorização assíncrona de emissão total marca invoiced (sem saldo restante)', async () => {
@@ -138,6 +159,8 @@ describe('GetSaleNfeStatusUseCase - reconciliação assíncrona (provedor real)'
     expect(item.invoiced_quantity).toBe(0);
     expect(sale.status).toBe('confirmed');
     expect(saleInvoice.nfe_status).toBe('denied');
+    // G9: NF-e negada nao baixa estoque nenhum.
+    expect(SaleStockService.commitInvoicedStock).not.toHaveBeenCalled();
   });
 
   it('idempotencia: emissao ja reconciliada (nfe_status != processing) nao reaplica o acumulo', async () => {
@@ -153,6 +176,8 @@ describe('GetSaleNfeStatusUseCase - reconciliação assíncrona (provedor real)'
     expect(item.invoiced_quantity).toBe(6);
     // status da venda tambem nao e recalculado por este caminho ja reconciliado.
     expect(sale.status).toBe('partially_invoiced');
+    // G9: e, principalmente, o estoque NAO e baixado duas vezes.
+    expect(SaleStockService.commitInvoicedStock).not.toHaveBeenCalled();
   });
 
   it('sem provider_ref, retorna a venda sem consultar o provedor', async () => {

@@ -26,6 +26,14 @@ jest.mock('../../src/modules/fiscal/domain/services/TaxCalculationService', () =
   })),
 }));
 
+// G9 (2026-08-10): a autorização da NF-e passou a baixar estoque. Aqui o
+// serviço é dublado só para isolar o use case fiscal da stack de estoque
+// (models/Sequelize) — a regra de baixa proporcional tem teste próprio em
+// `sale-stock-baixa-na-nfe-g9.test.ts`.
+jest.mock('../../src/services/saleStockService', () => ({
+  commitInvoicedStock: jest.fn(async () => []),
+}));
+
 jest.mock('../../src/modules/fiscal/infrastructure/providers/NfeProviderFactory', () =>
   jest.fn(() => ({
     issue: jest.fn(async () => ({
@@ -43,6 +51,8 @@ jest.mock('../../src/modules/fiscal/infrastructure/providers/NfeProviderFactory'
 );
 
 import IssueSaleNfeUseCase = require('../../src/modules/fiscal/application/use-cases/IssueSaleNfeUseCase');
+
+const SaleStockService = require('../../src/services/saleStockService');
 
 function buildSaleItem(overrides: Partial<Record<string, any>> = {}) {
   return {
@@ -62,6 +72,9 @@ function buildRepository({ saleStatus = 'confirmed', items = [buildSaleItem()] }
   const sale: any = {
     id: 500,
     status: saleStatus,
+    // Vendedor da venda — fallback do autor do InventoryMovement do G9
+    // quando o use case é chamado sem `userId` do JWT.
+    user_id: 7,
     nfe_status: 'pending',
     customer_id: 1,
     total_amount: '200.00',
@@ -98,6 +111,8 @@ function buildRepository({ saleStatus = 'confirmed', items = [buildSaleItem()] }
 }
 
 describe('IssueSaleNfeUseCase - faturamento parcial (gap 3/3)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
   it('sem payload, fatura o saldo pendente inteiro (comportamento anterior preservado)', async () => {
     const item = buildSaleItem({ quantity: 10, invoiced_quantity: 0 });
     const repo = buildRepository({ items: [item] });
@@ -107,6 +122,14 @@ describe('IssueSaleNfeUseCase - faturamento parcial (gap 3/3)', () => {
 
     expect(item.invoiced_quantity).toBe(10);
     expect(sale.status).toBe('invoiced');
+    // G9: baixa de estoque acompanha o que foi faturado.
+    expect(SaleStockService.commitInvoicedStock).toHaveBeenCalledWith(
+      500,
+      [{ productId: 10, quantity: 10 }],
+      expect.anything(),
+      expect.anything(),
+      expect.any(Object)
+    );
   });
 
   it('com payload parcial, fatura so a quantidade pedida e marca partially_invoiced', async () => {
@@ -118,6 +141,14 @@ describe('IssueSaleNfeUseCase - faturamento parcial (gap 3/3)', () => {
 
     expect(item.invoiced_quantity).toBe(4);
     expect(sale.status).toBe('partially_invoiced');
+    // G9: baixa PROPORCIONAL — 4, nunca as 10 do pedido.
+    expect(SaleStockService.commitInvoicedStock).toHaveBeenCalledWith(
+      500,
+      [{ productId: 10, quantity: 4 }],
+      expect.anything(),
+      expect.anything(),
+      expect.any(Object)
+    );
   });
 
   it('acumula invoiced_quantity entre duas emissoes parciais ate completar o saldo', async () => {
@@ -129,6 +160,14 @@ describe('IssueSaleNfeUseCase - faturamento parcial (gap 3/3)', () => {
 
     expect(item.invoiced_quantity).toBe(10);
     expect(sale.status).toBe('invoiced');
+    // G9: a segunda emissao baixa SO o restante (6), nao o pedido inteiro.
+    expect(SaleStockService.commitInvoicedStock).toHaveBeenCalledWith(
+      500,
+      [{ productId: 10, quantity: 6 }],
+      expect.anything(),
+      expect.anything(),
+      expect.any(Object)
+    );
   });
 
   it('rejeita quantidade acima do saldo pendente do item', async () => {

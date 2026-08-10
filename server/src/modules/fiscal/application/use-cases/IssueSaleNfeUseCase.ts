@@ -11,11 +11,22 @@
  *      'processing'`.
  *   2. Fora de transação: monta o payload e chama o provedor configurado.
  *   3. Transação curta: grava o resultado (autorizada/negada/processando)
- *      na venda; se autorizada, incrementa `invoiced_quantity` de cada
- *      item envolvido e transiciona `sale.status` conforme o saldo
- *      pendente total (`confirmed`/`partially_invoiced` -> `invoiced`
- *      quando não sobra saldo, ou -> `partially_invoiced` quando ainda
- *      resta saldo em algum item).
+ *      na venda; se autorizada, **baixa o estoque da quantidade faturada**
+ *      (gap G9 — ver abaixo), incrementa `invoiced_quantity` de cada item
+ *      envolvido e transiciona `sale.status` conforme o saldo pendente
+ *      total (`confirmed`/`partially_invoiced` -> `invoiced` quando não
+ *      sobra saldo, ou -> `partially_invoiced` quando ainda resta saldo em
+ *      algum item).
+ *
+ * BAIXA DE ESTOQUE (gap G9, 2026-08-10 — decisão D-A do dono): até esta
+ * data o estoque era baixado na CONFIRMAÇÃO do pedido, e o faturamento não
+ * tocava em estoque nenhum. Isso registrava saída de mercadoria que ainda
+ * estava fisicamente na empresa (Ajuste SINIEF 07/05, cláusula 1ª §1º e
+ * cláusula 9ª §1º: a NF-e é autorizada antes do fato gerador e a mercadoria
+ * só transita depois da autorização de uso). Agora a confirmação apenas
+ * **reserva**, e é a autorização da NF-e que baixa — sempre **na mesma
+ * transação** que incrementa `invoiced_quantity` e **na quantidade desta
+ * emissão**, nunca do pedido inteiro (ver `services/saleStockService.ts`).
  *
  * FATURAMENTO PARCIAL (gap 3/3 do módulo `sales` —
  * `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`): quando o chamador
@@ -46,6 +57,7 @@ const { NotFoundError, BusinessRuleError, ConflictError, ValidationError } = req
 const TaxCalculationService = require('../../domain/services/TaxCalculationService');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
 const SaleInvoiceAccumulator = require('../../domain/services/SaleInvoiceAccumulator');
+const SaleStockService = require('../../../../services/saleStockService');
 
 interface IssueSaleNfeItemInput {
   sale_item_id: number;
@@ -55,6 +67,7 @@ interface IssueSaleNfeItemInput {
 interface IssueSaleNfeInput {
   saleId: number | string;
   items?: IssueSaleNfeItemInput[];
+  userId?: number;
 }
 
 class IssueSaleNfeUseCase extends UseCase {
@@ -70,10 +83,11 @@ class IssueSaleNfeUseCase extends UseCase {
    * @param {Object} input
    * @param {number} input.saleId
    * @param {Array<{sale_item_id:number, quantity:number}>} [input.items] - Faturamento parcial: quando informado, fatura apenas estas quantidades (limitadas ao saldo pendente de cada item); quando omitido, fatura o saldo pendente inteiro de todos os itens.
+   * @param {number} [input.userId] - Usuário responsável (do JWT), autor do `InventoryMovement` de saída. Ausente apenas quando não há requisição HTTP autenticada por trás; cai no vendedor da venda (`Sale.user_id`), que é sempre NOT NULL.
    * @returns {Promise<Object>} A venda atualizada com o resultado da emissão.
-   * @throws {BusinessRuleError} Se o status da venda não permitir faturamento, se não houver saldo pendente para faturar, ou se alguma quantidade solicitada exceder o saldo pendente do item.
+   * @throws {BusinessRuleError} Se o status da venda não permitir faturamento, se não houver saldo pendente para faturar, se alguma quantidade solicitada exceder o saldo pendente do item, ou se não houver estoque suficiente para a baixa (G9).
    */
-  async execute({ saleId, items: requestedItems }: IssueSaleNfeInput) {
+  async execute({ saleId, items: requestedItems, userId }: IssueSaleNfeInput) {
     const reserved = await sequelize.transaction(async (transaction: Transaction) => {
       const sale = await this.fiscalRepository.findSaleById(saleId, { transaction, lock: transaction.LOCK.UPDATE });
       if (!sale) throw new NotFoundError('Venda não encontrada');
@@ -339,6 +353,27 @@ class IssueSaleNfeUseCase extends UseCase {
         // assíncrono) — ver `SaleInvoiceAccumulator`.
         const allItems = await this.fiscalRepository.findSaleItemsBySaleId(saleId, { transaction, lock: transaction.LOCK.UPDATE });
         const { updates, anyRemaining } = SaleInvoiceAccumulator.applyInvoicedQuantities(allItems, reserved.qtyToInvoiceByItemId);
+
+        // Gap G9: a baixa de estoque acontece AQUI, na mesma transação que
+        // grava `invoiced_quantity`, e apenas na quantidade desta emissão.
+        // Se falhar (estoque insuficiente — só possível em venda legada sem
+        // reserva ou após ajuste manual), a transação inteira volta atrás:
+        // `invoiced_quantity` NÃO avança sem a baixa correspondente. A
+        // emissão continua recuperável, porque `sale_invoices` já foi
+        // gravado com o snapshot de itens na transação de reserva — depois
+        // de corrigir o estoque, `GET /api/sales/:id/nfe`
+        // (`GetSaleNfeStatusUseCase`) reconsulta o provedor e reaplica.
+        await SaleStockService.commitInvoicedStock(
+          sale.id,
+          updates.map(({ item }: { item: any }) => ({
+            productId: item.product_id,
+            quantity: reserved.qtyToInvoiceByItemId.get(item.id) as number,
+          })),
+          userId ?? sale.user_id,
+          transaction,
+          { description: `NF-e ${sale.nfe_series}/${sale.nfe_number} - Venda #${sale.id}` }
+        );
+
         for (const { item, newInvoicedQuantity } of updates) {
           item.invoiced_quantity = newInvoicedQuantity;
           await item.save({ transaction });

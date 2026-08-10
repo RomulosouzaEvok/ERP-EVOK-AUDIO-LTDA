@@ -5,7 +5,6 @@ const SaleEntity = require('../../domain/entities/SaleEntity');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
 const { toCents, fromCents } = require('../../../../shared/utils/money');
 const InventoryService = require('../../../../services/inventoryService');
-const WarehouseStockService = require('../../../../services/warehouseStockService');
 
 /**
  * Cria uma venda com seus itens, opcionalmente debitando estoque e gerando
@@ -18,30 +17,37 @@ const WarehouseStockService = require('../../../../services/warehouseStockServic
  *   `toCents`/`fromCents` reutilizados de `shared/utils/money.ts` em vez de
  *   helpers locais duplicados), com a última parcela absorvendo o resto da
  *   divisão inteira entre `installments`;
- * - a baixa de estoque atômica via `InventoryService.consume`, que trava a
- *   linha do produto (`SELECT ... FOR UPDATE`) dentro da mesma transação,
- *   prevenindo a condição de corrida corrigida na Fase 4.1;
+ * - a operação de estoque atômica, que trava a linha do produto
+ *   (`SELECT ... FOR UPDATE`) dentro da mesma transação, prevenindo a
+ *   condição de corrida corrigida na Fase 4.1;
  * - por padrão (`status` omitido ou `'confirmed'`) a venda é criada já
- *   `confirmed`, com débito de estoque e geração de parcelas na hora —
- *   comportamento 100% preservado.
+ *   `confirmed`, com geração de parcelas na hora.
+ *
+ * GAP G9 (2026-08-10) — venda confirmada RESERVA, não baixa: até esta data
+ * a venda criada/confirmada chamava `InventoryService.consume` e dava baixa
+ * imediata em `products.quantity`. Isso registrava saída de mercadoria que
+ * ainda estava fisicamente na empresa (Ajuste SINIEF 07/05, cláusula 9ª
+ * §1º: a mercadoria só transita depois da autorização de uso da NF-e).
+ * Agora a venda confirmada chama `InventoryService.reserve({ saleId })` — o
+ * material fica comprometido (indisponível para outro pedido) mas continua
+ * no saldo; a baixa efetiva ocorre na autorização da NF-e, proporcional à
+ * quantidade faturada (ver `services/saleStockService.ts`).
+ *
+ * Consequência no dual-write de depósito: **reserva não movimenta
+ * depósito**. `WarehouseStockService.removeFromWarehouse` deixou de ser
+ * chamado aqui e passou para o faturamento, junto do `consume`, para a
+ * invariante "saldo_total = SOMA por depósito" (`BUSINESS_RULES.md` §12
+ * item 3) continuar valendo em todo instante.
  *
  * F22 — fluxo de orçamento (`status: 'quote'`): quando o chamador informa
  * explicitamente `status: 'quote'`, a venda e seus itens são persistidos
- * normalmente, mas **nenhum estoque é debitado** (`InventoryService.consume`
- * não é chamado) e **nenhuma `AccountReceivable` é gerada**. A validação de
- * quantidade disponível em estoque também é adiada — um orçamento pode ser
- * criado mesmo sem estoque suficiente no momento, pois nada está sendo
- * reservado/consumido de fato. A baixa real (e a validação de estoque
- * suficiente) só acontece quando o orçamento é confirmado via
- * `ChangeSaleStatusUseCase` (transição `quote -> confirmed`).
- *
- * Bloco 4 (multiplos depositos, BUSINESS_RULES.md §12 item 7): quando a
- * venda ja nasce `confirmed` (fluxo mais comum, `isQuote` false), toda
- * alteracao de `products.quantity` feita aqui via `InventoryService.consume`
- * e acompanhada, na MESMA transacao, do dual-write correspondente em
- * `WarehouseStockService.removeFromWarehouse` para o deposito 'ACABADOS',
- * preservando a invariante de soma por deposito (mesmo padrao aplicado em
- * `ChangeSaleStatusUseCase` para a transicao `quote -> confirmed`).
+ * normalmente, mas **nenhum estoque é reservado nem debitado** e **nenhuma
+ * `AccountReceivable` é gerada**. A validação de quantidade disponível em
+ * estoque também é adiada — um orçamento pode ser criado mesmo sem estoque
+ * suficiente no momento, pois nada está sendo comprometido de fato. A
+ * reserva (e a validação de estoque suficiente) só acontece quando o
+ * orçamento é confirmado via `ChangeSaleStatusUseCase` (transição
+ * `quote -> confirmed`).
  */
 class CreateSaleUseCase extends UseCase {
   /**
@@ -67,7 +73,7 @@ class CreateSaleUseCase extends UseCase {
    * @throws {ValidationError} Se os dados de entrada forem inválidos (forma) ou o desconto exceder o total.
    * @throws {NotFoundError} Se algum `product_id` referenciado não existir.
    * @throws {BusinessRuleError} Se algum produto estiver inativo ou (quando `status: 'confirmed'`) sem estoque suficiente.
-   * @throws {Error} Com `statusCode` 404/409 propagado de `InventoryService.consume` se o estoque for insuficiente no momento da baixa (revalidado sob lock), quando `status: 'confirmed'`.
+   * @throws {Error} Com `statusCode` 404/422 propagado de `InventoryService.reserve` se o estoque disponível for insuficiente no momento da reserva (revalidado sob lock), quando `status: 'confirmed'`.
    */
   async execute({ customer_id, items, discount = 0, payment_method, installments = 1, notes, status = 'confirmed', userId, transaction }: {
     customer_id: number;
@@ -135,20 +141,13 @@ class CreateSaleUseCase extends UseCase {
       notes: entity.notes
     }, transaction);
 
-    // Resolve o deposito ACABADOS uma unica vez para todos os itens (mesmo
-    // padrao de ChangeSaleStatusUseCase) — so e necessario quando a venda
-    // nasce confirmada, ja que orcamento (isQuote) nao debita nada.
-    const acabadosWarehouse = isQuote
-      ? null
-      : await WarehouseStockService.getWarehouseByCode('ACABADOS', transaction);
-
     // Cria os itens de venda. Quando `status: 'confirmed'` (padrão), também
-    // debita estoque atomicamente: InventoryService trava a linha do Product
-    // (SELECT ... FOR UPDATE) dentro desta mesma transação, revalida a
-    // quantidade disponível e registra o InventoryMovement, prevenindo que
-    // vendas concorrentes deixem o estoque negativo. Quando `status: 'quote'`
-    // (F22), nenhuma baixa de estoque acontece aqui — fica adiada para a
-    // confirmação do orçamento.
+    // RESERVA o estoque atomicamente (G9): InventoryService trava a linha do
+    // Product (SELECT ... FOR UPDATE) dentro desta mesma transação, revalida
+    // a quantidade disponível (`quantity - reserved_quantity`) e cria a
+    // reserva com a venda como dona, prevenindo que vendas concorrentes
+    // comprometam o mesmo material. Quando `status: 'quote'` (F22), nada é
+    // reservado aqui — fica adiado para a confirmação do orçamento.
     for (const item of processedItems) {
       await this.saleRepository.createSaleItem({
         sale_id: sale.id, product_id: item.product_id,
@@ -156,18 +155,12 @@ class CreateSaleUseCase extends UseCase {
       }, transaction);
 
       if (!isQuote) {
-        // Erros lançados aqui (statusCode 404/409) propagam para o controller,
+        // Erros lançados aqui (statusCode 404/422) propagam para o controller,
         // que já está preparado para repassá-los ao errorHandler central.
-        await InventoryService.consume(item.product_id, item.quantity, userId, transaction, {
-          description: `Venda #${sale.id} - ${entity.payment_method}`,
-          referenceId: sale.id,
-          referenceType: 'sale'
+        await InventoryService.reserve(item.product_id, item.quantity, userId, transaction, {
+          saleId: sale.id,
+          description: `Reserva da venda #${sale.id} - ${entity.payment_method}`
         });
-
-        // Dual-write (Bloco 4, BUSINESS_RULES.md §12 item 3/7): venda criada
-        // ja confirmada sempre debita o deposito ACABADOS na mesma
-        // transacao (mesmo padrao de ChangeSaleStatusUseCase).
-        await WarehouseStockService.removeFromWarehouse(item.product_id, acabadosWarehouse.id, item.quantity, transaction);
       }
     }
 

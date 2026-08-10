@@ -6,7 +6,12 @@
  * invariante" do Bloco 4:
  *
  * 1. Expedicao/venda so consome do deposito ACABADOS, mesmo que outro
- *    deposito tenha saldo do mesmo produto (`ChangeSaleStatusUseCase`).
+ *    deposito tenha saldo do mesmo produto. ATUALIZADO PELO G9
+ *    (2026-08-10): o momento da baixa deixou de ser a confirmacao do pedido
+ *    (`ChangeSaleStatusUseCase`) e passou a ser a autorizacao da NF-e
+ *    (`services/saleStockService`) — a invariante de deposito e a mesma, o
+ *    gatilho e que mudou. A confirmacao agora so RESERVA e, por isso,
+ *    nao pode tocar em deposito nenhum (ha teste explicito disso aqui).
  * 2. Quarentena/bloqueio/liberacao de lote (`BlockLotUseCase`/
  *    `ReleaseLotUseCase`) NUNCA move saldo entre depositos — so muda
  *    `LotControl.status`.
@@ -32,12 +37,13 @@ jest.mock('../../src/config/database', () => ({
   },
 }));
 
-describe('Invariante 1 — expedicao (ChangeSaleStatusUseCase) so le/consome o deposito ACABADOS', () => {
+describe('Invariante 1 — faturamento/expedicao (saleStockService) so le/consome o deposito ACABADOS', () => {
   let Product: any;
   let Warehouse: any;
   let ProductWarehouseStock: any;
   let warehouseStockService: any;
   let InventoryService: any;
+  let SaleStockService: any;
   let ChangeSaleStatusUseCase: any;
 
   const transaction: any = { LOCK: { UPDATE: 'UPDATE' } };
@@ -104,15 +110,21 @@ describe('Invariante 1 — expedicao (ChangeSaleStatusUseCase) so le/consome o d
     jest.doMock('../../src/models/index', () => ({ Product, Warehouse, ProductWarehouseStock }));
 
     InventoryService = {
-      // InventoryService.consume so mexe em products.quantity (dual-write
-      // legado); nao interessa a este teste, so precisa resolver sem erro.
+      // InventoryService so mexe em products.quantity / na tabela de
+      // reservas (dual-write legado); nao interessa a este teste, so
+      // precisa resolver sem erro.
       consume: jest.fn(async () => ({ product: { id: 10, quantity: 8 } })),
       receive: jest.fn(async () => ({ product: { id: 10, quantity: 10 } })),
+      reserve: jest.fn(async () => ({ quantityAffected: 3 })),
+      releaseReservation: jest.fn(async () => ({ quantityAffected: 3 })),
+      releaseAllReservationsForSale: jest.fn(async () => []),
     };
     jest.doMock('../../src/services/inventoryService', () => InventoryService);
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     warehouseStockService = require('../../src/services/warehouseStockService');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    SaleStockService = require('../../src/services/saleStockService');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     ChangeSaleStatusUseCase = require('../../src/modules/sales/application/use-cases/ChangeSaleStatusUseCase');
   });
@@ -125,28 +137,15 @@ describe('Invariante 1 — expedicao (ChangeSaleStatusUseCase) so le/consome o d
     };
   }
 
-  it('mesmo com saldo positivo do produto em INSUMOS, confirmar venda consome de ACABADOS (nao de INSUMOS) e o saldo de INSUMOS permanece intacto', async () => {
+  it('mesmo com saldo positivo do produto em INSUMOS, faturar consome de ACABADOS (nao de INSUMOS) e o saldo de INSUMOS permanece intacto', async () => {
     // Produto 10 tem bastante saldo em INSUMOS, mas nenhum em ACABADOS.
     await warehouseStockService.addToWarehouse(10, 1, 1000, transaction);
-
-    const sale = {
-      id: 1,
-      status: 'quote',
-      total_amount: '30.00',
-      installments: 1,
-      customer_id: 5,
-      payment_method: 'pix',
-      items: [{ product_id: 10, quantity: 3 }],
-      save: jest.fn(async () => ({})),
-    };
-    const saleRepository = buildSaleRepository(sale);
-    const useCase = new ChangeSaleStatusUseCase(saleRepository);
 
     // ACABADOS nao tem saldo -> deve falhar com 422 didatico, mesmo com
     // 1000 unidades disponiveis em INSUMOS (a expedicao NUNCA le outro
     // deposito alem de ACABADOS).
     await expect(
-      useCase.execute({ id: 1, status: 'confirmed', userId: 7, transaction })
+      SaleStockService.commitInvoicedStock(1, [{ productId: 10, quantity: 3 }], 7, transaction)
     ).rejects.toMatchObject({
       statusCode: 422,
       details: expect.objectContaining({ warehouse_id: 2, product_id: 10 }),
@@ -162,30 +161,44 @@ describe('Invariante 1 — expedicao (ChangeSaleStatusUseCase) so le/consome o d
     expect(Number(acabados.quantity)).toBe(0);
   });
 
-  it('com saldo suficiente em ACABADOS, confirmar venda debita ACABADOS e nao toca em INSUMOS mesmo que ambos tenham saldo', async () => {
+  it('com saldo suficiente em ACABADOS, faturar debita ACABADOS e nao toca em INSUMOS mesmo que ambos tenham saldo', async () => {
     await warehouseStockService.addToWarehouse(10, 1, 500, transaction); // INSUMOS
     await warehouseStockService.addToWarehouse(10, 2, 5, transaction); // ACABADOS
 
-    const sale = {
-      id: 2,
-      status: 'quote',
-      total_amount: '30.00',
-      installments: 1,
-      customer_id: 5,
-      payment_method: 'pix',
-      items: [{ product_id: 10, quantity: 3 }],
-      save: jest.fn(async () => ({})),
-    };
-    const saleRepository = buildSaleRepository(sale);
-    const useCase = new ChangeSaleStatusUseCase(saleRepository);
-
-    await useCase.execute({ id: 2, status: 'confirmed', userId: 7, transaction });
+    await SaleStockService.commitInvoicedStock(2, [{ productId: 10, quantity: 3 }], 7, transaction);
 
     const insumos = await ProductWarehouseStock.findOne({ where: { product_id: 10, warehouse_id: 1 } });
     const acabados = await ProductWarehouseStock.findOne({ where: { product_id: 10, warehouse_id: 2 } });
 
     expect(Number(insumos.quantity)).toBe(500); // INSUMOS intacto
     expect(Number(acabados.quantity)).toBe(2); // 5 - 3 = 2, so ACABADOS foi debitado
+  });
+
+  it('G9: confirmar o pedido nao toca em deposito nenhum (reserva nao movimenta saldo)', async () => {
+    await warehouseStockService.addToWarehouse(10, 1, 500, transaction); // INSUMOS
+    await warehouseStockService.addToWarehouse(10, 2, 5, transaction); // ACABADOS
+
+    const sale = {
+      id: 3,
+      status: 'quote',
+      total_amount: '30.00',
+      installments: 1,
+      customer_id: 5,
+      payment_method: 'pix',
+      items: [{ product_id: 10, quantity: 3, invoiced_quantity: 0 }],
+      save: jest.fn(async () => ({})),
+    };
+    const useCase = new ChangeSaleStatusUseCase(buildSaleRepository(sale));
+
+    await useCase.execute({ id: 3, status: 'confirmed', userId: 7, transaction });
+
+    const insumos = await ProductWarehouseStock.findOne({ where: { product_id: 10, warehouse_id: 1 } });
+    const acabados = await ProductWarehouseStock.findOne({ where: { product_id: 10, warehouse_id: 2 } });
+
+    expect(Number(insumos.quantity)).toBe(500);
+    expect(Number(acabados.quantity)).toBe(5); // intacto: a baixa so ocorre na NF-e
+    expect(InventoryService.reserve).toHaveBeenCalledWith(10, 3, 7, transaction, expect.objectContaining({ saleId: 3 }));
+    expect(InventoryService.consume).not.toHaveBeenCalled();
   });
 });
 

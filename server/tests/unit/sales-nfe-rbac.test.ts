@@ -78,6 +78,15 @@ jest.mock('../../src/models/index', () => ({
   },
 }));
 
+// G9 (2026-08-10): a autorização da NF-e passou a baixar estoque. Este
+// arquivo cobre RBAC, não a regra de baixa (que tem
+// `sale-stock-baixa-na-nfe-g9.test.ts` dedicado) — dublado para não
+// arrastar a stack de estoque/depósito para dentro de um teste de
+// autorização.
+jest.mock('../../src/services/saleStockService', () => ({
+  commitInvoicedStock: jest.fn(async () => []),
+}));
+
 const mockProviderIssue = jest.fn();
 const mockProviderCancel = jest.fn();
 jest.mock('../../src/modules/fiscal/infrastructure/providers/NfeProviderFactory', () => {

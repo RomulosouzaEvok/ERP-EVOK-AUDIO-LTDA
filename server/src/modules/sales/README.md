@@ -3,20 +3,66 @@
 ## Objetivo
 
 Gerenciar o ciclo de vida de Vendas ao cliente final: criação (com itens,
-baixa de estoque e geração de parcelas em contas a receber) e transições de
-status (`quote` → `confirmed` → `invoiced` → `shipped`, com `canceled`
-disponível a partir de `quote`/`confirmed`/`invoiced`). Migrado para a
-arquitetura em camadas (`domain` / `application` / `infrastructure` /
+**reserva** de estoque e geração de parcelas em contas a receber) e
+transições de status (`quote` → `confirmed` → `invoiced` → `shipped`, com
+`canceled` disponível a partir de `quote`/`confirmed`/`invoiced`). Migrado
+para a arquitetura em camadas (`domain` / `application` / `infrastructure` /
 `presentation`) descrita na Fase 5 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md`, seguindo o mesmo padrão
 dos módulos `products`, `inventory`, `bom`, `production` e `purchases`.
 
-Este módulo **não reimplementa** a lógica transacional de baixa/entrada de
-estoque — isso continua 100% centralizado em
-`server/src/services/inventoryService.ts` (`InventoryService.consume` na
-criação da venda, `InventoryService.receive` no cancelamento). Os use cases
+Este módulo **não reimplementa** a lógica transacional de reserva/baixa/
+entrada de estoque — isso continua 100% centralizado em
+`server/src/services/inventoryService.ts` (`reserve` na confirmação,
+`releaseReservation`/`releaseAllReservationsForSale` na alteração e no
+cancelamento, `receive` na devolução do que já foi faturado). Os use cases
 deste módulo são wrappers finos sobre os models Sequelize existentes
 (`Sale`, `SaleItem`, `Product`, `Client`, `AccountReceivable`) e sobre
 `InventoryService`.
+
+---
+
+## ⚠️ G9 (2026-08-10) — Confirmar RESERVA, faturar BAIXA
+
+**Mudança de regra mais importante deste módulo até hoje.** Até 2026-08-09 a
+confirmação do pedido chamava `InventoryService.consume` e dava **baixa
+imediata** em `products.quantity`. A partir do gap G9 (decisão D-A do dono,
+`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4):
+
+| Evento | O que acontece com o estoque |
+|---|---|
+| Criar como `quote` | nada |
+| Criar como `confirmed` / confirmar orçamento | **reserva** (`InventoryService.reserve({ saleId })`) |
+| Alterar itens de venda `confirmed` | ajusta a **reserva** pelo delta |
+| **NF-e autorizada** (`POST /api/sales/:id/nfe`) | **baixa** a quantidade faturada, consumindo a reserva (`services/saleStockService.ts`) |
+| Cancelar | libera toda a reserva + devolve ao estoque só `invoiced_quantity` |
+| `invoiced → shipped` | nada (a baixa já ocorreu) |
+
+**Por quê:** Ajuste SINIEF 07/05, cláusula 1ª §1º e cláusula 9ª §1º — a NF-e
+é autorizada **antes** do fato gerador e a mercadoria só transita **depois**
+da autorização de uso. Entre confirmar e faturar, a mercadoria ainda está
+fisicamente na empresa; baixar ali fazia o saldo do sistema ficar menor que o
+saldo real do galpão.
+
+**Consequências práticas:**
+
+- O que limita uma venda agora é o estoque **disponível**
+  (`quantity - reserved_quantity`), não o saldo bruto. Material reservado por
+  outro pedido — ou por uma OP — não pode ser vendido de novo.
+- **Reserva não movimenta depósito.** O dual-write em
+  `warehouseStockService` (ACABADOS) migrou junto com a baixa, para a
+  autorização da NF-e, mantendo a invariante "saldo_total = SOMA por
+  depósito" (`BUSINESS_RULES.md` §12 item 3) válida em todo instante.
+- A baixa é **proporcional à quantidade faturada**: faturamento parcial de
+  10 unidades em 4 + 6 gera duas baixas (4 e 6), consumindo a reserva aos
+  poucos.
+- **Requer a migration `20260810-000030-generalize-stock-reservations-for-sales-g9.cjs`**
+  (torna `production_order_reservations.production_order_id` nullable, cria
+  `sale_id` e o CHECK de exatamente-um-dono, e faz o backfill dos pedidos
+  confirmados e não faturados). Ver `docs/database/DATABASE.md`, seção G9.
+- Bug corrigido de tabela: cancelar um **orçamento** devolvia
+  `item.quantity` ao estoque mesmo sem nunca ter debitado nada (estoque
+  fantasma). Com a regra nova, `quote` não tem reserva nem quantidade
+  faturada, então o cancelamento não movimenta estoque.
 
 ## Decisão de compatibilidade de rotas
 
@@ -95,20 +141,21 @@ O enum de `status` da venda inclui `'quote'` e a máquina de estados
   `'confirmed'`, default `'confirmed'` — preserva 100% o comportamento
   anterior quando omitido).
 - Com `status: 'quote'`: `CreateSaleUseCase` cria a venda e os `SaleItem`
-  normalmente, mas **não chama `InventoryService.consume`** (nenhum estoque
-  é debitado) **e não gera nenhuma `AccountReceivable`**. A validação de
-  quantidade disponível em estoque também é adiada (um orçamento pode ser
-  criado mesmo sem estoque suficiente no momento).
-- Com `status: 'confirmed'` (ou omitido): comportamento idêntico ao
-  anterior — débito de estoque e geração de parcelas acontecem na criação.
+  normalmente, mas **não reserva nem debita estoque** **e não gera nenhuma
+  `AccountReceivable`**. A validação de quantidade disponível em estoque
+  também é adiada (um orçamento pode ser criado mesmo sem estoque
+  suficiente no momento).
+- Com `status: 'confirmed'` (ou omitido): **reserva** de estoque (G9) e
+  geração de parcelas acontecem na criação.
 - A confirmação de um orçamento (`PUT /api/sales/:id/status` com
   `{ "status": "confirmed" }`, transição `quote → confirmed`) é o momento em
-  que `ChangeSaleStatusUseCase` debita o estoque de cada item via
-  `InventoryService.consume` (revalidando disponibilidade sob lock, mesma
-  regra de erro 404/409 da criação confirmada direta) e gera as parcelas em
-  `AccountReceivable` a partir de `total_amount`/`installments`/
-  `payment_method` já persistidos na venda, com o mesmo arredondamento em
-  centavos (F24).
+  que `ChangeSaleStatusUseCase` **reserva** o estoque de cada item via
+  `InventoryService.reserve({ saleId })` (revalidando a disponibilidade
+  `quantity - reserved_quantity` sob lock, com 404/422 da mesma forma que a
+  criação confirmada direta) e gera as parcelas em `AccountReceivable` a
+  partir de `total_amount`/`installments`/`payment_method` já persistidos na
+  venda, com o mesmo arredondamento em centavos (F24). A **baixa** só ocorre
+  na autorização da NF-e (G9).
 
 ## Estrutura
 
@@ -140,18 +187,19 @@ server/src/modules/sales/
 
 ## Regras de negócio
 
-- Criação: `customer_id` obrigatório; `items` não pode ser vazio; cada item precisa de `product_id`/`quantity > 0`/`unit_price > 0` (validado por `SaleEntity`); `installments >= 1`; `discount >= 0`; `status` opcional (`'quote'`|`'confirmed'`, default `'confirmed'` — ver seção F22). Cada produto referenciado deve existir e estar `status: 'active'`. Estoque suficiente é exigido apenas quando `status: 'confirmed'` (validado no use case, dentro da transação, e revalidado sob lock por `InventoryService.consume`); para `status: 'quote'` essa checagem é adiada para a confirmação. `total_amount` é calculado no backend em centavos a partir dos itens e do desconto.
-- Baixa de estoque: `InventoryService.consume` por item, com lock pessimista (`SELECT ... FOR UPDATE`), executada dentro da transação da criação (venda `confirmed`) ou dentro da transação de confirmação (`quote → confirmed`, ver F22) — previne condição de corrida entre vendas concorrentes do mesmo produto (corrigida na Fase 4.1, preservada aqui).
-- Geração de parcelas: ver seção F24/F22 acima — na criação (venda `confirmed`) ou na confirmação do orçamento (`quote → confirmed`).
+- Criação: `customer_id` obrigatório; `items` não pode ser vazio; cada item precisa de `product_id`/`quantity > 0`/`unit_price > 0` (validado por `SaleEntity`); `installments >= 1`; `discount >= 0`; `status` opcional (`'quote'`|`'confirmed'`, default `'confirmed'` — ver seção F22). Cada produto referenciado deve existir e estar `status: 'active'`. Estoque suficiente é exigido apenas quando `status: 'confirmed'` (validado no use case, dentro da transação, e revalidado sob lock por `InventoryService.reserve`); para `status: 'quote'` essa checagem é adiada para a confirmação. `total_amount` é calculado no backend em centavos a partir dos itens e do desconto.
+- Reserva de estoque (G9): `InventoryService.reserve` por item, com lock pessimista (`SELECT ... FOR UPDATE`), executada dentro da transação da criação (venda `confirmed`) ou dentro da transação de confirmação (`quote → confirmed`, ver F22) — previne condição de corrida entre vendas concorrentes do mesmo produto (corrigida na Fase 4.1, preservada aqui) e impede que o mesmo saldo seja prometido a dois pedidos.
+- Baixa de estoque (G9): `services/saleStockService.commitInvoicedStock`, chamado por `IssueSaleNfeUseCase`/`GetSaleNfeStatusUseCase` na **mesma transação** em que `sale_items.invoiced_quantity` é incrementado. Libera a reserva no montante faturado, consome `products.quantity` e debita o depósito ACABADOS.
+- Geração de parcelas: ver seção F24/F22 acima — na criação (venda `confirmed`) ou na confirmação do orçamento (`quote → confirmed`). **Não** migrou para a NF-e: isso é o gap **G13**, ainda pendente de implementação.
 - Máquina de estados (`ChangeSaleStatusUseCase.VALID_TRANSITIONS`, single source of truth):
   - `quote` → `confirmed` | `canceled`
   - `confirmed` → `invoiced` | `canceled`
   - `invoiced` → `shipped` | `canceled`
   - `shipped` → (terminal, sem transições — inclusive não pode ser cancelada; ver bloqueio dedicado abaixo)
   - `canceled` → (terminal, sem transições)
-- Cancelamento (`status: 'canceled'`): restaura o estoque de cada item da venda via `InventoryService.receive` (mesma transação) e cancela (`status: 'canceled'`) todas as `AccountReceivable` da venda que ainda não estejam `paid`/`canceled`.
-- Múltiplos depósitos (Bloco 4, `BUSINESS_RULES.md` §12 item 7): a confirmação de orçamento (`quote → confirmed`) e o cancelamento chamam `warehouseStockService.removeFromWarehouse`/`addToWarehouse` para o depósito `ACABADOS` (resolvido via `getWarehouseByCode('ACABADOS', transaction)`) na MESMA transação em que `InventoryService.consume`/`receive` altera `products.quantity`, preservando a invariante de soma por depósito. **Pendência conhecida:** `CreateSaleUseCase` (criação direta com `status: 'confirmed'`, sem passar por orçamento) ainda não replica esse dual-write — só `ChangeSaleStatusUseCase` foi coberto nesta entrega.
-- Expedição (`status: 'shipped'`, Onda 3): única origem permitida é `invoiced`. Não debita estoque nem altera `AccountReceivable` (isso já ocorreu antes). Uma venda `shipped` **não pode mais ser cancelada** — `ChangeSaleStatusUseCase` lança 422 (`BusinessRuleError`) com mensagem dedicada ("Venda já foi expedida...") antes mesmo de consultar a tabela genérica de transições, para dar uma mensagem mais clara que o erro genérico de transição inválida.
+- Cancelamento (`status: 'canceled'`, G9): (1) libera **todo** o saldo reservado da venda via `InventoryService.releaseAllReservationsForSale` — nada entra em `products.quantity`, porque nada tinha saído; (2) devolve ao estoque via `InventoryService.receive` **apenas** `sale_items.invoiced_quantity` de cada item (o que já virou NF-e e portanto saiu de fato); (3) cancela todas as `AccountReceivable` da venda que ainda não estejam `paid`/`canceled`. Tudo na mesma transação.
+- Múltiplos depósitos (Bloco 4, `BUSINESS_RULES.md` §12 item 7): **reserva não movimenta depósito**. O dual-write com `warehouseStockService` acompanha exatamente as alterações de `products.quantity`: `removeFromWarehouse` na baixa por NF-e (`saleStockService`) e `addToWarehouse` na devolução do que foi faturado, no cancelamento. O depósito é sempre `ACABADOS` (resolvido via `getWarehouseByCode('ACABADOS', transaction)`).
+- Expedição (`status: 'shipped'`, Onda 3): única origem permitida é `invoiced`. Não debita estoque nem altera `AccountReceivable` (isso já ocorreu antes — o estoque na autorização da NF-e, as parcelas na confirmação). Uma venda `shipped` **não pode mais ser cancelada** — `ChangeSaleStatusUseCase` lança 422 (`BusinessRuleError`) com mensagem dedicada ("Venda já foi expedida...") antes mesmo de consultar a tabela genérica de transições, para dar uma mensagem mais clara que o erro genérico de transição inválida.
 
 ## Endpoints
 
@@ -161,8 +209,10 @@ Base URL: `/api/sales` (autenticação obrigatória via middleware `authenticate
 |---|---|---|
 | GET | `/api/sales` | Lista vendas (filtros: `status`, `customer_id`, `start_date`, `end_date`; paginação: `page`, `limit`) |
 | GET | `/api/sales/:id` | Busca venda por id (com cliente e itens + produto) |
-| POST | `/api/sales` | Cria venda com itens — transacional; com `status: 'confirmed'` (default) debita estoque e gera parcelas na hora; com `status: 'quote'` não debita estoque nem gera parcelas (F22) |
-| PUT | `/api/sales/:id/status` | Altera status (máquina de estados) — transacional; ao confirmar um orçamento (`quote → confirmed`) debita estoque e gera parcelas; ao cancelar, restaura estoque e cancela parcelas pendentes; `invoiced → shipped` marca a expedição (sem efeito colateral em estoque/parcelas); cancelamento de venda `shipped` é bloqueado (422) |
+| POST | `/api/sales` | Cria venda com itens — transacional; com `status: 'confirmed'` (default) **reserva** estoque e gera parcelas na hora; com `status: 'quote'` não reserva nem gera parcelas (F22) |
+| PUT | `/api/sales/:id/status` | Altera status (máquina de estados) — transacional; ao confirmar um orçamento (`quote → confirmed`) **reserva** estoque e gera parcelas; ao cancelar, libera a reserva, devolve ao estoque só o que foi faturado e cancela parcelas pendentes; `invoiced → shipped` marca a expedição (sem efeito colateral em estoque/parcelas); cancelamento de venda `shipped` é bloqueado (422) |
+| PUT | `/api/sales/:id/items` | Substitui o conjunto de itens (`quote`/`confirmed`); em `confirmed` ajusta a **reserva** pelo delta, sem tocar em `products.quantity` |
+| POST | `/api/sales/:id/nfe` | (módulo `fiscal`) Emite NF-e total/parcial — **é aqui que o estoque é baixado** (G9) |
 
 Ver `docs/arquitetura/API.md` para exemplos completos de request/response.
 
@@ -195,12 +245,21 @@ flowchart TD
   B --> C[Use Case]
   C -->|validacao de forma na criacao| D[SaleEntity]
   C -->|leitura/escrita de Sale e SaleItem| E[SequelizeSaleRepository]
-  C -->|criacao: baixa de estoque| F[InventoryService.consume]
-  C -->|cancelamento: restaura estoque| G[InventoryService.receive]
+  C -->|confirmacao: RESERVA G9| F[InventoryService.reserve saleId]
+  C -->|cancelamento: libera reserva| G1[InventoryService.releaseAllReservationsForSale]
+  C -->|cancelamento: devolve o que foi faturado| G[InventoryService.receive]
   C -->|criacao: gera parcelas| H[AccountReceivable]
   C -->|cancelamento: cancela parcelas pendentes| H
-  F -->|lock pessimista + transaction| I[(PostgreSQL - tabela products)]
-  F --> J[(PostgreSQL - tabela inventory_movements)]
+  NFE[POST /api/sales/:id/nfe autorizada] -->|BAIXA G9| S[saleStockService.commitInvoicedStock]
+  S --> G1b[InventoryService.releaseReservation]
+  S --> CONS[InventoryService.consume]
+  S --> WH[(PostgreSQL - product_warehouse_stock ACABADOS)]
+  F -->|lock pessimista + transaction| R[(PostgreSQL - production_order_reservations)]
+  F --> I[(PostgreSQL - tabela products)]
+  G1 --> R
+  G1b --> R
+  CONS -->|lock pessimista + transaction| I
+  CONS --> J[(PostgreSQL - tabela inventory_movements)]
   G --> I
   G --> J
   E --> K[(PostgreSQL - tabela sales / sale_items)]
@@ -218,6 +277,8 @@ flowchart TD
 - `server/tests/integration/sale-invalid-payload-no-crash.test.ts` — payload inválido não derruba a API.
 - `server/tests/integration/sale-quote-confirm.test.ts` — cria venda `quote` (estoque não muda), confirma via `PUT /status` e valida que o débito só acontece na confirmação (Postgres real, F22).
 - `server/tests/unit/onda3-shipping-cockpit-cashflow.test.ts` — `invoiced → shipped` permitido; `confirmed → shipped` rejeitado (422); cancelamento de venda `shipped` bloqueado (422, mensagem dedicada); `shipped` confirmado como terminal.
+- `server/tests/unit/sale-stock-baixa-na-nfe-g9.test.ts` — **(G9)** caminho real `ChangeSaleStatusUseCase → inventoryService → saleStockService` contra dublê em memória dos models: confirmação reserva e não baixa; faturamento parcial baixa proporcional; segunda emissão baixa só o restante; isolamento entre donos de reserva (venda × venda e venda × OP com o mesmo id numérico); `details.rule` dos erros de dono; cancelamento em cada estágio.
+- `server/tests/unit/warehouse-stock.test.ts` / `warehouse-invariants.test.ts` — **(G9)** dual-write de depósito migrado da confirmação para o faturamento; confirmação não movimenta depósito nenhum.
 
 ## Pendências conhecidas
 
@@ -230,3 +291,19 @@ flowchart TD
   `server/src/routes/sales.ts`) foram deixados intactos no repositório
   como referência histórica, mas não são mais usados; podem ser removidos
   em limpeza futura.
+- **(G9)** A migration `20260810-000030` está **escrita mas não aplicada**
+  (aplicar migration está bloqueado no ambiente). Enquanto não for
+  aplicada, confirmar pedido falha (coluna `sale_id` inexistente).
+- **(G9)** Cancelar a NF-e (`POST /api/sales/:id/nfe/cancel`) **não**
+  reverte `invoiced_quantity` nem devolve o estoque baixado —
+  comportamento pré-existente, mantido de propósito para as duas coisas
+  continuarem coerentes entre si (baixado == faturado). A devolução é
+  manual (ajuste de estoque) ou via cancelamento da venda.
+- **(G9)** Se a baixa falhar na autorização da NF-e (estoque insuficiente
+  por venda legada sem reserva ou ajuste manual), a transação final volta
+  atrás e a venda fica `nfe_status = 'processing'` mesmo com a nota
+  autorizada no provedor. A recuperação é `GET /api/sales/:id/nfe` depois
+  de corrigir o estoque (o snapshot da emissão já está em `sale_invoices`).
+- **(G9)** Ainda sem teste de integração contra Postgres real do CHECK de
+  exatamente-um-dono, dos índices únicos parciais novos e do backfill da
+  migration.

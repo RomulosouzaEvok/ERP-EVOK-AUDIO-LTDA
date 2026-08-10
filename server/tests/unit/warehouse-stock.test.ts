@@ -567,9 +567,16 @@ describe('Integracao dual-write: ReceivePurchaseItemsUseCase e ChangeProductionO
   });
 });
 
-describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACABADOS)', () => {
+/**
+ * ATUALIZADO PELO G9 (2026-08-10): o dual-write de deposito da venda saiu da
+ * confirmacao do pedido e foi para a autorizacao da NF-e
+ * (`services/saleStockService`). A confirmacao agora so RESERVA — e reserva
+ * nao movimenta saldo de deposito.
+ */
+describe('Integracao dual-write: venda -> ACABADOS (confirmacao reserva, NF-e baixa — G9)', () => {
   let InventoryService: any;
   let WarehouseStockService: any;
+  let SaleStockService: any;
   let ChangeSaleStatusUseCase: any;
 
   beforeEach(() => {
@@ -578,6 +585,9 @@ describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACA
     InventoryService = {
       consume: jest.fn(async () => ({ product: { id: 10, quantity: 8 } })),
       receive: jest.fn(async () => ({ product: { id: 10, quantity: 10 } })),
+      reserve: jest.fn(async () => ({ quantityAffected: 3 })),
+      releaseReservation: jest.fn(async () => ({ quantityAffected: 3 })),
+      releaseAllReservationsForSale: jest.fn(async () => []),
     };
     jest.doMock('../../src/services/inventoryService', () => InventoryService);
 
@@ -588,6 +598,8 @@ describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACA
     };
     jest.doMock('../../src/services/warehouseStockService', () => WarehouseStockService);
 
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    SaleStockService = require('../../src/services/saleStockService');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     ChangeSaleStatusUseCase = require('../../src/modules/sales/application/use-cases/ChangeSaleStatusUseCase');
   });
@@ -600,7 +612,7 @@ describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACA
     };
   }
 
-  it('confirmar orcamento (quote -> confirmed) debita o deposito ACABADOS de cada item, na mesma transacao', async () => {
+  it('confirmar orcamento (quote -> confirmed) NAO movimenta deposito: apenas reserva cada item', async () => {
     const transaction: any = { LOCK: { UPDATE: 'UPDATE' } };
     const sale = {
       id: 1,
@@ -610,8 +622,8 @@ describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACA
       customer_id: 5,
       payment_method: 'pix',
       items: [
-        { product_id: 10, quantity: 3 },
-        { product_id: 11, quantity: 2 },
+        { product_id: 10, quantity: 3, invoiced_quantity: 0 },
+        { product_id: 11, quantity: 2, invoiced_quantity: 0 },
       ],
       save: jest.fn(async () => ({})),
     };
@@ -619,6 +631,24 @@ describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACA
     const useCase = new ChangeSaleStatusUseCase(saleRepository);
 
     await useCase.execute({ id: 1, status: 'confirmed', userId: 7, transaction });
+
+    expect(InventoryService.reserve).toHaveBeenCalledTimes(2);
+    expect(InventoryService.reserve).toHaveBeenNthCalledWith(1, 10, 3, 7, transaction, expect.objectContaining({ saleId: 1 }));
+    expect(InventoryService.reserve).toHaveBeenNthCalledWith(2, 11, 2, 7, transaction, expect.objectContaining({ saleId: 1 }));
+    expect(InventoryService.consume).not.toHaveBeenCalled();
+    expect(WarehouseStockService.removeFromWarehouse).not.toHaveBeenCalled();
+    expect(WarehouseStockService.addToWarehouse).not.toHaveBeenCalled();
+  });
+
+  it('faturar (autorizacao da NF-e) debita o deposito ACABADOS de cada item, na mesma transacao', async () => {
+    const transaction: any = { LOCK: { UPDATE: 'UPDATE' } };
+
+    await SaleStockService.commitInvoicedStock(
+      1,
+      [{ productId: 10, quantity: 3 }, { productId: 11, quantity: 2 }],
+      7,
+      transaction
+    );
 
     expect(WarehouseStockService.getWarehouseByCode).toHaveBeenCalledWith('ACABADOS', transaction);
     expect(InventoryService.consume).toHaveBeenCalledTimes(2);
@@ -628,12 +658,13 @@ describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACA
     expect(WarehouseStockService.addToWarehouse).not.toHaveBeenCalled();
   });
 
-  it('cancelar venda credita de volta o deposito ACABADOS de cada item, na mesma transacao', async () => {
+  it('cancelar venda credita de volta o deposito ACABADOS SO do que ja tinha sido faturado', async () => {
     const transaction: any = { LOCK: { UPDATE: 'UPDATE' } };
     const sale = {
       id: 2,
-      status: 'confirmed',
-      items: [{ product_id: 10, quantity: 4 }],
+      status: 'partially_invoiced',
+      nfe_status: 'authorized',
+      items: [{ product_id: 10, quantity: 6, invoiced_quantity: 4 }],
       save: jest.fn(async () => ({})),
     };
     const saleRepository = buildSaleRepository(sale);
@@ -641,6 +672,7 @@ describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACA
 
     await useCase.execute({ id: 2, status: 'canceled', userId: 7, transaction });
 
+    expect(InventoryService.releaseAllReservationsForSale).toHaveBeenCalledWith(2, 7, transaction, expect.any(Object));
     expect(WarehouseStockService.getWarehouseByCode).toHaveBeenCalledWith('ACABADOS', transaction);
     expect(InventoryService.receive).toHaveBeenCalledTimes(1);
     expect(WarehouseStockService.addToWarehouse).toHaveBeenCalledTimes(1);
@@ -648,7 +680,25 @@ describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACA
     expect(WarehouseStockService.removeFromWarehouse).not.toHaveBeenCalled();
   });
 
-  it('saldo insuficiente em ACABADOS na confirmacao propaga 422 didatico (BusinessRuleError)', async () => {
+  it('cancelar venda sem nada faturado nao movimenta deposito nenhum', async () => {
+    const transaction: any = { LOCK: { UPDATE: 'UPDATE' } };
+    const sale = {
+      id: 4,
+      status: 'confirmed',
+      items: [{ product_id: 10, quantity: 4, invoiced_quantity: 0 }],
+      save: jest.fn(async () => ({})),
+    };
+    const useCase = new ChangeSaleStatusUseCase(buildSaleRepository(sale));
+
+    await useCase.execute({ id: 4, status: 'canceled', userId: 7, transaction });
+
+    expect(InventoryService.releaseAllReservationsForSale).toHaveBeenCalledTimes(1);
+    expect(InventoryService.receive).not.toHaveBeenCalled();
+    expect(WarehouseStockService.addToWarehouse).not.toHaveBeenCalled();
+    expect(WarehouseStockService.getWarehouseByCode).not.toHaveBeenCalled();
+  });
+
+  it('saldo insuficiente em ACABADOS no faturamento propaga 422 didatico (BusinessRuleError)', async () => {
     const { BusinessRuleError } = require('../../src/errors');
     WarehouseStockService.removeFromWarehouse.mockRejectedValueOnce(
       new BusinessRuleError('Saldo insuficiente do produto "Produto 10" (#10) no depósito "Deposito ACABADOS" (ACABADOS). Saldo atual: 1, solicitado: 3.', {
@@ -657,27 +707,10 @@ describe('Integracao dual-write: ChangeSaleStatusUseCase (expedicao/venda -> ACA
     );
 
     const transaction: any = { LOCK: { UPDATE: 'UPDATE' } };
-    const sale = {
-      id: 3,
-      status: 'quote',
-      total_amount: '100.00',
-      installments: 1,
-      customer_id: 5,
-      payment_method: 'pix',
-      items: [{ product_id: 10, quantity: 3 }],
-      save: jest.fn(async () => ({})),
-    };
-    const saleRepository = buildSaleRepository(sale);
-    const useCase = new ChangeSaleStatusUseCase(saleRepository);
 
     await expect(
-      useCase.execute({ id: 3, status: 'confirmed', userId: 7, transaction })
+      SaleStockService.commitInvoicedStock(3, [{ productId: 10, quantity: 3 }], 7, transaction)
     ).rejects.toBeInstanceOf(BusinessRuleError);
-
-    // Nao deve ter persistido o novo status nem gerado parcelas se o
-    // dual-write do deposito falhar no meio do loop.
-    expect(sale.save).not.toHaveBeenCalled();
-    expect(saleRepository.createAccountReceivable).not.toHaveBeenCalled();
   });
 });
 
@@ -805,7 +838,11 @@ describe('Integracao dual-write: CreateAcousticTestUseCase (teste destrutivo -> 
   });
 });
 
-describe('Integracao dual-write: CreateSaleUseCase (venda confirmada na criacao -> ACABADOS)', () => {
+/**
+ * ATUALIZADO PELO G9 (2026-08-10): venda criada ja `confirmed` reserva em
+ * vez de baixar, e portanto tambem nao movimenta deposito na criacao.
+ */
+describe('Integracao dual-write: CreateSaleUseCase (venda confirmada na criacao — G9: reserva, nao baixa)', () => {
   let InventoryService: any;
   let WarehouseStockService: any;
   let CreateSaleUseCase: any;
@@ -815,6 +852,7 @@ describe('Integracao dual-write: CreateSaleUseCase (venda confirmada na criacao 
 
     InventoryService = {
       consume: jest.fn(async () => ({ product: { id: 10, quantity: 8 } })),
+      reserve: jest.fn(async () => ({ quantityAffected: 3 })),
     };
     jest.doMock('../../src/services/inventoryService', () => InventoryService);
 
@@ -840,7 +878,7 @@ describe('Integracao dual-write: CreateSaleUseCase (venda confirmada na criacao 
 
   const transaction: any = { LOCK: { UPDATE: 'UPDATE' } };
 
-  it("venda criada com status 'confirmed' (padrao) debita o deposito ACABADOS de cada item, na mesma transacao", async () => {
+  it("venda criada com status 'confirmed' (padrao) RESERVA cada item e nao movimenta deposito", async () => {
     const saleRepository = buildSaleRepository();
     const useCase = new CreateSaleUseCase(saleRepository);
 
@@ -856,15 +894,16 @@ describe('Integracao dual-write: CreateSaleUseCase (venda confirmada na criacao 
       transaction,
     });
 
-    expect(WarehouseStockService.getWarehouseByCode).toHaveBeenCalledWith('ACABADOS', transaction);
-    expect(InventoryService.consume).toHaveBeenCalledTimes(2);
-    expect(WarehouseStockService.removeFromWarehouse).toHaveBeenCalledTimes(2);
-    expect(WarehouseStockService.removeFromWarehouse).toHaveBeenNthCalledWith(1, 10, 2, 3, transaction);
-    expect(WarehouseStockService.removeFromWarehouse).toHaveBeenNthCalledWith(2, 11, 2, 2, transaction);
+    expect(InventoryService.reserve).toHaveBeenCalledTimes(2);
+    expect(InventoryService.reserve).toHaveBeenNthCalledWith(1, 10, 3, 7, transaction, expect.objectContaining({ saleId: 1 }));
+    expect(InventoryService.reserve).toHaveBeenNthCalledWith(2, 11, 2, 7, transaction, expect.objectContaining({ saleId: 1 }));
+    expect(InventoryService.consume).not.toHaveBeenCalled();
+    expect(WarehouseStockService.getWarehouseByCode).not.toHaveBeenCalled();
+    expect(WarehouseStockService.removeFromWarehouse).not.toHaveBeenCalled();
     expect(WarehouseStockService.addToWarehouse).not.toHaveBeenCalled();
   });
 
-  it("venda criada sem 'status' explicito (default 'confirmed') tambem debita o deposito ACABADOS", async () => {
+  it("venda criada sem 'status' explicito (default 'confirmed') tambem apenas reserva", async () => {
     const saleRepository = buildSaleRepository();
     const useCase = new CreateSaleUseCase(saleRepository);
 
@@ -876,10 +915,11 @@ describe('Integracao dual-write: CreateSaleUseCase (venda confirmada na criacao 
       transaction,
     });
 
-    expect(WarehouseStockService.removeFromWarehouse).toHaveBeenCalledWith(10, 2, 1, transaction);
+    expect(InventoryService.reserve).toHaveBeenCalledWith(10, 1, 7, transaction, expect.objectContaining({ saleId: 1 }));
+    expect(WarehouseStockService.removeFromWarehouse).not.toHaveBeenCalled();
   });
 
-  it("venda criada com status: 'quote' (orcamento) nao debita nenhum deposito nem InventoryService", async () => {
+  it("venda criada com status: 'quote' (orcamento) nao reserva, nao debita e nao gera parcela", async () => {
     const saleRepository = buildSaleRepository();
     const useCase = new CreateSaleUseCase(saleRepository);
 
@@ -894,15 +934,16 @@ describe('Integracao dual-write: CreateSaleUseCase (venda confirmada na criacao 
 
     expect(WarehouseStockService.getWarehouseByCode).not.toHaveBeenCalled();
     expect(InventoryService.consume).not.toHaveBeenCalled();
+    expect(InventoryService.reserve).not.toHaveBeenCalled();
     expect(WarehouseStockService.removeFromWarehouse).not.toHaveBeenCalled();
     expect(saleRepository.createAccountReceivable).not.toHaveBeenCalled();
   });
 
-  it('saldo insuficiente em ACABADOS na criacao da venda confirmada propaga 422 didatico (BusinessRuleError)', async () => {
+  it('estoque disponivel insuficiente na criacao da venda confirmada propaga 422 didatico (BusinessRuleError)', async () => {
     const { BusinessRuleError } = require('../../src/errors');
-    WarehouseStockService.removeFromWarehouse.mockRejectedValueOnce(
-      new BusinessRuleError('Saldo insuficiente do produto "Produto 10" (#10) no depósito "Deposito ACABADOS" (ACABADOS). Saldo atual: 1, solicitado: 3.', {
-        product_id: 10, warehouse_id: 2, available_quantity: 1, requested_quantity: 3,
+    InventoryService.reserve.mockRejectedValueOnce(
+      new BusinessRuleError('Estoque insuficiente para "Produto 10". Disponível: 1, Solicitado: 3', {
+        product_id: 10, available_quantity: 1, requested_quantity: 3,
       })
     );
 
@@ -919,7 +960,7 @@ describe('Integracao dual-write: CreateSaleUseCase (venda confirmada na criacao 
       })
     ).rejects.toBeInstanceOf(BusinessRuleError);
 
-    // Nao deve ter gerado parcela se o dual-write do deposito falhar no meio do loop.
+    // Nao deve ter gerado parcela se a reserva falhar no meio do loop.
     expect(saleRepository.createAccountReceivable).not.toHaveBeenCalled();
   });
 });

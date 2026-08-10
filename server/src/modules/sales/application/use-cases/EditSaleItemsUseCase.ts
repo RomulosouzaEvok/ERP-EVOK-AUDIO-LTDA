@@ -4,7 +4,6 @@ const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
 const { toCents, fromCents } = require('../../../../shared/utils/money');
 const InventoryService = require('../../../../services/inventoryService');
-const WarehouseStockService = require('../../../../services/warehouseStockService');
 
 interface EditItemInput {
   sale_item_id?: number;
@@ -19,16 +18,25 @@ interface EditItemInput {
  * pedido"), cobrindo `PUT /api/sales/:id/items`.
  *
  * Regra de negócio: uma venda `quote` pode ser editada livremente (nada foi
- * debitado do estoque ainda — mesma premissa de `CreateSaleUseCase`/
+ * comprometido do estoque ainda — mesma premissa de `CreateSaleUseCase`/
  * `ChangeSaleStatusUseCase`). Uma venda `confirmed` também pode ter seus
- * itens/quantidades alterados, mas enquanto isso o estoque já debitado na
- * confirmação precisa ser ajustado na MESMA transação (delta de
- * quantidade por produto, ou restauração/débito completo quando o produto
- * de uma linha muda). A partir de `partially_invoiced`/`invoiced`/
- * `shipped`/`canceled` a edição é bloqueada com 422 didático
- * (`details.status`) — a venda já tem NF-e emitida (total ou parcial) ou
- * já foi encerrada, e a EVOK não pode alterar itens de um pedido já
- * faturado.
+ * itens/quantidades alterados, mas enquanto isso a **reserva** criada na
+ * confirmação precisa ser ajustada na MESMA transação (delta de quantidade
+ * por produto, ou liberação/reserva completa quando o produto de uma linha
+ * muda). A partir de `partially_invoiced`/`invoiced`/`shipped`/`canceled` a
+ * edição é bloqueada com 422 didático (`details.status`) — a venda já tem
+ * NF-e emitida (total ou parcial) ou já foi encerrada, e a EVOK não pode
+ * alterar itens de um pedido já faturado.
+ *
+ * GAP G9 (2026-08-10): antes deste gap a edição de venda `confirmed`
+ * mexia diretamente em `products.quantity` (`consume`/`receive`), porque a
+ * confirmação já tinha baixado o estoque. Como a confirmação passou a só
+ * **reservar** (a baixa migrou para a autorização da NF-e), a edição passou
+ * a ajustar a reserva (`reserve`/`releaseReservation` com `saleId`) e
+ * **não toca mais em `products.quantity` nem no saldo por depósito**. Como
+ * a edição só é permitida enquanto `invoiced_quantity` é 0 em todos os
+ * itens (as guardas abaixo garantem isso), a reserva viva é sempre igual à
+ * quantidade da linha — não há caso de reserva parcialmente consumida aqui.
  *
  * Cada item do payload pode trazer `sale_item_id` (atualiza a linha
  * existente) ou omiti-lo (nova linha). Toda linha existente cujo
@@ -54,7 +62,7 @@ class EditSaleItemsUseCase extends UseCase {
    * @returns {Promise<{ sale: Object, oldItems: Object[] }>} A venda atualizada e uma cópia dos itens anteriores (para auditoria).
    * @throws {NotFoundError} Se a venda, algum `sale_item_id` referenciado ou algum `product_id` não existir.
    * @throws {ValidationError} Se `sale_item_id` não pertencer à venda, houver `product_id` duplicado no payload, ou o desconto exceder o novo total.
-   * @throws {BusinessRuleError} Se o status da venda não permitir edição, ou (para `confirmed`) não houver estoque suficiente para o aumento de quantidade.
+   * @throws {BusinessRuleError} Se o status da venda não permitir edição, ou (para `confirmed`) não houver estoque disponível para o aumento de quantidade reservada.
    */
   async execute({ id, items, userId, transaction }: { id: number; items: EditItemInput[]; userId: number; transaction: Transaction }) {
     const sale = await this.saleRepository.findSaleWithItemsForUpdate(id, transaction);
@@ -92,11 +100,7 @@ class EditSaleItemsUseCase extends UseCase {
       seenProductIds.add(item.product_id);
     }
 
-    const acabadosWarehouse = isQuote
-      ? null
-      : await WarehouseStockService.getWarehouseByCode('ACABADOS', transaction);
-
-    // 1) Remove linhas que não aparecem mais no payload, restaurando estoque.
+    // 1) Remove linhas que não aparecem mais no payload, liberando a reserva.
     for (const [itemId, oldItem] of oldItemsById) {
       if (referencedItemIds.has(itemId)) continue;
 
@@ -107,12 +111,10 @@ class EditSaleItemsUseCase extends UseCase {
             { sale_item_id: itemId, invoiced_quantity: oldItem.invoiced_quantity }
           );
         }
-        await InventoryService.receive(oldItem.product_id, oldItem.quantity, userId, transaction, {
-          description: `Alteração de itens - Venda #${sale.id} (item removido)`,
-          referenceId: sale.id,
-          referenceType: 'adjustment'
+        await InventoryService.releaseReservation(oldItem.product_id, oldItem.quantity, userId, transaction, {
+          saleId: sale.id,
+          description: `Alteração de itens - Venda #${sale.id} (item removido)`
         });
-        await WarehouseStockService.addToWarehouse(oldItem.product_id, acabadosWarehouse.id, oldItem.quantity, transaction);
       }
 
       await this.saleRepository.deleteSaleItem(itemId, transaction);
@@ -146,7 +148,7 @@ class EditSaleItemsUseCase extends UseCase {
 
       if (!isQuote) {
         if (oldItem && oldItem.product_id === item.product_id) {
-          // Mesmo produto: ajusta só o delta de quantidade.
+          // Mesmo produto: ajusta só o delta de quantidade reservada.
           const delta = qty - Number(oldItem.quantity);
           if (Number(oldItem.invoiced_quantity) > qty) {
             throw new BusinessRuleError(
@@ -155,43 +157,35 @@ class EditSaleItemsUseCase extends UseCase {
             );
           }
           if (delta > 0) {
-            await InventoryService.consume(item.product_id, delta, userId, transaction, {
-              description: `Alteração de itens - Venda #${sale.id} (aumento de quantidade)`,
-              referenceId: sale.id,
-              referenceType: 'sale'
+            await InventoryService.reserve(item.product_id, delta, userId, transaction, {
+              saleId: sale.id,
+              description: `Alteração de itens - Venda #${sale.id} (aumento de quantidade)`
             });
-            await WarehouseStockService.removeFromWarehouse(item.product_id, acabadosWarehouse.id, delta, transaction);
           } else if (delta < 0) {
-            await InventoryService.receive(item.product_id, -delta, userId, transaction, {
-              description: `Alteração de itens - Venda #${sale.id} (redução de quantidade)`,
-              referenceId: sale.id,
-              referenceType: 'adjustment'
+            await InventoryService.releaseReservation(item.product_id, -delta, userId, transaction, {
+              saleId: sale.id,
+              description: `Alteração de itens - Venda #${sale.id} (redução de quantidade)`
             });
-            await WarehouseStockService.addToWarehouse(item.product_id, acabadosWarehouse.id, -delta, transaction);
           }
         } else {
           if (oldItem) {
-            // Produto da linha mudou: restaura o produto antigo por completo.
+            // Produto da linha mudou: libera a reserva do produto antigo por completo.
             if (Number(oldItem.invoiced_quantity) > 0) {
               throw new BusinessRuleError(
                 `Item #${oldItem.id} já possui quantidade faturada e não pode trocar de produto.`,
                 { sale_item_id: oldItem.id, invoiced_quantity: oldItem.invoiced_quantity }
               );
             }
-            await InventoryService.receive(oldItem.product_id, oldItem.quantity, userId, transaction, {
-              description: `Alteração de itens - Venda #${sale.id} (produto trocado)`,
-              referenceId: sale.id,
-              referenceType: 'adjustment'
+            await InventoryService.releaseReservation(oldItem.product_id, oldItem.quantity, userId, transaction, {
+              saleId: sale.id,
+              description: `Alteração de itens - Venda #${sale.id} (produto trocado)`
             });
-            await WarehouseStockService.addToWarehouse(oldItem.product_id, acabadosWarehouse.id, oldItem.quantity, transaction);
           }
-          // Item novo (ou produto trocado): debita a quantidade nova por completo.
-          await InventoryService.consume(item.product_id, qty, userId, transaction, {
-            description: `Alteração de itens - Venda #${sale.id} (item ${oldItem ? 'trocado' : 'adicionado'})`,
-            referenceId: sale.id,
-            referenceType: 'sale'
+          // Item novo (ou produto trocado): reserva a quantidade nova por completo.
+          await InventoryService.reserve(item.product_id, qty, userId, transaction, {
+            saleId: sale.id,
+            description: `Alteração de itens - Venda #${sale.id} (item ${oldItem ? 'trocado' : 'adicionado'})`
           });
-          await WarehouseStockService.removeFromWarehouse(item.product_id, acabadosWarehouse.id, qty, transaction);
         }
       }
 

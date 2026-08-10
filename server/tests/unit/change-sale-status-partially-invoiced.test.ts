@@ -13,6 +13,9 @@
 jest.mock('../../src/services/inventoryService', () => ({
   consume: jest.fn(async () => ({})),
   receive: jest.fn(async () => ({})),
+  reserve: jest.fn(async () => ({ quantityAffected: 0 })),
+  releaseReservation: jest.fn(async () => ({ quantityAffected: 0 })),
+  releaseAllReservationsForSale: jest.fn(async () => []),
 }));
 
 jest.mock('../../src/services/warehouseStockService', () => ({
@@ -22,6 +25,8 @@ jest.mock('../../src/services/warehouseStockService', () => ({
 }));
 
 import ChangeSaleStatusUseCase = require('../../src/modules/sales/application/use-cases/ChangeSaleStatusUseCase');
+
+const InventoryService = require('../../src/services/inventoryService');
 
 function buildRepository(sale: any) {
   return {
@@ -45,6 +50,8 @@ function buildSale(status: string) {
 }
 
 describe("ChangeSaleStatusUseCase - status 'partially_invoiced'", () => {
+  beforeEach(() => jest.clearAllMocks());
+
   it('bloqueia setar partially_invoiced manualmente via PUT /:id/status', async () => {
     const sale = buildSale('confirmed');
     const repo = buildRepository(sale);
@@ -55,7 +62,7 @@ describe("ChangeSaleStatusUseCase - status 'partially_invoiced'", () => {
     });
   });
 
-  it('permite cancelar uma venda partially_invoiced, restaurando estoque total', async () => {
+  it('permite cancelar uma venda partially_invoiced, liberando reserva e devolvendo so o que foi faturado', async () => {
     const sale = buildSale('partially_invoiced');
     const repo = buildRepository(sale);
     const useCase = new ChangeSaleStatusUseCase(repo);
@@ -64,6 +71,15 @@ describe("ChangeSaleStatusUseCase - status 'partially_invoiced'", () => {
 
     expect(updated.status).toBe('canceled');
     expect(repo.cancelPendingReceivables).toHaveBeenCalledWith(sale.id, {});
+
+    // G9: o item tem quantity 4 e invoiced_quantity 2. Só as 2 faturadas
+    // saíram do estoque (baixa na NF-e) e voltam; as outras 2 estavam
+    // apenas reservadas e são liberadas, sem entrar em products.quantity.
+    expect(InventoryService.releaseAllReservationsForSale).toHaveBeenCalledWith(
+      sale.id, 1, expect.anything(), expect.any(Object)
+    );
+    expect(InventoryService.receive).toHaveBeenCalledTimes(1);
+    expect(InventoryService.receive).toHaveBeenCalledWith(10, 2, 1, expect.anything(), expect.any(Object));
   });
 
   it('bloqueia partially_invoiced -> shipped (embarque exige venda totalmente invoiced)', async () => {
