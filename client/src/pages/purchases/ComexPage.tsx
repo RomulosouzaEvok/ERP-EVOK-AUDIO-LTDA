@@ -1,13 +1,14 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useFieldArray, useForm, Controller } from 'react-hook-form';
+import { useFieldArray, useForm, Controller, type DefaultValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2, Eye, Container, Ship, PackageCheck, Ban } from 'lucide-react';
+import { Plus, Trash2, Eye, Container, Ship, PackageCheck, Ban, ShieldCheck } from 'lucide-react';
 
 import * as comexApi from '@/api/comex';
 import * as suppliersApi from '@/api/suppliers';
-import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import type * as itemsApi from '@/api/items';
+import { type DidacticError } from '@/lib/translateApiError';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,37 +22,16 @@ import { DidacticAlert } from '@/components/DidacticAlert';
 import { ItemSearchSelect } from '@/components/ItemSearchSelect';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
+import { AmberNoticeBox } from '@/components/AmberNoticeBox';
 
-const STATUS_LABEL: Record<comexApi.ImportProcessStatus, string> = {
-  draft: 'Rascunho',
-  shipped: 'Embarcado',
-  arrived: 'Chegou ao país',
-  customs_cleared: 'Desembaraçado',
-  received: 'Recebido',
-  cancelled: 'Cancelado',
-};
-
-const STATUS_VARIANT: Record<comexApi.ImportProcessStatus, 'secondary' | 'warning' | 'default' | 'success' | 'destructive'> = {
-  draft: 'secondary',
-  shipped: 'warning',
-  arrived: 'warning',
-  customs_cleared: 'default',
-  received: 'success',
-  cancelled: 'destructive',
-};
-
-/** Próximo marco de acompanhamento (`POST /:id/tracking`) a partir do status atual — `null` quando não há mais marco a registrar. */
-const NEXT_TRACKING_EVENT: Partial<Record<comexApi.ImportProcessStatus, comexApi.ImportTrackingEvent>> = {
-  draft: 'shipped',
-  shipped: 'arrived',
-  arrived: 'customs_cleared',
-};
-
-const TRACKING_EVENT_LABEL: Record<comexApi.ImportTrackingEvent, string> = {
-  shipped: 'Embarque',
-  arrived: 'Chegada ao país',
-  customs_cleared: 'Desembaraço aduaneiro',
-};
+import { ImportApprovalGateCard } from './ImportApprovalGateCard';
+import {
+  NEXT_TRACKING_EVENT,
+  STATUS_LABEL,
+  STATUS_VARIANT,
+  TRACKING_EVENT_LABEL,
+  translateComexError,
+} from './comexShared';
 
 const createImportProcessItemSchema = z.object({
   item_id: z.string().min(1, 'Selecione um item.'),
@@ -75,10 +55,48 @@ const createImportProcessSchema = z.object({
   items: z.array(createImportProcessItemSchema).min(1, 'Adicione ao menos um item.'),
 });
 
-type CreateImportProcessFormData = z.infer<typeof createImportProcessSchema>;
+type CreateImportProcessFormData = z.output<typeof createImportProcessSchema>;
+/**
+ * Valores brutos do formulário (antes do `zodResolver`). O `zodResolver` tipa
+ * `Resolver<z.input, ctx, z.output>` — usar `z.infer` (= `z.output`) no
+ * primeiro genérico de `useForm` quebra o build com campos `z.coerce`, daí a
+ * forma de 3 genéricos adotada no projeto.
+ */
+type CreateImportProcessFormInput = z.input<typeof createImportProcessSchema>;
 
-function emptyItem(): CreateImportProcessFormData['items'][number] {
+function emptyItem(): CreateImportProcessFormInput['items'][number] {
   return { item_id: '', quantity: 1, fob_unit_price: 0, ii_rate: 0, ipi_rate: 0, pis_rate: 0, cofins_rate: 0, icms_rate: 0 };
+}
+
+/** Defaults do formulário — `supplier_id`/`exchange_rate` nascem vazios (o operador precisa informar). */
+function emptyCreateForm(): DefaultValues<CreateImportProcessFormInput> {
+  return {
+    fob_currency: 'USD',
+    freight_value: 0,
+    insurance_value: 0,
+    other_expenses_value: 0,
+    notes: '',
+    items: [emptyItem()],
+  } as DefaultValues<CreateImportProcessFormInput>;
+}
+
+/**
+ * Busca de item que preserva o item escolhido na linha (o `ItemSearchSelect`
+ * é controlado pelo objeto `Item`, enquanto o formulário guarda só o
+ * `item_id`).
+ */
+function ItemPicker({ onSelect }: { onSelect: (itemId: string) => void }) {
+  const [selected, setSelected] = React.useState<itemsApi.Item | null>(null);
+  return (
+    <ItemSearchSelect
+      value={selected}
+      placeholder="Item..."
+      onChange={(item) => {
+        setSelected(item);
+        onSelect(item?.id ?? '');
+      }}
+    />
+  );
 }
 
 /**
@@ -115,18 +133,9 @@ export default function ComexPage() {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateImportProcessFormData>({
+  } = useForm<CreateImportProcessFormInput, unknown, CreateImportProcessFormData>({
     resolver: zodResolver(createImportProcessSchema),
-    defaultValues: {
-      supplier_id: undefined,
-      fob_currency: 'USD',
-      exchange_rate: undefined,
-      freight_value: 0,
-      insurance_value: 0,
-      other_expenses_value: 0,
-      notes: '',
-      items: [emptyItem()],
-    } as never,
+    defaultValues: emptyCreateForm(),
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
 
@@ -141,19 +150,10 @@ export default function ComexPage() {
     onSuccess: () => {
       invalidate();
       setOpen(false);
-      reset({
-        supplier_id: undefined,
-        fob_currency: 'USD',
-        exchange_rate: undefined,
-        freight_value: 0,
-        insurance_value: 0,
-        other_expenses_value: 0,
-        notes: '',
-        items: [emptyItem()],
-      } as never);
+      reset(emptyCreateForm());
       setFormError(null);
     },
-    onError: (error) => setFormError(translateApiError(error, 'Não foi possível registrar o processo de importação.')),
+    onError: (error) => setFormError(translateComexError(error, 'Não foi possível registrar o processo de importação.')),
   });
 
   return (
@@ -241,9 +241,7 @@ export default function ComexPage() {
                       <Controller
                         control={control}
                         name={`items.${index}.item_id`}
-                        render={({ field: controllerField }) => (
-                          <ItemSearchSelect value={null} onChange={(item) => controllerField.onChange(item?.id ?? '')} placeholder="Item..." />
-                        )}
+                        render={({ field: controllerField }) => <ItemPicker onSelect={(itemId) => controllerField.onChange(itemId)} />}
                       />
                       <Input type="number" step="any" placeholder="Qtd." {...register(`items.${index}.quantity`)} />
                       <Input type="number" step="any" placeholder="FOB unit." {...register(`items.${index}.fob_unit_price`)} />
@@ -267,6 +265,12 @@ export default function ComexPage() {
                   <Label htmlFor="notes">Observações</Label>
                   <Input id="notes" {...register('notes')} />
                 </div>
+
+                <AmberNoticeBox size="xs" icon={ShieldCheck}>
+                  O processo nasce em <strong>Rascunho</strong>. Câmbio, frete, seguro e despesas só podem ser corrigidos
+                  enquanto ele não embarca — depois da aprovação da diretoria esses valores ficam congelados no embarque, e
+                  para alterá-los é preciso cancelar e recriar o processo.
+                </AmberNoticeBox>
 
                 {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>
@@ -381,6 +385,21 @@ function ImportProcessDetailDialog({
     enabled: importProcessId != null,
   });
 
+  /**
+   * Situação da alçada da diretoria (G11-COMEX) — fonte única de verdade do
+   * gate: `GET /:id/approvals`. Nunca inferimos aprovação a partir do status
+   * do processo nem tentando embarcar para ler o 422.
+   */
+  const {
+    data: approvalStatus,
+    isLoading: isApprovalLoading,
+    isError: isApprovalError,
+  } = useQuery({
+    queryKey: ['import-process-approvals', importProcessId],
+    queryFn: () => comexApi.getImportProcessApprovals(importProcessId as number),
+    enabled: importProcessId != null,
+  });
+
   React.useEffect(() => {
     if (importProcessId != null) {
       setTrackingOpen(false);
@@ -392,6 +411,7 @@ function ImportProcessDetailDialog({
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['import-processes'] });
     queryClient.invalidateQueries({ queryKey: ['import-process', importProcessId] });
+    queryClient.invalidateQueries({ queryKey: ['import-process-approvals', importProcessId] });
   };
 
   const receiveMutation = useMutation({
@@ -401,7 +421,7 @@ function ImportProcessDetailDialog({
       invalidateAll();
       queryClient.invalidateQueries({ queryKey: ['products'] });
     },
-    onError: (error) => setActionError(translateApiError(error, 'Não foi possível receber o processo de importação (dar entrada em estoque).')),
+    onError: (error) => setActionError(translateComexError(error, 'Não foi possível receber o processo de importação (dar entrada em estoque).')),
   });
 
   const cancelMutation = useMutation({
@@ -411,12 +431,22 @@ function ImportProcessDetailDialog({
       setCancelOpen(false);
       invalidateAll();
     },
-    onError: (error) => setActionError(translateApiError(error, 'Não foi possível cancelar o processo de importação.')),
+    onError: (error) => setActionError(translateComexError(error, 'Não foi possível cancelar o processo de importação.')),
   });
 
   const nextEvent = importProcess ? NEXT_TRACKING_EVENT[importProcess.status] : undefined;
   const canReceive = importProcess?.status === 'customs_cleared';
   const canCancel = importProcess && importProcess.status !== 'received' && importProcess.status !== 'cancelled';
+
+  /**
+   * O embarque (`draft → shipped`) é o único evento gateado pela diretoria
+   * (G11-COMEX). Enquanto `GET /:id/approvals` não respondeu — ou falhou —,
+   * o botão fica bloqueado: melhor pedir para aguardar/recarregar do que
+   * mandar o operador tomar um 422 do backend.
+   */
+  const isShipmentEvent = nextEvent === 'shipped';
+  const isShipmentBlocked = isShipmentEvent && !approvalStatus?.approval_complete;
+  const trackingButtonDisabled = isShipmentEvent && (isApprovalLoading || isShipmentBlocked);
 
   return (
     <Dialog open={importProcessId != null} onOpenChange={(next) => !next && onClose()}>
@@ -495,13 +525,47 @@ function ImportProcessDetailDialog({
               </p>
             </div>
 
+            {(importProcess.status === 'draft' || (approvalStatus?.approvals.length ?? 0) > 0) && (
+              <ImportApprovalGateCard
+                importProcessId={importProcess.id}
+                processNumber={importProcess.process_number}
+                approvalStatus={approvalStatus}
+                isLoading={isApprovalLoading}
+                isError={isApprovalError}
+                onApproved={invalidateAll}
+              />
+            )}
+
             {actionError && <DidacticAlert error={actionError} />}
+
+            {canWrite && isShipmentEvent && approvalStatus && !approvalStatus.approval_complete && (
+              <AmberNoticeBox size="sm" icon={ShieldCheck}>
+                <p className="font-medium">Embarque bloqueado: falta a aprovação da diretoria.</p>
+                <p>
+                  Registre a aprovação no bloco "Aprovação da diretoria" acima (ação exclusiva de quem tem o papel Diretoria).
+                  Enquanto ela não existir, o sistema não grava o embarque — nem o status, nem o recálculo de tributos.
+                </p>
+              </AmberNoticeBox>
+            )}
+
+            {canWrite && isShipmentEvent && isApprovalError && (
+              <AmberNoticeBox size="sm" icon={ShieldCheck}>
+                <p className="font-medium">Não foi possível confirmar a aprovação da diretoria.</p>
+                <p>
+                  O embarque fica bloqueado até a consulta funcionar — a tela não presume que o processo esteja aprovado.
+                  Recarregue a página e tente de novo.
+                </p>
+              </AmberNoticeBox>
+            )}
 
             {canWrite && (
               <div className="flex flex-wrap items-center gap-2 border-t pt-3">
                 {nextEvent && (
-                  <Button type="button" size="sm" onClick={() => setTrackingOpen(true)}>
-                    <Ship className="size-4" /> Registrar {TRACKING_EVENT_LABEL[nextEvent].toLowerCase()}
+                  <Button type="button" size="sm" disabled={trackingButtonDisabled} onClick={() => setTrackingOpen(true)}>
+                    <Ship className="size-4" />{' '}
+                    {isShipmentEvent && isApprovalLoading
+                      ? 'Verificando aprovação...'
+                      : `Registrar ${TRACKING_EVENT_LABEL[nextEvent].toLowerCase()}`}
                   </Button>
                 )}
                 {canReceive && (
@@ -574,6 +638,11 @@ function emptyTrackingForm(): TrackingFormState {
  * opcionais (string vazia = "não alterar"), o que colide com a inferência de
  * tipos do resolver do zod para uniões `number | undefined` (mesmo padrão já
  * usado em `ReceiveItemsDialog`, `PurchasesPage.tsx`).
+ *
+ * No **embarque** os campos monetários nem sequer são oferecidos: o gate
+ * G11-COMEX congela câmbio/frete/seguro/despesas nessa transição para que o
+ * processo embarcado seja o mesmo que a diretoria aprovou (o backend rejeita
+ * com 422 se vierem). Chegada e desembaraço continuam aceitando.
  */
 function RegisterTrackingDialog({
   importProcess,
@@ -598,24 +667,31 @@ function RegisterTrackingDialog({
     }
   }, [open]);
 
+  /** `true` no embarque: campos monetários congelados pelo G11-COMEX. */
+  const isShipment = event === 'shipped';
+
   const mutation = useMutation({
-    mutationFn: () =>
-      comexApi.registerImportTracking(importProcess.id, {
-        event,
-        event_date: form.event_date || undefined,
-        exchange_rate: form.exchange_rate ? Number(form.exchange_rate) : undefined,
-        freight_value: form.freight_value ? Number(form.freight_value) : undefined,
-        insurance_value: form.insurance_value ? Number(form.insurance_value) : undefined,
-        other_expenses_value: form.other_expenses_value ? Number(form.other_expenses_value) : undefined,
-        notes: form.notes.trim() || undefined,
-      }),
+    mutationFn: () => {
+      const base = { event_date: form.event_date || undefined, notes: form.notes.trim() || undefined };
+      const payload: comexApi.RegisterImportTrackingInput = isShipment
+        ? { event: 'shipped', ...base }
+        : {
+            event,
+            ...base,
+            exchange_rate: form.exchange_rate ? Number(form.exchange_rate) : undefined,
+            freight_value: form.freight_value ? Number(form.freight_value) : undefined,
+            insurance_value: form.insurance_value ? Number(form.insurance_value) : undefined,
+            other_expenses_value: form.other_expenses_value ? Number(form.other_expenses_value) : undefined,
+          };
+      return comexApi.registerImportTracking(importProcess.id, payload);
+    },
     onSuccess: () => {
       setError(null);
       onClose();
       onSuccess();
     },
     onError: (err) =>
-      setError(translateApiError(err, `Não foi possível registrar "${TRACKING_EVENT_LABEL[event]}" no processo ${importProcess.process_number}.`)),
+      setError(translateComexError(err, `Não foi possível registrar "${TRACKING_EVENT_LABEL[event]}" no processo ${importProcess.process_number}.`)),
   });
 
   return (
@@ -624,7 +700,9 @@ function RegisterTrackingDialog({
         <DialogHeader>
           <DialogTitle>Registrar {TRACKING_EVENT_LABEL[event].toLowerCase()}</DialogTitle>
           <DialogDescription>
-            Os campos monetários são opcionais — se informados, todos os itens do processo são recalculados com os novos valores.
+            {isShipment
+              ? 'O embarque registra apenas a data e a observação: câmbio, frete, seguro e outras despesas ficam congelados no valor aprovado pela diretoria.'
+              : 'Os campos monetários são opcionais — se informados, todos os itens do processo são recalculados com os novos valores.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -637,6 +715,15 @@ function RegisterTrackingDialog({
               onChange={(evt) => setForm((prev) => ({ ...prev, event_date: evt.target.value }))}
             />
           </div>
+          {isShipment && (
+            <AmberNoticeBox size="xs" icon={ShieldCheck}>
+              Valores congelados no embarque: para corrigir câmbio, frete, seguro ou outras despesas é preciso cancelar e
+              recriar o processo, apresentando-o de novo à diretoria. Despesas aduaneiras reais (armazenagem, capatazia)
+              podem ser lançadas na chegada e no desembaraço.
+            </AmberNoticeBox>
+          )}
+
+          {!isShipment && (
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="tracking_exchange_rate">Novo câmbio (opcional)</Label>
@@ -679,6 +766,7 @@ function RegisterTrackingDialog({
               />
             </div>
           </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="tracking_notes">Observações</Label>
             <Input

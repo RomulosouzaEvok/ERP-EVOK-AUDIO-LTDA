@@ -90,15 +90,34 @@ export interface ImportProcessListParams {
   supplier_id?: number;
 }
 
-export interface RegisterImportTrackingInput {
-  event: ImportTrackingEvent;
+interface RegisterImportTrackingBaseInput {
   event_date?: string;
+  notes?: string;
+}
+
+/**
+ * Embarque (`draft → shipped`). **Não aceita campos monetários** — o gate
+ * G11-COMEX congela `exchange_rate`/`freight_value`/`insurance_value`/
+ * `other_expenses_value` neste evento (o backend responde 422 com
+ * `details.rule = 'G11-COMEX'` e `details.frozen_fields`), para que o
+ * processo embarcado seja o mesmo que a diretoria aprovou. O tipo é
+ * discriminado justamente para a tela não conseguir oferecer esses campos
+ * no embarque.
+ */
+export interface RegisterImportShipmentInput extends RegisterImportTrackingBaseInput {
+  event: 'shipped';
+}
+
+/** Chegada/desembaraço — continuam aceitando dados monetários (despesas aduaneiras reais só aparecem aqui). */
+export interface RegisterImportCustomsEventInput extends RegisterImportTrackingBaseInput {
+  event: 'arrived' | 'customs_cleared';
   exchange_rate?: number;
   freight_value?: number;
   insurance_value?: number;
   other_expenses_value?: number;
-  notes?: string;
 }
+
+export type RegisterImportTrackingInput = RegisterImportShipmentInput | RegisterImportCustomsEventInput;
 
 /** `GET /api/comex/import-processes` — listagem paginada, filtro por status/fornecedor. */
 export async function listImportProcesses(params: ImportProcessListParams = {}) {
@@ -121,8 +140,11 @@ export async function createImportProcess(input: CreateImportProcessInput) {
 /**
  * `POST /api/comex/import-processes/:id/tracking` — registra o próximo marco
  * do acompanhamento (`shipped -> arrived -> customs_cleared`, sequencial:
- * pular etapa ou repetir dá 422). Campos monetários são opcionais; se
- * informados, recalculam todos os itens do processo.
+ * pular etapa ou repetir dá 422). Em `arrived`/`customs_cleared` os campos
+ * monetários são opcionais; se informados, recalculam todos os itens do
+ * processo.
+ *
+ * @throws {AxiosError} 422 BUSINESS_RULE_VIOLATION (`details.rule = 'G11-COMEX'`) — no evento `shipped`, quando a aprovação da diretoria ainda não foi registrada (`details.missing_roles`). Nada é gravado: nem o status, nem o recálculo de tributos. Consulte {@link getImportProcessApprovals} antes de oferecer o embarque.
  */
 export async function registerImportTracking(id: number, input: RegisterImportTrackingInput) {
   const { data } = await httpClient.post<ItemResponse<ImportProcess>>(`/api/comex/import-processes/${id}/tracking`, input);
@@ -136,6 +158,76 @@ export async function registerImportTracking(id: number, input: RegisterImportTr
  */
 export async function receiveImportProcess(id: number) {
   const { data } = await httpClient.post<ItemResponse<ImportProcess>>(`/api/comex/import-processes/${id}/receive`, {});
+  return data.data;
+}
+
+// ---------------------------------------------------------------------------
+// G11-COMEX — gate de aprovação da diretoria antes do embarque (2026-08-10)
+// ---------------------------------------------------------------------------
+
+/** Identificador da regra ecoado em `error.details.rule` / `approvals.rule` (`server/src/modules/comex/domain/constants.ts`). */
+export const IMPORT_APPROVAL_RULE = 'G11-COMEX';
+
+/** Papel de alçada exigido por um processo de importação (hoje só `diretor`, sem faixa de valor). */
+export type ImportApproverRole = 'diretor';
+
+export interface ImportProcessApproval {
+  id: number;
+  import_process_id: number;
+  approver_user_id: number;
+  approver_role: ImportApproverRole;
+  approved_at: string;
+}
+
+/**
+ * Situação da alçada de um processo de importação
+ * (`GET /api/comex/import-processes/:id/approvals`).
+ *
+ * É a **única** fonte de verdade da tela sobre o gate: nunca inferir
+ * aprovação a partir de efeito colateral (tentar aprovar, ou tentar embarcar
+ * e ler o 422). `can_register_approval` já combina "processo ainda em
+ * `draft`" com "ainda falta algum papel".
+ */
+export interface ImportProcessApprovalStatus {
+  rule: string;
+  process_status: ImportProcessStatus;
+  /** Evento de acompanhamento travado pelo gate (`shipped`). */
+  gate_event: ImportTrackingEvent;
+  can_register_approval: boolean;
+  required_roles: ImportApproverRole[];
+  approvals: ImportProcessApproval[];
+  missing_roles: ImportApproverRole[];
+  approval_complete: boolean;
+}
+
+/**
+ * `GET /api/comex/import-processes/:id/approvals` — leitura pura, sem efeito
+ * colateral. Acessível a quem tem o módulo `comex` **ou** `diretor` (os dois
+ * lados precisam enxergar a situação).
+ */
+export async function getImportProcessApprovals(id: number) {
+  const { data } = await httpClient.get<ItemResponse<ImportProcessApprovalStatus>>(
+    `/api/comex/import-processes/${id}/approvals`,
+  );
+  return data.data;
+}
+
+/**
+ * `POST /api/comex/import-processes/:id/approve` — registra a aprovação da
+ * diretoria (G11-COMEX). Sem body: `approver_user_id` vem do JWT e
+ * `approver_role` é resolvido pelo RBAC do backend (nada é aceito do
+ * cliente). Não embarca o processo — apenas libera o evento `shipped`.
+ *
+ * Exige o módulo de acesso `diretor` (`role === 'admin'` também satisfaz):
+ * um analista de COMEX não consegue aprovar, mesmo com `comex:operate`.
+ *
+ * @throws {AxiosError} 403 FORBIDDEN — usuário sem o módulo `diretor`.
+ * @throws {AxiosError} 422 BUSINESS_RULE_VIOLATION (`details.rule = 'G11-COMEX'`) — processo fora de `draft` (aprovação retroativa não existe) ou papel que já aprovou.
+ */
+export async function approveImportProcess(id: number) {
+  const { data } = await httpClient.post<ItemResponse<ImportProcessApproval>>(
+    `/api/comex/import-processes/${id}/approve`,
+  );
   return data.data;
 }
 
