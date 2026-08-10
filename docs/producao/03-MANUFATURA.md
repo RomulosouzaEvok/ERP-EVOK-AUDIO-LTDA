@@ -91,6 +91,29 @@ Célula 6: Embalagem
 
 ### Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> O bloco SQL abaixo é **rascunho de modelagem em dialeto MySQL** — este ERP
+> roda **exclusivamente em PostgreSQL 16**. Ele **não** descreve o banco real.
+> Confronto contra `erp_evok_audio` nesta data:
+>
+> - `daily_production` **não existe** — o apontamento real é
+>   `production_order_tracking` (por etapa da rota, com `quantity_good` /
+>   `quantity_scrapped`, ENUM de status
+>   `pending | in_progress | paused | completed | skipped`);
+> - `machine_downtime` **não existe**. A tabela real é
+>   **`production_downtimes`**, ligada a `work_centers` (não a `assets`) e
+>   opcionalmente a `production_orders`, com `started_at`/`finished_at` e
+>   `reason` no ENUM em português
+>   `setup | manutencao_corretiva | manutencao_preventiva | falta_material | falta_operador | qualidade | outros`
+>   — **sem** `breakdown`, `adjustment` nem `cleaning`. Existe índice UNIQUE
+>   parcial `(work_center_id) WHERE finished_at IS NULL` (uma parada aberta
+>   por centro de trabalho).
+>
+> Fonte da verdade do schema: `docs/database/04-DICIONARIO_DADOS.md`. Achado
+> **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- APONTAMENTO DIÁRIO DE PRODUÇÃO
 CREATE TABLE daily_production (

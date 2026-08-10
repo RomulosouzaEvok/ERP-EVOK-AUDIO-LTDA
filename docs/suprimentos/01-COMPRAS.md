@@ -59,6 +59,34 @@
 
 ### Tabelas SQL (Complementares)
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> O bloco SQL abaixo é **rascunho de modelagem em dialeto MySQL** — este ERP
+> roda **exclusivamente em PostgreSQL 16**. Confronto contra `erp_evok_audio`
+> nesta data:
+>
+> - `purchase_requisitions` **existe**, mas `department_id` é **nullable** e
+>   há colunas não descritas aqui: `origin`, `engineering_project_id`,
+>   `production_order_id`, `updated_at`;
+> - `purchase_requisition_items` **existe**, porém **não tem `product_id` nem
+>   `almox_item_id`**: a coluna real é **`item_id UUID NOT NULL`** com FK para
+>   `items.id`. Também tem `required_date`, `notes` e `updated_at`;
+> - o `ALTER TABLE purchase_orders` é fantasia parcial: `requisition_id`,
+>   `freight_type`, `freight_value`, `invoice_number` e `invoice_date`
+>   **existem**; `incoterm`, `tracking_code`, `delivery_forecast_date` e
+>   `received_date` **não existem** (as datas reais são `expected_date` e
+>   `delivery_date`). O pedido real ainda tem `nfe_key`, `nfe_series`,
+>   `nfe_xml_path`, `nfe_registered_by`, `nfe_registered_at` e `invoice_type`.
+>
+> Sobre o ciclo de `purchase_requisitions.status`: desde o commit `9df39c7`
+> (gap G15) os estados `partial` e `received` **deixaram de ser mortos** — são
+> recalculados a cada recebimento por
+> `modules/purchases/application/services/syncRequisitionReceiptStatus.ts`, e
+> não são declaráveis por `PATCH /:id/status`.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- REQUISIÇÃO DE COMPRA (antes do pedido)
 CREATE TABLE purchase_requisitions (

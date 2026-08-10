@@ -83,6 +83,37 @@
 
 ## Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> O bloco SQL abaixo é **rascunho de modelagem em dialeto MySQL** — este ERP
+> roda **exclusivamente em PostgreSQL 16**. Confronto contra `erp_evok_audio`
+> nesta data:
+>
+> - `imports` e `import_items` **não existem**. As tabelas reais do módulo
+>   COMEX são **`import_processes`** e **`import_process_items`** (UC-19,
+>   migration `20260806-000090`), com colunas bem diferentes:
+>   `process_number`, `fob_currency`, `exchange_rate`, `freight_value`,
+>   `insurance_value`, `other_expenses_value`, `shipped_at`, `arrived_at`,
+>   `customs_cleared_at`, `received_at`; e por item `fob_unit_price`,
+>   `ii_rate`/`ipi_rate`/`pis_rate`/`cofins_rate`/`icms_rate` (informadas
+>   manualmente, **sem integração Siscomex/NCM**), `customs_value`, os
+>   `*_value` calculados e `nationalized_unit_cost`;
+> - o ENUM real de status é
+>   `draft | shipped | arrived | customs_cleared | received | cancelled` —
+>   **não** `ordered | shipped | arrived | clearance | delivered`;
+> - **não existem** `incoterm`, `shipping_method`, `container_number`,
+>   `bill_of_lading`, `di_number`, `di_date`, `country_of_origin`,
+>   `gross_weight`, `net_weight`, nem `purchase_order_id` ligando a
+>   importação a um pedido de compra;
+> - desde o commit `9df39c7` (gap G14) o recebimento da importação grava
+>   `inventory_movements.reference_type = 'import'` e
+>   `product_cost_ledgers.source_type = 'import'` (antes gravava `'purchase'`
+>   com `reference_id` de `import_processes`, o que fazia a consulta reversa
+>   de auditoria devolver um pedido de compra alheio).
+>
+> Ver `docs/arquitetura/API.md` §32. Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- IMPORTAÇÕES
 CREATE TABLE imports (

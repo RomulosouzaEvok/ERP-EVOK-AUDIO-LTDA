@@ -45,6 +45,17 @@ docs/comercial/
 
 ## Tabelas SQL (Novas)
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> `sales_pipeline` e `sales_commissions` **não existem** em `erp_evok_audio`.
+> O funil real é **`marketing_leads`** (ENUM `status`:
+> `new | contacted | qualified | converted | lost | in_sales_attendance`); não
+> há nenhuma tabela de comissão de vendas no banco. O bloco abaixo é rascunho
+> em dialeto MySQL; este ERP roda **exclusivamente em PostgreSQL 16**.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- FUNIL DE VENDAS (oportunidades)
 CREATE TABLE sales_pipeline (

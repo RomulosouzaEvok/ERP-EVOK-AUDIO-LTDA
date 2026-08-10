@@ -7,6 +7,22 @@ para `03-MODELO_FISICO.md`/`schema.sql` (regenerar via `pg_dump`) e
 `04-DICIONARIO_DADOS.md` (regenerar via `docs/database/gen_dict.py` — ver
 nota no topo desse arquivo).
 
+> ## ⚠️ Correção global — 2026-08-10 (auditoria de consistência da cadeia do produto)
+>
+> **Todas as 150 migrations do repositório estão aplicadas** ao banco
+> `erp_evok_audio` (`SELECT count(*) FROM "SequelizeMeta"` = 150 = número de
+> arquivos em `server/migrations/`), incluindo `20260809-000026` e
+> `20260809-000027`. Onde este documento (e `DATABASE.md`, e os
+> `docs/business/BLOCO_*_MODELO_DADOS.md`) diz que as migrations de
+> SST/TI/Jurídico/Facilities/Marketing/RH, do G3 ou do G14 estão
+> "criadas, **não aplicadas**, aguardando aprovação do dono", **a informação
+> está desatualizada** — elas já foram aplicadas. Os números de
+> "auditoria de origem" abaixo (80 tabelas, 175 FKs, 66 migrations) também
+> estão desatualizados: hoje são **195 tabelas** e **150 migrations**.
+>
+> Ver `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`
+> (achado **P2-09**).
+
 **Auditoria de origem:** 2026-08-06, introspecção real do PostgreSQL 16
 local (81 tabelas incl. `SequelizeMeta`, 80 tabelas de negócio, 175
 foreign keys, 66 migrations aplicadas) — não apenas leitura de código/models.

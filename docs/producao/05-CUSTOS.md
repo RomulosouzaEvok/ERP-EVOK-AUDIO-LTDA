@@ -74,6 +74,22 @@
 
 ### Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> O bloco SQL abaixo é **rascunho de modelagem em dialeto MySQL** — este ERP
+> roda **exclusivamente em PostgreSQL 16**. Confronto contra `erp_evok_audio`
+> nesta data:
+>
+> - `cost_centers` **existe** (módulo Financeiro), com outras colunas;
+> - `product_standard_costs` e `cost_variations` **não existem**. O custo
+>   padrão vive em `products.cost_price` / `items.custo_padrao`, e o histórico
+>   de custeio real em **`product_cost_ledgers`** (ENUM `source_type`:
+>   `purchase | production | adjustment | production_labor | production_overhead | import`).
+>   Os parâmetros de overhead ficam no singleton `production_cost_settings`.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- CENTROS DE CUSTO
 CREATE TABLE cost_centers (

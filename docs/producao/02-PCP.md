@@ -71,6 +71,29 @@ Previsão de Vendas / Pedidos Firmes
 
 ### Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> O bloco SQL abaixo é **rascunho de modelagem em dialeto MySQL**
+> (`AUTO_INCREMENT`, `DATETIME`, `ENUM(...)` inline) — este ERP roda
+> **exclusivamente em PostgreSQL 16**. Ele **não** descreve o banco real.
+> Confronto contra `erp_evok_audio` nesta data:
+>
+> - `production_programs` e `material_requirements` **não existem**. O
+>   planejamento de materiais é feito por `mrp_ordens_planejadas` (MRP) +
+>   `purchase_requisitions`;
+> - `work_centers` **existe**, mas com outras colunas. As reais são `code`,
+>   `name`, `description`, `machines_count`, `capacity_hours_per_day`,
+>   `efficiency_factor NUMERIC(5,4)`, `cost_per_hour NUMERIC(18,6)`,
+>   `active BOOLEAN`. **Não existem** `department_id`, `machine_id`,
+>   `capacity_per_hour`, `setup_time_min`, `labor_count`, nem
+>   `status ENUM('active','inactive','maintenance')`. A jornada do centro
+>   fica em `work_center_shifts` (weekday + `start_time`/`end_time`), tabela
+>   que este documento não menciona.
+>
+> Fonte da verdade do schema: `docs/database/04-DICIONARIO_DADOS.md` e
+> `docs/database/02-MODELO_LOGICO.md`. Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- PROGRAMA MESTRE DE PRODUÇÃO (MPS)
 CREATE TABLE production_programs (

@@ -81,6 +81,21 @@ Fase 5: Industrialização
 
 ### Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> O bloco SQL abaixo é **rascunho de modelagem em dialeto MySQL** — este ERP
+> roda **exclusivamente em PostgreSQL 16**. Confronto contra `erp_evok_audio`
+> nesta data:
+>
+> - `product_drawings` e `engineering_projects` **existem**, mas com colunas
+>   diferentes das descritas — ver `docs/database/04-DICIONARIO_DADOS.md`;
+> - `material_specifications` **não existe**. Não há tabela equivalente: a
+>   especificação técnica de item mora em `item_especificacoes_tecnicas`
+>   (`familia_tecnica` + `atributos` JSONB, com índice GIN).
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- DESENHOS TÉCNICOS
 CREATE TABLE product_drawings (

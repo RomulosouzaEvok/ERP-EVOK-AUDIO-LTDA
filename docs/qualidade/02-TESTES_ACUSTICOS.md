@@ -62,6 +62,25 @@ Frequência │ THD Máximo
 
 ### Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> O bloco SQL abaixo é **rascunho de modelagem em dialeto MySQL** — este ERP
+> roda **exclusivamente em PostgreSQL 16**. Confronto contra `erp_evok_audio`
+> nesta data:
+>
+> - `acoustic_test_results` **existe**, mas: **não** tem coluna
+>   `product_code`; o ENUM real de `test_type` é
+>   `impedance | frequency_response | thd | power_rms | power_peak | life | polarity | noise | thiele_small`
+>   (o rascunho traz `power` — que não existe — e omite `thiele_small`); e a
+>   tabela real também tem `lot_number`, `production_order_id`,
+>   `non_conformity_id`, `consumed_quantity` e `updated_at`. Desde o commit
+>   `0d5812e` (gap G8) uma reprovação **sempre** abre RNC, preenchendo
+>   `non_conformity_id`;
+> - `test_certificates` **não existe**.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- RESULTADOS DE TESTE ACÚSTICO
 CREATE TABLE acoustic_test_results (

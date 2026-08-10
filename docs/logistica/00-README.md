@@ -49,6 +49,17 @@ docs/logistica/
 
 ## Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> `shipping_orders` **não existe** em `erp_evok_audio`. A expedição hoje é
+> derivada de `sales` (status `shipped`) e de `inventory_movements`
+> (`reference_type='sale'`), sem tabela própria de ordem de expedição. O bloco
+> abaixo é rascunho em dialeto MySQL; este ERP roda **exclusivamente em
+> PostgreSQL 16**.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- NOTA FISCAL DE REMESSA / FATURAMENTO
 CREATE TABLE shipping_orders (

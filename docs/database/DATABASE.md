@@ -2531,8 +2531,12 @@ riscos residuais.
 
 **Migration:** `20260809-000026-create-production-order-reservations.cjs`
 (Onda 2 do `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`).
-**Aplicação:** ⚠️ migration **entregue mas ainda não aplicada** — depende de
-aprovação do dono e de rodar o backfill logo em seguida (ver abaixo).
+**Aplicação:** ✅ migration **aplicada ao banco** (confirmado em
+`SequelizeMeta` na auditoria de consistência de 2026-08-10). ⚠️ O **backfill
+`server/src/scripts/backfill/05_production_order_reservations.ts` continua
+pendente de execução com `--apply`** — até lá, OPs liberadas antes de
+2026-08-09 não têm linha de reserva (a liberação delas é um no-op silencioso,
+por desenho, ver abaixo).
 
 ### O problema de modelagem
 
@@ -2631,8 +2635,10 @@ alto para sempre — material invisivelmente indisponível.
 ## G14 — Origem `import` no rastro de estoque e de custo (2026-08-09)
 
 **Migration:** `20260809-000027-add-import-origin-to-inventory-and-cost-enums.cjs`
-**Status:** criada, **NÃO aplicada** (aguarda a mesma janela de deploy da
-`20260809-000026`).
+**Status:** ✅ **aplicada ao banco** — os valores `'import'` já existem em
+`enum_inventory_movements_reference_type` e em
+`enum_product_cost_ledgers_source_type` (verificado por `pg_enum` em
+2026-08-10).
 
 ### Problema
 

@@ -13088,3 +13088,93 @@ Postgres) — o código já grava `'import'`.
 - **Nada em `client/`** — a tela de COMEX ainda não existe, e nenhuma tela
   exibe o status novo da requisição depois do recebimento. Escopo dos agentes
   de frontend.
+
+---
+
+# Handoff — Validação ponta a ponta da cadeia do produto (2026-08-10)
+
+## 1. Resumo da feature
+
+Não é feature de produto: é o **teste de integração real** que faltava para provar
+o critério de aceite do dono ("um insumo é cadastrado e segue seu curso até virar
+produto finalizado, sem gap"). Um único arquivo percorre as 10 estações da corrente
+contra API + PostgreSQL rodando, sem mock, e exercita os 8 gates de regressão dos
+gaps corrigidos em 2026-08-09.
+
+**Arquivo:** `server/tests/integration/e2e-cadeia-insumo-produto.test.ts` (26 casos,
+convenção `tests/integration`: `RUN_INTEGRATION=true` + `TEST_API_URL` +
+`TEST_AUTH_TOKEN`, gate `hasIntegrationPrerequisites()`).
+
+**Nenhuma linha de código de produção foi alterada.** Onde a corrente quebrou, o
+teste registra a quebra e segue com um contorno explicitamente marcado no próprio
+código (`Contorno BUG-0x`), para não perder as estações seguintes.
+
+**Resultado:** 22/26 no ambiente real (banco `erp_evok_audio`); 6/26 no banco
+isolado `erp_evok_audio_test` (que está mais divergente que o de dev — ver §5 do
+relatório). 8 das 10 estações fecham; 8/8 gates provados fechados; **5 bugs novos
+P0/P1**, todos de divergência schema × model.
+
+## 2. Documentações atualizadas
+
+- **`docs/governance/VALIDACAO_CADEIA_PRODUTO_2026-08-10.md`** (novo) — relatório
+  completo: estação por estação (✅/❌/⚠️), erro exato + causa raiz de cada quebra,
+  tabela dos 8 gates com a resposta real da API, achado de governança sobre o drift
+  de schema, achados menores e **script de limpeza dos dados `E2E-*`**.
+- **`docs/governance/TODO.md`** — seção "2026-08-10", com BUG-01 a BUG-05 e o item
+  de drift de schema como pendências abertas.
+- **JSDoc** — o arquivo de teste está documentado no padrão do projeto: cabeçalho de
+  módulo explicando a corrente e os gates, e JSDoc em todos os helpers
+  (`expectStatus`, `createBomDirectly`, geradores de CPF/CNPJ) e nos três contornos,
+  cada um dizendo o que **não** prova.
+
+Não houve alteração em `docs/database/DATABASE.md` nem em
+`docs/projeto/04-USE_CASES.md`: nenhum model, migration ou regra de negócio foi
+modificado nesta entrega.
+
+## 3. Instruções de teste (o que o próximo agente/humano deve validar)
+
+1. **Reproduzir a validação** (com o ambiente no ar, `docker compose ps` saudável):
+   emitir um JWT para o admin existente com o `JWT_SECRET` da raiz e rodar,
+   a partir de `server/`:
+   ```
+   RUN_INTEGRATION=true TEST_API_URL=http://127.0.0.1:5000 \
+   TEST_AUTH_TOKEN=<jwt> DB_NAME=erp_evok_audio \
+   npx jest --runInBand tests/integration/e2e-cadeia-insumo-produto.test.ts --forceExit
+   ```
+   Esperado hoje: **4 falhas** — `etapa 2` (BOM), `etapa 9a` (cliente), `etapa 9b`
+   (venda) e `etapa 9c` (confirmação/AR). Qualquer falha **além** dessas quatro é
+   regressão nova.
+2. **Confirmar os 4 bugs P0 no banco** (leitura, não escreve):
+   ```sql
+   SELECT table_name||'.'||column_name FROM information_schema.columns
+    WHERE table_schema='public' AND is_nullable='NO' AND column_default IS NULL
+      AND (table_name,column_name) IN
+        (('bill_of_material_items','parent_item_id'),('clients','cnae'),
+         ('sales','nfe_number'),('accounts_receivable','payment_date'));
+   ```
+   As 4 linhas devem aparecer — é a causa raiz.
+3. **Confirmar BUG-05:** `docker compose logs api | grep "Falha ao gravar audit log"`
+   deve mostrar `invalid input value for enum enum_audit_logs_action` para
+   `update_status`, `convert`, `register_tracking` e `receive`.
+4. **Depois da correção** (migration `DROP NOT NULL` + `ALTER TYPE ... ADD VALUE`):
+   remover os três contornos do teste (`etapa 2 (contorno...)`,
+   `etapa 9a (contorno...)`, `etapa 9b/9c (contorno...)`) e exigir **26/26 verdes,
+   sem contorno nenhum**. Esse é o critério de aceite final da cadeia.
+5. **Banco de teste:** `erp_evok_audio_test` recebeu as 100 migrations que faltavam
+   (50 → 150). Ele continua com 29 `NOT NULL` a mais que o dev — recriar do zero
+   apenas por migrations antes de confiar em `npm run test:integration:strict`.
+
+## 4. Riscos residuais desta entrega
+
+- **Dados `E2E-*` no banco do dono:** 4 execuções deixaram ~90 linhas identificáveis
+  (contagem e script de remoção na §8 do relatório). Nada foi apagado nem alterado
+  do que já existia; nenhum usuário foi criado ou teve senha alterada em
+  `erp_evok_audio`.
+- **O usuário sintético `ci-admin@evok.local`** existe apenas em
+  `erp_evok_audio_test` (convenção já usada por `scripts/run-api-suite.cjs`);
+  nenhuma senha foi gravada por esta entrega.
+- **A estação 9 não está validada** — só NF-e e expedição foram exercitadas de
+  verdade. O débito de estoque da venda e a geração de conta a receber seguem sem
+  cobertura porque as duas operações estão quebradas (BUG-03/BUG-04).
+- **G12 foi provado pela máquina de estados**, não pelo filtro de saldo por item; o
+  cenário de adjudicação parcial de RFQ continua sem teste de integração.

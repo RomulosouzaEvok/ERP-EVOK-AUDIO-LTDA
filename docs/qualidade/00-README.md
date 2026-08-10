@@ -77,6 +77,27 @@ Embalagem
 
 ## Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> O bloco SQL abaixo é **rascunho de modelagem em dialeto MySQL** — este ERP
+> roda **exclusivamente em PostgreSQL 16**. Confronto contra `erp_evok_audio`
+> nesta data:
+>
+> - `inspection_plans` e `supplier_quality` **não existem**;
+> - `non_conformities` **existe**, mas com outros nomes de coluna:
+>   `defect_type` (não `category`), `report_date`/`reported_by` (não
+>   `detected_at`/`detected_by`), `closed_date` (não `closed_at`), e
+>   `production_order_id` (não `production_record_id`). O ENUM real de
+>   `status` tem **6** valores —
+>   `open | analysis | corrective_action | effectiveness_check | closed | canceled`
+>   — enquanto o rascunho abaixo lista 4. A tabela real ainda tem `origin`,
+>   `immediate_action`, `root_cause_category`, `effectiveness_result`,
+>   `purchase_item_id`, `service_order_id`, `asset_id`, `quantity_affected`,
+>   `scrap_cost`, `rework_cost` e `total_cost`, não descritos aqui.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- PLANO DE INSPEÇÃO POR PRODUTO
 CREATE TABLE inspection_plans (

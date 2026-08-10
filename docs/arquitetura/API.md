@@ -1534,8 +1534,16 @@ Lista produtos ativos com estoque em ou abaixo do ponto de reposição (`quantit
 > Nota de arquitetura: os endpoints de `/api/inventory` são servidos pelo
 > módulo `server/src/modules/inventory/` (Clean Architecture). Ver
 > `server/src/modules/inventory/README.md` para detalhes de regras de
-> negócio, entidades e pendências (ex.: `reserved_quantity` ainda não
-> existe no schema).
+> negócio e entidades.
+>
+> **Correção 2026-08-10:** a versão anterior desta nota dizia que
+> "`reserved_quantity` ainda não existe no schema". **É falso.**
+> `products.reserved_quantity` existe (`NUMERIC(18,6) NOT NULL DEFAULT 0`) e,
+> desde a migration `20260809-000026` (gap G3), é um **cache derivado** da
+> tabela `production_order_reservations` — vale sempre
+> `SUM(quantity - quantity_released)` das reservas `active` daquele produto,
+> recalculado na mesma transação. A disponibilidade usada nas validações de
+> estoque é `quantity - reserved_quantity`.
 
 ---
 

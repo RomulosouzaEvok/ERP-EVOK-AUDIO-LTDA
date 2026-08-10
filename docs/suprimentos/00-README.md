@@ -58,6 +58,18 @@ docs/suprimentos/
 
 ## Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> `supplier_evaluations` e `purchase_categories` **não existem** em
+> `erp_evok_audio`. A avaliação de fornecedor está em colunas da própria
+> tabela `suppliers`; o catálogo item × fornecedor é **`item_suppliers`**
+> (N:N com `unit_price`, `lead_time_days`, `moq`, `preferred`). O bloco abaixo
+> é rascunho em dialeto MySQL; este ERP roda **exclusivamente em
+> PostgreSQL 16**.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- AVALIAÇÃO DE FORNECEDORES
 CREATE TABLE supplier_evaluations (

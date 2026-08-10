@@ -4975,3 +4975,168 @@ rastro requisição → pedido → recebimento → estoque ficava aberto.
 - [ ] **`client/` não exibe** o status novo da requisição depois do
   recebimento nem o lote/quarentena do material importado (a tela de COMEX
   ainda não existe) — escopo dos agentes de frontend.
+
+---
+
+## 2026-08-10 — Validação ponta a ponta da cadeia do produto (teste de integração real)
+
+Relatório completo: **`docs/governance/VALIDACAO_CADEIA_PRODUTO_2026-08-10.md`**.
+Artefato: `server/tests/integration/e2e-cadeia-insumo-produto.test.ts` (26 casos).
+
+### O que foi provado
+
+- [x] Corrente executada de verdade contra API + PostgreSQL rodando (sem mock):
+  **8 das 10 estações fecham** (cadastro → requisição → pedido → recebimento com
+  quarentena → liberação pela Qualidade → OP com reserva → conclusão com consumo
+  por lote, custo real e reserva liberada → rastro lote-acabado→OP→lote-insumo).
+- [x] **Os 8 gates pedidos foram provados fechados**: G2 (sem BOM ativa e
+  quantidade zero), G3 (reserva por OP, sem canibalização), G8 (RNC automática),
+  G12 (requisição não gera 2º pedido), G14 (importação em quarentena), G15
+  (requisição chega a `received`), G16 (OP via MRP valida material).
+- [x] Migrations `20260809-000026` e `20260809-000027` **aplicadas e exercitadas**
+  em `erp_evok_audio_test` (pendência anterior deste TODO permanece para o banco
+  de desenvolvimento/produção).
+
+### Bugs NOVOS encontrados (nenhum estava nos 17 gaps)
+
+- [ ] **BUG-01 (P0)** `POST /api/engineering/bom` responde **500 sempre** —
+  `bill_of_material_items.parent_item_id`/`notes`/`alternative_product_id` são
+  `NOT NULL` no banco e o model/`BomService` gravam `NULL`. **Não é possível
+  cadastrar estrutura de produto pelo sistema.**
+- [ ] **BUG-02 (P0)** `POST /api/clients` responde **500 sempre** — `clients.cnae`
+  (entre outras) é `NOT NULL` e o schema Zod `.strict()` nem aceita o campo.
+  **Nenhum cliente pode ser cadastrado** (`clients` = 0 linhas no banco do dono).
+- [ ] **BUG-03 (P0)** `POST /api/sales` responde **500 sempre** —
+  `sales.nfe_number`/`nfe_key` são `NOT NULL` e só são preenchidos na emissão.
+  **Nenhuma venda pode ser criada** (`sales` = 0 linhas).
+- [ ] **BUG-04 (P0)** confirmar venda responde **500** —
+  `accounts_receivable.payment_date` (+7 colunas) `NOT NULL` sem default.
+  **Nenhuma conta a receber pode ser gerada.**
+- [ ] **BUG-05 (P1)** trilha de auditoria perdida em silêncio: o enum
+  `enum_audit_logs_action` tem 15 valores, o código usa 43 literais — **28 nunca
+  gravam** (`convert`, `receive`, `release`, `update_status`, `approve` de
+  requisição etc.). A requisição responde 200 e o log some.
+- [ ] **Drift de schema (P1)** `erp_evok_audio_test` tem **29 colunas `NOT NULL` a
+  mais** que `erp_evok_audio`, com as mesmas 150 migrations. **Nenhum dos dois
+  bancos é reproduzível a partir das migrations** — bloqueador para provisionar o
+  servidor de produção. Recriar o banco de teste só por migrations + teste de
+  guarda comparando `information_schema` com os `allowNull` dos models.
+
+### Observações menores
+
+- [ ] `GET /api/inventory/lots?product_id=X` sem `status` assume `available`
+  (compatibilidade retroativa) — lote em quarentena fica invisível; documentar na
+  `API.md`.
+- [ ] MRP planeja **apenas componentes**, nunca o item demandado — reforça o G17.
+- [ ] `POST /api/comex/import-processes/:id/{tracking,receive}` respondem 201 e não
+  200, diferente das demais transições de estado.
+- [ ] Limpeza dos dados `E2E-*` criados na validação: script pronto na §8 do
+  relatório (atenção ao recorte de data em `non_conformities` — existe NC real).
+
+---
+
+## 2026-08-10 — Auditoria de consistência tripla Documentação ↔ Banco ↔ Código (cadeia do produto) — `AuditorIntegrador`
+
+Relatório completo: `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+**Veredito: `[AUDITORIA-FALHOU]` — REPROVADO** (banco reprovado; código e documentação reprovados com ressalvas).
+Auditoria feita em paralelo à validação E2E acima e **convergiu com ela de forma independente**: BUG-01/BUG-03 do E2E são o mesmo achado P0-05 desta auditoria.
+
+### P0 — bloqueiam a cadeia do produto
+
+- [ ] **[AUDITORIA-FALHOU] S-1 — "bomba de schema" do `allowNull` implícito, segunda rodada.**
+  A migration `20260804-000012-fix-production-orders-nullable-columns.cjs` corrigiu
+  isso **só para `production_orders`**. Continua vivo em: `bill_of_material_items`
+  (`parent_item_id`, `alternative_product_id`, `notes`), `inventory_counts`
+  (`location`, `started_at`, `completed_at`, `approved_at`, `approved_by`, `notes`),
+  `inventory_count_items` (`counted_quantity`, `variance_quantity`, `counted_by`,
+  `counted_at`, `notes`), `inventory_movements` (`reference_id`, `reference_type`,
+  `description`) e `sales` (`nfe_number`, `nfe_key`) — mais `clients` e
+  `accounts_receivable` (BUG-02/BUG-04). Levantamento completo e provas de `INSERT`
+  no §P0-05 do relatório. **Alinhar os models na mesma entrega**, senão o bootstrap
+  canônico (`20260731-000001-baseline-schema.cjs:148`) recria o problema num banco
+  novo. Responsável: `AdmDBA` + `programador`.
+- [ ] **[AUDITORIA-FALHOU] P0-01 — `InventoryService.adjust()` grava `reference_id = NULL`
+  em coluna `NOT NULL`.** Derruba com 500: `POST /api/inventory/movements`,
+  `POST /api/products/movements`, aprovação de contagem de inventário
+  (`ApproveInventoryCountUseCase.ts:89`) e **todo o app mobile**
+  (`ScanItemUseCase.ts:67`, `BatchScanUseCase.ts:72`). Evidência: 35 movimentações
+  no banco, **nenhuma** com `reference_type='adjustment'`. Resolvido por S-1.
+- [ ] **[AUDITORIA-FALHOU] P0-02 — model `InventoryMovement` declara `description`,
+  `reference_id` e `reference_type` como opcionais; o banco exige os três.**
+  Por isso o P0-01 vira 500 de driver em vez de 422 didático.
+- [ ] **[PENDENTE] Limpar o dado sujo do contorno BUG-01:** as 7 linhas de
+  `bill_of_material_items` com `notes = 'Contorno BUG-01'` têm `parent_item_id`
+  apontando para si mesmas e `alternative_product_id` igual ao próprio componente.
+  Corrigir junto com S-1.
+
+### P1 — inconsistências reais entre camadas
+
+- [ ] **[PENDENTE] P1-03 — `inventoryService.ts:476,573` usam `'reservation'` e
+  `'reservation_release'` como *fallback* de `reference_type`; nenhum dos dois existe
+  no ENUM.** Hoje não explode porque o único chamador passa `'production'`
+  explicitamente. Ver S-2 no relatório.
+- [ ] **[PENDENTE] P1-04 — Facilities: `reference_type`/`reference_id` do consumo
+  predial são descartados por `CreateInventoryMovementUseCase`, e os valores que ele
+  tenta gravar (`facility_maintenance_ticket`, `facility_cleaning_execution`) não
+  existem no ENUM.** JSDoc do adapter **já corrigido** nesta auditoria; falta a
+  decisão de negócio (S-3).
+- [ ] **[PENDENTE] P1-06 — 4 FKs `ON DELETE SET NULL` sobre colunas `NOT NULL`**
+  (`bill_of_material_items.parent_item_id`/`alternative_product_id`,
+  `inventory_counts.approved_by`, `inventory_count_items.counted_by`): o `DELETE` do
+  pai falha com erro de banco em vez de anular a referência. Resolvido por S-1.
+- [ ] **[PENDENTE] P1-07 — FKs ausentes:** `purchase_receipts` **não tem nenhuma FK**
+  (nem `purchase_id`, nem `received_by`) e `product_cost_ledgers.product_id` também
+  não tem. Contradiz `CLAUDE.md` §7. Ver S-4.
+- [ ] **[PENDENTE] P1-13 — fechar RNC grava `closed_at`, coluna que não existe**
+  (`UpdateNonConformityUseCase.ts:70`); a real é `closed_date`. O Sequelize descarta
+  em silêncio ⇒ **toda RNC fechada fica com `closed_date` nulo**.
+  `CloseNonConformityUseCase.ts:26` não grava nem `closed_by` nem `closed_date`.
+  `client/src/api/nonConformities.ts:140` repete o nome errado.
+- [ ] **[PENDENTE] P1-14 — duas BOMs paralelas sem sincronização:** produção/OP/custo
+  leem `bill_of_material_items`; **MRP e a API de item leem `item_estruturas`**. Já
+  divergem no banco. Como o G2 exige BOM ativa em `bill_of_material_items` para
+  concluir OP, cadastrar estrutura pelo caminho novo **não destrava** a OP.
+  Decisão do dono do produto. Responsável: `AnalistaNegocios` + `AdmDBA`.
+- [ ] **[PENDENTE] P1-15 — `item_estruturas` tem dois interruptores de vigência**
+  (`ativo BOOLEAN` e `status` ENUM) e o código só usa `ativo`; `status` nunca é lido
+  nem escrito.
+
+### P2 — documentação (a maior parte já corrigida nesta auditoria)
+
+- [x] **[IMPLEMENTADO] P2-08** — `04-DICIONARIO_DADOS.md`: 22 seções da cadeia do
+  produto regeneradas por introspecção real; `production_order_reservations` e
+  `sale_invoices` adicionadas; `migracao_categoria_map` (tabela inexistente) marcada;
+  cabeçalho e índice corrigidos.
+- [ ] **[PENDENTE] P2-08 (resto)** — ~124 divergências de nulabilidade **fora** da
+  cadeia do produto continuam no dicionário, e o índice cobre 81 de 195 tabelas.
+  Exige regeneração completa (S-5), preferencialmente **depois** de S-1.
+- [x] **[IMPLEMENTADO] P2-09** — corrigidas as afirmações de "migration não aplicada"
+  em `00-INDICE.md` (banner global), `DATABASE.md` (G3, G14),
+  `PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` (G3, G14) e `02-MODELO_LOGICO.md`.
+- [ ] **[PENDENTE] P2-09 (resto)** — `docs/business/BLOCO_{1..6}_*_MODELO_DADOS.md` e
+  as entradas de SST/TI/JUR/FAC/MKT/RH ainda dizem "não aplicadas". As 150 migrations
+  **estão aplicadas**. Responsável: `documentador` / `AdmDBA`.
+- [x] **[IMPLEMENTADO] P2-10** — banner "DDL de projeto, NÃO é o schema implementado"
+  inserido nos 15 documentos departamentais em escopo, com o confronto exato contra o
+  banco. **24 tabelas** documentadas em DDL MySQL não existem.
+- [ ] **[PENDENTE] P2-10 (decisão)** — decidir quais desses 24 desenhos viram backlog
+  real (ex.: `test_certificates`, `inspection_plans`, `shipping_orders`,
+  `sales_commissions`) e quais devem ser removidos da documentação.
+  Responsável: `AnalistaNegocios`.
+- [x] **[IMPLEMENTADO] P2-11** — `02-MODELO_LOGICO.md` deixou de afirmar a FK
+  inexistente `products → purchase_requisition_items.product_id` (a coluna real é
+  `item_id UUID` para `items.id`).
+- [x] **[IMPLEMENTADO] P2-12** — `API.md` deixou de afirmar que `reserved_quantity`
+  "ainda não existe no schema".
+- [ ] **[PENDENTE] S-5** — regenerar `docs/database/schema.sql` (`pg_dump`) e o
+  dicionário inteiro contra `erp_evok_audio` depois de S-1. O `schema.sql` atual
+  descreve `sales.nfe_number`/`status` como nullable — foi gerado de outro banco.
+
+### Não coberto por esta auditoria (declarado, para não inflar o veredito)
+
+- Suíte de testes não foi executada; conclusões de runtime vêm de leitura de código
+  + prova SQL direta, corroboradas pelo E2E que rodava em paralelo.
+- Tabelas fora da cadeia do produto (RH, SST, TI, Jurídico, Facilities, Marketing,
+  Contabilidade/Tesouraria/Controladoria) não foram auditadas.
+- `client/` não foi auditado nem tocado.
+- `03-MODELO_FISICO.md`/`schema.sql` não foram regenerados (dependem de S-1).

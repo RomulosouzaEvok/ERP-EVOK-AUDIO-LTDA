@@ -98,6 +98,21 @@ Documento que descreve **passo a passo** como fabricar um auto-falante, incluind
 
 ## Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> O bloco SQL abaixo é **rascunho de modelagem em dialeto MySQL** — este ERP
+> roda **exclusivamente em PostgreSQL 16**. Confronto contra `erp_evok_audio`
+> nesta data:
+>
+> - `process_parameters` e `operation_consumables` **não existem**. As rotas
+>   reais são `production_routes` + `production_route_steps` (com
+>   `standard_time_minutes`, `setup_time_minutes`, `quality_check_required`,
+>   `work_center_id`); não há tabela de parâmetros de processo nem de
+>   consumíveis por operação.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- ROTEIROS DETALHADOS (expansão do manufacturing_routes)
 ALTER TABLE manufacturing_routes ADD COLUMN (

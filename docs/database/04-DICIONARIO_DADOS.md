@@ -6,22 +6,35 @@ Legenda: **PK** = chave primária, **FK → tabela.coluna** = chave estrangeira,
 
 Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em português (schema-fantasma nunca adotado pelo app real, `COMMENT ON TABLE` aplicado em 2026-08-06) e **não devem ser usadas em código novo** — ver `docs/database/DATABASE.md` seção "Tabelas órfãs do schema-fantasma em português".
 
-> ⚠️ **Pendente de regeneração (2026-08-09).** A migration
-> `20260809-000026-create-production-order-reservations.cjs` (gap **G3** —
-> reserva de material vinculada à OP) foi entregue mas **ainda não aplicada**
-> ao banco. Como este arquivo é gerado por introspecção do schema real, a
-> tabela `production_order_reservations` **ainda não aparece aqui** —
-> propositalmente, para não descrever um schema que não existe. Assim que a
-> migration for aplicada, regenere este dicionário. A especificação completa
-> da tabela (colunas, FKs, índice único parcial e CHECKs) está em
-> `docs/database/DATABASE.md`, seção "G3 — Reserva de material vinculada à
-> Ordem de Produção (2026-08-09)". Nessa mesma migration,
-> `products.reserved_quantity` deixa de ser contador autoritativo e passa a
-> ser **cache derivado** daquela tabela.
+> ⚠️ **Estado deste arquivo em 2026-08-10 (auditoria de consistência da cadeia do produto).**
+>
+> 1. A migration `20260809-000026-create-production-order-reservations.cjs`
+>    (gap **G3**) **está aplicada** ao banco (confirmado em `SequelizeMeta`),
+>    assim como `20260809-000027`. A tabela `production_order_reservations`
+>    passou a constar deste dicionário, e `products.reserved_quantity` está
+>    documentado como **cache derivado** dela.
+> 2. As seções das **46 tabelas da cadeia do produto** (item/BOM/OP/estoque/
+>    compra/venda) foram **regeneradas por introspecção real** de
+>    `erp_evok_audio` nesta data. `sale_invoices` e
+>    `production_order_reservations`, que existiam no banco e faltavam aqui,
+>    foram adicionadas.
+> 3. **As demais seções ainda não foram regeneradas** e sabidamente divergem
+>    do banco real em cerca de **120 colunas** (na maioria marcando como
+>    `sim`/nullable colunas que hoje são `NOT NULL`), além de o índice cobrir
+>    80 tabelas quando o banco tem **195**. Rode o procedimento de
+>    `03-MODELO_FISICO.md` §"Regenerando o Dicionário de Dados" antes de
+>    confiar nas seções fora da cadeia do produto. Ver
+>    `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`,
+>    achado **P2-08**.
 
 ---
 
-## Índice de tabelas (80)
+## Índice de tabelas (81 catalogadas de 195 existentes no banco)
+
+> As tabelas dos módulos SST (`sst_*`), RH (`hr_*`), TI (`it_*`), Jurídico
+> (`jur_*`), Facilities (`facility_*`), Marketing (`marketing_*`),
+> Contabilidade/Tesouraria/Controladoria **não estão catalogadas aqui** —
+> foram criadas depois da última geração completa deste arquivo.
 
 - [`access_profile_permissions`](#accessprofilepermissions)
 - [`access_profiles`](#accessprofiles)
@@ -60,7 +73,7 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 - [`lotes`](#lotes) `[DEPRECATED]`
 - [`maintenance_orders`](#maintenanceorders)
 - [`migracao_bom_log`](#migracaobomlog) `[DEPRECATED]`
-- [`migracao_categoria_map`](#migracaocategoriamap) `[DEPRECATED]`
+- [`migracao_categoria_map`](#migracaocategoriamap) `[NÃO EXISTE NO BANCO]`
 - [`migracao_product_item_map`](#migracaoproductitemmap) `[DEPRECATED]`
 - [`movimentos_estoque`](#movimentosestoque) `[DEPRECATED]`
 - [`mrp_ordens_planejadas`](#mrpordensplanejadas)
@@ -74,6 +87,7 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 - [`production_cost_settings`](#productioncostsettings)
 - [`production_downtimes`](#productiondowntimes)
 - [`production_lot_consumptions`](#productionlotconsumptions)
+- [`production_order_reservations`](#productionorderreservations)
 - [`production_order_tracking`](#productionordertracking)
 - [`production_orders`](#productionorders)
 - [`production_route_steps`](#productionroutesteps)
@@ -90,6 +104,7 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 - [`rfq_quotes`](#rfqquotes)
 - [`rfq_suppliers`](#rfqsuppliers)
 - [`rfqs`](#rfqs)
+- [`sale_invoices`](#saleinvoices)
 - [`sale_items`](#saleitems)
 - [`sales`](#sales)
 - [`serial_numbers`](#serialnumbers)
@@ -336,21 +351,21 @@ Componentes de uma BOM legada, dual-read `product_id`/`item_id`.
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `bom_id` | INTEGER | NÃO | - | FK → `bill_of_materials.id` |
 | `component_product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `quantity` | NUMERIC(12,4) | NÃO | 1 | - |
-| `unit` | VARCHAR(10) | sim | 'un'::character varying | - |
-| `bom_level` | INTEGER | sim | 1 | - |
-| `parent_item_id` | INTEGER | sim | - | FK → `bill_of_material_items.id` |
-| `sequence_order` | INTEGER | sim | 0 | - |
-| `component_type` | enum_bill_of_material_items_component_type | sim | 'component'::enum_bill_of_material_it... | - |
-| `scrap_percentage` | NUMERIC(5,2) | sim | 0 | - |
-| `unit_cost` | NUMERIC(12,2) | sim | 0 | - |
-| `total_cost` | NUMERIC(12,2) | sim | 0 | - |
-| `notes` | TEXT | sim | - | - |
-| `alternative_product_id` | INTEGER | sim | - | FK → `products.id` |
-| `is_critical` | BOOLEAN | sim | false | - |
+| `unit` | VARCHAR(10) | NÃO | 'un'::character varying | - |
+| `bom_level` | INTEGER | NÃO | 1 | - |
+| `parent_item_id` | INTEGER | NÃO | - | FK → `bill_of_material_items.id` |
+| `sequence_order` | INTEGER | NÃO | 0 | - |
+| `component_type` | enum_bill_of_material_items_component_type | NÃO | 'component'::enum_bill_of_material_it... | - |
+| `scrap_percentage` | NUMERIC(5,2) | NÃO | 0 | - |
+| `unit_cost` | NUMERIC(12,2) | NÃO | 0 | - |
+| `total_cost` | NUMERIC(12,2) | NÃO | 0 | - |
+| `notes` | TEXT | NÃO | - | - |
+| `alternative_product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `is_critical` | BOOLEAN | NÃO | false | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
 
 ## `bill_of_materials`
 
@@ -360,17 +375,17 @@ BOM do schema `products` legado (cabeçalho).
 |---|---|---|---|---|
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
-| `revision` | VARCHAR(10) | sim | '00'::character varying | - |
-| `revision_date` | DATE | sim | - | - |
+| `revision` | VARCHAR(10) | NÃO | '00'::character varying | - |
+| `revision_date` | DATE | NÃO | - | - |
 | `revision_notes` | TEXT | sim | - | - |
-| `status` | enum_bill_of_materials_status | sim | 'draft'::enum_bill_of_materials_status | - |
+| `status` | enum_bill_of_materials_status | NÃO | 'draft'::enum_bill_of_materials_status | - |
 | `created_by` | INTEGER | sim | - | FK → `users.id` |
 | `approved_by` | INTEGER | sim | - | FK → `users.id` |
 | `approval_date` | DATE | sim | - | - |
 | `notes` | TEXT | sim | - | - |
-| `total_components` | INTEGER | sim | 0 | - |
-| `total_cost` | NUMERIC(12,2) | sim | 0 | - |
-| `manufacturing_time_minutes` | INTEGER | sim | 0 | - |
+| `total_components` | INTEGER | NÃO | 0 | - |
+| `total_cost` | NUMERIC(12,2) | NÃO | 0 | - |
+| `manufacturing_time_minutes` | INTEGER | NÃO | 0 | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 
@@ -645,16 +660,16 @@ Itens de uma contagem cíclica — saldo esperado vs contado, dual-read `product
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `inventory_count_id` | INTEGER | NÃO | - | FK → `inventory_counts.id` |
 | `product_id` | INTEGER | sim | - | FK → `products.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `system_quantity` | NUMERIC(12,3) | NÃO | 0 | - |
-| `counted_quantity` | NUMERIC(12,3) | sim | - | - |
-| `variance_quantity` | NUMERIC(12,3) | sim | - | - |
+| `counted_quantity` | NUMERIC(12,3) | NÃO | - | - |
+| `variance_quantity` | NUMERIC(12,3) | NÃO | - | - |
 | `status` | enum_inventory_count_items_status | NÃO | 'pending'::enum_inventory_count_items... | - |
-| `counted_by` | INTEGER | sim | - | FK → `users.id` |
-| `counted_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
-| `notes` | TEXT | sim | - | - |
+| `counted_by` | INTEGER | NÃO | - | FK → `users.id` |
+| `counted_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+| `notes` | TEXT | NÃO | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
 
 ## `inventory_counts`
 
@@ -666,13 +681,13 @@ Contagem cíclica de inventário (cabeçalho) — depósito, atribuição (pool/
 | `count_number` | VARCHAR(30) | NÃO | - | UQ |
 | `status` | enum_inventory_counts_status | NÃO | 'draft'::enum_inventory_counts_status | - |
 | `count_type` | enum_inventory_counts_count_type | NÃO | 'cycle'::enum_inventory_counts_count_... | - |
-| `location` | VARCHAR(100) | sim | - | - |
-| `started_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
-| `completed_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
-| `approved_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
+| `location` | VARCHAR(100) | NÃO | - | - |
+| `started_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+| `completed_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+| `approved_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `created_by` | INTEGER | NÃO | - | FK → `users.id` |
-| `approved_by` | INTEGER | sim | - | FK → `users.id` |
-| `notes` | TEXT | sim | - | - |
+| `approved_by` | INTEGER | NÃO | - | FK → `users.id` |
+| `notes` | TEXT | NÃO | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `warehouse_id` | INTEGER | sim | - | FK → `warehouses.id` |
@@ -687,16 +702,16 @@ Movimentações de estoque (entrada/saída/ajuste/transferência), dual-read `pr
 |---|---|---|---|---|
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `user_id` | INTEGER | NÃO | - | FK → `users.id` |
 | `type` | enum_inventory_movements_type | NÃO | - | - |
 | `quantity` | NUMERIC(18,6) | NÃO | - | - |
-| `unit_cost` | NUMERIC(10,2) | sim | 0 | - |
-| `description` | TEXT | sim | - | - |
-| `reference_id` | INTEGER | sim | - | - |
-| `reference_type` | enum_inventory_movements_reference_type | sim | - | - |
+| `unit_cost` | NUMERIC(10,2) | NÃO | 0 | - |
+| `description` | TEXT | NÃO | - | - |
+| `reference_id` | INTEGER | NÃO | - | - |
+| `reference_type` | enum_inventory_movements_reference_type | NÃO | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
 | `warehouse_id` | INTEGER | sim | - | FK → `warehouses.id` |
 
 ## `item_categorias`
@@ -705,11 +720,11 @@ Categorias do novo modelo `items` (N:1).
 
 | Coluna | Tipo | Nulo? | Default | Chave |
 |---|---|---|---|---|
-| `id` | UUID | NÃO | - | **PK** |
+| `id` | UUID | NÃO | gen_random_uuid() | **PK** |
 | `codigo` | VARCHAR(50) | NÃO | - | UQ |
 | `descricao` | VARCHAR(240) | NÃO | - | - |
-| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
+| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
 
 ## `item_detalhes_comerciais`
 
@@ -728,8 +743,8 @@ Extensão 1:1 obrigatória de `items` — preço, NCM/CEST, peso, localização,
 | `revisao_tecnica` | VARCHAR(10) | NÃO | '00'::character varying | - |
 | `lote_rastreabilidade` | VARCHAR(50) | sim | - | - |
 | `numero_serie` | VARCHAR(80) | sim | - | - |
-| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
+| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
 
 ## `item_especificacoes_tecnicas`
 
@@ -740,8 +755,8 @@ Extensão 1:1 opcional de `items` — 13 parâmetros Thiele-Small (JSONB) e fam�
 | `item_id` | UUID | NÃO | - | **PK**, FK → `items.id` |
 | `familia_tecnica` | VARCHAR(40) | NÃO | - | - |
 | `atributos` | JSONB | NÃO | '{}'::jsonb | - |
-| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
+| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
 
 ## `item_estruturas`
 
@@ -749,28 +764,28 @@ BOM (estrutura de produto) do modelo `items` — hierarquia multi-nível, compon
 
 | Coluna | Tipo | Nulo? | Default | Chave |
 |---|---|---|---|---|
-| `id` | UUID | NÃO | - | **PK** |
-| `item_pai_id` | UUID | NÃO | - | FK → `items.id` |
-| `item_componente_id` | UUID | NÃO | - | FK → `items.id` |
+| `id` | UUID | NÃO | gen_random_uuid() | **PK** |
+| `item_pai_id` | UUID | NÃO | - | FK → `items.id`, UQ |
+| `item_componente_id` | UUID | NÃO | - | FK → `items.id`, UQ |
 | `quantidade` | NUMERIC(18,6) | NÃO | - | - |
 | `perda_percentual` | NUMERIC(9,6) | NÃO | 0 | - |
 | `nivel` | INTEGER | NÃO | 1 | - |
 | `sequencia` | INTEGER | NÃO | 0 | - |
 | `ativo` | BOOLEAN | NÃO | true | - |
-| `revisao` | VARCHAR(20) | NÃO | '00'::character varying | - |
+| `revisao` | VARCHAR(20) | NÃO | '00'::character varying | UQ |
 | `observacoes` | TEXT | sim | - | - |
 | `criado_por` | INTEGER | sim | - | FK → `users.id` |
-| `status` | enum_item_estruturas_status | NÃO | 'active'::enum_item_estruturas_status | - |
+| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
+| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
+| `status` | item_estrutura_status | NÃO | 'active'::item_estrutura_status | - |
 | `approved_by` | INTEGER | sim | - | FK → `users.id` |
 | `approval_date` | DATE | sim | - | - |
 | `unit_cost` | NUMERIC(18,6) | NÃO | 0 | - |
 | `total_cost` | NUMERIC(18,6) | NÃO | 0 | - |
 | `parent_item_estrutura_id` | UUID | sim | - | FK → `item_estruturas.id` |
-| `component_type` | enum_item_estruturas_component_type | NÃO | 'component'::enum_item_estruturas_com... | - |
+| `component_type` | item_estrutura_component_type | NÃO | 'component'::item_estrutura_component... | - |
 | `is_critical` | BOOLEAN | NÃO | false | - |
 | `alternative_product_id` | UUID | sim | - | FK → `items.id` |
-| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 
 ## `item_suppliers`
 
@@ -798,12 +813,12 @@ Item Mestre Canônico (novo núcleo, UUID) — 12 colunas críticas de MRP, nunc
 
 | Coluna | Tipo | Nulo? | Default | Chave |
 |---|---|---|---|---|
-| `id` | UUID | NÃO | - | **PK** |
+| `id` | UUID | NÃO | gen_random_uuid() | **PK** |
 | `codigo` | VARCHAR(80) | NÃO | - | UQ |
 | `descricao` | VARCHAR(240) | NÃO | - | - |
-| `tipo` | enum_items_tipo | NÃO | - | - |
+| `tipo` | item_tipo | NÃO | - | - |
 | `unidade` | VARCHAR(12) | NÃO | - | - |
-| `status` | enum_items_status | NÃO | 'ATIVO'::enum_items_status | - |
+| `status` | item_status | NÃO | 'ATIVO'::item_status | - |
 | `estoque_atual` | NUMERIC(18,6) | NÃO | 0 | - |
 | `estoque_reservado` | NUMERIC(18,6) | NÃO | 0 | - |
 | `estoque_seguranca` | NUMERIC(18,6) | NÃO | 0 | - |
@@ -811,8 +826,8 @@ Item Mestre Canônico (novo núcleo, UUID) — 12 colunas críticas de MRP, nunc
 | `lead_time_dias` | INTEGER | NÃO | 0 | - |
 | `custo_padrao` | NUMERIC(18,6) | NÃO | 0 | - |
 | `fornecedor_padrao_id` | INTEGER | sim | - | FK → `suppliers.id` |
-| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+| `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
+| `atualizado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
 | `conversao_automatica` | BOOLEAN | NÃO | false | - |
 
 ## `lot_controls`
@@ -823,6 +838,7 @@ Rastreabilidade de lotes (matéria-prima e produto acabado) — inclui quarenten
 |---|---|---|---|---|
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `supplier_id` | INTEGER | sim | - | FK → `suppliers.id` |
 | `purchase_id` | INTEGER | sim | - | FK → `purchase_orders.id` |
 | `production_order_id` | INTEGER | sim | - | FK → `production_orders.id` |
@@ -837,7 +853,6 @@ Rastreabilidade de lotes (matéria-prima e produto acabado) — inclui quarenten
 | `notes` | TEXT | sim | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
 | `warehouse_id` | INTEGER | sim | - | FK → `warehouses.id` |
 
 ## `lotes` `[DEPRECATED]`
@@ -904,15 +919,15 @@ Ordens de manutenção de ativos.
 | `processado_em` | TIMESTAMP WITH TIME ZONE | sim | - | - |
 | `criado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
 
-## `migracao_categoria_map` `[DEPRECATED]`
+## `migracao_categoria_map` `[NÃO EXISTE NO BANCO]`
 
-[ÓRFÃ/DEPRECATED] Mapa de migração de categorias, sem uso em código vivo.
-
-| Coluna | Tipo | Nulo? | Default | Chave |
-|---|---|---|---|---|
-| `product_category_id` | INTEGER | NÃO | - | UQ |
-| `item_categoria_id` | UUID | NÃO | - | FK → `item_categorias.id`, UQ |
-| `mapeado_em` | TIMESTAMP WITH TIME ZONE | NÃO | now() | - |
+> ⚠️ Esta tabela **não existe** em `erp_evok_audio`
+> (`SELECT to_regclass('public.migracao_categoria_map')` retorna `NULL`,
+> verificado em 2026-08-10). O dicionário a descrevia com três colunas
+> (`product_category_id`, `item_categoria_id`, `mapeado_em`) que também não
+> existem em lugar nenhum. Entrada mantida apenas como registro do erro —
+> não crie código contra ela. O mapa de migração que **existe** é
+> `migracao_product_item_map`, logo abaixo.
 
 ## `migracao_product_item_map` `[DEPRECATED]`
 
@@ -984,8 +999,8 @@ Não-conformidades (RNC) de qualidade — pode bloquear lote e realimentar `qual
 | `description` | TEXT | NÃO | - | - |
 | `defect_type` | enum_non_conformities_defect_type | NÃO | - | - |
 | `severity` | enum_non_conformities_severity | NÃO | - | - |
-| `quantity_affected` | INTEGER | sim | 0 | - |
-| `immediate_action` | enum_non_conformities_immediate_action | sim | 'rework'::enum_non_conformities_immed... | - |
+| `quantity_affected` | INTEGER | NÃO | 0 | - |
+| `immediate_action` | enum_non_conformities_immediate_action | NÃO | 'rework'::enum_non_conformities_immed... | - |
 | `immediate_action_desc` | TEXT | sim | - | - |
 | `root_cause` | TEXT | sim | - | - |
 | `root_cause_category` | enum_non_conformities_root_cause_category | sim | - | - |
@@ -995,14 +1010,14 @@ Não-conformidades (RNC) de qualidade — pode bloquear lote e realimentar `qual
 | `effectiveness_check` | TEXT | sim | - | - |
 | `effectiveness_date` | DATE | sim | - | - |
 | `effectiveness_result` | enum_non_conformities_effectiveness_result | sim | - | - |
-| `status` | enum_non_conformities_status | sim | 'open'::enum_non_conformities_status | - |
+| `status` | enum_non_conformities_status | NÃO | 'open'::enum_non_conformities_status | - |
 | `lot_number` | VARCHAR(50) | sim | - | - |
 | `batch_number` | VARCHAR(50) | sim | - | - |
 | `report_date` | DATE | sim | CURRENT_DATE | - |
 | `closed_date` | DATE | sim | - | - |
-| `scrap_cost` | NUMERIC(10,2) | sim | 0 | - |
-| `rework_cost` | NUMERIC(10,2) | sim | 0 | - |
-| `total_cost` | NUMERIC(10,2) | sim | 0 | - |
+| `scrap_cost` | NUMERIC(10,2) | NÃO | 0 | - |
+| `rework_cost` | NUMERIC(10,2) | NÃO | 0 | - |
+| `total_cost` | NUMERIC(10,2) | NÃO | 0 | - |
 | `reported_by` | INTEGER | NÃO | - | FK → `users.id` |
 | `closed_by` | INTEGER | sim | - | FK → `users.id` |
 | `notes` | TEXT | sim | - | - |
@@ -1049,8 +1064,8 @@ Categorias do schema `products` legado (não confundir com `item_categorias`).
 |---|---|---|---|---|
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `name` | VARCHAR(100) | NÃO | - | UQ |
-| `description` | TEXT | sim | ''::text | - |
-| `active` | BOOLEAN | sim | true | - |
+| `description` | TEXT | NÃO | ''::text | - |
+| `active` | BOOLEAN | NÃO | true | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 
@@ -1150,13 +1165,38 @@ Consumo de lotes específicos por uma OP (FEFO).
 | `production_order_id` | INTEGER | NÃO | - | FK → `production_orders.id` |
 | `lot_control_id` | INTEGER | NÃO | - | FK → `lot_controls.id` |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `quantity_consumed` | NUMERIC(12,4) | NÃO | - | - |
 | `consumed_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `user_id` | INTEGER | sim | - | FK → `users.id` |
 | `notes` | TEXT | sim | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
+
+## `production_order_reservations`
+
+Reserva de material **vinculada a uma Ordem de Produção** (gap G3, migration `20260809-000026`, aplicada). Fonte da verdade da reserva: cada linha amarra uma OP a um produto e à quantidade que só ela pode liberar/consumir. `products.reserved_quantity` passou a ser **cache derivado** desta tabela (`SUM(quantity - quantity_released)` das reservas `active`).
+
+| Coluna | Tipo | Nulo? | Default | Chave |
+|---|---|---|---|---|
+| `id` | INTEGER | NÃO | auto-increment | **PK** |
+| `production_order_id` | INTEGER | NÃO | - | FK → `production_orders.id` |
+| `product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `quantity` | NUMERIC(18,6) | NÃO | - | - |
+| `quantity_released` | NUMERIC(18,6) | NÃO | 0 | - |
+| `status` | enum_production_order_reservations_status | NÃO | 'active'::enum_production_order_reser... | - |
+| `released_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
+| `created_by` | INTEGER | sim | - | FK → `users.id` |
+| `notes` | TEXT | sim | - | - |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+
+Restrições adicionais não representadas na tabela acima:
+
+- `uq_production_order_reservations_active` — índice **UNIQUE parcial** em `(production_order_id, product_id) WHERE status = 'active'` (uma única reserva viva por OP × produto).
+- `chk_production_order_reservations_quantity` — `quantity > 0`.
+- `chk_production_order_reservations_released_range` — `0 <= quantity_released <= quantity`.
+- `chk_production_order_reservations_status_coherence` — `status='active' AND quantity_released < quantity` **OU** `status='released' AND quantity_released = quantity`.
 
 ## `production_order_tracking`
 
@@ -1188,9 +1228,9 @@ Ordem de Produção (OP) — planned→released→in_progress→completed, vínc
 | `order_number` | VARCHAR(20) | NÃO | - | UQ |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
 | `quantity` | NUMERIC(18,6) | NÃO | - | - |
-| `quantity_produced` | NUMERIC(18,6) | sim | 0 | - |
-| `priority` | enum_production_orders_priority | sim | 'normal'::enum_production_orders_prio... | - |
-| `status` | enum_production_orders_status | sim | 'planned'::enum_production_orders_status | - |
+| `quantity_produced` | NUMERIC(18,6) | NÃO | 0 | - |
+| `priority` | enum_production_orders_priority | NÃO | 'normal'::enum_production_orders_prio... | - |
+| `status` | enum_production_orders_status | NÃO | 'planned'::enum_production_orders_status | - |
 | `start_date` | DATE | sim | - | - |
 | `due_date` | DATE | NÃO | - | - |
 | `completion_date` | DATE | sim | - | - |
@@ -1198,9 +1238,9 @@ Ordem de Produção (OP) — planned→released→in_progress→completed, vínc
 | `responsible_id` | INTEGER | sim | - | FK → `employees.id` |
 | `notes` | TEXT | sim | - | - |
 | `created_by` | INTEGER | sim | - | FK → `users.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
 | `quantity_scrapped` | NUMERIC(18,6) | NÃO | 0 | - |
 | `scrap_reason` | TEXT | sim | - | - |
 | `department_id` | INTEGER | sim | - | FK → `departments.id` |
@@ -1234,6 +1274,7 @@ Rota de manufatura de um produto (sequência de operações).
 |---|---|---|---|---|
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `route_code` | VARCHAR(50) | NÃO | - | UQ |
 | `revision` | VARCHAR(10) | NÃO | '00'::character varying | - |
 | `status` | enum_production_routes_status | NÃO | 'draft'::enum_production_routes_status | - |
@@ -1244,7 +1285,6 @@ Rota de manufatura de um produto (sequência de operações).
 | `approved_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
 
 ## `products`
 
@@ -1255,25 +1295,25 @@ Rota de manufatura de um produto (sequência de operações).
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `name` | VARCHAR(200) | NÃO | - | - |
 | `code` | VARCHAR(50) | NÃO | - | UQ |
-| `description` | TEXT | sim | ''::text | - |
+| `description` | TEXT | NÃO | ''::text | - |
 | `category_id` | INTEGER | sim | - | FK → `product_categories.id` |
 | `price` | NUMERIC(10,2) | NÃO | 0 | - |
-| `cost_price` | NUMERIC(10,2) | sim | 0 | - |
-| `quantity` | NUMERIC(18,6) | sim | 0 | - |
-| `reserved_quantity` | NUMERIC(18,6) | sim | 0 | - |
-| `min_quantity` | NUMERIC(18,6) | sim | 5 | - |
-| `status` | enum_products_status | sim | 'active'::enum_products_status | - |
-| `location` | VARCHAR(100) | sim | ''::character varying | - |
-| `product_type` | enum_products_product_type | sim | 'finished'::enum_products_product_type | - |
-| `ncm` | VARCHAR(10) | sim | '85182100'::character varying | - |
+| `cost_price` | NUMERIC(10,2) | NÃO | 0 | - |
+| `quantity` | NUMERIC(18,6) | NÃO | 0 | - |
+| `reserved_quantity` | NUMERIC(18,6) | NÃO | 0 | - |
+| `min_quantity` | NUMERIC(18,6) | NÃO | 5 | - |
+| `status` | enum_products_status | NÃO | 'active'::enum_products_status | - |
+| `location` | VARCHAR(100) | NÃO | ''::character varying | - |
+| `product_type` | enum_products_product_type | NÃO | 'finished'::enum_products_product_type | - |
+| `ncm` | VARCHAR(10) | NÃO | '85182100'::character varying | - |
 | `cest` | VARCHAR(10) | sim | - | - |
-| `weight` | NUMERIC(10,3) | sim | 0 | - |
-| `unit` | VARCHAR(10) | sim | 'un'::character varying | - |
-| `lead_time` | INTEGER | sim | 0 | - |
+| `weight` | NUMERIC(10,3) | NÃO | 0 | - |
+| `unit` | VARCHAR(10) | NÃO | 'un'::character varying | - |
+| `lead_time` | INTEGER | NÃO | 0 | - |
 | `drawing_number` | VARCHAR(50) | sim | - | - |
 | `lot_number` | VARCHAR(50) | sim | - | - |
 | `serial_number` | VARCHAR(80) | sim | - | - |
-| `revision` | VARCHAR(10) | sim | '00'::character varying | - |
+| `revision` | VARCHAR(10) | NÃO | '00'::character varying | - |
 | `ts_params_fs` | NUMERIC(10,2) | sim | - | - |
 | `ts_params_qms` | NUMERIC(10,2) | sim | - | - |
 | `ts_params_qes` | NUMERIC(10,2) | sim | - | - |
@@ -1300,14 +1340,14 @@ Itens de um Pedido de Compra, com quantidade recebida e status.
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `purchase_id` | INTEGER | NÃO | - | FK → `purchase_orders.id` |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `quantity` | NUMERIC(10,2) | NÃO | - | - |
 | `unit_price` | NUMERIC(10,2) | NÃO | - | - |
 | `total_price` | NUMERIC(10,2) | NÃO | - | - |
-| `received_quantity` | NUMERIC(10,2) | sim | 0 | - |
-| `status` | enum_purchase_order_items_status | sim | 'pending'::enum_purchase_order_items_... | - |
+| `received_quantity` | NUMERIC(10,2) | NÃO | 0 | - |
+| `status` | enum_purchase_order_items_status | NÃO | 'pending'::enum_purchase_order_items_... | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
 
 ## `purchase_orders`
 
@@ -1319,14 +1359,14 @@ Pedido de Compra — origem em Requisição, ciclo pending→approved→sent→p
 | `order_number` | VARCHAR(20) | NÃO | - | UQ |
 | `supplier_id` | INTEGER | NÃO | - | FK → `suppliers.id` |
 | `requester_id` | INTEGER | sim | - | FK → `users.id` |
-| `status` | enum_purchase_orders_status | sim | 'pending'::enum_purchase_orders_status | - |
+| `status` | enum_purchase_orders_status | NÃO | 'pending'::enum_purchase_orders_status | - |
 | `requisition_id` | INTEGER | sim | - | - |
-| `order_date` | DATE | sim | - | - |
+| `order_date` | DATE | NÃO | - | - |
 | `expected_date` | DATE | sim | - | - |
 | `delivery_date` | DATE | sim | - | - |
 | `freight_type` | enum_purchase_orders_freight_type | sim | - | - |
-| `freight_value` | NUMERIC(10,2) | sim | 0 | - |
-| `total_amount` | NUMERIC(10,2) | sim | 0 | - |
+| `freight_value` | NUMERIC(10,2) | NÃO | 0 | - |
+| `total_amount` | NUMERIC(10,2) | NÃO | 0 | - |
 | `notes` | TEXT | sim | - | - |
 | `invoice_number` | VARCHAR(50) | sim | - | - |
 | `invoice_date` | DATE | sim | - | - |
@@ -1488,6 +1528,31 @@ Cotação/RFQ multi-fornecedor (cabeçalho) — avulsa ou originada de requisiç
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
 
+## `sale_invoices`
+
+Histórico de NF-e emitidas por venda (faturamento parcial): uma linha por emissão, com o *snapshot* dos itens faturados em `items` (JSONB) e o ciclo de vida junto ao provedor. `sales.nfe_*` guarda apenas a emissão **mais recente**; esta tabela é a que preserva o histórico completo.
+
+| Coluna | Tipo | Nulo? | Default | Chave |
+|---|---|---|---|---|
+| `id` | INTEGER | NÃO | auto-increment | **PK** |
+| `sale_id` | INTEGER | NÃO | - | FK → `sales.id` |
+| `items` | JSONB | NÃO | '[]'::jsonb | - |
+| `total_amount` | NUMERIC(10,2) | NÃO | - | - |
+| `nfe_number` | VARCHAR(50) | sim | - | - |
+| `nfe_series` | INTEGER | sim | - | - |
+| `nfe_environment` | enum_sale_invoices_nfe_environment | sim | - | - |
+| `nfe_provider` | enum_sale_invoices_nfe_provider | NÃO | - | - |
+| `nfe_status` | enum_sale_invoices_nfe_status | NÃO | 'processing'::enum_sale_invoices_nfe_... | - |
+| `nfe_key` | VARCHAR(50) | sim | - | - |
+| `nfe_protocol` | VARCHAR(50) | sim | - | - |
+| `nfe_provider_ref` | VARCHAR(100) | NÃO | - | UQ (índice `uq_sale_invoices_provider_ref`) |
+| `nfe_xml_url` | VARCHAR(500) | sim | - | - |
+| `nfe_danfe_url` | VARCHAR(500) | sim | - | - |
+| `nfe_error_message` | TEXT | sim | - | - |
+| `nfe_issued_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+
 ## `sale_items`
 
 Itens de uma venda, com `invoiced_quantity` acumulada (faturamento parcial).
@@ -1497,12 +1562,12 @@ Itens de uma venda, com `invoiced_quantity` acumulada (faturamento parcial).
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `sale_id` | INTEGER | NÃO | - | FK → `sales.id` |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `quantity` | NUMERIC(18,6) | NÃO | - | - |
 | `unit_price` | NUMERIC(10,2) | NÃO | - | - |
 | `total_price` | NUMERIC(10,2) | NÃO | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
 | `cfop` | VARCHAR(4) | sim | - | - |
 | `icms_cst` | VARCHAR(3) | sim | - | - |
 | `icms_aliquot` | NUMERIC(5,2) | sim | - | - |
@@ -1529,14 +1594,14 @@ Vendas — ciclo quote→confirmed→partially_invoiced→invoiced→shipped.
 | `customer_id` | INTEGER | NÃO | - | FK → `clients.id` |
 | `user_id` | INTEGER | NÃO | - | FK → `users.id` |
 | `total_amount` | NUMERIC(10,2) | NÃO | - | - |
-| `discount` | NUMERIC(10,2) | sim | 0 | - |
-| `status` | enum_sales_status | sim | 'quote'::enum_sales_status | - |
-| `payment_method` | enum_sales_payment_method | sim | 'pix'::enum_sales_payment_method | - |
-| `installments` | INTEGER | sim | 1 | - |
-| `notes` | TEXT | sim | ''::text | - |
-| `nfe_number` | VARCHAR(50) | sim | - | - |
-| `nfe_status` | enum_sales_nfe_status | sim | 'pending'::enum_sales_nfe_status | - |
-| `nfe_key` | VARCHAR(50) | sim | - | - |
+| `discount` | NUMERIC(10,2) | NÃO | 0 | - |
+| `status` | enum_sales_status | NÃO | 'quote'::enum_sales_status | - |
+| `payment_method` | enum_sales_payment_method | NÃO | 'pix'::enum_sales_payment_method | - |
+| `installments` | INTEGER | NÃO | 1 | - |
+| `notes` | TEXT | NÃO | ''::text | - |
+| `nfe_number` | VARCHAR(50) | NÃO | - | - |
+| `nfe_status` | enum_sales_nfe_status | NÃO | 'pending'::enum_sales_nfe_status | - |
+| `nfe_key` | VARCHAR(50) | NÃO | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `nfe_series` | INTEGER | sim | - | - |
@@ -1556,6 +1621,7 @@ Rastreabilidade por número de série de produto acabado.
 |---|---|---|---|---|
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `item_id` | UUID | sim | - | FK → `items.id` |
 | `lot_control_id` | INTEGER | sim | - | FK → `lot_controls.id` |
 | `production_order_id` | INTEGER | sim | - | FK → `production_orders.id` |
 | `sale_id` | INTEGER | sim | - | FK → `sales.id` |
@@ -1566,7 +1632,6 @@ Rastreabilidade por número de série de produto acabado.
 | `notes` | TEXT | sim | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `item_id` | UUID | sim | - | FK → `items.id` |
 
 ## `service_orders`
 

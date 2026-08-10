@@ -1,16 +1,19 @@
 # Modelo Lógico (DER) — ERP EVOK ÁUDIO
 
 DER técnico: tabelas reais, chaves primárias/estrangeiras e cardinalidade,
-conforme aplicado pelas 66 migrations no PostgreSQL 16 local (introspecção
-real, 2026-08-06, reconferida no mesmo dia após a migration
-`20260806-000090-create-import-processes.cjs`, que adicionou
-`import_processes`/`import_process_items` — módulo COMEX/Importação, UC-19).
-Cobre os módulos principais pedidos (Item, Fornecedor,
+conforme aplicado pelas migrations no PostgreSQL 16 local. Bloco Compras/
+Produção/Vendas reconferido por introspecção real em **2026-08-10**
+(auditoria de consistência da cadeia do produto); demais blocos datam de
+2026-08-06. Cobre os módulos principais pedidos (Item, Fornecedor,
 Venda, OP, Requisição/Pedido de Compra, Financeiro, RFQ, Centros de
 Custo, COMEX/Importação) — **não** cobre as 12 tabelas órfãs do
-schema-fantasma em português nem tabelas puramente técnicas de migração
-(ver [04-DICIONARIO_DADOS.md](04-DICIONARIO_DADOS.md) para o catálogo
-completo das 80 tabelas).
+schema-fantasma em português, nem tabelas puramente técnicas de migração,
+nem os módulos SST/RH/TI/Jurídico/Facilities/Marketing/Contabilidade.
+
+> Números atuais do banco `erp_evok_audio` (2026-08-10): **150 migrations**
+> aplicadas e **195 tabelas**. O catálogo em
+> [04-DICIONARIO_DADOS.md](04-DICIONARIO_DADOS.md) cobre 81 delas — as
+> demais ainda não foram catalogadas.
 
 > **Atenção — dualidade Item×Product ainda em migração (Fase 4/expand):**
 > o núcleo canônico novo é `items` (UUID), mas `products` (INTEGER) ainda
@@ -26,7 +29,8 @@ erDiagram
     USERS ||--o{ PURCHASE_REQUISITIONS : "requester_id"
     ENGINEERING_PROJECTS ||--o{ PURCHASE_REQUISITIONS : "engineering_project_id"
     PURCHASE_REQUISITIONS ||--|{ PURCHASE_REQUISITION_ITEMS : "id"
-    PRODUCTS ||--o{ PURCHASE_REQUISITION_ITEMS : "product_id"
+    ITEMS ||--o{ PURCHASE_REQUISITION_ITEMS : "item_id (UUID, obrigatorio)"
+    SUPPLIERS ||--o{ PURCHASE_REQUISITION_ITEMS : "suggested_supplier_id (opcional)"
 
     PURCHASE_REQUISITIONS ||--o{ RFQS : "requisition_id (opcional)"
     RFQS ||--|{ RFQ_ITEMS : "id"
@@ -52,8 +56,17 @@ erDiagram
         int department_id FK
         int requester_id FK
         int engineering_project_id FK
+        int production_order_id FK "nullable"
         varchar origin
-        enum status
+        enum status "draft|pending|approved|ordered|partial|received|canceled"
+    }
+    PURCHASE_REQUISITION_ITEMS {
+        int id PK
+        int requisition_id FK
+        uuid item_id FK "aponta para ITEMS, nao para PRODUCTS"
+        numeric quantity
+        int suggested_supplier_id FK "nullable"
+        enum status "pending|ordered|canceled"
     }
     RFQS {
         int id PK
@@ -124,10 +137,17 @@ erDiagram
 ```
 
 `IMPORT_PROCESS_ITEMS.item_id` referencia o núcleo canônico `ITEMS`
-(UUID), não `PRODUCTS` legado — único ponto do bloco Compras/RFQ que já
-nasceu apontando só para o modelo novo (ao contrário de
-`PURCHASE_REQUISITION_ITEMS`/`PURCHASE_ORDER_ITEMS`, que ainda apontam
-para `PRODUCTS`).
+(UUID), não `PRODUCTS` legado.
+
+> **Correção 2026-08-10 (auditoria de consistência da cadeia do produto):**
+> a versão anterior deste parágrafo afirmava que
+> `PURCHASE_REQUISITION_ITEMS` "ainda aponta para `PRODUCTS`". **É falso** —
+> `purchase_requisition_items` **não tem coluna `product_id`**; tem
+> `item_id UUID NOT NULL` com FK para `items.id`
+> (`purchase_requisition_items_item_id_fkey`), exatamente como `rfq_items` e
+> `import_process_items`. Quem de fato ainda usa `products.id` no bloco
+> Compras é apenas `purchase_order_items.product_id` (com `item_id` UUID
+> opcional em paralelo, dual-read).
 
 ## Vendas: Cliente → Venda → Faturamento → Contas a Receber
 
@@ -137,6 +157,7 @@ erDiagram
     USERS ||--o{ SALES : "user_id (vendedor)"
     SALES ||--|{ SALE_ITEMS : "id"
     PRODUCTS ||--o{ SALE_ITEMS : "product_id"
+    SALES ||--o{ SALE_INVOICES : "id (uma linha por NF-e emitida)"
     SALES ||--o{ ACCOUNTS_RECEIVABLE : "sale_id"
     CLIENTS ||--o{ ACCOUNTS_RECEIVABLE : "customer_id"
     CLIENTS ||--o{ CUSTOMER_PRICE_LISTS : "customer_id"
@@ -154,8 +175,18 @@ erDiagram
         int id PK
         int sale_id FK
         int product_id FK
-        int quantity
-        decimal invoiced_quantity "acumulado entre NF-e parciais"
+        uuid item_id FK "nullable, dual-read"
+        numeric quantity
+        numeric invoiced_quantity "acumulado entre NF-e parciais"
+    }
+    SALE_INVOICES {
+        int id PK
+        int sale_id FK
+        jsonb items "snapshot dos itens faturados nesta NF-e"
+        numeric total_amount
+        enum nfe_provider "mock|focus_nfe|enotas"
+        enum nfe_status "processing|authorized|denied|cancelled"
+        varchar nfe_provider_ref UK
     }
     CUSTOMER_PRICE_LISTS {
         int id PK
@@ -184,6 +215,8 @@ erDiagram
     PRODUCTS ||--o{ BILL_OF_MATERIAL_ITEMS : "product_id (BOM legado, dual-read item_id)"
     PRODUCTION_ORDERS ||--o{ LOT_CONTROLS : "production_order_id (lote de saida)"
     PRODUCTION_ORDERS ||--o{ PRODUCTION_LOT_CONSUMPTIONS : "id (FEFO)"
+    PRODUCTION_ORDERS ||--o{ PRODUCTION_ORDER_RESERVATIONS : "id (reserva de material, G3)"
+    PRODUCTS ||--o{ PRODUCTION_ORDER_RESERVATIONS : "product_id"
 
     PRODUCTION_ORDERS {
         int id PK
@@ -201,11 +234,27 @@ erDiagram
         int id PK
         int work_center_id FK
         int production_order_id FK "nullable"
-        enum reason
+        enum reason "setup|manutencao_corretiva|manutencao_preventiva|falta_material|falta_operador|qualidade|outros"
         timestamp started_at
         timestamp finished_at "nullable"
     }
+    PRODUCTION_ORDER_RESERVATIONS {
+        int id PK
+        int production_order_id FK
+        int product_id FK
+        numeric quantity
+        numeric quantity_released
+        enum status "active|released"
+    }
 ```
+
+`PRODUCTION_ORDER_RESERVATIONS` (migration `20260809-000026`, gap G3) é a
+fonte da verdade da reserva de material. `products.reserved_quantity`
+continua existindo, mas rebaixado a **cache derivado**
+(`SUM(quantity - quantity_released)` das reservas `active`), recalculado na
+mesma transação por `server/src/services/inventoryService.ts`. Índice
+`UNIQUE` parcial `(production_order_id, product_id) WHERE status='active'`
+garante uma única reserva viva por OP × produto.
 
 ## Financeiro: Contas, Centros de Custo, Conciliação Bancária
 

@@ -55,6 +55,16 @@
 
 ## Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> `product_certifications` e `quality_audits` **não existem** em
+> `erp_evok_audio` — não há módulo de certificação de produto nem de auditoria
+> da qualidade no banco. O bloco abaixo é rascunho de modelagem em dialeto
+> MySQL, e este ERP roda **exclusivamente em PostgreSQL 16**.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- CERTIFICAÇÕES DE PRODUTOS
 CREATE TABLE product_certifications (

@@ -28,6 +28,19 @@
 
 ### Tabelas SQL
 
+> ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
+>
+> `finished_goods_inventory` **não existe** em `erp_evok_audio`. O que existe:
+> saldo por depósito em **`product_warehouse_stock`** (`product_id` ×
+> `warehouse_id` × `quantity`, com UNIQUE no par e CHECK `quantity >= 0`),
+> saldo global em `products.quantity`, reserva em `products.reserved_quantity`
+> (cache derivado de `production_order_reservations`) e lote/validade em
+> `lot_controls`. O bloco abaixo é rascunho em dialeto MySQL; este ERP roda
+> **exclusivamente em PostgreSQL 16**.
+>
+> Achado **P2-10** de
+> `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
 ```sql
 -- INVENTÁRIO DE PRODUTO ACABADO
 CREATE TABLE finished_goods_inventory (
