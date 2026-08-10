@@ -1,8 +1,20 @@
 # CLAUDE.md — ERP Evok Áudio LTDA
 **Single Source of Truth (SSOT) para o projeto ERP**
 
-**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 entregue (2026-08-04/07); **cadeia do produto: os 17 gaps fechados em 2026-08-09/10** (o G6 fechou por último, com aprovação do dono) e o **banco voltou a ser reproduzível** (2026-08-10) | **Data:** 10 de agosto de 2026
-**Próximo passo:** teste ponta a ponta com escrita real (insumo → produto acabado expedido) → UAT completo → aprovação formal G6 → aquisição do servidor de produção → Go-Live
+**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 entregue (2026-08-04/07); **cadeia do produto: os 17 gaps fechados em 2026-08-09/10** (o G6 fechou por último, com aprovação do dono); o **banco voltou a ser reproduzível** (2026-08-10); **banco de dev limpo + carga inicial real: 327 insumos da fábrica carregados via API** (2026-08-10, tarde) | **Data:** 10 de agosto de 2026
+**Próximo passo:** fábrica conferir os 59 insumos marcados e completar o cadastro (custos, produtos acabados, BOM, roteiros, inventário — ver `docs/carga-inicial/GUIA_CARGA_INICIAL.md`) → teste ponta a ponta com escrita real → UAT completo → aprovação formal G6 → servidor de produção → Go-Live. Em paralelo, frente nova: n8n + IA + integração Meta (webhook `POST /api/webhooks/n8n` já existe; criar perfil de acesso dedicado ao robô antes do 1º fluxo)
+
+> 📌 **Fonte de pendências: `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`**
+> (retrato MEDIDO contra banco/código/suíte), **não** o `TODO.md` — auditoria de
+> 2026-08-10 encontrou ~12 alegações falsas nas 190 caixas abertas do TODO.md
+> (migrations "não aplicadas" já aplicadas, telas "pendentes" que existem).
+> Duas guardas novas seguram isso: `tests/unit/audit-coverage-guard.test.ts`
+> (módulo de escrita sem `logAction` reprova; 14 módulos em débito congelado,
+> lista só encolhe) e `tests/integration/docs-reality-drift-guard.test.ts`
+> (TODO.md citando migration pendente já aplicada reprova).
+> **Cadastro carregado mas cru:** 327 itens com custo 0/estoque 0/unidade UN;
+> 59 marcados `revisar=SIM` no CSV (5 bobinas CRÍTICAS: MP-057/060/061/064/090);
+> sem produto acabado, sem BOM, sem roteiro → **nenhuma OP consegue iniciar**.
 
 > ⚠️ **Critério de aceite corrigido em 2026-08-10.** Typecheck + suíte unitária
 > verdes **não** provam que um módulo funciona: os 1807 testes unitários usam

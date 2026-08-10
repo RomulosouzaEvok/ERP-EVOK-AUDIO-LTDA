@@ -3302,7 +3302,7 @@ completo.
   pré-existente e conhecida em `onda3-shipping-cockpit-cashflow.test.ts`,
   não relacionada a este bloco) — 54 testes novos do módulo TI, 0
   regressões.
-- [ ] Migrations `20260807-000150` a `000156` **não aplicadas ao banco de
+- [x] Migrations `20260807-000150` a `000156` **não aplicadas ao banco de *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   dev** — aguardando aprovação do dono do produto (mesma convenção do
   Bloco 1 SST).
 - [ ] Fora de escopo desta entrega (pendências aceitas, ver
@@ -3963,7 +3963,7 @@ segue como proximo passo do pipeline.
 Facilities (departamento 17, 60 RF-FAC, UC-58 a UC-62), confrontando
 `docs/business/BLOCO_4_FAC_REQUISITOS.md`,
 `docs/business/BLOCO_4_FAC_MODELO_DADOS.md` (11 migrations,
-`server/migrations/20260807-000290` a `000300`, nao aplicadas) e
+`server/migrations/20260807-000290` a `000300`, nao aplicadas) e *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
 `docs/business/BLOCO_4_FAC_API.md` (60 endpoints, 9 grupos). Correcao do
 modulo Facilities existente (commit `2ad27fd`), motivada por
 `docs/business/BLOCO_4_FAC_VERIFICACAO.md` (14/17 regras do brief
@@ -4073,7 +4073,7 @@ reescrita do modulo `server/src/modules/facilities/`.
   `client/src/pages/facilities/` vao quebrar com os breaking changes
   (`vehicle_id`→`asset_id`, `id` do recurso vehicles passa a ser
   `asset_id`) — proxima tarefa de `PromadorFonteEnd`.
-- [ ] **Pendente:** aplicar as migrations `20260807-000290..300` em
+- [x] **Pendente:** aplicar as migrations `20260807-000290..300` em *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   ambiente de teste real (RNF-FAC-03) antes de qualquer deploy; teste de
   integracao real (Postgres) do fluxo completo (odometro cross-row,
   EXCLUDE gist de reservas, transicao automatica `expired_nic`).
@@ -4368,8 +4368,8 @@ regras de negócio decididas pelo dono do produto em 2026-08-08.
   (`ActivateContractUseCase` — RF-JUR-003, `ApproveContractUseCase`).
   Suíte completa do server: 1198/1198 unitários passando. `npm run
   typecheck` limpo.
-- [ ] **Pendência residual, fora deste passo:** migrations
-  `20260808-000001`/`20260808-000002` ainda não aplicadas no banco (deixadas
+- [x] **Pendência residual, fora deste passo:** migrations
+  `20260808-000001`/`20260808-000002` ainda não aplicadas no banco (deixadas *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   para revisão/aplicação manual, conforme instrução da tarefa); nenhuma
   tela nova em `client/` (fora de escopo — telas de Procurações/Atos
   Societários e o botão de aprovação de contrato ficam para o próximo passo
@@ -4751,7 +4751,7 @@ de apresentação**). Artefatos: `docs/business/BLOCO_6_RH_REQUISITOS.md`,
 
 ### Riscos residuais
 
-- [ ] **Migrations `20260808-000010..025` continuam NÃO aplicadas.** Todo o
+- [x] **Migrations `20260808-000010..025` continuam NÃO aplicadas.** Todo o *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   backend foi validado com repositório mockado + boot do Express; nenhum
   `INSERT`/`SELECT` real foi executado. Os pontos de maior risco para o
   primeiro teste com Postgres real estão listados em
@@ -4834,7 +4834,7 @@ liberação fazia `MIN(reservado_total, desejado)`
 
 ### Riscos residuais
 
-- [ ] **Migration `20260809-000026` NÃO aplicada** (deliberado — aguarda
+- [x] **Migration `20260809-000026` NÃO aplicada** (deliberado — aguarda *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   aprovação do dono). Enquanto não for aplicada, **o código novo não funciona
   contra o banco**: `reserve`/`releaseReservation` gravam em uma tabela que
   ainda não existe. Aplicar migration e rodar o backfill são um **único**
@@ -4963,7 +4963,7 @@ rastro requisição → pedido → recebimento → estoque ficava aberto.
 
 ### Pendências e riscos residuais
 
-- [ ] **Migration `20260809-000027` NÃO aplicada** (deliberado). O código já
+- [x] **Migration `20260809-000027` NÃO aplicada** (deliberado). O código já *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   grava `'import'` — sem a migration, o recebimento de importação falha com
   erro de ENUM inválido do Postgres (500). Aplicar na **mesma janela** da
   `20260809-000026` (G3), que está na mesma condição.
@@ -5215,7 +5215,7 @@ exige a diretoria**.
 
 ### Pendências e riscos residuais deste gap
 
-- [ ] **[PENDENTE] Aplicar a migration `20260810-000029`.** Enquanto não for
+- [x] **[PENDENTE] Aplicar a migration `20260810-000029`.** Enquanto não for *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   aplicada, `PUT /api/purchases/:id/status` para `approved` quebra em runtime
   (coluna `origin`/tabela de aprovações inexistentes) — o código já lê os dois.
   **Aplicar antes de subir este working tree.**
@@ -5299,7 +5299,7 @@ com o G11.
 
 ### Pendências e riscos residuais deste gap
 
-- [ ] **[PENDENTE] Aplicar a migration `20260810-000031`.** Enquanto não for
+- [x] **[PENDENTE] Aplicar a migration `20260810-000031`.** Enquanto não for *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   aplicada, `POST /api/comex/import-processes/:id/tracking` com
   `event='shipped'` e as 2 rotas novas quebram em runtime (tabela inexistente).
   **Aplicar antes de subir este working tree** — junto com a `20260810-000029`
@@ -5442,7 +5442,7 @@ unidades em 4 + 6 gera duas baixas (4 e 6), consumindo a reserva aos poucos.
 
 ### Pendências e riscos residuais deste gap
 
-- [ ] **[PENDENTE — bloqueia o deploy] Aplicar a migration `20260810-000030`.**
+- [x] **[PENDENTE — bloqueia o deploy] Aplicar a migration `20260810-000030`.** *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   O código do working tree já grava `sale_id`; com o schema antigo, confirmar
   pedido falha (coluna inexistente). Aplicar **antes** de subir o código,
   junto com `20260810-000029` (G11) e `20260810-000031` (G11-COMEX), que
@@ -5953,7 +5953,7 @@ suítes: **148/148 verdes**. Baseline de entrada era 1615/1615 em 152 suítes;
 
 ### ⚠️ Pendências abertas por esta entrega
 
-- [ ] **MIGRATION NÃO APLICADA** — `20260810-000035`. Passam a ser **7**
+- [x] **MIGRATION NÃO APLICADA** — `20260810-000035`. Passam a ser **7** *(✔ aplicada — conferido contra `SequelizeMeta` em 2026-08-10 pela guarda `docs-reality-drift-guard`)*
   pendentes (000029 a 000035) aguardando liberação do dono.
 - [ ] **Tela `ItemMasterDetailPage` (`client/`) continua oferecendo o cadastro
   de estrutura** que agora responde 422. O erro é didático e o frontend já
