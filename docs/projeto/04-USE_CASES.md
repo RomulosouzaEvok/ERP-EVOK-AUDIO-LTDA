@@ -460,7 +460,14 @@ reserva de venda a vincular.
 3. Informa dados: fornecedor, produto, quantidade, valor FOB
 4. Sistema calcula tributos de importacao (II, IPI, PIS, COFINS, ICMS)
 5. Registra acompanhamento (embarque, chegada, desembaraco)
-6. Apos recebimento, da entrada no estoque com custo nacionalizado
+6. Apos recebimento, da entrada no estoque com custo nacionalizado, **no
+   mesmo padrao de rastreabilidade do recebimento de compra nacional**: lote
+   proprio (`IMP-<ano>-XXXX-ITEM<id>-R001`) nascendo em **quarentena**,
+   dual-write no deposito `INSUMOS` e custo medio ponderado (gap G14,
+   2026-08-09)
+7. A liberacao do material para a producao depende da inspecao de
+   recebimento (`POST /api/inventory/lots/:id/release`) — o FEFO da producao
+   so consome lote `available`
 
 **Status real (2026-08-06):** backend completo em
 `server/src/modules/comex/` (`/api/comex/import-processes`, RBAC via
@@ -487,6 +494,26 @@ necessárias para implementar; detalhadas em `docs/governance/HANDOFF_CODEX.md`,
 - **Sem geração automática de Conta a Pagar** dos tributos de importação
   — `AccountPayable` não suporta moeda estrangeira; fica como melhoria
   futura (`docs/governance/TODO.md`).
+
+**Corrigido em 2026-08-09 (gap G14, `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`):**
+a entrada de estoque da importação era uma versão **degradada** do
+recebimento de compra — mexia em `products.quantity` e no custo médio, mas
+**não criava lote, não passava por quarentena e não fazia dual-write de
+depósito**. Na prática, insumo importado entrava sem rastreabilidade por lote
+e podia ser consumido pela produção sem nunca ter sido liberado pela
+qualidade, enquanto o mesmo insumo comprado no Brasil ficava retido. A
+correção não duplicou lógica: os dois caminhos passaram a chamar
+`services/materialReceiptService.receiveMaterialIntoQuarantine`. O rastro de
+origem também deixou de mentir — `reference_type`/`source_type` passaram de
+`'purchase'` para `'import'` (migration `20260809-000027`, **não aplicada**),
+porque `reference_id` aponta para `import_processes.id` e a consulta reversa
+devolvia um pedido de compra alheio.
+
+**Pendência ligada ao G13 (Onda 3, decisão do dono):** a Conta a Pagar dos
+tributos continua não sendo gerada aqui **de propósito**. O momento de
+reconhecimento do passivo é a decisão em aberto do G13 e vale para compra
+nacional e importação ao mesmo tempo; implementar uma regra própria só para
+COMEX criaria um segundo padrão contábil dentro do mesmo ERP.
 
 ---
 
@@ -588,6 +615,36 @@ necessárias para implementar; detalhadas em `docs/governance/HANDOFF_CODEX.md`,
   `admin`
 - `approved_by` e `approval_date` nunca são informados pelo cliente da API
   (sempre derivados do usuário autenticado e da data do servidor)
+- **Os estados `ordered`, `partial` e `received` NÃO são alcançáveis por este
+  endpoint** — são fatos derivados de outros módulos (gap G15, 2026-08-09).
+  Marcá-los à mão seria um jeito de declarar "requisição atendida" sem nada
+  ter chegado ao estoque:
+
+| Status | Quem grava | Significado |
+|---|---|---|
+| `ordered` | conversão em pedido (UC-25) ou adjudicação de RFQ | todo o saldo requisitado virou pedido |
+| `partial` | recebimento do pedido de compra (`POST /api/purchases/:id/receive`) | parte do que foi requisitado já chegou |
+| `received` | recebimento do pedido de compra | requisição **atendida** — tudo chegou |
+
+**Corrigido em 2026-08-09 (gap G15):** `partial` e `received` eram estados
+**mortos** — existiam no ENUM `purchase_requisitions.status` e nenhuma rotina
+os atingia. A requisição morria em `ordered` e ninguém conseguia responder
+"esta requisição foi atendida?", deixando aberto o elo final do rastro
+requisição → pedido → recebimento → estoque (rastreabilidade 100%,
+`CLAUDE.md` §7). Optou-se por **acionar** os estados, não removê-los do ENUM:
+a pergunta é requisito de auditoria fiscal, não enfeite.
+
+Regra de decisão (recálculo **total** a cada recebimento, nunca incremental —
+`modules/purchases/application/services/syncRequisitionReceiptStatus.ts`):
+- `received` ⇔ todos os pedidos ativos gerados pela requisição estão
+  `received` **e** nenhum item da requisição ficou com saldo `pending`;
+- `partial` ⇔ já chegou algo, mas não tudo;
+- pedidos `canceled` são ignorados (senão a requisição nunca fecharia);
+- requisição ainda `approved` (com saldo de compra em aberto) **não é
+  tocada**: `approved` é o estado que autoriza cotar/converter o restante, e
+  empurrá-la para `partial` deixaria o saldo remanescente impossível de
+  comprar. Quando o último saldo vira pedido ela passa a `ordered`, e o
+  recebimento desse pedido fecha em `received` normalmente.
 
 ---
 

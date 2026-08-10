@@ -215,6 +215,10 @@ describe('Cadeia completa: amostra aprovada -> convertida em pedido -> recebida 
     const findRequisitionOriginById = jest.fn(async (id: number) => (
       id === 55 ? { id: 55, origin: ENGINEERING_SAMPLE_ORIGIN } : null
     ));
+    // O passo 1 acima deixou a requisicao 55 em `ordered` e seu unico item em
+    // `ordered` — e esse o estado que o recebimento le para fechar o ciclo
+    // (gap G15).
+    const updateRequisitionStatus = jest.fn(async () => undefined);
     const receivePurchaseRepository = {
       findPurchaseWithItemsForUpdate: jest.fn(async () => purchaseAggregate),
       updatePurchaseItem: jest.fn(async () => ({})),
@@ -223,10 +227,14 @@ describe('Cadeia completa: amostra aprovada -> convertida em pedido -> recebida 
       findRequisitionOriginById,
       findLotForReceipt: jest.fn(async () => null),
       createLot: jest.fn(async () => ({ id: 1 })),
+      findRequisitionByIdForUpdate: jest.fn(async () => ({ id: 55, status: 'ordered', requisition_number: 'RQ-AMOSTRA-55' })),
+      findPurchaseStatusesByRequisitionId: jest.fn(async () => ([{ id: 900, status: 'received' }])),
+      findRequisitionItemStatuses: jest.fn(async () => ([{ id: 550, status: 'ordered' }])),
+      updateRequisitionStatus,
     };
 
     const receiveUseCase = new ReceivePurchaseItemsUseCase(receivePurchaseRepository);
-    await receiveUseCase.execute({
+    const receiveResult = await receiveUseCase.execute({
       id: 900,
       items: [{ item_id: 9001, quantity: 1 }],
       invoiceNumber: 'NF-AMOSTRA-1',
@@ -239,5 +247,11 @@ describe('Cadeia completa: amostra aprovada -> convertida em pedido -> recebida 
     expect(findRequisitionOriginById).toHaveBeenCalledWith(55, transaction);
     expect(WarehouseStockService.getWarehouseByCode).toHaveBeenCalledWith('LABORATORIO', transaction);
     expect(WarehouseStockService.addToWarehouse).toHaveBeenCalledWith(501, 3, 1, transaction);
+
+    // Gap G15: a corrente fecha de verdade — a requisicao de origem sai de
+    // `ordered` e passa a `received` (antes morria em `ordered` e ninguem
+    // conseguia responder "esta requisicao foi atendida?").
+    expect(updateRequisitionStatus).toHaveBeenCalledWith(55, 'received', transaction);
+    expect(receiveResult.requisitionStatus).toBe('received');
   });
 });

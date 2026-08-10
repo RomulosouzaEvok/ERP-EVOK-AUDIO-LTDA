@@ -1,12 +1,33 @@
 /**
- * Caso de uso para transicionar o status de uma requisicao de compra.
+ * Caso de uso para transicionar MANUALMENTE o status de uma requisicao de
+ * compra.
  *
- * Transicoes validas:
+ * Transicoes validas (manuais):
  * - draft -> pending | canceled
  * - pending -> approved | canceled
  *
  * Ao aprovar (status = approved), registra `approved_by` (usuario logado) e
  * `approval_date` (data atual).
+ *
+ * ## Os demais estados do ENUM sao AUTOMATICOS, nao manuais (gap G15)
+ *
+ * `purchase_requisitions.status` tem tambem `ordered`, `partial` e
+ * `received`. Nenhum deles e alcancavel por este caso de uso, **de
+ * proposito** — sao fatos derivados de outros modulos, e permitir marca-los
+ * a mao seria criar um jeito de declarar "requisicao atendida" sem nada ter
+ * chegado ao estoque:
+ *
+ * | Status     | Quem grava                                                                    | Significado                                   |
+ * |------------|-------------------------------------------------------------------------------|-----------------------------------------------|
+ * | `ordered`  | `ConvertRequisitionToPurchaseOrdersUseCase` / `AwardRfqUseCase` (gap G12)      | todo o saldo requisitado virou pedido          |
+ * | `partial`  | `ReceivePurchaseItemsUseCase` (gap G15)                                       | parte do que foi requisitado ja chegou fisicamente |
+ * | `received` | `ReceivePurchaseItemsUseCase` (gap G15)                                       | requisicao atendida — tudo chegou              |
+ *
+ * Ate 2026-08-09 `partial` e `received` eram estados MORTOS: existiam no
+ * ENUM e nenhuma rotina os atingia, entao ninguem conseguia responder "esta
+ * requisicao foi atendida?". A regra que os aciona (e a razao de uma
+ * requisicao `approved` com saldo NAO ser tocada pelo recebimento) esta em
+ * `modules/purchases/application/services/syncRequisitionReceiptStatus.ts`.
  *
  * @module modules/purchaseRequisitions/application/use-cases/ChangePurchaseRequisitionStatusUseCase
  */

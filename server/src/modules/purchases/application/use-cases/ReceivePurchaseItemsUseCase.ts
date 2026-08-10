@@ -2,25 +2,15 @@ import type { Transaction } from 'sequelize';
 import type PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
 
 const UseCase = require('../../../../shared/application/UseCase');
-const InventoryService = require('../../../../services/inventoryService');
 const WarehouseStockService = require('../../../../services/warehouseStockService');
-const CostingService = require('../../../../services/costingService');
+const MaterialReceiptService = require('../../../../services/materialReceiptService');
+const { resolveRequisitionStatusAfterReceipt } = require('../services/syncRequisitionReceiptStatus');
 const { NotFoundError, ValidationError, BusinessRuleError, ConflictError } = require('../../../../errors');
 
 const UNIQUE_VIOLATION = 'SequelizeUniqueConstraintError';
 
 /** Origem de requisicao que direciona o recebimento para o Depósito do Laboratório por padrão (UC-39, Bloco 2, BUSINESS_RULES.md §9/§12 item 7). */
 const ENGINEERING_SAMPLE_ORIGIN = 'engenharia_amostra';
-
-interface GeneratedLotNumberInput {
-  orderNumber: string;
-  purchaseItemId: number | string;
-  sequence: number;
-}
-
-function buildGeneratedLotNumber({ orderNumber, purchaseItemId, sequence }: GeneratedLotNumberInput) {
-  return `${orderNumber}-ITEM${purchaseItemId}-R${String(sequence).padStart(3, '0')}`;
-}
 
 interface ReceivePurchaseItemsInput {
   id: number | string;
@@ -50,7 +40,10 @@ class ReceivePurchaseItemsUseCase extends UseCase {
    * @param {'INSUMOS'|'LABORATORIO'} [input.warehouseCode] - Deposito de destino (Bloco 4, UC-42 §12 item 7). Se omitido, o default e 'INSUMOS', EXCETO quando o pedido veio de uma requisicao com `origin='engenharia_amostra'` (Bloco 2, UC-39/§9), caso em que o default passa a ser 'LABORATORIO' automaticamente.
    * @param {number} input.userId
    * @param {import('sequelize').Transaction} input.transaction
-   * @returns {Promise<{ purchase: Object, previousStatus: string }>}
+   * @returns {Promise<{ purchase: Object, previousStatus: string, requisitionStatus: string|null }>}
+   *   `requisitionStatus` e o novo status da requisicao de origem quando o
+   *   recebimento a fez avancar para `partial`/`received` (gap G15), ou
+   *   `null` quando nao ha requisicao de origem ou nada mudou.
    * @throws {ConflictError} Se esta NF (invoiceNumber) ja tiver sido registrada para este pedido.
    * @throws {ValidationError} Se invoiceNumber estiver ausente/vazio.
    *   `details: { purchase_id, order_number, field: 'invoice_number' }`.
@@ -136,82 +129,56 @@ class ReceivePurchaseItemsUseCase extends UseCase {
       await this.purchaseRepository.updatePurchaseItem(item.id, { received_quantity: newReceived, status: itemStatus }, transaction);
 
       const unitCost = parseFloat(item.unit_price || 0);
-      const { product } = await InventoryService.receive(item.product_id, qty, userId, transaction, {
-        description: `Recebimento PO ${purchase.order_number}`,
-        referenceId: purchase.id,
-        referenceType: 'purchase',
-        warehouseId: warehouse.id
-      });
-
-      // Dual-write (Bloco 4, BUSINESS_RULES.md §12 item 3): mantem o saldo
-      // por deposito em sincronia com products.quantity acima, na mesma
-      // transacao.
-      await WarehouseStockService.addToWarehouse(item.product_id, warehouse.id, qty, transaction);
 
       const providedLotNumber = received.lot_number ? String(received.lot_number).trim() : '';
       generatedLotSequence += 1;
-      const lotNumber = providedLotNumber || buildGeneratedLotNumber({
-        orderNumber: purchase.order_number,
-        purchaseItemId: item.id,
-        sequence: generatedLotSequence
-      });
+      const lotNumber = providedLotNumber || MaterialReceiptService.buildGeneratedLotNumber(
+        purchase.order_number,
+        item.id,
+        generatedLotSequence
+      );
 
-      const existingLot = await this.purchaseRepository.findLotForReceipt({
-        product_id: item.product_id,
-        purchase_id: purchase.id,
-        lot_number: lotNumber
-      }, transaction);
-
-      // Lotes de recebimento de compra nascem/permanecem em quarentena
-      // ('quarantine'): o estoque fisico (products.quantity) e incrementado
-      // normalmente acima via InventoryService.receive, mas o CONSUMO por
-      // lote fica bloqueado ate a inspecao de recebimento liberar o lote
-      // (POST /api/inventory/lots/:id/release). O FEFO da producao
-      // (ChangeProductionOrderStatusUseCase) so seleciona lotes com
-      // status='available', logo lotes 'quarantine' ja ficam automaticamente
-      // fora do consumo automatico sem nenhuma mudanca adicional la.
-      if (existingLot) {
-        const nextInitial = parseFloat(existingLot.quantity_initial || 0) + qty;
-        const nextAvailable = parseFloat(existingLot.quantity_available || 0) + qty;
-        await existingLot.update({
-          supplier_id: purchase.supplier_id,
-          status: 'quarantine',
-          warehouse_id: warehouse.id,
-          quantity_initial: nextInitial,
-          quantity_available: nextAvailable,
-          received_at: received.received_at || purchase.delivery_date || purchase.invoice_date || new Date(),
-          manufactured_at: received.manufactured_at || existingLot.manufactured_at || null,
-          expires_at: received.expires_at || existingLot.expires_at || null,
-          created_by: userId,
-          notes: received.lot_notes || existingLot.notes || `Recebimento PO ${purchase.order_number}`
-        }, { transaction });
-      } else {
-        await this.purchaseRepository.createLot({
-          product_id: item.product_id,
-          supplier_id: purchase.supplier_id,
-          purchase_id: purchase.id,
-          lot_number: lotNumber,
-          status: 'quarantine',
-          warehouse_id: warehouse.id,
-          quantity_initial: qty,
-          quantity_available: qty,
-          received_at: received.received_at || purchase.delivery_date || purchase.invoice_date || new Date(),
-          manufactured_at: received.manufactured_at || null,
-          expires_at: received.expires_at || null,
-          created_by: userId,
-          notes: received.lot_notes || `Recebimento PO ${purchase.order_number}`
-        }, transaction);
-      }
-
-      await CostingService.registerWeightedAverageCost({
-        product,
+      // Caminho UNICO de entrada de material comprado (gap G14): estoque +
+      // dual-write de deposito + lote em quarentena + custo real, sempre na
+      // mesma transacao. A importacao (ReceiveImportProcessUseCase) chama
+      // exatamente esta funcao — antes ela tinha um caminho proprio, sem lote
+      // e sem quarentena.
+      await MaterialReceiptService.receiveMaterialIntoQuarantine({
+        productId: item.product_id,
         quantity: qty,
         unitCost,
-        sourceType: 'purchase',
-        sourceId: purchase.id,
         userId,
-        notes: `Custo real de compra - PO ${purchase.order_number}`
-      }, transaction);
+        warehouseId: warehouse.id,
+        lotNumber,
+        lotLookup: {
+          product_id: item.product_id,
+          purchase_id: purchase.id,
+          lot_number: lotNumber
+        },
+        lotOwnership: {
+          supplier_id: purchase.supplier_id,
+          purchase_id: purchase.id
+        },
+        lotDates: {
+          receivedAt: received.received_at || purchase.delivery_date || purchase.invoice_date || new Date(),
+          manufacturedAt: received.manufactured_at,
+          expiresAt: received.expires_at
+        },
+        lotNotes: received.lot_notes,
+        defaultLotNotes: `Recebimento PO ${purchase.order_number}`,
+        movement: {
+          description: `Recebimento PO ${purchase.order_number}`,
+          referenceId: purchase.id,
+          referenceType: 'purchase'
+        },
+        costing: {
+          sourceType: 'purchase',
+          sourceId: purchase.id,
+          notes: `Custo real de compra - PO ${purchase.order_number}`
+        },
+        lotGateway: this.purchaseRepository,
+        transaction
+      });
     }
 
     const updatedItems = await this.purchaseRepository.findPurchaseItemsForUpdate(purchase.id, transaction);
@@ -219,7 +186,61 @@ class ReceivePurchaseItemsUseCase extends UseCase {
     purchase.status = allReceived ? 'received' : 'partial';
     await purchase.save({ transaction });
 
-    return { purchase, previousStatus };
+    const requisitionStatus = await this.syncRequisitionStatus(purchase, transaction);
+
+    return { purchase, previousStatus, requisitionStatus };
+  }
+
+  /**
+   * Reflete o recebimento na REQUISICAO de origem (gap G15).
+   *
+   * Antes de 2026-08-09 `purchase_requisitions.status` morria em `ordered`:
+   * os valores `partial` e `received` existiam no ENUM e **nenhuma rotina do
+   * sistema jamais os atingia**, entao nao havia como responder "esta
+   * requisicao foi atendida?" — o elo final do rastro
+   * requisicao -> pedido -> recebimento ficava aberto (rastreabilidade 100%,
+   * CLAUDE.md §7).
+   *
+   * O gatilho e este ponto porque e o unico lugar que sabe, de fato, o que
+   * chegou. A decisao (qual status resulta) fica na funcao pura
+   * `resolveRequisitionStatusAfterReceipt`, que so olha o estado atual da
+   * requisicao, o status de TODOS os pedidos gerados por ela e o saldo de
+   * compra dos itens — recalculo completo, nunca incremental, para o
+   * resultado nao depender da ordem dos recebimentos.
+   *
+   * Nao lanca erro: um pedido de compra avulso (sem `requisition_id`) e
+   * legitimo, e uma requisicao ainda com saldo a comprar (`approved`)
+   * permanece intocada de proposito — ver a justificativa completa em
+   * `resolveRequisitionStatusAfterReceipt`.
+   *
+   * @param purchase - Pedido de compra ja com o status desta rodada salvo.
+   * @param transaction - Transacao Sequelize ativa (a mesma do recebimento).
+   * @returns Novo status da requisicao, ou `null` se nada mudou.
+   */
+  private async syncRequisitionStatus(purchase: any, transaction: Transaction): Promise<string | null> {
+    if (!purchase.requisition_id) return null;
+
+    // Lock pessimista: dois recebimentos simultaneos de pedidos DIFERENTES
+    // da mesma requisicao recalculariam o status em paralelo e o ultimo a
+    // gravar poderia regredir `received` para `partial`.
+    const requisition = await this.purchaseRepository.findRequisitionByIdForUpdate(purchase.requisition_id, transaction);
+    if (!requisition) return null;
+
+    const [purchaseStatuses, requisitionItemStatuses] = await Promise.all([
+      this.purchaseRepository.findPurchaseStatusesByRequisitionId(purchase.requisition_id, transaction),
+      this.purchaseRepository.findRequisitionItemStatuses(purchase.requisition_id, transaction),
+    ]);
+
+    const nextStatus = resolveRequisitionStatusAfterReceipt({
+      currentStatus: requisition.status,
+      purchaseStatuses: purchaseStatuses.map((row: any) => row.status),
+      requisitionItemStatuses: requisitionItemStatuses.map((row: any) => row.status),
+    });
+
+    if (!nextStatus) return null;
+
+    await this.purchaseRepository.updateRequisitionStatus(purchase.requisition_id, nextStatus, transaction);
+    return nextStatus;
   }
 }
 

@@ -4835,3 +4835,143 @@ liberação fazia `MIN(reservado_total, desejado)`
 - [ ] **Nenhuma tela em `client/`** expõe a reserva por OP (o endpoint de
   consulta é `inventoryService.listOrderReservations`, ainda sem rota HTTP) —
   escopo dos agentes de frontend.
+
+---
+
+## 2026-08-09 — Cadeia do produto, Onda 2: gaps G14 e G15 — `programador`
+
+**Contexto:** `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`.
+Fecham a Onda 2 junto com o G3 (`fed3129`).
+
+### G14 — Importação (COMEX) entrava fora do padrão de rastreabilidade
+
+**O problema (verificado no código, e declarado no próprio cabeçalho do
+arquivo como limitação conhecida):** `ReceiveImportProcessUseCase` dava
+entrada do material importado mexendo em `products.quantity` e no custo médio,
+mas **sem criar lote, sem passar por quarentena e sem dual-write de
+depósito** — as três coisas que `ReceivePurchaseItemsUseCase` faz. Na prática:
+insumo importado entrava no estoque sem rastreabilidade por lote e sem gate de
+qualidade, podendo ser consumido pela produção sem nunca ter sido liberado,
+enquanto o mesmo insumo comprado no Brasil ficava retido em quarentena.
+
+- [x] **Caminho único extraído**, não duplicado:
+  `server/src/services/materialReceiptService.ts` →
+  `receiveMaterialIntoQuarantine` executa os 4 passos na mesma transação
+  (estoque → dual-write de depósito → lote nascendo em `quarantine` → custo
+  real médio ponderado). `ReceivePurchaseItemsUseCase` passou a chamá-la
+  **sem mudança de comportamento** (há teste-guarda de regressão), e a
+  importação passou a usar exatamente a mesma função.
+- [x] **Lote de importação**: `IMP-<ano>-XXXX-ITEM<id do item>-R001`,
+  `supplier_id` do processo, `purchase_id` nulo, depósito `INSUMOS`,
+  `received_at` = data do desembaraço, `status='quarantine'`. O par
+  (processo, item) é único, então o número nunca colide com o índice único
+  `(product_id, lot_number)` de `lot_controls`.
+- [x] **Acesso ao lote por gateway injetado** (`findLotForReceipt`/`createLot`),
+  método novo em `ComexRepository` + implementação Sequelize — mantém os dois
+  módulos Clean Architecture e o serviço testável com repositório mockado,
+  sem abrir uma segunda porta direta ao ORM.
+- [x] **`reference_type`/`source_type` deixaram de mentir**: de `'purchase'`
+  para `'import'`. O valor antigo era dado factualmente errado —
+  `reference_id` aponta para `import_processes.id`, e a consulta reversa pelo
+  índice `(reference_type, reference_id)` devolvia um **pedido de compra
+  alheio** de id coincidente. Migration
+  `20260809-000027-add-import-origin-to-inventory-and-cost-enums.cjs`
+  (`ALTER TYPE ... ADD VALUE`, aditivo, fora de transação, `down` no-op).
+  Sincronizado em `InventoryMovement`, `ProductCostLedger`, `costingService`,
+  `InventoryMovementEntity.REFERENCE_TYPES` e no enum Zod de
+  `inventoryValidators`.
+- [x] **Testes:** 4 casos novos em `tests/unit/comex.test.ts` (lote em
+  quarentena, dual-write, consolidação em lote existente, nada gravado quando
+  o processo não está desembaraçado) + `tests/unit/material-receipt-quarantine.test.ts`
+  (4 casos: os 4 passos na mesma transação, lote existente voltando a
+  quarentena, gerador de número de lote e o guarda de regressão do lado de
+  compras).
+- [x] **Mock incompleto corrigido**: `tests/unit/comex.test.ts` não mockava
+  `warehouseStockService` — sem isso o teste tentava abrir conexão real com o
+  Postgres ao resolver o depósito.
+
+### G15 — Estados mortos no ENUM da requisição de compra
+
+**O problema:** `purchase_requisitions.status` tem `partial` e `received` no
+ENUM e **nenhuma rotina jamais os atingia**. A requisição morria em `ordered`
+e ninguém conseguia responder "esta requisição foi atendida?" — o elo final do
+rastro requisição → pedido → recebimento → estoque ficava aberto.
+
+- [x] **Decisão: acionar, não remover do ENUM.** O rastro
+  requisição → pedido → recebimento é requisito de auditoria fiscal declarado
+  (`CLAUDE.md` §7); sem esses estados, a única forma de saber se a requisição
+  foi atendida é abrir cada pedido gerado, um a um.
+- [x] **Gatilho no recebimento** (`ReceivePurchaseItemsUseCase`), que é o
+  único ponto que sabe o que de fato chegou. Regra pura isolada em
+  `modules/purchases/application/services/syncRequisitionReceiptStatus.ts`:
+  `received` ⇔ todos os pedidos **ativos** da requisição `received` **e**
+  nenhum item da requisição com saldo `pending`; `partial` ⇔ chegou algo mas
+  não tudo; pedido `canceled` ignorado (senão a requisição nunca fecharia).
+  **Recálculo total, nunca incremental** — o resultado não depende da ordem
+  dos recebimentos.
+- [x] **Requisição `approved` com saldo NÃO é tocada.** Foi a decisão mais
+  importante: `approved` é o estado que autoriza cotar/converter o restante
+  (`CreateRfqUseCase`/`AwardRfqUseCase` bloqueiam `partial`/`received` desde o
+  G12). Empurrá-la para `partial` num recebimento parcial deixaria o saldo
+  remanescente **impossível de comprar** — trocaria um estado morto por um
+  travamento real de processo. Não abre buraco: quando o último saldo vira
+  pedido ela passa a `ordered`, e o recebimento desse pedido fecha em
+  `received`.
+- [x] **Semântica honrada, sem colidir com o G12:** o ENUM espelha o de
+  `purchase_orders`, onde `partial` = "parcialmente **recebido**" — que é
+  exatamente o sentido usado aqui. O saldo de *compra* continua em
+  `purchase_requisition_items.status`, onde o G12 o colocou.
+- [x] **Lock pessimista na requisição** antes do recálculo, para dois
+  recebimentos simultâneos de pedidos diferentes da mesma requisição não
+  regredirem `received` para `partial`.
+- [x] **`PATCH /:id/status` continua sem alcançar `ordered`/`partial`/
+  `received`** — são fatos derivados, não declaráveis à mão (marcar
+  "requisição atendida" sem nada ter chegado seria fraude de rastreabilidade).
+  Tabela de "quem grava cada status" documentada no JSDoc do use case, na
+  API.md §15 e no UC-23.
+- [x] **`requisition_status` exposto na resposta** de
+  `POST /api/purchases/:id/receive` (fora de `data`) e no log de auditoria.
+- [x] **Testes:** `tests/unit/requisition-receipt-status.test.ts` (15 casos:
+  11 da regra pura, incluindo todos os "não deve mexer", + 4 da integração no
+  recebimento). `tests/unit/engineering-sample-requisition.test.ts` (o teste
+  da "cadeia completa") passou a **provar a corrente fechando**: a requisição
+  de amostra sai de `ordered` e chega em `received`.
+
+### Validação
+
+- [x] `npm run typecheck` limpo.
+- [x] `npx jest tests/unit`: **1453/1453** (baseline era 1430/1430; +23 casos).
+- [x] `npx tsx -e "require('./app')"` sobe.
+
+### Pendências e riscos residuais
+
+- [ ] **Migration `20260809-000027` NÃO aplicada** (deliberado). O código já
+  grava `'import'` — sem a migration, o recebimento de importação falha com
+  erro de ENUM inválido do Postgres (500). Aplicar na **mesma janela** da
+  `20260809-000026` (G3), que está na mesma condição.
+- [ ] **Movimentações/ledgers de importação gravados ANTES** continuam com
+  `reference_type='purchase'`. Não há backfill automático possível (olhando
+  só a linha, não dá para distinguir compra de importação); a correção é
+  manual, cruzando `import_processes.received_at` com a `description` do
+  movimento, que sempre cita `IMP-<ano>-XXXX`.
+- [ ] **Requisições já em `ordered` cujos pedidos foram todos recebidos antes
+  desta mudança continuam em `ordered`** — o gatilho é o recebimento, e ele já
+  passou. Backfill não feito nesta entrega; se for necessário, o critério é
+  exatamente o da regra pura `resolveRequisitionStatusAfterReceipt`.
+- [ ] **AP dos tributos de importação NÃO implementada — ligada ao G13
+  (Onda 3, decisão do dono).** O momento de reconhecimento do passivo vale
+  para compra nacional e importação ao mesmo tempo; criar uma regra só para
+  COMEX geraria um segundo padrão contábil no mesmo ERP. Some-se: os tributos
+  têm fatos geradores e vencimentos distintos entre si, e `AccountPayable` não
+  suporta moeda estrangeira. **O escopo do G13 no plano foi ampliado para
+  registrar isso.**
+- [ ] **Sem teste de integração contra Postgres real** do novo valor de ENUM,
+  do lote de importação e do lock da requisição — mesma limitação estrutural
+  do princípio 2 do plano (a suíte unitária usa repositório mockado).
+- [ ] **Ordem de lock inversa entre recebimento e conversão** (recebimento:
+  pedido → requisição; conversão: requisição → pedidos). Teoricamente sujeito
+  a deadlock sob concorrência alta; o Postgres detecta e aborta uma das
+  transações, e as duas operações são curtas. Registrado como risco conhecido.
+- [ ] **`client/` não exibe** o status novo da requisição depois do
+  recebimento nem o lote/quarentena do material importado (a tela de COMEX
+  ainda não existe) — escopo dos agentes de frontend.

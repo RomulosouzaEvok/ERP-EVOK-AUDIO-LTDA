@@ -2625,3 +2625,130 @@ produto antes de gravar.
 reserva ativa (`BusinessRuleError`, regra `G3`), orientando a cancelar antes.
 Sem isso o `ON DELETE CASCADE` levaria as reservas junto e deixaria o cache
 alto para sempre — material invisivelmente indisponível.
+
+---
+
+## G14 — Origem `import` no rastro de estoque e de custo (2026-08-09)
+
+**Migration:** `20260809-000027-add-import-origin-to-inventory-and-cost-enums.cjs`
+**Status:** criada, **NÃO aplicada** (aguarda a mesma janela de deploy da
+`20260809-000026`).
+
+### Problema
+
+`ReceiveImportProcessUseCase` gravava a entrada do material importado com
+`inventory_movements.reference_type = 'purchase'` e
+`product_cost_ledgers.source_type = 'purchase'`, mas com
+`reference_id`/`source_id` apontando para `import_processes.id`.
+
+Isso não era imprecisão de nomenclatura, era **dado factualmente errado**. O
+índice `(reference_type, reference_id)` existe exatamente para a consulta
+reversa "toda movimentação originada por este documento"; com `'purchase'`
+gravado, essa consulta cruza `import_processes.id` contra `purchase_orders.id`
+e devolve o **pedido de compra errado** sempre que os ids coincidem — o que é
+praticamente certo, já que as duas sequências começam em 1.
+
+### Alteração
+
+```sql
+ALTER TYPE "enum_inventory_movements_reference_type" ADD VALUE IF NOT EXISTS 'import';
+ALTER TYPE "enum_product_cost_ledgers_source_type"   ADD VALUE IF NOT EXISTS 'import';
+```
+
+`ALTER TYPE ... ADD VALUE` é aditivo e retrocompatível: nenhuma linha muda,
+nenhum leitor quebra. Roda **fora de transação** (limitação do Postgres),
+mesma técnica de `20260804-000009`. O `down` é no-op deliberado — remover um
+valor de ENUM no Postgres exige recriar o tipo inteiro com todas as
+dependências.
+
+### Sincronizado no código
+
+- `models/InventoryMovement.ts` e `models/ProductCostLedger.ts` (ENUM + tipo TS)
+- `services/costingService.ts` (`CostSourceType`)
+- `modules/inventory/domain/entities/InventoryMovementEntity.ts` (`REFERENCE_TYPES`)
+- `modules/inventory/presentation/validators/inventoryValidators.ts` (enum Zod)
+
+### Dado histórico
+
+As linhas gravadas **antes** desta migration continuam com `'purchase'`. Não há
+backfill automático possível (olhando só a linha, não dá para distinguir um
+`reference_id` que aponta para compra de um que aponta para importação). Se
+houver processo de importação já recebido em produção, a correção é manual,
+cruzando `import_processes.received_at` com a `description` do movimento, que
+sempre cita o número do processo (`IMP-<ano>-XXXX`).
+
+### ATENÇÃO — ordem de deploy
+
+O código do working tree **já grava `'import'`**. Sem esta migration aplicada, o
+recebimento de importação falha com erro de ENUM inválido do Postgres (500).
+
+### Sem tabela nova para lote de importação
+
+A entrada de material importado passou a criar lote em `lot_controls`
+(gap G14) reutilizando as colunas existentes: `supplier_id` do processo,
+`purchase_id` nulo (não há pedido de compra nacional por trás) e o número do
+processo embutido no `lot_number` (`IMP-<ano>-XXXX-ITEM<id>-R001`). **Nenhuma
+coluna `import_process_id` foi adicionada** — o vínculo forte já existe via
+`inventory_movements(reference_type='import', reference_id)`, e uma FK nova numa
+tabela de rastreabilidade em uso exigiria migração de dado sem ganho de
+consulta real hoje.
+
+---
+
+## G15 — `purchase_requisitions.status`: fim dos estados mortos (2026-08-09)
+
+**Migration:** nenhuma. O ENUM já tinha os valores; o que faltava era código
+que os atingisse.
+
+### Problema
+
+O ENUM `enum_purchase_requisitions_status` é
+`draft | pending | approved | ordered | partial | received | canceled`.
+`ChangePurchaseRequisitionStatusUseCase` só implementa
+`draft → pending|canceled` e `pending → approved|canceled`, e a conversão em
+pedido para em `ordered`. Ou seja: **`partial` e `received` nunca eram
+gravados por rotina nenhuma**. Dois valores de ENUM decorativos, e — pior — a
+pergunta "esta requisição foi atendida?" não tinha resposta no banco.
+
+### Decisão: acionar, não remover
+
+A alternativa era um `ALTER TYPE` de limpeza removendo os dois valores.
+Recusada: o rastro requisição → pedido → recebimento é requisito de auditoria
+fiscal declarado (`CLAUDE.md` §7), e sem esses estados a única forma de saber
+se a requisição foi atendida é abrir cada pedido gerado, um a um.
+
+### Semântica (herdada de `purchase_orders`, de propósito)
+
+O ENUM espelha o de `purchase_orders`, onde `partial` significa
+"parcialmente **RECEBIDO**" — foi por isso que o **G12** recusou usar
+`partial` para "parcialmente **pedido**" e colocou o saldo de compra em
+`purchase_requisition_items.status`. Aqui a semântica original é honrada:
+
+| Valor | Gravado por | Significa |
+|---|---|---|
+| `ordered` | conversão em pedido / adjudicação de RFQ (G12) | todo o saldo requisitado virou pedido |
+| `partial` | `ReceivePurchaseItemsUseCase` (G15) | parte do requisitado já chegou fisicamente |
+| `received` | `ReceivePurchaseItemsUseCase` (G15) | requisição atendida — tudo chegou |
+
+### Consultas novas (sem índice novo)
+
+O recálculo lê `purchase_orders(requisition_id)` e
+`purchase_requisition_items(requisition_id)`. As duas colunas **já têm
+índice**, e a requisição é travada com `SELECT ... FOR UPDATE` (só
+`id`/`status`/`requisition_number`) para que dois recebimentos simultâneos de
+pedidos diferentes da mesma requisição não regridam `received` para
+`partial`.
+
+**Ordem de lock:** o recebimento trava o pedido e **depois** a requisição,
+enquanto a conversão trava a requisição e depois cria os pedidos. É uma ordem
+inversa, teoricamente sujeita a deadlock sob concorrência alta; o Postgres
+detecta e aborta uma das transações, e as duas operações são curtas. Fica
+registrado como risco residual conhecido.
+
+### Dado histórico
+
+Requisições já em `ordered` cujos pedidos foram todos recebidos **antes**
+desta mudança continuam em `ordered` — o gatilho é o recebimento, e ele já
+passou. Não há backfill automático nesta entrega; se for necessário, o
+critério é exatamente o da regra pura
+(`syncRequisitionReceiptStatus.resolveRequisitionStatusAfterReceipt`).

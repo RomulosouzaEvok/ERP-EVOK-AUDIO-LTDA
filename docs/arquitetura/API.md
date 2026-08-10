@@ -2068,6 +2068,21 @@ Registra o recebimento (total ou parcial) dos itens do pedido. Só permitido enq
 ```
 Cada item não pode exceder a quantidade pendente (`quantity - received_quantity`). Dá entrada no estoque via `InventoryService.receive` (lock pessimista + transação) e atualiza o status do pedido e dos itens.
 
+**Entrada em estoque (caminho único, gap G14):** desde 2026-08-09 os quatro
+passos ficam em `materialReceiptService.receiveMaterialIntoQuarantine`
+(estoque → dual-write de depósito → lote nascendo em `quarantine` → custo
+real). O comportamento do recebimento de compra **não mudou** — a extração
+existiu para que a Importação/COMEX (seção 32), que entrava sem lote e sem
+quarentena, passasse a usar exatamente o mesmo caminho em vez de uma cópia
+degradada.
+
+**Reflexo na requisição de origem (gap G15):** quando o pedido tem
+`requisition_id`, o recebimento recalcula e grava o status da requisição
+(`partial`/`received`) na mesma transação, com lock pessimista na requisição.
+A resposta traz `requisition_status` **fora de `data`** (novo status da
+requisição, ou `null` quando não há requisição de origem ou nada mudou).
+Regra completa na seção 15.
+
 > Nota de arquitetura: os endpoints de `/api/purchases` são servidos pelo
 > módulo `server/src/modules/purchases/` (Clean Architecture). O
 > recebimento reutiliza `server/src/services/inventoryService.ts` (lock
@@ -2477,9 +2492,34 @@ rotas e em `docs/governance/TODO.md` (um usuário com perfil "Gestor de
 Requisições", `level='approve'`, passa pela rota mas ainda pode ser barrado
 pelo controller legado).
 
-Máquina de status: `draft → pending → approved → ordered` (`partial`,
-`received`, `canceled` também possíveis conforme o fluxo de conversão/
-recebimento do pedido de compra gerado).
+Máquina de status: `draft → pending → approved → ordered → partial →
+received` (+ `canceled`). **Só os três primeiros saltos são manuais**
+(`PATCH /:id/status`); `ordered`, `partial` e `received` são fatos derivados
+de outros módulos e **não podem ser marcados à mão** — permitir isso seria
+um jeito de declarar "requisição atendida" sem nada ter chegado ao estoque:
+
+| Status | Quem grava | Significado |
+|---|---|---|
+| `ordered` | `POST /:id/convert` ou adjudicação de RFQ (gap G12) | todo o saldo requisitado virou pedido |
+| `partial` | recebimento do pedido de compra (gap G15) | parte do que foi requisitado já chegou fisicamente |
+| `received` | recebimento do pedido de compra (gap G15) | requisição **atendida** — tudo chegou |
+
+**Corrigido em 2026-08-09 (gap G15):** `partial` e `received` eram estados
+**mortos** — existiam no ENUM e nenhuma rotina os atingia, então a requisição
+morria em `ordered` e não havia como responder "esta requisição foi
+atendida?". O gatilho passou a ser
+`POST /api/purchases/:id/receive` (ver seção 13), que recalcula o status da
+requisição do zero a cada recebimento: `received` quando **todos** os pedidos
+gerados por ela estão `received` **e** nenhum item da requisição ficou com
+saldo `pending`; `partial` quando já chegou algo mas não tudo. Pedidos
+`canceled` são ignorados no cálculo.
+
+Requisição ainda `approved` (com saldo de compra em aberto) **não é tocada**
+pelo recebimento, de propósito: `approved` é o estado que autoriza cotar/
+converter o restante, e empurrá-la para `partial` deixaria o saldo
+remanescente impossível de comprar (`CreateRfqUseCase`/`AwardRfqUseCase`
+bloqueiam `partial`/`received`). Quando o último saldo vira pedido, ela passa
+a `ordered` e o recebimento desse pedido fecha em `received` normalmente.
 
 ### GET /api/purchase-requisitions
 Lista requisições, paginada.
@@ -3415,12 +3455,41 @@ status `customs_cleared`.
 `AwardRfqUseCase`/`ReceivePurchaseItemsUseCase`; o frontend deve orientar
 o cadastro do produto correspondente antes).
 
-**Sucesso:** `status → received`, `received_at` preenchido, entrada no
-estoque via `InventoryService.receive` (incrementa `Product.quantity`
-legado + cria `InventoryMovement` com `reference_type`/`source_type` =
-`'purchase'`, rastreabilidade específica via `reference_id`/`source_id` =
-`import_processes.id`) e custo médio via
-`CostingService.registerWeightedAverageCost`.
+**Sucesso:** `status → received`, `received_at` preenchido, e a entrada em
+estoque passa pelo **mesmo caminho do recebimento de compra**
+(`materialReceiptService.receiveMaterialIntoQuarantine`), com os 4 passos na
+mesma transação:
+
+1. `InventoryService.receive` — incrementa `Product.quantity` legado e cria o
+   `InventoryMovement`;
+2. **dual-write de depósito** — `WarehouseStockService.addToWarehouse` no
+   depósito `INSUMOS` (o endpoint não aceita `warehouse_code`; ver JSDoc do
+   use case para o critério);
+3. **lote (`lot_controls`) nascendo em `quarantine`** — número
+   `IMP-<ano>-XXXX-ITEM<id do item>-R001`, `supplier_id` do processo,
+   `purchase_id` nulo, `received_at` = data do desembaraço. O material fica
+   retido até `POST /api/inventory/lots/:id/release` (o FEFO da produção só
+   consome lote `available`);
+4. `CostingService.registerWeightedAverageCost` — custo nacionalizado.
+
+**Alterado em 2026-08-09 (gap G14):** até então a importação era uma versão
+degradada do recebimento — **sem lote, sem quarentena e sem dual-write de
+depósito** —, ou seja, insumo importado entrava sem rastreabilidade por lote e
+podia ser consumido pela produção sem nenhuma liberação de qualidade.
+
+**Alterado em 2026-08-09 (gap G14):** `reference_type` /`source_type` passaram
+de `'purchase'` para **`'import'`**. O valor antigo era dado factualmente
+errado: `reference_id` aponta para `import_processes.id`, e a consulta reversa
+por `(reference_type, reference_id)` devolvia um **pedido de compra alheio**
+de id coincidente. O valor novo entra pela migration `20260809-000027`, que
+**precisa estar aplicada** antes de subir este código (as linhas gravadas
+antes dela continuam com `'purchase'` — sem backfill automático possível; o
+número do processo está na `description` do movimento).
+
+**Ainda não gera Conta a Pagar dos tributos** — pendência ligada ao **G13**
+(momento de reconhecimento do passivo, Onda 3 de
+`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`), decisão do dono
+que vale para compra nacional e importação ao mesmo tempo.
 
 ### POST /api/comex/import-processes/:id/cancel
 Cancela o processo.

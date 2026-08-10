@@ -2,7 +2,7 @@ import type { Transaction } from 'sequelize';
 
 const ComexRepository = require('../../domain/repositories/ComexRepository');
 const {
-  ImportProcess, ImportProcessItem, User, Item, Supplier,
+  ImportProcess, ImportProcessItem, User, Item, Supplier, LotControl,
 } = require('../../../../models/index');
 
 /**
@@ -94,6 +94,20 @@ class SequelizeComexRepository extends ComexRepository {
 
   async findSupplierById(id: number, transaction?: Transaction) {
     return Supplier.findByPk(id, transaction ? { transaction } : undefined);
+  }
+
+  /** @inheritdoc */
+  async findLotForReceipt(where: Record<string, unknown>, transaction: Transaction) {
+    return LotControl.findOne({
+      where,
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+  }
+
+  /** @inheritdoc */
+  async createLot(data: Record<string, unknown>, transaction: Transaction) {
+    return LotControl.create(data, { transaction });
   }
 }
 

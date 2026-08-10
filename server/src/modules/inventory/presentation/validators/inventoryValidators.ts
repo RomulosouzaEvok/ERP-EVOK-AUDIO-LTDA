@@ -21,7 +21,9 @@ export const createInventoryMovementSchema = z.object({
   quantity: decimalQuantity,
   description: z.string().trim().min(1).max(1000),
   reference_id: z.coerce.number().int().positive().nullable().optional(),
-  reference_type: z.enum(['sale', 'purchase', 'production', 'adjustment', 'transfer', 'sst_epi_delivery']).nullable().optional(),
+  // 'import' (gap G14, migration 20260809-000027): origem de entrada de
+  // material nacionalizado por processo de importacao/COMEX.
+  reference_type: z.enum(['sale', 'purchase', 'production', 'adjustment', 'transfer', 'sst_epi_delivery', 'import']).nullable().optional(),
   // Deposito onde a movimentacao manual ocorre (Bloco 4, UC-42). Opcional —
   // default 'INSUMOS' quando ausente.
   warehouse_code: z.string().trim().min(1).max(30).optional(),

@@ -11,7 +11,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
 
-type ProductCostSourceType = 'purchase' | 'production' | 'adjustment' | 'production_labor' | 'production_overhead';
+type ProductCostSourceType = 'purchase' | 'production' | 'adjustment' | 'production_labor' | 'production_overhead' | 'import';
 
 interface ProductCostLedgerAttributes {
   id: number;
@@ -32,7 +32,11 @@ interface ProductCostLedgerAttributes {
 const ProductCostLedger = sequelize.define('ProductCostLedger', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id' },
-  source_type: { type: DataTypes.ENUM('purchase', 'production', 'adjustment', 'production_labor', 'production_overhead'), allowNull: false },
+  source_type: {
+    type: DataTypes.ENUM('purchase', 'production', 'adjustment', 'production_labor', 'production_overhead', 'import'),
+    allowNull: false,
+    comment: "'import' adicionado em 20260809-000027 (gap G14) — custo nacionalizado de processo de importacao; antes era gravado como 'purchase' com source_id de import_processes.",
+  },
   source_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'ID da origem: compra, OP ou ajuste' },
   quantity: { type: DataTypes.DECIMAL(12, 4), allowNull: false, validate: { min: 0.0001 } },
   unit_cost: { type: DataTypes.DECIMAL(12, 4), allowNull: false, validate: { min: 0 } },

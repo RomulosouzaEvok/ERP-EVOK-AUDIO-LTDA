@@ -15,12 +15,21 @@ import { BusinessRuleError, NotFoundError } from '../../src/errors';
 
 const InventoryService = require('../../src/services/inventoryService');
 const CostingService = require('../../src/services/costingService');
+const WarehouseStockService = require('../../src/services/warehouseStockService');
 
 jest.mock('../../src/services/inventoryService', () => ({
   receive: jest.fn(),
 }));
 jest.mock('../../src/services/costingService', () => ({
   registerWeightedAverageCost: jest.fn(),
+}));
+// Gap G14: a entrada de material importado passou a fazer dual-write de
+// deposito (`materialReceiptService`), entao o servico de deposito precisa
+// estar mockado aqui — sem isso o teste tentaria abrir conexao real com o
+// Postgres para resolver o deposito 'INSUMOS'.
+jest.mock('../../src/services/warehouseStockService', () => ({
+  getWarehouseByCode: jest.fn(),
+  addToWarehouse: jest.fn(),
 }));
 
 const baseTransaction = { id: 'tx-1' };
@@ -36,6 +45,10 @@ function makeComexRepository(overrides: Partial<Record<string, any>> = {}) {
     updateImportProcessItem: jest.fn(async () => undefined),
     updateImportProcess: jest.fn(async (id: number, data: any) => ({ id, ...data })),
     findSupplierById: jest.fn(async (id: number) => ({ id, company_name: `Fornecedor ${id}` })),
+    // Gateway de lote (gap G14) — mesma forma exigida de `PurchaseRepository`
+    // por `materialReceiptService.receiveMaterialIntoQuarantine`.
+    findLotForReceipt: jest.fn(async () => null),
+    createLot: jest.fn(async (data: any) => ({ id: 77, ...data })),
     ...overrides,
   };
 }
@@ -274,28 +287,46 @@ describe('ReceiveImportProcessUseCase', () => {
     nationalized_unit_cost: null,
   };
 
-  it('recalcula, da entrada em estoque via InventoryService/CostingService e marca received', async () => {
-    const comexRepository = makeComexRepository({
-      findImportProcessByIdForUpdate: jest.fn(async () => ({
-        id: 1, status: 'customs_cleared', process_number: 'IMP-2026-0001',
-        exchange_rate: 5, freight_value: 0, insurance_value: 0, other_expenses_value: 0,
-      })),
-      findImportProcessItems: jest.fn(async () => [rawItem]),
-    });
-    const itemRepository = makeItemRepository();
+  /** Processo desembaracado padrao usado pelos testes de recebimento. */
+  function clearedProcess(overrides: Record<string, any> = {}) {
+    return {
+      id: 1, status: 'customs_cleared', process_number: 'IMP-2026-0001', supplier_id: 42,
+      customs_cleared_at: '2026-08-01',
+      exchange_rate: 5, freight_value: 0, insurance_value: 0, other_expenses_value: 0,
+      ...overrides,
+    };
+  }
+
+  /** Arma os mocks de servico compartilhados pelo caminho de recebimento. */
+  function armReceiptServices() {
     const mockProduct = { id: 900, quantity: 0, cost_price: 0 };
     (InventoryService.receive as jest.Mock).mockResolvedValue({ product: mockProduct });
     (CostingService.registerWeightedAverageCost as jest.Mock).mockResolvedValue({ ledger: {}, previousCost: 0, newCost: 100, totalCost: 1000 });
+    (WarehouseStockService.getWarehouseByCode as jest.Mock).mockResolvedValue({ id: 1, code: 'INSUMOS' });
+    (WarehouseStockService.addToWarehouse as jest.Mock).mockResolvedValue({});
+    return mockProduct;
+  }
+
+  it('recalcula, da entrada em estoque via InventoryService/CostingService e marca received', async () => {
+    const comexRepository = makeComexRepository({
+      findImportProcessByIdForUpdate: jest.fn(async () => clearedProcess()),
+      findImportProcessItems: jest.fn(async () => [rawItem]),
+    });
+    const itemRepository = makeItemRepository();
+    const mockProduct = armReceiptServices();
 
     const useCase = new ReceiveImportProcessUseCase(comexRepository as any, itemRepository as any);
     await useCase.execute({ id: 1, userId: 5, transaction: baseTransaction });
 
     expect(InventoryService.receive).toHaveBeenCalledWith(
       900, 10, 5, baseTransaction,
-      expect.objectContaining({ referenceId: 1, referenceType: 'purchase' }),
+      // Gap G14: a origem deixou de ser gravada como 'purchase' (que fazia
+      // reference_id apontar para import_processes.id sob um rotulo que
+      // significa purchase_orders.id) — ver migration 20260809-000027.
+      expect.objectContaining({ referenceId: 1, referenceType: 'import' }),
     );
     expect(CostingService.registerWeightedAverageCost).toHaveBeenCalledWith(
-      expect.objectContaining({ product: mockProduct, quantity: 10, sourceType: 'purchase', sourceId: 1 }),
+      expect.objectContaining({ product: mockProduct, quantity: 10, sourceType: 'import', sourceId: 1 }),
       baseTransaction,
     );
     expect(comexRepository.updateImportProcess).toHaveBeenCalledWith(
@@ -303,6 +334,105 @@ describe('ReceiveImportProcessUseCase', () => {
       expect.objectContaining({ status: 'received' }),
       baseTransaction,
     );
+  });
+
+  // --- Gap G14: importacao entrava fora do padrao de rastreabilidade -------
+
+  it('G14: cria LOTE do material importado, nascendo em QUARENTENA (nao entrava lote nenhum antes)', async () => {
+    const comexRepository = makeComexRepository({
+      findImportProcessByIdForUpdate: jest.fn(async () => clearedProcess()),
+      findImportProcessItems: jest.fn(async () => [rawItem]),
+    });
+    armReceiptServices();
+
+    const useCase = new ReceiveImportProcessUseCase(comexRepository as any, makeItemRepository() as any);
+    await useCase.execute({ id: 1, userId: 5, transaction: baseTransaction });
+
+    expect(comexRepository.createLot).toHaveBeenCalledTimes(1);
+    const [lotPayload, lotTransaction] = comexRepository.createLot.mock.calls[0];
+    expect(lotTransaction).toBe(baseTransaction);
+    expect(lotPayload).toMatchObject({
+      product_id: 900,
+      supplier_id: 42,
+      purchase_id: null,
+      // Gate de qualidade: o FEFO da producao so consome lote 'available',
+      // entao o material importado fica retido ate a inspecao liberar.
+      status: 'quarantine',
+      warehouse_id: 1,
+      quantity_initial: 10,
+      quantity_available: 10,
+      created_by: 5,
+    });
+    // Numero deterministico <processo>-ITEM<id do item>-R001.
+    expect(lotPayload.lot_number).toBe('IMP-2026-0001-ITEM10-R001');
+    // Data de entrada = desembaraco (fato que libera a mercadoria).
+    expect(lotPayload.received_at).toBe('2026-08-01');
+  });
+
+  it('G14: faz o dual-write de deposito (INSUMOS) junto com o saldo global', async () => {
+    const comexRepository = makeComexRepository({
+      findImportProcessByIdForUpdate: jest.fn(async () => clearedProcess()),
+      findImportProcessItems: jest.fn(async () => [rawItem]),
+    });
+    armReceiptServices();
+
+    const useCase = new ReceiveImportProcessUseCase(comexRepository as any, makeItemRepository() as any);
+    await useCase.execute({ id: 1, userId: 5, transaction: baseTransaction });
+
+    expect(WarehouseStockService.getWarehouseByCode).toHaveBeenCalledWith('INSUMOS', baseTransaction);
+    // Invariante BUSINESS_RULES.md §12 item 3: products.quantity = SOMA dos
+    // saldos por deposito. Antes do G14 a importacao so mexia no primeiro.
+    expect(WarehouseStockService.addToWarehouse).toHaveBeenCalledWith(900, 1, 10, baseTransaction);
+    expect(InventoryService.receive).toHaveBeenCalledWith(
+      900, 10, 5, baseTransaction,
+      expect.objectContaining({ warehouseId: 1 }),
+    );
+  });
+
+  it('G14: consolida no lote ja existente (mesmo produto x numero de lote) em vez de duplicar', async () => {
+    const existingLot = {
+      id: 77,
+      quantity_initial: '4.0000',
+      quantity_available: '4.0000',
+      manufactured_at: null,
+      expires_at: null,
+      notes: 'Lote pre-existente',
+      update: jest.fn(async () => undefined),
+    };
+    const comexRepository = makeComexRepository({
+      findImportProcessByIdForUpdate: jest.fn(async () => clearedProcess()),
+      findImportProcessItems: jest.fn(async () => [rawItem]),
+      findLotForReceipt: jest.fn(async () => existingLot),
+    });
+    armReceiptServices();
+
+    const useCase = new ReceiveImportProcessUseCase(comexRepository as any, makeItemRepository() as any);
+    await useCase.execute({ id: 1, userId: 5, transaction: baseTransaction });
+
+    expect(comexRepository.createLot).not.toHaveBeenCalled();
+    expect(comexRepository.findLotForReceipt).toHaveBeenCalledWith(
+      { product_id: 900, lot_number: 'IMP-2026-0001-ITEM10-R001' },
+      baseTransaction,
+    );
+    const [updatePayload] = existingLot.update.mock.calls[0];
+    expect(updatePayload).toMatchObject({
+      status: 'quarantine',
+      quantity_initial: 14, // 4 pre-existente + 10 recebidos
+      quantity_available: 14,
+    });
+  });
+
+  it('G14: nao cria lote nem toca deposito quando o processo nao esta desembaracado', async () => {
+    const comexRepository = makeComexRepository({
+      findImportProcessByIdForUpdate: jest.fn(async () => ({ id: 1, status: 'arrived' })),
+    });
+    const useCase = new ReceiveImportProcessUseCase(comexRepository as any, makeItemRepository() as any);
+
+    await expect(
+      useCase.execute({ id: 1, userId: 5, transaction: baseTransaction }),
+    ).rejects.toBeInstanceOf(BusinessRuleError);
+    expect(comexRepository.createLot).not.toHaveBeenCalled();
+    expect(WarehouseStockService.addToWarehouse).not.toHaveBeenCalled();
   });
 
   it('rejeita recebimento se o processo nao estiver desembaracado (422 BusinessRuleError)', async () => {

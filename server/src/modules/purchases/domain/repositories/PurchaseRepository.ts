@@ -255,6 +255,63 @@ class PurchaseRepository {
   }
 
   /**
+   * Busca uma requisição de compra "crua" com lock pessimista, para refletir
+   * o recebimento nela sem condição de corrida entre dois pedidos da mesma
+   * requisição chegando ao mesmo tempo (gap G15).
+   *
+   * @abstract
+   * @param {number|string} requisitionId
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Object|null>} `{ id, status }`.
+   */
+  async findRequisitionByIdForUpdate(requisitionId: number | string, transaction: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findRequisitionByIdForUpdate não implementado.');
+  }
+
+  /**
+   * Lista o status de TODOS os pedidos de compra gerados por uma requisição
+   * (gap G15 — o recálculo do status da requisição é sempre total, nunca
+   * incremental).
+   *
+   * @abstract
+   * @param {number|string} requisitionId
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Array<{ id: number, status: string }>>}
+   */
+  async findPurchaseStatusesByRequisitionId(requisitionId: number | string, transaction: Transaction): Promise<any[]> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findPurchaseStatusesByRequisitionId não implementado.');
+  }
+
+  /**
+   * Lista o status dos itens de uma requisição (`purchase_requisition_items`),
+   * usado para saber se ainda há saldo requisitado que nunca virou pedido
+   * (gap G15 — requisição com saldo não pode ser dada como `received`).
+   *
+   * @abstract
+   * @param {number|string} requisitionId
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<Array<{ id: number, status: string }>>}
+   */
+  async findRequisitionItemStatuses(requisitionId: number | string, transaction: Transaction): Promise<any[]> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findRequisitionItemStatuses não implementado.');
+  }
+
+  /**
+   * Grava o novo status da requisição de origem depois de um recebimento
+   * (gap G15). Escrita cross-module pontual, pelo mesmo motivo já aceito em
+   * {@link findRequisitionOriginById}: só o recebimento sabe o que chegou.
+   *
+   * @abstract
+   * @param {number|string} requisitionId
+   * @param {string} status - `'partial'` ou `'received'`.
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<void>}
+   */
+  async updateRequisitionStatus(requisitionId: number | string, status: string, transaction: Transaction): Promise<void> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.updateRequisitionStatus não implementado.');
+  }
+
+  /**
    * Busca um lote (`LotControl`) por produto, pedido de compra e número de
    * lote, com lock pessimista (leitura/escrita cross-module pontual —
    * `LotControl` pertence ao módulo de estoque/inventário; usado aqui para

@@ -63,6 +63,28 @@ class ComexRepository {
   async findSupplierById(_id: number, _transaction?: Transaction): Promise<any | null> {
     throw new Error('ComexRepository.findSupplierById nao implementado.');
   }
+
+  /**
+   * Busca um lote (`LotControl`) com lock pessimista, para consolidar uma
+   * segunda entrada no mesmo lote (gap G14).
+   *
+   * Leitura/escrita cross-module pontual — `LotControl` pertence ao modulo de
+   * estoque —, exatamente pelo mesmo motivo ja aceito em
+   * `PurchaseRepository.findLotForReceipt`: a entrada de material importado
+   * passa pelo MESMO caminho do recebimento de compra
+   * (`materialReceiptService.receiveMaterialIntoQuarantine`), que exige este
+   * par de metodos como gateway de lote.
+   *
+   * @param _where - `{ product_id, lot_number }`.
+   */
+  async findLotForReceipt(_where: Record<string, unknown>, _transaction: Transaction): Promise<any | null> {
+    throw new Error('ComexRepository.findLotForReceipt nao implementado.');
+  }
+
+  /** Cria um lote (`LotControl`) para a entrada de material importado (gap G14 — mesmo raciocinio de {@link findLotForReceipt}). */
+  async createLot(_data: Record<string, unknown>, _transaction: Transaction): Promise<any> {
+    throw new Error('ComexRepository.createLot nao implementado.');
+  }
 }
 
 export = ComexRepository;

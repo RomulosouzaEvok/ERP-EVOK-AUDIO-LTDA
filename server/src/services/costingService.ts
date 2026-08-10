@@ -9,7 +9,14 @@
 
 import ProductCostLedger = require('../models/ProductCostLedger');
 
-type CostSourceType = 'purchase' | 'production' | 'adjustment';
+/**
+ * Origens de custo real de ENTRADA de material/produto.
+ * `'import'` (gap G14, migration `20260809-000027`) e o custo nacionalizado
+ * de um processo de importacao — antes era gravado como `'purchase'`, o que
+ * fazia `source_id` apontar para `import_processes.id` sob um rotulo que
+ * significa `purchase_orders.id`.
+ */
+type CostSourceType = 'purchase' | 'production' | 'adjustment' | 'import';
 type AdditionalProductionCostSourceType = 'production_labor' | 'production_overhead';
 
 interface RegisterWeightedAverageCostInput {

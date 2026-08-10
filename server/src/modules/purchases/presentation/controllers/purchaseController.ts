@@ -211,6 +211,10 @@ exports.updateStatus = async (req: Request, res: Response, next: NextFunction) =
  * parcial) dos itens de um pedido de compra (transacional, com lock
  * pessimista via `InventoryService`).
  *
+ * Devolve também `requisition_status` (gap G15): o novo status da requisição
+ * de origem quando este recebimento a fez avançar para `partial`/`received`,
+ * ou `null` quando o pedido é avulso ou nada mudou.
+ *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
@@ -223,7 +227,7 @@ exports.receiveItems = async (req: Request, res: Response, next: NextFunction) =
     if (!parsed.success) handleZodError(parsed.error);
     const { items, invoice_number, warehouse_code } = parsed.data;
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
-    const { purchase, previousStatus } = await useCase.execute({ id: req.params.id, items, invoiceNumber: invoice_number, warehouseCode: warehouse_code, userId: (req as any).user.id, transaction: t });
+    const { purchase, previousStatus, requisitionStatus } = await useCase.execute({ id: req.params.id, items, invoiceNumber: invoice_number, warehouseCode: warehouse_code, userId: (req as any).user.id, transaction: t });
 
     await t.commit();
 
@@ -234,12 +238,14 @@ exports.receiveItems = async (req: Request, res: Response, next: NextFunction) =
       entityId: purchase.id,
       entityDescription: purchase.order_number,
       oldValues: { status: previousStatus },
-      newValues: { status: purchase.status },
-      description: `Recebimento de itens do pedido ${purchase.order_number}`
+      newValues: { status: purchase.status, requisition_status: requisitionStatus ?? null },
+      description: requisitionStatus
+        ? `Recebimento de itens do pedido ${purchase.order_number} (requisicao de origem -> ${requisitionStatus})`
+        : `Recebimento de itens do pedido ${purchase.order_number}`
     });
 
     const fullPurchase = await purchaseRepository.findPurchaseById(purchase.id);
-    res.json({ success: true, data: fullPurchase });
+    res.json({ success: true, data: fullPurchase, requisition_status: requisitionStatus ?? null });
   } catch (error) {
     await rollbackIfPending(t);
     next(error);

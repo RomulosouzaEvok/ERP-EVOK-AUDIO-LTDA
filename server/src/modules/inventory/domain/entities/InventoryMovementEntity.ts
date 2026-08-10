@@ -5,7 +5,7 @@ const { ValidationError } = require('../../../../errors');
 const MOVEMENT_TYPES = ['in', 'out', 'adjustment'];
 
 /** Origens suportadas (mesmo ENUM do model Sequelize `InventoryMovement.reference_type`). */
-const REFERENCE_TYPES = ['sale', 'purchase', 'production', 'adjustment', 'transfer', 'sst_epi_delivery'];
+const REFERENCE_TYPES = ['sale', 'purchase', 'production', 'adjustment', 'transfer', 'sst_epi_delivery', 'import'];
 
 /** Propriedades aceitas pelo construtor de `InventoryMovementEntity`. */
 interface InventoryMovementEntityProps {

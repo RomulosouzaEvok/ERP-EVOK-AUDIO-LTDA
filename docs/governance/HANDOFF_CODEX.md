@@ -12930,3 +12930,161 @@ comportamento (`cache inflado sem reserva por tras bloqueia reserva nova`).
   existe no serviço, sem controller) — não havia consumidor pedindo.
 - Nenhuma alteração em `client/`.
 - Migration **não aplicada**, por instrução explícita.
+
+---
+
+# HANDOFF — Cadeia do produto, Onda 2: gaps G14 e G15 (2026-08-09)
+
+**Plano:** `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`
+**Antecessores:** G2 (`5ec0651`), G16/G8/G10/G12 (`0d5812e`), G3 (`fed3129`).
+**Estado:** working tree, **sem commit**, **migration não aplicada**.
+
+## 1. Resumo da feature
+
+Dois gaps que deixavam a corrente insumo → produto aberta em pontos
+diferentes:
+
+**G14 — a importação entrava fora do padrão de rastreabilidade.**
+`ReceiveImportProcessUseCase` dava entrada do material importado mexendo em
+`products.quantity` e no custo médio, mas **sem criar lote, sem quarentena e
+sem dual-write de depósito**. Insumo importado entrava no estoque sem
+rastreabilidade por lote e sem gate de qualidade — podia ser consumido pela
+produção sem nunca ter sido liberado, enquanto o mesmo insumo comprado no
+Brasil ficava retido. A correção **extraiu** o caminho já testado do
+recebimento de compra para `services/materialReceiptService.ts`
+(`receiveMaterialIntoQuarantine`: estoque → depósito → lote nascendo em
+`quarantine` → custo real, tudo na mesma transação) e fez os **dois** caminhos
+chamarem a mesma função, em vez de a importação manter uma cópia degradada.
+De quebra, o rastro de origem parou de mentir: `reference_type`/`source_type`
+saíram de `'purchase'` (que fazia a consulta reversa por
+`(reference_type, reference_id)` cair num pedido de compra alheio de id
+coincidente) para `'import'`.
+
+**G15 — estados mortos no ENUM da requisição.** `partial` e `received`
+existiam em `purchase_requisitions.status` e **nenhuma rotina jamais os
+atingia**: a requisição morria em `ordered` e ninguém conseguia responder
+"esta requisição foi atendida?". Passaram a ser gravados pelo recebimento do
+pedido de compra, que é o único ponto que sabe o que de fato chegou.
+
+## 2. Decisões de desenho (com o porquê)
+
+| Decisão | Por quê |
+|---|---|
+| **Extrair o caminho de recebimento em vez de copiá-lo** | Duas cópias do mesmo processo divergem — foi exatamente assim que a importação nasceu sem quarentena. O comportamento do lado de compras não mudou (há teste-guarda de regressão). |
+| **Gateway de lote injetado** (`findLotForReceipt`/`createLot`) em vez de usar `LotControl` direto no serviço | Os dois consumidores já são módulos Clean Architecture com repositório próprio; ambos satisfazem o contrato estruturalmente. Mantém o serviço testável com repositório mockado e não abre uma segunda porta direta ao ORM. |
+| **Lote de importação sem coluna `import_process_id` nova** | O vínculo forte já existe via `inventory_movements(reference_type='import', reference_id)`. Uma FK nova numa tabela de rastreabilidade em uso exigiria migração de dado sem ganho de consulta real hoje. O número do processo fica embutido no `lot_number`. |
+| **Depósito fixo `INSUMOS` na importação** | O endpoint de recebimento de importação não tem body, e importação neste ERP é de matéria-prima/componente. Ampliar o contrato por hipótese seria superfície sem consumidor. Se um dia entrar acabado importado, o caminho é acrescentar `warehouse_code` ao validator, igual ao recebimento de compra. |
+| **Criar migration de ENUM (`'import'`) em vez de continuar com `'purchase'`** | Não era imprecisão de nomenclatura: o índice `(reference_type, reference_id)` existe para a consulta reversa, e com `'purchase'` ela devolvia o pedido de compra ERRADO. `ALTER TYPE ... ADD VALUE` é aditivo e retrocompatível. |
+| **G15: acionar `partial`/`received`, não removê-los** | O rastro requisição → pedido → recebimento é requisito de auditoria fiscal declarado (`CLAUDE.md` §7). Sem esses estados, a única forma de saber se a requisição foi atendida é abrir cada pedido gerado, um a um. |
+| **Requisição `approved` com saldo NÃO é tocada pelo recebimento** | A decisão mais importante da entrega. `approved` é o estado que autoriza cotar/converter o restante — `CreateRfqUseCase`/`AwardRfqUseCase` bloqueiam `partial`/`received` desde o G12. Empurrá-la para `partial` num recebimento parcial deixaria o saldo remanescente **impossível de comprar**: trocaríamos um estado morto por um travamento real de processo. Não abre buraco: quando o último saldo vira pedido ela passa a `ordered`, e o recebimento desse pedido fecha em `received`. |
+| **Recálculo total, nunca incremental** | O resultado não pode depender da ordem em que os recebimentos aconteceram. A regra olha o quadro inteiro (status de todos os pedidos + saldo dos itens) toda vez. |
+| **`PATCH /:id/status` continua sem alcançar `ordered`/`partial`/`received`** | São fatos derivados. Permitir marcá-los à mão seria um jeito de declarar "requisição atendida" sem nada ter chegado ao estoque. |
+
+## 3. Arquivos alterados
+
+**Código novo**
+- `server/src/services/materialReceiptService.ts` — caminho único de entrada de material comprado.
+- `server/src/modules/purchases/application/services/syncRequisitionReceiptStatus.ts` — regra pura do G15.
+- `server/migrations/20260809-000027-add-import-origin-to-inventory-and-cost-enums.cjs` — **NÃO aplicada**.
+
+**Código alterado**
+- `server/src/modules/comex/application/use-cases/ReceiveImportProcessUseCase.ts` — passa pelo caminho único; lote + quarentena + depósito; `reference_type='import'`.
+- `server/src/modules/comex/domain/repositories/ComexRepository.ts` e `.../infrastructure/sequelize/SequelizeComexRepository.ts` — gateway de lote.
+- `server/src/modules/purchases/application/use-cases/ReceivePurchaseItemsUseCase.ts` — usa o serviço extraído; sincroniza a requisição de origem.
+- `server/src/modules/purchases/domain/repositories/PurchaseRepository.ts` e `.../infrastructure/sequelize/SequelizePurchaseRepository.ts` — 4 métodos novos (lock da requisição, status dos pedidos, status dos itens, update do status).
+- `server/src/modules/purchases/presentation/controllers/purchaseController.ts` — expõe `requisition_status` e registra no log de auditoria.
+- `server/src/modules/purchaseRequisitions/application/use-cases/ChangePurchaseRequisitionStatusUseCase.ts` — JSDoc: tabela de quem grava cada status.
+- `server/src/models/InventoryMovement.ts`, `server/src/models/ProductCostLedger.ts`, `server/src/services/costingService.ts`, `server/src/modules/inventory/domain/entities/InventoryMovementEntity.ts`, `server/src/modules/inventory/presentation/validators/inventoryValidators.ts` — valor `'import'` sincronizado.
+
+**Testes**
+- `server/tests/unit/material-receipt-quarantine.test.ts` (novo, 4 casos).
+- `server/tests/unit/requisition-receipt-status.test.ts` (novo, 15 casos).
+- `server/tests/unit/comex.test.ts` (+4 casos G14, mock de `warehouseStockService` corrigido).
+- `server/tests/unit/engineering-sample-requisition.test.ts` (a "cadeia completa" agora prova a requisição chegando em `received`).
+
+## 4. Documentações atualizadas
+
+- `docs/arquitetura/API.md` — §13 (`POST /api/purchases/:id/receive`: caminho único + `requisition_status`), §15 (máquina de status da requisição, tabela de quem grava o quê), §32 (recebimento de importação: 4 passos, lote/quarentena, `reference_type='import'`, pendência do G13).
+- `docs/projeto/04-USE_CASES.md` — UC-19 (passos 6 e 7, correção do G14, pendência do G13) e UC-23 (estados derivados + regra do G15).
+- `docs/database/DATABASE.md` — seções novas "G14 — Origem `import`..." e "G15 — fim dos estados mortos".
+- `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` — registro de execução de G14/G15; escopo do G13 ampliado para incluir os tributos de importação.
+- `docs/governance/TODO.md` — entrada completa com pendências e riscos residuais.
+- JSDoc: cabeçalhos completos em `materialReceiptService.ts`, `syncRequisitionReceiptStatus.ts`, `ReceiveImportProcessUseCase.ts`, `ChangePurchaseRequisitionStatusUseCase.ts`, `ReceivePurchaseItemsUseCase.syncRequisitionStatus` e nos métodos novos dos dois repositórios.
+
+## 5. Instruções de teste
+
+**Pré-requisito operacional:** aplicar as migrations `20260809-000026` (G3) e
+`20260809-000027` (G14) **antes** de rodar qualquer coisa contra o banco. Sem a
+`000027`, o recebimento de importação retorna **500** (ENUM inválido no
+Postgres) — o código já grava `'import'`.
+
+**Roteiro funcional do G14 (importação):**
+1. Cadastre um fornecedor e um `Item` com `Product` legado correspondente
+   (`products.code = items.codigo`).
+2. `POST /api/comex/import-processes` com 1 item, câmbio e alíquotas.
+3. `POST /:id/tracking` três vezes: `shipped` → `arrived` → `customs_cleared`.
+4. `POST /:id/receive` (sem body).
+5. **Confira:**
+   - `SELECT * FROM lot_controls WHERE lot_number LIKE 'IMP-%'` → existe um
+     lote com `status='quarantine'`, `supplier_id` do processo, `purchase_id`
+     nulo, `warehouse_id` do depósito `INSUMOS`;
+   - `SELECT reference_type, reference_id FROM inventory_movements ORDER BY id
+     DESC LIMIT 1` → `('import', <id do processo>)`;
+   - `product_warehouse_stocks` do produto no depósito `INSUMOS` subiu na
+     mesma quantidade que `products.quantity` (invariante §12 item 3);
+   - `product_cost_ledgers.source_type = 'import'`.
+6. **O teste que prova o gate de qualidade:** crie uma OP que consuma esse
+   produto e libere-a. O FEFO **não pode** consumir o lote em quarentena.
+   Depois `POST /api/inventory/lots/:id/release` e repita — agora consome.
+
+**Roteiro funcional do G15 (requisição):**
+1. Crie uma requisição com **2 itens**, aprove-a
+   (`PATCH /api/purchase-requisitions/:id/status`, `approved`).
+2. `POST /api/purchase-requisitions/:id/convert` → gera o(s) pedido(s); a
+   requisição vai para `ordered`.
+3. Aprove e envie o pedido (`sent`), depois receba **parcialmente**
+   (`POST /api/purchases/:id/receive` com quantidade menor que a pedida).
+   → resposta traz `requisition_status: "partial"`; confira no banco.
+4. Receba o **saldo**. → `requisition_status: "received"`. A requisição agora
+   responde "fui atendida".
+5. **Caso que não pode regredir:** com 2 pedidos da mesma requisição, receba o
+   segundo **antes** de completar o primeiro — a requisição deve continuar
+   `partial`, nunca voltar de `received` para `partial` por ordem de chegada.
+6. **Caso que não pode travar (o mais importante):** requisição aprovada com
+   2 itens, converta/adjudique **só um**; receba o pedido desse item. A
+   requisição deve continuar **`approved`** (não `partial`), e você deve
+   conseguir cotar/converter o item restante normalmente. Se ela virar
+   `partial`, o saldo fica impossível de comprar — é o cenário que essa regra
+   existe para evitar.
+7. Tente `PATCH /:id/status` com `received` → deve ser recusado (o schema Zod
+   só aceita `approved`/`canceled`/`pending`).
+
+**Regressão automatizada já rodada:**
+`npm run typecheck` limpo · `npx jest tests/unit` **1453/1453** (baseline
+1430/1430) · `npx tsx -e "require('./app')"` sobe sem erro.
+
+## 6. O que **não** foi feito (deliberado) e riscos residuais
+
+- **Conta a pagar dos tributos de importação — NÃO implementada.** É o **G13**
+  (Onda 3, decisão do dono): o momento de reconhecimento do passivo vale para
+  compra nacional e importação ao mesmo tempo, e criar uma regra só para COMEX
+  geraria um segundo padrão contábil dentro do mesmo ERP. Os tributos ainda
+  têm fatos geradores e vencimentos distintos entre si, e `AccountPayable` não
+  suporta moeda estrangeira. O escopo do G13 no plano foi ampliado para
+  registrar isso.
+- **Migration `20260809-000027` não aplicada** (instrução explícita). Aplicar
+  na mesma janela da `000026`.
+- **Dado histórico não migrado:** movimentações/ledgers de importação
+  anteriores continuam com `'purchase'` (sem backfill automático possível), e
+  requisições já `ordered` com todos os pedidos recebidos antes desta mudança
+  continuam `ordered` (o gatilho é o recebimento, e ele já passou).
+- **Sem teste de integração contra Postgres real** do valor novo de ENUM, do
+  lote de importação e do lock da requisição — limitação estrutural apontada
+  no princípio 2 do plano.
+- **Ordem de lock inversa** entre recebimento (pedido → requisição) e
+  conversão (requisição → pedidos): teoricamente sujeito a deadlock sob
+  concorrência alta; o Postgres detecta e aborta uma das transações, e as duas
+  operações são curtas.
+- **Nada em `client/`** — a tela de COMEX ainda não existe, e nenhuma tela
+  exibe o status novo da requisição depois do recebimento. Escopo dos agentes
+  de frontend.

@@ -3,7 +3,7 @@ import type { Transaction } from 'sequelize';
 const { Op, QueryTypes } = require('sequelize');
 const PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
 const { sequelize } = require('../../../../config/database');
-const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item, PurchaseRequisition, PurchaseReceipt, LotControl } = require('../../../../models/index');
+const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item, PurchaseRequisition, PurchaseRequisitionItem, PurchaseReceipt, LotControl } = require('../../../../models/index');
 
 class SequelizePurchaseRepository extends PurchaseRepository {
   async listPurchases(filters: any = {}, pagination: any = {}) {
@@ -215,6 +215,38 @@ class SequelizePurchaseRepository extends PurchaseRepository {
       attributes: ['id', 'origin'],
       transaction,
     });
+  }
+
+  /** @inheritdoc */
+  async findRequisitionByIdForUpdate(requisitionId: number | string, transaction: Transaction) {
+    return PurchaseRequisition.findByPk(requisitionId, {
+      attributes: ['id', 'status', 'requisition_number'],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+  }
+
+  /** @inheritdoc */
+  async findPurchaseStatusesByRequisitionId(requisitionId: number | string, transaction: Transaction) {
+    return Purchase.findAll({
+      where: { requisition_id: requisitionId },
+      attributes: ['id', 'status'],
+      transaction,
+    });
+  }
+
+  /** @inheritdoc */
+  async findRequisitionItemStatuses(requisitionId: number | string, transaction: Transaction) {
+    return PurchaseRequisitionItem.findAll({
+      where: { requisition_id: requisitionId },
+      attributes: ['id', 'status'],
+      transaction,
+    });
+  }
+
+  /** @inheritdoc */
+  async updateRequisitionStatus(requisitionId: number | string, status: string, transaction: Transaction) {
+    await PurchaseRequisition.update({ status }, { where: { id: requisitionId }, transaction });
   }
 
   /** @inheritdoc */
