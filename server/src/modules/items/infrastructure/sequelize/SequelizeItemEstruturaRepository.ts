@@ -1,85 +1,60 @@
-import { Op } from 'sequelize';
 import ItemEstruturaRepository from '../../domain/repositories/ItemEstruturaRepository';
-const { ItemEstrutura, Item } = require('../../../../models/index');
+// G1 (2026-08-10): a estrutura de produto passou a ter fonte unica — a BOM
+// ativa (`bill_of_materials`), projetada em UUID de item. Este repositorio
+// deixou de ler a tabela `item_estruturas`, que virou legado congelado.
+// Racional completo em `services/bomStructureProjection`.
+const BomStructureProjection = require('../../../../services/bomStructureProjection');
 
 /**
- * Implementacao Sequelize do repositorio de estruturas canonicas.
+ * Implementacao Sequelize do repositorio de estruturas de produto.
+ *
+ * **Depois do G1 este repositorio nao le mais `item_estruturas`.** Ele le a
+ * mesma estrutura que a producao consome e custeia, projetada para o
+ * formato de aresta em UUID que os casos de uso ja esperavam. O contrato
+ * publico (nomes de metodo, formato de retorno) nao mudou — mudou de onde
+ * vem o dado, que era o gap G1: planejamento e consumo liam arvores
+ * diferentes.
  */
 class SequelizeItemEstruturaRepository extends ItemEstruturaRepository {
-  /** @inheritdoc */
-  public async create(data: Record<string, unknown>, transaction?: any): Promise<any> {
-    return ItemEstrutura.create(data, transaction ? { transaction } : undefined);
+  /**
+   * @inheritdoc
+   *
+   * Escrita direta em `item_estruturas` esta encerrada (G1). A criacao de
+   * estrutura passa a ser exclusividade do modulo de BOM, que e onde o
+   * controle de alteracao de engenharia (revisao/`superseded`) existe. O
+   * bloqueio de negocio, com mensagem e `details.rule`, mora em
+   * `CreateItemStructureUseCase` — este metodo e a ultima barreira, para o
+   * caso de alguem instanciar o repositorio direto.
+   */
+  public async create(_data: Record<string, unknown>, _transaction?: any): Promise<any> {
+    throw Object.assign(
+      new Error(
+        'Estrutura de produto nao e mais gravada em `item_estruturas` (gap G1). '
+        + 'Cadastre a estrutura pelo modulo de BOM (`POST /api/engineering/bom`), '
+        + 'que e a fonte unica lida pelo MRP e pela producao.',
+      ),
+      { statusCode: 422, rule: 'G1-ESTRUTURA-DUPLA' },
+    );
   }
 
   /** @inheritdoc */
   public async findActiveByParentId(itemPaiId: string): Promise<any[]> {
-    return ItemEstrutura.findAll({
-      where: { item_pai_id: itemPaiId, ativo: true },
-      include: [
-        { model: Item, as: 'itemComponente' },
-      ],
-      order: [['sequencia', 'ASC'], ['criado_em', 'ASC']],
-    });
+    return BomStructureProjection.listActiveEdgesByParent(String(itemPaiId));
   }
 
   /** @inheritdoc */
   public async listActiveEdges(): Promise<any[]> {
-    return ItemEstrutura.findAll({
-      where: { ativo: true },
-      order: [['item_pai_id', 'ASC'], ['sequencia', 'ASC']],
-    });
+    return BomStructureProjection.listActiveEdges();
   }
 
   /** @inheritdoc */
   public async hasPathBetween(fromItemId: string, toItemId: string): Promise<boolean> {
-    const edges = await ItemEstrutura.findAll({
-      where: { ativo: true },
-      attributes: ['item_pai_id', 'item_componente_id'],
-    });
-
-    const childrenByParent = new Map<string, string[]>();
-    for (const edge of edges) {
-      const parentId = String(edge.item_pai_id);
-      const childId = String(edge.item_componente_id);
-      const children = childrenByParent.get(parentId) ?? [];
-      children.push(childId);
-      childrenByParent.set(parentId, children);
-    }
-
-    const visited = new Set<string>();
-    const stack = [fromItemId];
-
-    while (stack.length > 0) {
-      const current = stack.pop() as string;
-      if (current === toItemId) {
-        return true;
-      }
-      if (visited.has(current)) {
-        continue;
-      }
-      visited.add(current);
-      for (const child of childrenByParent.get(current) ?? []) {
-        if (!visited.has(child)) {
-          stack.push(child);
-        }
-      }
-    }
-
-    return false;
+    return BomStructureProjection.hasPathBetween(String(fromItemId), String(toItemId));
   }
 
   /** @inheritdoc */
   public async hasActiveParentOrComponent(itemId: string): Promise<boolean> {
-    const count = await ItemEstrutura.count({
-      where: {
-        ativo: true,
-        [Op.or]: [
-          { item_pai_id: itemId },
-          { item_componente_id: itemId },
-        ],
-      },
-    });
-    return count > 0;
+    return BomStructureProjection.hasActiveParentOrComponent(String(itemId));
   }
 }
 

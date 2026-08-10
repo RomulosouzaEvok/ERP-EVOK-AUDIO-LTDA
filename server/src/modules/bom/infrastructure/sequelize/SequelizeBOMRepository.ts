@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { BillOfMaterial, BillOfMaterialItem, Product } = require('../../../../models/index');
+const { BillOfMaterial, BillOfMaterialItem, Product, sequelize } = require('../../../../models/index');
 const BOMRepository = require('../../domain/repositories/BOMRepository');
 const Validators = require('../../../../utils/validators');
 
@@ -140,6 +140,51 @@ class SequelizeBOMRepository extends BOMRepository {
   async update(id: number, data: Record<string, unknown>) {
     const [updated] = await BillOfMaterial.update(data, { where: { id } });
     return updated;
+  }
+
+  /**
+   * Ativa uma BOM e rebaixa para `superseded`, na MESMA transação, qualquer
+   * outra BOM ativa do mesmo produto.
+   *
+   * Sem atomicidade aqui existiria uma janela em que o produto fica com
+   * **zero** BOM ativa (se o `superseded` passasse e a ativação falhasse) —
+   * e, depois do G2, produto sem BOM ativa é produto que não consegue mais
+   * concluir OP. A outra janela, com **duas** ativas, é a que reabre o G1:
+   * `findOne({ status: 'active' })` passaria a devolver uma BOM arbitrária,
+   * e planejamento e consumo poderiam pegar revisões diferentes.
+   *
+   * Os itens da BOM rebaixada **não são tocados** — ela continua sustentando
+   * o que as OPs já concluídas consumiram (mesmo padrão do roteiro de
+   * manufatura no G5).
+   *
+   * @param {number} id - BOM a ativar.
+   * @param {number} productId - Produto dono da BOM.
+   * @param {Object} data - Demais campos aplicados junto da ativação.
+   * @returns {Promise<{ updated: number, supersededIds: number[] }>}
+   */
+  async activateExclusively(id: number, productId: number, data: Record<string, unknown> = {}) {
+    return sequelize.transaction(async (transaction: any) => {
+      const previouslyActive = await BillOfMaterial.findAll({
+        where: { product_id: productId, status: 'active', id: { [Op.ne]: id } },
+        attributes: ['id'],
+        transaction
+      });
+      const supersededIds = previouslyActive.map((bom: any) => Number(bom.id));
+
+      if (supersededIds.length > 0) {
+        await BillOfMaterial.update(
+          { status: 'superseded' },
+          { where: { id: { [Op.in]: supersededIds } }, transaction }
+        );
+      }
+
+      const [updated] = await BillOfMaterial.update(
+        { ...data, status: 'active' },
+        { where: { id }, transaction }
+      );
+
+      return { updated, supersededIds };
+    });
   }
 
   /**

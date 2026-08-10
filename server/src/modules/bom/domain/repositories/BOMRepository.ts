@@ -30,6 +30,7 @@ export interface IBOMRepository {
   listVersionsByProduct(productId: number): Promise<any[]>;
   findProductById(id: number): Promise<any | null>;
   update(id: number, data: Record<string, unknown>): Promise<any>;
+  activateExclusively(id: number, productId: number, data: Record<string, unknown>): Promise<any>;
   listItems(bomId: number): Promise<any[]>;
 }
 
@@ -77,6 +78,20 @@ class BOMRepository {
    * @returns {Promise<Object|null>}
    */
   async update(id: number, data: Record<string, unknown>): Promise<any> { // eslint-disable-line no-unused-vars
+    throw new Error('Não implementado');
+  }
+
+  /**
+   * Ativa uma BOM **e** rebaixa para `superseded`, na MESMA transação,
+   * qualquer outra BOM ativa do mesmo produto (G1 / ISO 9001 §8.5.6:
+   * um produto tem no máximo uma estrutura vigente).
+   *
+   * @param {number} id - BOM a ativar.
+   * @param {number} productId - Produto dono da BOM.
+   * @param {Object} data - Demais campos a aplicar junto da ativação.
+   * @returns {Promise<{ updated: number, supersededIds: number[] }>}
+   */
+  async activateExclusively(id: number, productId: number, data: Record<string, unknown>): Promise<any> { // eslint-disable-line no-unused-vars
     throw new Error('Não implementado');
   }
 

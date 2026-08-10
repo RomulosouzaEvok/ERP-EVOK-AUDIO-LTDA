@@ -1,14 +1,42 @@
 import MrpRepository from '../../domain/repositories/MrpRepository';
-const { ItemEstrutura, MrpOrdemPlanejada, Item } = require('../../../../models/index');
+const { MrpOrdemPlanejada, Item } = require('../../../../models/index');
 const { Op } = require('sequelize');
+// G1 (2026-08-10): o MRP deixou de ler `item_estruturas`. Planejamento e
+// consumo passam a ler a MESMA estrutura — ver `bomStructureProjection`.
+const BomStructureProjection = require('../../../../services/bomStructureProjection');
 
 class SequelizeMrpRepository extends MrpRepository {
+  /**
+   * Arestas da estrutura vigente, projetadas em UUID de item.
+   *
+   * **Mudou no G1 (2026-08-10).** Até aqui esta consulta lia
+   * `item_estruturas` — uma segunda árvore de produto, com mestre e chave
+   * diferentes da que a produção realmente consome e custeia
+   * (`bill_of_materials`). O planejamento comprava contra uma árvore e o
+   * chão de fábrica consumia contra outra, sem nada reconciliando as duas.
+   * Agora a fonte é única: a BOM ativa, projetada para UUID pelo crosswalk
+   * `products.code = items.codigo` que o resto do ERP já usa.
+   *
+   * @returns Arestas pai→componente da BOM ativa.
+   */
   public async listActiveEdges(): Promise<any[]> {
-    return ItemEstrutura.findAll({
-      where: { ativo: true },
-      attributes: ['item_pai_id', 'item_componente_id', 'quantidade', 'perda_percentual', 'ativo'],
-      raw: true,
-    });
+    return BomStructureProjection.listActiveEdges();
+  }
+
+  /**
+   * Arestas de BOM ativa que o MRP **não consegue enxergar** porque o
+   * produto não tem item canônico correspondente (`products.code` sem
+   * `items.codigo`).
+   *
+   * Existe para que o buraco do crosswalk seja visível em vez de virar
+   * planejamento silenciosamente incompleto — que é exatamente o defeito
+   * que o G1 fecha.
+   *
+   * @returns Lista de lacunas de catálogo (vazia quando a projeção é total).
+   */
+  public async listStructureGaps(): Promise<any[]> {
+    const { unmapped } = await BomStructureProjection.listActiveStructure();
+    return unmapped;
   }
 
   public async upsertPlannedOrders(orders: Record<string, unknown>[], transaction?: any): Promise<any[]> {

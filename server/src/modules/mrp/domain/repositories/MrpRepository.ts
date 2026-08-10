@@ -5,9 +5,21 @@
  */
 
 class MrpRepository {
-  /** Lista arestas ativas da estrutura canonica. */
+  /**
+   * Lista arestas ativas da estrutura de produto vigente (G1: a MESMA que a
+   * producao consome e custeia — `bill_of_materials`, projetada em UUID).
+   */
   public async listActiveEdges(): Promise<any[]> {
     throw new Error('MrpRepository.listActiveEdges nao implementado.');
+  }
+
+  /**
+   * Lista lacunas de catalogo: arestas de BOM ativa invisiveis ao MRP porque
+   * o produto nao tem item canonico correspondente (`products.code` sem
+   * `items.codigo`). Ver `services/bomStructureProjection`.
+   */
+  public async listStructureGaps(): Promise<any[]> {
+    throw new Error('MrpRepository.listStructureGaps nao implementado.');
   }
 
   /** Persiste ordens planejadas. */

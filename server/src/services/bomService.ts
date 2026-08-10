@@ -141,23 +141,64 @@ class BomService {
 
     // Valida se todos os componentes existem
     for (const item of items) {
+      // G1: auto-referência direta (produto componente de si mesmo) é ciclo
+      // de profundidade 1. `explodeBOM` já barrava isso, mas só na hora de
+      // explodir — ou seja, a BOM entrava no banco e só quebrava depois, na
+      // liberação/conclusão da OP. Barrar na escrita é mais barato e evita
+      // que o produto fique com uma estrutura vigente inexplodível (que,
+      // depois do G2, é produto que não conclui OP).
+      if (String(item.component_product_id) === String(product_id)) {
+        throw Object.assign(
+          new Error(
+            `O produto "${product.name}" não pode ser componente da própria estrutura. `
+            + 'Isso é um ciclo: explodir a BOM entraria em recursão infinita.',
+          ),
+          { statusCode: 422, rule: 'G1-BOM-AUTO-REF' },
+        );
+      }
+
       const component = await Product.findByPk(item.component_product_id);
       if (!component) {
         throw Object.assign(new Error(`Componente ID ${item.component_product_id} não encontrado`), { statusCode: 404 });
       }
     }
 
-    // Desativa BOMs ativas anteriores para este produto (versionamento)
-    await BillOfMaterial.update(
-      { status: 'superseded' },
-      { where: { product_id, status: 'active' } }
-    );
+    const newRevision = revision || '00';
 
-    // Cria BOM com os itens em transação
+    // G1 (ISO 9001 §8.5.6): a revisão identifica a versão da estrutura. Duas
+    // revisões com o mesmo rótulo tornam impossível dizer contra qual delas
+    // uma OP rodou — que é justamente o registro que a norma exige.
+    const duplicatedRevision = await BillOfMaterial.findOne({
+      where: { product_id, revision: newRevision, status: { [Op.ne]: 'inactive' } }
+    });
+    if (duplicatedRevision) {
+      throw Object.assign(
+        new Error(
+          `Já existe a revisão "${newRevision}" da estrutura de "${product.name}" (BOM #${duplicatedRevision.id}). `
+          + 'Informe uma revisão nova para a alteração de engenharia — é ela que identifica, depois, contra qual '
+          + 'versão da estrutura cada ordem de produção rodou.',
+        ),
+        { statusCode: 409, rule: 'G1-BOM-REV-DUP' },
+      );
+    }
+
+    // Cria BOM com os itens em transação.
+    //
+    // G1: o `superseded` da revisão anterior mora DENTRO da transação. Antes
+    // ele rodava solto, antes dela: se a criação falhasse depois (componente
+    // inválido, erro de enum, queda de conexão), o produto ficava com ZERO
+    // BOM ativa — e, depois do G2, produto sem BOM ativa não conclui OP. Um
+    // cadastro malsucedido derrubava a produção de um produto que estava
+    // funcionando.
     const result = await sequelize.transaction(async (transaction: Transaction) => {
+      await BillOfMaterial.update(
+        { status: 'superseded' },
+        { where: { product_id, status: 'active' }, transaction }
+      );
+
       const bom = await BillOfMaterial.create({
         product_id,
-        revision: revision || '00',
+        revision: newRevision,
         revision_notes: revision_notes || null,
         notes: notes || null,
         status: 'active',

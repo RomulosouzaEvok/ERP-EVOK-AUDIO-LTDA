@@ -447,3 +447,139 @@ graph TD
 - Quantidade deve ser maior que zero (mínimo 0.0001)
 - Percentual de perda técnica (`scrap_percentage`) entre 0 e 100%
 - Nível hierárquico (`bom_level`) entre 0 e 10 — a explosão recursiva para automaticamente em profundidade 10 para evitar loop infinito em BOM mal cadastrada (`BomService.MAX_BOM_DEPTH`)
+
+---
+
+## 🧬 G1 — Fonte única da estrutura de produto (2026-08-10)
+
+### O problema que existia
+
+O ERP carregava **duas estruturas de produto paralelas**, com mestres e
+chaves diferentes, e nada reconciliava as duas:
+
+| Estrutura | Mestre | Chave | Quem lia |
+|---|---|---|---|
+| `item_estruturas` | `items` | UUID | MRP (`SequelizeMrpRepository.listActiveEdges`), explosão de item (`GET /api/items/:id/estrutura/explode`) |
+| `bill_of_materials` | `products` | INTEGER | `BomService` → criação, liberação (reserva), **conclusão** (consumo + custeio) da OP |
+
+A única ponte entre elas era casamento de string (`products.code =
+items.codigo`) — e ela **nunca foi exercida para estrutura**. Consequência
+prática: o planejamento comprava contra uma árvore e o chão de fábrica
+consumia e custeava contra outra, **sem nada acusando a divergência**.
+
+### A decisão: `bill_of_materials` sobrevive
+
+Tomada com o código, não por preferência. O dono confirmou (D-B, 2026-08-10)
+que **ninguém mantinha nenhuma das duas ainda** — conferido no banco: as 4
+linhas de `item_estruturas` e as 2 BOMs existentes são resíduo de teste
+(`PA-TESTE-001`, `E2E-*`), zero engenharia real. Isso rebaixou o risco de
+migração de base viva para **escolha técnica**.
+
+1. **É a única estrutura que governa dinheiro e estoque.** A liberação da OP
+   reserva material por ela; a conclusão consome, baixa lote e **cifra o
+   custo do produto acabado** por ela. Depois do **G2**, concluir OP sem BOM
+   ativa falha — ela é item obrigatório da corrente.
+2. **Sua chave é a que o resto do sistema usa.** `inventory_movements`,
+   `lot_controls`, `stock_reservations`, `sale_items`,
+   `purchase_order_items` e `production_orders` são todas `products.id`
+   (INTEGER). `item_estruturas` era a única ilha de UUID da cadeia física.
+3. **O mestre de `item_estruturas` não é sistema de registro de nada
+   transacional.** Conferido no banco real: `items.estoque_atual` é
+   `0.000000` em **100% das linhas**, enquanto `products.quantity` carrega os
+   saldos. Tanto que o próprio MRP abandona `items` quando precisa de número
+   — `SequelizeItemRepository.listMrpInventoryPositions` faz o crosswalk para
+   `products` para ler saldo, reservado, mínimo e lead time.
+4. **Já tem o vocabulário de controle de alteração de engenharia**
+   (`draft`/`active`/`inactive`/`superseded`, `revision`, `approved_by`,
+   `approval_date`) que a ISO 9001 §8.5.6 exige — o mesmo ciclo que o **G5**
+   exercitou em roteiro de manufatura.
+
+> **Sobre "Item core intocado + extensões por domínio" (`CLAUDE.md` §7):** a
+> decisão segue valendo para **cadastro** — código, descrição, tipo, custo
+> padrão, catálogo item×fornecedor, requisição, RFQ continuam em `items`. O
+> que muda é só a **estrutura**: ela não é extensão de cadastro, é regra de
+> consumo e de custo, e passa a morar onde o consumo e o custo já moram.
+
+### Como a convergência foi feita (incremental, sem big-bang)
+
+**Nenhuma linha foi copiada, migrada ou apagada.** A convergência é de
+**leitura**: `server/src/services/bomStructureProjection.ts` projeta a BOM
+ativa (em `products.id`) para o formato de aresta em UUID que o motor de MRP
+já consumia, usando o crosswalk `products.code = items.codigo` que o resto do
+ERP já usa (recebimento COMEX, conversão de requisição, adjudicação de RFQ,
+movimentação de estoque). Como a projeção é feita na hora, **não existe
+réplica para sair de sincronia**.
+
+Passaram a ler a projeção:
+
+- `SequelizeMrpRepository.listActiveEdges` (planejamento)
+- `SequelizeItemEstruturaRepository` inteiro — inclusive o guarda de
+  inativação de item (`hasActiveParentOrComponent`), que antes olhava só a
+  tabela vazia e portanto estava **cego para a BOM de produção**: dava para
+  inativar um item que é componente de uma BOM ativa
+
+Escrita em `item_estruturas` foi encerrada: `POST /api/items/:id/estrutura`
+responde **422 `G1-ESTRUTURA-DUPLA`** apontando para
+`POST /api/engineering/bom`. Aceitar em silêncio seria pior que recusar — o
+usuário cadastrava a árvore, recebia 201, e a produção continuava sem
+enxergar nada.
+
+#### Lacunas de catálogo são reportadas, não engolidas
+
+Se um produto de BOM ativa não tiver `items.codigo` correspondente, a aresta
+não existe para o MRP. Engolir isso recriaria o G1 por outro caminho. Por
+isso a projeção devolve `unmapped` junto com `edges`, exposto em
+`MrpRepository.listStructureGaps`.
+
+**Isso já acontece no banco de dev hoje:** a BOM #18 tem 2 componentes e o
+segundo (`E2E-MP2-1786338099090`) não tem item canônico — invisível ao MRP,
+visível na produção. É exatamente o sintoma que o G1 fecha.
+
+### Controle de alteração de engenharia (ISO 9001 §8.5.6)
+
+Mesmo com fonte única, a estrutura ainda podia se contradizer **entre
+revisões**: `PUT /api/engineering/bom/:id` era um `UPDATE` cru. Dava para
+reescrever a revisão de uma BOM vigente, ressuscitar uma `superseded` e —
+o pior — marcar `status: 'active'` numa **segunda** BOM do mesmo produto. Com
+duas ativas, `findOne({ product_id, status: 'active' })` devolve uma revisão
+**arbitrária**, e planejamento e consumo voltam a discordar.
+
+Vale agora o mesmo ciclo do G5 (roteiro de manufatura):
+
+| Regra | Código | Comportamento |
+|---|---|---|
+| BOM vigente é imutável no conteúdo | `G1-BOM-ATIVA-IMUTAVEL` | Mudar `revision`/`revision_notes`/`notes` de uma BOM `active` → 422. Mudança exige nova revisão (`POST /api/engineering/bom`) |
+| BOM substituída é intocável | `G1-BOM-SUPERSEDED-IMUTAVEL` | Qualquer alteração ou reativação de uma `superseded` → 422. Ela sustenta o consumo e o custo das OPs que rodaram com ela |
+| Ciclo de vida só avança | `G1-BOM-STATUS-INVALIDO` | De `active` só para `inactive` ou `superseded`; nunca de volta para `draft` |
+| Uma vigente por produto | — | Ativar rebaixa a anterior para `superseded` **na mesma transação** (`SequelizeBOMRepository.activateExclusively`), com os componentes intactos. Rede de baixo no banco: índice único parcial `uq_bill_of_materials_active_per_product` |
+| Rótulo de revisão único | `G1-BOM-REV-DUP` | Duas revisões com o mesmo rótulo tornam impossível dizer contra qual delas uma OP rodou |
+| Produto não é componente de si mesmo | `G1-BOM-AUTO-REF` | Ciclo de profundidade 1. Antes só estourava na explosão, com a BOM já gravada |
+
+**Bug corrigido de quebra:** o `superseded` da revisão anterior rodava **fora
+da transação**, antes dela. Se a criação falhasse depois (componente
+inválido, erro de enum, queda de conexão), o produto ficava com **zero** BOM
+ativa — e, desde o G2, produto sem BOM ativa **não conclui OP**. Um cadastro
+malsucedido derrubava a produção de um produto que estava funcionando.
+
+### O que ficou fora (decisão de negócio pendente)
+
+**Amarrar a OP à revisão de BOM que ela executou** (`production_orders.bom_id`).
+Hoje a conclusão explode a BOM **vigente no momento da conclusão** — se a
+engenharia revisar a estrutura no meio de uma OP aberta, ela é consumida e
+custeada pela revisão nova, não pela que foi reservada na liberação.
+
+É o mesmo gap que o G5 registrou para roteiro, e pela mesma razão: é coluna
+nova **mais** decisão de negócio (a OP em curso segue a revisão antiga ou
+migra para a nova?), e implementá-la mexe em
+`ChangeProductionOrderStatusUseCase`, que está sob trabalho concorrente
+(G2/G3/G7). **Pré-requisito honesto se o Fisco ou a auditoria ISO exigirem
+reconstituir o produto COMO FABRICADO.**
+
+### Passos seguintes da convergência
+
+| # | Passo | Status |
+|---|---|---|
+| 1 | Leitura única (MRP + explosão de item passam a ler a BOM ativa projetada); escrita paralela bloqueada; controle de revisão ISO | ✅ 2026-08-10 |
+| 2 | `production_orders.bom_id` — registro "como fabricado" | ⏸️ aguarda decisão de negócio |
+| 3 | Tela: `ItemMasterDetailPage` deixa de oferecer cadastro de estrutura e aponta para o módulo de BOM | 🔧 pendente (`client/`) |
+| 4 | `DROP TABLE item_estruturas` na fase de contração do schema, junto com as tabelas órfãs do schema PT | ⏸️ depois da baseline congelada |
