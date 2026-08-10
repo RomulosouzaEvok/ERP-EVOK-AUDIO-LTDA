@@ -39,8 +39,8 @@ const Department = sequelize.define('Department', {
   code: { type: DataTypes.STRING(10), allowNull: false, comment: 'Código único do departamento' },
   name: { type: DataTypes.STRING(100), allowNull: false, comment: 'Nome do departamento' },
   sigla: { type: DataTypes.STRING(10), allowNull: false, comment: 'Sigla (DIR, RH, ENG, etc.)' },
-  description: DataTypes.TEXT,
-  manager_id: { type: DataTypes.INTEGER, comment: 'FK → employees.id (gestor)' },
+  description: { type: DataTypes.TEXT, allowNull: true },
+  manager_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → employees.id (gestor)' },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
   cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = departamento sem centro de custo mapeado)' }
 }, {

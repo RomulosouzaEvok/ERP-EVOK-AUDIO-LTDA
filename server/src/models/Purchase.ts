@@ -54,7 +54,10 @@ const Purchase = sequelize.define('Purchase', {
     comment: 'G11: origem declarada (national|import). Escalation-only — suppliers.is_foreign prevalece'
   },
   requisition_id: DataTypes.INTEGER,
-  order_date: { type: DataTypes.DATEONLY, defaultValue: DataTypes.NOW },
+  // NOT NULL no banco de proposito: pedido de compra sem data e invalido. Os
+  // 3 pontos de INSERT gravam `order_date: new Date()` (ver migration
+  // 20260810-000033, §"NAO afrouxadas").
+  order_date: { type: DataTypes.DATEONLY, allowNull: false, defaultValue: DataTypes.NOW, comment: 'Data de emissão do pedido' },
   expected_date: DataTypes.DATEONLY,
   delivery_date: DataTypes.DATEONLY,
   freight_type: { type: DataTypes.ENUM('cif', 'fob'), comment: 'CIF=fornecedor responsável, FOB=comprador responsável' },

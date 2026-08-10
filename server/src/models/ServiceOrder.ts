@@ -39,23 +39,26 @@ const ServiceOrder = sequelize.define('ServiceOrder', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   order_number: { type: DataTypes.STRING(20), allowNull: false, unique: true, comment: 'Nº da OS' },
   client_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → clients.id' },
-  product_id: { type: DataTypes.INTEGER, comment: 'FK → products.id' },
-  equipment_description: DataTypes.TEXT,
-  reported_issue: DataTypes.TEXT,
-  diagnosed_issue: DataTypes.TEXT,
-  service_performed: DataTypes.TEXT,
+  product_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → products.id' },
+  equipment_description: { type: DataTypes.TEXT, allowNull: true },
+  reported_issue: { type: DataTypes.TEXT, allowNull: true },
+  diagnosed_issue: { type: DataTypes.TEXT, allowNull: true },
+  service_performed: { type: DataTypes.TEXT, allowNull: true },
   labor_cost: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
   total_amount: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
   status: { type: DataTypes.ENUM('open', 'diagnosing', 'in_progress', 'waiting_parts', 'completed', 'delivered', 'canceled'), defaultValue: 'open' },
   priority: { type: DataTypes.ENUM('low', 'normal', 'high', 'urgent'), defaultValue: 'normal' },
-  entry_date: { type: DataTypes.DATEONLY, defaultValue: DataTypes.NOW },
-  completion_date: DataTypes.DATEONLY,
-  delivery_date: DataTypes.DATEONLY,
-  technician_id: { type: DataTypes.INTEGER, comment: 'FK → users.id' },
-  responsible_id: { type: DataTypes.INTEGER, comment: 'FK → users.id' },
+  // NOT NULL no banco de proposito: toda OS tem data de entrada do
+  // equipamento. `defaultValue` e aplicado no cliente pelo Sequelize, entao o
+  // INSERT nunca omite (ver migration 20260810-000033, §"NAO afrouxadas").
+  entry_date: { type: DataTypes.DATEONLY, allowNull: false, defaultValue: DataTypes.NOW, comment: 'Data de entrada do equipamento' },
+  completion_date: { type: DataTypes.DATEONLY, allowNull: true },
+  delivery_date: { type: DataTypes.DATEONLY, allowNull: true },
+  technician_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → users.id' },
+  responsible_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → users.id' },
   warranty_days: { type: DataTypes.INTEGER, defaultValue: 90 },
-  notes: DataTypes.TEXT,
-  created_by: { type: DataTypes.INTEGER, comment: 'FK → users.id' }
+  notes: { type: DataTypes.TEXT, allowNull: true },
+  created_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → users.id' }
 }, {
   tableName: 'service_orders',
   underscored: true,

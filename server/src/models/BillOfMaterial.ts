@@ -39,7 +39,10 @@ const BillOfMaterial = sequelize.define('BillOfMaterial', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true, comment: 'Identificador único da BOM' },
   product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → Product.id. Produto ao qual esta BOM pertence' },
   revision: { type: DataTypes.STRING(10), defaultValue: '00', comment: 'Revisão da BOM (00, 01, A, B...)' },
-  revision_date: { type: DataTypes.DATEONLY, defaultValue: DataTypes.NOW, comment: 'Data de efetivação desta revisão' },
+  // NOT NULL no banco de proposito: e a data que da rastreabilidade a versao
+  // da estrutura. `defaultValue` e aplicado no cliente pelo Sequelize, entao o
+  // INSERT nunca omite (ver migration 20260810-000033, §"NAO afrouxadas").
+  revision_date: { type: DataTypes.DATEONLY, allowNull: false, defaultValue: DataTypes.NOW, comment: 'Data de efetivação desta revisão' },
   revision_notes: { type: DataTypes.TEXT, comment: 'Notas de alteração da revisão' },
   status: { type: DataTypes.ENUM('draft', 'active', 'inactive', 'superseded'), defaultValue: 'draft', comment: 'Status: draft=rascunho, active=vigente, inactive=desativada, superseded=substituída' },
   created_by: { type: DataTypes.INTEGER, comment: 'FK → User.id (criador)' },

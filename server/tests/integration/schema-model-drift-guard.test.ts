@@ -104,15 +104,27 @@ describeIntegration('Guarda de drift schema × model', () => {
         ? model.getTableName()
         : model.getTableName().tableName;
 
+      // Vários atributos podem apontar para a MESMA coluna física. Acontece
+      // quando o model declara o atributo em camelCase com `field:` e a
+      // associação em `src/models/index.ts` usa `foreignKey: '<nome_da_coluna>'`
+      // em vez do nome do atributo: o Sequelize então cria um segundo atributo,
+      // homônimo da coluna, com `allowNull` no default (`true`). Esse atributo
+      // fantasma não descreve o que a aplicação grava — quem grava é o atributo
+      // declarado. Por isso a nulabilidade é avaliada por COLUNA, tomando a
+      // declaração mais estrita: se qualquer atributo mapeado para a coluna diz
+      // `allowNull: false`, a coluna está coberta.
+      const strictestByColumn = new Map<string, boolean>();
       for (const [attrName, attr] of Object.entries<any>(model.rawAttributes)) {
         const columnName = attr.field || attrName;
+        const modelAllowsNull = attr.allowNull !== false;
+        const previous = strictestByColumn.get(columnName);
+        strictestByColumn.set(columnName, previous === false ? false : modelAllowsNull);
+      }
+
+      for (const [columnName, modelAllowsNull] of strictestByColumn) {
         const key = `${tableName}.${columnName}`;
         const column = physical.get(key);
         if (!column || isException(tableName, columnName)) continue;
-
-        // O model considera a coluna opcional quando `allowNull` é `true` ou
-        // foi omitido (o default do Sequelize é permitir nulo).
-        const modelAllowsNull = attr.allowNull !== false;
 
         // Coluna obrigatória COM default nunca quebra um INSERT que a omite,
         // então não é um defeito — a menos que o código passe NULL explícito,
