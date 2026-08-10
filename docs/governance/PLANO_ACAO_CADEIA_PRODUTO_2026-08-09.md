@@ -84,23 +84,69 @@ Estes causam dado errado hoje, e a correção é local e testável. **Executar p
 
 ---
 
-## 4. Decisões pendentes do dono
+## 4. Decisões do dono — TOMADAS em 2026-08-10
 
-As 6 perguntas do artefato de fluxo. **Combinado:** onde houver lei ou norma que
-já responda, a recomendação chega fechada com a fonte e o dono apenas valida.
+Registro das respostas dadas pelo dono do produto. Base normativa em
+`docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`.
 
-1. Produção sob encomenda vs. para estoque (e o papel do Plano Mestre)
-2. Unificação da estrutura de produto + quem aprova alteração de engenharia
-3. Gate de qualidade e o momento da baixa de estoque
-4. Faixas de alçada de compra e quem aprova
-5. Apontamento obrigatório
-6. Automação do planejamento
+### ✅ D-A — Seguir a lei nas 3 decisões com resposta normativa
+Autorizado implementar as três, **isoladas, uma por vez**, com caminho de
+migração do dado existente:
+- **G4** apontamento obrigatório (Bloco K) — **depende do G5** (API de roteiro):
+  exigir apontamento sem poder cadastrar roteiro seria regra inexequível.
+- **G9** baixa de estoque migra da confirmação do pedido para a **expedição**.
+- **G13** conta a pagar nasce no **recebimento**; conta a receber, na **NF-e**.
 
-Perguntas que dependem de informação da empresa (para o dono ou o contador):
-- Regime tributário e enquadramento no **SPED Bloco K**
-- A empresa é ou pretende ser **certificada ISO 9001**? Há exigência de cliente OEM?
-- Há auditoria externa das demonstrações financeiras?
-- Política de alçada de compra praticada hoje, fora do sistema
+### ✅ D-B — Unificação da BOM: ninguém mantém nenhuma das duas ainda
+**Isto muda o risco do G1 de alto para baixo.** Não há base de produção a
+preservar, então deixa de ser migração e vira **escolha técnica**: escolher a
+estrutura tecnicamente melhor, migrar o que existir, e aposentar a outra.
+Confirmar o volume real antes de agir (o comparador somente-leitura resolve).
+
+### ✅ D-C — Alçada de compra: a regra é por ORIGEM, não só por valor
+Descoberta importante — todos assumiam faixa de valor; a regra real é outra:
+
+| Origem | Regra |
+|---|---|
+| **Nacional** | até R$ 500.000 segue direto · **acima de R$ 500.000 exige a diretoria** |
+| **Importação** | **sempre exige a diretoria**, em qualquer valor |
+
+Contexto: existem pedidos de importação na casa de **R$ 1 milhão**.
+⚠️ Registrado como risco residual: abaixo de R$ 500.000 no nacional **quem
+solicita ainda pode aprovar** (sem segregação de função). Não foi pedida
+segregação; fica como recomendação de controle interno, não como implementação.
+
+### ✅ D-D — Aviso de férias: manter aceitando com alerta
+A CLT (Art. 135 caput) exige 30 dias de antecedência, mas o sistema continua
+**aceitando prazo menor** e registrando o alerta de descumprimento — para não
+travar a operação quando o funcionário pede em cima da hora.
+Divergência lei × prática **consciente e registrada**, não um defeito.
+
+### ✅ D-E — Janela pedido → nota fiscal: mesmo dia
+**Isto derruba o risco do G9.** Quase não existe pedido confirmado e não
+faturado parado, então mover a baixa de estoque para a expedição tem migração
+quase indolor. Ainda assim vai isolada.
+
+### ✅ D-F — Existe PCP formal
+Há quem exerça o planejamento, então a camada de **Plano Mestre (MPS)** faz
+sentido e tem quem a opere. Confirma a recomendação do G17: **não** ligar
+pedido de venda diretamente à ordem de produção.
+
+---
+
+### 🟡 Ainda pendente do dono
+- **D10** — a empresa é ou pretende ser certificada **ISO 9001**? Algum cliente
+  OEM exige plano de amostragem próprio? *(define o rigor do registro de
+  inspeção do G7 e do controle de alteração de engenharia)*
+- **CNAE no cadastro de cliente** — deve passar a ser coletado? Hoje o campo
+  nem existe no schema de criação, e não se aplica a pessoa física.
+- **Conta a receber avulsa** (sem venda vinculada) é caso legítimo de negócio?
+
+### 🟡 Pendente do contador
+- **C1** CNAE efetivamente escriturado e faturamento do segundo exercício anterior
+- **C4** a empresa escritura hoje o Livro modelo 3? *(só o Bloco K completo desobriga)*
+- **C9** destino das contas a pagar já criadas na aprovação e ainda não recebidas
+- **C11** a empresa é auditada ou tem exigência de banco sobre os números?
 
 ---
 
