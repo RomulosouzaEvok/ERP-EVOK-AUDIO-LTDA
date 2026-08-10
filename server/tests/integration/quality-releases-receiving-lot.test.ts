@@ -1,30 +1,6 @@
-import jwt from 'jsonwebtoken';
-
-import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
-import { getJwtRuntimeConfig, JWT_ISSUER, JWT_AUDIENCE } from '../../src/config/runtimeEnv';
+import { api, approverToken, authToken, hasIntegrationPrerequisites, mintToken } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
-
-/**
- * Emite um token JWT diretamente (mesma tecnica de `scripts/run-api-suite.cjs`
- * para o token admin), sem passar por `POST /api/auth/login` — evita
- * consumir o `authLimiter` (10 tentativas/15min por IP, `server/app.ts`)
- * compartilhado com as demais suites de integracao no mesmo processo. O
- * middleware `authenticate` recarrega o usuario/perfil do banco a cada
- * request (nunca confia em claims do token), entao o caminho de autorizacao
- * exercitado e identico ao de um token emitido via login real.
- *
- * @param user - Usuario (`id`, `passwordVersion` opcional) para o qual emitir o token.
- * @returns Token JWT valido por 1 hora.
- */
-function mintToken(user: { id: number; passwordVersion?: number | null }): string {
-  const { secret } = getJwtRuntimeConfig();
-  return jwt.sign({ id: user.id, passwordVersion: user.passwordVersion ?? 1 }, secret, {
-    expiresIn: '1h',
-    issuer: JWT_ISSUER,
-    audience: JWT_AUDIENCE,
-  });
-}
 
 /**
  * Fecha o item pendente do Bloco 1 (`docs/governance/TODO.md`, Bloco 1.5):
@@ -96,6 +72,10 @@ describeIntegration('E2E: Qualidade libera lote criado pelo Recebimento (UC-37, 
 
     const suffix = Date.now();
     const profile = await AccessProfile.create({ nome: `Qualidade UC37 ${suffix}`, active: true });
+    // `approve` cobre tambem `operate`, entao o mesmo usuario registra a
+    // inspecao (G7, `qualidade:operate`) e autoriza a liberacao
+    // (`qualidade:approve`) — que e como a ISO 9001 §8.6 admite, desde que
+    // ambos os atos fiquem rastreados, e ficam.
     await AccessProfilePermission.create({ accessProfileId: profile.id, module: 'qualidade', level: 'approve' });
 
     const email = `qualidade-uc37-${suffix}@evok.local`;
@@ -126,9 +106,10 @@ describeIntegration('E2E: Qualidade libera lote criado pelo Recebimento (UC-37, 
     const purchaseId = created.body.data.id;
     const itemId = created.body.data.items[0].id;
 
-    for (const status of ['approved', 'sent']) {
-      await api().put(`/api/purchases/${purchaseId}/status`).set('Authorization', `Bearer ${adminToken}`).send({ status }).expect(200);
-    }
+    // `approved` sai do SEGUNDO administrador (segregacao de funcao D-K,
+    // 2026-08-10): o autor do pedido nao pode aprova-lo.
+    await api().put(`/api/purchases/${purchaseId}/status`).set('Authorization', `Bearer ${approverToken()}`).send({ status: 'approved' }).expect(200);
+    await api().put(`/api/purchases/${purchaseId}/status`).set('Authorization', `Bearer ${adminToken}`).send({ status: 'sent' }).expect(200);
 
     // 1) Recebimento (usuario com apenas 'recebimento':'operate') recebe o
     // pedido - cria/atualiza o LotControl em status='quarantine'.
@@ -170,6 +151,25 @@ describeIntegration('E2E: Qualidade libera lote criado pelo Recebimento (UC-37, 
     // sucesso - RBAC por modulo nao impede a colaboracao entre modulos
     // diferentes no fluxo real (UC-37).
     const qualityToken = await createQualityUserToken();
+
+    // G7 (2026-08-10, ISO 9001 §8.6): a liberacao deixou de ser um clique —
+    // exige uma inspecao registrada e APROVADA sobre o lote. O ato de
+    // inspecionar tambem pertence ao modulo `qualidade`, o que reforca o
+    // ponto do UC-37: quem recebeu o material nao inspeciona nem libera.
+    const inspection = await api()
+      .post('/api/quality/inspections')
+      .set('Authorization', `Bearer ${qualityToken}`)
+      .send({
+        lot_id: lot.id,
+        stage: 'incoming',
+        acceptance_criteria: 'Inspecao visual e dimensional conforme desenho (teste de integracao UC-37)',
+        sample_size: 7,
+        defects_found: 0,
+        verdict: 'approved',
+      });
+    expect(inspection.status).toBe(201);
+    expect(inspection.body.data.verdict).toBe('approved');
+
     const release = await api()
       .post(`/api/inventory/lots/${lot.id}/release`)
       .set('Authorization', `Bearer ${qualityToken}`)

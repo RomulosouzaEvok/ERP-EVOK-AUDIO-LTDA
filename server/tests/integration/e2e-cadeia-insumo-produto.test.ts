@@ -34,9 +34,28 @@
  * Todo dado criado usa o prefixo `E2E-` (ver `SUFFIX`), para permitir
  * limpeza posterior — ver `docs/governance/VALIDACAO_CADEIA_PRODUTO_2026-08-10.md`.
  *
+ * ## Revisao de 2026-08-10 (tarde): DOIS usuarios, nao um
+ *
+ * A versao original desta suite foi escrita quando **um unico usuario fazia
+ * tudo** — pedia e aprovava a propria compra. Os 17 gaps entregues neste dia
+ * tornaram esse roteiro impossivel, e corretamente:
+ *
+ * | Regra | O que mudou | Efeito aqui |
+ * |---|---|---|
+ * | **D-K** (segregacao de funcao) | aprovador ≠ solicitante, e `admin` NAO isenta | requisicao/pedido/importacao passam a ser aprovados por `approverToken()` |
+ * | **G11-COMEX** | importacao exige aprovacao da diretoria antes do embarque | novo passo `POST /:id/approve` antes do `shipped` |
+ * | **G7** (ISO 9001 §8.6) | liberar lote exige inspecao registrada e aprovada | nova etapa 5b antes da liberacao da Qualidade |
+ * | **G1** | estrutura de produto tem fonte unica (`bill_of_materials`) | o gate G16 monta a arvore por BOM, nao mais por `item_estruturas` |
+ *
+ * Os contornos BUG-01..BUG-04 que existiam aqui foram **removidos**: as
+ * quatro colunas `NOT NULL` indevidas foram corrigidas na migration
+ * `20260810-000028`, e os caminhos de API (BOM, cliente, venda, confirmacao)
+ * voltaram a funcionar. Manter contornos vivos depois da correcao esconderia
+ * a proxima regressao.
+ *
  * @module tests/integration/e2e-cadeia-insumo-produto
  */
-import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
+import { api, approverToken, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
@@ -178,71 +197,68 @@ function expectStatus<T extends { status: number; body: any }>(response: T, expe
 }
 
 /**
- * CONTORNO do achado **BUG-01**: cria uma BOM ativa com um componente
- * escrevendo direto no banco.
+ * Cria uma BOM ativa de um componente **pela API real**
+ * (`POST /api/engineering/bom`).
  *
- * `POST /api/engineering/bom` responde 500 porque
- * `bill_of_material_items.parent_item_id`, `.notes` e
- * `.alternative_product_id` estao `NOT NULL` no banco real (dev e teste) e
- * o `BomService` grava `NULL` nas tres. Aqui `parent_item_id` recebe o
- * PROPRIO id da linha (auto-referencia satisfaz a FK no mesmo INSERT) e
- * `alternative_product_id` recebe o proprio componente — valores sem
- * significado de negocio, escolhidos apenas para satisfazer as restricoes
- * indevidas e destravar as estacoes seguintes da cadeia.
+ * Ate 2026-08-10 este helper escrevia direto no banco, contornando o achado
+ * BUG-01 (`bill_of_material_items.parent_item_id`/`.notes`/
+ * `.alternative_product_id` estavam `NOT NULL` e o `BomService` gravava
+ * `NULL` nos tres, entao QUALQUER BOM respondia 500). A migration
+ * `20260810-000028` corrigiu as colunas; o contorno virou divida — e um
+ * contorno vivo depois da correcao esconde a proxima regressao. Agora o
+ * helper usa o endpoint, e uma quebra do cadastro de BOM derruba o teste em
+ * vez de ser mascarada.
  *
  * @param productId - Produto acabado dono da BOM.
  * @param componentId - Produto componente.
  * @param quantityPerUnit - Quantidade do componente por unidade produzida.
+ * @param token - JWT do usuario que cadastra a estrutura.
  * @returns Id da BOM criada.
  */
-async function createBomDirectly(productId: number, componentId: number, quantityPerUnit: number): Promise<number> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { BillOfMaterial, Product, sequelize } = require('../../src/models/index');
-
-  const component = await Product.findByPk(componentId);
-  const unitCost = Number(component.cost_price ?? 0);
-
-  const bom = await BillOfMaterial.create({
-    product_id: productId,
-    revision: 'E2E',
-    revision_date: new Date().toISOString().slice(0, 10),
-    revision_notes: 'Contorno BUG-01 (validacao E2E da cadeia do produto)',
-    notes: 'Contorno BUG-01 (validacao E2E da cadeia do produto)',
-    status: 'active',
-    total_components: 1,
-    total_cost: quantityPerUnit * unitCost,
-    manufacturing_time_minutes: 1,
-  });
-
-  const [[{ nextval }]] = await sequelize.query("SELECT nextval('bill_of_material_items_id_seq') AS nextval");
-  const itemId = Number(nextval);
-
-  await sequelize.query(
-    `INSERT INTO bill_of_material_items
-       (id, bom_id, component_product_id, quantity, unit, bom_level, parent_item_id, sequence_order,
-        component_type, scrap_percentage, unit_cost, total_cost, notes, alternative_product_id,
-        is_critical, created_at, updated_at)
-     VALUES (:id, :bomId, :componentId, :quantity, 'un', 1, :id, 1,
-             'raw_material', 0, :unitCost, :totalCost, 'Contorno BUG-01', :componentId,
-             true, NOW(), NOW())`,
-    {
-      replacements: {
-        id: itemId,
-        bomId: bom.id,
-        componentId,
-        quantity: quantityPerUnit,
-        unitCost,
-        totalCost: quantityPerUnit * unitCost,
-      },
-    },
-  );
-
-  return bom.id;
+async function createBomViaApi(
+  productId: number,
+  componentId: number,
+  quantityPerUnit: number,
+  token: string,
+): Promise<number> {
+  const bom = await api()
+    .post('/api/engineering/bom')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      product_id: productId,
+      revision: 'E2E',
+      notes: 'BOM da validacao E2E da cadeia do produto',
+      items: [
+        {
+          component_product_id: componentId,
+          quantity: quantityPerUnit,
+          unit: 'un',
+          component_type: 'raw_material',
+          is_critical: true,
+        },
+      ],
+    });
+  expectStatus(bom, 201, 'createBomViaApi');
+  return bom.body.data?.id ?? bom.body.data?.bom?.id;
 }
 
 describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acabado expedido', () => {
-  /** Token admin emitido pelo runner (`scripts/run-api-suite.cjs`). */
+  /**
+   * Token do usuario que **executa** a cadeia (cadastra, requisita, compra,
+   * recebe, produz, vende) — emitido pelo runner (`scripts/run-api-suite.cjs`).
+   */
   const token = () => authToken();
+
+  /**
+   * Token do **segundo** administrador, usado exclusivamente nos pontos de
+   * aprovacao (requisicao, pedido de compra, processo de importacao).
+   *
+   * Existe por causa da segregacao de funcao (D-K): aprovador ≠ solicitante,
+   * e `role: 'admin'` deliberadamente nao isenta — permissao e concedivel,
+   * identidade nao. Usar o mesmo token dos dois lados nao "testaria menos":
+   * testaria um fluxo que a empresa nao pode operar.
+   */
+  const approver = () => approverToken();
 
   // ====================================================================
   // ETAPA 1 — Cadastro do insumo e do produto acabado
@@ -375,32 +391,6 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
     expect(active.body.data.status).toBe('active');
   });
 
-  /**
-   * CONTORNO documentado do achado **BUG-01** (ver
-   * `docs/governance/VALIDACAO_CADEIA_PRODUTO_2026-08-10.md`): as colunas
-   * `parent_item_id`, `notes` e `alternative_product_id` de
-   * `bill_of_material_items` estao `NOT NULL` no banco real (dev e teste)
-   * enquanto o model as declara nulaveis — `POST /api/engineering/bom`
-   * responde 500 para QUALQUER BOM. Sem BOM ativa nao existe OP, entao a
-   * corrente pararia na etapa 2 e as 8 estacoes seguintes ficariam sem
-   * evidencia. Este passo cria a mesma BOM direto pelos models (mesmos
-   * valores que o `BomService` gravaria, mais os tres campos que o banco
-   * exige) SOMENTE para destravar o restante da validacao. Nao corrige o
-   * bug e nao substitui a etapa 2, que continua vermelha de proposito.
-   */
-  it('etapa 2 (contorno de BUG-01): provisiona a BOM direto no banco para destravar as etapas seguintes', async () => {
-    if (ctx.bomId) return; // etapa 2 passou: contorno desnecessario.
-
-    ctx.bomId = await createBomDirectly(ctx.finishedProductId, ctx.rawProductId, QTY_PER_UNIT);
-    ctx.bomViaWorkaround = true;
-
-    const active = await api()
-      .get(`/api/engineering/bom/product/${ctx.finishedProductId}`)
-      .set('Authorization', `Bearer ${token()}`);
-    expectStatus(active, 200, 'activeAfterWorkaround');
-    expect(active.body.data.status).toBe('active');
-  });
-
   // ====================================================================
   // ETAPA 3 — Requisicao de compra
   // ====================================================================
@@ -426,9 +416,19 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
     ctx.requisitionId = created.body.data.id;
     expect(created.body.data.status).toBe('pending');
 
-    const approved = await api()
+    // D-K: quem registrou a requisicao NAO pode aprova-la. Primeiro a prova
+    // de que a regra esta viva (auto-aprovacao recusada), depois a aprovacao
+    // legitima pelo segundo administrador.
+    const selfApproval = await api()
       .patch(`/api/purchase-requisitions/${ctx.requisitionId}/status`)
       .set('Authorization', `Bearer ${token()}`)
+      .send({ status: 'approved' });
+    expectStatus(selfApproval, 422, 'selfApproval');
+    expect(selfApproval.body.error.details.rule).toBe('D-K-REQUISICAO');
+
+    const approved = await api()
+      .patch(`/api/purchase-requisitions/${ctx.requisitionId}/status`)
+      .set('Authorization', `Bearer ${approver()}`)
       .send({ status: 'approved' });
     expectStatus(approved, 200, 'approved');
     expect(approved.body.data.status).toBe('approved');
@@ -451,12 +451,15 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
     expect(Number(purchase.items[0].unit_price)).toBeCloseTo(RAW_UNIT_PRICE, 4);
     expect(converted.body.data.requisition_status).toBe('ordered');
 
-    for (const status of ['approved', 'sent']) {
+    // D-K de novo, agora no PEDIDO: a conversao gravou o solicitante a
+    // partir do JWT de quem converteu, entao a aprovacao tem que vir do
+    // outro administrador. `sent` nao e ponto de aprovacao.
+    for (const [status, statusToken] of [['approved', approver()], ['sent', token()]]) {
       const changed = await api()
         .put(`/api/purchases/${ctx.purchaseId}/status`)
-        .set('Authorization', `Bearer ${token()}`)
+        .set('Authorization', `Bearer ${statusToken}`)
         .send({ status });
-      expectStatus(changed, 200, 'changed');
+      expectStatus(changed, 200, `changed:${status}`);
     }
   });
 
@@ -519,12 +522,44 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
   // ETAPA 6 — Liberacao pela Qualidade
   // ====================================================================
   it('etapa 6: a Qualidade libera o lote da quarentena', async () => {
+    // G7 (2026-08-10, ISO 9001 §8.6/§8.7): liberar deixou de ser um clique
+    // com observacao livre. Sem inspecao registrada, a liberacao e recusada
+    // com `reason: 'no_inspection'` — provado aqui antes do caminho feliz,
+    // porque este e o gate que impede material nao verificado de chegar ao
+    // chao de fabrica.
+    const semInspecao = await api()
+      .post(`/api/inventory/lots/${ctx.rawLotId}/release`)
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ notes: `${P} tentativa de liberar sem inspecao` });
+    expectStatus(semInspecao, 422, 'semInspecao');
+    expect(semInspecao.body.error.details.rule).toBe('G7');
+    expect(semInspecao.body.error.details.reason).toBe('no_inspection');
+
+    const inspection = await api()
+      .post('/api/quality/inspections')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({
+        lot_id: ctx.rawLotId,
+        stage: 'incoming',
+        acceptance_criteria: 'Resistencia DC 6,8 +/- 0,3 ohm e ausencia de deformacao no carretel',
+        sampling_plan: 'Amostragem simples, nivel II (validacao E2E)',
+        sample_size: 8,
+        defects_found: 0,
+        verdict: 'approved',
+        notes: `${P} inspecao de recebimento`,
+      });
+    expectStatus(inspection, 201, 'inspection');
+    expect(inspection.body.data.verdict).toBe('approved');
+    ctx.inspectionId = inspection.body.data.id;
+
     const release = await api()
       .post(`/api/inventory/lots/${ctx.rawLotId}/release`)
       .set('Authorization', `Bearer ${token()}`)
       .send({ notes: `${P} liberado apos inspecao de recebimento` });
     expectStatus(release, 200, 'release');
     expect(release.body.data.status).toBe('available');
+    // A liberacao amarra a evidencia: qual inspecao autorizou.
+    expect(Number(release.body.data.release_inspection_id)).toBe(Number(ctx.inspectionId));
   });
 
   // ====================================================================
@@ -892,43 +927,6 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
     ctx.clientId = client.body.data.id;
   });
 
-  /**
-   * CONTORNO documentado do achado **BUG-02**: `clients.cnae` (e, no banco
-   * de teste, tambem `clients.city_ibge_code`) esta `NOT NULL` sem default,
-   * mas nenhum dos dois e aceito por `createClientSchema` (`.strict()`) —
-   * nao existe payload capaz de criar cliente pela API. Sem cliente nao ha
-   * venda, entao a estacao 9 pararia aqui. Cria o cliente direto pelos
-   * models apenas para destravar venda -> NF-e -> expedicao.
-   */
-  it('etapa 9a (contorno de BUG-02): provisiona o cliente direto no banco', async () => {
-    if (ctx.clientId) return;
-
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Client } = require('../../src/models/index');
-    const client = await Client.create({
-      name: `${P} Cliente ${SUFFIX}`,
-      cpf_cnpj: generateValidCpf(),
-      phone: '(11) 3000-0000',
-      email: `e2e-cliente-${SUFFIX}@evok.local`,
-      cep: '01001-000',
-      street: 'Praca da Se',
-      number: '1',
-      complement: 'Sala 1',
-      neighborhood: 'Se',
-      city: 'Sao Paulo',
-      state: 'SP',
-      status: 'active',
-      notes: 'Contorno BUG-02 (validacao E2E da cadeia do produto)',
-      tax_regime: 'simples_nacional',
-      ie: 'ISENTO',
-      im: 'ISENTO',
-      cnae: '2790201',
-      city_ibge_code: '3550308',
-    });
-    ctx.clientId = client.id;
-    ctx.clientViaWorkaround = true;
-  });
-
   it('etapa 9b: cria a venda (orcamento) via API', async () => {
     const sale = await api()
       .post('/api/sales')
@@ -946,74 +944,26 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
   });
 
   /**
-   * CONTORNO documentado do achado **BUG-03**: `sales.nfe_number` (e
-   * `sales.nfe_key`) estao `NOT NULL` sem default no banco real, mas
-   * `CreateSaleUseCase` nunca os preenche na criacao (so a emissao da NF-e
-   * preenche) — `POST /api/sales` responde 500 para QUALQUER venda. Cria a
-   * venda como `quote` direto pelos models, com os campos de NF-e vazios,
-   * para que o restante da estacao 9 (confirmacao com debito de estoque,
-   * emissao de NF-e e expedicao) ainda possa ser exercitado pela API real.
+   * Confirmar o orcamento RESERVA o produto acabado (G9, 2026-08-10) — nao
+   * baixa mais o estoque, porque a mercadoria ainda esta fisicamente na
+   * empresa (Ajuste SINIEF 07/05, clausula 9ª §1º). A baixa acontece na
+   * autorizacao da NF-e (etapa 9d), e a conta a receber tambem (G13/CPC 47).
    */
-  it('etapa 9b (contorno de BUG-03): provisiona a venda (orcamento) direto no banco', async () => {
-    if (ctx.saleId) return;
-
+  it('etapa 9c: confirma a venda (reserva o produto acabado)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Sale, SaleItem } = require('../../src/models/index');
-    const unitPrice = 500;
-    const sale = await Sale.create({
-      customer_id: ctx.clientId,
-      user_id: 1,
-      total_amount: SOLD_QTY * unitPrice,
-      discount: 0,
-      status: 'quote',
-      payment_method: 'pix',
-      installments: 1,
-      notes: `${P} venda da validacao da cadeia (contorno BUG-03)`,
-      nfe_number: '',
-      nfe_key: '',
-    });
-    await SaleItem.create({
-      sale_id: sale.id,
-      product_id: ctx.finishedProductId,
-      quantity: SOLD_QTY,
-      unit_price: unitPrice,
-      total_price: SOLD_QTY * unitPrice,
-    });
-    ctx.saleId = sale.id;
-    ctx.saleViaWorkaround = true;
-  });
+    const { Product } = require('../../src/models/index');
 
-  it('etapa 9c: confirma a venda (debita estoque + gera conta a receber)', async () => {
     const confirmed = await api()
       .put(`/api/sales/${ctx.saleId}/status`)
       .set('Authorization', `Bearer ${token()}`)
       .send({ status: 'confirmed' });
     expectStatus(confirmed, 200, 'confirmed');
     expect(confirmed.body.data.status).toBe('confirmed');
-    ctx.saleConfirmedViaApi = true;
-  });
 
-  /**
-   * CONTORNO documentado do achado **BUG-04**: confirmar a venda gera a
-   * `AccountReceivable` das parcelas, e `accounts_receivable` tem 8 colunas
-   * (`payment_date`, `payment_method`, `invoice_number`, `barcode`,
-   * `pix_key`, `protest_date`, `negativation_date`, `notes`) `NOT NULL` sem
-   * default que o use case nunca preenche — a confirmacao sempre responde
-   * 500. Aqui a venda e apenas promovida a `confirmed` no banco, para que a
-   * emissao de NF-e e a expedicao ainda possam ser exercitadas pela API.
-   *
-   * ATENCAO ao ler o resultado: com este contorno, **o debito de estoque do
-   * produto acabado e a geracao da conta a receber NAO foram exercitados** —
-   * a estacao 9 nao pode ser considerada validada, apenas as sub-etapas de
-   * NF-e e expedicao.
-   */
-  it('etapa 9c (contorno de BUG-04): promove a venda para `confirmed` direto no banco', async () => {
-    if (ctx.saleConfirmedViaApi) return;
-
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Sale } = require('../../src/models/index');
-    await Sale.update({ status: 'confirmed' }, { where: { id: ctx.saleId } });
-    ctx.saleConfirmedViaWorkaround = true;
+    const finished = await Product.findByPk(ctx.finishedProductId);
+    // Reserva, nao baixa: o saldo continua o produzido na etapa 8.
+    expect(Number(finished.quantity)).toBeCloseTo(OP_QTY, 4);
+    expect(Number(finished.reserved_quantity)).toBeCloseTo(SOLD_QTY, 4);
   });
 
   it('etapa 9d: emite a NF-e e expede', async () => {
@@ -1087,6 +1037,14 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
       });
     expectStatus(raw2, 201, 'raw2');
 
+    // `product_type: 'finished'` num SUBCONJUNTO nao e descuido: hoje
+    // `BomService.createBOM` recusa BOM para qualquer produto que nao seja
+    // `finished` (400), e depois do G1 o MRP so enxerga estrutura que venha
+    // de BOM ativa. Logo, um subconjunto com estrutura propria so e
+    // representavel tipando-o como `finished`. A restricao e anterior aos
+    // gaps desta rodada e esta registrada como achado em
+    // `docs/governance/TODO.md` — nao se afrouxa a regra de producao para o
+    // teste passar; o teste registra a limitacao real do sistema.
     const subProduct = await api()
       .post('/api/products')
       .set('Authorization', `Bearer ${token()}`)
@@ -1096,24 +1054,46 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
         price: 300,
         cost_price: 0,
         quantity: 0,
-        product_type: 'semi_finished',
+        product_type: 'finished',
         status: 'active',
         ...productDefaults(),
       });
     expectStatus(subProduct, 201, 'subProduct');
 
-    // Contorno de BUG-01 (ver `createBomDirectly`): a BOM deste gate tambem
-    // nao pode ser criada pela API. Sem ela o MRP falharia por "sem BOM
+    // BOM do subconjunto (sub <- ima). Sem ela o MRP falharia por "sem BOM
     // ativa" e o gate nao provaria o que interessa (validacao de MATERIAL).
-    await createBomDirectly(subProduct.body.data.id, raw2.body.data.id, 1);
+    await createBomViaApi(subProduct.body.data.id, raw2.body.data.id, 1, token());
 
-    // O motor de MRP (`explodeBomRequirements`) so planeja COMPONENTES da
-    // demanda — nunca o proprio item demandado. Para existir uma ordem
-    // planejada de FABRICACAO e preciso que o subconjunto apareca como
-    // componente de um item pai, via a estrutura do schema novo
-    // (`item_estruturas`), que e a BOM que o MRP le (gap G1: sao duas BOMs
-    // paralelas — o MRP le `item_estruturas`, a producao le
-    // `bill_of_materials`).
+    // Produto PAI: o motor de MRP (`explodeBomRequirements`) so planeja
+    // COMPONENTES da demanda — nunca o proprio item demandado. Para existir
+    // uma ordem planejada de FABRICACAO do subconjunto, ele precisa ser
+    // componente de um item pai.
+    //
+    // G1 (2026-08-10): a estrutura que o MRP le passou a ser a MESMA que a
+    // producao consome — a BOM ativa (`bill_of_materials`), projetada para
+    // UUID de item pelo crosswalk `products.code = items.codigo`. Por isso o
+    // pai precisa existir NOS DOIS cadastros com o MESMO codigo, e a ligacao
+    // pai->componente e cadastrada por BOM. O caminho antigo
+    // (`POST /api/items/:id/estrutura`, que gravava em `item_estruturas`)
+    // agora responde 422 `G1-ESTRUTURA-DUPLA` — provado no fim deste teste.
+    const parentCode = `${P}-PAI-${SUFFIX}`;
+    const parentProduct = await api()
+      .post('/api/products')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({
+        name: `${P} Alto-falante 15pol ${SUFFIX}`,
+        code: parentCode,
+        price: 900,
+        cost_price: 0,
+        quantity: 0,
+        product_type: 'finished',
+        status: 'active',
+        ...productDefaults(),
+      });
+    expectStatus(parentProduct, 201, 'parentProduct');
+
+    await createBomViaApi(parentProduct.body.data.id, subProduct.body.data.id, 1, token());
+
     const subItem = await api()
       .post('/api/items')
       .set('Authorization', `Bearer ${token()}`)
@@ -1131,7 +1111,7 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
       .post('/api/items')
       .set('Authorization', `Bearer ${token()}`)
       .send({
-        codigo: `${P}-PAI-${SUFFIX}`,
+        codigo: parentCode,
         descricao: `${P} Alto-falante 15pol ${SUFFIX}`,
         tipo: 'PRODUTO_ACABADO',
         unidade: 'un',
@@ -1140,7 +1120,10 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
       });
     expectStatus(parentItem, 201, 'parentItem');
 
-    const structure = await api()
+    // G1: a arvore paralela (`item_estruturas`) esta fechada para escrita.
+    // Aceitar aqui devolveria 201 e a producao continuaria sem enxergar a
+    // estrutura — o descasamento exato que o G1 corrigiu.
+    const estruturaParalela = await api()
       .post(`/api/items/${parentItem.body.data.id}/estrutura`)
       .set('Authorization', `Bearer ${token()}`)
       .send({
@@ -1150,7 +1133,9 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
         nivel: 1,
         ativo: true,
       });
-    expectStatus(structure, 201, 'structure');
+    expectStatus(estruturaParalela, 422, 'estruturaParalela');
+    expect(estruturaParalela.body.error.details.rule).toBe('G1-ESTRUTURA-DUPLA');
+    expect(estruturaParalela.body.error.details.origem_unica).toBe('bill_of_materials');
 
     const plan = await api()
       .post('/api/mrp/plan')
@@ -1231,6 +1216,32 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
       });
     expectStatus(created, 201, 'created');
     const processId = created.body.data.id;
+
+    // G11-COMEX (2026-08-10): importacao exige aprovacao da diretoria em
+    // QUALQUER valor, e o gate trava exatamente na transicao `draft ->
+    // shipped` — ultimo instante em que ainda da para desistir sem custo
+    // afundado. Sem aprovacao, o embarque e recusado.
+    const semAprovacao = await api()
+      .post(`/api/comex/import-processes/${processId}/tracking`)
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ event: 'shipped', event_date: new Date().toISOString().slice(0, 10) });
+    expectStatus(semAprovacao, 422, 'semAprovacao');
+    expect(semAprovacao.body.error.details.rule).toBe('G11-COMEX');
+
+    // D-K tambem vale aqui: quem registrou o processo nao o aprova.
+    const autoAprovacao = await api()
+      .post(`/api/comex/import-processes/${processId}/approve`)
+      .set('Authorization', `Bearer ${token()}`)
+      .send({});
+    expectStatus(autoAprovacao, 422, 'autoAprovacao');
+    expect(autoAprovacao.body.error.details.rule).toBe('D-K-COMEX');
+
+    const aprovacao = await api()
+      .post(`/api/comex/import-processes/${processId}/approve`)
+      .set('Authorization', `Bearer ${approver()}`)
+      .send({});
+    expectStatus(aprovacao, 201, 'aprovacao');
+    expect(aprovacao.body.data.approver_role).toBe('diretor');
 
     for (const event of ['shipped', 'arrived', 'customs_cleared']) {
       const tracking = await api()

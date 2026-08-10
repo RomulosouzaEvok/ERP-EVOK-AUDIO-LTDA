@@ -1,4 +1,4 @@
-import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
+import { api, approverToken, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
@@ -33,9 +33,11 @@ describeIntegration('Regressao: rastreabilidade e audit-log com dados reais de l
     expect(purchase.status).toBe(201);
     const purchaseId = purchase.body.data.id;
 
+    // Segregacao de funcao (D-K, 2026-08-10): quem registrou o pedido nao o
+    // aprova — a aprovacao sai do segundo administrador.
     const sent = await api()
       .put(`/api/purchases/${purchaseId}/status`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', `Bearer ${approverToken()}`)
       .send({ status: 'approved' });
     expect(sent.status).toBe(200);
 

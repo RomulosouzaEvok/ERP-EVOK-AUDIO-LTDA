@@ -28,7 +28,16 @@ interface SupplierProps {
 class SupplierEntity extends Entity {
   public company_name: string;
   public cnpj: string;
-  public trade_name: string | null;
+  /**
+   * Nome fantasia. `undefined` (e **nunca** `null`) quando ausente:
+   * `suppliers.trade_name` é `NOT NULL DEFAULT ''` no banco, e gravar `null`
+   * explícito anula o DEFAULT do Postgres — era exatamente o que fazia
+   * `POST /api/suppliers` responder **500** ("null value in column
+   * trade_name ... violates not-null constraint") para qualquer payload que
+   * omitisse o nome fantasia, que é opcional no validador. Mesma armadilha
+   * de {@link is_foreign} logo abaixo.
+   */
+  public trade_name: string | undefined;
   public ie: string | null;
   public phone: string | null;
   public email: string | null;
@@ -55,7 +64,7 @@ class SupplierEntity extends Entity {
     super({ id: props.id });
     this.company_name = props.company_name;
     this.cnpj = props.cnpj;
-    this.trade_name = props.trade_name ?? null;
+    this.trade_name = props.trade_name ?? undefined;
     this.ie = props.ie ?? null;
     this.phone = props.phone ?? null;
     this.email = props.email ?? null;

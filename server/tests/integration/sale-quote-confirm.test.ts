@@ -41,9 +41,10 @@ describeIntegration('F22 - Confirmacao de orcamento (quote -> confirmed)', () =>
   }
 
   /**
-   * @returns Quantidade em estoque do produto fixture usado no cronograma de testes.
+   * @param productId - Produto fixture.
+   * @returns Saldo total e quantidade reservada do produto.
    */
-  async function getProductQuantity(productId: number): Promise<number> {
+  async function getProductStock(productId: number): Promise<{ quantity: number; reserved: number }> {
     const token = authToken();
     const response = await api()
       .get(`/api/products/${productId}`)
@@ -53,18 +54,36 @@ describeIntegration('F22 - Confirmacao de orcamento (quote -> confirmed)', () =>
       throw new Error(`Falha ao consultar produto fixture: ${JSON.stringify(response.body)}`);
     }
 
-    return Number(response.body.data.quantity);
+    return {
+      quantity: Number(response.body.data.quantity),
+      reserved: Number(response.body.data.reserved_quantity),
+    };
   }
 
-  it('cria venda quote sem debitar estoque, depois confirma e debita o estoque so nesse momento', async () => {
+  /**
+   * F22 (orcamento) + **G9** (2026-08-10).
+   *
+   * O que este teste afirmava ate hoje — "confirmar DEBITA o estoque" — era
+   * o comportamento antigo, e ele estava errado do ponto de vista fiscal: dar
+   * saida de mercadoria que ainda esta fisicamente na empresa contraria o
+   * Ajuste SINIEF 07/05, clausula 9ª §1º (a mercadoria so transita depois da
+   * autorizacao de uso da NF-e). Com o G9, confirmar **RESERVA** (o material
+   * fica comprometido, indisponivel para outro pedido, mas continua no
+   * saldo) e a baixa acontece na autorizacao da NF-e, proporcional ao que
+   * foi faturado.
+   *
+   * O teste foi corrigido para medir os dois numeros que agora contam:
+   * `quantity` (nao pode mudar) e `reserved_quantity` (tem que subir).
+   */
+  it('cria venda quote sem reservar estoque, depois confirma e so entao reserva (sem baixar o saldo)', async () => {
     const token = authToken();
     const productId = Number(process.env.TEST_PRODUCT_ID);
     const customerId = await ensureFixtureClient();
 
-    // NOTA: a confirmacao debita o saldo do produto no deposito ACABADOS
-    // (dual-write, Bloco 4) - o fixture global (scripts/run-api-suite.cjs
-    // `ensureFixtures`) garante saldo generoso la para TEST_PRODUCT_ID.
-    const quantityBefore = await getProductQuantity(productId);
+    // NOTA: reserva NAO movimenta deposito (G9) — o dual-write por deposito
+    // acontece so no faturamento. O fixture global (scripts/run-api-suite.cjs
+    // `ensureFixtures`) garante saldo generoso para TEST_PRODUCT_ID.
+    const before = await getProductStock(productId);
 
     const createResponse = await api()
       .post('/api/sales')
@@ -80,9 +99,10 @@ describeIntegration('F22 - Confirmacao de orcamento (quote -> confirmed)', () =>
 
     const saleId = createResponse.body.data.id;
 
-    // Estoque nao pode ter mudado apenas por criar o orcamento.
-    const quantityAfterQuote = await getProductQuantity(productId);
-    expect(quantityAfterQuote).toBe(quantityBefore);
+    // Nem saldo nem reserva podem mudar apenas por criar o orcamento.
+    const afterQuote = await getProductStock(productId);
+    expect(afterQuote.quantity).toBe(before.quantity);
+    expect(afterQuote.reserved).toBe(before.reserved);
 
     const confirmResponse = await api()
       .put(`/api/sales/${saleId}/status`)
@@ -92,15 +112,21 @@ describeIntegration('F22 - Confirmacao de orcamento (quote -> confirmed)', () =>
     expect(confirmResponse.status).toBe(200);
     expect(confirmResponse.body.data.status).toBe('confirmed');
 
-    // So agora, na confirmacao, o estoque deve ter sido debitado.
-    const quantityAfterConfirm = await getProductQuantity(productId);
-    expect(quantityAfterConfirm).toBe(quantityBefore - 1);
+    // So agora, na confirmacao, o material fica comprometido — RESERVADO,
+    // nao baixado (a baixa e na autorizacao da NF-e, G9).
+    const afterConfirm = await getProductStock(productId);
+    expect(afterConfirm.quantity).toBe(before.quantity);
+    expect(afterConfirm.reserved).toBe(before.reserved + 1);
 
-    // Limpeza: cancela a venda para restaurar o estoque ao estado original
-    // e nao deixar side effects entre rodadas de CI.
+    // Limpeza: cancela a venda para liberar a reserva e nao deixar side
+    // effects entre rodadas de CI.
     await api()
       .put(`/api/sales/${saleId}/status`)
       .set('Authorization', `Bearer ${token}`)
       .send({ status: 'canceled' });
+
+    const afterCancel = await getProductStock(productId);
+    expect(afterCancel.quantity).toBe(before.quantity);
+    expect(afterCancel.reserved).toBe(before.reserved);
   });
 });

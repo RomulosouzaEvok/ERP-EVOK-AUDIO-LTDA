@@ -1,4 +1,4 @@
-import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
+import { api, approverToken, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 import type { Response } from 'supertest';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
@@ -30,10 +30,13 @@ describeIntegration('Concorrencia de recebimento de compra', () => {
     const purchaseId = createResponse.body.data.id;
     const itemId = createResponse.body.data.items[0].id;
 
-    for (const status of ['approved', 'sent']) {
+    // `approved` sai do SEGUNDO administrador: a segregacao de funcao (D-K,
+    // 2026-08-10) recusa que o autor do pedido o aprove. `sent` nao e ponto
+    // de aprovacao e permanece com o mesmo usuario que registrou.
+    for (const [status, statusToken] of [['approved', approverToken()], ['sent', token]]) {
       const statusResponse = await api()
         .put(`/api/purchases/${purchaseId}/status`)
-        .set('Authorization', `Bearer ${token}`)
+        .set('Authorization', `Bearer ${statusToken}`)
         .send({ status });
 
       if (statusResponse.status !== 200) {

@@ -1,6 +1,29 @@
-import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
+import { api, approverToken, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
+
+/**
+ * Leva o pedido de `pending` ate `sent`.
+ *
+ * A aprovacao usa `approverToken()` (segundo administrador) porque a
+ * segregacao de funcao (D-K, 2026-08-10) recusa que o autor do pedido o
+ * aprove. `sent` nao e ponto de aprovacao e continua com o mesmo usuario.
+ *
+ * @param purchaseId - Id do pedido de compra.
+ * @returns Promise resolvida quando o pedido esta `sent`.
+ */
+async function aprovarEEnviar(purchaseId: number): Promise<void> {
+  await api()
+    .put(`/api/purchases/${purchaseId}/status`)
+    .set('Authorization', `Bearer ${approverToken()}`)
+    .send({ status: 'approved' })
+    .expect(200);
+  await api()
+    .put(`/api/purchases/${purchaseId}/status`)
+    .set('Authorization', `Bearer ${authToken()}`)
+    .send({ status: 'sent' })
+    .expect(200);
+}
 
 describeIntegration('Deduplicacao de NF no recebimento de compra', () => {
   /**
@@ -25,9 +48,7 @@ describeIntegration('Deduplicacao de NF no recebimento de compra', () => {
     const purchaseId = created.body.data.id;
     const itemId = created.body.data.items[0].id;
 
-    for (const status of ['approved', 'sent']) {
-      await api().put(`/api/purchases/${purchaseId}/status`).set('Authorization', `Bearer ${token}`).send({ status }).expect(200);
-    }
+    await aprovarEEnviar(purchaseId);
 
     const invoiceNumber = `NF-DUP-${Date.now()}`;
 
@@ -67,9 +88,7 @@ describeIntegration('Deduplicacao de NF no recebimento de compra', () => {
     const purchaseId = created.body.data.id;
     const itemId = created.body.data.items[0].id;
 
-    for (const status of ['approved', 'sent']) {
-      await api().put(`/api/purchases/${purchaseId}/status`).set('Authorization', `Bearer ${token}`).send({ status }).expect(200);
-    }
+    await aprovarEEnviar(purchaseId);
 
     const response = await api()
       .post(`/api/purchases/${purchaseId}/receive`)

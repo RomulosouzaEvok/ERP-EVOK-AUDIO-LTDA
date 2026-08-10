@@ -30,9 +30,18 @@ class SaleEntity extends Entity {
     this.customer_id = props.customer_id;
     this.items = props.items;
     this.discount = props.discount ?? 0;
-    this.payment_method = props.payment_method ?? null;
+    // `undefined`, NUNCA `null`: `sales.payment_method` e `sales.notes` sao
+    // `NOT NULL` no banco COM default (`'pix'` e `''`). Coagir a ausencia
+    // para `null` (comportamento ate 2026-08-10) fazia o Sequelize gravar um
+    // `null` EXPLICITO — o default nunca era aplicado e `POST /api/sales`
+    // respondia 400 "Sale.payment_method cannot be null; Sale.notes cannot
+    // be null" para qualquer payload que omitisse os dois campos, que sao
+    // opcionais em `createSaleSchema`. Ou seja: nao existia venda criavel
+    // pela API sem informar forma de pagamento e observacao. Mantendo
+    // `undefined`, o Sequelize aplica o default da coluna.
+    this.payment_method = props.payment_method ?? undefined;
     this.installments = props.installments ?? 1;
-    this.notes = props.notes ?? null;
+    this.notes = props.notes ?? undefined;
 
     this.validate();
   }

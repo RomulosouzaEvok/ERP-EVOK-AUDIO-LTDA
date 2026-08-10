@@ -106,7 +106,10 @@ function waitForReady(url, timeoutMs) {
 
 async function ensureFixtures() {
   const models = require(path.join(serverDir, 'dist', 'src', 'models', 'index.js'));
-  const { sequelize, User, Supplier, Product, BillOfMaterial, CompanyFiscalConfig, Warehouse, ProductWarehouseStock, Item } = models;
+  const {
+    sequelize, User, Supplier, Product, BillOfMaterial, CompanyFiscalConfig,
+    Warehouse, ProductWarehouseStock, Item, ProductionCostSettings,
+  } = models;
 
   try {
     await sequelize.authenticate();
@@ -132,6 +135,32 @@ async function ensureFixtures() {
       },
     });
     await admin.update({
+      password: process.env.ADMIN_SEED_PASSWORD || 'ci-admin-seed-password-2026',
+      active: true,
+      role: 'admin',
+    });
+
+    // SEGUNDO administrador — existe por causa da segregacao de funcao
+    // (D-K, `src/shared/domain/segregationOfDuties.ts`, 2026-08-10): quem
+    // solicita uma compra nao pode aprova-la, e a regra e sobre IDENTIDADE,
+    // entao `role: 'admin'` nao isenta. Com um unico usuario na suite, toda
+    // requisicao/pedido/importacao criada pelos testes ficava inaprovavel
+    // (422 D-K-*), o que derrubava a cadeia inteira a partir da aprovacao.
+    // `role: 'admin'` tambem lhe da a alcada de diretoria do G11/G11-COMEX
+    // (`resolveAvailableApproverRoles` trata admin como `diretor`), entao um
+    // unico usuario extra cobre os 4 pontos de aprovacao do ERP.
+    // Mesmo dominio sintetico `@evok.local` do admin de CI acima, pelas
+    // mesmas razoes de seguranca documentadas la.
+    const [approver] = await User.findOrCreate({
+      where: { email: 'ci-approver@evok.local' },
+      defaults: {
+        name: 'CI Aprovador (run-api-suite)',
+        password: process.env.ADMIN_SEED_PASSWORD || 'ci-admin-seed-password-2026',
+        active: true,
+        role: 'admin',
+      },
+    });
+    await approver.update({
       password: process.env.ADMIN_SEED_PASSWORD || 'ci-admin-seed-password-2026',
       active: true,
       role: 'admin',
@@ -273,6 +302,24 @@ async function ensureFixtures() {
       approval_date: new Date().toISOString().slice(0, 10),
     });
 
+    // Taxa horaria de mao-de-obra — fixture do gap G4 (2026-08-10).
+    // Concluir uma OP passou a exigir apontamento por etapa E custeio real
+    // dessa etapa: sem `work_centers.cost_per_hour` na etapa nem
+    // `production_cost_settings.default_labor_rate_per_hour` global, a
+    // conclusao falha com `G4-LABOR-RATE-MISSING` (com taxa zero o custo de
+    // mao-de-obra sairia zero e o estoque ficaria subavaliado). O banco de
+    // teste nasce com a taxa zerada, entao todo teste que conclui OP sem
+    // roteiro/centro de trabalho proprio dependia de uma configuracao que
+    // ninguem fazia. Configurar aqui e o equivalente do que o dono faz uma
+    // vez em Producao > Configuracao de Custeio.
+    const [costSettings] = await ProductionCostSettings.findOrCreate({
+      where: { id: 1 },
+      defaults: { id: 1, overhead_calculation_basis: 'material_labor', overhead_rate_percent: 0, default_labor_rate_per_hour: 50 },
+    });
+    if (Number(costSettings.default_labor_rate_per_hour) <= 0) {
+      await costSettings.update({ default_labor_rate_per_hour: 50 });
+    }
+
     await CompanyFiscalConfig.findOrCreate({
       where: { id: 1 },
       defaults: {
@@ -324,6 +371,8 @@ async function ensureFixtures() {
     return {
       adminId: admin.id,
       adminPasswordVersion: admin.passwordVersion,
+      approverId: approver.id,
+      approverPasswordVersion: approver.passwordVersion,
       supplierId: supplier.id,
       purchaseProductId: purchaseProduct.id,
       lowStockProductId: lowStockProduct.id,
@@ -334,18 +383,32 @@ async function ensureFixtures() {
   }
 }
 
-async function runJestSuite(suiteName, env) {
+/**
+ * Roda uma suite Jest contra a API ja no ar.
+ *
+ * @param {string} suiteName - Pasta sob `tests/` (`integration` | `edge`).
+ * @param {NodeJS.ProcessEnv} env - Ambiente com os tokens/fixtures exportados.
+ * @param {string} [filter] - Regex opcional de caminho (`process.argv[3]`) para
+ *   rodar so alguns arquivos durante depuracao. Com filtro, a checagem de
+ *   "nenhum teste pulado" e ignorada — ela so faz sentido na suite completa,
+ *   onde um `describe.skip` silencioso e o defeito que se quer pegar.
+ * @returns {Promise<void>}
+ */
+async function runJestSuite(suiteName, env, filter) {
   const outputFile = path.join('tmp', `jest-${suiteName}.json`);
   await spawnLogged(process.execPath, [
     jestBin,
     '--runInBand',
     `tests/${suiteName}`,
+    ...(filter ? ['--testPathPattern', filter] : []),
     '--ci',
     '--forceExit',
     '--json',
     `--outputFile=${outputFile}`,
   ], { env });
-  await spawnLogged(process.execPath, ['scripts/assert-jest-no-skips.cjs', outputFile], { env });
+  if (!filter) {
+    await spawnLogged(process.execPath, ['scripts/assert-jest-no-skips.cjs', outputFile], { env });
+  }
 }
 
 async function main() {
@@ -371,6 +434,10 @@ async function main() {
   }
 
   const suite = process.argv[2] || 'api';
+  // Filtro opcional de depuracao: `node scripts/run-api-suite.cjs integration sale-`
+  // roda so os arquivos cujo caminho casa com o regex. Sem argumento, roda tudo
+  // (comportamento de CI, inalterado).
+  const filter = process.argv[3];
   const port = process.env.TEST_API_PORT || '3101';
   const n8nWebhookSecret = process.env.N8N_WEBHOOK_SECRET || 'ci-n8n-webhook-secret-for-integration-tests';
   const baseEnv = {
@@ -392,16 +459,31 @@ async function main() {
     await waitForReady(`http://127.0.0.1:${port}/health/ready`, 60000);
     const fixtures = await ensureFixtures();
 
-    const token = jwt.sign(
-      { id: fixtures.adminId, passwordVersion: fixtures.adminPasswordVersion },
+    /**
+     * Emite um JWT para um usuario de fixture (mesma tecnica de
+     * `tests/helpers/testApi.ts#mintToken`).
+     *
+     * @param {number} id - Id do usuario.
+     * @param {number|null|undefined} passwordVersion - Versao de senha atual (invalidacao de sessao).
+     * @returns {string} Token valido por 1 hora.
+     */
+    const mint = (id, passwordVersion) => jwt.sign(
+      { id, passwordVersion },
       process.env.JWT_SECRET,
       { expiresIn: '1h', issuer: 'erp-evok-audio', audience: 'erp-evok-audio-api' },
     );
+
+    const token = mint(fixtures.adminId, fixtures.adminPasswordVersion);
+    const approverJwt = mint(fixtures.approverId, fixtures.approverPasswordVersion);
     const testEnv = {
       ...baseEnv,
       RUN_INTEGRATION: 'true',
       TEST_API_URL: `http://127.0.0.1:${port}`,
       TEST_AUTH_TOKEN: token,
+      // Token do SEGUNDO administrador (segregacao de funcao D-K) — ver
+      // `tests/helpers/testApi.ts#approverToken`.
+      TEST_APPROVER_TOKEN: approverJwt,
+      TEST_APPROVER_USER_ID: String(fixtures.approverId),
       TEST_SUPPLIER_ID: String(fixtures.supplierId),
       TEST_PRODUCT_ID: String(fixtures.purchaseProductId),
       TEST_LOW_STOCK_PRODUCT_ID: String(fixtures.lowStockProductId),
@@ -412,12 +494,12 @@ async function main() {
     };
 
     if (suite === 'integration') {
-      await runJestSuite('integration', testEnv);
+      await runJestSuite('integration', testEnv, filter);
     } else if (suite === 'edge') {
-      await runJestSuite('edge', testEnv);
+      await runJestSuite('edge', testEnv, filter);
     } else {
-      await runJestSuite('integration', testEnv);
-      await runJestSuite('edge', testEnv);
+      await runJestSuite('integration', testEnv, filter);
+      await runJestSuite('edge', testEnv, filter);
     }
   } finally {
     server.kill('SIGTERM');
