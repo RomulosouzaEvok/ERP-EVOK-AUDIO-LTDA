@@ -322,7 +322,12 @@ A cadeia só é considerada fechada quando, num teste ponta a ponta com dado rea
 - [x] Quem aprova uma compra não é quem a solicitou — **fechado em 2026-08-10
       (decisão D-K)** nos 4 pontos de aprovação da cadeia, sem exceção para
       `admin`. ⚠️ Depende de uma ação operacional para não travar a fábrica:
-      hoje existe **1 único usuário capaz de aprovar** (ver D-K, item 2)
+      resolvido **para teste** em 2026-08-10 (20 usuários departamentais
+      semeados, entre eles Diretor e Gerente de Compras, ambos distintos do
+      `admin` que assina 18/18 pedidos e 13/13 requisições); **falta um
+      aprovador real** no domínio `@evokaudio.com.br` para produção — os
+      semeados usam `@teste.evokaudio` e o script recusa rodar em produção
+      (ver D-K, item 2)
 - [ ] **Todo passo obrigatório do processo é obrigatório no código** —
       avançou muito (G2, G4, G7, G9, G11, G13, D-K passaram a **bloquear**),
       mas o **G6 segue em aberto** por decisão consciente: iniciar produção

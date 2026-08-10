@@ -31,6 +31,7 @@ const ComexPage = lazy(() => import('@/pages/purchases/ComexPage'));
 const BomPage = lazy(() => import('@/pages/production/BomPage'));
 const ProductionOrdersPage = lazy(() => import('@/pages/production/ProductionOrdersPage'));
 const MrpPage = lazy(() => import('@/pages/production/MrpPage'));
+const MasterProductionPlanPage = lazy(() => import('@/pages/production/MasterProductionPlanPage'));
 const ShopFloorPage = lazy(() => import('@/pages/production/ShopFloorPage'));
 const WorkCentersPage = lazy(() => import('@/pages/production/WorkCentersPage'));
 const ProductionRoutesPage = lazy(() => import('@/pages/production/ProductionRoutesPage'));
@@ -337,6 +338,16 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <MrpPage />
+                </Suspense>
+              }
+            />
+            {/* MPS (G17): o caminho é de produção, mas o ator é o PCP — mesmo
+                módulo de acesso de quem opera o MRP, igual ao backend. */}
+            <Route
+              path="/production/master-plans"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <MasterProductionPlanPage />
                 </Suspense>
               }
             />
