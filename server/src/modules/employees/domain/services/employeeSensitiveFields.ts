@@ -24,6 +24,14 @@ export interface RequestingUserContext {
  * LGPD (remuneração, documentos, dados bancários, endereço e telefone
  * pessoal) — sinalizados com 🔒 em
  * `docs/business/briefs/BRIEF_RH_2026-08-06.md` (BR-RH-020).
+ *
+ * `pcd` — ADICIONADO no BLOCO 6 RH (RF-RH-067, migration
+ * `20260808-000011`). Achado 11 da auditoria cruzada
+ * (`docs/business/BLOCO_6_RH_AUDITORIA.md`): sem esta adição, a condição de
+ * PCD de qualquer funcionário ficaria visível a todo autenticado via
+ * `GET /api/employees` assim que a coluna existisse — dado de saúde
+ * (LGPD art. 5º II), mais restrito que a maioria dos campos já protegidos
+ * nesta lista.
  */
 export const SENSITIVE_EMPLOYEE_FIELDS: readonly string[] = [
   'cpf',
@@ -39,6 +47,7 @@ export const SENSITIVE_EMPLOYEE_FIELDS: readonly string[] = [
   'pix_key',
   'address',
   'phone',
+  'pcd',
 ];
 
 /**

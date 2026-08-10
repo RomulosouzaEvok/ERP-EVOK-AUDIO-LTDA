@@ -2442,3 +2442,85 @@ aprovadores de alçada não necessariamente têm o módulo `juridico`.
 Ver `docs/governance/TODO.md` (entrada 2026-08-08) e
 `docs/governance/HANDOFF_CODEX.md` para o detalhamento completo (endpoints,
 testes, decisões de inferência).
+
+---
+
+## BLOCO 6 RH — Models Sequelize dos fluxos P0 (Férias, Experiência, Admissão, Demissão) — 2026-08-09
+
+**Migrations:** `20260808-000010` a `20260808-000025` (16 arquivos, 20
+tabelas `hr_*`), criadas pelo `AdmDBA` e corrigidas pelo
+`AuditorIntegrador` (achados 1 a 5 de
+`docs/business/BLOCO_6_RH_AUDITORIA.md`). **⚠️ Ainda NÃO aplicadas a
+nenhum banco** — a implementação backend desta passada foi validada apenas
+por typecheck, suíte unitária (repositórios mockados) e boot real do
+Express; nenhum `INSERT`/`SELECT` real foi executado contra as tabelas.
+
+### Models criados nesta passada (8 dos 20)
+
+Somente as tabelas necessárias ao escopo P0 ganharam model Sequelize e
+associações em `server/src/models/index.ts`:
+
+| Model | Tabela | RF |
+|---|---|---|
+| `HrJobPosition` | `hr_job_positions` | RF-RH-024 (só como FK opcional) |
+| `HrEmployeeContract` | `hr_employee_contracts` | RF-RH-013 a 016 |
+| `HrAdmissionProcess` | `hr_admission_processes` | RF-RH-007 a 012 |
+| `HrTerminationProcess` | `hr_termination_processes` | RF-RH-017 a 023 |
+| `HrEmployeeDocument` | `hr_employee_documents` | RF-RH-027 a 030 |
+| `HrVacationAccrualPeriod` | `hr_vacation_accrual_periods` | RF-RH-031 a 034, 041 a 043 |
+| `HrVacationSchedule` | `hr_vacation_schedules` | RF-RH-035 a 040 |
+| `HrEmployeeJobHistory` | `hr_employee_job_history` | RF-RH-064 (registro inicial da admissão) |
+
+Todos com `tableName` `hr_*` literal, `underscored: true`, PK/FK
+`INTEGER autoIncrement` (**nunca UUID** neste módulo — `employees.id`,
+`departments.id` e `users.id` são `INTEGER`).
+
+### Alterações em `employees` (tabela já em produção)
+
+Migration `20260808-000011` adiciona duas colunas **nullable** e aditivas
+(sem backfill): `pcd` (BOOLEAN, RF-RH-067) e `job_position_id`
+(INTEGER FK → `hr_job_positions.id`, RF-RH-025). Ambas refletidas em
+`server/src/models/Employee.ts`. **`pcd` foi adicionado a
+`SENSITIVE_EMPLOYEE_FIELDS`** (`modules/employees/domain/services/
+employeeSensitiveFields.ts`) — achado 11 da auditoria: como
+`GET /api/employees` continua aberto a qualquer autenticado (RF-RH-006),
+sem essa inclusão a condição de PCD (dado de saúde, LGPD art. 5º II)
+ficaria visível para todo mundo assim que a coluna existisse.
+
+### Restrições de banco que a aplicação precisa respeitar (armadilhas reais)
+
+1. **`ck_hr_vacation_accrual_periods_period_end` / `..._concessive_end`** —
+   `period_end = (period_start + INTERVAL '1 year')::date`. O PostgreSQL
+   **satura** o dia no fim do mês (`2028-02-29 + 1 year` = `2029-02-28`),
+   enquanto `Date.setUTCFullYear(+1)` do JavaScript **transborda** para
+   `2029-03-01`. `vacationRules.calculateConcessiveEnd` foi reescrito para
+   replicar a semântica do Postgres; sem isso, todo funcionário admitido em
+   29 de fevereiro produziria violação de CHECK em runtime.
+2. **`hr_termination_processes.payment_deadline`** é
+   `GENERATED ALWAYS AS (termination_date + 10) STORED` (Art. 477 §6º da
+   CLT). A aplicação **nunca** grava essa coluna — o validator
+   (`.strict()`) rejeita a tentativa de enviá-la no payload com 400.
+3. **`ck_hr_termination_processes_concluido_requires_checklist`** —
+   `status='concluido'` exige `checklist_assets_returned = true`; o use
+   case de conclusão grava os dois juntos.
+4. **Triggers de imutabilidade** — `hr_lock_employee_contract` (campos
+   estruturais imutáveis; `period_2_end_date` só admite UMA gravação),
+   `hr_lock_vacation_accrual_period` (datas da janela legal imutáveis) e
+   `hr_block_delete_vacation_schedule` (DELETE sempre bloqueado). Nenhuma
+   rota do módulo expõe `DELETE`, e a revisão de programação de férias
+   (`POST /vacation-schedules/:id/revise`, RF-RH-040) grava um novo
+   registro encadeado por `superseded_by_id`.
+
+### Guarda automatizada de literais de ENUM
+
+`server/tests/unit/rh-validators.test.ts` lê os arquivos de migration e
+compara, literal a literal, cada `Sequelize.ENUM(...)` com o `z.enum([...])`
+correspondente em `modules/rh/presentation/validators/rhEnums.ts`. Motivo:
+um literal errado passa por `tsc --noEmit` e por toda a suíte (o `where`
+do Sequelize é `any` e os testes usam repositório mockado) e só explode em
+produção como `invalid input value for enum ...` — um 500 que o
+`errorHandler` não mapeia para 400.
+
+Ver `docs/governance/HANDOFF_CODEX.md` (entrada 2026-08-09, BLOCO 6 RH) e
+`docs/governance/TODO.md` para endpoints, divergências lei × requisito e
+riscos residuais.

@@ -4412,3 +4412,334 @@ RESSALVAS**.
   `hr_vacation_accrual_periods`) nao foram auditadas coluna-a-coluna
   contra a migration bruta nesta rodada — recomenda-se segunda passada
   antes do `programador` iniciar a implementacao dessas tabelas.
+
+## 2026-08-09 — Fecha superfície de risco de enum sem validação no módulo TI — `programador`
+
+**Contexto:** logo após a correção de um 500 em produção no módulo
+Jurídico (query filtrando por um valor de `status` fora do enum do
+Postgres — `invalid input value for enum`, não capturado nem por
+`npm run typecheck` nem pelos 1203 testes unitários porque o `where` do
+Sequelize é `any` e os testes usam repositório mockado), uma varredura
+identificou que o módulo `ti` era o único, junto de `juridico` já
+corrigido, sem validador Zod replicando os enums reais do banco — os
+use-cases só validam presença dos campos, não o valor, e o payload ia
+direto do `req.body` para o `.create()`/`.update()` do Sequelize.
+
+- [x] Criado `server/src/modules/ti/presentation/validators/` (5 arquivos
+  novos, mesmo padrão `.strict()` + `safeParse`/`handleZodError` de
+  `facilities`/`juridico`): `licenseValidators.ts` (`license_type`,
+  `billing_cycle` — `it_software_license_details`), `termValidators.ts`
+  (`acceptance_type`, `condition_on_return` —
+  `it_responsibility_terms`), `backupValidators.ts` (`backup_type` —
+  `it_backup_logs`), `accessRequestValidators.ts` (`type` —
+  `it_access_requests`), `ticketValidators.ts` (`default_priority` —
+  `it_ticket_categories`, `priority` — `it_tickets`/reclassificação).
+  Cada literal foi conferido contra a migration real (`20260807-000150` a
+  `000155`), não contra uma lista solta.
+- [x] 5 controllers ligados aos validadores:
+  `licenseController.create`/`.update`, `termController.create`/
+  `.returnTerm`, `backupController.create`, `accessRequestController.create`,
+  `ticketController.createCategory`/`.updateCategory`/`.changePriority`.
+  Endpoints cobertos: `POST/PUT /api/ti/licenses(:assetId)`,
+  `POST /api/ti/responsibility-terms`,
+  `POST /api/ti/responsibility-terms/:id/return`,
+  `POST /api/ti/backup-logs`, `POST /api/ti/access-requests`,
+  `POST/PUT /api/ti/ticket-categories(:id)`,
+  `PUT /api/ti/tickets/:id/priority`.
+- [x] **Decisão de escopo (não é omissão):** `license_type` NÃO é aceito em
+  `updateLicenseSchema` — a API já documentava
+  `PUT /api/ti/licenses/:assetId` como "atualiza fornecedor/seats/custo/
+  ciclo" (`docs/business/BLOCO_2_TI_API.md` §3) e `UpdateLicenseDetailInput`
+  nunca incluiu o campo; o `.strict()` agora fecha um caminho não
+  documentado que existia por acidente (o controller fazia spread cru de
+  `req.body`, então um cliente que mandasse `license_type` no update
+  conseguia alterá-lo sem que a API ou o tipo TS previssem isso).
+  `it_tickets.status`/`it_access_requests.status`/
+  `it_responsibility_terms.status` não precisaram de validador porque
+  nunca vêm do `req.body` (são sempre setados internamente pelo use-case
+  em transições fixas). `impact`/`urgency` de `it_tickets` são
+  `SMALLINT` com `CHECK 1..3`, não `ENUM` — fora do escopo desta tarefa
+  (risco residual: um valor fora de 1..3 ainda causaria erro de `CHECK
+  constraint` do Postgres, não de `ENUM`; ver observação abaixo).
+- [x] Testes novos: `server/tests/unit/ti-validators.test.ts` (21 casos —
+  1 válido + 1 inválido por enum coberto, mais 1 caso de `.strict()`
+  rejeitando campo desconhecido). Suíte completa do server:
+  1259/1260 passando (a única falha, `module-authorization-map`, é de
+  outro agente trabalhando em paralelo no módulo `rh`, fora do escopo e
+  das restrições desta tarefa). `npm run typecheck` limpo.
+- [ ] **Risco residual, fora do escopo pedido:** `impact`/`urgency` em
+  `POST /api/ti/tickets/:id/assign` e `PUT /api/ti/tickets/:id/priority`
+  têm `CHECK (... BETWEEN 1 AND 3)` no banco mas não são `ENUM` — um
+  valor fora da faixa ainda produziria um erro de constraint do Postgres
+  não mapeado para 400 (mesma classe de bug, mas fora do pedido explícito
+  "enum" desta tarefa). Meus schemas Zod já limitam `impact`/`urgency` a
+  `1..3` como efeito colateral (`changeTicketPrioritySchema`), mas
+  `AssignTicketUseCase`/`assign` continua sem validador — recomenda-se
+  cobrir na próxima rodada de robustez.
+
+---
+
+## 2026-08-09 — Cadeia do produto, Onda 1: gaps G16, G8, G10, G12 (+ análise de G6) — `programador`
+
+**Contexto:** `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` — a
+auditoria do fluxo real do produto final (21 estações) achou 17 gaps. G2 já
+havia sido corrigido (commit `5ec0651`). Esta entrega fecha os demais gaps da
+Onda 1 sob a mesma regra: correção contida, sem migration, sem decisão de
+negócio, uma correção por vez com teste.
+
+- [x] **G16 — os dois caminhos de criação de OP tinham rigor diferente.**
+  `ConvertPlannedOrdersToProductionOrderUseCase` (via MRP) não validava
+  disponibilidade nenhuma e criava OP sem material — OP que depois não podia
+  ser concluída (a conclusão explode a BOM e falha sem estoque/sem BOM, G2).
+  Passa a chamar `BomService.checkAvailability` com a mesma regra do caminho
+  manual, convertendo o 404 de "sem BOM ativa" em `BusinessRuleError`
+  didático (mesmo padrão do G2) em vez de vazar um 404 de serviço.
+  **Decisão de desenho:** `semi_finished` **continua aceito** neste caminho
+  (produzir subconjunto é legítimo e é o que o MRP planeja ao explodir um
+  `SUBCONJUNTO`); o caminho manual, mais restrito (`finished` apenas), não
+  foi afrouxado — afrouxar controle está fora do escopo de um gap sobre o
+  caminho permissivo demais.
+- [x] **G16 — numeração `OP-YYYY-NNNN` insegura.** `countByOrderNumberPrefix`
+  (`COUNT(*) + 1` lido pelo caso de uso) foi **removido** do contrato e da
+  implementação, substituído por
+  `ProductionOrderRepository.nextOrderNumberForYear(yearPrefix, transaction)`:
+  advisory lock de transação por ano (`pg_advisory_xact_lock(41001, ano)`,
+  reentrante — o laço do MRP pode chamá-lo N vezes) + `MAX` do sufixo já
+  emitido. **Correção do enunciado do achado:** dentro do laço do MRP o
+  `COUNT` *funcionava* (a contagem enxerga as próprias inserções da
+  transação); os defeitos reais são (a) nada protegia contra criação
+  concorrente lendo a mesma contagem e (b) `COUNT` regride quando uma OP é
+  removida (`RemoveProductionOrderUseCase`), reemitindo um número já usado —
+  e `order_number` é `UNIQUE`, então a colisão derruba a operação em runtime.
+- [x] **G8 — teste acústico reprovado não abria não conformidade.**
+  `CreateAcousticTestUseCase`: a condição `!passed && create_rnc_on_fail`
+  virou `!passed`. Reprovação abre RNC **sempre** (`origin: 'final'`).
+  **Decisão de desenho:** a flag `create_rnc_on_fail` **não foi removida do
+  schema** — `createTestSchema` é `.strict()` e a tela de Laboratório sempre
+  envia o campo; removê-lo daria 400 no client, que está fora do escopo
+  desta tarefa. Ficou aceita e **ignorada**, marcada `@deprecated` no tipo de
+  entrada e documentada em `API.md`/`04-USE_CASES.md`.
+- [x] **G10 — RNC que não conseguia bloquear o lote passava em silêncio.**
+  `CreateNonConformityUseCase` passa a classificar o desfecho do bloqueio
+  (`blocked`/`not_found`/`not_blockable`/`not_informed`/`not_applicable`) e,
+  quando **nada** é bloqueado, grava aviso explícito em
+  `non_conformities.notes` prefixado por `[ATENCAO: NENHUM LOTE BLOQUEADO]`,
+  que volta no payload da resposta (o endpoint devolve a RNC inteira).
+  **Decisão de desenho:** avisar em vez de recusar — a RNC é registro de
+  qualidade e evidência de auditoria (ISO 9001 8.7), e pode legitimamente
+  referenciar lote externo/legado, material sem controle de lote ou nem se
+  referir a produto (`audit`, `asset_id`). Exigir o lote também não
+  resolveria (continuaria criando RNC sem bloqueio quando o número não
+  existisse). Sem coluna nova: `notes` já existia, era nullable e **não era
+  escrita por este caso de uso** — nenhum dado do usuário é sobrescrito.
+- [x] **G12 — requisição e cotação podiam gerar pedido em duplicidade.**
+  Controle de saldo/estado em três pontos, todos na mesma transação:
+  (1) `CreateRfqUseCase` recusa cotar requisição em
+  `ordered`/`partial`/`received`/`canceled` e só puxa itens com saldo
+  (`purchase_requisition_items.status = 'pending'`); (2) `AwardRfqUseCase`
+  recebe o `PurchaseRequisitionRepository` (4º parâmetro, injetado no
+  controller), trava a requisição (`FOR UPDATE`) **antes** de criar qualquer
+  pedido, exige `approved`, exige saldo nos itens adjudicados, marca-os
+  `ordered` e fecha a requisição **só quando não sobra saldo**;
+  (3) `ConvertRequisitionToPurchaseOrdersUseCase` passa a converter apenas
+  itens `pending`. **Decisão de desenho (efeito colateral consciente):**
+  adjudicar exige requisição `approved` — mesma porta da conversão direta;
+  antes, adjudicar uma requisição `draft`/`pending` gerava pedido de compra
+  pulando o gate de aprovação e saltava a máquina de estados direto para
+  `ordered`. Cotar antes de aprovar continua permitido (o preço cotado é o
+  que embasa a aprovação).
+- [x] **G15 avaliado no contexto do G12 e deliberadamente NÃO ativado.** O
+  enum `purchase_requisitions.status` (`draft, pending, approved, ordered,
+  partial, received, canceled`) espelha o de `purchase_orders`, onde
+  `partial` significa "parcialmente **recebido**". Reaproveitá-lo aqui para
+  "parcialmente **pedido**" colidiria com a rotina de recebimento que o G15
+  ainda vai escrever. O saldo de compra ficou em
+  `purchase_requisition_items.status` (`pending|ordered|canceled`), enum
+  inequívoco e já existente; a requisição permanece `approved` enquanto há
+  saldo. **`partial`/`received` continuam mortos — G15 segue em aberto.**
+- [ ] **G6 — analisado e NÃO implementado (decisão consciente).** A
+  transição `released → in_progress` só grava `start_date`, mas a
+  pré-condição que importa já é coberta: `in_progress` só é alcançável a
+  partir de `released`/`paused`, e entrar em `released` valida
+  disponibilidade e **reserva** o material (`reserveMaterials`). As três
+  validações sugeridas não têm onde se apoiar: **centro de trabalho** não
+  existe como coluna em `production_orders` (vive nas etapas de
+  roteiro/apontamento) — exigi-lo é **mudança de schema**, explicitamente
+  fora do escopo; **`responsible_id`** é opcional por desenho em todo o
+  módulo e nenhuma regra documentada o torna obrigatório; **apontamento
+  iniciado** contradiz a decisão explícita de `reconcileTrackingOnCompletion`
+  ("OP sem apontamento por etapa: fluxo simples permanece válido") e é
+  exatamente a pergunta em aberto do **G4**, que depende de decisão do dono
+  (Onda 3). A análise ficou registrada em código, em
+  `ProductionOrderEntity.transitionTo`. O plano já classificava G6 na
+  **Onda 2** (precisa de migration) — confirmado.
+- [x] **Testes:** +29 casos novos/reescritos em 6 arquivos
+  (`mrp-convert-to-production-order`, `production-order-lifecycle`,
+  `laboratory-tests`, `quality-lot-lifecycle`, `rfq`,
+  `requisition-convert-to-purchase`). Suíte unitária **1295/1296**
+  (baseline era 1266/1267; a única falha, `module-authorization-map`, é do
+  agente que está implementando `rh` em paralelo — mesma falha de antes,
+  nenhuma nova). `npm run typecheck` limpo. Cada literal de status/enum foi
+  conferido contra o model real (`PurchaseRequisition`,
+  `PurchaseRequisitionItem`, `LotControl`, `NonConformity`, `Purchase`),
+  não contra memória.
+- [x] **Fixtures corrigidos (mock incompleto não é teste verde legítimo):**
+  os fixtures de item de requisição em `requisition-convert-to-purchase`,
+  `engineering-sample-requisition` e `rfq` não tinham `status`, embora a
+  coluna seja `NOT NULL DEFAULT 'pending'` — não representavam uma linha
+  real. Preenchidos.
+- [ ] **Risco residual (G8), não introduzido nesta entrega:** a RNC da
+  reprovação nasce em transação **própria**, depois do commit do teste
+  (`CreateNonConformityUseCase` abre a sua). Se ela falhar, o teste
+  reprovado já está gravado e a resposta é 500. Fechar isso exige que
+  aquele caso de uso aceite transação externa, o que afeta todos os seus
+  chamadores.
+- [ ] **Pendência no `client/` (G8), fora do escopo desta tarefa:** remover
+  a caixinha "Abrir RNC automaticamente se reprovar"
+  (`client/src/pages/laboratory/RegisterTestTab.tsx`, `create_rnc_on_fail`
+  em `client/src/api/laboratory.ts`) — o campo virou decorativo no backend.
+  Quando ela sair, remover também do `createTestSchema`.
+- [ ] **Sem teste de integração real (Postgres).** Duas mudanças desta
+  entrega só foram exercitadas com repositório mockado e merecem teste
+  contra banco real: o `pg_advisory_xact_lock` + `SUBSTRING/CAST` da
+  numeração de OP (SQL cru, invisível para o typecheck e para os mocks) e o
+  consumo de saldo requisição × cotação com dois clients concorrentes.
+
+---
+
+## 2026-08-09 — BLOCO 6 RH: backend do escopo P0 (Férias, Experiência, Admissão, Demissão) — `programador`
+
+Passada 2/2 do backend do Bloco 6 (a passada 1 foi interrompida por queda
+de rede e deixou domínio/aplicação/infraestrutura parciais, **sem camada
+de apresentação**). Artefatos: `docs/business/BLOCO_6_RH_REQUISITOS.md`,
+`..._MODELO_DADOS.md`, `..._API.md`, `..._AUDITORIA.md`.
+
+### Entregue
+
+- [x] **Camada de apresentação completa do módulo `rh`** (não existia): 5
+  controllers, 6 arquivos de validators Zod `.strict()`, middleware Multer
+  dedicado e o router agregador `/api/rh` (**34 endpoints**), montado em
+  `server/app.ts`. Boot real do Express verificado (`require('./app')`),
+  não só typecheck.
+- [x] **`module-authorization-map.test.ts` volta a passar** — `rh` entrou
+  na lista de módulos que exigem `authorizeModule` em 100% das rotas
+  (era a única falha da suíte antes desta entrega).
+- [x] **4 use cases de férias que faltavam:** listagem de programações,
+  confirmação de gozo, calendário por departamento (RF-RH-039) e
+  **revisão de programação** (RF-RH-040, P0 — sem endpoint no contrato de
+  API original, ver "Lacunas do contrato" abaixo).
+- [x] **RBAC decidido conforme instrução normativa do dono do produto**
+  (fecha o achado 10 da auditoria, Opção C): `rh:approve` só para as 2
+  ações de alto impacto; `hr_absences.cid` (`rh`+`sst`) e
+  `hr_payroll_import_items.bruto/liquido` (`rh`+`financeiro`) por
+  **interseção de módulo com omissão de campo**, em
+  `modules/rh/domain/services/rhSensitiveFields.ts` (pronto e testado,
+  ainda sem consumidor — as entidades são P1).
+- [x] **Clean Architecture restaurada:** `EmployeeDirectoryService` +
+  adapter substituíram o `require('models/index')` que estava dentro de 3
+  use cases (férias, admissão, demissão). Efeito colateral desejado: os
+  dois use cases transacionais passaram a ser testáveis sem banco.
+- [x] **Transação onde faltava:** `decision='efetivar'` (fechar o contrato
+  de experiência + abrir o indeterminado) agora é atômico.
+- [x] **+81 casos de teste novos** em 5 arquivos
+  (`rh-vacation-use-cases`, `rh-contract-use-cases`,
+  `rh-admission-termination-use-cases`, `rh-sensitive-fields`,
+  `rh-validators`) mais casos acrescentados a `rh-vacation-rules` e
+  `rh-termination-rules`. Suíte unitária **1402/1402**, `npm run typecheck`
+  limpo.
+
+### Bugs de runtime encontrados e corrigidos (nenhum era pego por typecheck nem por teste)
+
+- [x] **`export =` + `export interface` derrubava o servidor inteiro.** O
+  esbuild do `tsx` transpila o módulo em modo ESM e o `export =` vira uma
+  referência a `<Nome>_module`, que não existe →
+  `ReferenceError` no `require`. Afetava **10 arquivos**: 8 use cases novos
+  de `rh`, `employees/DeactivateEmployeeUseCase.ts` (introduzido na passada
+  1) e **`juridico/ApproveContractUseCase.ts` — este já commitado desde
+  `97628ae`**, ou seja, `require('./app')` estava falhando em `main`.
+  Corrigido em todos (interface local ou `*Types.ts`) e coberto por uma
+  guarda nova: `tests/unit/export-assignment-guard.test.ts`, que varre
+  `src/` inteiro.
+- [x] **Aviso prévio proporcional subestimado em 1 ano nos aniversários
+  redondos** (Lei 12.506/2011). O cálculo usava
+  `floor(dias / 365,25)`: 10 anos completos davam 9 → 57 dias de aviso em
+  vez de 60, **3 dias a menos do que a lei garante**. Substituído por
+  `calculateCompletedYearsOfService` (aniversário de calendário), com teste
+  de regressão.
+- [x] **`calculateConcessiveEnd` violaria CHECK do Postgres em 29/02.** O
+  JS transborda para 01/03, o Postgres satura em 28/02 e a migration
+  `20260808-000018` exige igualdade exata. Corrigido e testado.
+- [x] **Contrato de experiência PRORROGADO nunca vencia automaticamente** —
+  a verificação ativa só olhava `status='ativo'`. Era justamente o cenário
+  do Art. 451 da CLT (prorrogação vencida em silêncio vira prazo
+  indeterminado). Corrigido para `['ativo','prorrogado']`.
+
+### Divergências lei × requisito (lei conferida na fonte, `planalto.gov.br`)
+
+- [x] **Art. 134 §2º → §3º.** A vedação de início de férias nos 2 dias que
+  antecedem feriado/DSR é o **§3º** (incluído pela Lei 13.467/2017); o §2º
+  foi **revogado** por essa mesma lei. Os requisitos, o contrato de API e o
+  código da passada 1 citavam "§2º". Citação corrigida no código.
+- [ ] **Art. 135 caput × RF-RH-037 — divergência NÃO resolvida em código,
+  precisa de decisão do dono do produto.** A lei fixa 30 dias como
+  antecedência **mínima obrigatória** do aviso de férias; o requisito manda
+  aceitar antecedência menor "com justificativa", sem bloquear. Mantido o
+  comportamento do requisito (o ERP registra um aviso já dado, não o
+  emite), mas a mensagem de warning passou a citar o descumprimento do
+  mínimo legal. **Se o dono quiser bloquear, é uma linha.**
+- [ ] **Feriados não são verificados** (Art. 134 §3º, cobertura parcial): o
+  ERP não tem calendário de feriados em nenhum módulo, e nenhum RF do bloco
+  pede um. Só o DSR (assumido como domingo) é verificado. Fica como
+  pendência de modelagem para a passada 2.
+
+### Lacunas dos artefatos de origem encontradas na implementação
+
+- [x] **`POST /vacation-schedules/:id/revise` não existia no contrato de
+  API.** §8.3 descreve a regra de RF-RH-040 (P0) em prosa e a migration
+  modela as colunas, mas a tabela de endpoints de §8.1 não lista nenhuma
+  rota capaz de executá-la. Endpoint acrescentado.
+- [x] **`PATCH .../aso-confirmation`** (admissão e demissão) também não
+  existia — sem ele o gate de conclusão seria inalcançável (já registrado
+  pela passada 1, mantido).
+- [x] **`"work_regime": "experiencia"`** no exemplo de §4.3 do contrato de
+  API é inválido: o ENUM real de `employees.work_regime` é
+  `clt|pj|estagiario|aprendiz`. Experiência é tipo de CONTRATO. Coberto
+  por teste dedicado.
+
+### Pendente para a passada 2 (P1/P2)
+
+- [ ] Grupos 1, 7 a 15 do contrato de API (~43 endpoints): Cargos,
+  Afastamentos (`Absence` — inclui ligar o gatilho de zeramento de férias,
+  RF-RH-041, cujo use case já existe e está testado, mas hoje **não tem
+  quem o chame**), Benefícios, Treinamentos, Espelho de Ponto, Histórico
+  Contratual, Quotas PCD/aprendiz, Folha importada, Painel/KPIs
+  (RF-RH-074/075), Avaliação de Desempenho e Recrutamento.
+- [ ] **`RecalculateVacationAccrualPeriodUseCase` sempre assume 0 faltas** e
+  devolve `data_gap_detected: true` — o cálculo real de RF-RH-032 depende
+  de `HrTimeSheetSummary` (Grupo 10, P1). Enquanto isso, `dias_direito`
+  só muda se o RH informar as faltas manualmente no corpo do
+  `POST .../recalculate`.
+- [ ] **Abertura automática do período aquisitivo no aniversário de 12
+  meses** (RF-RH-031, segunda metade): hoje só o primeiro período é aberto,
+  na conclusão da admissão. Falta o mecanismo recorrente (cron ou
+  verificação ativa em leitura) — o contrato de API delegava a escolha ao
+  programador (§8.1).
+- [ ] **`PUT /api/employees/:id` ainda não gera `EmployeeJobHistory`**
+  (RF-RH-065, P1) nem bloqueia `hire_date` sem confirmação de S-2200
+  (RF-RH-010): `hire_date` continua fora de `ALLOWED_FIELDS`, ou seja, já é
+  ignorado — a trava só faz sentido depois de abrir o campo (achado 15).
+- [ ] **Nenhuma tela em `client/`** para o módulo RH — escopo dos agentes de
+  frontend.
+
+### Riscos residuais
+
+- [ ] **Migrations `20260808-000010..025` continuam NÃO aplicadas.** Todo o
+  backend foi validado com repositório mockado + boot do Express; nenhum
+  `INSERT`/`SELECT` real foi executado. Os pontos de maior risco para o
+  primeiro teste com Postgres real estão listados em
+  `docs/database/DATABASE.md` (seção BLOCO 6 RH): CHECKs de data do período
+  aquisitivo, coluna gerada `payment_deadline`, CHECK de checklist na
+  conclusão e os 3 triggers de imutabilidade.
+- [ ] **Sem teste de integração real** dos 2 fluxos transacionais
+  (conclusão de admissão e de demissão) nem dos triggers de imutabilidade
+  de contrato/período aquisitivo — mesma pendência das entregas anteriores.

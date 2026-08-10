@@ -28,7 +28,15 @@ const ALLOWED_FIELDS = [
   'bank_account',
   'pix_key',
   'notes',
-  'status'
+  'status',
+  // BLOCO 6 RH: 'pcd' (RF-RH-067) e 'job_position_id' (RF-RH-025) — campos novos
+  // opcionais, aditivos, não quebram registros existentes (docs/business/
+  // BLOCO_6_RH_API.md §18). Nota: 'hire_date' segue deliberadamente FORA desta
+  // lista (achado 15 da auditoria, docs/business/BLOCO_6_RH_AUDITORIA.md) —
+  // já é ignorado silenciosamente por este endpoint, o que satisfaz por si só
+  // a trava de RF-RH-010 sem necessidade de guarda condicional adicional.
+  'pcd',
+  'job_position_id',
 ];
 
 interface UpdateEmployeeInput {

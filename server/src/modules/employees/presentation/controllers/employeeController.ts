@@ -8,6 +8,24 @@ const UpdateEmployeeUseCase = require('../../application/use-cases/UpdateEmploye
 const DeactivateEmployeeUseCase = require('../../application/use-cases/DeactivateEmployeeUseCase');
 
 /**
+ * BLOCO 6 RH (pendência #13 da auditoria) — checagem read-only de
+ * `HrTerminationProcess` aberto, sem acoplar `employees` ao módulo `rh`
+ * (nenhum use-case/repositório de `modules/rh` é importado aqui, apenas o
+ * model Sequelize compartilhado via `models/index`, mesmo padrão de baixo
+ * acoplamento já usado entre outros módulos deste projeto).
+ */
+const terminationProcessChecker = {
+  async hasOpenTerminationProcess(employeeId: number | string): Promise<boolean> {
+    const { HrTerminationProcess } = require('../../../../models/index');
+    const { Op } = require('sequelize');
+    const count = await HrTerminationProcess.count({
+      where: { employee_id: employeeId, status: { [Op.notIn]: ['concluido', 'cancelado'] } },
+    });
+    return count > 0;
+  },
+};
+
+/**
  * Controller enxuto do módulo `employees`. Delega toda a regra de negócio
  * aos use cases da camada de aplicação, mantendo o mesmo contrato JSON e os
  * mesmos 5 endpoints do controller anterior
@@ -76,7 +94,7 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
 /** `DELETE /api/employees/:id` — desliga (soft delete) um funcionário. */
 exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new DeactivateEmployeeUseCase(employeesRepository);
+    const useCase = new DeactivateEmployeeUseCase(employeesRepository, terminationProcessChecker);
     const result = await useCase.execute({ id: req.params.id });
     res.json({ success: true, data: result });
   } catch (error) {

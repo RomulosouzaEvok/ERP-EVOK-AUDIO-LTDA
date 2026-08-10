@@ -28,6 +28,11 @@
  * (`docs/business/BLOCO_6_RH_API.md` §4.1, `POST /admission-processes`) —
  * a tabela nao sustentava o payload documentado. Ver
  * `docs/business/BLOCO_6_RH_AUDITORIA.md` achado #1.
+ *
+ * CORRIGIDO pelo programador (passo 4, 2026-08-09): `aso_requested_at`
+ * tambem faltava apesar de exigido pelo contrato de API
+ * (`docs/business/BLOCO_6_RH_API.md` §4.2, "Grava status='aso_pendente',
+ * aso_requested_at=now()") — mesmo padrao de lacuna dos achados 1-5.
  */
 module.exports = {
   async up(queryInterface, Sequelize) {
@@ -76,6 +81,7 @@ module.exports = {
         defaultValue: 'documentos_pendentes',
       },
       cancel_reason: { type: Sequelize.TEXT, allowNull: true },
+      aso_requested_at: { type: Sequelize.DATE, allowNull: true },
       aso_confirmed_at: { type: Sequelize.DATE, allowNull: true },
       aso_result: { type: Sequelize.ENUM('apto', 'inapto', 'apto_com_restricao'), allowNull: true },
       aso_valid_until: { type: Sequelize.DATEONLY, allowNull: true },

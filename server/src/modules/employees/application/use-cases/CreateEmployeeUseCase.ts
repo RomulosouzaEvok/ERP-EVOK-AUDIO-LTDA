@@ -30,6 +30,10 @@ interface CreateEmployeeInput {
   bank_account?: string;
   pix_key?: string;
   notes?: string;
+  /** BLOCO 6 RH — RF-RH-067 (dado sensível, ver SENSITIVE_EMPLOYEE_FIELDS). */
+  pcd?: boolean;
+  /** BLOCO 6 RH — RF-RH-025 (opcional, FK hr_job_positions.id). */
+  job_position_id?: number;
 }
 
 class CreateEmployeeUseCase extends UseCase<CreateEmployeeInput, any> {
@@ -67,7 +71,9 @@ class CreateEmployeeUseCase extends UseCase<CreateEmployeeInput, any> {
       bank_agency,
       bank_account,
       pix_key,
-      notes
+      notes,
+      pcd,
+      job_position_id,
     } = input;
 
     if (!name || !cpf) {
@@ -98,6 +104,8 @@ class CreateEmployeeUseCase extends UseCase<CreateEmployeeInput, any> {
         bank_account,
         pix_key,
         notes,
+        pcd,
+        job_position_id,
         status: 'active'
       });
     } catch (error: any) {

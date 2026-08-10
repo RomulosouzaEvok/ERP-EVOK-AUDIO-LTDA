@@ -75,6 +75,13 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   'accounting',
   'treasury',
   'budget',
+  // BLOCO 6 RH (2026-08-09): módulo NOVO `/api/rh` — todas as rotas atrás de
+  // `authorizeModule('rh', ...)`, bloqueando a rota inteira (desenho de
+  // `docs/business/BLOCO_6_RH_API.md` §0). Não confundir com o módulo
+  // `employees` (abaixo, na lista de excluídos), que continua aberto a
+  // qualquer autenticado com segregação POR CAMPO (RF-RH-006) — são dois
+  // desenhos deliberadamente diferentes para o mesmo departamento.
+  'rh',
 ];
 
 /**

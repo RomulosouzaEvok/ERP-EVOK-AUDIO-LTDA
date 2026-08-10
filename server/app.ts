@@ -194,6 +194,9 @@ app.use('/api/jur', require('./src/modules/juridico/presentation/routes/juridico
 app.use('/api/accounting', require('./src/modules/accounting/presentation/routes/accounting'));
 app.use('/api/treasury', require('./src/modules/treasury/presentation/routes/treasury'));
 app.use('/api/budget', require('./src/modules/budget/presentation/routes/budget'));
+// BLOCO 6 RH — modulo NOVO, montado AO LADO de '/api/employees' (que
+// permanece inalterado, RF-RH-006); nao ha conflito de prefixo.
+app.use('/api/rh', require('./src/modules/rh/presentation/routes/rh'));
 
 app.use('/uploads', express.static('uploads'));
 

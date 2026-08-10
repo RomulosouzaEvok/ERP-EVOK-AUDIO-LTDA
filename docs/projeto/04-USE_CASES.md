@@ -2026,4 +2026,120 @@ módulo: `authorizeModule('juridico', 'operate')`.
 
 ---
 
+## UC-67 a UC-70 (implementado — BLOCO 6 RH, escopo P0, 2026-08-09): Férias, Contrato de Experiência, Admissão e Demissão
+
+**Departamento:** 02 — RH. Módulo novo `server/src/modules/rh/`, montado em
+`/api/rh`, **ao lado** de `/api/employees` (que permanece inalterado —
+RF-RH-006 mantém a rota aberta a qualquer autenticado com segregação por
+campo). Artefatos de origem: `docs/business/BLOCO_6_RH_REQUISITOS.md`
+(81 RF-RH), `docs/business/BLOCO_6_RH_MODELO_DADOS.md` + migrations
+`20260808-000010` a `-000025`, `docs/business/BLOCO_6_RH_API.md` e
+`docs/business/BLOCO_6_RH_AUDITORIA.md`.
+
+Esta passada entrega **apenas o escopo P0** (Grupos 2 a 6 do contrato de
+API, 34 endpoints). Os grupos P1/P2 (Cargos, Afastamentos, Benefícios,
+Treinamentos, Ponto, Histórico Contratual, Quotas PCD/aprendiz, Folha
+importada, Painel/KPIs, Avaliação/Recrutamento) ficam para a passada 2 —
+ver `docs/governance/TODO.md`.
+
+### UC-67 — Férias com alertas de dobra (RF-RH-031 a 043, P0)
+
+`GET/POST /api/rh/vacation-accrual-periods*` e
+`/api/rh/vacation-schedules*`. Regras legais implementadas como funções
+puras em `domain/services/vacationRules.ts`, **cada uma citando o artigo
+conferido no texto oficial da CLT em `planalto.gov.br` (2026-08-09)**:
+
+- **Art. 130, I a IV** — `dias_direito` por faltas injustificadas
+  (30/24/18/12) e **Art. 133, II** (0 dias acima de 32 faltas).
+- **Art. 130 caput / Art. 134 caput** — período aquisitivo de 12 meses e
+  concessivo de mais 12. O cálculo replica a saturação de fim de mês do
+  PostgreSQL (`date '2028-02-29' + interval '1 year'` = `2029-02-28`),
+  exigida pelos CHECKs da migration `20260808-000018`.
+- **Art. 134 §1º** — até 3 frações, uma ≥14 dias e as demais ≥5.
+- **Art. 134 §3º** — vedação de início nos 2 dias que antecedem o DSR
+  (cobertura parcial: feriados não são verificáveis, o ERP não tem
+  calendário de feriados — gap declarado).
+- **Art. 135 caput** — aviso com 30 dias de antecedência (aceito com
+  aviso/justificativa, não bloqueante, por determinação de RF-RH-037;
+  divergência lei × requisito registrada no HANDOFF).
+- **Art. 143 caput e §1º** — abono de até 1/3 e prazo de 15 dias antes do
+  fim do aquisitivo.
+- **Art. 137 caput** — dobra: verificação **ativa na leitura**
+  (`GET` grava `status='vencido_dobra'` de forma idempotente e devolve
+  `alert_level: 'critical'`), sem depender de cron (RF-RH-076/RNF-RH-02).
+- **Art. 133, IV** — afastamento previdenciário >6 meses zera o período
+  aquisitivo e abre um novo a partir do retorno (`Reset...UseCase` pronto,
+  ainda **sem gatilho**: depende de `Absence`, que é P1).
+
+O período aquisitivo **nunca nasce por `POST` manual** (RF-RH-031): é
+aberto automaticamente dentro da transação de conclusão da admissão.
+`POST /vacation-schedules/:id/revise` (RF-RH-040) grava a alteração como
+**novo registro** encadeado por `superseded_by_id`, nunca sobrescreve.
+
+### UC-68 — Contrato de experiência (RF-RH-013 a 016, P0)
+
+`GET /api/rh/employee-contracts`, `PATCH .../extend`, `PATCH .../decision`.
+**Art. 445, parágrafo único** (máximo de 90 dias corridos) e **Art. 451**
+(uma única prorrogação). Vencimento sem decisão vira
+`indeterminado_automatico` por verificação ativa na leitura — inclusive
+para contratos já **prorrogados**, que é o cenário de maior risco do
+Art. 451. `decision='efetivar'` fecha o contrato de experiência e cria um
+**novo** contrato `indeterminado` na mesma transação (RNF-RH-04, histórico
+imutável); `decision='rescindir'` abre o `TerminationProcess` sem encerrar
+o contrato antes dos gates de demissão.
+
+### UC-69 — Admissão com gate de ASO e confirmação de eSocial (RF-RH-007 a 012)
+
+`POST /api/rh/admission-processes` e ações. A conclusão é **uma única
+transação**: cria `employees` + `hr_employee_contracts` +
+`hr_employee_job_history` + o primeiro `hr_vacation_accrual_periods`.
+Bloqueada por `422` enquanto o ASO admissional não estiver confirmado como
+`apto`/`apto_com_restricao` e dentro da validade. O ERP **nunca transmite**
+eSocial: `esocial_s2200_confirmed_at` é confirmação manual (RNF-RH-03).
+Cancelamento usa `status='cancelada'` com motivo — nunca exclusão física.
+
+### UC-70 — Demissão com checklist e prazo de verbas (RF-RH-017 a 023)
+
+`POST /api/rh/termination-processes` e ações. **Art. 477 §6º da CLT**:
+`payment_deadline` = `termination_date + 10 dias corridos` (coluna GERADA
+pelo banco, nunca gravada pela aplicação); `?payment_deadline_at_risk=true`
+lista os processos a ≤3 dias do vencimento sem pagamento confirmado.
+**Lei 12.506/2011**: aviso prévio proporcional sugerido (30 + 3 dias por
+ano completo, teto de 90) — sugestão, não imposição. A conclusão exige
+nível `rh:approve` e, na mesma transação, grava
+`employees.status='fired'` + `dismissal_date` e desativa o login
+(`users.active=false`); é bloqueada enquanto houver ativo/EPI vinculado ao
+funcionário ou ASO demissional pendente.
+
+**Reconciliação com a rota antiga (achado 13 da auditoria, decisão do dono
+do produto):** `DELETE /api/employees/:id` passa a ser **bloqueado com
+422** quando existir `HrTerminationProcess` em aberto para o funcionário —
+o desligamento formal só pode ser concluído pelo novo fluxo. Sem processo
+formal, o comportamento legado é preservado (ex.: correção de cadastro
+indevido).
+
+### RBAC do módulo (decisão normativa do dono do produto, fecha o achado 10)
+
+Todas as rotas de `/api/rh` ficam atrás de `authorizeModule('rh', ...)`
+(bloqueio de rota inteira). `rh:approve` é exigido em **exatamente 2
+ações** — concluir demissão e decidir rescisão de experiência — e **não** é
+reaproveitado como nível de leitura de dado sensível. Os 2 campos
+sensíveis do bloco usam **interseção de módulos**, implementada como
+omissão do campo no retorno (nunca 403 de rota):
+`hr_absences.cid` exige `rh` **E** `sst`;
+`hr_payroll_import_items.bruto`/`liquido` exige `rh` **E** `financeiro`
+(`server/src/modules/rh/domain/services/rhSensitiveFields.ts`). `pcd` foi
+adicionado a `SENSITIVE_EMPLOYEE_FIELDS` (achado 11).
+
+**Testes:** `rh-vacation-rules`, `rh-vacation-use-cases`,
+`rh-contract-use-cases`, `rh-admission-termination-use-cases`,
+`rh-termination-rules`, `rh-experience-contract-rules`,
+`rh-sensitive-fields`, `rh-validators` (guarda que cruza cada literal de
+enum do validador contra o `ENUM` real da migration) e
+`rh-deactivate-employee-termination-guard` em `server/tests/unit/`.
+Ver `docs/governance/HANDOFF_CODEX.md` (entrada 2026-08-09) para o
+detalhamento, as divergências lei × requisito e os riscos residuais.
+
+---
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

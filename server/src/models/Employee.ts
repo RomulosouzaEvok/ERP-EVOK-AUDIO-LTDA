@@ -41,6 +41,10 @@ interface EmployeeAttributes {
   emergency_phone: string | null;
   notes: string | null;
   photo_url: string | null;
+  /** RF-RH-067 (BLOCO 6 RH) — indicador PCD para cálculo de quota legal (BR-RH-018). Dado sensível — ver SENSITIVE_EMPLOYEE_FIELDS. */
+  pcd: boolean | null;
+  /** RF-RH-025 (BLOCO 6 RH) — FK opcional para `hr_job_positions.id`; `position` (texto livre) permanece válido. */
+  job_position_id: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -75,7 +79,9 @@ const Employee = sequelize.define('Employee', {
   emergency_contact: DataTypes.STRING(100),
   emergency_phone: DataTypes.STRING(20),
   notes: DataTypes.TEXT,
-  photo_url: DataTypes.STRING(255)
+  photo_url: DataTypes.STRING(255),
+  pcd: { type: DataTypes.BOOLEAN, allowNull: true, comment: 'RF-RH-067 - indicador PCD (dado sensivel, BR-RH-020)' },
+  job_position_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'RF-RH-025 - FK opcional para hr_job_positions.id' },
 }, {
   tableName: 'employees',
   underscored: true,

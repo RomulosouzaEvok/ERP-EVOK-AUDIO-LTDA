@@ -168,6 +168,14 @@ import AccountingEntryItem = require('./AccountingEntryItem');
 import TreasuryBankAccount = require('./TreasuryBankAccount');
 import TreasuryFinancialOperation = require('./TreasuryFinancialOperation');
 import BudgetLine = require('./BudgetLine');
+import HrJobPosition = require('./HrJobPosition');
+import HrEmployeeContract = require('./HrEmployeeContract');
+import HrAdmissionProcess = require('./HrAdmissionProcess');
+import HrTerminationProcess = require('./HrTerminationProcess');
+import HrEmployeeDocument = require('./HrEmployeeDocument');
+import HrVacationAccrualPeriod = require('./HrVacationAccrualPeriod');
+import HrVacationSchedule = require('./HrVacationSchedule');
+import HrEmployeeJobHistory = require('./HrEmployeeJobHistory');
 
 // ============================================
 // RELACIONAMENTOS
@@ -1262,6 +1270,40 @@ CostCenter.hasMany(BudgetLine, { foreignKey: 'cost_center_id', as: 'budget_lines
 BudgetLine.belongsTo(CostCenter, { foreignKey: 'cost_center_id', as: 'costCenter' });
 AccountingEntry.hasOne(AccountingEntry, { foreignKey: 'reversal_of_id', as: 'reversalEntry' });
 
+// ---- BLOCO 6 RH — Admissão, Contrato de Experiência, Demissão, Férias (P0) ----
+// Employee ↔ HrJobPosition (RF-RH-025, opcional — Employee.job_position_id já criado via migration 20260808-000011)
+Employee.belongsTo(HrJobPosition, { foreignKey: 'job_position_id', as: 'jobPosition' });
+HrJobPosition.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+
+Employee.hasMany(HrEmployeeContract, { foreignKey: 'employee_id', as: 'hrContracts' });
+HrEmployeeContract.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+Employee.hasMany(HrAdmissionProcess, { foreignKey: 'employee_id', as: 'hrAdmissionProcesses' });
+HrAdmissionProcess.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+HrAdmissionProcess.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+HrAdmissionProcess.belongsTo(HrJobPosition, { foreignKey: 'job_position_id', as: 'jobPosition' });
+HrAdmissionProcess.belongsTo(HrEmployeeContract, { foreignKey: 'contract_id', as: 'contract' });
+HrAdmissionProcess.belongsTo(HrEmployeeJobHistory, { foreignKey: 'job_history_id', as: 'jobHistory' });
+
+Employee.hasMany(HrTerminationProcess, { foreignKey: 'employee_id', as: 'hrTerminationProcesses' });
+HrTerminationProcess.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+Employee.hasMany(HrEmployeeDocument, { foreignKey: 'employee_id', as: 'hrDocuments' });
+HrEmployeeDocument.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+Employee.hasMany(HrVacationAccrualPeriod, { foreignKey: 'employee_id', as: 'hrVacationAccrualPeriods' });
+HrVacationAccrualPeriod.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+HrVacationAccrualPeriod.belongsTo(HrVacationAccrualPeriod, { foreignKey: 'zeroed_from_period_id', as: 'zeroedFromPeriod' });
+
+HrVacationAccrualPeriod.hasMany(HrVacationSchedule, { foreignKey: 'accrual_period_id', as: 'schedules' });
+HrVacationSchedule.belongsTo(HrVacationAccrualPeriod, { foreignKey: 'accrual_period_id', as: 'accrualPeriod' });
+HrVacationSchedule.belongsTo(HrVacationSchedule, { foreignKey: 'superseded_by_id', as: 'supersededBy' });
+
+Employee.hasMany(HrEmployeeJobHistory, { foreignKey: 'employee_id', as: 'hrJobHistory' });
+HrEmployeeJobHistory.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+HrEmployeeJobHistory.belongsTo(HrJobPosition, { foreignKey: 'job_position_id', as: 'jobPosition' });
+HrEmployeeJobHistory.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -1312,5 +1354,7 @@ export {
   JurCorporateAct, JurContractApproval,
   AccountingChartOfAccount, AccountingEntry, AccountingEntryItem,
   TreasuryBankAccount, TreasuryFinancialOperation,
-  BudgetLine
+  BudgetLine,
+  HrJobPosition, HrEmployeeContract, HrAdmissionProcess, HrTerminationProcess,
+  HrEmployeeDocument, HrVacationAccrualPeriod, HrVacationSchedule, HrEmployeeJobHistory
 };

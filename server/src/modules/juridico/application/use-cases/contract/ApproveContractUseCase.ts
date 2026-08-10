@@ -18,7 +18,19 @@ import ContractApprovalRepository from '../../../domain/repositories/ContractApp
 import { NotFoundError, BusinessRuleError, ValidationError } from '../../../../../errors';
 import { requiredApproverRoles, type ContractApproverRole } from '../../../domain/constants';
 
-export interface ApproveContractInput {
+/**
+ * ⚠️ Interface **LOCAL** (sem `export`) — correção de bug de RUNTIME
+ * encontrada em 2026-08-09 durante o Bloco 6 RH, não relacionada ao
+ * Jurídico em si: este arquivo usa `export =` e o transpilador CJS/ESM do
+ * runtime (tsx/esbuild) aborta em tempo de EXECUÇÃO quando um `export =`
+ * convive com qualquer outro `export`, inclusive um `export interface`
+ * (`ReferenceError: ApproveContractUseCase_module is not defined`). Como
+ * `contractController` é carregado no boot de `app.ts`, isso derrubava o
+ * **servidor inteiro** — e nem `tsc --noEmit` nem a suíte unitária (Jest
+ * em CJS) acusavam. `ApproveContractInput` não era importado por nenhum
+ * outro arquivo, então tornar a interface local não muda nada além disso.
+ */
+interface ApproveContractInput {
   contractId: number;
   approverUserId: number;
   /** Papéis que o usuário logado efetivamente possui (resolvidos por RBAC no controller, nunca do body). */

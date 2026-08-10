@@ -26,6 +26,14 @@
  * pagamento das verbas rescisorias, preenchido via `POST
  * /termination-processes/:id/trct` com `{ paid: true }`). Ver
  * `docs/business/BLOCO_6_RH_AUDITORIA.md` achado #5.
+ *
+ * CORRIGIDO pelo programador (passo 4, 2026-08-09): `concluded_by`/
+ * `concluded_at` tambem faltavam apesar de exigidos pelo contrato de API
+ * (`docs/business/BLOCO_6_RH_API.md` §6.2, "Grava TerminationProcess.
+ * status='concluido', concluded_by=req.user.id, concluded_at=now()") —
+ * mesmo padrao de lacuna ja encontrado 5 vezes pelo `AuditorIntegrador`
+ * nesta migration (achados 1-5), nao pego porque a tabela nao havia sido
+ * lida coluna-a-coluna contra a secao 6.2 especificamente.
  */
 module.exports = {
   async up(queryInterface, Sequelize) {
@@ -64,6 +72,14 @@ module.exports = {
         defaultValue: 'aberto',
       },
       cancel_reason: { type: Sequelize.TEXT, allowNull: true },
+      concluded_by: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: 'users', key: 'id' },
+        onDelete: 'RESTRICT',
+        onUpdate: 'CASCADE',
+      },
+      concluded_at: { type: Sequelize.DATE, allowNull: true },
       created_by: {
         type: Sequelize.INTEGER,
         allowNull: false,
