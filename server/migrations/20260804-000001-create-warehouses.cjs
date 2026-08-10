@@ -164,14 +164,7 @@ async function createWarehousesAndStock(queryInterface, Sequelize) {
     });
 
     // 2. Seed idempotente dos 3 depositos decididos (BUSINESS_RULES.md §12 item 1)
-    await queryInterface.sequelize.query(`
-      INSERT INTO warehouses (code, name, description, active, created_at, updated_at)
-      VALUES
-        ('INSUMOS', 'Deposito de Insumos de Producao', 'Materia-prima e componentes utilizados na producao', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-        ('ACABADOS', 'Deposito de Produto Acabado', 'Produtos concluidos pela producao, prontos para expedicao', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-        ('LABORATORIO', 'Deposito do Laboratorio', 'Amostras e insumos de teste/engenharia', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT (code) DO NOTHING;
-    `);
+    await seedWarehouses(queryInterface);
 
     // 3. Tabela product_warehouse_stock (saldo por par produto/deposito)
     await queryInterface.createTable('product_warehouse_stock', {
@@ -238,3 +231,25 @@ async function createWarehousesAndStock(queryInterface, Sequelize) {
       name: 'idx_product_warehouse_stock_warehouse_id',
     });
 }
+
+/**
+ * Seed idempotente dos 3 depositos decididos (BUSINESS_RULES.md §12 item 1).
+ *
+ * @param {import('sequelize').QueryInterface} queryInterface
+ * @returns {Promise<void>}
+ */
+async function seedWarehouses(queryInterface) {
+  await queryInterface.sequelize.query(`
+    INSERT INTO warehouses (code, name, description, active, created_at, updated_at)
+    VALUES
+      ('INSUMOS', 'Deposito de Insumos de Producao', 'Materia-prima e componentes utilizados na producao', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('ACABADOS', 'Deposito de Produto Acabado', 'Produtos concluidos pela producao, prontos para expedicao', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+      ('LABORATORIO', 'Deposito do Laboratorio', 'Amostras e insumos de teste/engenharia', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ON CONFLICT (code) DO NOTHING;
+  `);
+}
+
+// Exposto para o baseline congelado (`20260731-000001-baseline-schema.cjs`):
+// em um banco novo o DDL vem do dump e esta migration nao roda, mas os 3
+// depositos ainda precisam existir. A fonte da verdade continua aqui.
+module.exports.seedReferenceData = seedWarehouses;

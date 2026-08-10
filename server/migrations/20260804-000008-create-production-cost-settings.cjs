@@ -65,16 +65,7 @@ module.exports = {
       CHECK (id = 1);
     `);
 
-    // Seed da linha singleton com valores neutros (0%) — a fabrica configura
-    // depois via tela/endpoint administrativo (fora do escopo desta migration).
-    await queryInterface.sequelize.query(`
-      INSERT INTO production_cost_settings (
-        id, overhead_calculation_basis, overhead_rate_percent, default_labor_rate_per_hour, created_at, updated_at
-      ) VALUES (
-        1, 'material_labor', 0, 0, NOW(), NOW()
-      )
-      ON CONFLICT (id) DO NOTHING;
-    `);
+    await seedProductionCostSettings(queryInterface);
   },
 
   async down(queryInterface) {
@@ -84,3 +75,26 @@ module.exports = {
     `);
   },
 };
+
+/**
+ * Seed da linha singleton com valores neutros (0%) — a fabrica configura
+ * depois via tela/endpoint administrativo (fora do escopo desta migration).
+ *
+ * @param {import('sequelize').QueryInterface} queryInterface
+ * @returns {Promise<void>}
+ */
+async function seedProductionCostSettings(queryInterface) {
+  await queryInterface.sequelize.query(`
+    INSERT INTO production_cost_settings (
+      id, overhead_calculation_basis, overhead_rate_percent, default_labor_rate_per_hour, created_at, updated_at
+    ) VALUES (
+      1, 'material_labor', 0, 0, NOW(), NOW()
+    )
+    ON CONFLICT (id) DO NOTHING;
+  `);
+}
+
+// Exposto para o baseline congelado (`20260731-000001-baseline-schema.cjs`):
+// em um banco novo o DDL vem do dump e esta migration nao roda, mas a linha
+// singleton de configuracao de custo ainda precisa existir.
+module.exports.seedReferenceData = seedProductionCostSettings;

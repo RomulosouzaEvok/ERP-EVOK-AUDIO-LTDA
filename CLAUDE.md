@@ -1,8 +1,16 @@
 # CLAUDE.md — ERP Evok Áudio LTDA
 **Single Source of Truth (SSOT) para o projeto ERP**
 
-**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 majoritariamente entregue (2026-08-04/07), incluindo apps mobile e Android TV novos, RFQ, centros de custo, OEE, conciliação bancária, faturamento parcial, downtime de produção, módulos SST/TI completos e os 6 departamentos/subáreas que faltavam (Facilities, Marketing, Jurídico, Contabilidade, Tesouraria, Controladoria) | **Data:** 7 de agosto de 2026  
-**Próximo passo:** UAT completo → aprovação formal G6 → aquisição do servidor de produção → Go-Live
+**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 entregue (2026-08-04/07); **cadeia do produto: 16 dos 17 gaps fechados em 2026-08-09/10** e o **banco voltou a ser reproduzível** (2026-08-10) | **Data:** 10 de agosto de 2026
+**Próximo passo:** teste ponta a ponta com escrita real (insumo → produto acabado expedido) → UAT completo → aprovação formal G6 → aquisição do servidor de produção → Go-Live
+
+> ⚠️ **Critério de aceite corrigido em 2026-08-10.** Typecheck + suíte unitária
+> verdes **não** provam que um módulo funciona: os 1807 testes unitários usam
+> repositório dublê e nenhum toca o PostgreSQL. Quatro rodadas de defeito
+> silencioso vieram daí. O aceite honesto é **uma escrita real bem-sucedida no
+> fluxo principal**. Leitura obrigatória antes de declarar qualquer coisa
+> pronta: `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md`
+> e `docs/governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md`.
 
 ---
 
@@ -30,14 +38,25 @@
 
 ### Status Atual
 - ✅ Backend: Node.js + Express + Sequelize (30+ módulos, Clean Architecture — use-cases desacoplados do Sequelize direto em 22+ módulos desde 2026-08-05)
-- ✅ Database: PostgreSQL 16 (66 migrations versionadas, 159+ foreign keys — RFQ, centros de custo, tabela de preços por cliente, downtime de produção, conciliação bancária e importação/COMEX, 2026-08-06)
-- ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela (MRP, requisição de compra, qualidade, manutenção, RH, relatórios, configuração fiscal e auditor inteligente foram cabeados entre 2026-08-02 e 2026-08-05); as exceções são o inventário mobile (QR, propositalmente mobile-only), os endpoints de webhook (sem UI, integração backend-to-backend) e, temporariamente, o módulo de **Importação/COMEX (NOVO)**, backend completo mas ainda sem tela
+- ✅ Database: PostgreSQL 16 — **160 migrations versionadas e aplicadas**, **200 tabelas**, **459 foreign keys** (medido no banco em 2026-08-10, não estimado). Os dois bancos (`erp_evok_audio` e `erp_evok_audio_test`) são **idênticos**, e o baseline passou a ser **DDL estático congelado** (`server/database/postgresql/00_baseline_frozen.sql`) em vez de gerado a partir dos models — banco novo nasce igual ao atual. Ver `docs/database/DATABASE.md`, seção *"Baseline congelado"*
+- ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela. **A tela de Importação/COMEX existe** (`/purchases/comex`, `client/src/pages/purchases/ComexPage.tsx`, commit `612e116`) e já conhece o gate de aprovação da diretoria; a **tela de roteiro de fabricação** entrou em `b52470d`. As exceções restantes são por desenho, não por atraso: inventário mobile (QR, propositalmente mobile-only) e endpoints de webhook (integração backend-to-backend, sem UI). Sem tela ainda: **Plano Mestre de Produção (MPS)**, entregue só por API em `3e3827e`
 - ✅ **App mobile novo** (`mobile/`, Expo/React Native): login JWT, scan de estoque QR, histórico de movimentações, execução de contagens cíclicas (pool/atribuídas) — entregue em 2026-08-06, validado só por typecheck/bundle, **sem teste em dispositivo real ainda**
 - ✅ **App Android TV novo** (`tv/`, react-native-tvos): painel de demandas por departamento (recebimento, requisições, expedição, qualidade), auto-refresh 60s — entregue em 2026-08-06, mesma ressalva de validação (sem hardware real testado)
 - ✅ **4 bloqueadores P0 + 2 P1 remediados em 2026-08-02** (commit `d1d3aff`) — Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)
 - ✅ **Auditoria multi-agente de 7 frentes concluída em 2026-08-06** (geral, segurança, DBA, infra, frontend, mobile/TV, documentação) com remediação imediata de 4 frentes no mesmo dia — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06, e pendências residuais em `docs/governance/TODO.md`
 - ✅ **Terceira rodada de entregas em 2026-08-06** (auth refresh deslizante + logging estruturado Winston, paginação/renovação de sessão em `mobile/`/`tv/`, telas web de reatribuição de contagem e fornecedor padrão do item, e 3 gaps de negócio fechados — tabela de preços por cliente, alteração de pedido confirmado, faturamento parcial de NF-e em Vendas; paradas de máquina com OEE preciso em Produção; conciliação bancária OFX em Financeiro) — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "terceira rodada", e `docs/governance/HANDOFF_CODEX.md`
-- ✅ **Quarta rodada de entregas em 2026-08-06** (`Asset.status` passou a sincronizar automaticamente com o ciclo de vida da ordem de manutenção — RF-PAT-05 `[IMPLEMENTADO]`, `docs/patrimonio/03-MANUTENCAO.md` §6; e o módulo **Importação/COMEX** (UC-19, RF-COM-12) foi implementado do zero — backend completo em `server/src/modules/comex/`, `/api/comex/import-processes`, tela web pendente) — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` e `docs/governance/HANDOFF_CODEX.md`
+- ✅ **Quarta rodada de entregas em 2026-08-06** (`Asset.status` passou a sincronizar automaticamente com o ciclo de vida da ordem de manutenção — RF-PAT-05 `[IMPLEMENTADO]`, `docs/patrimonio/03-MANUTENCAO.md` §6; e o módulo **Importação/COMEX** (UC-19, RF-COM-12) foi implementado do zero — backend completo em `server/src/modules/comex/`, `/api/comex/import-processes`) — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` e `docs/governance/HANDOFF_CODEX.md`
+- ✅ **Cadeia do produto — 16 dos 17 gaps fechados em 2026-08-09/10.** SSOT do estado: `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` (§3 ondas, §4 decisões D-A a D-K do dono, §5 critério de pronto, §6 registro de execução commit a commit). O que mudou no comportamento do sistema:
+  - **Engenharia (G1, `067472a`):** as duas BOMs paralelas viraram **fonte única** (`bill_of_materials`); escrita paralela em `item_estruturas` encerrada com 422; MRP lê por projeção em tempo de leitura, sem réplica
+  - **Produção (G5 `c21f81b` + G4 `b954fa5`):** roteiro de fabricação ganhou API e tela, e **concluir OP sem apontamento passa a falhar** — obrigação do SPED Bloco K (Ajuste SINIEF 2/09 cl. 3ª §7º III), documentada em `docs/tributario/04-BLOCO_K.md`
+  - **PCP (G17, `3e3827e`):** **Plano Mestre de Produção (MPS)** entre a carteira e a ordem. Venda **não** gera OP automática (decisão D-F: existe PCP formal). Limitação conhecida: `sales` não tem data de entrega prometida, então não há baldes de tempo
+  - **Qualidade (G7, `9e061ea`):** inspeção virou entidade (`quality_inspections`) no formato da ISO 9001:2015 §8.6; liberar lote exige inspeção aprovada; a **quarentena deixou de ser decorativa** (MRP e disponibilidade de OP descontam o saldo retido)
+  - **Vendas (G9, `ed47e10`):** a **baixa de estoque saiu da confirmação do pedido e passou para a autorização da NF-e**; confirmar passou a reservar
+  - **Financeiro (G13, `2648686`):** **conta a pagar nasce no recebimento**, **conta a receber na NF-e** (CPC 00 R2 4.56/4.58 e CPC 47); nenhuma parcela nasce paga
+  - **Compras (G11 `ec1b499`, G11-COMEX `4b60a81`, D-K `bc13006`):** alçada por **origem** (nacional acima de R$ 500 mil e **toda** importação exigem diretoria), gate da diretoria na saída de `draft` do COMEX, e **segregação de função: quem solicita não aprova** — nos 4 pontos de aprovação, **sem exceção para `admin`**
+  - 🔴 **Ação operacional obrigatória antes de produção:** a segregação de função (D-K) é sobre identidade, não privilégio. Hoje há **1 único usuário capaz de aprovar compra** e ele é o autor de 18/18 pedidos e 13/13 requisições — **nenhuma compra será aprovável** até existir um segundo aprovador cadastrado. Ver `PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4, D-K item 2
+  - ⏸️ **G6 é o único gap sem implementação** (decisão consciente: a pré-condição já é coberta pela máquina de estados)
+- ✅ **Rede de segurança armada (2026-08-10).** Os 34 arquivos de teste de integração **pulavam em silêncio** e reportavam verde, porque `npm run test:integration` não definia `RUN_INTEGRATION`. O script passou a apontar para o runner que sobe a API e usa o banco de teste isolado (`node scripts/run-api-suite.cjs integration`). Três guardas novas contra a classe de defeito que passava por typecheck **e** por 1800 testes: `schema-model-drift-guard`, `column-name-drift-guard` e `enum-literal-guard` (`server/tests/integration/`) — **as três verdes**
 
 ---
 
@@ -157,7 +176,7 @@ erp-evok-audio/
 - **Pedido de Compra:** Origem em Requisição, status (pending → approved → sent → partial → received)
 - **Fornecedores:** Avaliação, prazos, termos de pagamento
 - **Recebimento:** Entrada no estoque, geração de Contas a Pagar (pós-recebimento, não em aprovação)
-- **Importação / COMEX (NOVO, 2026-08-06):** `/api/comex/import-processes` (UC-19) — processo de importação (fornecedor, itens, FOB, câmbio, frete/seguro), cálculo automático de tributos (II/IPI/PIS/COFINS/ICMS, alíquotas informadas manualmente por item — sem integração Siscomex/NCM), acompanhamento sequencial (`shipped → arrived → customs_cleared`), recebimento com entrada em estoque e custo nacionalizado; backend completo, **tela web ainda pendente**; sem AP automática de tributos (ver `docs/arquitetura/API.md` §32, `docs/governance/HANDOFF_CODEX.md`)
+- **Importação / COMEX (NOVO, 2026-08-06):** `/api/comex/import-processes` (UC-19) — processo de importação (fornecedor, itens, FOB, câmbio, frete/seguro), cálculo automático de tributos (II/IPI/PIS/COFINS/ICMS, alíquotas informadas manualmente por item — sem integração Siscomex/NCM), acompanhamento sequencial (`shipped → arrived → customs_cleared`), recebimento com entrada em estoque e custo nacionalizado. **Tela em `/purchases/comex`** (`612e116`). Desde 2026-08-10 a **diretoria aprova na saída de `draft`** (gate G11-COMEX/D-G, `import_process_approvals`, `4b60a81`) e a entrada de material passou pelo padrão do G14 (lote + quarentena). **Ainda sem AP automática dos tributos** — é escopo do G13 e depende de decisão do dono sobre moeda estrangeira (ver `docs/arquitetura/API.md` §32, `docs/governance/HANDOFF_CODEX.md`)
 
 ### Estoque & Logística
 - **Inventário:** Entrada/saída/ajuste com rastreamento completo
@@ -209,10 +228,11 @@ Veja [AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA
    - Mapeamento departamento→centro de custo na AP automática, CNAB (boleto/remessa/retorno — só OFX foi implementado)
    - Histórico multi-NF-e por pedido (`sale_invoices`) e reconciliação de status assíncrono de provedores reais de NF-e com faturamento parcial
    - Teste de integração real (Postgres) das 3 features de maior risco da terceira rodada de 2026-08-06: conciliação bancária, índice único parcial de downtime, faturamento parcial (ver `docs/governance/TODO.md`, seção 2026-08-06 terceira rodada)
-   - Tela web do módulo Importação/COMEX (backend pronto, `client/` pendente) e teste de integração real (Postgres) do fluxo create→tracking→receive de COMEX e da sincronização `Asset.status`↔ordem de manutenção
+   - ~~Tela web do módulo Importação/COMEX~~ ✅ **entregue em 2026-08-10** (`612e116`, `/purchases/comex`). Continua pendente o teste de integração real (Postgres) do fluxo create→tracking→receive de COMEX e da sincronização `Asset.status`↔ordem de manutenção
+   - Tela do **Plano Mestre de Produção (MPS)** — backend entregue em `3e3827e`, `client/` pendente
 3. **Fase 3 (P2):** Capacidade finita/centros de trabalho, TypeScript strict
 4. **Fase 4 (P3):** Refugo detalhado por etapa, CI/CD, unificação schema legado/novo (decisão futura de `DROP TABLE` das 12 tabelas órfãs do schema-fantasma em português, marcadas `DEPRECATED` em 2026-08-06 — ver `docs/database/DATABASE.md`)
-5. **Infra de produção (bloqueia deploy, independente das fases acima):** servidor de produção (VPS/on-premise) ainda não adquirido; reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato e cron de backup aguardando essa compra — ver `docs/infra/DEPLOY_UBUNTU.md` e `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md`
+5. **Infra de produção (bloqueia deploy, independente das fases acima):** servidor de produção (VPS/on-premise) ainda não adquirido; reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato e cron de backup aguardando essa compra — ver `docs/infra/DEPLOY_UBUNTU.md` e `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md`. **O banco deixou de ser bloqueador** desde 2026-08-10: o baseline congelado faz um banco novo nascer idêntico ao atual (provado com banco descartável provisionado só por migrations). Falta a troca da credencial de runtime para a role de privilégio mínimo `evok_app` — ver `docs/database/05-ACESSOS_E_ISOLAMENTO.md`
 
 ---
 
@@ -297,7 +317,7 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 **Tradeoff:** Menos previsível (não há "MRP run" com hora específica), mas mais preciso.
 
 ### Foreign Keys Obrigatórias
-**Decisão:** Integridade referencial obrigatória — 159+ FKs aplicadas via migrations versionadas (base de 133 em 2026-08-02, expandida por schema novo desde então, incluindo RFQ + centros de custo em 2026-08-06), com `ON DELETE RESTRICT` (padrão) ou `CASCADE`/`SET NULL` (quando apropriado).
+**Decisão:** Integridade referencial obrigatória — **459 FKs** no banco (contadas em `pg_constraint` em 2026-08-10; base de 133 em 2026-08-02), aplicadas via migrations versionadas, com `ON DELETE RESTRICT` (padrão) ou `CASCADE`/`SET NULL` (quando apropriado). A guarda `schema-model-drift-guard` reprova FK `ON DELETE SET NULL` sobre coluna `NOT NULL` — contradição que já escondeu 12 colunas indevidamente obrigatórias.
 
 **Por quê:** Integridade referencial, sem órfãos, auditoria
 **Tradeoff:** Mais rígido (ex: não pode deletar fornecedor com compras abertas), mas banco garante consistência
@@ -366,7 +386,7 @@ R: Siga `modules/{modulo}/{use-cases,repositories,controllers}/` padrão Clean A
 R: CTO/Tech Lead (plano 30h), CFO (riscos), Gerente Produção (rastreabilidade), Compliance (LGPD/ISO).
 
 **P: Frontend está pronto?**  
-R: Quase — a única lacuna real hoje é o módulo novo de Importação/COMEX. Web (`client/`, React 19 + Vite, porta 5173) cobre praticamente todos os módulos do backend — login, dashboard, produtos, vendas, compras, requisição de compra, MRP, produção/BOM, qualidade, financeiro, patrimônio, manutenção, RH, relatórios, configuração fiscal, auditor inteligente, usuários/perfis de acesso e rastreabilidade. As exceções por desenho (não por atraso) são o inventário mobile via QR (propositalmente mobile-only) e os endpoints de webhook (integração backend-to-backend, sem UI); a exceção por atraso é a **Importação/COMEX (UC-19, NOVO 2026-08-06)** — backend completo em `/api/comex/import-processes`, tela web ainda pendente para a próxima rodada de frontend. Além disso, dois apps novos: `mobile/` (Expo, inventário QR + contagens cíclicas) e `tv/` (Android TV, painel de demandas por departamento) — ambos entregues em 2026-08-06, validados só por typecheck/bundle, **ainda sem teste em hardware real**.
+R: Web (`client/`, React 19 + Vite, porta 5173) cobre praticamente todos os módulos do backend — login, dashboard, produtos, vendas, compras, requisição de compra, MRP, produção/BOM, **roteiro de fabricação** (`b52470d`), qualidade, financeiro, patrimônio, manutenção, RH, relatórios, configuração fiscal, auditor inteligente, usuários/perfis de acesso, rastreabilidade e **Importação/COMEX** (`/purchases/comex`, `612e116`). As exceções por desenho (não por atraso) são o inventário mobile via QR (propositalmente mobile-only) e os endpoints de webhook (integração backend-to-backend, sem UI). **Sem tela ainda:** o Plano Mestre de Produção (MPS), entregue só por API em `3e3827e`. Além disso, dois apps: `mobile/` (Expo, inventário QR + contagens cíclicas) e `tv/` (Android TV, painel de demandas por departamento) — ambos entregues em 2026-08-06, validados só por typecheck/bundle, **ainda sem teste em hardware real**.
 
 **P: Posso rodar em MySQL/SQLite?**  
 R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de arquitetura").
@@ -383,8 +403,8 @@ R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de 
 
 ---
 
-**Versão:** 1.3 SSOT  
-**Última atualização:** 7 de agosto de 2026 (Bloco 2 TI + fechamento dos 6 departamentos/subáreas sem módulo: Facilities, Marketing, Jurídico, Contabilidade, Tesouraria, Controladoria)  
+**Versão:** 1.4 SSOT
+**Última atualização:** 10 de agosto de 2026 (cadeia do produto: 16/17 gaps fechados · baseline do schema congelado, banco reproduzível · rede de segurança de integração armada)
 **Próxima revisão:** Pós-Go-Live (semana 1 de setembro)
 
 Remova referências a análises antigas. Este documento é o guia único de verdade.

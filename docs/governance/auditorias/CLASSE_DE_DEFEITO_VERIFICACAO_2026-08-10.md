@@ -1,7 +1,15 @@
 # Por que a mesma classe de defeito aparece de novo a cada rodada
 
 **Data:** 2026-08-10 · **Origem:** pergunta do dono do produto — *"isso já é no mínimo a quarta vez que você acha. O que está acontecendo?"*
-**Status:** causa raiz identificada e provada · correção estrutural **pendente**
+**Status:** causa raiz identificada e provada · **correção estrutural EXECUTADA no mesmo dia** — ver §6, onde cada item ganhou o resultado real
+
+> **Atualização de 2026-08-10 (fim do dia).** Os 5 itens da §6 foram executados.
+> O que mudou de fato: `npm run test:integration` deixou de pular em silêncio,
+> as três guardas de varredura existem e estão **verdes**, o baseline do schema
+> virou **DDL estático congelado** (banco novo nasce idêntico ao atual, provado
+> com banco descartável) e os dois bancos são **idênticos**. O diagnóstico
+> abaixo fica **como está**, sem reescrita: ele é o registro de por que a
+> classe de defeito reincidia.
 
 ---
 
@@ -98,6 +106,15 @@ mapeador bugado; o banco de teste, criado depois, pegou o corrigido.
 **Dois bancos diferentes com as mesmas migrations.** É por isso que o servidor
 de produção sairia um terceiro banco, diferente dos dois.
 
+> ✅ **Resolvido em 2026-08-10.** A circularidade foi quebrada: o baseline não
+> lê mais model nenhum — aplica DDL estático congelado
+> (`server/database/postgresql/00_baseline_frozen.sql`). Com isso o banco
+> **volta a poder servir de conferência contra os models**, que é exatamente o
+> que as três guardas de integração fazem hoje. Os dois bancos existentes foram
+> convergidos e medidos como idênticos, e um banco descartável provisionado só
+> por migrations saiu idêntico a eles. Detalhe em `docs/database/DATABASE.md`,
+> seção *"Baseline congelado"*.
+
 ---
 
 ## 5. Por que eu venho achando um de cada vez
@@ -114,26 +131,32 @@ Mas ele cobre **uma** das variantes (nulabilidade). As outras duas — literal d
 
 ## 6. O que fecha isso de vez
 
-Ordenado por quanto elimina, não por esforço:
+Ordenado por quanto elimina, não por esforço. **Resultado de cada item
+registrado em 2026-08-10, no fim do dia:**
 
-1. **Armar a rede que já existe.** Fazer `npm run test:integration` executar de
-   fato — apontar para o `:strict`, ou exigir `RUN_INTEGRATION`. **Suíte que
-   pula em silêncio é pior que suíte inexistente**, porque produz confiança
-   falsa. *(Correção de uma linha; maior retorno da lista.)*
-2. **Congelar o baseline do schema** (plano de 4 passos em
-   `docs/database/DATABASE.md`): aplicar as migrations pendentes →
-   `pg_dump --schema-only` → substituir a geração dinâmica por SQL estático →
-   provisionar banco descartável só por migrations e rodar a guarda contra ele.
-   **Até o passo 4 passar, não provisionar produção.**
-3. **Varredura de escrita real:** um `POST` contra cada endpoint de criação, no
-   Postgres de verdade, listando tudo que quebra numa única passada — em vez de
-   descobrir de módulo em módulo.
-4. **Guarda de `ENUM` e de nome de coluna:** conferir todo literal usado em
-   `where`/`create` contra `pg_enum` e `information_schema.columns`. Fecha as
-   duas variantes que o guard de nulabilidade não vê.
-5. **Critério de aceite corrigido**, e este é cultural: nenhum módulo é "pronto"
-   com typecheck + unitário verdes. O aceite é **uma escrita real bem-sucedida**
-   no fluxo principal.
+1. ✅ **Armar a rede que já existe.** `npm run test:integration` passou a ser
+   `node scripts/run-api-suite.cjs integration` — o runner que sobe a API,
+   emite JWT e aponta para o banco de teste isolado. Não pula mais em silêncio.
+2. ✅ **Congelar o baseline do schema.** Os 4 passos foram executados: as
+   migrations pendentes foram aplicadas e os dois bancos ficaram idênticos
+   (`e2a8d7e`); o `pg_dump --schema-only` virou
+   `server/database/postgresql/00_baseline_frozen.sql`; a geração dinâmica
+   (`DYNAMIC_MODEL_FILES` / `createTableFromModel`) foi **removida** do
+   `20260731-000001-baseline-schema.cjs`; e um banco descartável provisionado
+   **só por migrations** saiu **idêntico** ao `erp_evok_audio` — 0 divergência
+   em coluna, tipo, default, índice e constraint
+   (`server/scripts/comparar-bancos.cjs`). **O passo 4 passou: o banco deixou
+   de bloquear o provisionamento de produção.**
+3. ✅ **Varredura de escrita real.** Feita: `POST` real contra 237 endpoints —
+   ver `VARREDURA_ESCRITA_REAL_2026-08-10.md` (commit `5dfd63e`).
+4. ✅ **Guarda de `ENUM` e de nome de coluna.** Criadas e **verdes**:
+   `server/tests/integration/enum-literal-guard.test.ts` e
+   `column-name-drift-guard.test.ts`, ao lado do
+   `schema-model-drift-guard.test.ts` que já existia.
+5. 🟡 **Critério de aceite corrigido** — a parte escrita está feita (o aviso
+   está no topo do `CLAUDE.md`), mas **isto é cultural e só se prova no uso**.
+   O teste ponta a ponta "insumo cadastrado → produto acabado expedido", que é
+   o aceite de verdade, **ainda não foi executado**.
 
 ---
 

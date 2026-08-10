@@ -164,6 +164,12 @@ module.exports = {
   },
 };
 
+// Exposto para o baseline congelado (`20260731-000001-baseline-schema.cjs`):
+// em um banco novo, o DDL vem do dump e esta migration nao chega a rodar,
+// mas o seed de referencia abaixo ainda precisa acontecer. A fonte da
+// verdade do seed continua sendo este arquivo.
+module.exports.seedReferenceData = seedAdministradorGeral;
+
 // Seed idempotente: perfil "Administrador Geral" com todas as permissoes
 // em approve. Nao atribuido a nenhum usuario — o admin global (role='admin')
 // ja esta acima do sistema de perfis (§3). Seguro rodar mesmo quando as

@@ -177,7 +177,12 @@ class CreateSaleUseCase extends UseCase {
         // que já está preparado para repassá-los ao errorHandler central.
         await InventoryService.reserve(item.product_id, item.quantity, userId, transaction, {
           saleId: sale.id,
-          description: `Reserva da venda #${sale.id} - ${entity.payment_method}`
+          // `sale.payment_method` (persistido) e nao `entity.payment_method`:
+          // quando o payload omite a forma de pagamento, a entidade guarda
+          // `undefined` e quem resolve o valor real e o default da coluna
+          // (`'pix'`). Usar a entidade escreveria a string "undefined" na
+          // descricao da movimentacao de estoque.
+          description: `Reserva da venda #${sale.id} - ${sale.payment_method}`
         });
       }
     }

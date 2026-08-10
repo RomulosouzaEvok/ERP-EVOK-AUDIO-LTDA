@@ -10,10 +10,23 @@
 > modelagem desde 2026-07-31 — mantido como está abaixo, sem duplicar o
 > conteúdo já consolidado na pasta `docs/database/`.
 
+> **Estado do banco em 2026-08-10 (vale sobre qualquer entrada mais antiga):**
+> as **160** migrations estão aplicadas nos **dois** bancos (`erp_evok_audio` e
+> `erp_evok_audio_test`), que foram medidos como **idênticos** — coluna, tipo,
+> default, índice e constraint (`server/scripts/comparar-bancos.cjs`). Qualquer
+> texto abaixo dizendo "migration NÃO aplicada" é anterior ao commit `e2a8d7e`
+> e está **superado**. O baseline deixou de gerar schema a partir dos models e
+> passou a aplicar DDL congelado — ver a última seção deste arquivo,
+> *"Baseline congelado: o banco passa a ser reproduzível"*.
+
 ## Tecnologia
 - **ORM:** Sequelize 6.x
-- **Banco:** PostgreSQL 16 (único suportado; 59 migrations versionadas em 2026-08-06, 133+ FKs)
+- **Banco:** PostgreSQL 16 (único suportado; **160 migrations** versionadas e
+  aplicadas em 2026-08-10, 200 tabelas)
 - **Migrações:** `sequelize-cli` com migrations versionadas em todos os ambientes
+- **Baseline:** DDL **estático congelado**
+  (`server/database/postgresql/00_baseline_frozen.sql`), não gerado a partir
+  dos models — desde 2026-08-10
 
 ---
 
@@ -2930,8 +2943,8 @@ afetados. Registrado em `docs/governance/TODO.md`.
 **Migration:** `20260810-000030-generalize-stock-reservations-for-sales-g9.cjs`
 (Onda 3 do `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`, decisão
 D-A do dono).
-**Status:** ⏳ **escrita, NÃO aplicada** (aplicar migration está bloqueado por
-permissão do ambiente). Última aplicada no banco: `20260810-000028`.
+**Status:** ✅ **aplicada em 2026-08-10** (commit `e2a8d7e`, junto com as demais
+pendentes). Os dois bancos estão com as 160 migrations aplicadas.
 
 ### O problema
 
@@ -3040,8 +3053,8 @@ fisicamente correto e o código antigo apenas não cria reservas novas.
 ## S-1 rodada 3 — drift schema × model e a irreprodutibilidade do banco (2026-08-10)
 
 **Migration:** `20260810-000033-fix-nullable-columns-round-3.cjs`
-**Status:** ⏳ **escrita, NÃO aplicada** (aplicar migration está bloqueado por
-permissão do ambiente). Última aplicada no banco: `20260810-000028`.
+**Status:** ✅ **aplicada em 2026-08-10** (commit `e2a8d7e`, junto com as demais
+pendentes). Os dois bancos estão com as 160 migrations aplicadas.
 
 Fecha o escopo que a rodada 2 (`20260810-000028`, commit `94e0f14`) deixou
 declaradamente para depois, e responde à segunda metade do problema: **por que
@@ -3134,8 +3147,7 @@ Até o passo 4 passar, **o servidor de produção não deve ser provisionado**.
 ## G5 — API de Roteiro de Produção: índice único parcial de roteiro ativo (2026-08-10)
 
 **Migration:** `server/migrations/20260810-000034-production-route-active-unique-g5.cjs`
-(**escrita, NÃO aplicada** — aplicar migration está bloqueado por permissão do
-ambiente nesta rodada; `up`/`down` estão funcionais).
+(✅ **aplicada em 2026-08-10**, commit `e2a8d7e`).
 
 ### O que NÃO mudou
 
@@ -3313,8 +3325,8 @@ refatoração concorrente de reserva por documento, G3/G9).
 ## G1 — Estrutura de produto (BOM) passa a ter fonte única (2026-08-10)
 
 **Migration:** `server/migrations/20260810-000035-bom-single-source-g1.cjs`
-(**escrita, NÃO aplicada** — aplicar migration segue bloqueado por permissão do
-ambiente nesta rodada; `up`/`down` estão funcionais e foram exercitados de fato
+(✅ **aplicada em 2026-08-10**, commit `e2a8d7e`; antes disso `up`/`down` já
+haviam sido exercitados de fato
 contra o Postgres real dentro de uma transação revertida por `ROLLBACK`, que
 deixa o banco byte-idêntico: `CREATE INDEX` → índice presente → `DROP INDEX` →
 índice ausente, os quatro `COMMENT ON` aplicados e zerados).
@@ -3456,8 +3468,7 @@ produto COMO FABRICADO.**
 ## 2026-08-10 — G17: Plano Mestre de Produção (MPS)
 
 **Migration:** `20260810-000037-create-master-production-plan-g17.cjs`
-**Status:** escrita e validada por dry-run · ⚠️ **NÃO APLICADA** (aplicar
-migrations está bloqueado pelo classificador de permissão do ambiente).
+**Status:** ✅ **aplicada em 2026-08-10** (commit `e2a8d7e`).
 **Decisão de negócio:** D-F do dono — *existe PCP formal, há quem planeje*.
 
 ### Por que estas tabelas existem
@@ -3548,8 +3559,8 @@ prazo negociado × prazo confirmado) **mais** tela de venda.
 
 ## 2026-08-10 — `enum_audit_logs_action`: 37 literais que nunca chegaram ao banco
 
-**Migration:** `20260810-000036-extend-audit-log-action-enum.cjs` (**escrita,
-NÃO aplicada** — fila de pendentes aguardando liberação do dono).
+**Migration:** `20260810-000036-extend-audit-log-action-enum.cjs`
+(✅ **aplicada em 2026-08-10**, commit `e2a8d7e`).
 **Origem:** achado P0 §2 de
 `docs/governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md`.
 
@@ -3695,3 +3706,128 @@ fechamento que ninguém tem.
 `PUT`, então bastava enviá-lo no payload para atribuir o encerramento a outra
 pessoa. Passa a vir exclusivamente do JWT — mesmo padrão anti-spoofing de
 identidade da remediação 3.1 (2026-08-02).
+
+---
+
+## 2026-08-10 — Baseline congelado: o banco passa a ser reproduzível
+
+**Fecha os passos 3 e 4** do plano registrado acima em
+["S-1 rodada 3 — drift schema × model e a irreprodutibilidade do banco"](#s-1-rodada-3--drift-schema--model-e-a-irreprodutibilidade-do-banco-2026-08-10).
+Passos 1 e 2 (aplicar as migrations pendentes e congelar o `pg_dump`) saíram
+no commit `e2a8d7e`.
+
+### O que mudou
+
+`server/migrations/20260731-000001-baseline-schema.cjs` **deixou de gerar o
+schema a partir dos models compilados**. `DYNAMIC_MODEL_FILES`,
+`createTableFromModel` e `addIndexesFromModel` foram removidos, junto com a
+dependência de `dist/src/models/*.js` em tempo de migration. No lugar, o
+`up` aplica o DDL estático `database/postgresql/00_baseline_frozen.sql`
+(784 KB, 200 tabelas — `pg_dump --schema-only` do banco de dev já convergido).
+
+Os arquivos `01_schema.sql`, `02_indexes.sql`, `02a_…` e a série `04a…04i` não
+são mais lidos por esta migration. Continuam no repositório como histórico; o
+DDL que provisiona banco novo é **só** o congelado.
+
+### Como as outras 159 migrations são tratadas
+
+O arquivo congelado já **contém** o resultado das 160 migrations. Rodá-las por
+cima quebraria (`column already exists`). Então o próprio `up` do baseline as
+registra em `SequelizeMeta` como aplicadas.
+
+Isso funciona porque o umzug 2.x reconsulta o storage **por migration, no
+momento de executar** (`Umzug#execute` → `_wasExecuted` → `findAll`), e não
+apenas uma vez no início. A lista vem de `00_baseline_frozen_meta.sql`, não de
+um `readdir` em `migrations/` — migration criada **depois** do congelamento não
+está no dump e continua rodando normalmente por cima dele.
+
+**Duas migrations ficam de fora da marcação e rodam de verdade**
+(`STILL_RUN_AFTER_FROZEN`), porque `pg_dump --schema-only --no-owner --no-acl`
+não carrega role, GRANT nem dado:
+
+| Migration | Por que precisa rodar |
+|---|---|
+| `20260806-000080-create-app-role-least-privilege` | role `evok_app` é objeto de **cluster**; os GRANTs não estão no dump |
+| `20260807-000231-seed-accounting-chart-of-accounts` | seed puro (30 contas), dado não vem em dump de schema |
+
+Ambas são DDL-free e idempotentes, então rodam sem conflito sobre um schema já
+completo.
+
+### Dado de referência que o dump não carrega
+
+Três migrations misturam DDL + seed na mesma função e por isso não podem ser
+reexecutadas inteiras. Delas só a **parte de seed** é reaproveitada: cada uma
+passou a exportar `seedReferenceData`, chamado pelo baseline após aplicar o
+dump. O SQL não foi copiado — a fonte da verdade continua sendo a migration.
+
+| Migration | Dado de referência |
+|---|---|
+| `20260803-000008-create-access-profiles` | perfil "Administrador Geral" + 26 permissões |
+| `20260804-000001-create-warehouses` | depósitos `INSUMOS`, `ACABADOS`, `LABORATORIO` |
+| `20260804-000008-create-production-cost-settings` | linha singleton `id = 1` |
+
+Sem isso, banco novo nasceria sem depósito, sem perfil de referência e sem a
+configuração de custo — o seed de boot da aplicação (`src/config/seeds.ts`) só
+cobre admin, departamentos e categorias.
+
+### Divergência deliberada em relação ao plano original
+
+O passo 3 do plano previa remover também o atalho
+`shouldBootstrapCanonicalSchema`. **Ele foi mantido**, de propósito: é a única
+proteção contra aplicar o dump sobre um banco que já tem tabelas (restore de
+backup sem `SequelizeMeta`, banco provisionado fora do fluxo de migrations).
+Quando o atalho dispara, o `up` não faz **nada** — não aplica o dump e não
+pré-marca migration nenhuma, porque nesse cenário as demais podem
+legitimamente precisar rodar.
+
+### `down`
+
+O `up` cria o schema inteiro, então o inverso coerente é remover o schema
+inteiro: derruba todas as tabelas de `public` (exceto `SequelizeMeta`), as
+funções e os tipos ENUM que **não** pertencem a extensão, e devolve as 159
+migrations pré-marcadas ao estado pendente. `pgcrypto` e `btree_gist`
+permanecem instaladas (o `up` as cria com `IF NOT EXISTS`, então o ciclo
+up → down → up continua funcionando).
+
+### Validação executada — medida, não afirmada
+
+Banco descartável `erp_evok_audio_baseline_check` criado vazio, provisionado
+**só** por `db:migrate`, comparado com `erp_evok_audio` e derrubado em seguida.
+`server/scripts/comparar-bancos.cjs` foi estendido para receber os dois nomes
+por argumento e para comparar bem mais do que antes — além de presença de
+coluna e nulabilidade, agora confere **tipo completo** (`format_type`, com
+tamanho/precisão), **default**, **definição de todo índice** (`pg_indexes`) e
+**definição de toda constraint** (`pg_get_constraintdef`: PK, FK, UNIQUE,
+CHECK). Sai com código 2 quando há divergência.
+
+```
+$ node scripts/comparar-bancos.cjs erp_evok_audio erp_evok_audio_baseline_check
+erp_evok_audio                tabelas=200  migrations=160
+erp_evok_audio_baseline_check tabelas=200  migrations=160
+Colunas so em erp_evok_audio: 0          Colunas so em ..._baseline_check: 0
+Colunas com NULABILIDADE diferente: 0    Colunas com TIPO diferente: 0
+Colunas com DEFAULT diferente: 0         Indices: 0 / 0 / 0
+Constraints: 0 / 0 / 0
+RESULTADO: os dois bancos sao IDENTICOS.
+```
+
+Verificado também no banco descartável: 3 depósitos, 1 perfil de acesso, 26
+permissões, 1 linha de `production_cost_settings`, 30 contas contábeis e
+GRANT de `evok_app` em 199 tabelas. O ciclo `up → down → up` foi exercitado:
+depois do `down` restou **1 tabela** (`SequelizeMeta`), 0 migrations e 0 tipos
+ENUM; o `up` seguinte reconstruiu tudo e a comparação voltou a dar idêntico.
+
+Provisionamento completo passou a levar **~5 s** (3 migrations executam de
+fato; as outras 157 são puladas).
+
+### Efeito no gate de produção
+
+O plano dizia: *"até o passo 4 passar, o servidor de produção não deve ser
+provisionado"*. **O passo 4 passou.** O banco deixou de ser um bloqueador de
+provisionamento — máquina nova, CI e produção nascem com o mesmo schema, byte
+a byte, independentemente da data e do estado de `dist/`.
+
+Continua valendo, e não é escopo desta entrega: aquisição do servidor,
+reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato, cron de backup
+e a troca da credencial de runtime para `evok_app` (ver
+`docs/database/05-ACESSOS_E_ISOLAMENTO.md`).

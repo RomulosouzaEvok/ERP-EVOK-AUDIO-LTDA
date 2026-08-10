@@ -8,6 +8,24 @@ indicadas). Ao concluir cada bloco, o programador deve atualizar
 `docs/governance/HANDOFF_CODEX.md` e consolidar os casos de uso implementados em
 `docs/projeto/04-USE_CASES.md`.
 
+> ## ⚠️ Estado do banco em 2026-08-10 — leia antes de qualquer entrada abaixo
+>
+> As **160** migrations estão **aplicadas nos dois bancos** (`erp_evok_audio` e
+> `erp_evok_audio_test`), commit `e2a8d7e`. Os dois foram medidos como
+> **idênticos** — coluna, tipo, default, índice e constraint
+> (`node server/scripts/comparar-bancos.cjs`).
+>
+> **Toda linha deste arquivo que diz "migration NÃO aplicada" e é anterior a
+> 2026-08-10 está superada.** Elas foram escritas quando aplicar migration
+> estava barrado pelo classificador de permissão do ambiente; esse bloqueio
+> caiu. Não foram reescritas uma a uma de propósito — o arquivo é um registro
+> cronológico, e reescrever o passado apagaria o histórico. Este bloco é a
+> fonte de verdade sobre o estado atual.
+>
+> O baseline (`20260731-000001-baseline-schema.cjs`) deixou de gerar schema a
+> partir dos models e passou a aplicar DDL congelado — ver a última seção
+> deste arquivo e `docs/database/DATABASE.md`.
+
 **Status das decisões de negócio:** as 6 decisões antes propostas foram
 **confirmadas pelo dono em 2026-08-03** (ver seção "Decisões do Dono —
 Todas Confirmadas" ao final deste documento e o topo de
@@ -6682,3 +6700,243 @@ ninguém tem.
   tem `cancel_reason`, não `reason`. Conferidos linha a linha; eram
   **pré-existentes** (vieram do commit G13 e do módulo MPS, ambos fora desta
   tarefa).
+
+---
+
+## 2026-08-10 — Baseline do schema congelado: o banco passa a ser reproduzível — `AdmDBA`
+
+Fecha os **passos 3 e 4** do plano de 4 passos registrado em
+`docs/database/DATABASE.md` (seção "S-1 rodada 3"). Passos 1 e 2 saíram no
+commit `e2a8d7e`. Também fecha o **item 2** da lista de correções estruturais
+de `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md` §6.
+
+### O que foi feito
+
+- [x] `server/migrations/20260731-000001-baseline-schema.cjs` **não gera mais
+  schema a partir dos models compilados**. `DYNAMIC_MODEL_FILES`,
+  `createTableFromModel`, `addIndexesFromModel` e a dependência de
+  `dist/src/models/*.js` foram removidos. O `up` aplica o DDL estático
+  `database/postgresql/00_baseline_frozen.sql` (784 KB, 200 tabelas).
+- [x] As outras 159 migrations são **registradas em `SequelizeMeta` pelo
+  próprio `up`** (a lista vem de `00_baseline_frozen_meta.sql`, não de um
+  `readdir`). Funciona porque o umzug 2.x reconsulta o storage por migration,
+  no momento de executar. Migration criada **depois** do congelamento não está
+  no dump e continua rodando normalmente por cima dele.
+- [x] Duas migrations ficam **fora** da marcação e rodam de verdade, porque
+  `pg_dump --schema-only --no-owner --no-acl` não carrega role, GRANT nem dado:
+  `20260806-000080` (role `evok_app`, objeto de cluster) e `20260807-000231`
+  (seed do plano de contas). Ambas são DDL-free e idempotentes.
+- [x] Três migrations que misturam DDL + seed passaram a exportar
+  `seedReferenceData`, chamado pelo baseline: `20260803-000008`
+  (perfil "Administrador Geral" + 26 permissões), `20260804-000001`
+  (depósitos `INSUMOS`/`ACABADOS`/`LABORATORIO`) e `20260804-000008`
+  (singleton de custo). O SQL **não** foi copiado — a fonte da verdade
+  continua na migration. Sem isso banco novo nasceria sem depósito.
+- [x] `down` coerente: derruba todas as tabelas de `public` (exceto
+  `SequelizeMeta`), funções e tipos ENUM que não pertencem a extensão, e
+  devolve as 159 pré-marcadas ao estado pendente.
+- [x] O atalho `shouldBootstrapCanonicalSchema` foi **mantido** (o plano
+  original previa removê-lo). É a proteção contra aplicar o dump sobre banco
+  que já tem tabelas. Quando dispara, o `up` não faz nada — nem aplica o dump,
+  nem pré-marca migration.
+- [x] `server/scripts/comparar-bancos.cjs` passou a **receber os dois nomes de
+  banco por argumento** e a comparar muito mais: além de presença de coluna e
+  nulabilidade, confere **tipo completo** (`format_type`), **default**,
+  **definição de todo índice** e **de toda constraint**
+  (`pg_get_constraintdef`). Sai com código 2 quando há divergência.
+
+### Validação — medida, não afirmada
+
+- [x] Banco descartável `erp_evok_audio_baseline_check` criado vazio,
+  provisionado **só** por `db:migrate` (3 migrations executaram de fato, 157
+  puladas, ~5 s), comparado com `erp_evok_audio`: **"os dois bancos sao
+  IDENTICOS"** — 0 divergência em coluna, tipo, default, índice e constraint.
+- [x] Dado de referência conferido no descartável: 3 depósitos, 1 perfil, 26
+  permissões, 1 `production_cost_settings`, 30 contas contábeis, GRANT de
+  `evok_app` em 199 tabelas.
+- [x] Ciclo `up → down → up` exercitado: depois do `down` restou 1 tabela
+  (`SequelizeMeta`), 0 migrations e 0 tipos ENUM; o `up` seguinte reconstruiu
+  tudo e a comparação voltou a dar idêntico.
+- [x] Banco descartável **derrubado** ao fim. `erp_evok_audio` e
+  `erp_evok_audio_test` não foram tocados (`migration:status` segue 160 up /
+  0 pendentes nos dois).
+- [x] `npm run typecheck` limpo · `npx jest tests/unit` **1807 testes / 166
+  suítes**, todos passando · servidor sobe (`/health/ready` 200) · as 3 guardas
+  de integração (drift de schema, nome de coluna, literal de enum) **verdes**
+  com `RUN_INTEGRATION=true DB_NAME=erp_evok_audio_test`.
+
+### Efeito no gate de produção
+
+O plano dizia *"até o passo 4 passar, o servidor de produção não deve ser
+provisionado"*. **O passo 4 passou** — o banco deixou de ser bloqueador.
+Continuam pendentes e **fora** desta entrega: aquisição do servidor, reverse
+proxy/TLS, `docker-compose.prod.yml` exercitado de fato, cron de backup e a
+troca da credencial de runtime para `evok_app`.
+
+### Pendências que esta entrega deixa
+
+- [ ] **`01_schema.sql`, `02_indexes.sql`, `02a_…` e a série `04a…04i` ficaram
+  órfãos** — nenhuma migration os lê mais. Foram mantidos como histórico.
+  Decidir se saem do repositório ou ganham um cabeçalho `DEPRECATED`.
+- [ ] **O dump não carrega dado.** Se no futuro outra migration passar a
+  semear dado de referência, ela precisa entrar em `STILL_RUN_AFTER_FROZEN`
+  (se for DDL-free) ou exportar `seedReferenceData`. Não há guarda automática
+  para isso — é convenção documentada no cabeçalho do baseline.
+- [ ] **Recongelar o dump quando o volume de migrations pós-freeze crescer.**
+  Hoje o processo é manual (`pg_dump --schema-only` + `pg_dump --data-only
+  --table=SequelizeMeta`); não há script versionado que o faça.
+- [ ] **`erp_evok_audio_test` não foi reprovisionado a partir do baseline
+  congelado.** Ele foi recriado a partir do dev em `e2a8d7e` e é idêntico ao
+  dev, então não há divergência a corrigir — mas quem quiser a prova completa
+  do caminho de provisionamento deve refazê-lo pelo baseline.
+
+---
+
+## 2026-08-10 — Suíte de integração: de 31 falhas para 0 (124/124 verdes) — `programador`
+
+**Ponto de partida medido:** `npm run test:integration` → **97 passavam, 31
+falhavam** em 36 arquivos, contra a API + PostgreSQL reais
+(`scripts/run-api-suite.cjs`, banco `erp_evok_audio_test`).
+
+**Resultado:** `npm run test:integration` → **36 suítes / 124 testes, todos
+passando**, duas execuções seguidas contra o mesmo banco (idempotente).
+`assert-jest-no-skips` verde — nenhum teste pulou em silêncio.
+
+### O diagnóstico: 26 das 31 falhas eram teste desatualizado, 5 eram defeito/fixture
+
+| Causa | Falhas | Natureza |
+|---|---|---|
+| Segregação de função **D-K** (aprovador ≠ solicitante) com **um único usuário** na suíte | 7 diretas + cascata no E2E | teste desatualizado |
+| **G7** (liberar lote exige inspeção registrada, ISO 9001 §8.6) | 1 + cascata | teste desatualizado |
+| **G11-COMEX** (importação exige aprovação da diretoria antes do embarque) | 1 | teste desatualizado |
+| **G1** (estrutura de produto tem fonte única: BOM) | 1 | teste desatualizado |
+| **G9** (venda confirmada RESERVA, não baixa) | 1 | teste desatualizado |
+| `POST /api/sales` impossível sem `payment_method` + `notes` | 4 | **bug real** |
+| `POST /api/suppliers` 500 sem `trade_name` | 1 | **bug real** |
+| `production_cost_settings.default_labor_rate_per_hour` zerado no banco de teste | 1 | fixture faltando |
+
+Nenhuma regra de produção foi afrouxada para o teste passar. Onde o teste
+afirmava o comportamento antigo como correto, o **teste** foi corrigido — e a
+regra nova passou a ser exercitada explicitamente (a suíte hoje prova o 422 de
+auto-aprovação, o 422 de liberação sem inspeção, o 422 de embarque sem
+diretoria e o 422 de estrutura paralela, além do caminho feliz).
+
+### Bugs reais corrigidos
+
+- [x] **`POST /api/sales` respondia 400 para qualquer payload sem
+  `payment_method` e `notes`** — ou seja, não existia venda criável pela API
+  sem informar forma de pagamento e observação, apesar de os dois serem
+  `.optional()` em `createSaleSchema`. Causa: `SaleEntity` coagia a ausência
+  para **`null` explícito**, e `sales.payment_method` / `sales.notes` são
+  `NOT NULL` **COM default** (`'pix'` e `''`) — `null` explícito anula o
+  default do Postgres. Corrigido em
+  `server/src/modules/sales/domain/entities/SaleEntity.ts` (passa `undefined`);
+  `CreateSaleUseCase` passou a usar `sale.payment_method` (persistido) na
+  descrição da movimentação de estoque, em vez do valor da entidade.
+  Verificado contra o Postgres real: `POST /api/sales` mínimo → **201**, com
+  `payment_method: "pix"` e `notes: ""` aplicados pelo default.
+- [x] **`POST /api/suppliers` respondia 500 quando `trade_name` era omitido**
+  (`null value in column "trade_name" ... violates not-null constraint`).
+  Mesma armadilha: `suppliers.trade_name` é `NOT NULL DEFAULT ''` e
+  `SupplierEntity` gravava `null`. Corrigido em
+  `server/src/modules/suppliers/domain/entities/SupplierEntity.ts`. Verificado:
+  cadastro mínimo → **201** com `trade_name: ""`.
+
+> ⚠️ **É uma classe de defeito, não dois defeitos.** Mesma família catalogada
+> em `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md`,
+> numa variante que **nenhuma das 3 guardas cobre**: a guarda de drift
+> (`schema-model-drift-guard`) isenta de propósito colunas `NOT NULL` **com
+> default**, porque omiti-las não quebra INSERT — o que quebra é passar `null`
+> explícito, e isso é código, não schema. Ver pendência aberta abaixo.
+
+### Correções de fixture (runner)
+
+- [x] `scripts/run-api-suite.cjs` provisiona um **segundo administrador**
+  (`ci-approver@evok.local`) e exporta `TEST_APPROVER_TOKEN`. É o mínimo
+  organizacional que a D-K exige: com um único usuário, nenhuma compra do ERP
+  é aprovável, então a suíte inteira travava na primeira aprovação.
+  `role: 'admin'` também dá a alçada de diretoria do G11/G11-COMEX
+  (`resolveAvailableApproverRoles` trata `admin` como `diretor`), então um
+  usuário extra cobre os **4** pontos de aprovação.
+- [x] `tests/helpers/testApi.ts` ganhou `approverToken()` e `mintToken()`
+  (esta última promovida de `quality-releases-receiving-lot.test.ts`, onde já
+  existia). **Nenhuma senha é usada**: o token é assinado direto, mesma
+  técnica do runner — as senhas dos 18 usuários departamentais
+  (`scripts/seed-usuarios-departamentos.cjs`) são aleatórias a cada execução e
+  vivem fora do Git, então nenhum teste pode depender delas.
+- [x] `scripts/run-api-suite.cjs` passou a garantir
+  `production_cost_settings.default_labor_rate_per_hour = 50` no banco de
+  teste. Sem isso, o G4 recusa concluir qualquer OP cuja etapa não tenha
+  centro de trabalho com `cost_per_hour` (`G4-LABOR-RATE-MISSING`) — é o
+  equivalente do que o dono configura uma vez em Produção > Configuração de
+  Custeio.
+- [x] `scripts/run-api-suite.cjs` aceita um **filtro opcional** de caminho
+  (`node scripts/run-api-suite.cjs integration sale-`) para depuração. Com
+  filtro, a checagem de "nenhum teste pulado" é ignorada — ela só faz sentido
+  na suíte completa.
+
+### Testes atualizados para a regra nova
+
+- [x] `e2e-cadeia-insumo-produto.test.ts` — reescrito para **dois usuários**.
+  Passou a exercitar: recusa de auto-aprovação da requisição
+  (`D-K-REQUISICAO`), aprovação do pedido pelo segundo administrador, recusa
+  de liberação de lote sem inspeção (`G7` / `no_inspection`) seguida de
+  inspeção aprovada e liberação amarrada à evidência
+  (`release_inspection_id`), recusa de embarque de importação sem diretoria
+  (`G11-COMEX`) e de auto-aprovação (`D-K-COMEX`), e recusa de estrutura
+  paralela (`G1-ESTRUTURA-DUPLA`).
+  **Os 4 contornos BUG-01…BUG-04 foram removidos** — as colunas `NOT NULL`
+  indevidas caíram na migration `20260810-000028` e os caminhos de API (BOM,
+  cliente, venda, confirmação) voltaram a funcionar; contorno vivo depois da
+  correção esconde a próxima regressão. O gate G16 passou a montar a árvore
+  por BOM (fonte única do G1) em vez de `item_estruturas`.
+- [x] `sale-quote-confirm.test.ts` — **afirmava o comportamento pré-G9 como
+  correto** ("confirmar DEBITA o estoque"), que é justamente o que o G9
+  corrigiu por contrariar o Ajuste SINIEF 07/05 cl. 9ª §1º. Passou a medir os
+  dois números que hoje importam: `quantity` não muda, `reserved_quantity`
+  sobe, e o cancelamento devolve a reserva.
+- [x] `material-requisition-flow.test.ts`,
+  `purchase-receipt-duplicate-invoice.test.ts`,
+  `purchase-receive-concurrency.test.ts`,
+  `traceability-and-audit-log-regression.test.ts`,
+  `quality-releases-receiving-lot.test.ts` — aprovação de pedido movida para
+  `approverToken()`. O último ganhou também o registro de inspeção (G7) antes
+  da liberação do lote.
+
+### Verificação
+
+- [x] `npm run test:integration` → **36/36 suítes, 124/124 testes**, duas
+  rodadas seguidas · `Jest sem skips` verde
+- [x] As **3 guardas verdes**: `schema-model-drift-guard`,
+  `column-name-drift-guard`, `enum-literal-guard`
+- [x] `npm run typecheck` limpo
+- [x] `npx jest tests/unit --runInBand` → **1807/1807** (166 suítes), sem queda
+- [x] `npm run test:edge:strict` → 3/3
+- [x] Servidor sobe (`/health/ready` 200)
+
+### Pendências que esta entrega deixa
+
+- [ ] **Guarda para a variante "`null` explícito em coluna `NOT NULL` COM
+  default"** — a que deixou passar os dois bugs de hoje. Levantamento feito:
+  há **69** colunas nessa condição declaradas nulláveis nos models. Uma guarda
+  por schema seria ruído (a maioria nunca recebe `null` explícito); o sinal
+  real está no código — o padrão `this.<campo> = props.<campo> ?? null` dentro
+  de `domain/entities/`. Uma varredura estática ingênua devolve 13 candidatos,
+  a maioria falso-positivo por casar só pelo nome da coluna (não há mapeamento
+  declarativo entidade→tabela). **Fechar isto de verdade exige o item 3 do
+  documento de classe de defeito: um `POST` com payload mínimo contra cada
+  endpoint de criação, no Postgres real.** Recomendado como próxima frente.
+- [ ] **`BomService.createBOM` só aceita `product_type = 'finished'`.** Como o
+  G1 fez o MRP ler exclusivamente a BOM ativa, um **subconjunto
+  (`semi_finished`) não pode ter estrutura própria** — o gate G16 do E2E só
+  roda porque tipa o subconjunto como `finished`, o que está comentado no
+  teste. Restrição anterior a esta rodada; precisa de **decisão do dono** (a
+  alternativa é a árvore multinível dentro da BOM do produto acabado, via
+  `bom_level` / `parent_item_id`, que existe no schema mas não é o que o
+  `bomStructureProjection` projeta hoje).
+- [ ] **`POST /api/inventory/lots/:id/release` com id não numérico responde
+  500** ("Erro ao processar operação no banco de dados") em vez de 400. Achado
+  incidental: apareceu porque o E2E, ao falhar numa etapa anterior, mandava
+  `undefined` na URL. Outros endpoints (rastreabilidade) já validam o
+  parâmetro e respondem 400 — este não. Baixo impacto, mas é inconsistência de
+  contrato.
