@@ -142,6 +142,24 @@ class ProductionOrderRepository {
   public async bulkCreateTracking(rows: Array<Record<string, unknown>>, transaction: any): Promise<any[]> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('Nao implementado');
   }
+
+  /**
+   * Busca o funcionario vinculado a um usuario do sistema.
+   *
+   * Existe para o G6: `production_orders.responsible_id` e FK para
+   * **`employees.id`**, nao para `users.id` — gravar o id do JWT ali apontaria
+   * para outra pessoa (ou para ninguem). Mesmo padrao ja usado em
+   * `SequelizePurchaseRequisitionRepository.findEmployeeByUserId`.
+   *
+   * @abstract
+   * @param userId - `users.id` (do JWT).
+   * @param transaction - Transacao Sequelize ativa.
+   * @returns Funcionario vinculado, ou `null` quando o usuario nao e funcionario.
+   * @throws {Error} Se nao implementado.
+   */
+  public async findEmployeeByUserId(userId: number, transaction?: any): Promise<any | null> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    throw new Error('Nao implementado');
+  }
 }
 
 export = ProductionOrderRepository;

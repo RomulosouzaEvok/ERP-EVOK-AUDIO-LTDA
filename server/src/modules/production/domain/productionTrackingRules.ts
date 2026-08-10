@@ -98,6 +98,17 @@ export const PRODUCTION_TRACKING_RULES = {
    * jamais pode DESLIGAR uma regra fiscal em silencio.
    */
   MODE_INVALID: 'G4-TRACKING-MODE-INVALID',
+  /**
+   * **G6** — OP entrando em produção sem nada contra o que apontar: nenhuma
+   * etapa materializada e nenhum apontamento manual.
+   */
+  START_WITHOUT_ROUTE: 'G6-START-NO-ROUTE',
+  /**
+   * **G6** — alguma etapa aponta para um centro de trabalho **inativo**. O
+   * centro foi desativado depois que o roteiro foi liberado, e a hora
+   * trabalhada ali sairia sem taxa — custo de mão-de-obra zero, em silêncio.
+   */
+  START_WORK_CENTER_INACTIVE: 'G6-START-WC-INACTIVE',
 } as const;
 
 /** Codigo de regra do modulo de apontamento. */
@@ -149,8 +160,17 @@ export interface TrackingStepSnapshot {
   quantity_good?: number | string | null;
   routeStep?: {
     id?: number;
+    step_code?: string | null;
+    name?: string | null;
     work_center_id?: number | null;
-    workCenter?: { id?: number; cost_per_hour?: number | string | null } | null;
+    workCenter?: {
+      id?: number;
+      code?: string | null;
+      name?: string | null;
+      /** G6: centro desativado depois da liberação zeraria a hora trabalhada. */
+      active?: boolean | null;
+      cost_per_hour?: number | string | null;
+    } | null;
   } | null;
 }
 
@@ -291,6 +311,89 @@ export function assertTrackingExists(orderNumber: string, steps: TrackingStepSna
     + 'apontamento o produto acabado entraria em estoque sem custo de mao-de-obra. '
     + 'Se o produto ainda nao tem roteiro, cadastre-o em Producao > Roteiros de Fabricacao e libere a OP novamente.',
     { rule: PRODUCTION_TRACKING_RULES.TRACKING_REQUIRED, orderNumber },
+  );
+}
+
+/**
+ * **G6 — pré-condições para a ordem ENTRAR em produção.**
+ *
+ * ## Por que esta regra existe, e por que ela fica no INÍCIO
+ *
+ * O achado original do G6 era "iniciar a produção só grava a data". Ele ficou
+ * três vezes sem implementação porque as validações sugeridas (centro de
+ * trabalho e operador em `production_orders`) exigiriam colunas que a tabela
+ * não tem — e inventar requisito é pior que não ter regra.
+ *
+ * O que mudou foi o G5 (roteiro ganhou API) e o G4 (apontamento virou
+ * obrigatório na CONCLUSÃO). Com os dois no lugar, a pré-condição real deixou
+ * de precisar de coluna nova: a OP entra em produção quando existe **algo
+ * contra o que apontar**. E aí aparece o defeito de processo que o G4 sozinho
+ * não resolve:
+ *
+ * > produto sem roteiro ativo é liberado (só um `warn` no log), a fábrica
+ * > monta o lote inteiro, e a OP só é recusada **na conclusão** — depois de
+ * > todo o trabalho feito, com o material já consumido.
+ *
+ * Recusar no início é estritamente melhor para o chão de fábrica: o problema
+ * é de cadastro e, na partida, ainda dá tempo de resolver sem perder produção.
+ *
+ * ## As duas condições
+ *
+ * 1. **Existe apontamento.** Materializado do roteiro ativo na liberação
+ *    (G4) ou criado à mão. Nenhuma linha = nada contra o que apontar.
+ * 2. **Nenhum centro de trabalho inativo.** Um centro desativado entre a
+ *    liberação e a partida faria a hora trabalhada ali sair **sem taxa** — o
+ *    mesmo custo-zero silencioso que o G5 já barra na ativação do roteiro.
+ *    Etapa sem centro (`work_center_id` nulo) continua válida: centro é
+ *    opcional no roteiro por desenho do G5, e exigi-lo aqui seria inventar
+ *    requisito de novo.
+ *
+ * O responsável **não** é validado aqui: em vez de recusar, o caso de uso
+ * atribui quem iniciou (do JWT) quando o campo está vazio. Bloquear seria
+ * inventar obrigatoriedade que nenhuma regra documentada tem; atribuir fecha o
+ * buraco de auditoria ("quem pôs esta ordem para rodar?") sem travar ninguém.
+ *
+ * @param orderNumber - Número da OP.
+ * @param steps - Etapas de apontamento da OP, com `routeStep.workCenter`.
+ * @throws {BusinessRuleError} 422 `G6-START-NO-ROUTE` ou `G6-START-WC-INACTIVE`.
+ */
+export function assertOrderCanStart(orderNumber: string, steps: TrackingStepSnapshot[]): void {
+  const lista = steps || [];
+
+  if (lista.length === 0) {
+    throw new BusinessRuleError(
+      `Nao e possivel iniciar a producao da OP ${orderNumber}: nao ha nenhuma etapa contra a qual apontar. `
+      + 'Cadastre o roteiro do produto em Producao > Roteiros de Fabricacao, deixe-o ATIVO e libere a OP de novo '
+      + '(a liberacao materializa as etapas do roteiro). '
+      + 'Este bloqueio existe no INICIO de proposito: sem apontamento a OP nao conclui (Bloco K / Livro modelo 3), '
+      + 'e descobrir isso depois do lote montado significaria perder a producao inteira.',
+      { rule: PRODUCTION_TRACKING_RULES.START_WITHOUT_ROUTE, orderNumber },
+    );
+  }
+
+  const inativos = lista
+    .filter((step) => step.routeStep?.workCenter && step.routeStep.workCenter.active === false)
+    .map((step) => ({
+      sequence: step.sequence,
+      step_code: step.routeStep?.step_code ?? null,
+      work_center_id: step.routeStep?.workCenter?.id ?? null,
+      work_center_code: step.routeStep?.workCenter?.code ?? null,
+      work_center_name: step.routeStep?.workCenter?.name ?? null,
+    }));
+
+  if (inativos.length === 0) return;
+
+  const descricao = inativos
+    .map((item) => `etapa ${item.step_code ?? item.sequence} -> ${item.work_center_name ?? item.work_center_code ?? item.work_center_id}`)
+    .join('; ');
+
+  throw new BusinessRuleError(
+    `Nao e possivel iniciar a producao da OP ${orderNumber}: ${inativos.length} etapa(s) apontam para um centro de `
+    + `trabalho INATIVO (${descricao}). O centro foi desativado depois que o roteiro foi liberado, e a hora `
+    + 'trabalhada nele sairia sem taxa horaria — o produto acabado entraria em estoque com custo de mao-de-obra '
+    + 'zerado. Reative o centro em Producao > Centros de Trabalho, ou crie uma revisao do roteiro apontando para '
+    + 'um centro ativo.',
+    { rule: PRODUCTION_TRACKING_RULES.START_WORK_CENTER_INACTIVE, orderNumber, steps: inativos },
   );
 }
 

@@ -94,6 +94,58 @@ injection, RCE, etc.) para o banco inteiro.
    - `npm test` (a partir de `server/`) → **86 suites, 670 testes,
      passou** depois da migration aplicada.
 
+### ⚠️ Atualização 2026-08-10 — os GRANTs sumiam em banco reprovisionado
+
+Medido nos dois bancos antes de qualquer conclusão:
+
+```
+erp_evok_audio ......  201 de 201 tabelas com GRANT para evok_app
+erp_evok_audio_test ..    1 de 201  (200 sem nenhum privilégio)
+```
+
+A migration `...-000080` fez o trabalho corretamente **no banco em que rodou
+de fato**. O banco de teste foi reprovisionado depois (baseline congelado,
+`e2a8d7e`): as tabelas nasceram de novo, sem ACL, e a migration já constava
+aplicada em `SequelizeMeta` — então nunca mais rodou ali.
+
+**O risco não era o banco de teste, era produção:** um banco novo,
+provisionado do baseline + migrations, nasceria com `evok_app` sem poder ler
+nem escrever nada, e a troca de credencial falharia no primeiro request. O
+sintoma (*permission denied* em tudo) não aponta para a causa.
+
+**Ponto cego que isso expôs:** `scripts/comparar-bancos.cjs` compara coluna,
+tipo, default, índice e constraint — **não compara ACL**. O "os dois bancos são
+idênticos" nunca incluiu privilégios.
+
+Corrigido por:
+
+1. Migration `20260810-000041-reapply-app-role-privileges.cjs` — reaplica os
+   GRANTs de forma idempotente e fixa os *default privileges* em
+   `current_user` (a `...-000080` fixava o literal `evok_admin`, o que
+   falharia se outro usuário provisionasse o banco).
+2. Guarda `tests/integration/app-role-privileges-guard.test.ts` — reprova se
+   qualquer tabela de negócio ficar sem `SELECT/INSERT/UPDATE/DELETE`, se
+   alguma sequence ficar sem `USAGE`, se a role ganhar `SUPERUSER`/`CREATEDB`/
+   `CREATEROLE`, ou se ela **ganhar** acesso a `SequelizeMeta`.
+
+**Prova de que a troca funciona** (conectado de fato como `evok_app`, escrita
+desfeita por `ROLLBACK`):
+
+```
+login como evok_app ........ OK          SELECT em products ........ OK (646 linhas)
+INSERT + sequence .......... OK          UPDATE / DELETE ........... OK
+CREATE TABLE ............... bloqueado (permission denied for schema public)
+DROP TABLE ................. bloqueado (must be owner of table products)
+SELECT em SequelizeMeta .... bloqueado (permission denied for table SequelizeMeta)
+```
+
+**`docker-compose.prod.yml` passou a usar `evok_app` por padrão** no serviço
+`api` (`DB_USER: ${APP_DB_USER:-evok_app}`), em vez de recomendá-lo num
+comentário: segurança que depende de alguém lembrar de trocar uma variável no
+dia do deploy não acontece. `DB_USER`/`DB_PASSWORD` continuam servindo ao
+serviço do Postgres e às migrations, que precisam de DDL e rodam fora do
+container de runtime.
+
 ### Decisão explícita: a troca de `.env` NÃO foi aplicada agora
 
 **Esta rodada optou pela opção (a) do escopo pedido:** criar a role e

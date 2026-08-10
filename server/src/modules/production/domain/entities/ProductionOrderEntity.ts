@@ -46,6 +46,8 @@ interface ProductionTransitionOptions {
 interface ProductionTransitionChanges {
   status: ProductionStatus;
   start_date?: Date;
+  /** G6: preenchido na partida quando a OP ainda nao tem responsavel. FK -> `employees.id`. */
+  responsible_id?: number;
   quantity_produced?: number;
   quantity_scrapped?: number;
   scrap_reason?: string | null;
@@ -164,24 +166,23 @@ class ProductionOrderEntity extends Entity {
 
     const changes: ProductionTransitionChanges = { status: nextStatus };
 
-    // Gap G6 (auditoria da cadeia do produto, 2026-08-09) — ANALISADO, NAO
-    // ALTERADO. O achado e que iniciar a producao "so grava a data". A
-    // pre-condicao que de fato importa ja e coberta antes: `in_progress` so e
-    // alcancavel a partir de `released` ou `paused`, e a entrada em
-    // `released` valida disponibilidade e RESERVA o material
-    // (`ChangeProductionOrderStatusUseCase.reserveMaterials`). As validacoes
-    // sugeridas no achado nao tem onde se apoiar hoje:
-    // - centro de trabalho: `production_orders` nao tem coluna de centro de
-    //   trabalho (ele vive nas etapas de roteiro/apontamento) — exigir isso e
-    //   mudanca de schema, fora do escopo desta correcao;
-    // - operador/responsavel: `responsible_id` e opcional por desenho em todo
-    //   o modulo, e nenhuma regra documentada o torna obrigatorio;
-    // - apontamento iniciado: contradiz a decisao explicita de
-    //   `reconcileTrackingOnCompletion` ("OP sem apontamento por etapa: fluxo
-    //   simples permanece valido") e e exatamente a pergunta em aberto do gap
-    //   G4 (apontamento obrigatorio?), que depende de decisao do dono.
-    // Qualquer regra alem disso seria requisito inventado — ver relatorio da
-    // Onda 1 e docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md.
+    // Gap G6 — FECHADO em 2026-08-10, com aprovacao do dono.
+    //
+    // A analise de 2026-08-09 (que manteve o gap aberto por tres rodadas)
+    // continua correta no que dizia: `production_orders` nao tem coluna de
+    // centro de trabalho, `responsible_id` e opcional por desenho, e exigir
+    // apontamento iniciado dependia da decisao do G4. O que mudou foi o
+    // contexto — G5 deu API de roteiro e G4 tornou o apontamento obrigatorio
+    // na conclusao —, e a pre-condicao real da partida passou a existir sem
+    // precisar de coluna nova: **a OP so entra em producao se houver algo
+    // contra o que apontar, e nenhum centro de trabalho inativo**.
+    //
+    // A regra pura vive em `productionTrackingRules.assertOrderCanStart`
+    // (codigos `G6-START-NO-ROUTE` / `G6-START-WC-INACTIVE`) e e aplicada por
+    // `ChangeProductionOrderStatusUseCase.assertOrderIsReadyToStart`, que
+    // precisa do banco (etapas + centro de trabalho). A entidade continua
+    // cuidando so da maquina de estados: aqui a partida grava a data, e o
+    // `responsible_id` e preenchido pelo caso de uso quando resolvivel.
     if (nextStatus === 'in_progress') changes.start_date = new Date();
     if (nextStatus === 'completed') {
       const produced = quantityProduced !== undefined ? Number(quantityProduced) : this.quantity;

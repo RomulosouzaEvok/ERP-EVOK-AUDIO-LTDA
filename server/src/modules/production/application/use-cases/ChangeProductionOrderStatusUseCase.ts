@@ -14,6 +14,7 @@ import {
   assertHasCompletedStep,
   assertLaborRateIsResolvable,
   assertNoOpenSteps,
+  assertOrderCanStart,
   assertProducedQuantityMatchesTracking,
   assertTrackingExists,
   computeStepHours,
@@ -86,6 +87,21 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       if (input.status === 'released') {
         await this.reserveMaterials(order, input.user_id, t);
         await this.materializeTrackingFromActiveRoute(order, t);
+      }
+
+      if (input.status === 'in_progress') {
+        await this.assertOrderIsReadyToStart(order, t);
+        // G6: quem manda a ordem para o chao de fabrica responde por ela ate
+        // ser reatribuida. Preencher em vez de recusar fecha o buraco de
+        // auditoria sem inventar obrigatoriedade — `responsible_id` e opcional
+        // por desenho em todo o modulo. A coluna e FK para `employees.id`, e
+        // nao para `users.id`: sem a traducao, o id do JWT apontaria para
+        // outro funcionario. Usuario que nao e funcionario deixa o campo como
+        // esta — nao se trava a partida por causa de um cadastro de RH.
+        if (!order.responsible_id && input.user_id) {
+          const employee = await this.productionOrderRepository.findEmployeeByUserId(input.user_id, t);
+          if (employee?.id) updateData.responsible_id = employee.id;
+        }
       }
 
       if (input.status === 'completed') {
@@ -242,6 +258,54 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * @returns void
    * @throws {BusinessRuleError} 422 com `details.rule` em qualquer reprovacao.
    */
+  /**
+   * **G6** — gate de PARTIDA da ordem (`* → in_progress`).
+   *
+   * ## Por que este gate nasceu só agora
+   *
+   * O G6 ficou três rodadas sem implementação porque as validações sugeridas
+   * (centro de trabalho e operador em `production_orders`) exigiam colunas que
+   * a tabela não tem. O que destravou foi o par G5 + G4: com roteiro
+   * cadastrável e apontamento obrigatório na conclusão, a pré-condição real da
+   * partida deixou de precisar de coluna nova — e ficou visível um defeito de
+   * processo que o G4 sozinho não resolve.
+   *
+   * Hoje, produto sem roteiro ativo é **liberado** (a materialização só grava
+   * um `warn` no log), a fábrica monta o lote inteiro, e a OP só é recusada na
+   * **conclusão** — com material já consumido e horas já gastas. Recusar na
+   * partida transforma uma perda de produção em um problema de cadastro que
+   * ainda dá tempo de resolver.
+   *
+   * ## Mesma chave do G4, de propósito
+   *
+   * Respeita `PRODUCTION_TRACKING_REQUIRED`: em `warn` o gate apenas registra
+   * o log e deixa passar. É a mesma família de regra (a OP precisa ter contra
+   * o que apontar) e um segundo botão criaria a chance de desligar metade da
+   * obrigação sem perceber.
+   *
+   * @param order - OP travada.
+   * @param transaction - Transação ativa.
+   * @returns void
+   * @throws {BusinessRuleError} 422 `G6-START-NO-ROUTE` / `G6-START-WC-INACTIVE`.
+   */
+  private async assertOrderIsReadyToStart(order: any, transaction: any): Promise<void> {
+    const detailedTrackings = await this.productionOrderRepository.listTrackingWithRouteStepByOrder(order.id, transaction);
+
+    if (this.resolveEnforcementMode() === 'warn') {
+      if (!detailedTrackings || detailedTrackings.length === 0) {
+        logger.warn('OP iniciada SEM nenhuma etapa de apontamento (PRODUCTION_TRACKING_REQUIRED=warn).', {
+          rule: PRODUCTION_TRACKING_RULES.START_WITHOUT_ROUTE,
+          production_order_id: order.id,
+          order_number: order.order_number,
+          product_id: order.product_id,
+        });
+      }
+      return;
+    }
+
+    assertOrderCanStart(order.order_number, detailedTrackings || []);
+  }
+
   private async assertTrackingIsSufficientForCompletion(order: any, producedQty: number, transaction: any): Promise<void> {
     const mode = this.resolveEnforcementMode();
     const trackings = await this.productionOrderRepository.listTrackingByOrderForUpdate(order.id, transaction);

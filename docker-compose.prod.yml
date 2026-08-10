@@ -20,11 +20,15 @@
 #   - Cron/systemd timer de backup ativo (scripts/schedule-backup-cron.sh)
 #     rodando fora deste compose, apontando para o volume postgres_data
 #     deste arquivo.
-#   - .env de producao com DB_PASSWORD, JWT_SECRET, ADMIN_SEED_PASSWORD
-#     fortes e UNICOS — nunca reaproveitar valores de dev/staging.
-#   - Considerar usar DB_USER=evok_app (role de privilegio minimo criada
-#     pela migration 20260806-000080) em vez de evok_admin para a API em
-#     producao — ver docs/database/05-ACESSOS_E_ISOLAMENTO.md.
+#   - .env de producao com DB_PASSWORD, JWT_SECRET, ADMIN_SEED_PASSWORD e
+#     APP_DB_ROLE_PASSWORD fortes e UNICOS — nunca reaproveitar valores de
+#     dev/staging.
+#   - A API ja roda com a role de privilegio minimo `evok_app` por PADRAO
+#     (ver o servico `api` abaixo). Rode as migrations ANTES de subir a API:
+#     e a migration 20260806-000080 que cria a role, e a 20260810-000041 que
+#     garante os GRANTs em TODAS as tabelas — sem ela, um banco novo nasce
+#     com a role sem poder ler nem escrever nada (defeito real medido em
+#     2026-08-10). Ver docs/database/05-ACESSOS_E_ISOLAMENTO.md.
 
 services:
   postgres:
@@ -72,13 +76,20 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-erp_evok_audio}
-      # PRODUCAO (recomendado, nao obrigatorio no primeiro deploy): trocar
-      # para DB_USER=evok_app (role de privilegio minimo, sem DDL) — ver
-      # docs/database/05-ACESSOS_E_ISOLAMENTO.md antes de decidir.
-      # Migrations continuam precisando rodar com a role administrativa
-      # (evok_admin), fora deste container de runtime.
-      DB_USER: ${DB_USER:?defina DB_USER no .env (evok_admin ou evok_app) antes de subir a API de producao}
-      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env antes de subir a API de producao}
+      # O runtime roda com a role de PRIVILEGIO MINIMO por padrao
+      # (`evok_app`): ela tem SELECT/INSERT/UPDATE/DELETE nas tabelas de
+      # negocio e NENHUM privilegio de DDL — testado conectando de fato
+      # (CREATE TABLE, DROP TABLE e leitura de `SequelizeMeta` sao recusados).
+      #
+      # Deixar isso como default, e nao como recomendacao em comentario, e
+      # deliberado: seguranca que depende de alguem lembrar de trocar uma
+      # variavel no dia do deploy nao acontece.
+      #
+      # `DB_USER`/`DB_PASSWORD` (a role administrativa) continuam servindo ao
+      # servico do Postgres e as MIGRATIONS, que precisam de DDL e rodam FORA
+      # deste container. Ver docs/database/05-ACESSOS_E_ISOLAMENTO.md.
+      DB_USER: ${APP_DB_USER:-evok_app}
+      DB_PASSWORD: ${APP_DB_ROLE_PASSWORD:?defina APP_DB_ROLE_PASSWORD no .env (senha da role evok_app, a mesma usada pela migration que a cria) antes de subir a API de producao}
       # PRODUCAO: TLS obrigatorio na conexao com o Postgres gerenciado
       # (validar de ponta a ponta antes do Go-Live — item pendente do
       # checklist em docs/infra/DEPLOY_UBUNTU.md).

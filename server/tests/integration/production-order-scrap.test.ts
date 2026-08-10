@@ -20,24 +20,7 @@ const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.
  * @returns Promise resolvida com a etapa concluida.
  */
 async function apontarEtapa(token: string, orderId: number, quantityGood: number): Promise<void> {
-  // A liberacao da OP ja materializa as etapas quando o produto tem roteiro
-  // ATIVO. Reaproveitar o que existe evita colidir com o indice unico
-  // `(production_order_id, sequence)` — que viraria 500 em vez de falha
-  // legivel — e mantem o teste valido nos dois cenarios.
-  const existing = await api()
-    .get(`/api/production-orders/${orderId}/tracking`)
-    .set('Authorization', `Bearer ${token}`);
-  expect(existing.status).toBe(200);
-
-  const steps: any[] = existing.body.data ?? [];
-  if (steps.length === 0) {
-    const created = await api()
-      .post(`/api/production-orders/${orderId}/tracking`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ sequence: 1, notes: 'Apontamento do teste de refugo' });
-    expect(created.status).toBe(201);
-    steps.push(created.body.data);
-  }
+  const steps = await garantirEtapa(token, orderId);
 
   for (const step of steps) {
     if (step.status === 'completed' || step.status === 'skipped') continue;
@@ -54,6 +37,44 @@ async function apontarEtapa(token: string, orderId: number, quantityGood: number
       .send({ quantity_good: quantityGood, quantity_scrapped: 0 });
     expect(finished.status).toBe(200);
   }
+}
+
+/**
+ * Garante que a OP tenha ao menos uma etapa de apontamento, e devolve as
+ * etapas existentes.
+ *
+ * Precisa rodar **antes** de `in_progress` desde o gap G6 (2026-08-10): a OP
+ * so entra em producao se houver algo contra o que apontar
+ * (`G6-START-NO-ROUTE`). Isso e a regra funcionando, nao um contratempo do
+ * teste — produto sem roteiro era liberado, montado e so recusado na
+ * conclusao, com material ja consumido.
+ *
+ * A liberacao da OP ja materializa as etapas quando o produto tem roteiro
+ * ATIVO. Reaproveitar o que existe evita colidir com o indice unico
+ * `(production_order_id, sequence)` — que viraria 500 em vez de falha legivel
+ * — e mantem o teste valido nos dois cenarios.
+ *
+ * @param token - JWT do usuario de teste.
+ * @param orderId - Id da OP.
+ * @returns Etapas da OP (as que existiam, ou a recem-criada).
+ */
+async function garantirEtapa(token: string, orderId: number): Promise<any[]> {
+  const existing = await api()
+    .get(`/api/production-orders/${orderId}/tracking`)
+    .set('Authorization', `Bearer ${token}`);
+  expect(existing.status).toBe(200);
+
+  const steps: any[] = existing.body.data ?? [];
+  if (steps.length === 0) {
+    const created = await api()
+      .post(`/api/production-orders/${orderId}/tracking`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sequence: 1, notes: 'Apontamento do teste de refugo' });
+    expect(created.status).toBe(201);
+    steps.push(created.body.data);
+  }
+
+  return steps;
 }
 
 describeIntegration('Registro de refugo na conclusao de ordem de producao', () => {
@@ -81,6 +102,9 @@ describeIntegration('Registro de refugo na conclusao de ordem de producao', () =
       .set('Authorization', `Bearer ${token}`)
       .send({ status: 'released' });
     expect(released.status).toBe(200);
+
+    // G6: a OP so parte se houver etapa contra a qual apontar.
+    await garantirEtapa(token, orderId);
 
     const started = await api()
       .put(`/api/production-orders/${orderId}/status`)
@@ -137,6 +161,9 @@ describeIntegration('Registro de refugo na conclusao de ordem de producao', () =
       .set('Authorization', `Bearer ${token}`)
       .send({ status: 'released' })
       .expect(200);
+
+    // G6: a OP so parte se houver etapa contra a qual apontar.
+    await garantirEtapa(token, orderId);
 
     await api()
       .put(`/api/production-orders/${orderId}/status`)

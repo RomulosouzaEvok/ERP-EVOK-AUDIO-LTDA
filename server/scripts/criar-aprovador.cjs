@@ -60,6 +60,11 @@
  * `.gitignore` via `*.local.txt`). Não é recuperável depois: no banco existe
  * só o hash bcrypt.
  *
+ * Use `--sem-exibir` quando o terminal não for confiável (sessão gravada,
+ * pareamento, log de CI): a senha vai **apenas** para o arquivo, e o terminal
+ * mostra só o caminho. Uma senha que aparece em transcrição precisa ser
+ * trocada de novo — o modo existe para não precisar.
+ *
  * @module scripts/criar-aprovador
  */
 
@@ -357,8 +362,13 @@ async function main() {
       ].join('\n');
       fs.writeFileSync(ARQUIVO_CREDENCIAL, conteudo, 'utf8');
       console.log('');
-      console.log(`  senha ................. ${senhaGerada}`);
-      console.log(`  (gravada em ${path.relative(process.cwd(), ARQUIVO_CREDENCIAL)}, fora do Git — troque no primeiro acesso)`);
+      if (flag('sem-exibir')) {
+        console.log('  senha ................. gerada e gravada SEM exibir no terminal');
+        console.log(`  leia em ${path.relative(process.cwd(), ARQUIVO_CREDENCIAL)} (fora do Git) e troque no primeiro acesso`);
+      } else {
+        console.log(`  senha ................. ${senhaGerada}`);
+        console.log(`  (gravada em ${path.relative(process.cwd(), ARQUIVO_CREDENCIAL)}, fora do Git — troque no primeiro acesso)`);
+      }
     } else {
       console.log('');
       console.log('  senha ................. inalterada (use --rotacionar-senha para gerar uma nova)');

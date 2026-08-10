@@ -209,7 +209,15 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
    *
    * @param productionOrderId - ID da OP.
    * @param transaction - Transacao ativa.
-   * @returns Apontamentos com `routeStep.workCenter.cost_per_hour` (quando existir).
+   * Serve tambem ao gate de partida do G6 (`assertOrderCanStart`), que
+   * precisa saber se o centro esta ATIVO e como ele se chama — por isso
+   * `code`/`name`/`active` entram no `attributes` junto de `cost_per_hour`.
+   * Sem `active` aqui, a regra do G6 leria `undefined` e nunca reprovaria: o
+   * campo ausente e indistinguivel do centro ativo.
+   *
+   * @param productionOrderId - ID da OP.
+   * @param transaction - Transacao ativa.
+   * @returns Apontamentos com `routeStep.workCenter` (quando existir).
    */
   public async listTrackingWithRouteStepByOrder(productionOrderId: number, transaction: any): Promise<any[]> {
     return ProductionOrderTracking.findAll({
@@ -218,13 +226,25 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
         {
           model: ProductionRouteStep,
           as: 'routeStep',
-          attributes: ['id', 'work_center_id'],
-          include: [{ model: WorkCenter, as: 'workCenter', attributes: ['id', 'cost_per_hour'] }]
+          attributes: ['id', 'step_code', 'name', 'work_center_id'],
+          include: [{ model: WorkCenter, as: 'workCenter', attributes: ['id', 'code', 'name', 'active', 'cost_per_hour'] }]
         }
       ],
       transaction,
       order: [['sequence', 'ASC']]
     });
+  }
+
+  /**
+   * Funcionario vinculado a um usuario (G6 — `responsible_id` e FK para
+   * `employees.id`, nao para `users.id`).
+   *
+   * @param userId - `users.id` do JWT.
+   * @param transaction - Transacao ativa.
+   * @returns Funcionario, ou `null` quando o usuario nao e funcionario.
+   */
+  public async findEmployeeByUserId(userId: number, transaction?: any): Promise<any | null> {
+    return Employee.findOne({ where: { user_id: userId }, attributes: ['id'], transaction });
   }
 
   /** @param data - Dados da etapa. @param transaction - Transacao opcional. @returns Apontamento criado. */

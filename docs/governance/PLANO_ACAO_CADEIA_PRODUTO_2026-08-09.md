@@ -328,11 +328,15 @@ A cadeia só é considerada fechada quando, num teste ponta a ponta com dado rea
       aprovador real** no domínio `@evokaudio.com.br` para produção — os
       semeados usam `@teste.evokaudio` e o script recusa rodar em produção
       (ver D-K, item 2)
-- [ ] **Todo passo obrigatório do processo é obrigatório no código** —
-      avançou muito (G2, G4, G7, G9, G11, G13, D-K passaram a **bloquear**),
-      mas o **G6 segue em aberto** por decisão consciente: iniciar produção
-      não valida centro de trabalho nem operador. Enquanto houver um passo
-      declarado obrigatório na norma e não no código, este item não fecha.
+- [x] **Todo passo obrigatório do processo é obrigatório no código** —
+      G2, G4, G7, G9, G11, G13, D-K, D-L/D-M **bloqueiam**, e o **G6 fechou em
+      2026-08-10**: iniciar produção passou a exigir etapa contra a qual
+      apontar e centro de trabalho ativo, registrando quem assumiu a ordem.
+      Era o último passo declarado obrigatório que vivia só na norma.
+      ⚠️ Ressalva honesta: as regras respeitam a chave
+      `PRODUCTION_TRACKING_REQUIRED` — em `warn` o G4 e o G6 apenas registram
+      log. O padrão é `block` (inclusive para valor inválido), mas quem opera
+      pode desligar, e isso é deliberado (janela de UAT).
 - [ ] **Nenhum dado é registrado "decorativamente"** — a quarentena deixou de
       ser decorativa (G7) e os estados mortos da requisição foram acionados
       (G15). Segue decorativo, por decisão registrada: plano de amostragem /
@@ -377,4 +381,5 @@ A cadeia só é considerada fechada quando, num teste ponta a ponta com dado rea
 | 2026-08-10 | — | **G18** | ✅ Implementado — subconjunto **estocável × fantasma** na explosão da BOM (`bill_of_material_items.is_phantom`, migration `20260810-000038`). O REPARO que a Evok vende no balcão E monta no alto-falante tinha o estoque nunca baixado, porque a explosão descia incondicionalmente até a matéria-prima. Duas visões separadas: produção para no subconjunto estocável, engenharia (`?through_subassemblies=true`) desce até a folha. Provado em `tests/integration/bom-two-level-reparo.test.ts`. ⚠️ A migration ficou aplicada **só no banco de teste** até 2026-08-10 — ver a linha da guarda de drift abaixo. | *(working tree)* |
 | 2026-08-10 | — | **Importação de cadastro por planilha** | ✅ Implementado e **provado** — `/api/catalog-import` (módulo `spreadsheetImport`): dois CSVs (cadastro e estrutura), leitura tolerante ao Excel brasileiro (`;`, vírgula decimal, Windows-1252, BOM), simulação sem gravar, e gravação de `products` + `items` + `bill_of_materials` na mesma transação. Recusa é **tudo ou nada**, com arquivo/linha/coluna em português. RBAC exige `produtos` **e** `bom` em nível `operate` na escrita — sem isso a importação seria um caminho lateral para criar estrutura de produto. 6 casos em `tests/integration/catalog-spreadsheet-import.test.ts`. | *(working tree)* |
 | 2026-08-10 | — | **Guarda de drift entre bancos** | ✅ Corrigido — a migration `...-000038` estava aplicada **só em `erp_evok_audio_test`**, com a `...-000039` já registrada: no banco real a coluna `is_phantom` não existia e qualquer leitura de item de BOM quebraria. Nenhuma rede pegou, porque **todas as guardas de integração rodam contra o banco de teste**. Migration aplicada e nova guarda `tests/integration/cross-database-drift-guard.test.ts`, que executa `scripts/comparar-bancos.cjs` (o script já existia; faltava alguém rodá-lo) e reprova quando os dois bancos divergem — contrato verificado: sai 0 idênticos, 2 divergentes. Pula quando o banco de dev não é acessível (CI). | *(working tree)* |
-| — | 2 | **G6** | ⏸️ **Continua sem implementação** — reafirmado em 2026-08-10. A análise de 2026-08-09 (linha acima) segue válida: a pré-condição real já é coberta pela máquina de estados, e as validações sugeridas exigiriam coluna nova em `production_orders`. É o **único dos 17 gaps sem entrada de fechamento**. | — |
+| 2026-08-10 | 2 | **G6** | ✅ **Implementado — o último dos 17** (aprovação explícita do dono). A análise anterior estava certa no que dizia (sem coluna de centro de trabalho, `responsible_id` opcional, apontamento dependia do G4); o que mudou foi o **contexto**: com o G5 dando API de roteiro e o G4 tornando o apontamento obrigatório, a pré-condição da partida passou a existir **sem coluna nova**. A OP só entra em `in_progress` se houver etapa contra a qual apontar (`G6-START-NO-ROUTE`) e nenhum centro de trabalho inativo (`G6-START-WC-INACTIVE`); a partida grava quem assumiu (traduzindo o usuário do JWT para `employees.id` — `responsible_id` **não** é FK para `users`). Respeita a mesma chave `PRODUCTION_TRACKING_REQUIRED` do G4. **O ganho real é de processo:** antes, produto sem roteiro era liberado, a fábrica montava o lote inteiro e a OP só era recusada na CONCLUSÃO, com material consumido e horas gastas — recusar na partida transforma perda de produção em problema de cadastro que ainda dá tempo de resolver. Provado em `tests/integration/production-start-gate-g6.test.ts`. | *(working tree)* |
+| — | 2 | ~~**G6**~~ | ⏸️ ~~Continua sem implementação~~ — **superado pela linha acima.** Registro histórico de 2026-08-10. A análise de 2026-08-09 (linha acima) segue válida: a pré-condição real já é coberta pela máquina de estados, e as validações sugeridas exigiriam coluna nova em `production_orders`. É o **único dos 17 gaps sem entrada de fechamento**. | — |
