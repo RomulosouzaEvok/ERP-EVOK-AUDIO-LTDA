@@ -96,6 +96,100 @@ Documento que descreve **passo a passo** como fabricar um auto-falante, incluind
 | Tempo de cura | 24h | 2h | 24h |
 | Força de aperto | 2 kgf | 1 kgf | 5 kgf |
 
+## Roteiro no sistema (API) — implementado em 2026-08-10 (gap G5)
+
+Até 2026-08-10 as tabelas `production_routes` / `production_route_steps`
+existiam e já eram **lidas** pelo sistema (custeio de mão de obra na conclusão
+da OP, carga-máquina por centro de trabalho, OEE), mas **não havia nenhuma
+tela nem endpoint para cadastrá-las** — só script. Ou seja: era impossível ao
+PCP registrar o roteiro que gera o custo. Isso foi fechado com a API
+`/api/production/routes` (contrato completo em `docs/arquitetura/API.md` §33).
+
+### Quem faz o quê
+
+| Papel | Permissão | Pode |
+|---|---|---|
+| PCP / Engenharia de Processo | `producao` nível `operate` | criar rascunho, editar cabeçalho e etapas, criar nova revisão, excluir rascunho |
+| Gerência de Produção | `producao` nível `approve` | **liberar** (`activate`) e **aposentar** (`inactivate`) o roteiro |
+
+Liberar roteiro é ato de aprovação, não de digitação — por isso grava
+`approved_by`/`approved_at` (sempre do usuário logado, nunca do payload).
+
+### Ciclo de vida — e por que o roteiro liberado não muda
+
+```
+rascunho (draft) ──liberar──> ativo (active) ──(nova revisão liberada)──> substituído (superseded)
+                                  │
+                                  └──aposentar──> inativo (inactive) ──liberar──> ativo
+```
+
+Um roteiro **ativo é congelado**. Quem precisa mudar o processo (trocar o
+adesivo da bobina, mudar a operação de centro de trabalho) **cria uma nova
+revisão** (`POST /api/production/routes/:id/revise`), edita o rascunho e libera.
+A revisão anterior vira `superseded` com **todas as etapas intactas**.
+
+**Consequência prática — o que acontece com as OPs já abertas:** nada. Elas não
+são afetadas, porque as etapas antigas continuam existindo e os apontamentos já
+feitos continuam apontando para elas (é disso que sai o custo de mão de obra
+daquela OP). O que muda é o que a fábrica passa a executar dali para frente.
+
+⚠️ **Limitação estrutural (decisão de negócio em aberto):** não existe coluna
+que amarre uma OP a uma revisão específica de roteiro. Relatórios derivados
+(carga-máquina) usam sempre a revisão **ativa no momento da consulta**. Amarrar
+a OP à revisão vigente na liberação é decisão do dono do produto — registrada em
+`docs/governance/TODO.md`.
+
+Só pode existir **um roteiro ativo por produto** (garantido em transação e por
+índice único parcial no banco, migration `20260810-000034`).
+
+### Numeração das operações: `sequence` × `step_code`
+
+As tabelas deste documento numeram as operações de 10 em 10 (`OP 10`, `OP 20`,
+`OP 30`...), prática de chão de fábrica que deixa espaço para inserir etapa no
+meio. O sistema separa as duas coisas:
+
+| Campo | O que é | Regra |
+|---|---|---|
+| `sequence` | **ordinal** da etapa no roteiro | obrigatoriamente **1..N contígua**, sem buraco e sem repetição |
+| `step_code` | **código da operação** como o chão de fábrica a conhece | texto livre (até 50 caracteres), único dentro do roteiro |
+
+Ou seja, a operação "OP 20 — Prensar Surround" é gravada como
+`sequence: 2`, `step_code: "20"` (ou `"PRENSA-SUR"`). O `sequence` contíguo é
+exigência do sistema porque é por ele que o apontamento
+(`production_order_tracking.sequence`) casa com a etapa, sem tabela de-para.
+Inserir uma operação no meio implica renumerar o `sequence` — o que só é
+possível em rascunho, e é exatamente o motivo de existir o fluxo de revisão.
+
+### Tempos
+
+| Campo | Unidade | Entra em |
+|---|---|---|
+| `standard_time_minutes` | minutos **por unidade** | `total_standard_time_minutes` do roteiro, tempo padrão do OEE |
+| `setup_time_minutes` | minutos **por lote** | carga-máquina (uma vez por etapa) — **não** entra no tempo padrão total |
+
+Essa separação é deliberada: somar setup (por lote) ao tempo padrão (por
+unidade) distorceria o OEE. O detalhe está em
+`server/src/modules/production/domain/productionRouteRules.ts`.
+
+### Vínculo com centro de trabalho
+
+`work_center_id` é **opcional**, mas quando informado precisa apontar para um
+centro **existente e ativo** — verificado tanto ao gravar o rascunho quanto **de
+novo na liberação** (um centro pode ser desativado no meio do caminho, e roteiro
+ativo apontando para centro morto zera o custo de mão de obra sem avisar).
+Etapa sem `work_center_id` é válida: ela apenas não entra na carga-máquina nem
+no custeio por hora-máquina.
+
+### Por que isto foi feito agora
+
+É **pré-requisito** do apontamento de produção obrigatório (gap G4 — Bloco K do
+SPED Fiscal, Ajuste SINIEF 2/09 cláusula 3ª §7º III/§10; ver
+`docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`, Decisão 4).
+Exigir apontamento sem poder cadastrar roteiro seria regra inexequível: o
+operador não teria contra o que apontar.
+
+---
+
 ## Tabelas SQL
 
 > ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)

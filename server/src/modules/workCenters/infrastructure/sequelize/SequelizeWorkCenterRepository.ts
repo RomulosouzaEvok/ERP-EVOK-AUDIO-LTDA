@@ -69,9 +69,18 @@ class SequelizeWorkCenterRepository extends WorkCenterRepository {
    * Caminho do schema seguido: `production_orders.product_id` ->
    * `production_routes.product_id` -> `production_route_steps.production_route_id`,
    * filtrando etapas por `work_center_id` (centro de trabalho estruturado).
-   * Quando o mesmo produto tem mais de um roteiro (ex.: revisoes), todos os
-   * roteiros compativeis com o produto entram na soma — nao ha coluna que
-   * amarre a OP a uma revisao especifica de roteiro no schema atual.
+   *
+   * ⚠️ Corrigido em 2026-08-10 junto com a API de roteiro (gap G5): a query
+   * somava TODAS as revisoes de roteiro do produto (`draft`, `inactive`,
+   * `superseded` inclusive), o que era inofensivo enquanto nao havia como
+   * cadastrar roteiro (a tabela estava vazia) e passaria a DOBRAR a carga na
+   * primeira revisao criada. Agora so entra o roteiro `active` — que o banco
+   * garante ser no maximo um por produto
+   * (`uq_production_routes_active_per_product`, migration
+   * `20260810-000034`). Continua valendo a limitacao estrutural: nao ha
+   * coluna que amarre a OP a uma revisao especifica de roteiro, entao a
+   * carga de uma OP aberta e sempre calculada pela revisao ATIVA no momento
+   * da consulta.
    *
    * Formula por etapa: `GREATEST(quantity - quantity_produced, 0) *
    * (standard_time_minutes + setup_time_minutes) / 60`. O `setup_time_minutes`
@@ -89,6 +98,7 @@ class SequelizeWorkCenterRepository extends WorkCenterRepository {
          JOIN production_routes pr ON pr.product_id = po.product_id
          JOIN production_route_steps prs ON prs.production_route_id = pr.id
         WHERE po.status IN ('planned', 'released', 'in_progress', 'paused')
+          AND pr.status = 'active'
           AND prs.work_center_id IS NOT NULL
           AND prs.is_active = true
         GROUP BY prs.work_center_id`,

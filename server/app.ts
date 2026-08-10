@@ -167,6 +167,8 @@ app.use('/api/employees', require('./src/modules/employees/presentation/routes/e
 app.use('/api/departments', require('./src/modules/departments/presentation/routes/departments'));
 app.use('/api/production-orders', require('./src/modules/production/presentation/routes/productionOrders'));
 app.use('/api/production/downtimes', require('./src/modules/production/presentation/routes/productionDowntimes'));
+// Roteiro de producao (gap G5) — pre-requisito do apontamento obrigatorio (G4).
+app.use('/api/production/routes', require('./src/modules/production/presentation/routes/productionRoutes'));
 app.use('/api/work-centers', require('./src/modules/workCenters/presentation/routes/workCenters'));
 app.use('/api/inventory', require('./src/modules/inventory/presentation/routes/inventory'));
 app.use('/api/inventory-counts', require('./src/modules/inventory/presentation/routes/inventoryCounts'));
@@ -176,6 +178,10 @@ app.use('/api/mobile-inventory', require('./src/modules/mobileInventory/presenta
 app.use('/api/auditor', require('./src/modules/intelligentAuditor/presentation/routes/intelligentAuditor'));
 app.use('/api/dashboard', require('./src/modules/dashboard/presentation/routes/dashboard'));
 app.use('/api/quality/non-conformities', require('./src/modules/nonConformities/presentation/routes/nonConformities'));
+// IMPORTANTE: registrado APOS '/api/quality/non-conformities' para nao
+// capturar suas rotas. Inspecao de qualidade (G7) — `/api/quality/inspections`
+// e `/api/quality/lots/:lotId/release-eligibility`.
+app.use('/api/quality', require('./src/modules/quality/presentation/routes/qualityInspections'));
 app.use('/api/maintenance', require('./src/modules/maintenance/presentation/routes/maintenance'));
 app.use('/api/audit-logs', require('./src/modules/auditLogs/presentation/routes/auditLogs'));
 app.use('/api/engineering/bom', require('./src/modules/bom/presentation/routes/bom'));
