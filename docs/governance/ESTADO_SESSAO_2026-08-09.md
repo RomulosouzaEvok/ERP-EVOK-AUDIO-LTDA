@@ -47,6 +47,9 @@ Blocos 0–5 fechados (LGPD, SST, TI, Jurídico, Facilities, Marketing).
 | `fed3129` | **G3** — reserva de material vinculada à OP (fim da canibalização entre ordens). |
 | `bf07136` | **Pesquisa normativa** das 6 decisões, com fonte. |
 | `9df39c7` | **G14/G15** — importação com lote e quarentena; ciclo `partial`/`received` da requisição. |
+| `4f077a2` | Atualização deste documento com o placar dos gaps. |
+| `a90deee` | 🔴 **Teste ponta a ponta + auditoria de consistência revelam bloqueador P0** (ver seção 3.1). |
+| `94e0f14` | 🟢 **Bloqueador P0 destravado** — 38 colunas alinhadas, provado via API real. |
 
 ### Estado do banco local
 **Todas as migrations aplicadas**, incluindo as 16 do RH (`20260808-000010..025`),
@@ -137,6 +140,62 @@ Plano de execução: `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`.
 | **G13** momento de AP/AR | 🟡 **decisão do dono — a norma contábil já responde** |
 | **G17** venda não gera produção; MRP não lê carteira | 🟡 **decisão do dono** |
 
+---
+
+## 3.1. 🔴 O achado mais importante da noite — e ele não estava nos 17 gaps
+
+**O schema físico do banco não correspondia ao que a aplicação escreve.**
+Dois agentes independentes (teste ponta a ponta contra a API no ar, e auditoria
+cruzada banco × docs × código) chegaram ao **mesmo diagnóstico sem se falarem**.
+
+Era **impossível**, contra o banco real — todos 500:
+- criar estrutura de produto (BOM) · criar cliente · criar venda ·
+  confirmar venda · criar contagem de inventário · **ajustar estoque**
+  (o que derrubava **todo o app mobile**)
+
+**Prova de que nunca funcionou:** as únicas 4 linhas de `clients` eram resíduo de
+teste inserido por SQL direto, e entre 35 movimentações de estoque **nenhuma**
+tinha `reference_type='adjustment'`.
+
+**Efeito colateral cruel:** como o `5ec0651` (G2) passou a exigir BOM ativa para
+concluir OP, e criar BOM era impossível, a cadeia ficou **fechada em circuito**.
+A correção estava certa — ela expôs o defeito de baixo.
+
+### Resolvido em `94e0f14` (S-1)
+38 colunas afrouxadas em 7 tabelas, models alinhados (`allowNull` explícito em
+todas as 128 colunas, batendo 1:1 com o `information_schema`), resíduo limpo, e
+**provado via API real**: BOM 201, cliente 201, venda 201 com parcelas, contagem
+201, e o **primeiro `reference_type='adjustment'` da história deste banco**.
+
+Um bug de código que a auditoria não viu foi descoberto no caminho: `ClientEntity`
+normalizava campo ausente para `null` e o use case repassava esse **NULL explícito**
+para colunas `NOT NULL DEFAULT ''` — e **NULL explícito anula o DEFAULT do Postgres**.
+
+### ⚠️ Ainda em aberto desta frente
+1. **12 FKs `ON DELETE SET NULL` sobre colunas `NOT NULL`** em `employees`,
+   `service_orders`, `assets`, `maintenance_orders` — provavelmente a mesma bomba.
+   As 4 tabelas estão com **0 linhas**, o que reforça a suspeita. Precisam de
+   migration e prova próprias.
+2. **Drift de schema entre bancos** — `erp_evok_audio_test` tem 29 colunas
+   `NOT NULL` a mais que o de dev, **com as mesmas migrations**. Nenhum dos dois é
+   reproduzível a partir das migrations. 🚨 **Isso bloqueia provisionar o servidor
+   de produção.** Recomendação: recriar o banco de teste só por migrations + criar
+   teste-guarda comparando `information_schema` × models.
+3. **Toda RNC fechada fica sem data** — `UpdateNonConformityUseCase` grava
+   `closed_at`, coluna que **não existe** (a real é `closed_date`); o Sequelize
+   engole em silêncio.
+4. **28 ações nunca gravam log de auditoria** — `enum_audit_logs_action` tem 15
+   valores e o código usa 43 literais. A API responde 200 e o registro some.
+5. **S-2**: `inventoryService.ts` usa fallback `'reservation'`/`'reservation_release'`,
+   valores que não existem no enum (nenhum chamador vivo atinge, mas é bomba armada).
+6. **S-5**: `docs/database/schema.sql` e `03-MODELO_FISICO.md` precisam de
+   `pg_dump --schema-only` novo agora que o S-1 foi aplicado.
+
+Relatórios: `docs/governance/VALIDACAO_CADEIA_PRODUTO_2026-08-10.md` e
+`docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-10.md`.
+
+---
+
 ### Os 6 que quebram a corrente (diagnóstico original)
 
 | ID | Gap | Etapa |
@@ -225,6 +284,12 @@ neste módulo. Achou 2 literais errados na documentação.
 ---
 
 ## 5. Fila de próximos passos (retomar exatamente daqui)
+
+0. **[PRIORIDADE — nasceu esta noite]** Fechar as 6 pendências da seção 3.1.
+   As duas mais urgentes: as **12 FKs contraditórias** nos 4 módulos ainda não
+   validados, e o **drift de schema entre bancos**, que bloqueia o servidor de
+   produção. Um teste-guarda `information_schema` × models impede a reincidência
+   de toda essa classe de defeito.
 
 1. **[PENDENTE — decisão do dono]** Validar as 6 decisões de processo.
    Artefato pronto: <https://claude.ai/code/artifact/34b933ad-33a6-4ec1-b5a5-ea8e9cc20804>
