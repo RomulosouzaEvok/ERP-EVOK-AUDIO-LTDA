@@ -2248,7 +2248,75 @@ Muda o status da OP conforme a máquina de estados `planned → released → in_
 ```json
 { "status": "completed", "quantity_produced": 98 }
 ```
-Ao transicionar para `completed`, consome os componentes da BOM ativa do produto (se houver) e dá entrada do produto acabado no estoque, em uma única transação com lock pessimista.
+Ao transicionar para `completed`, consome os componentes da BOM ativa do produto e dá entrada do produto acabado no estoque, em uma única transação com lock pessimista.
+
+**Ao transicionar para `released` (gap G4, 2026-08-10):** se o produto tiver
+roteiro **ativo** (`/api/production/routes`), as etapas ativas desse roteiro são
+materializadas automaticamente em `production_order_tracking` com
+`status = 'pending'`, cada linha já apontando para o `production_route_step_id`
+da revisão vigente naquele instante. Idempotente — nada é criado se a OP já
+tiver apontamento. Sem roteiro ativo a liberação **passa** (não se trava a
+fábrica por cadastro faltante); o bloqueio mora na conclusão.
+
+#### Apontamento obrigatório na conclusão (gap G4)
+
+> **Base legal, não preferência de processo.** Ajuste SINIEF 2/09, cláusula 3ª
+> §7º III — Bloco K desde 01/01/2019 para os demais estabelecimentos
+> industriais das divisões 10–32 (alto-falante = CNAE 2640-0/00, divisão 26).
+> O **§10** mantém obrigatório o Livro Registro de Controle da Produção e do
+> Estoque (modelo 3) — que exige consumo e produção **por ordem de produção** —
+> enquanto não houver escrituração completa do Bloco K; o **§13** deixa claro
+> que a versão simplificada dispensa *transmitir*, não *registrar*. Soma-se a
+> exigência de custo integrado e coordenado (RIR/2018): produto acabado
+> valorizado com mão de obra R$ 0,00 não é custo real.
+> Fonte e ressalvas: `docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`, Decisão 4.
+
+Todas as reprovações respondem **HTTP 422** no envelope padrão, com o código
+legível em `error.details.rule`:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BUSINESS_RULE_VIOLATION",
+    "message": "Nao e possivel concluir a OP OP-2026-0003 sem nenhum apontamento de producao. …",
+    "details": { "rule": "G4-TRACKING-REQUIRED", "orderNumber": "OP-2026-0003" }
+  }
+}
+```
+
+| `details.rule` | Reprova quando | Campos extras em `details` |
+|---|---|---|
+| `G4-TRACKING-STEP-OPEN` | há etapa `pending`/`in_progress`/`paused` | `open_steps[]` (**todas**, não a primeira) |
+| `G4-TRACKING-REQUIRED` | a OP não tem nenhuma linha de apontamento | `orderNumber` |
+| `G4-TRACKING-NO-COMPLETED` | existe apontamento mas nenhuma etapa `completed` (ex.: tudo `skipped`) | `steps[]` |
+| `G4-TRACKING-QTY-EXCEEDS` | `quantity_produced` > `quantity_good` da última etapa concluída | `last_step_sequence`, `last_step_quantity_good`, `quantity_produced` |
+| `G4-TRACKING-TIME-MISSING` | etapa `completed` sem `started_at`/`finished_at`, ou com duração ≤ 0 | `steps[]` com os dois timestamps |
+| `G4-LABOR-RATE-MISSING` | nenhuma taxa horária positiva resolvível para uma etapa concluída | `default_labor_rate_per_hour`, `steps[]` com `work_center_id` e `work_center_cost_per_hour` |
+
+Nenhuma escrita ocorre quando a conclusão é reprovada — o gate roda **antes**
+de qualquer consumo, entrada de estoque, criação de lote ou lançamento de custo.
+
+`G4-TRACKING-STEP-OPEN` e `G4-TRACKING-QTY-EXCEEDS` são anteriores ao G4
+(reconciliação 1.3) e valem **sempre**; as demais respeitam a janela de
+transição abaixo.
+
+**Janela de transição — `PRODUCTION_TRACKING_REQUIRED`**
+
+| Valor | Efeito |
+|---|---|
+| ausente / `block` (**padrão**) | a lei aplicada: bloqueia a conclusão e materializa as etapas na liberação |
+| `warn` | registra a pendência em log estruturado e deixa concluir; **não** materializa etapas na liberação |
+| qualquer outro | cai em `block` e loga erro com `rule: G4-TRACKING-MODE-INVALID` — um typo nunca desliga a regra em silêncio |
+
+`warn` é temporário por desenho e precisa estar desligado no Go-Live.
+
+> **Mudança de envelope (2026-08-10):** os erros de `AppError` deste módulo
+> passaram a ser serializados pelo `errorHandler` central
+> (`{ error: { code, message, details } }`) em vez do envelope antigo
+> `{ error: "<mensagem>" }`, que **descartava `details`** — e com ele o
+> `details.rule`. `extractApiErrorMessage` no cliente já aceita as duas formas;
+> nenhuma tela precisou mudar.
 
 ### DELETE /api/production-orders/:id
 Remove a OP. Requer papel `admin`. Não permitido se a OP estiver `in_progress` ou `completed`.
@@ -2330,10 +2398,70 @@ Altera o status conforme a máquina de estados `pending → approved → sent �
 ```
 Ao transicionar para `approved`, gera automaticamente uma `AccountPayable` vinculada ao pedido (idempotente), em uma única transação com o `save()` do status.
 
+**Segregação de função (D-K):** a transição para `approved` é bloqueada com
+**422** (`details.rule = "D-K-PEDIDO"`) quando quem aprova é quem consta em
+`purchase_orders.requester_id`. Verificada **antes** da alçada G11 e antes de
+qualquer escrita. Ver a seção *Segregação de função na compra (D-K)* abaixo.
+
 **Alçada de aprovação (G11):** a transição para `approved` é bloqueada com
 **422** (`details.rule = "G11"`) quando o pedido exige aprovação da diretoria
 e ela ainda não foi registrada. Nada é gravado nesse caso (nem status, nem
 conta a pagar).
+
+### Segregação de função na compra (D-K) — quem solicita não aprova
+
+**(NOVO 2026-08-10 — decisão D-K do dono do produto,
+`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4.)** Fecha o
+critério de pronto da §5 do mesmo plano, que até esta data estava
+explicitamente **não atendido**: o G11 entregou *alçada* (quem tem poder de
+aprovar), não *segregação* (se essa pessoa é a mesma que pediu).
+
+Regra única, aplicada em **4 pontos de aprovação** da cadeia de suprimentos.
+O aprovador vem **sempre de `req.user.id` (JWT)**, nunca do body:
+
+| Endpoint | `details.rule` | Solicitante comparado |
+|---|---|---|
+| `PATCH /api/purchase-requisitions/:id/status` (`approved`) | `D-K-REQUISICAO` | `purchase_requisitions.requester_id` |
+| `PUT /api/purchases/:id/status` (`approved`) | `D-K-PEDIDO` | `purchase_orders.requester_id` |
+| `POST /api/purchases/:id/approve` (alçada G11) | `D-K-ALCADA` | `purchase_orders.requester_id` |
+| `POST /api/comex/import-processes/:id/approve` (G11-COMEX) | `D-K-COMEX` | `import_processes.created_by` |
+
+Corpo do erro (HTTP **422**), igual nos quatro:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BUSINESS_RULE_VIOLATION",
+    "message": "Segregacao de funcao: voce mesmo registrou o pedido de compra PO-2026-0007, entao nao pode aprova-la. Peca a aprovacao a outro usuario com acesso ao modulo de compras (ou outro administrador). Se ninguem mais tem esse acesso hoje, o administrador precisa cadastrar um segundo aprovador (Administracao > Perfis de Acesso) — a regra existe para que nenhuma compra seja pedida e aprovada pela mesma pessoa.",
+    "details": {
+      "rule": "D-K-PEDIDO",
+      "requester_user_id": 7,
+      "approver_user_id": 7,
+      "what_to_do": "Solicitar a aprovacao a outro usuario com acesso ao modulo de compras."
+    }
+  }
+}
+```
+
+Pontos que o cliente precisa conhecer:
+
+- ⚠️ **`role: "admin"` NÃO isenta.** É a única regra do ERP em que o
+  administrador não tem curto-circuito. RBAC e alçada tratam de
+  **privilégio** (concedível); segregação trata de **identidade**, e nenhum
+  nível de permissão transforma uma pessoa em duas. Consequência prática:
+  **é preciso existir um segundo usuário habilitado a aprovar** — com um
+  único aprovador cadastrado, nada é aprovável.
+- Só vale para **aprovar**. O solicitante continua submetendo
+  (`draft → pending`), cancelando, convertendo e enviando o próprio pedido
+  (`approved → sent`).
+- **Nada é gravado** quando a regra reprova — nem `status`, nem `approved_by`,
+  nem `approval_date`, nem a linha de alçada.
+- Documento **sem solicitante registrado** não é bloqueado (comparação
+  impossível). Isso só alcança pedidos legados:
+  `purchase_orders.requester_id` é a única das três colunas que é `NULL`-able
+  no schema (0 linhas nulas hoje); as outras duas são `NOT NULL`.
+- Implementação: `server/src/shared/domain/segregationOfDuties.ts`.
 
 ### Alçada de aprovação de compra (G11) — `approve` / `approvals`
 
@@ -2364,6 +2492,12 @@ não aprova duas vezes (UNIQUE no banco → 422).
 
 Erros (422, `details.rule = "G11"`): usuário sem o papel; pedido que não
 exige alçada; pedido fora de `pending`; papel que já aprovou.
+
+Erro (422, `details.rule = "D-K-ALCADA"`): o diretor é o próprio solicitante
+do pedido (`purchase_orders.requester_id`) — verificado **antes** de tudo o
+que está acima, inclusive para `role: "admin"`. Sem essa trava a segregação do
+pedido teria porta lateral: o mesmo usuário criaria o pedido, assinaria a
+própria alçada e a diretoria viraria carimbo.
 
 #### GET /api/purchases/:id/approvals
 Situação da alçada, **sem efeito colateral**. Autorização: `compras` **OU**
@@ -2991,6 +3125,13 @@ Transiciona o status: `draft → pending/canceled`, `pending → approved/cancel
 `requisicoes` nem `role: admin` (`ForbiddenError`, checagem redundante rota
 + controller, ver nota acima).
 
+**Erro (422, `details.rule = "D-K-REQUISICAO"`)** — **(NOVO 2026-08-10,
+decisão D-K)** aprovar a própria requisição
+(`purchase_requisitions.requester_id == req.user.id`). Vale inclusive para
+`role: "admin"`; nada é gravado (nem `status`, nem `approved_by`, nem
+`approval_date`). Ver *Segregação de função na compra (D-K)* na seção de
+Compras.
+
 ### POST /api/purchase-requisitions/:id/convert
 Converte uma requisição **aprovada** em um ou mais Pedidos de Compra (um
 por fornecedor resolvido), transacional com lock pessimista
@@ -3101,12 +3242,40 @@ body). Único campo obrigatório em runtime é `description`
 **Erro (400)** — `description` ausente (`ValidationError`).
 
 ### PUT /api/quality/non-conformities/:id
-Atualiza campos da RNC (análise de causa raiz, ação corretiva, etc.). Se
-o payload fechar a RNC, `closed_by` vem de `req.user.id`.
+Atualiza campos da RNC (análise de causa raiz, ação corretiva, etc.).
+
+Campos aceitos do body: `description`, `severity`, `origin`,
+`quantity_affected`, `immediate_action`, `root_cause`, `corrective_action`,
+`status`, `responsible_id`.
+
+Quando o payload traz `status: 'closed'`, o backend grava **`closed_date`**
+(`DATE`, `YYYY-MM-DD`) e **`closed_by`** (sempre de `req.user.id`).
+
+> ⚠️ **Corrigido em 2026-08-10** (achado §3 de
+> `docs/governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md`): até
+> essa data o use case gravava `closed_at`, chave que **não é atributo do
+> model** — o Sequelize a descartava em silêncio, o `UPDATE` saía sem ela e a
+> API respondia `200`. **Toda RNC fechada ficava sem data de fechamento**
+> (ISO 9001:2015 §8.7/§10.2). A coluna real sempre foi `closed_date`.
+>
+> No mesmo dia, `closed_by` foi **removido** da lista de campos aceitos do
+> body: ele estava lá, então bastava enviá-lo no payload para atribuir o
+> encerramento a outra pessoa. Passa a vir exclusivamente do JWT — mesmo
+> padrão anti-spoofing da remediação 3.1.
 
 ### DELETE /api/quality/non-conformities/:id
 Fecha (soft delete lógico, `status → closed`) uma RNC.
 `authorizeModule('qualidade', 'approve')`.
+
+Grava o **mesmo** conjunto de campos do `PUT` acima: `status`, `closed_date`
+e `closed_by` (do JWT).
+
+> ⚠️ **Segunda ocorrência do mesmo defeito, corrigida em 2026-08-10** (não
+> apontada pela auditoria; encontrada ao varrer o módulo). Esta rota gravava
+> **apenas** `status = 'closed'` — sem data e sem responsável. Os dois
+> caminhos de encerramento agora derivam os campos da mesma função
+> (`modules/nonConformities/domain/closure.ts`), e há teste comparando os
+> dois payloads para impedir que voltem a divergir.
 
 ---
 
@@ -3576,6 +3745,79 @@ timestamp — gerado internamente por `logAction()` (`server/src/services/auditL
 chamado pelos controllers/use cases de escrita da maioria dos módulos (ver
 nota de exceção em `/api/suppliers`, seção 12, que **não** gera auditoria).
 
+### 24.1 Vocabulário de `action` (fechado, revisto em 2026-08-10)
+
+> ⚠️ **Achado P0 §2 de
+> [`VARREDURA_ESCRITA_REAL_2026-08-10.md`](../governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md).**
+> `enum_audit_logs_action` tinha 15 valores e o código chamava `logAction`
+> com **43 literais** (37 fora do tipo, em 46 call sites). Como `logAction` é
+> fire-and-forget por desenho, o Postgres rejeitava o `INSERT`
+> (`22P02 invalid input value for enum`), **a API respondia `200` e a trilha
+> não era gravada**. Prova no dado real: `audit_logs` só tinha 5 valores
+> distintos (`login=111, create=85, status_change=42, update=27, approve=20`).
+> Entre os ausentes, **`access_denied`** — tentativa de acesso indevido sem
+> rastro nenhum.
+
+**SSOT:** `server/src/shared/domain/auditActions.ts`. `action` deixou de ser
+`string` no model e passou a ser um union type derivado dessa constante.
+
+**24 valores canônicos** = os 15 originais + 9 novos:
+
+| Valor | Quando é usado |
+|---|---|
+| `create` · `update` · `delete` · `soft_delete` | CRUD |
+| `login` · `logout` · `password_change` | sessão e credencial |
+| `status_change` · `approve` · `reject` | ciclo de vida de documento |
+| `price_change` · `salary_change` | alteração de valor sensível |
+| `export` · `import` · `print` | saída de dado |
+| **`access_denied`** *(novo)* | negativa de autorização (middlewares de RBAC) |
+| **`read`** *(novo)* | consulta a dado pessoal/regulado (LGPD art. 37) |
+| **`read_sensitive`** *(novo)* | exibição de segredo em claro (ex.: chave de licença) |
+| **`permission_change`** *(novo)* | concessão/revogação de acesso (perfil ↔ usuário) |
+| **`cancel`** *(novo)* | cancelamento terminal de documento |
+| **`close`** *(novo)* | encerramento de processo/caso |
+| **`post`** *(novo)* | contabilização (lançamento vira definitivo) |
+| **`reverse`** *(novo)* | estorno contábil |
+| **`settle`** *(novo)* | liquidação/baixa de operação financeira |
+
+**Critério de admissão de um valor novo:** *a pergunta do auditor muda?* —
+não "o verbo é diferente?". `action` responde **que tipo** de evento;
+`entity_type` responde **sobre o quê**; `route`/`method`, **por onde**;
+`description`/`new_values`, **com que conteúdo**. Um `ENUM` que ganha um
+valor por endpoint não é vocabulário: é texto livre com passos extras, que
+não agrega, não indexa e volta a divergir no módulo seguinte.
+
+**Os outros 29 verbos de módulo são sinônimos**, traduzidos para o
+vocabulário na gravação — `award` → `approve`, `settle` já é canônico,
+`upsert` → `update`, `mrp_auto_convert_to_requisition` → `create`, etc. O
+verbo original **não se perde**: vira marcador no início da `description`,
+consultável diretamente:
+
+```sql
+SELECT * FROM audit_logs WHERE description LIKE '[award]%';
+```
+
+**Comportamento antes e depois da migration `20260810-000036`**
+(que acrescenta os 9 valores e ainda **não foi aplicada**):
+
+| | antes | depois |
+|---|---|---|
+| `access_denied` | grava `reject`, `description` começa com `[access_denied]` | grava `access_denied` |
+| `read` / `read_sensitive` | grava `export` + marcador | grava o valor exato |
+| `permission_change` | grava `update` + marcador | grava o valor exato |
+| `cancel`/`close`/`post`/`reverse`/`settle` | grava `status_change` + marcador | grava o valor exato |
+
+Em nenhum dos dois estados o evento é perdido. Nenhuma degradação mente de
+categoria: evento **não-mutante** só cai em valor não-mutante (`reject`,
+`export`) — uma leitura nunca é registrada como escrita. As linhas gravadas
+em modo degradado são identificáveis (`description LIKE '[<valor>]%'`) e
+**não sofrem backfill automático**: reescrever log de auditoria existente é
+justamente o que uma trilha não pode permitir.
+
+**Rede de proteção:** `server/tests/integration/enum-literal-guard.test.ts`
+confronta todo literal com o `pg_enum` real; `server/tests/unit/audit-action-vocabulary.test.ts`
+faz a metade que não precisa de banco e roda na suíte rápida.
+
 ---
 
 ## 25. Ordens de Serviço (Garantia / Assistência Técnica)
@@ -3796,15 +4038,34 @@ Cria um centro de trabalho (409 se `code` duplicado).
   "description": "Segunda máquina de corte CNC",
   "machines_count": 1,
   "capacity_hours_per_day": 16,
-  "efficiency_factor": 0.9
+  "efficiency_factor": 0.9,
+  "cost_per_hour": 85.50
 }
 ```
 `capacity_hours_per_day` (0 a 24) e `efficiency_factor` (0 a 1) alimentam
 diretamente o fallback de cálculo de `available_hours` do OEE (seção 7)
 quando o centro não tem turnos cadastrados.
 
+`cost_per_hour` (0 a 1.000.000, default `0`) — **novo em 2026-08-10 (gap G4)**.
+Custo de mão de obra + operação por hora produtiva, em BRL/h. É a **base do
+custeio real de mão de obra** na conclusão da OP: cada etapa de apontamento
+concluída soma `horas apontadas × cost_per_hour` do centro da sua etapa de
+roteiro. A coluna existia desde o custeio real, mas os schemas eram `.strict()`
+e não a aceitavam — só dava para alterá-la por SQL direto. Isso virou
+impedimento quando a conclusão da OP passou a exigir taxa horária resolvível
+(`G4-LABOR-RATE-MISSING`, seção 10): uma regra bloqueante precisa de caminho de
+remediação pelo próprio sistema.
+
+O valor `0` é aceito na entrada (centro sem custo atribuído); recusá-lo é
+decisão da regra de negócio na conclusão da OP, não da validação de payload.
+
+> **Pendência conhecida:** o fallback global
+> `production_cost_settings.default_labor_rate_per_hour` — usado por etapas de
+> apontamento **sem** centro de trabalho — continua **sem nenhuma API**. Ver
+> `docs/governance/TODO.md`.
+
 ### PUT /api/work-centers/:id
-Atualiza campos (todos opcionais, incluindo `active`).
+Atualiza campos (todos opcionais, incluindo `cost_per_hour` e `active`).
 
 ### PUT /api/work-centers/:id/shifts
 Substitui integralmente os turnos do centro (transacional).
@@ -4022,6 +4283,16 @@ approver_role: "diretor", approved_at }`.
 - usuário sem o papel `diretor` (`details.required_roles`);
 - o papel já aprovou este processo (garantia final: UNIQUE
   `uq_import_process_approvals_process_role`).
+
+**Erro (422, `details.rule = "D-K-COMEX"`)** — **(NOVO 2026-08-10, decisão
+D-K, segregação de função)** o aprovador é o analista que registrou o
+processo (`import_processes.created_by`). Verificado **antes** dos erros
+acima e **sem exceção para `role: "admin"`** — ao contrário do RBAC da rota,
+que continua com o curto-circuito de admin. Como este gate é o único
+controle antes do embarque de uma importação, permitir auto-aprovação aqui
+deixaria a importação inteira (processos citados na casa de R$ 1 milhão) sem
+segunda pessoa em nenhum ponto. Nada é gravado. Ver *Segregação de função na
+compra (D-K)* na seção de Compras.
 
 **Erro (404):** processo inexistente.
 
@@ -4345,6 +4616,193 @@ concluídas e a rastreabilidade do Bloco K: não se apaga, se inativa.
 
 **Erros:** `422 G5-ROUTE-NOT-DRAFT` (não é rascunho), `422 G5-ROUTE-IN-USE`
 (há apontamento vinculado às etapas).
+
+---
+
+## 34. Plano Mestre de Produção (MPS)
+
+**NOVO em 2026-08-10 (gap G17, decisão D-F do dono do produto).** Módulo
+`server/src/modules/masterProduction/`, base URL
+`/api/production/master-plans`.
+
+É a camada de decisão que faltava entre a **carteira de pedidos** e a **ordem
+de produção**. Até aqui, confirmar uma venda não produzia efeito nenhum na
+fábrica (`ChangeSaleStatusUseCase` apenas reserva estoque, G9) e o MRP só
+calculava contra a demanda **digitada no payload**
+(`GenerateMrpPlanUseCase` → `input.demands`): ninguém lia a carteira aberta e
+ninguém tratava o estoque mínimo como demanda.
+
+> ⚠️ **Não existe geração automática de OP na confirmação da venda, e isso é
+> deliberado.** A decisão D-F registrou que existe PCP formal — há quem
+> planeje. O sistema consolida a informação, **uma pessoa decide**, e a decisão
+> registrada é o que gera a ordem. A linha do plano nasce `pending` com
+> `planned_quantity = 0` mesmo quando a sugestão calculada é positiva.
+
+**RBAC** (`server/src/shared/domain/accessModules.ts`):
+
+| Ação | Middleware |
+|---|---|
+| Leitura (`GET`) | `authorizeModule('mrp')` (nível `operate` implícito) |
+| Todas as escritas | `authorizeModule('mrp', 'operate')` |
+
+O caminho é de produção, mas o **ator é o PCP** — o mesmo que opera o MRP e
+converte ordem planejada em OP (`POST /api/mrp/planned-orders/convert-to-production`,
+também `mrp:operate`). Nenhuma rota exige `approve`: alçada do PCP é política
+de governança que o dono não definiu (pendência em `docs/governance/TODO.md`).
+
+`planner_id`, `firmed_by`, `released_by`, `canceled_by` e `decided_by` vêm
+**sempre** de `req.user.id` (JWT), nunca do body — regra anti-spoofing P0.
+
+### Ciclo de vida
+
+```
+draft ──firm──> firm ──release──> released (terminal)
+  │              │
+  └──cancel──────┴──> canceled (terminal)
+```
+
+- **`draft`** — demanda consolidada; linhas editáveis pelo planejador.
+- **`firm`** — decisão **congelada**; nenhuma linha muda mais (422).
+- **`released`** — OPs geradas.
+
+### A conta do plano
+
+```
+necessidade líquida = max(0,
+    (carteira de pedidos + estoque mínimo + previsão manual)
+  − (saldo de planejamento + saldo a produzir das OPs abertas))
+```
+
+| Componente | Origem no banco |
+|---|---|
+| `demand_sales_orders` | `Σ (sale_items.quantity − invoiced_quantity)` das vendas `confirmed`/`partially_invoiced` |
+| `demand_safety_stock` | `products.min_quantity` |
+| `demand_forecast` | informado manualmente no payload (não existe entidade de forecast) |
+| `supply_on_hand` | `max(0, products.quantity − retido em quarentena/bloqueio − reservado)` |
+| `supply_in_production` | `Σ max(0, quantity − quantity_produced)` das OPs `planned`/`released`/`in_progress`/`paused` |
+
+O saldo usado é o **saldo de planejamento**, idêntico ao imposto pelo G7 ao MRP
+e à disponibilidade de OP: material em quarentena (não inspecionado) e material
+reservado por OP/venda (G3/G9) **não** contam como disponíveis.
+`supply_withheld` e `supply_reserved` ficam gravados na linha para que o número
+seja auditável sem refazer a conta.
+
+`suggested_quantity` (cálculo) e `planned_quantity` (decisão do humano) são
+colunas **distintas** e a primeira nunca é sobrescrita.
+
+### Códigos de regra (`error.details.rule`)
+
+Todo erro 400/404/422 deste módulo carrega `details.rule = "G17"`, junto de
+`field` (erros de validação) ou do contexto do bloqueio.
+
+### GET /api/production/master-plans
+Lista planos. Query: `status` (`draft|firm|released|canceled`), `page`,
+`limit` (teto 100). `status` fora do ENUM → `400` com `details.rule = "G17"`.
+
+### GET /api/production/master-plans/:id
+Plano com `lines` (produto e OP gerada incluídos) e um bloco `summary`
+agregado: `total_lines`, `pending_lines`, `planned_lines`, `dismissed_lines`,
+`released_lines`, `total_suggested_quantity`, `total_planned_quantity`.
+
+### POST /api/production/master-plans
+Consolida a demanda do horizonte e abre o plano em `draft`.
+
+```json
+{
+  "horizon_start": "2026-08-10",
+  "horizon_end": "2026-09-10",
+  "notes": "Plano mestre de setembro",
+  "forecast_demands": [{ "product_id": 25, "quantity": 120 }]
+}
+```
+
+- `horizon_start`/`horizon_end` são **obrigatórios** e não têm default:
+  horizonte de planejamento é política de PCP que o dono não definiu.
+- `forecast_demands` é opcional — é a única forma de previsão no ERP hoje.
+
+**Resposta:** `201` com `{ plan, lines, skipped }`. `skipped` lista produtos
+que **têm demanda mas o plano mestre não planeja** (`not_manufactured` —
+componente/matéria-prima, que é necessidade de compra e cabe ao MRP →
+Requisição; `inactive_product`). A omissão é explícita, nunca silenciosa.
+
+**Erros:** `400` horizonte ausente/mal formado/invertido ou previsão inválida
+(`details.field`); `422` quando não há demanda nenhuma a planejar — e nesse
+caso **nada é gravado**.
+
+### PATCH /api/production/master-plans/:id/lines/:lineId
+Registra a **decisão do planejador** sobre uma linha. Só em plano `draft`.
+
+```json
+{ "planned_quantity": 800, "due_date": "2026-09-05", "notes": "sobe p/ lote cheio" }
+```
+ou
+```json
+{ "dismiss": true, "notes": "cobertura suficiente" }
+```
+
+- `planned_quantity > 0` → linha vira `planned`;
+- `planned_quantity = 0` ou `dismiss: true` → linha vira `dismissed`.
+  `dismissed` é informação diferente de `pending`: significa que **alguém
+  olhou e decidiu não produzir**.
+- Informar `planned_quantity` **e** `dismiss` juntos → `400` (decisões opostas).
+
+**Erros:** `404` plano/linha inexistente ou linha de outro plano; `422` plano
+já firmado (`details.status`); `400` payload sem decisão.
+
+### POST /api/production/master-plans/:id/firm
+Congela a decisão (`draft → firm`).
+
+**Erro `422`:** plano sem **nenhuma** linha `planned` com quantidade positiva —
+`details.decided_lines = 0`. Um plano em que ninguém decidiu nada não é um
+plano.
+
+### POST /api/production/master-plans/:id/release
+Gera as **Ordens de Produção** das linhas decididas (`firm → released`).
+Exige plano `firm`.
+
+Cada linha `planned` com quantidade positiva vira **uma OP**:
+
+| Campo da OP | Valor |
+|---|---|
+| `order_number` | `OP-YYYY-NNNN` pelo repositório serializado (advisory lock + `MAX`, G16) |
+| `product_id` / `quantity` / `due_date` | da linha |
+| `status` | `planned` |
+| `sales_order_id` | **`NULL` de propósito** — a demanda é consolidada de vários pedidos; apontar um só seria rastreabilidade falsa |
+| `created_by` | `req.user.id` |
+
+O **rastro de origem** fica em `master_production_plan_lines.production_order_id`:
+da OP se chega à linha, ao plano, ao planejador e à demanda que a justificou.
+
+**Validações — as mesmas dos outros dois caminhos de criação de OP** (para não
+recriar a divergência de rigor que o G16 fechou): produto ativo, tipo
+`finished`/`semi_finished`, **BOM ativa** (G2) e material mínimo disponível.
+
+**Erro `422`:** a liberação é **tudo ou nada**. Todos os bloqueios são
+coletados antes de qualquer escrita e devolvidos em `details.blocked_lines`,
+com `reason` ∈ `product_not_found | inactive_product | not_manufactured |
+no_active_bom | insufficient_material` (+ `max_possible_quantity` e
+`missing_items` neste último). **Nenhuma OP é criada** e o status do plano não
+muda.
+
+**Resposta:** `201` com `{ plan, production_orders, released_lines }`.
+
+### POST /api/production/master-plans/:id/cancel
+Cancela o plano (`draft|firm → canceled`). Body opcional: `{ "reason": "..." }`.
+Não desfaz OPs já geradas — plano `released` é terminal e não cancela.
+
+### Limitações conhecidas
+
+- **A carteira de pedidos não tem data de entrega prometida** (`sales` não tem
+  coluna de prazo). A demanda é consolidada por produto no horizonte inteiro,
+  **sem baldes de tempo**; um MPS semanal de verdade depende dessa coluna.
+- **Não há entidade de previsão de vendas** — só a previsão digitada no
+  payload.
+- **Não há replanejamento automático:** o plano é uma fotografia
+  (`consolidated_at`); pedido que chega depois entra no próximo plano.
+- `BomService.checkAvailability` **não participa da transação** e a reserva de
+  material só ocorre quando a OP vai a `released` — duas linhas do mesmo plano
+  que consomem o mesmo componente são avaliadas de forma independente (mesma
+  limitação já existente no caminho do MRP).
 
 ---
 

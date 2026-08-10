@@ -89,6 +89,27 @@ Célula 6: Embalagem
 | Tweeter | 200 un | 4.000 un | 88.000 un |
 | Mid-range | 120 un | 2.400 un | 52.800 un |
 
+### Apontamento por etapa é OBRIGATÓRIO para concluir a OP (gap G4, 2026-08-10)
+
+Desde 2026-08-10 nenhuma ordem de produção é concluída sem apontamento de
+etapa: sem ele o ERP não teria como demonstrar consumo e produção **por ordem**
+(Livro Registro de Controle da Produção e do Estoque / Bloco K, Ajuste SINIEF
+2/09 cl. 3ª §7º III e §10) nem custo de mão de obra real (RIR/2018).
+
+Na prática, para o chão de fábrica:
+
+- ao **liberar** a OP, o sistema já cria a lista de etapas a apontar a partir do
+  roteiro ativo do produto — o operador não digita nada para começar;
+- cada etapa precisa ser **iniciada** e **concluída** em `Produção > Chão de
+  Fábrica` (é o que grava início, fim, quantidade boa e refugo);
+- a OP só fecha depois disso, e a quantidade produzida não pode passar do que
+  foi apontado na última etapa.
+
+Regras, códigos de erro e a janela de transição
+(`PRODUCTION_TRACKING_REQUIRED`): `docs/producao/04-ROTEIROS.md`, seção
+"Apontamento obrigatório para concluir a OP". Contrato HTTP:
+`docs/arquitetura/API.md` §10.
+
 ### Tabelas SQL
 
 > ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)

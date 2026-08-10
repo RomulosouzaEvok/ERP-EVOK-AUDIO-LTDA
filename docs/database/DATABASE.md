@@ -3450,3 +3450,248 @@ para roteiro. É coluna nova **mais** decisão de negócio, e mexeria em
 `ChangeProductionOrderStatusUseCase`, sob trabalho concorrente (G2/G3/G7).
 **Pré-requisito honesto se o Fisco ou a auditoria ISO exigirem reconstituir o
 produto COMO FABRICADO.**
+
+---
+
+## 2026-08-10 — G17: Plano Mestre de Produção (MPS)
+
+**Migration:** `20260810-000037-create-master-production-plan-g17.cjs`
+**Status:** escrita e validada por dry-run · ⚠️ **NÃO APLICADA** (aplicar
+migrations está bloqueado pelo classificador de permissão do ambiente).
+**Decisão de negócio:** D-F do dono — *existe PCP formal, há quem planeje*.
+
+### Por que estas tabelas existem
+
+Não havia nenhuma ligação persistida entre a carteira de pedidos e a produção.
+Conferido no código: `ChangeSaleStatusUseCase` só reserva estoque (G9), e
+`GenerateMrpPlanUseCase` calcula exclusivamente contra a demanda **digitada no
+payload**. Nenhuma consulta lia o saldo aberto de `sale_items` fora do
+faturamento, e `products.min_quantity` só alimentava alerta de dashboard. A
+decisão de o que produzir **não era um dado** — era memória do planejador.
+
+### `master_production_plans` (nova)
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `plan_number` | VARCHAR(30) **UNIQUE** | `MPS-YYYY-NNNN`, gerado com advisory lock por ano + `MAX` (**nunca `COUNT`** — mesma correção do G16 na numeração da OP) |
+| `horizon_start` / `horizon_end` | DATEONLY NOT NULL | **sem default**: horizonte é política de PCP não decidida pelo dono. CHECK `horizon_end >= horizon_start` |
+| `status` | ENUM | `draft → firm → released`; `canceled` a partir de `draft`/`firm` |
+| `planner_id` | INTEGER NOT NULL → `users` | **sempre do JWT** |
+| `consolidated_at` | TIMESTAMP NOT NULL | fotografia da demanda; o plano não se re-consolida sozinho |
+| `firmed_by`/`firmed_at`, `released_by`/`released_at`, `canceled_by`/`canceled_at`, `cancel_reason` | nullable | rastro de cada transição |
+| `notes` | TEXT nullable | |
+
+### `master_production_plan_lines` (nova)
+
+Uma linha por produto por plano — índice **único** `(plan_id, product_id)`. Sem
+ele, uma re-consolidação concorrente (ou um retry de rede) duplicaria a
+necessidade e o planejador liberaria duas OPs para a mesma demanda.
+
+Três famílias de coluna, todas `DECIMAL(18,6) NOT NULL DEFAULT 0`:
+
+| Família | Colunas | Origem |
+|---|---|---|
+| **Demanda** | `demand_sales_orders`, `demand_safety_stock`, `demand_forecast` → `gross_requirement` | `Σ (sale_items.quantity − invoiced_quantity)` das vendas `confirmed`/`partially_invoiced`; `products.min_quantity`; previsão manual |
+| **Suprimento** | `supply_on_hand`, `supply_withheld`, `supply_reserved`, `supply_in_production` | saldo de planejamento + OPs abertas |
+| **Decisão** | `suggested_quantity` (sistema) × `planned_quantity` (humano) | cálculo × planejador |
+
+Mais: `net_requirement`, `due_date` (DATEONLY NOT NULL), `status` ENUM
+(`pending|planned|dismissed|released`), `production_order_id` (FK nullable →
+`production_orders`, `ON DELETE SET NULL`), `decided_by`/`decided_at`, `notes`.
+CHECK `planned_quantity >= 0`.
+
+**Sugestão e decisão são colunas separadas de propósito.** Se a decisão
+sobrescrevesse a sugestão, ninguém conseguiria auditar onde o planejador
+divergiu do cálculo — que é exatamente o que uma auditoria de PCP procura.
+
+**`supply_withheld` e `supply_reserved` são redundantes com o cálculo, e isso é
+intencional:** `supply_on_hand` já vem líquido (`max(0, físico − retido −
+reservado)`), mas guardar as parcelas torna o número auditável meses depois sem
+refazer a conta contra um saldo que mudou.
+
+### Nenhuma coluna alterada em tabela existente
+
+O vínculo com a OP mora em `master_production_plan_lines.production_order_id`,
+**não** numa coluna nova em `production_orders` — decisão explícita para não
+tocar o hot path da produção, que está sob trabalho concorrente (G2/G3/G7).
+`production_orders.sales_order_id` continua `NULL` nas OPs geradas pelo MPS: a
+demanda é consolidada de vários pedidos, e apontar um só seria rastreabilidade
+falsa.
+
+### Literais de ENUM conferidos contra `pg_enum` antes de escritos
+
+Exigência de `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md`
+(a classe de defeito que passa por typecheck **e** pela suíte inteira):
+
+- `enum_sales_status` = `quote,confirmed,invoiced,canceled,shipped,partially_invoiced`
+  → o MPS usa `confirmed` + `partially_invoiced`;
+- `enum_production_orders_status` = `planned,released,in_progress,completed,paused,canceled`
+  → o MPS usa `planned,released,in_progress,paused` (OP aberta);
+- `enum_products_product_type` = `finished,semi_finished,component,raw_material`
+  → o MPS planeja `finished` + `semi_finished`.
+
+Nomes de coluna conferidos em `information_schema.columns`:
+`sale_items.invoiced_quantity`, **`products.min_quantity`** (não `min_stock`),
+`products.reserved_quantity`, `production_orders.quantity_produced`.
+
+### Pendência estrutural que este gap expôs
+
+**`sales` não tem coluna de data de entrega prometida.** Sem ela, a demanda só
+pode ser consolidada por produto **no horizonte inteiro, sem baldes de tempo** —
+o MPS semanal que `docs/producao/02-PCP.md` desenha desde sempre depende dessa
+coluna existir. Registrado em `docs/governance/TODO.md` (entrada 2026-08-10 G17),
+não implementado: é coluna nova **mais** decisão de negócio (prazo prometido ×
+prazo negociado × prazo confirmado) **mais** tela de venda.
+
+---
+
+## 2026-08-10 — `enum_audit_logs_action`: 37 literais que nunca chegaram ao banco
+
+**Migration:** `20260810-000036-extend-audit-log-action-enum.cjs` (**escrita,
+NÃO aplicada** — fila de pendentes aguardando liberação do dono).
+**Origem:** achado P0 §2 de
+`docs/governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md`.
+
+### O defeito, e por que ele é pior que um 500
+
+`enum_audit_logs_action` tinha **15 valores**; o código chamava
+`auditLogService.logAction` com **43 literais**, sendo **37 fora do tipo, em
+46 call sites**.
+
+O que acontecia: o Postgres rejeitava o `INSERT` com
+`22P02 invalid input value for enum enum_audit_logs_action`. Mas
+`logAction` é **fire-and-forget por desenho** — faz retry, grava em
+`logs/audit-failures.log` e **nunca propaga o erro ao chamador**. Resultado:
+a API respondia `200`, o usuário via sucesso, e a trilha de auditoria
+simplesmente não existia.
+
+**Prova no dado real** (banco do dono, contagem por valor):
+
+```
+login=111 · create=85 · status_change=42 · update=27 · approve=20
+```
+
+Cinco valores. Os outros dez válidos nunca apareceram, e nenhum dos 37
+inválidos jamais entrou. Entre os ausentes: **`access_denied`** — ou seja,
+**tentativa de acesso indevido não deixava rastro nenhum**. Isso é achado de
+segurança, não só de auditoria.
+
+`tsc` não pegava porque `src/models/AuditLog.ts` declarava `action: string`.
+
+### A decisão: 9 valores novos + 29 sinônimos, não 37 nem 0
+
+O critério aplicado literal a literal foi **"a pergunta do auditor muda?"**,
+não "o verbo é diferente". `action` responde **que tipo** de evento;
+`entity_type`, **sobre o quê**; `route`/`method`, **por onde**;
+`description`/`new_values`, **com que conteúdo**. Um `ENUM` que ganha um valor
+por endpoint deixa de ser vocabulário e vira campo de texto livre com passos
+extras — não agrega, não indexa e volta a divergir no módulo seguinte.
+
+**9 valores acrescentados** (`ALTER TYPE ... ADD VALUE IF NOT EXISTS`, aditivo
+e retrocompatível — nenhuma linha existente muda):
+
+| Valor | Por que nenhum dos 15 servia |
+|---|---|
+| `access_denied` | negativa de autorização; não é mutação, e `reject` é decisão humana sobre documento |
+| `read` | consulta a dado pessoal/regulado (LGPD art. 37); `export` é outra operação |
+| `read_sensitive` | exibição de segredo em claro; afogaria no volume de `read` |
+| `permission_change` | concessão/revogação de acesso; segue o padrão `password_change`/`salary_change` que o vocabulário já tinha |
+| `cancel` | ato terminal de documento; `delete` apaga, `status_change` não distingue |
+| `close` | encerramento de processo/caso |
+| `post` | contabilização (lançamento vira definitivo); par obrigatório de `reverse` |
+| `reverse` | estorno contábil — por norma não é `update` nem `delete`: o original permanece e um novo o anula |
+| `settle` | liquidação/baixa financeira; movimenta caixa |
+
+**Os outros 28 verbos** (`award`, `convert`, `upsert`, `update_steps`,
+`mrp_auto_convert_to_requisition`, `verify_identity`, …) viraram **sinônimos**
+em `server/src/shared/domain/auditActions.ts`, traduzidos na gravação. O verbo
+original não se perde: vira marcador no início da `description`
+(`WHERE description LIKE '[award]%'`).
+
+> Nota de execução: 7 desses sinônimos estão em `src/modules/production/` e
+> `src/modules/mrp/`, sob edição concorrente de outros agentes em 2026-08-10.
+> A tabela central os cobre **sem um único byte de diff naqueles arquivos** —
+> foi um dos motivos de a tradução morar num único ponto em vez de em 46
+> edições espalhadas.
+
+### Comportamento antes e depois de aplicar a migration
+
+Esta migration, ao contrário de `20260809-000027`, **não bloqueia o código**:
+
+- **Antes:** `auditLogService` recebe o `22P02`, memoriza o valor como não
+  suportado (por processo) e **regrava a mesma linha** com o valor legado
+  equivalente + marcador `[verbo]`. Detecção por erro, e não por consulta a
+  `pg_enum` no boot: custo zero no caminho feliz e acerto automático assim
+  que a migration for aplicada.
+- **Depois:** a primeira tentativa passa e o valor exato é gravado.
+
+Degradação declarada em `AUDIT_ACTION_DB_FALLBACK`:
+`access_denied → reject`; `read`/`read_sensitive → export`;
+`permission_change → update`; `cancel`/`close`/`post`/`reverse`/`settle →
+status_change`. Regra que governou a escolha: **nunca mentir de categoria** —
+evento não-mutante só cai em valor não-mutante, senão uma leitura passaria a
+contar como escrita e o relatório de auditoria ficaria pior do que sem a
+linha.
+
+### Backfill: deliberadamente NÃO feito
+
+As linhas gravadas em modo degradado são identificáveis com precisão
+(`WHERE description LIKE '[access_denied]%'`), mas **reescrever log de
+auditoria existente é exatamente o que uma trilha não pode permitir**. Se um
+dia for necessário reclassificar, que seja por decisão explícita e registrada,
+com o `UPDATE` revisado — nunca como efeito colateral de migration de schema.
+
+### `down()` é no-op consciente
+
+Remover valor de `ENUM` no Postgres exige recriar o tipo inteiro (com colunas,
+índices e defaults dependentes) e, pior, exigiria decidir o que fazer com as
+linhas de auditoria já gravadas com o valor novo. O valor extra permanece,
+inofensivo. Mesmo critério de `20260804-000009` e `20260809-000027`.
+
+### Verificação executada
+
+- `ALTER TYPE ... ADD VALUE IF NOT EXISTS` exercitado contra o PostgreSQL real
+  em **tipo descartável** criado e destruído na sonda (banco de teste) — a
+  sintaxe roda nesta versão; **nenhum tipo real foi alterado**.
+- Banco de dev conferido antes e depois: `enum_audit_logs_action` continua com
+  15 valores e `audit_logs` com as mesmas contagens.
+
+---
+
+## 2026-08-10 — `non_conformities.closed_date`: a coluna que o Sequelize engolia
+
+**Sem migration** — o defeito era de código, não de schema.
+**Origem:** achado §3 de
+`docs/governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md`.
+
+`UpdateNonConformityUseCase` gravava `closed_at`. A coluna real de
+`non_conformities` é **`closed_date`** (`DATE`); `closed_at` não existe. O
+Sequelize **descarta em silêncio** uma chave que não é atributo do model.
+Reprodução contra o PostgreSQL real (`UPDATE` com `WHERE id = -1`, zero linhas
+afetadas, apenas para capturar o SQL emitido):
+
+```sql
+-- ANTES
+UPDATE "non_conformities" SET "status"=$1,"closed_by"=$2,"updated_at"=$3 WHERE "id" = $4
+-- DEPOIS
+UPDATE "non_conformities" SET "status"=$1,"closed_by"=$2,"closed_date"=$3,"updated_at"=$4 WHERE "id" = $5
+```
+
+**Segunda ocorrência, não apontada pela auditoria:** `CloseNonConformityUseCase`
+(`DELETE /api/quality/non-conformities/:id`) gravava **apenas**
+`status = 'closed'` — sem data e sem responsável.
+
+Os dois caminhos passaram a derivar os campos de encerramento da mesma função
+(`server/src/modules/nonConformities/domain/closure.ts`), com teste comparando
+os dois payloads.
+
+**Estado do dado:** as 6 RNCs do banco estão todas `status='open'` e
+`closed_date IS NULL` em 100% delas — **nenhuma perda ocorreu**, e por isso a
+correção veio antes do Go-Live. Depois exigiria reconstituir uma data de
+fechamento que ninguém tem.
+
+**`closed_by` deixou de ser aceito do body.** Estava em `ALLOWED_FIELDS` do
+`PUT`, então bastava enviá-lo no payload para atribuir o encerramento a outra
+pessoa. Passa a vir exclusivamente do JWT — mesmo padrão anti-spoofing de
+identidade da remediação 3.1 (2026-08-02).

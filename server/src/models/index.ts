@@ -42,6 +42,8 @@ import ServiceOrder = require('./ServiceOrder');
 import Asset = require('./Asset');
 import NonConformity = require('./NonConformity');
 import QualityInspection = require('./QualityInspection');
+import MasterProductionPlan = require('./MasterProductionPlan');
+import MasterProductionPlanLine = require('./MasterProductionPlanLine');
 import MaintenanceOrder = require('./MaintenanceOrder');
 import AuditLog = require('./AuditLog');
 import WebhookEvent = require('./WebhookEvent');
@@ -609,6 +611,30 @@ LotControl.belongsTo(QualityInspection, { foreignKey: 'release_inspection_id', a
 
 User.hasMany(LotControl, { foreignKey: 'released_by', as: 'released_lot_controls' });
 LotControl.belongsTo(User, { foreignKey: 'released_by', as: 'releasedBy' });
+
+// ---- MasterProductionPlan / MasterProductionPlanLine (G17, migration 20260810-000037) ----
+// A camada de Plano Mestre (MPS) entre a carteira de pedidos e a OP. As
+// associações abaixo espelham exatamente as FKs da migration. Todos os
+// atributos são snake_case e iguais ao nome da coluna (os models não usam
+// `field:`), então `foreignKey` é o nome do ATRIBUTO.
+MasterProductionPlan.hasMany(MasterProductionPlanLine, { foreignKey: 'plan_id', as: 'lines', onDelete: 'CASCADE' });
+MasterProductionPlanLine.belongsTo(MasterProductionPlan, { foreignKey: 'plan_id', as: 'plan' });
+
+Product.hasMany(MasterProductionPlanLine, { foreignKey: 'product_id', as: 'master_plan_lines' });
+MasterProductionPlanLine.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+// O rastro de origem da OP: da ordem se chega à linha, ao plano, ao planejador
+// e à demanda que a justificou. É o vínculo que não existia antes do G17.
+ProductionOrder.hasMany(MasterProductionPlanLine, { foreignKey: 'production_order_id', as: 'master_plan_lines' });
+MasterProductionPlanLine.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+// Rastreabilidade de quem planejou / firmou / liberou / cancelou — sempre do JWT.
+User.hasMany(MasterProductionPlan, { foreignKey: 'planner_id', as: 'master_production_plans' });
+MasterProductionPlan.belongsTo(User, { foreignKey: 'planner_id', as: 'planner' });
+MasterProductionPlan.belongsTo(User, { foreignKey: 'firmed_by', as: 'firmedBy' });
+MasterProductionPlan.belongsTo(User, { foreignKey: 'released_by', as: 'releasedBy' });
+MasterProductionPlan.belongsTo(User, { foreignKey: 'canceled_by', as: 'canceledBy' });
+MasterProductionPlanLine.belongsTo(User, { foreignKey: 'decided_by', as: 'decidedBy' });
 
 // MaintenanceOrder associations
 Asset.hasMany(MaintenanceOrder, { foreignKey: 'asset_id', as: 'maintenance_orders' });
@@ -1399,6 +1425,7 @@ export {
   LotControl, SerialNumber, ProductionLotConsumption, ProductionOrderReservation,
   ServiceOrder, Asset,
   NonConformity, QualityInspection, MaintenanceOrder, AuditLog, WebhookEvent, CompanyFiscalConfig, PurchaseReceipt,
+  MasterProductionPlan, MasterProductionPlanLine,
   BillOfMaterial, BillOfMaterialItem,
   Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada,
   ItemSupplier,

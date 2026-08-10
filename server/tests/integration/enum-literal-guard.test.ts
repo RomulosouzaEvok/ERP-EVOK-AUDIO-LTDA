@@ -16,13 +16,46 @@
  * (ver `src/models/AuditLog.ts:20` — `action: string`), a suíte unitária usa
  * repositório dublê, e o boot do servidor não escreve nada.
  *
- * ## O caso concreto que este teste trava hoje
+ * ## O caso concreto que este teste travou (e como foi resolvido)
  *
- * `enum_audit_logs_action` tem 15 valores; o código chama `logAction` com
- * 37 literais que não existem no tipo. Como `auditLogService` é
- * fire-and-forget (nunca propaga erro ao chamador), a API responde **200** e
- * o log de auditoria simplesmente **não é gravado** — perda silenciosa de
- * trilha de auditoria, que é requisito fiscal.
+ * `enum_audit_logs_action` tinha 15 valores; o código chamava `logAction` com
+ * 37 literais que não existiam no tipo, em 46 call sites. Como
+ * `auditLogService` é fire-and-forget (nunca propaga erro ao chamador), a API
+ * respondia **200** e o log de auditoria simplesmente **não era gravado** —
+ * inclusive `access_denied`, ou seja, tentativa de acesso indevido sem rastro.
+ *
+ * A correção (2026-08-10) tem duas metades:
+ *
+ * 1. **Vocabulário fechado** em `src/shared/domain/auditActions.ts`: 9 valores
+ *    novos (os que mudam a pergunta do auditor) + 29 sinônimos de módulo
+ *    traduzidos para o vocabulário, preservando o verbo original como marcador
+ *    `[verbo]` na `description`.
+ * 2. **Degradação segura**: os 9 valores novos só existem no banco depois da
+ *    migration `20260810-000036`, que está na fila de pendentes. Até lá,
+ *    `auditLogService` capta o `22P02` do Postgres e **regrava a mesma linha**
+ *    com o valor legado equivalente (`AUDIT_ACTION_DB_FALLBACK`) + marcador.
+ *
+ * ## ⚠️ O que este teste passou a afirmar — e por quê
+ *
+ * A pergunta original era *"o literal está no `ENUM` hoje?"*. Ela é uma
+ * **aproximação** da pergunta que importa, que é *"o evento chega ao banco?"*.
+ * As duas coincidiam enquanto não havia caminho de degradação; agora não mais.
+ *
+ * O teste passou a afirmar a pergunta real, e isso o deixou **mais forte**,
+ * não mais fraco:
+ *
+ * - continua reprovando qualquer literal que não seja valor canônico nem
+ *   sinônimo declarado (o caso "alguém inventou um verbo novo");
+ * - passou a reprovar também **sinônimo quebrado** (aponta para valor que não
+ *   existe) e **degradação quebrada** (valor novo sem destino válido no banco
+ *   atual) — duas falhas que a versão anterior não enxergava;
+ * - a tolerância é **estritamente limitada** a valores com degradação provada
+ *   contra o `pg_enum` REAL desta conexão. Se a migration `000036` estiver
+ *   aplicada, não há nada a tolerar e o teste se aperta sozinho, sem edição.
+ *
+ * O que se perde: este arquivo, sozinho, não avisa mais que a migration está
+ * pendente. Isso passou a ser dito em voz alta pelo `console.warn` de cada
+ * teste e pelo `auditLogService` em runtime.
  *
  * @module tests/integration/enum-literal-guard
  */
@@ -31,6 +64,13 @@ import fs from 'fs';
 import path from 'path';
 
 import { integrationEnabled } from '../helpers/testApi';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_ACTION_ALIASES,
+  downgradeAuditAction,
+  resolveAuditAction,
+  type AuditAction,
+} from '../../src/shared/domain/auditActions';
 
 const describeIntegration = integrationEnabled() ? describe : describe.skip;
 
@@ -54,6 +94,16 @@ const KNOWN_NON_DB_LITERALS: Array<{ file: RegExp; key: string; reason: string }
   { file: /modules\/juridico\/presentation\/controllers\/contractController\.ts$/, key: 'type', reason: 'tipo de contraparte do DTO de resposta, não é coluna enum' },
   { file: /modules\/quality\/domain\/constants\.ts$/, key: 'reason', reason: 'motivo de bloqueio de liberação em memória (regra G7), não é coluna' },
   { file: /modules\/sst\/application\/use-cases\/epi\//, key: 'reason', reason: 'inventory_movements.reason é VARCHAR livre, não enum' },
+  // As 3 entradas abaixo são discriminadores de RETORNO em memória, tipados
+  // como union de string no próprio arquivo (`reason: 'created' | 'zero_amount'
+  // | ...`) e devolvidos ao chamador — nenhuma delas chega a `.create()`/
+  // `.update()`. Conferido linha a linha em 2026-08-10; os models envolvidos
+  // não têm sequer coluna `reason` (`MasterProductionPlan` tem `cancel_reason`).
+  // São falso positivo estrutural da união por nome de coluna, que é a
+  // limitação já documentada no cabeçalho do 3º teste.
+  { file: /^src\/services\/saleReceivableService\.ts$/, key: 'reason', reason: 'discriminador do retorno de criação de contas a receber (DTO em memória), não é coluna' },
+  { file: /modules\/purchases\/application\/use-cases\/ReceivePurchaseItemsUseCase\.ts$/, key: 'reason', reason: 'discriminador do retorno de criação de conta a pagar (DTO em memória), não é coluna' },
+  { file: /modules\/masterProduction\//, key: 'reason', reason: 'motivo de bloqueio de liberação do plano mestre (DTO em memória); o model tem cancel_reason, não reason' },
   { file: /modules\/(mrp|ti)\//, key: 'origin', reason: 'purchase_requisitions.origin é VARCHAR livre, não enum' },
   { file: /modules\/rh\/application\/use-cases\/admission\//, key: 'contract_type', reason: 'employees.contract_type é VARCHAR livre; o enum homônimo é de jur_contracts' },
   // ⚠️ TEMPORÁRIO — remover quando a migration 20260810-000029 for aplicada.
@@ -116,11 +166,34 @@ describeIntegration('Guarda de literal de ENUM × pg_enum', () => {
   });
 
   /**
-   * Valores que o MODEL declara e o banco não aceita. Um `create` que use
-   * um desses valores é um `500` garantido.
+   * `true` quando `action` é gravável neste banco: ou o `ENUM` já a conhece,
+   * ou existe degradação declarada para um valor que ele conhece.
+   *
+   * @param action - Valor canônico do vocabulário.
+   * @param allowed - Valores de `enum_audit_logs_action` nesta conexão.
+   * @returns Se o evento chega ao banco.
+   */
+  function auditActionIsWritable(action: AuditAction, allowed: Set<string>): boolean {
+    if (allowed.has(action)) return true;
+    const fallback = downgradeAuditAction(action);
+    return fallback !== null && allowed.has(fallback);
+  }
+
+  /**
+   * Valores que o MODEL declara e o banco não aceita. Em regra é `500`
+   * garantido em qualquer `create`/`update` com esse valor.
+   *
+   * Única exceção tolerada, e por um motivo verificado aqui mesmo contra o
+   * `pg_enum`: `audit_logs.action`, cujos valores novos têm degradação
+   * declarada em `AUDIT_ACTION_DB_FALLBACK` para um valor que ESTE banco
+   * aceita. Nesse caso não há `500` nem perda — há regravação com marcador.
+   * Qualquer outro model/coluna continua reprovando sem exceção, e quando a
+   * migration `20260810-000036` for aplicada a exceção deixa de ser exercida
+   * sozinha.
    */
   it('nenhum model declara valor de ENUM que o banco não aceita', () => {
     const divergences: string[] = [];
+    const tolerated: string[] = [];
 
     for (const [modelName, model] of Object.entries(models)) {
       if (!model?.getTableName || !model?.rawAttributes) continue;
@@ -136,13 +209,30 @@ describeIntegration('Guarda de literal de ENUM × pg_enum', () => {
 
         const allowed = enumValues.get(typname)!;
         const invalid = declared.filter((v) => !allowed.has(v));
-        if (invalid.length) {
-          divergences.push(
-            `${modelName}.${attrName} (${table}.${column} :: ${typname}): model aceita `
-            + `[${invalid.join(', ')}] que o banco rejeita — INSERT/UPDATE com esse valor é 500.`,
-          );
+        if (!invalid.length) continue;
+
+        const isAuditAction = table === 'audit_logs' && column === 'action';
+        const covered = isAuditAction
+          && invalid.every((v) => auditActionIsWritable(v as AuditAction, allowed));
+
+        if (covered) {
+          tolerated.push(...invalid);
+          continue;
         }
+
+        divergences.push(
+          `${modelName}.${attrName} (${table}.${column} :: ${typname}): model aceita `
+          + `[${invalid.join(', ')}] que o banco rejeita — INSERT/UPDATE com esse valor é 500.`,
+        );
       }
+    }
+
+    if (tolerated.length) {
+      console.warn(
+        `[enum-literal-guard] migration 20260810-000036 PENDENTE neste banco: ${tolerated.join(', ')} `
+        + 'sao gravados no valor legado equivalente + marcador [verbo] na description. '
+        + 'Aplique a migration para gravar o valor exato.',
+      );
     }
 
     expect(divergences).toEqual([]);
@@ -152,12 +242,21 @@ describeIntegration('Guarda de literal de ENUM × pg_enum', () => {
    * O caso mais caro já visto: `audit_logs.action`. `auditLogService.logAction`
    * é fire-and-forget — um literal inválido NÃO gera erro HTTP, apenas
    * silencia a trilha de auditoria. Só um confronto com `pg_enum` acha.
+   *
+   * A afirmação é **"o evento chega ao banco"**, que é o que importa, e não
+   * "o literal está no ENUM hoje". Um literal reprova quando:
+   *
+   * - não é valor canônico nem sinônimo declarado (verbo inventado); ou
+   * - resolve para um valor que este banco não aceita **e** não tem
+   *   degradação válida (aí sim o evento seria perdido).
    */
-  it('todo literal passado a logAction/AuditLog.register existe em enum_audit_logs_action', () => {
+  it('todo literal passado a logAction/AuditLog.register chega ao banco', () => {
     const allowed = enumValues.get('enum_audit_logs_action');
     expect(allowed).toBeDefined();
 
     const offenders: string[] = [];
+    const degraded = new Set<string>();
+
     for (const file of walk(SRC_DIR)) {
       const text = fs.readFileSync(file, 'utf8');
       if (!/logAction\s*\(|AuditLog\.register\s*\(/.test(text)) continue;
@@ -166,17 +265,107 @@ describeIntegration('Guarda de literal de ENUM × pg_enum', () => {
         if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
         const match = /(?:^|[^\w.'"`])action\s*:\s*(['"])([a-z0-9_]+)\1/.exec(line);
         if (!match) return;
+
         const literal = match[2];
-        if (allowed!.has(literal)) return;
-        offenders.push(
-          `${path.relative(path.resolve(__dirname, '..', '..'), file).replace(/\\/g, '/')}:${i + 1} `
-          + `→ action: '${literal}' não existe em enum_audit_logs_action `
-          + `[${[...allowed!].join('|')}] — o audit log NÃO é gravado e a API responde 200.`,
-        );
+        const where = `${path.relative(path.resolve(__dirname, '..', '..'), file).replace(/\\/g, '/')}:${i + 1}`;
+        const resolved = resolveAuditAction(literal);
+
+        if (resolved.unknown) {
+          offenders.push(
+            `${where} → action: '${literal}' não é valor canônico nem sinônimo declarado em `
+            + 'src/shared/domain/auditActions.ts — seria gravado como genérico e a granularidade se perde. '
+            + 'Declare o sinônimo (ou justifique um valor canônico novo) antes de usar o verbo.',
+          );
+          return;
+        }
+
+        if (!auditActionIsWritable(resolved.action, allowed!)) {
+          offenders.push(
+            `${where} → action: '${literal}' resolve para '${resolved.action}', que não existe em `
+            + `enum_audit_logs_action [${[...allowed!].join('|')}] e não tem degradação válida — `
+            + 'o audit log NÃO é gravado e a API responde 200.',
+          );
+          return;
+        }
+
+        if (!allowed!.has(resolved.action)) degraded.add(`${literal} → ${resolved.action}`);
       });
     }
 
+    if (degraded.size) {
+      console.warn(
+        `[enum-literal-guard] gravando em modo degradado (migration 20260810-000036 pendente): ${[...degraded].join(', ')}`,
+      );
+    }
+
     expect(offenders).toEqual([]);
+  });
+
+  /**
+   * A prova de que a tolerância acima é segura, e não um "allowlist de
+   * conveniência": TODO valor canônico que este banco ainda não conhece tem
+   * que ter para onde degradar, e o destino tem que ser um valor que este
+   * banco aceita.
+   *
+   * Se alguém acrescentar um valor ao vocabulário e esquecer a degradação,
+   * este teste reprova — antes que a trilha volte a sumir em silêncio.
+   * Depois da migration `20260810-000036` aplicada, ele passa a ser vácuo
+   * (nada a degradar), que é o estado desejado.
+   */
+  it('todo valor canônico que o banco ainda não conhece tem degradação válida', () => {
+    const allowed = enumValues.get('enum_audit_logs_action')!;
+    const problems: string[] = [];
+
+    for (const action of AUDIT_ACTIONS) {
+      if (allowed.has(action)) continue;
+      const fallback = downgradeAuditAction(action);
+      if (!fallback) {
+        problems.push(`'${action}' não existe no banco e não tem degradação — o evento seria PERDIDO.`);
+      } else if (!allowed.has(fallback)) {
+        problems.push(`'${action}' degrada para '${fallback}', que o banco também não aceita.`);
+      }
+    }
+
+    expect(problems).toEqual([]);
+  });
+
+  /**
+   * Deriva do mesmo princípio, no sentido inverso: sinônimo que aponta para
+   * um valor inexistente no vocabulário grava lixo silenciosamente. O
+   * `satisfies` do TypeScript já cobre isso em compilação; aqui é a rede de
+   * runtime, que continua valendo se alguém contornar a tipagem.
+   */
+  it('todo sinônimo de módulo aponta para um valor canônico gravável', () => {
+    const allowed = enumValues.get('enum_audit_logs_action')!;
+    const canonical = new Set<string>(AUDIT_ACTIONS);
+    const problems: string[] = [];
+
+    for (const [alias, target] of Object.entries(AUDIT_ACTION_ALIASES)) {
+      if (!canonical.has(target)) {
+        problems.push(`sinônimo '${alias}' aponta para '${target}', que não é valor canônico.`);
+        continue;
+      }
+      if (!auditActionIsWritable(target as AuditAction, allowed)) {
+        problems.push(`sinônimo '${alias}' → '${target}' não é gravável neste banco nem por degradação.`);
+      }
+    }
+
+    expect(problems).toEqual([]);
+  });
+
+  /**
+   * Deriva reversa: valor que existe no `ENUM` do banco e sumiu do
+   * vocabulário do código. Não quebra escrita, mas deixa linhas antigas de
+   * `audit_logs` fora de qualquer classificação conhecida — e é o sintoma de
+   * alguém ter "limpado" a lista sem olhar o dado gravado.
+   */
+  it('todo valor do ENUM do banco está declarado no vocabulário do código', () => {
+    const allowed = enumValues.get('enum_audit_logs_action')!;
+    const canonical = new Set<string>(AUDIT_ACTIONS);
+
+    const orphans = [...allowed].filter((value) => !canonical.has(value));
+
+    expect(orphans).toEqual([]);
   });
 
   /**

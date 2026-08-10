@@ -63,7 +63,10 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
 exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CloseNonConformityUseCase(nonConformitiesRepository);
-    const result = await useCase.execute({ id: req.params.id });
+    // `closedBy` vem do JWT (nunca do body): identifica quem encerrou a RNC,
+    // dado de auditoria ISO 9001 §8.7. Mesmo padrão anti-spoofing da
+    // remediação 3.1 já usado em `update`/`create` acima.
+    const result = await useCase.execute({ id: req.params.id, closedBy: (req as any).user.id });
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);

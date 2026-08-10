@@ -96,20 +96,39 @@ function mockSettings(overrides: Partial<{
   return { ...settings, get: () => settings };
 }
 
-/** Cria um tracking `completed` com horas conhecidas e work center opcional. */
-function makeTracking(startHour: number, endHour: number, costPerHour: number | null) {
+/**
+ * Cria um tracking `completed` com horas conhecidas e work center opcional.
+ *
+ * `quantity_good` default 10 casa com o `quantity_produced: 10` usado nos
+ * testes — sem ele, o gate G4 (`G4-TRACKING-QTY-EXCEEDS`) barraria a conclusao
+ * antes de o custeio rodar, e todo teste deste arquivo falharia por um motivo
+ * que nao e o que ele afirma medir.
+ */
+function makeTracking(startHour: number, endHour: number, costPerHour: number | null, quantityGood = 10) {
   return {
+    id: 1,
+    sequence: 1,
     status: 'completed',
+    quantity_good: quantityGood,
     started_at: new Date(2026, 0, 1, startHour, 0, 0),
     finished_at: new Date(2026, 0, 1, endHour, 0, 0),
     routeStep: costPerHour === null ? null : { workCenter: { cost_per_hour: costPerHour } },
   };
 }
 
-function baseRepository(overrides: any = {}) {
+/**
+ * Repositorio dublê da OP.
+ *
+ * `trackings` alimenta AS DUAS consultas de apontamento — a travada
+ * (`listTrackingByOrderForUpdate`, usada pelo gate G4) e a que traz o centro de
+ * trabalho (`listTrackingWithRouteStepByOrder`, usada pelo custeio). Elas leem
+ * as mesmas linhas em producao; dublar so uma delas produzia um cenario
+ * impossivel no banco real.
+ */
+function baseRepository(trackings: any[] = [], overrides: any = {}) {
   return {
-    listTrackingByOrderForUpdate: jest.fn(async () => []),
-    listTrackingWithRouteStepByOrder: jest.fn(async () => []),
+    listTrackingByOrderForUpdate: jest.fn(async () => trackings),
+    listTrackingWithRouteStepByOrder: jest.fn(async () => trackings),
     findByIdForUpdate: jest.fn(async () => ({
       id: 1,
       status: 'in_progress',
@@ -135,13 +154,11 @@ describe('Custeio real de mao-de-obra e overhead (item 7/9)', () => {
   it('lanca production_labor e production_overhead com horas apontadas x cost_per_hour do centro de trabalho', async () => {
     const product = createProductStub(1, 10, 0);
     InventoryService.receive.mockResolvedValueOnce({ product });
-    ProductionCostSettings.findByPk.mockResolvedValueOnce(
+    ProductionCostSettings.findByPk.mockResolvedValue(
       mockSettings({ overhead_calculation_basis: 'material_labor', overhead_rate_percent: 10 })
     );
 
-    const productionOrderRepository = baseRepository({
-      listTrackingWithRouteStepByOrder: jest.fn(async () => [makeTracking(8, 10, 50)]), // 2h x 50/h = 100
-    });
+    const productionOrderRepository = baseRepository([makeTracking(8, 10, 50)]); // 2h x 50/h = 100
 
     const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
     await useCase.execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 });
@@ -164,14 +181,12 @@ describe('Custeio real de mao-de-obra e overhead (item 7/9)', () => {
   it('usa production_cost_settings.default_labor_rate_per_hour quando a etapa nao tem work_center_id', async () => {
     const product = createProductStub(1, 10, 0);
     InventoryService.receive.mockResolvedValueOnce({ product });
-    ProductionCostSettings.findByPk.mockResolvedValueOnce(
+    ProductionCostSettings.findByPk.mockResolvedValue(
       mockSettings({ overhead_calculation_basis: 'material_only', overhead_rate_percent: 0, default_labor_rate_per_hour: 40 })
     );
 
-    const productionOrderRepository = baseRepository({
-      // Etapa sem work_center (routeStep null) -> usa fallback global (40/h).
-      listTrackingWithRouteStepByOrder: jest.fn(async () => [makeTracking(8, 9, null)]), // 1h x 40/h = 40
-    });
+    // Etapa sem work_center (routeStep null) -> usa fallback global (40/h).
+    const productionOrderRepository = baseRepository([makeTracking(8, 9, null)]); // 1h x 40/h = 40
 
     const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
     await useCase.execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 });
@@ -185,27 +200,38 @@ describe('Custeio real de mao-de-obra e overhead (item 7/9)', () => {
     expect(overheadEntry).toBeUndefined();
   });
 
-  it('OP sem nenhum apontamento nao lanca custo de mao-de-obra (nem quebra a conclusao)', async () => {
-    const product = createProductStub(1, 10, 0);
-    InventoryService.receive.mockResolvedValueOnce({ product });
-    ProductionCostSettings.findByPk.mockResolvedValueOnce(
-      mockSettings({ overhead_calculation_basis: 'material_only', overhead_rate_percent: 5 })
-    );
+  // Este cenario deixou de ser alcancavel no modo padrao com o gap G4
+  // (2026-08-10): concluir OP sem apontamento agora e `G4-TRACKING-REQUIRED`.
+  // Ele sobrevive como documentacao viva da JANELA DE TRANSICAO — e a unica
+  // configuracao em que o comportamento historico (mao-de-obra zero, conclusao
+  // permitida) continua valendo.
+  it('modo de transicao `warn`: OP sem apontamento conclui e nao lanca custo de mao-de-obra', async () => {
+    const previousMode = process.env.PRODUCTION_TRACKING_REQUIRED;
+    process.env.PRODUCTION_TRACKING_REQUIRED = 'warn';
 
-    const productionOrderRepository = baseRepository({
-      listTrackingWithRouteStepByOrder: jest.fn(async () => []), // sem apontamento
-    });
+    try {
+      const product = createProductStub(1, 10, 0);
+      InventoryService.receive.mockResolvedValueOnce({ product });
+      ProductionCostSettings.findByPk.mockResolvedValue(
+        mockSettings({ overhead_calculation_basis: 'material_only', overhead_rate_percent: 5 })
+      );
 
-    const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
-    await expect(
-      useCase.execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
-    ).resolves.toBeDefined();
+      const productionOrderRepository = baseRepository([]); // sem apontamento
 
-    const calls = (ProductCostLedger.create as jest.Mock).mock.calls.map((c) => c[0]);
-    expect(calls.find((c) => c.source_type === 'production_labor')).toBeUndefined();
-    // Overhead ainda e lancado sobre material (material_only, 5%: 200*0.05=10).
-    const overheadEntry = calls.find((c) => c.source_type === 'production_overhead');
-    expect(overheadEntry).toMatchObject({ quantity: 10, unit_cost: 1, total_cost: 10 });
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+      await expect(
+        useCase.execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
+      ).resolves.toBeDefined();
+
+      const calls = (ProductCostLedger.create as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(calls.find((c) => c.source_type === 'production_labor')).toBeUndefined();
+      // Overhead ainda e lancado sobre material (material_only, 5%: 200*0.05=10).
+      const overheadEntry = calls.find((c) => c.source_type === 'production_overhead');
+      expect(overheadEntry).toMatchObject({ quantity: 10, unit_cost: 1, total_cost: 10 });
+    } finally {
+      if (previousMode === undefined) delete process.env.PRODUCTION_TRACKING_REQUIRED;
+      else process.env.PRODUCTION_TRACKING_REQUIRED = previousMode;
+    }
   });
 
   it.each([
@@ -215,13 +241,11 @@ describe('Custeio real de mao-de-obra e overhead (item 7/9)', () => {
   ])('overhead_calculation_basis=%s aplica o percentual sobre a base correta', async (basis, expectedBase) => {
     const product = createProductStub(1, 10, 0);
     InventoryService.receive.mockResolvedValueOnce({ product });
-    ProductionCostSettings.findByPk.mockResolvedValueOnce(
+    ProductionCostSettings.findByPk.mockResolvedValue(
       mockSettings({ overhead_calculation_basis: basis, overhead_rate_percent: 25 })
     );
 
-    const productionOrderRepository = baseRepository({
-      listTrackingWithRouteStepByOrder: jest.fn(async () => [makeTracking(8, 10, 40)]), // 2h x 40/h = 80
-    });
+    const productionOrderRepository = baseRepository([makeTracking(8, 10, 40)]); // 2h x 40/h = 80
 
     const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
     await useCase.execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 });

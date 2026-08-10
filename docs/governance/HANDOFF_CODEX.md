@@ -14410,3 +14410,287 @@ npx tsx -e "require('./app')"          # sobe sem erro
 8. **`cost_center_id` da AP automática continua `NULL`** — o de-para
    departamento → centro de custo nunca foi definido pelo negócio. O TODO
    apenas mudou de lugar (da aprovação para o recebimento).
+
+---
+
+# Handoff — D-K: segregação de função na compra (quem solicita não aprova)
+**Data:** 2026-08-10 · **Agente:** `evok-production-remediation` (backend) ·
+**Commit:** *(não commitado — o dono verifica antes)*
+
+## 1. Resumo da feature
+
+O dono decidiu em 2026-08-10, respondendo à pergunta direta *"aprovador ≠
+solicitante?"*: **"Sim, aprovador ≠ solicitante"** — decisão **D-K**,
+registrada em `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4.
+Isso fecha o critério de pronto da §5 do mesmo plano (*"quem aprova uma
+compra não é quem a solicitou"*), que estava aberto **de propósito** desde o
+G11: naquela entrega o pedido foi **alçada** (quem tem poder de aprovar),
+não **segregação** (se essa pessoa é a mesma que pediu), e o escopo não foi
+estendido por iniciativa do agente.
+
+A regra é única e vive em `server/src/shared/domain/segregationOfDuties.ts`
+(`assertApproverIsNotRequester`, `isSelfApproval`, `SEGREGATION_RULES`).
+Mora em `shared/` porque os pontos de aprovação pertencem a **3 módulos
+diferentes** — uma cópia por módulo garantiria que o próximo ponto ficasse
+para trás, que foi exatamente o que aconteceu com o G11 (nasceu em Compras e
+só alcançou o COMEX na decisão D-G).
+
+**4 pontos cobertos**, cada um com `details.rule` próprio, verificação
+**antes de qualquer escrita** e aprovador **sempre** de `req.user.id` (JWT):
+
+| Endpoint | `details.rule` | Solicitante comparado |
+|---|---|---|
+| `PATCH /api/purchase-requisitions/:id/status` (`approved`) | `D-K-REQUISICAO` | `purchase_requisitions.requester_id` |
+| `PUT /api/purchases/:id/status` (`approved`) | `D-K-PEDIDO` | `purchase_orders.requester_id` |
+| `POST /api/purchases/:id/approve` (alçada G11) | `D-K-ALCADA` | `purchase_orders.requester_id` |
+| `POST /api/comex/import-processes/:id/approve` (G11-COMEX) | `D-K-COMEX` | `import_processes.created_by` |
+
+Duas decisões de julgamento, com o argumento:
+
+1. **`role = 'admin'` NÃO isenta** — única regra do ERP sem curto-circuito de
+   admin. RBAC e alçada respondem a *"tem privilégio?"*, e privilégio é
+   concedível; segregação responde a *"é a mesma pessoa?"*, e identidade não
+   é. Exceção para `admin` não seria estreita: seria o cancelamento da regra,
+   porque `admin` é a conta que opera o sistema.
+2. **Solicitante desconhecido não bloqueia.** `purchase_orders.requester_id`
+   é `NULL`-able (0 nulos hoje); bloquear por `NULL` tornaria pedidos legados
+   inaprováveis para sempre, sem remediação.
+
+**Sem migration.** Nenhuma coluna nova foi necessária.
+
+### 🔴 O que o dono precisa saber ANTES de aplicar
+
+Verificado no banco (somente leitura), não estimado: existem **2 usuários
+ativos** e **apenas 1 capaz de aprovar compra** — o próprio `admin`, autor de
+18/18 pedidos, 13/13 requisições e 4/4 importações, com **7 de 7 requisições
+auto-aprovadas** (`approved_by = requester_id = 1`). Com a regra ativa e sem
+novo cadastro, **nenhuma compra é aprovável**. Ação necessária:
+**Administração → Perfis de Acesso**, criar um segundo aprovador com
+`requisicoes: approve` + `compras: operate` (+ `diretor: operate` se for
+assinar alçada/importação).
+
+## 2. Arquivos alterados
+
+**Código (6):**
+- `server/src/shared/domain/segregationOfDuties.ts` *(novo)*
+- `server/src/modules/purchaseRequisitions/application/use-cases/ChangePurchaseRequisitionStatusUseCase.ts`
+- `server/src/modules/purchases/application/use-cases/ChangePurchaseStatusUseCase.ts`
+- `server/src/modules/purchases/application/use-cases/ApprovePurchaseUseCase.ts`
+- `server/src/modules/comex/application/use-cases/ApproveImportProcessUseCase.ts`
+- `server/tests/unit/purchase-segregation-of-duties.test.ts` *(novo, 18 testes)*
+
+Nenhum controller, rota, model ou migration foi tocado.
+
+## 3. Documentações atualizadas
+
+- `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` — decisão **D-K**
+  em §4 (mesmo formato de D-A…D-J), critério da §5 marcado `[x]` com a
+  ressalva operacional, e linha nova na tabela de execução da §6.
+- `docs/arquitetura/API.md` — nova seção *Segregação de função na compra
+  (D-K)* com o corpo exato do 422, mais notas nos 4 endpoints.
+- `docs/suprimentos/01-COMPRAS.md` — seção nova com a tabela dos 4 pontos e
+  a ação operacional necessária.
+- `docs/suprimentos/02-COMEX.md` — seção nova sobre o gate da diretoria + D-K.
+- `docs/administrativo/04-PERFIS_ACESSO.md` — subseção *"A exceção onde
+  `admin` NÃO passa direto"* + perfil mínimo do segundo aprovador.
+- `docs/governance/TODO.md` — entrada D-K com entregue, impacto operacional e
+  achados.
+- JSDoc: cabeçalho completo em `segregationOfDuties.ts` e nos 4 use cases
+  (incluindo os `@throws` novos com o `details.rule` de cada um).
+
+## 4. Instruções de teste
+
+```bash
+cd server
+npm run typecheck                                   # limpo
+npx jest tests/unit/purchase-segregation-of-duties.test.ts   # 18/18
+npx jest tests/unit --maxWorkers=2                  # ver ressalva abaixo
+npx tsx -e "require('./app')"                       # sobe sem erro
+```
+
+Manual (exige 2 usuários — é justamente o ponto):
+1. Com o usuário A, criar uma requisição de compra e submetê-la (`pending`).
+2. Ainda como A, `PATCH /api/purchase-requisitions/:id/status`
+   `{ "status": "approved" }` → **422** com
+   `error.details.rule = "D-K-REQUISICAO"`; conferir no banco que `status`
+   continua `pending` e `approved_by` continua `NULL`.
+3. Com o usuário B (perfil `requisicoes: approve`), o mesmo `PATCH` → **200**.
+4. Repetir o par recusa/aprovação em `PUT /api/purchases/:id/status`
+   (`D-K-PEDIDO`), `POST /api/purchases/:id/approve` (`D-K-ALCADA`) e
+   `POST /api/comex/import-processes/:id/approve` (`D-K-COMEX`).
+5. Conferir que o solicitante **continua** conseguindo submeter, cancelar,
+   converter e enviar (`approved → sent`) — a regra só alcança aprovar.
+
+## 5. Riscos residuais
+
+1. 🔴 **Um único aprovador cadastrado** — detalhado acima. É o risco que pode
+   parar a fábrica, e é organizacional, não técnico.
+2. **`purchase_orders.requester_id` `NULL`-able** — recomendado
+   `ALTER TABLE purchase_orders ALTER COLUMN requester_id SET NOT NULL;` em
+   migration futura (não escrita, para não engrossar a fila de 8 pendentes).
+3. **Adjudicação de RFQ e recebimento não cobertos** — avaliados, com
+   argumento em `docs/governance/TODO.md`; entram com um "sim" do dono.
+4. **Nada exercitado por HTTP contra o Postgres.** Validação foi typecheck +
+   unitário + boot + conferência de nomes de coluna em
+   `information_schema.columns`. Mesmo débito do item 3 de
+   `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md`.
+   Atenuante: esta entrega **não escreve nada** — só decide se uma escrita já
+   existente acontece.
+5. **A UI ainda não sabe da regra** — o botão "Aprovar" continua visível para
+   o solicitante e só falha no clique. `isSelfApproval` está exportado
+   justamente para o front resolver isso; `client/` é escopo de outro agente.
+
+---
+
+# Handoff — G17: Plano Mestre de Produção (MPS)
+
+**Data:** 2026-08-10 · **Gap:** G17 (Onda 3) · **Decisão do dono:** **D-F**
+**Escopo:** backend (`server/`). Tela web **não** entregue.
+
+## 1. Resumo da feature
+
+Criada a camada de **Plano Mestre de Produção** entre a carteira de pedidos e a
+ordem de produção. Antes disto não existia ligação nenhuma entre "o cliente
+comprou" e "a fábrica produz": confirmar venda só reservava estoque
+(`ChangeSaleStatusUseCase`, G9), o MRP calculava exclusivamente contra a demanda
+**digitada no payload** (`GenerateMrpPlanUseCase` → `input.demands`), ninguém lia
+o saldo aberto dos pedidos e ninguém tratava `products.min_quantity` como
+demanda. A decisão de produção era memória do planejador.
+
+**O que a camada faz:** consolida
+`(carteira de pedidos + estoque mínimo + previsão manual)` contra
+`(saldo de planejamento + saldo a produzir das OPs abertas)`, registra a
+**decisão do planejador** linha a linha, e gera as OPs a partir dessa decisão,
+com rastro de origem.
+
+**O que ela deliberadamente NÃO faz:** disparar OP automática na confirmação da
+venda. A decisão D-F confirmou que existe PCP formal — há quem planeje —, e a
+recomendação do plano de ação é justamente esta camada. Na prática: a linha
+nasce `pending` com `planned_quantity = 0` mesmo com sugestão positiva, e
+firmar um plano sem nenhuma decisão é recusado (422).
+
+**Ciclo:** `draft → firm → released` (`canceled` a partir de `draft`/`firm`).
+
+**Endpoints** (`/api/production/master-plans`, RBAC `authorizeModule('mrp', …)`
+em 100% das rotas): `GET /`, `GET /:id`, `POST /`,
+`PATCH /:id/lines/:lineId`, `POST /:id/firm`, `POST /:id/release`,
+`POST /:id/cancel`.
+
+### Aderência ao que foi entregue hoje pelos outros gaps
+
+- **G1** — nenhuma segunda estrutura de produto foi criada. A liberação usa
+  `BomService.checkAvailability`, que já lê a fonte única.
+- **G7/G3/G9** — o saldo usado é o **saldo de planejamento**
+  (`max(0, products.quantity − quarentena/bloqueio − reservado)`), o mesmo que o
+  G7 impôs ao MRP; o desconto de quarentena delega a
+  `services/quarantineBalanceService` para não criar uma segunda definição.
+- **G16** — a liberação repete as **mesmas** validações dos outros dois
+  caminhos de criação de OP (produto ativo e fabricável, BOM ativa/G2, material
+  disponível) e usa a numeração serializada por advisory lock + `MAX`.
+- **`ChangeProductionOrderStatusUseCase`, `quality/` e `client/` não foram
+  tocados** (agentes concorrentes).
+
+## 2. Arquivos
+
+**Novos**
+
+```
+server/migrations/20260810-000037-create-master-production-plan-g17.cjs  (NAO APLICADA)
+server/src/models/MasterProductionPlan.ts
+server/src/models/MasterProductionPlanLine.ts
+server/src/modules/masterProduction/**  (domain, infrastructure, 6 use cases, controller, rotas, README)
+server/tests/unit/master-production-plan-g17.test.ts   (40 casos)
+```
+
+**Alterados**
+
+```
+server/app.ts                                        monta /api/production/master-plans
+server/src/models/index.ts                           registro + associacoes dos 2 models
+server/tests/unit/module-authorization-map.test.ts   guarda RBAC do modulo novo
+```
+
+## 3. Documentações atualizadas
+
+| Arquivo | O que entrou |
+|---|---|
+| `docs/arquitetura/API.md` | **§34 nova** — contrato completo, RBAC, ciclo de vida, a conta, `details.rule`, limitações |
+| `docs/producao/02-PCP.md` | seção "Plano Mestre (MPS) — IMPLEMENTADO", incluindo o registro honesto de que o fluxo desenhado ali era doc e não código |
+| `docs/projeto/04-USE_CASES.md` | **UC-72** com fluxo, tabela de validações e decisões em aberto |
+| `docs/database/DATABASE.md` | entrada 2026-08-10 G17 — as 2 tabelas, os literais de ENUM conferidos, e a pendência de `sales` sem data de entrega |
+| `docs/governance/TODO.md` | entrada 2026-08-10 G17 — entregue, 4 decisões de PCP pendentes, 5 limitações reportadas |
+| `server/src/modules/masterProduction/README.md` | visão do módulo para quem pegar depois |
+| JSDoc | cabeçalho de módulo em 100% dos arquivos novos; toda função pública documentada com `@param`/`@returns`/`@throws` |
+
+## 4. Instruções de teste
+
+### Verificação automática (roda hoje, sem migration)
+
+```bash
+cd server
+npm run typecheck
+npx jest tests/unit/master-production-plan-g17.test.ts --maxWorkers=2
+npx jest tests/unit --maxWorkers=2
+npx tsx -e "require('./app')"
+```
+
+### Teste funcional — só DEPOIS de aplicar a migration `20260810-000037`
+
+Pré-requisito: um produto `finished` **ativo**, com **BOM ativa** e material em
+estoque **liberado** (não em quarentena).
+
+1. **Demanda de venda.** Criar venda desse produto e confirmá-la
+   (`confirmed`). Não faturar.
+2. **Demanda de estoque mínimo.** Garantir `products.min_quantity > 0` em outro
+   produto fabricável.
+3. `POST /api/production/master-plans`
+   `{ "horizon_start": "2026-08-10", "horizon_end": "2026-09-10" }` → **201**.
+   **Conferir na resposta:** o produto vendido aparece com
+   `demand_sales_orders` = saldo não faturado; o outro aparece com
+   `demand_safety_stock` = `min_quantity`; **toda** linha nasce
+   `status: "pending"` e `planned_quantity: 0`.
+4. **Quarentena.** Colocar um lote do produto em `quarantine`, criar outro
+   plano e conferir que `supply_withheld` > 0 e que `supply_on_hand` **caiu** —
+   é a prova de que o plano não conta material não inspecionado.
+5. `POST /:id/firm` **antes de decidir qualquer linha** → **422** com
+   `details.rule = "G17"` e `details.decided_lines = 0`.
+6. `PATCH /:id/lines/:lineId` `{ "planned_quantity": 10 }` → linha `planned`.
+   Conferir que `suggested_quantity` **não** mudou.
+7. `POST /:id/firm` → **200**. Repetir o `PATCH` da linha → **422**
+   (`details.status = "firm"`), decisão congelada.
+8. `POST /:id/release` → **201**: uma OP por linha decidida, `order_number`
+   `OP-YYYY-NNNN`, `sales_order_id` **NULL**, e
+   `master_production_plan_lines.production_order_id` preenchido.
+9. **Tudo ou nada.** Repetir com um produto **sem BOM ativa** entre as linhas
+   decididas → **422** com `details.blocked_lines[].reason = "no_active_bom"` e
+   **nenhuma OP criada** (conferir `SELECT count(*) FROM production_orders`
+   antes e depois).
+10. **Contagem de linha** (regra prática do §3 da nota de classe de defeito):
+    `SELECT count(*) FROM master_production_plans;` — zero depois deste roteiro
+    significa que o caminho de escrita nunca executou com sucesso.
+
+## 5. Riscos residuais
+
+1. **Migration `20260810-000037` NÃO aplicada.** Enquanto não for, todo
+   endpoint deste módulo responde 500 (tabela inexistente). `up`/`down` foram
+   validados por dry-run com `queryInterface` dublê, não contra o Postgres.
+2. **Nada exercitado por HTTP contra o Postgres** — os 40 testes usam
+   repositório dublê. É o débito do item 3 de
+   `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md`, e
+   aqui ele **pesa mais que o normal**: diferente do G11/D-K, esta entrega
+   **escreve** (duas tabelas novas e uma OP).
+3. **4 decisões de PCP em aberto** (horizonte, lote mínimo, pedido que chega
+   depois do plano fechado, alçada de aprovação do PCP) — detalhadas em
+   `docs/governance/TODO.md`. Nenhuma foi inventada.
+4. **`sales` não tem data de entrega prometida.** A demanda é consolidada no
+   horizonte inteiro, **sem baldes de tempo**. O MPS "Semana 1 / Semana 2 /
+   Semana 3" que `docs/producao/02-PCP.md` desenha **não é possível** sem essa
+   coluna. É a limitação mais relevante desta entrega.
+5. **Concorrência entre linhas do mesmo plano** — `checkAvailability` não
+   participa da transação e a reserva só ocorre em `released`; duas linhas que
+   consomem o mesmo componente são avaliadas independentemente. Limitação
+   herdada, idêntica à do caminho do MRP.
+6. **Sem tela** (`client/`) — o planejador só acessa por API hoje.
+7. **Numeração `MPS-YYYY-NNNN`** usa `pg_advisory_xact_lock(41002, ano)`; o
+   `classid` `41001` já é da OP. Se alguém adicionar outra numeração
+   serializada, **não reutilizar esses dois valores**.

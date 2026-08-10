@@ -7,8 +7,16 @@ docs/tributario/
 ├── 00-README.md                  <- Este arquivo (visao geral)
 ├── 01-REGIMES.md                 <- Regimes tributarios (SN, LP, LR)
 ├── 02-ICMS_ESTADOS.md            <- ICMS por estado, NCM, CFOP, importacao
-└── 03-RECEITA_FEDERAL.md         <- SPED, NFe, DCTF, eSocial, Reinf
+├── 03-RECEITA_FEDERAL.md         <- SPED, NFe, DCTF, eSocial, Reinf
+└── 04-BLOCO_K.md                 <- Bloco K da EFD (producao/estoque por OP) — NOVO 2026-08-10
 ```
+
+> **Bloco K (`04-BLOCO_K.md`)** — a Evok Audio e CNAE 2640-0/00 (divisao 26) e
+> esta obrigada desde **01/01/2019** (Ajuste SINIEF 2/09, cl. 3a §7o III). O
+> §10 mantem o **Livro modelo 3** obrigatorio enquanto nao houver escrituracao
+> completa, e ele exige consumo e producao **por ordem de producao**. O ERP ja
+> **registra** o dado (gap G4, 2026-08-10); a **geracao do arquivo ainda nao foi
+> iniciada**.
 
 ## Os 3 Regimes dos Clientes
 

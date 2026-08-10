@@ -7,6 +7,21 @@
 import { z } from 'zod';
 import { ValidationError } from '../../../../errors';
 
+/**
+ * Custo de mao-de-obra + operacao por hora produtiva do centro (BRL/h).
+ *
+ * A coluna `work_centers.cost_per_hour` existe desde o custeio real de
+ * producao, mas **nunca teve caminho de configuracao** — os schemas eram
+ * `.strict()` e nao a incluiam, entao so dava para altera-la por SQL direto.
+ * Isso virou impedimento com o gap G4 (2026-08-10): a conclusao da OP passou a
+ * exigir taxa horaria resolvivel (`G4-LABOR-RATE-MISSING`), e uma regra
+ * bloqueante sem caminho de remediacao pelo sistema seria inexequivel.
+ *
+ * Aceita `0` (centro sem custo atribuido) — a decisao de recusar zero e da
+ * regra de negocio do G4, na conclusao da OP, nao da validacao de entrada.
+ */
+const costPerHourSchema = z.coerce.number().min(0).max(1_000_000);
+
 export const createWorkCenterSchema = z.object({
   code: z.string().trim().min(1).max(30),
   name: z.string().trim().min(1).max(100),
@@ -14,6 +29,7 @@ export const createWorkCenterSchema = z.object({
   machines_count: z.coerce.number().int().min(1).default(1),
   capacity_hours_per_day: z.coerce.number().gt(0).lte(24).default(8),
   efficiency_factor: z.coerce.number().gt(0).lte(1).default(1),
+  cost_per_hour: costPerHourSchema.default(0),
 }).strict();
 
 export const updateWorkCenterSchema = z.object({
@@ -23,6 +39,7 @@ export const updateWorkCenterSchema = z.object({
   machines_count: z.coerce.number().int().min(1).optional(),
   capacity_hours_per_day: z.coerce.number().gt(0).lte(24).optional(),
   efficiency_factor: z.coerce.number().gt(0).lte(1).optional(),
+  cost_per_hour: costPerHourSchema.optional(),
   active: z.coerce.boolean().optional(),
 }).strict();
 

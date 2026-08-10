@@ -25,7 +25,17 @@ describe('Use cases de não conformidades', () => {
     await expect(useCase.execute({ id: 999 })).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('define closed_by e closed_at ao atualizar status para closed', async () => {
+  /**
+   * ⚠️ Este teste se chamava "define closed_by e closed_at" e **nunca
+   * verificou a data** — só `status` e `closed_by`. Foi por isso que o
+   * defeito atravessou a suíte: o use case gravava `closed_at`, chave que não
+   * é atributo do model, e o Sequelize a descartava em silêncio. O nome
+   * anunciava a garantia; a asserção não a cobria.
+   *
+   * A coluna real é `closed_date` (`DATE`). Ver
+   * `docs/governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md` §3.
+   */
+  it('define closed_by e closed_date (a coluna REAL) ao atualizar status para closed', async () => {
     const nonConformitiesRepository = {
       update: jest.fn(async () => 1),
       findById: jest.fn(async () => ({ id: 1, status: 'closed' })),
@@ -35,10 +45,10 @@ describe('Use cases de não conformidades', () => {
 
     await useCase.execute({ id: 1, body: { status: 'closed' }, closedBy: 42 });
 
-    expect(nonConformitiesRepository.update).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ status: 'closed', closed_by: 42 })
-    );
+    const [, payload] = nonConformitiesRepository.update.mock.calls[0] as any;
+    expect(payload).toMatchObject({ status: 'closed', closed_by: 42 });
+    expect(payload.closed_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(payload).not.toHaveProperty('closed_at');
   });
 
   it('lança NotFoundError ao atualizar não conformidade inexistente', async () => {

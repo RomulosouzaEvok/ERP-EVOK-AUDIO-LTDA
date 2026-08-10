@@ -5,6 +5,7 @@
  */
 
 import type { Request, Response, NextFunction } from 'express';
+import { AppError } from '../../../../errors';
 const { logAction }: any = require('../../../../services/auditLogService');
 import SequelizeProductionOrderRepository = require('../../infrastructure/sequelize/SequelizeProductionOrderRepository');
 import ListProductionOrdersUseCase = require('../../application/use-cases/ListProductionOrdersUseCase');
@@ -28,7 +29,24 @@ const {
 const productionOrderRepository = new SequelizeProductionOrderRepository();
 
 /**
- * Trata erros de dominio no envelope atual e delega erros internos.
+ * Trata erros do modulo e delega erros internos.
+ *
+ * **Gap G4 (2026-08-10):** todo `AppError` passa a ser delegado ao
+ * `errorHandler` central, que serializa `{ success: false, error: { code,
+ * message, details } }`. O envelope anterior (`error: '<mensagem>'`)
+ * **descartava `details`** — e com ele o `details.rule` das regras de negocio
+ * (`G2`, `G4-TRACKING-REQUIRED`, `G4-LABOR-RATE-MISSING`, ...). Sem o codigo,
+ * o cliente so teria a mensagem em portugues para casar por substring, que e
+ * exatamente o acoplamento fragil que os codigos de regra existem para evitar.
+ *
+ * Compatibilidade verificada: `client/src/api/httpClient.ts`
+ * (`extractApiErrorMessage`) ja aceita as duas formas — `error` string ou
+ * objeto com `message` — e o helper `errorText` dos testes de integracao
+ * tambem. Nenhuma tela precisa mudar.
+ *
+ * Erros com `statusCode` que NAO sao `AppError` (ex.: os 404 sinteticos do
+ * `bomService`) continuam no envelope antigo, para nao alterar contrato de
+ * quem nao carrega `details`.
  *
  * @param error - Erro capturado.
  * @param res - Response Express.
@@ -36,6 +54,10 @@ const productionOrderRepository = new SequelizeProductionOrderRepository();
  * @returns void.
  */
 function handleError(error: any, res: Response, next: NextFunction): void {
+  if (error instanceof AppError) {
+    next(error);
+    return;
+  }
   if (error.statusCode) {
     res.status(error.statusCode).json({ success: false, error: error.message });
     return;

@@ -187,6 +187,44 @@ Campo disponível no cadastro, **sem travar** a criação — não se aplica a
 pessoa física e a empresa não quer bloquear cadastro por causa dele. A coluna
 já existe no banco; falta expô-la na tela e no schema de criação.
 
+### ✅ D-K — Segregação de função na compra: **aprovador ≠ solicitante**
+Resposta direta do dono em 2026-08-10 à pergunta *"aprovador ≠ solicitante?"*:
+**"Sim, aprovador ≠ solicitante"**. Isto reverte a ressalva registrada em
+**D-C** ("não foi pedida segregação; fica como recomendação de controle
+interno") e **fecha o critério de pronto da §5** que estava aberto de
+propósito desde o G11.
+
+Alcance: os **4 pontos de aprovação** da cadeia, não um só —
+requisição (`purchase_requisitions.requester_id`), pedido
+(`purchase_orders.requester_id`), alçada da diretoria do G11
+(`purchase_order_approvals`) e gate do COMEX (`import_process_approvals`,
+comparado com `import_processes.created_by`). Aprovador **sempre** de
+`req.user.id` (JWT). Cada ponto tem seu `details.rule` próprio
+(`D-K-REQUISICAO`, `D-K-PEDIDO`, `D-K-ALCADA`, `D-K-COMEX`).
+
+Duas decisões de implementação que precisam do aval do dono:
+
+1. ⚠️ **`role = 'admin'` NÃO isenta.** É a única regra do ERP sem
+   curto-circuito de admin. Argumento: RBAC e alçada respondem a
+   *"esta pessoa tem privilégio para isso?"* — e privilégio é concedível;
+   segregação responde a *"esta é a mesma pessoa?"* — e identidade não é.
+   Uma exceção para `admin` não seria estreita, seria o cancelamento da
+   regra, porque `admin` é justamente a conta que opera o sistema hoje.
+2. 🔴 **Impacto operacional imediato — verificado no banco, não estimado.**
+   Existem **2 usuários ativos**: `admin` (id 1) e um Analista de
+   Laboratório sem nenhum módulo de compras. **Um único usuário no sistema
+   inteiro é capaz de aprovar compra**, e é o mesmo que cria tudo: 18 de 18
+   pedidos, 4 de 4 processos de importação e 13 de 13 requisições têm
+   `requester_id = 1`; **7 das 7 requisições aprovadas foram
+   auto-aprovadas** (`approved_by = requester_id = 1`) — que é exatamente o
+   furo que a regra fecha, agora com prova documental.
+   Consequência: **assim que este código entrar em produção, nenhuma compra
+   será aprovável** até existir um segundo usuário habilitado. A regra está
+   correta; falta a contrapartida organizacional. **Ação necessária antes de
+   aplicar:** cadastrar um segundo aprovador em Administração → Perfis de
+   Acesso (`requisicoes: approve` + `compras: operate`, e `diretor` se for
+   aprovar alçada/COMEX).
+
 ### ✅ D-J — Conta a receber avulsa é caso legítimo
 Existe cobrança sem venda vinculada (reembolso, aluguel, venda de sucata).
 O caminho **permanece aberto** e não deve ser tratado como achado de
@@ -223,7 +261,10 @@ A cadeia só é considerada fechada quando, num teste ponta a ponta com dado rea
 - [ ] Reserva de material de uma ordem não pode ser consumida por outra
 - [ ] Uma única estrutura de produto governa planejamento e consumo
 - [ ] Nenhum produto sai sem liberação de qualidade registrada, com evidência
-- [ ] Quem aprova uma compra não é quem a solicitou
+- [x] Quem aprova uma compra não é quem a solicitou — **fechado em 2026-08-10
+      (decisão D-K)** nos 4 pontos de aprovação da cadeia, sem exceção para
+      `admin`. ⚠️ Depende de uma ação operacional para não travar a fábrica:
+      hoje existe **1 único usuário capaz de aprovar** (ver D-K, item 2)
 - [ ] Todo passo obrigatório do processo é obrigatório **no código**, não só na norma escrita
 - [ ] Nenhum dado é registrado "decorativamente" — ou bloqueia algo, ou é removido
 - [ ] Documentação, banco de dados e código descrevem o mesmo processo
@@ -246,3 +287,4 @@ A cadeia só é considerada fechada quando, num teste ponta a ponta com dado rea
 | 2026-08-09 | 1 | **G15** | ✅ Corrigido — estados mortos **acionados** (não removidos): `ReceivePurchaseItemsUseCase` passou a recalcular o status da requisição de origem a cada recebimento, na mesma transação e com lock pessimista. Regra pura isolada em `modules/purchases/application/services/syncRequisitionReceiptStatus.ts`: `received` ⇔ todos os pedidos ativos da requisição `received` **e** nenhum item com saldo `pending`; `partial` ⇔ chegou algo mas não tudo; pedido `canceled` ignorado. **Requisição `approved` com saldo NÃO é tocada** — `approved` é o estado que autoriza cotar/converter o restante (G12 bloqueia `partial`/`received`), então empurrá-la para `partial` travaria a compra do saldo remanescente; quando o último saldo vira pedido ela passa a `ordered` e o recebimento fecha em `received`. `PATCH /:id/status` continua sem alcançar `ordered`/`partial`/`received` (fatos derivados, não declaráveis à mão). | *(working tree)* |
 | 2026-08-10 | 3 | **G11** | ✅ Implementado — alçada de aprovação de compra **por ORIGEM** (decisão D-C): nacional ≤ R$ 500.000 segue direto, acima exige `diretor`; **importação exige `diretor` em qualquer valor**. Regra em `modules/purchases/domain/constants.ts`; aprovação registrada em `purchase_order_approvals` (migration `20260810-000029`, **NÃO aplicada** — mesmo padrão de `jur_contract_approvals`/RF-JUR-003, `approver_user_id` do JWT, `approver_role` do RBAC, UNIQUE por papel). Origem efetiva = `purchase_orders.origin='import'` **OU** `suppliers.is_foreign=true` (escalation-only: o campo do pedido só endurece a regra). Valor comparado = `total_amount` + `freight_value`, sem impostos. Pós-aprovação, `supplier_id`/`freight_value`/`origin` ficam congelados. **Segregação de função NÃO implementada** — não foi pedida (ver §4 D-C); permanece como risco residual de controle interno. **Importação registrada em `import_processes` (COMEX) continua fora da alçada** — não passa por `purchase_orders`; falta decisão do dono sobre em que ponto do ciclo COMEX a diretoria aprova (ver §4, pendências). | *(working tree)* |
 | 2026-08-10 | 3 | **G9** | ✅ Implementado (decisão D-A) — **a baixa de estoque da venda saiu da confirmação do pedido e passou para a autorização da NF-e**; confirmar passou a **reservar**. Base: Ajuste SINIEF 07/05, cláusula 1ª §1º e cláusula 9ª §1º (a nota é autorizada antes do fato gerador e a mercadoria só transita depois da autorização de uso). `production_order_reservations` foi generalizada exatamente como o cabeçalho da migration do G3 previu — `production_order_id` nullable, `sale_id` novo, CHECK de exatamente-um-dono, índices únicos parciais por dono (migration `20260810-000030`, **NÃO aplicada**). Baixa proporcional à quantidade faturada em `services/saleStockService.ts`, chamada pelos dois caminhos de autorização (síncrono e assíncrono/webhook) na MESMA transação que incrementa `invoiced_quantity`. Cancelamento libera a reserva e devolve só `invoiced_quantity`. **Migração do dado: 1 único pedido** no banco real (venda #10, 1 un. do produto #25) — confirma na prática a decisão **D-E**; backfill devolve o saldo a `products.quantity`/ACABADOS e converte em reserva. Desarmada de carona uma bomba do G3: `inventory_movements.reference_type` `'reservation'`/`'reservation_release'` **não existem no ENUM** e faziam toda reserva morrer em 500 — reserva deixou de gravar movimento (não altera `products.quantity`). Corrigido também o estoque fantasma ao cancelar orçamento. | *(working tree)* |
+| 2026-08-10 | 3 | **D-K** | ✅ Implementado — **segregação de função na compra: quem solicita não aprova** (decisão D-K). Regra única em `shared/domain/segregationOfDuties.ts`, aplicada nos **4** pontos de aprovação da cadeia com `details.rule` próprio: requisição (`D-K-REQUISICAO`), pedido (`D-K-PEDIDO`), alçada da diretoria/G11 (`D-K-ALCADA`) e gate do COMEX (`D-K-COMEX`). Aprovador sempre de `req.user.id` (JWT); checagem **antes de qualquer escrita** (nada de estado parcial); mensagem prescritiva com `details.what_to_do`. ⚠️ **`role = 'admin'` não isenta** — única regra do ERP sem curto-circuito de admin (identidade ≠ privilégio). **Sem migration.** 🔴 **Impacto operacional verificado no banco:** 1 único usuário ativo capaz de aprovar compra (o próprio `admin`), autor de 18/18 pedidos, 13/13 requisições e 4/4 importações, com **7/7 requisições auto-aprovadas** — exige cadastrar um segundo aprovador antes de aplicar (ver §4, D-K item 2). Achado registrado: `purchase_orders.requester_id` é `NULL`-able (0 nulos hoje) e por isso não bloqueia quando nulo — recomendado `SET NOT NULL` em migration futura. Pontos avaliados e **não** implementados por não terem sido autorizados: adjudicação de RFQ (`POST /api/rfqs/:id/award`) e recebimento (`POST /api/purchases/:id/receive`). | *(working tree)* |

@@ -19,6 +19,8 @@ type UpdateWorkCenterInput = {
   machines_count?: number;
   capacity_hours_per_day?: number;
   efficiency_factor?: number;
+  /** Custo BRL/h do centro; base do custeio real de mao-de-obra (gap G4). */
+  cost_per_hour?: number;
   active?: boolean;
 };
 

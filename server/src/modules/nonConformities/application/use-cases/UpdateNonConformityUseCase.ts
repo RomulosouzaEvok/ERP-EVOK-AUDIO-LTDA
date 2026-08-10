@@ -8,10 +8,21 @@ import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError } from '../../../../errors';
 import NonConformitiesRepository from '../../domain/repositories/NonConformitiesRepository';
 import { sequelize } from '../../../../config/database';
+import { CLOSED_STATUS, buildClosureFields } from '../../domain/closure';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { applySupplierReturn } = require('../services/SupplierReturnHandler');
 
+/**
+ * Campos que o PUT aceita do corpo da requisicao.
+ *
+ * `closed_by` foi REMOVIDO desta lista em 2026-08-10: ele identifica QUEM
+ * encerrou a RNC e por isso vem sempre do JWT (`closedBy`, resolvido no
+ * controller a partir de `req.user.id`), nunca do body — mesmo padrao
+ * anti-spoofing de identidade da remediacao 3.1 (2026-08-02). Enquanto
+ * estava aqui, qualquer usuario podia atribuir o encerramento a outra
+ * pessoa mandando `closed_by` no payload.
+ */
 const ALLOWED_FIELDS = [
   'description',
   'severity',
@@ -21,8 +32,7 @@ const ALLOWED_FIELDS = [
   'root_cause',
   'corrective_action',
   'status',
-  'responsible_id',
-  'closed_by'
+  'responsible_id'
 ];
 const RETURN_TO_SUPPLIER_ACTION = 'return_supplier';
 
@@ -65,9 +75,15 @@ class UpdateNonConformityUseCase extends UseCase<UpdateNonConformityInput, any> 
     for (const field of ALLOWED_FIELDS) {
       if (body[field] !== undefined) updateData[field] = body[field];
     }
-    if (body.status === 'closed') {
-      updateData.closed_by = closedBy;
-      updateData.closed_at = new Date();
+    if (body.status === CLOSED_STATUS) {
+      // `closed_date`, NAO `closed_at`. A coluna real de `non_conformities` e
+      // `closed_date DATE` — `closed_at` nao existe, e o Sequelize DESCARTA em
+      // silencio uma chave que nao e atributo do model: o UPDATE saia sem ela,
+      // a API respondia 200 e toda RNC fechada ficava sem data de fechamento
+      // (ISO 9001 §8.7/§10.2 exigem a data de encerramento; sem ela nao ha como
+      // medir tempo de tratativa nem provar tempestividade em auditoria).
+      // Ver `docs/governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md` §3.
+      Object.assign(updateData, buildClosureFields(closedBy));
     }
 
     const current = await this.nonConformitiesRepository.findById(id);

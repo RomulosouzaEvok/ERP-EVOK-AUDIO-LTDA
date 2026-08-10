@@ -2,6 +2,60 @@ import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi'
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
+/**
+ * Cria, inicia e conclui um apontamento de etapa da OP.
+ *
+ * Desde o gap G4 (2026-08-10) nenhuma OP conclui sem apontamento
+ * (`G4-TRACKING-REQUIRED`) — este helper e o que mantem os testes de refugo
+ * medindo REFUGO, e nao o gate novo.
+ *
+ * A etapa e criada a mao (sem `production_route_step_id`), portanto o custeio
+ * cai no fallback global `production_cost_settings.default_labor_rate_per_hour`.
+ * Se ele estiver zerado, a conclusao falha com `G4-LABOR-RATE-MISSING` — ver
+ * `docs/producao/04-ROTEIROS.md` §7 e `docs/governance/TODO.md`.
+ *
+ * @param token - JWT do usuario de teste.
+ * @param orderId - Id da OP.
+ * @param quantityGood - Quantidade boa apontada na etapa.
+ * @returns Promise resolvida com a etapa concluida.
+ */
+async function apontarEtapa(token: string, orderId: number, quantityGood: number): Promise<void> {
+  // A liberacao da OP ja materializa as etapas quando o produto tem roteiro
+  // ATIVO. Reaproveitar o que existe evita colidir com o indice unico
+  // `(production_order_id, sequence)` — que viraria 500 em vez de falha
+  // legivel — e mantem o teste valido nos dois cenarios.
+  const existing = await api()
+    .get(`/api/production-orders/${orderId}/tracking`)
+    .set('Authorization', `Bearer ${token}`);
+  expect(existing.status).toBe(200);
+
+  const steps: any[] = existing.body.data ?? [];
+  if (steps.length === 0) {
+    const created = await api()
+      .post(`/api/production-orders/${orderId}/tracking`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sequence: 1, notes: 'Apontamento do teste de refugo' });
+    expect(created.status).toBe(201);
+    steps.push(created.body.data);
+  }
+
+  for (const step of steps) {
+    if (step.status === 'completed' || step.status === 'skipped') continue;
+
+    const started = await api()
+      .post(`/api/production-orders/tracking/${step.id}/start`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    expect(started.status).toBe(200);
+
+    const finished = await api()
+      .post(`/api/production-orders/tracking/${step.id}/complete`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ quantity_good: quantityGood, quantity_scrapped: 0 });
+    expect(finished.status).toBe(200);
+  }
+}
+
 describeIntegration('Registro de refugo na conclusao de ordem de producao', () => {
   /**
    * Conclui uma OP informando quantity_scrapped/scrap_reason e confirma,
@@ -33,6 +87,10 @@ describeIntegration('Registro de refugo na conclusao de ordem de producao', () =
       .set('Authorization', `Bearer ${token}`)
       .send({ status: 'in_progress' });
     expect(started.status).toBe(200);
+
+    // G4: sem apontamento concluido a OP nao fecha. A etapa aponta 7 boas, a
+    // mesma quantidade produzida declarada abaixo.
+    await apontarEtapa(token, orderId, 7);
 
     const completed = await api()
       .put(`/api/production-orders/${orderId}/status`)

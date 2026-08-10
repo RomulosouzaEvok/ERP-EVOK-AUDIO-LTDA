@@ -19,6 +19,8 @@ type CreateWorkCenterInput = {
   machines_count?: number;
   capacity_hours_per_day?: number;
   efficiency_factor?: number;
+  /** Custo BRL/h do centro; base do custeio real de mao-de-obra (gap G4). */
+  cost_per_hour?: number;
   transaction?: any;
 };
 
@@ -45,6 +47,7 @@ class CreateWorkCenterUseCase extends UseCase<CreateWorkCenterInput, any> {
       machines_count: input.machines_count ?? 1,
       capacity_hours_per_day: input.capacity_hours_per_day ?? 8,
       efficiency_factor: input.efficiency_factor ?? 1,
+      cost_per_hour: input.cost_per_hour ?? 0,
     }, input.transaction);
   }
 }

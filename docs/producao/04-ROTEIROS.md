@@ -139,6 +139,16 @@ que amarre uma OP a uma revisão específica de roteiro. Relatórios derivados
 a OP à revisão vigente na liberação é decisão do dono do produto — registrada em
 `docs/governance/TODO.md`.
 
+> **Mitigação parcial entregue no G4 (2026-08-10), sem migration.** Ao liberar
+> a OP, cada etapa do roteiro ativo vira uma linha de
+> `production_order_tracking` **já carregando o `production_route_step_id`
+> daquela revisão**. Como roteiro ativo é imutável e a revisão substituída fica
+> `superseded` com as etapas intactas, o processo **como executado** passa a ser
+> reconstituível a partir dos próprios apontamentos.
+> **O que a mitigação NÃO cobre:** OP liberada quando o produto ainda não tinha
+> roteiro ativo, e apontamento criado à mão sem `production_route_step_id`.
+> Cobrir 100% dos casos continua exigindo a coluna em `production_orders`.
+
 Só pode existir **um roteiro ativo por produto** (garantido em transação e por
 índice único parcial no banco, migration `20260810-000034`).
 
@@ -187,6 +197,100 @@ SPED Fiscal, Ajuste SINIEF 2/09 cláusula 3ª §7º III/§10; ver
 `docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`, Decisão 4).
 Exigir apontamento sem poder cadastrar roteiro seria regra inexequível: o
 operador não teria contra o que apontar.
+
+---
+
+## Apontamento obrigatório para concluir a OP — gap G4 (2026-08-10)
+
+> **É LEI, não escolha de processo.** Ajuste SINIEF 2/09, cláusula 3ª §7º III
+> (redação do Ajuste SINIEF 46/22): Bloco K desde **01/01/2019** para os demais
+> estabelecimentos industriais das divisões 10 a 32 — alto-falante é CNAE
+> **2640-0/00**, divisão 26. O **§10** é o dispositivo decisivo: *só* a
+> escrituração completa desobriga o **Livro Registro de Controle da Produção e
+> do Estoque (modelo 3)**, que exige consumo e produção **por ordem de
+> produção**. O **§13** deixa explícito que a escrituração simplificada da Lei
+> 13.874/2019 dispensa *transmitir*, e não *registrar*: o dado tem de existir no
+> ERP de qualquer forma.
+>
+> Em paralelo, o RIR/2018 condiciona a avaliação do estoque pelo custo real à
+> manutenção de **custo integrado e coordenado com a escrituração**. Produto
+> acabado valorizado com mão de obra R$ 0,00 não é custo real — é custo
+> incompleto, e a alternativa legal é o arbitramento.
+>
+> Fonte, artigos e as ressalvas `[NÃO CONFIRMADO NA FONTE]` (número do artigo
+> do RIR/2018, alcance do Ajuste SINIEF 31/24, CNAE efetivamente escriturado):
+> `docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`, Decisão 4.
+> **Essas ressalvas continuam pendentes de confirmação pelo contador** e não
+> foram tratadas aqui como norma.
+
+### O que mudou na prática
+
+| Antes (até 2026-08-09) | Depois (G4) |
+|---|---|
+| OP sem nenhum apontamento concluía normalmente | conclusão bloqueada (`G4-TRACKING-REQUIRED`) |
+| todas as etapas `skipped` = sem produção apontada, e concluía | bloqueada (`G4-TRACKING-NO-COMPLETED`) |
+| etapa concluída sem `started_at`/`finished_at` era **pulada em silêncio** no custeio | bloqueada (`G4-TRACKING-TIME-MISSING`) |
+| sem taxa horária, o custo de mão de obra saía **zero sem erro** | bloqueada (`G4-LABOR-RATE-MISSING`) |
+| operador tinha de criar cada etapa de apontamento à mão | liberar a OP **materializa** as etapas do roteiro ativo |
+
+### O fluxo completo no chão de fábrica
+
+```
+1. Engenharia/PCP cadastra o roteiro          Produção > Roteiros de Fabricação
+   (etapa -> centro de trabalho COM custo/hora)
+2. Gerência libera o roteiro (active)
+3. PCP cria a OP e LIBERA
+   └─> o sistema cria uma linha de apontamento `pending` por etapa ativa
+4. Chão de fábrica inicia e conclui cada etapa Produção > Chão de Fábrica
+   └─> `started_at`, `finished_at`, `quantity_good`, `quantity_scrapped`
+5. PCP conclui a OP
+   └─> consumo por lote + entrada do acabado + custo real (material + MO + overhead)
+```
+
+Sem roteiro ativo o fluxo continua possível: as etapas são criadas manualmente
+em Chão de Fábrica. A liberação **nunca** é travada por falta de roteiro — parar
+a fábrica por um cadastro que ainda dá tempo de fazer seria pior que o problema.
+
+### Pré-requisito de configuração que trava tudo se for esquecido
+
+O custo de mão de obra sai de **horas apontadas × taxa horária**. A taxa é
+resolvida nesta ordem:
+
+1. `work_centers.cost_per_hour` do centro da etapa de roteiro;
+2. na ausência do centro, `production_cost_settings.default_labor_rate_per_hour`.
+
+Se **nenhuma das duas** for positiva, a conclusão falha com
+`G4-LABOR-RATE-MISSING`. Estado verificado no banco de dev em 2026-08-10: os
+dois valores estavam **zerados**, e o único centro cadastrado (`MONTAGEM`)
+tinha `cost_per_hour = 0`.
+
+- ✅ `cost_per_hour` passou a ser configurável em `POST`/`PUT /api/work-centers`
+  (entregue junto com o G4 — antes só existia por SQL direto).
+- ⚠️ `default_labor_rate_per_hour` **continua sem API**. Etapa de apontamento
+  sem centro de trabalho depende dele. Registrado em `docs/governance/TODO.md`.
+
+### Janela de transição
+
+`PRODUCTION_TRACKING_REQUIRED=warn` registra a pendência em log estruturado e
+deixa concluir, para não travar o chão de fábrica no dia 1. Nesse modo a
+liberação **não** materializa etapas — materializar sem bloquear só criaria
+etapas pendentes que a regra de "etapa em aberto" barraria assim mesmo.
+
+Ausente ou com valor inválido, o modo é `block`: a lei vale por padrão, e um
+typo (`blok`, `false`) nunca desliga a regra em silêncio — cai em `block` e loga
+`G4-TRACKING-MODE-INVALID`.
+
+**`warn` é temporário por desenho e precisa estar desligado no Go-Live.**
+
+### Duas regras que valem sempre, independentemente do modo
+
+`G4-TRACKING-STEP-OPEN` (etapa em aberto) e `G4-TRACKING-QTY-EXCEEDS`
+(`quantity_produced` acima do apontado na última etapa) são anteriores ao G4 —
+vieram da reconciliação apontamento × OP (bloqueador 1.3) — e por isso não fazem
+parte da janela de transição.
+
+Contrato de erro completo: `docs/arquitetura/API.md` §10.
+Regras puras: `server/src/modules/production/domain/productionTrackingRules.ts`.
 
 ---
 

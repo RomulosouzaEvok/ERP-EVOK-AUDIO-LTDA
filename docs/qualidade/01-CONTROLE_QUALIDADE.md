@@ -195,7 +195,57 @@ em lotes `quarantine`/`blocked`, sempre com `max(0, físico − retido)`. O
 saldo **físico** continua sendo `products.quantity` (o material está lá, é
 verdade) — o que mudou é o número que o planejamento enxerga.
 
-### 4.5 ⚠️ O que o ERP **não** decide (pendência da Engenharia da Qualidade)
+### 4.5 Encerramento da RNC: data e responsável (corrigido em 2026-08-10)
+
+> **Achado §3 de
+> [`VARREDURA_ESCRITA_REAL_2026-08-10.md`](../governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md).**
+> Corrigido antes do Go-Live, e não depois, por um motivo simples: as 6 RNCs
+> do banco estavam **todas `open`**, então nada se perdeu ainda. Corrigir
+> agora custa nada; corrigir depois exigiria reconstituir uma data de
+> fechamento que ninguém tem.
+
+**O que estava errado.** `UpdateNonConformityUseCase` gravava `closed_at`.
+A coluna real de `non_conformities` é **`closed_date`** (`DATE`) — `closed_at`
+não existe. O Sequelize **descarta em silêncio** uma chave que não é atributo
+do model: o `UPDATE` era emitido sem ela, a API respondia `200` e o campo
+nunca era preenchido. Reprodução contra o PostgreSQL real:
+
+```
+ANTES  UPDATE "non_conformities" SET "status"=$1,"closed_by"=$2,"updated_at"=$3 WHERE "id" = $4
+DEPOIS UPDATE "non_conformities" SET "status"=$1,"closed_by"=$2,"closed_date"=$3,"updated_at"=$4 WHERE "id" = $5
+```
+
+Sem `closed_date` não há como medir tempo de tratativa nem provar
+tempestividade em auditoria — **ISO 9001:2015 §8.7** (controle de saídas não
+conformes) e **§10.2** (não conformidade e ação corretiva) exigem o registro
+do encerramento.
+
+**A segunda ocorrência, que a auditoria não tinha apontado.** Ao varrer o
+módulo apareceu o outro caminho de encerramento: `DELETE /api/quality/
+non-conformities/:id` (`CloseNonConformityUseCase`) gravava **apenas**
+`status = 'closed'` — sem data e **sem responsável**. Sintoma idêntico, rota
+diferente, e justamente a mais fácil de acionar por engano.
+
+**Como ficou.** Os dois caminhos passaram a derivar os campos de encerramento
+da mesma função (`modules/nonConformities/domain/closure.ts`), e um teste
+compara os dois payloads para que não voltem a divergir:
+
+| Rota | Efeito no encerramento |
+|---|---|
+| `PUT /api/quality/non-conformities/:id` com `status: 'closed'` | grava `status`, `closed_date` (`YYYY-MM-DD`) e `closed_by` |
+| `DELETE /api/quality/non-conformities/:id` | idem — antes gravava só o `status` |
+
+**`closed_by` vem do JWT, nunca do body.** Ele estava em `ALLOWED_FIELDS` do
+`PUT`, então bastava enviá-lo no payload para atribuir o encerramento a outra
+pessoa. Foi removido da lista — mesmo padrão anti-spoofing de identidade da
+remediação 3.1 (2026-08-02).
+
+> Nota de fuso: `closed_date` usa a mesma convenção de "hoje" já adotada em
+> ~90 pontos do backend (`toISOString().slice(0, 10)`, portanto UTC). Um
+> encerramento feito depois das 21h (UTC-3) grava a data do dia seguinte. A
+> troca, se for decidida, é num único ponto (`domain/closure.ts`).
+
+### 4.6 ⚠️ O que o ERP **não** decide (pendência da Engenharia da Qualidade)
 
 **A tabela AQL da seção 1 deste documento é ilustrativa e NÃO é executada
 pelo sistema.** O ERP não tem motor de amostragem Ac/Re, e isso é

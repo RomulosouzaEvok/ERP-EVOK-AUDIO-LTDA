@@ -2614,4 +2614,210 @@ guarda de apontamento; todo teste de erro afirma `details.rule`).
 
 ---
 
+## UC-72 [IMPLEMENTADO — gap G17, 2026-08-10]: Planejar a Produção pelo Plano Mestre (MPS)
+
+**Ator:** PCP / Planejador (`mrp:operate`) 🔒
+**Módulo:** `server/src/modules/masterProduction/`, base URL
+`/api/production/master-plans` — contrato em `docs/arquitetura/API.md` §34,
+visão de processo em `docs/producao/02-PCP.md`.
+**Decisão do dono:** **D-F** — *existe PCP formal, há quem planeje*
+(`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4).
+
+**Problema que fecha.** Não havia ligação nenhuma entre a carteira de pedidos e
+a fábrica. Conferido no código: confirmar venda só reservava estoque
+(`ChangeSaleStatusUseCase`, G9), o MRP calculava exclusivamente contra a demanda
+**digitada no payload** (`GenerateMrpPlanUseCase` → `input.demands`), ninguém
+lia o saldo aberto dos pedidos e ninguém tratava `products.min_quantity` como
+demanda. A ponte "o cliente comprou" → "a fábrica produz" era memória do
+planejador, sem registro de decisão nem rastro de origem na OP.
+
+> ⚠️ **A venda NÃO gera OP automática, e isso é a regra — não uma pendência.**
+> O padrão da indústria (e a decisão D-F) é a camada de plano mestre: o sistema
+> consolida a informação, **uma pessoa decide**, e a decisão registrada é o que
+> gera ordem. A linha do plano nasce `pending` com `planned_quantity = 0` mesmo
+> quando a sugestão calculada é positiva.
+
+### Fluxo principal
+
+1. **Consolidar** (`POST /api/production/master-plans`): o planejador declara o
+   horizonte (`horizon_start`/`horizon_end` — obrigatórios, sem default) e,
+   opcionalmente, uma previsão manual. O sistema fotografa a demanda e o
+   suprimento, e abre o plano em `draft`. `planner_id` vem do JWT.
+2. **Decidir** (`PATCH /:id/lines/:lineId`): para cada linha, o planejador
+   informa `planned_quantity` (produzir) ou `dismiss: true` (não produzir).
+   `dismissed` é registro de que **alguém olhou** — diferente de `pending`.
+3. **Firmar** (`POST /:id/firm`): congela a decisão. As linhas não mudam mais.
+4. **Liberar** (`POST /:id/release`): gera **uma OP por linha decidida**,
+   grava `production_order_id` na linha e leva o plano a `released`.
+
+### A conta consolidada
+
+| Componente | Fonte real |
+|---|---|
+| `demand_sales_orders` | `Σ (sale_items.quantity − invoiced_quantity)` das vendas `confirmed`/`partially_invoiced` |
+| `demand_safety_stock` | `products.min_quantity` |
+| `demand_forecast` | digitada no payload (não existe entidade de forecast no ERP) |
+| `supply_on_hand` | `max(0, products.quantity − quarentena/bloqueio − reservado)` |
+| `supply_in_production` | `Σ max(0, quantity − quantity_produced)` das OPs `planned`/`released`/`in_progress`/`paused` |
+
+`necessidade líquida = max(0, demanda bruta − saldo de planejamento − em produção)`.
+
+O saldo é o **de planejamento**, idêntico ao imposto pelo **G7** ao MRP e à
+disponibilidade de OP: material em quarentena e material reservado por OP/venda
+(**G3/G9**) não contam como disponível.
+
+### Validações e gatilhos
+
+Todo erro carrega `details.rule = "G17"`.
+
+| Regra | Resposta |
+|---|---|
+| Horizonte ausente/mal formado/invertido, previsão com quantidade ≤ 0 | 400 (`details.field`) |
+| Nenhuma demanda a planejar → **nada é gravado** | 422 |
+| Produto com demanda que não é de fabricação própria | entra em `skipped` (`not_manufactured`), nunca some em silêncio |
+| Alterar linha de plano já firmado | 422 (`details.status`) |
+| `planned_quantity` **e** `dismiss` juntos, ou nenhum dos dois | 400 |
+| `planned_quantity = 0` | vira `dismissed` (nunca uma OP de quantidade zero — mesma armadilha que o G2 fechou) |
+| Firmar plano sem nenhuma linha decidida | 422 (`details.decided_lines = 0`) |
+| Liberar plano que não está `firm` | 422 (`details.required_status`) |
+| Linha bloqueada na liberação (produto inativo/não fabricável, **sem BOM ativa**, sem material) | 422 com `details.blocked_lines` — **tudo ou nada, nenhuma OP criada** |
+
+As validações da liberação são **as mesmas** dos outros dois caminhos de
+criação de OP, para não recriar a divergência de rigor que o **G16** fechou.
+
+### Rastreabilidade
+
+`master_production_plan_lines.production_order_id` é o rastro de origem: da OP
+se chega à linha, ao plano, ao planejador e à demanda que a justificou.
+`production_orders.sales_order_id` fica **NULL de propósito** — a demanda é
+consolidada de vários pedidos, e apontar um só seria rastreabilidade falsa.
+
+### Decisões de negócio ainda em aberto (não inventadas)
+
+| Pendência | Estado atual |
+|---|---|
+| **Horizonte de planejamento** | declarado pelo planejador a cada plano, sem default |
+| **Lote mínimo / múltiplo de produção** | sugestão é a necessidade líquida crua, sem arredondamento |
+| **Pedido que chega depois do plano fechado** | sem replanejamento automático; entra no próximo plano |
+| **Alçada de aprovação do PCP** | firmar/liberar exigem apenas `mrp:operate` |
+| **Data de entrega prometida no pedido** | `sales` não tem a coluna → demanda consolidada no horizonte inteiro, **sem baldes de tempo** |
+
+**Testes:** `server/tests/unit/master-production-plan-g17.test.ts` (40 casos —
+consolidação de venda + estoque mínimo, desconto de quarentena e reserva,
+confronto com OPs abertas, decisão do planejador, máquina de estados e
+liberação tudo-ou-nada; todo teste de erro afirma `details.rule`).
+
+---
+
+## UC-73 [IMPLEMENTADO — gap G4, 2026-08-10]: Apontar a Produção e Concluir a OP
+
+**Ator:** Operador de chão de fábrica (`chao_de_fabrica:operate`) 🔒 e
+PCP (`producao:operate`) 🔒
+**Módulo:** `server/src/modules/production/` — regras puras em
+`domain/productionTrackingRules.ts`; contrato em `docs/arquitetura/API.md` §10;
+visão de processo em `docs/producao/04-ROTEIROS.md`.
+**Decisão do dono:** **D-A** — *"Sim, siga a lei nas 3"*
+(`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`).
+
+### Base normativa (não é preferência de processo)
+
+- **Ajuste SINIEF 2/09, cláusula 3ª §7º III** (red. Aj. SINIEF 46/22) — Bloco K
+  desde **01/01/2019** para os demais estabelecimentos industriais das divisões
+  10 a 32. Alto-falante é **CNAE 2640-0/00**, divisão 26.
+- **§10** — só a escrituração *completa* do Bloco K desobriga o **Livro Registro
+  de Controle da Produção e do Estoque (modelo 3)**, que exige consumo e
+  produção **por ordem de produção**.
+- **§13** — a escrituração simplificada da Lei 13.874/2019 dispensa
+  *transmitir*, não *registrar*.
+- **RIR/2018** — custo integrado e coordenado com a escrituração; sem mão de
+  obra apontada, o estoque não é avaliado a custo real e fica sujeito a
+  arbitramento.
+
+Fonte, URLs e as ressalvas `[NÃO CONFIRMADO NA FONTE]` que **continuam
+pendentes do contador**: `docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`,
+Decisão 4.
+
+### Pré-condições
+
+Produto com BOM ativa (UC-… / gap G2) e, para o caminho automático,
+**roteiro ativo** (UC-71) cujas etapas apontem para centro de trabalho com
+`cost_per_hour > 0` — ou, na ausência de centro,
+`production_cost_settings.default_labor_rate_per_hour > 0`.
+
+### Fluxo principal
+
+1. PCP libera a OP (`PUT /api/production-orders/:id/status`, `released`).
+2. **O sistema materializa** uma linha de `production_order_tracking`
+   (`status: 'pending'`) por etapa ativa do roteiro ativo, cada uma já
+   carregando o `production_route_step_id` da revisão vigente.
+3. Operador inicia a etapa
+   (`POST /api/production-orders/tracking/:id/start`) → grava `started_at` e
+   `operator_id`.
+4. Operador conclui a etapa
+   (`POST /api/production-orders/tracking/:id/complete`) → grava `finished_at`,
+   `quantity_good`, `quantity_scrapped`.
+5. PCP conclui a OP (`completed`): o gate valida o apontamento e só então
+   consome componentes por lote, dá entrada do acabado, cria o lote de produto
+   acabado e registra o custo real (material + **mão de obra apontada** +
+   overhead), tudo em uma transação.
+
+### Fluxo alternativo — produto sem roteiro cadastrado
+
+A liberação **não** é bloqueada (parar a fábrica por cadastro faltante seria
+pior que o problema); apenas nada é materializado e um `warn` estruturado é
+logado. O operador cria as etapas à mão em `Produção > Chão de Fábrica`
+(`POST /api/production-orders/:id/tracking`). Nesse caminho o custeio depende do
+fallback global de taxa horária.
+
+### Regras de negócio (todas com `details.rule`, HTTP 422)
+
+| `details.rule` | Reprova quando | Vale no modo `warn`? |
+|---|---|---|
+| `G4-TRACKING-STEP-OPEN` | há etapa `pending`/`in_progress`/`paused` | **sim** (regra anterior, 1.3) |
+| `G4-TRACKING-REQUIRED` | a OP não tem nenhum apontamento | não |
+| `G4-TRACKING-NO-COMPLETED` | há apontamento mas nenhuma etapa `completed` | não |
+| `G4-TRACKING-QTY-EXCEEDS` | `quantity_produced` > `quantity_good` da última etapa | **sim** (regra anterior, 1.3) |
+| `G4-TRACKING-TIME-MISSING` | etapa `completed` sem tempo mensurável | não |
+| `G4-LABOR-RATE-MISSING` | nenhuma taxa horária positiva resolvível | não |
+
+**Nada é gravado quando a conclusão é reprovada** — o gate roda antes de
+qualquer efeito colateral, não depende do rollback para isso.
+
+### Anti-spoofing
+
+O executor da transição vem sempre de `req.user.id` (JWT). O `operator_id` da
+etapa é dado de negócio — **qual funcionário operou a máquina**, FK →
+`employees.id` — e é deliberadamente distinto do usuário autenticado: `users`
+não tem vínculo com `employees`, e forçar `req.user.id` ali gravaria uma FK
+errada. O autor real da ação fica no log de auditoria.
+
+### Janela de transição e migração do dado existente
+
+`PRODUCTION_TRACKING_REQUIRED` = `block` (padrão, a lei) ou `warn` (transição,
+registra e deixa concluir; não materializa etapas). Valor inválido cai em
+`block` e loga `G4-TRACKING-MODE-INVALID`.
+
+Levantamento do banco de dev em 2026-08-10 (somente leitura): **12 OPs no
+total** — 3 `completed`, 5 `canceled`, 4 abertas (1 `planned`, 2 `released`,
+1 `in_progress`) — **zero linhas** em `production_order_tracking` e **zero**
+roteiros cadastrados. Todas as 12 OPs são de dados de teste (`CI-…`, `E2E-…`).
+Nenhuma OP concluída precisa de retrofit e nenhuma OP aberta de produção real
+seria travada pela regra nova.
+
+### Efeito sobre o vínculo OP × revisão de roteiro
+
+Sem migration: cada apontamento materializado guarda o
+`production_route_step_id` da revisão ativa na liberação, e roteiro ativo é
+imutável (UC-71). O processo **como executado** passa a ser reconstituível pelos
+apontamentos. Não cobre OP liberada sem roteiro nem apontamento manual sem
+etapa — cobrir 100% ainda exige a coluna em `production_orders`. Registrado em
+`docs/governance/TODO.md`.
+
+**Testes:** `server/tests/unit/production-tracking-required-g4.test.ts`
+(21 casos — modo de vigência, funções puras de horas/taxa, as 6 regras de
+bloqueio com prova de "nada gravado", caminho feliz completo, materialização
+idempotente e janela de transição; todo teste de erro afirma `details.rule`).
+
+---
+
 > **Legenda:** 🔓 Acesso livre | 🔒 Requer permissao especifica

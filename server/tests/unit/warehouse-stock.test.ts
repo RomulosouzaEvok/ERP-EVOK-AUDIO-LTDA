@@ -555,9 +555,25 @@ describe('Integracao dual-write: ReceivePurchaseItemsUseCase e ChangeProductionO
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ChangeProductionOrderStatusUseCase = require('../../src/modules/production/application/use-cases/ChangeProductionOrderStatusUseCase');
+
+    // G4 (2026-08-10): concluir OP sem apontamento agora e
+    // `G4-TRACKING-REQUIRED`. Este teste mede o DUAL-WRITE DE DEPOSITO, entao
+    // precisa de um apontamento suficiente para atravessar o gate — senao
+    // falharia por uma regra que nao e a dele. Cada campo cobre uma regra:
+    // `completed`, `quantity_good` (>= produzido), tempo apontado e taxa horaria.
+    const tracking = [{
+      id: 10,
+      sequence: 1,
+      status: 'completed',
+      quantity_good: 10,
+      started_at: new Date('2026-08-19T08:00:00Z'),
+      finished_at: new Date('2026-08-19T10:00:00Z'),
+      routeStep: { id: 100, work_center_id: 5, workCenter: { id: 5, cost_per_hour: 50 } },
+    }];
+
     const productionOrderRepository = {
-      listTrackingByOrderForUpdate: jest.fn(async () => []),
-      listTrackingWithRouteStepByOrder: jest.fn(async () => []),
+      listTrackingByOrderForUpdate: jest.fn(async () => tracking),
+      listTrackingWithRouteStepByOrder: jest.fn(async () => tracking),
       findByIdForUpdate: jest.fn(async () => ({
         id: 1, status: 'in_progress', order_number: 'OP-2026-0001', product_id: 1, quantity: 10,
         due_date: new Date('2026-08-20'), get: function () { return this; },

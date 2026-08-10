@@ -106,6 +106,42 @@ class ProductionOrderRepository {
   public async listForReport(filters: Record<string, unknown>): Promise<any[]> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('Nao implementado');
   }
+
+  /**
+   * Busca o roteiro ATIVO do produto com suas etapas ATIVAS, para materializar
+   * o apontamento da OP na liberacao (gap G4).
+   *
+   * Le do agregado de roteiro (`production_routes` / `production_route_steps`)
+   * mas mora aqui, e nao em `ProductionRouteRepository`, por uma razao de
+   * desenho: quem materializa o apontamento e o agregado OP, e a alternativa
+   * (injetar um segundo repositorio no caso de uso) espalharia a dependencia
+   * por todos os pontos de construcao do use case sem ganho real.
+   *
+   * @abstract
+   * @param productId - `products.id` do produto da OP.
+   * @param transaction - Transacao Sequelize ativa.
+   * @returns `{ id, route_code, revision, steps: [...] }` ou `null` se o
+   *   produto nao tiver roteiro ativo. Etapas ordenadas por `sequence` e
+   *   filtradas por `is_active = true`.
+   * @throws {Error} Se nao implementado.
+   */
+  public async findActiveRouteWithStepsByProduct(productId: number, transaction: any): Promise<any | null> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    throw new Error('Nao implementado');
+  }
+
+  /**
+   * Cria varias linhas de apontamento de uma vez (materializacao do roteiro na
+   * liberacao da OP, gap G4).
+   *
+   * @abstract
+   * @param rows - Linhas a inserir em `production_order_tracking`.
+   * @param transaction - Transacao Sequelize ativa.
+   * @returns Linhas criadas.
+   * @throws {Error} Se nao implementado.
+   */
+  public async bulkCreateTracking(rows: Array<Record<string, unknown>>, transaction: any): Promise<any[]> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    throw new Error('Nao implementado');
+  }
 }
 
 export = ProductionOrderRepository;

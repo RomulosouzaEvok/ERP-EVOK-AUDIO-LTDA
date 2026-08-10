@@ -6231,3 +6231,454 @@ decidir o momento" (que o G13 resolveu) para virar quatro lacunas concretas:
   fornecedor ou do recebimento físico?) muda apenas a data-base do default de
   30 dias; **C9** (destino das AP legadas: estorno ou congelamento) segue sem
   resposta e as 8 linhas continuam intactas aguardando.
+
+---
+
+## D-K — Segregação de função na compra: quem solicita não aprova (2026-08-10)
+
+**Decisão de negócio:** D-K do dono do produto, 2026-08-10, respondendo à
+pergunta direta *"aprovador ≠ solicitante?"* com **"Sim, aprovador ≠
+solicitante"**. Registrada em
+`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4 (D-K) e fecha o
+critério de pronto da §5 do mesmo plano, que estava aberto **de propósito**
+desde o G11 (naquela entrega o dono pediu alçada, não segregação, e o escopo
+não foi estendido por conta própria).
+
+### Entregue
+
+- [x] Regra única em `server/src/shared/domain/segregationOfDuties.ts`
+  (`assertApproverIsNotRequester`, `isSelfApproval`, `SEGREGATION_RULES`).
+  Mora em `shared/` porque os 4 pontos pertencem a 3 módulos diferentes —
+  cópia por módulo garantiria que o próximo ponto ficasse para trás, que foi
+  exatamente o que aconteceu com o G11 (nasceu em Compras, só alcançou o
+  COMEX na decisão D-G).
+- [x] **4 pontos de aprovação cobertos**, cada um com `details.rule` próprio
+  e verificação **antes de qualquer escrita**:
+
+  | Ponto | `details.rule` | Solicitante comparado | Arquivo |
+  |---|---|---|---|
+  | `PATCH /api/purchase-requisitions/:id/status` (`approved`) | `D-K-REQUISICAO` | `purchase_requisitions.requester_id` | `ChangePurchaseRequisitionStatusUseCase.ts` |
+  | `PUT /api/purchases/:id/status` (`approved`) | `D-K-PEDIDO` | `purchase_orders.requester_id` | `ChangePurchaseStatusUseCase.ts` |
+  | `POST /api/purchases/:id/approve` (alçada G11) | `D-K-ALCADA` | `purchase_orders.requester_id` | `ApprovePurchaseUseCase.ts` |
+  | `POST /api/comex/import-processes/:id/approve` (G11-COMEX) | `D-K-COMEX` | `import_processes.created_by` | `ApproveImportProcessUseCase.ts` |
+
+- [x] Identidade do aprovador **sempre** de `req.user.id` (JWT), nunca do
+  body — os 4 controllers já injetavam assim; nenhum deles foi alterado.
+- [x] Mensagem prescritiva (diz a quem pedir a aprovação e como cadastrar um
+  segundo aprovador), com `details.what_to_do` — não um 422 seco.
+- [x] 18 testes unitários em
+  `server/tests/unit/purchase-segregation-of-duties.test.ts`: para cada ponto,
+  o solicitante é recusado **e nada é gravado**; um segundo usuário aprova
+  normalmente; todo teste de erro afirma `details.rule`.
+- [x] **Sem migration.** Nenhuma coluna nova foi necessária — as 3 colunas de
+  solicitante já existiam e já eram preenchidas do JWT em 100% dos caminhos
+  de criação (`CreatePurchaseRequisitionUseCase`, `CreatePurchaseUseCase`,
+  `ConvertRequisitionToPurchaseOrdersUseCase`, `AwardRfqUseCase`,
+  `CreateImportProcessUseCase`). Nomes de coluna conferidos contra
+  `information_schema.columns` (regra de
+  `CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md` §6 item 4).
+
+### 🔴 Impacto operacional — precisa de ação ANTES de a regra valer
+
+Verificado no banco de dev em 2026-08-10 (somente leitura), não estimado:
+
+- **2 usuários ativos** no sistema inteiro: `admin` (id 1) e um Analista de
+  Laboratório cujo perfil não tem `compras`, `requisicoes` nem `diretor`.
+- **1 único usuário capaz de aprovar compra** — o próprio `admin`.
+- Ele é o autor de **100% dos documentos**: 18/18 pedidos, 13/13 requisições
+  e 4/4 processos de importação com `requester_id`/`created_by = 1`.
+- **7 das 7 requisições aprovadas foram auto-aprovadas**
+  (`approved_by = requester_id = 1`) — a prova documental do furo que a regra
+  fecha, e ao mesmo tempo a prova de que ela trava a operação atual.
+
+Com a regra ativa e sem novo cadastro, **nenhuma compra é aprovável**.
+
+- [ ] **Cadastrar o segundo aprovador** (Administração → Perfis de Acesso):
+  `requisicoes: approve` + `compras: operate`; e `diretor: operate` se ele
+  também for assinar alçada G11 / aprovação de importação.
+
+### Achados desta entrega (reportados, não implementados)
+
+- [ ] **`purchase_orders.requester_id` é `NULL`-able** — é a única das três
+  colunas de solicitante que não é `NOT NULL` (`purchase_requisitions.requester_id`
+  e `import_processes.created_by` são). Quando nula, a comparação é impossível
+  e a regra **não bloqueia**, por desenho (bloquear tornaria pedidos legados
+  inaprováveis para sempre, sem caminho de remediação). Hoje há **0 linhas
+  nulas**, então o risco é teórico — mas *segregação sem solicitante confiável
+  é decorativa*. Recomendado, em migration futura (não escrita para não
+  engrossar a fila de 8 pendentes):
+  `ALTER TABLE purchase_orders ALTER COLUMN requester_id SET NOT NULL;`
+- [ ] **Adjudicação de RFQ (`POST /api/rfqs/:id/award`) não está coberta.**
+  É um ato de nível `compras:approve` que escolhe o fornecedor vencedor e
+  gera pedido(s), e `rfqs.created_by` é `NOT NULL` — dá para cobrir em ~5
+  linhas. **Não implementado por decisão consciente:** (a) não estava no
+  escopo autorizado; (b) o desembolso continua com segunda pessoa, porque o
+  pedido gerado nasce `pending` com `requester_id` = quem adjudicou e passa
+  pelo gate `D-K-PEDIDO`; (c) com 1 único aprovador, cobrir também a
+  adjudicação paralisaria um terceiro fluxo sem ganho de controle. **Basta o
+  dono dizer "sim" para entrar.**
+- [ ] **Recebimento (`POST /api/purchases/:id/receive`) não está coberto.**
+  Segregação clássica de *three-way match* (quem compra ≠ quem recebe ≠ quem
+  paga) — controle diferente do D-K (que é solicitante × aprovador) e não
+  autorizado nesta rodada. Fica como recomendação de controle interno.
+- [ ] **Aprovações fora da cadeia de compras** encontradas na varredura de
+  rotas e **deliberadamente não tocadas** (escopo é a cadeia de suprimentos):
+  `PUT /api/inventory/transfers/:id/approve`,
+  `POST /api/inventory/counts/:id/approve`,
+  `PATCH /api/marketing/materials/:id/approve`,
+  `POST /api/ti/access-requests/:id/approve` (este já tem elegibilidade
+  própria por gestor de departamento) e
+  `POST /api/juridico/contracts/:id/approve`. Se o dono quiser a mesma regra
+  nesses pontos, a função de `shared/domain/segregationOfDuties.ts` já serve
+  sem alteração.
+- [ ] **`docs/arquitetura/API.md`, seção `PUT /api/purchases/:id/status`,
+  contém uma frase desatualizada** ("Ao transicionar para `approved`, gera
+  automaticamente uma `AccountPayable`"): o G13 moveu esse lançamento para o
+  recebimento. Não corrigido aqui por ser área de outro agente em voo
+  (financeiro/G13).
+
+---
+
+## 2026-08-10 — Cadeia do produto, gap G17: Plano Mestre de Produção (MPS) — `programador`
+
+**Decisão de negócio:** **D-F** do dono, 2026-08-10 — *existe PCP formal, há
+quem planeje* (`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4).
+Isso confirma a recomendação da linha do G17: **não** ligar pedido de venda
+diretamente à OP; o padrão da indústria é uma camada de plano mestre entre a
+carteira e a ordem.
+
+### O buraco que foi fechado (conferido no código, não na doc)
+
+| Fato | Onde |
+|---|---|
+| Confirmar venda **não** gerava produção nenhuma | `ChangeSaleStatusUseCase` (só reserva estoque, G9) |
+| O MRP calculava **só** contra a demanda digitada no payload | `GenerateMrpPlanUseCase` → `input.demands` |
+| Nada lia a **carteira de pedidos** aberta | não havia consulta de `quantity − invoiced_quantity` fora do faturamento |
+| Nada tratava o **estoque mínimo** como demanda | `products.min_quantity` só alimentava alerta de dashboard |
+
+### O que foi entregue
+
+- [x] Migration `20260810-000037-create-master-production-plan-g17.cjs` —
+  `master_production_plans` + `master_production_plan_lines`. **ESCRITA, NÃO
+  APLICADA** (aplicar migrations está bloqueado pelo classificador de permissão
+  do ambiente; entra na fila de pendentes). `up`/`down` validados por dry-run
+  com `queryInterface` dublê. Duas tabelas novas, **nenhuma coluna alterada em
+  tabela existente** — o vínculo com a OP mora em
+  `master_production_plan_lines.production_order_id`, não numa coluna nova em
+  `production_orders`, justamente para não tocar o hot path da produção.
+- [x] Models `MasterProductionPlan` / `MasterProductionPlanLine` registrados em
+  `server/src/models/index.ts` com todas as associações.
+- [x] Módulo `server/src/modules/masterProduction/` (Clean Architecture:
+  `domain/constants.ts` com as regras puras, contrato de repositório,
+  implementação Sequelize, 6 use cases, controller, rotas).
+- [x] `/api/production/master-plans` montado em `app.ts`; RBAC
+  `authorizeModule('mrp', …)` em 100% das rotas; guarda
+  `module-authorization-map.test.ts` atualizada.
+- [x] 40 testes unitários (`server/tests/unit/master-production-plan-g17.test.ts`),
+  todo teste de erro afirmando `details.rule === 'G17'`.
+- [x] Documentação: `docs/arquitetura/API.md` §34,
+  `docs/producao/02-PCP.md` (seção "Plano Mestre — IMPLEMENTADO"),
+  `docs/projeto/04-USE_CASES.md` UC-72, `docs/database/DATABASE.md`,
+  `server/src/modules/masterProduction/README.md`.
+
+### A regra, em uma frase
+
+O sistema consolida (carteira + estoque mínimo + previsão) × (saldo de
+planejamento + OPs abertas), **uma pessoa decide** linha a linha, e só a
+liberação explícita do plano **firmado** gera OP. A linha nasce `pending` com
+`planned_quantity = 0` mesmo com sugestão positiva, e firmar plano sem decisão
+nenhuma é recusado (422).
+
+### 🟡 Decisões de PCP que o dono NÃO tomou — e que o código se recusou a inventar
+
+- [ ] **Horizonte de planejamento.** Não há default: `horizon_start`/`horizon_end`
+  são obrigatórios e declarados pelo planejador a cada plano. Se a empresa tem
+  um horizonte padrão (30/60/90 dias, semana móvel), ele pode virar default.
+- [ ] **Política de lote mínimo / múltiplo de produção.** `suggested_quantity` é
+  a necessidade líquida **crua**, sem arredondamento. O motor MRP arredonda por
+  `items.lote_minimo`, mas o MPS opera sobre `products` (a chave da OP), onde
+  não existe campo equivalente — criá-lo é decisão de negócio + migration.
+- [ ] **Pedido que chega depois do plano fechado.** Não há replanejamento
+  automático: o plano é fotografia datada (`consolidated_at`) e a demanda nova
+  entra no próximo plano. Alternativas possíveis (re-consolidar plano `draft`,
+  plano "vivo", alerta de demanda órfã) dependem de como o PCP trabalha.
+- [ ] **Alçada de aprovação do PCP.** Firmar e liberar exigem apenas
+  `mrp:operate`, seguindo o precedente de
+  `POST /api/mrp/planned-orders/convert-to-production` (que também cria OP).
+  Se o dono quiser gerente/diretoria firmando, é trocar para
+  `authorizeModule('mrp', 'approve')` em 2 rotas.
+
+### ⚠️ Limitações estruturais reportadas (não implementadas)
+
+- [ ] **`sales` não tem data de entrega prometida.** Não existe coluna de prazo
+  no pedido de venda — a demanda é consolidada por produto **no horizonte
+  inteiro, sem baldes de tempo**. O "Semana 1 / Semana 2 / Semana 3" que
+  `docs/producao/02-PCP.md` desenha desde sempre **não é possível** hoje. Um MPS
+  semanal de verdade depende dessa coluna existir (migration + tela de venda).
+- [ ] **Não existe entidade de previsão de vendas.** A previsão é digitada no
+  payload de criação do plano (`forecast_demands`). Se o Comercial passar a
+  manter previsão formal, ela vira tabela e o MPS lê dela.
+- [ ] **`BomService.checkAvailability` não participa da transação** e a reserva
+  de material só ocorre quando a OP vai a `released` — duas linhas do mesmo
+  plano que consomem o mesmo componente são avaliadas de forma independente.
+  **Limitação herdada, idêntica à do caminho do MRP**; a contenção real
+  continua sendo a reserva por OP do G3. Fechar isso exige reservar na criação
+  da OP, o que muda o comportamento dos três caminhos.
+- [ ] **Teste de integração real (Postgres) pendente** — como todo o resto da
+  fila, os 40 testes usam repositório dublê. O aceite honesto desta entrega é
+  um `POST /api/production/master-plans` bem-sucedido contra o banco, **depois**
+  de a migration ser aplicada (ver
+  `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md` §6,
+  item 5).
+- [ ] **Tela web pendente** (`client/`) — backend completo, sem UI.
+
+---
+
+## 2026-08-10 — Cadeia do produto, gap G4: apontamento de produção obrigatório — `programador`
+
+**Decisão de negócio:** **D-A** do dono — *"Sim, siga a lei nas 3"*, isoladas,
+uma por vez, com caminho de migração do dado existente.
+
+**Base legal (não é preferência de processo):** Ajuste SINIEF 2/09, cl. 3ª §7º
+III (Bloco K desde 01/01/2019, divisões 10–32 — alto-falante é CNAE 2640-0/00,
+divisão 26); **§10** (só a escrituração completa desobriga o Livro modelo 3, que
+exige consumo e produção **por ordem de produção**); **§13** (a simplificada
+dispensa transmitir, não registrar); RIR/2018 (custo integrado e coordenado).
+Fonte e ressalvas: `docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`
+Decisão 4. Detalhamento fiscal: `docs/tributario/04-BLOCO_K.md` (**novo**).
+
+### O que foi entregue
+
+- [x] `server/src/modules/production/domain/productionTrackingRules.ts` (**novo**)
+  — regras puras, 7 códigos `G4-*`, sem Sequelize/HTTP/`process.env`.
+- [x] Gate na conclusão da OP (`ChangeProductionOrderStatusUseCase`), rodando
+  **antes** de qualquer escrita: sem apontamento (`G4-TRACKING-REQUIRED`), tudo
+  pulado (`G4-TRACKING-NO-COMPLETED`), etapa concluída sem tempo mensurável
+  (`G4-TRACKING-TIME-MISSING`) e sem taxa horária resolvível
+  (`G4-LABOR-RATE-MISSING`) passam a reprovar. As duas regras anteriores
+  (etapa em aberto, quantidade acima do apontado) ganharam `details.rule`.
+- [x] **Materialização do apontamento na liberação da OP** a partir do roteiro
+  ativo (G5) — é o que torna a regra exequível e o que amarra cada apontamento
+  ao `production_route_step_id` da revisão executada.
+- [x] `calculateLaborCost` passou a usar as mesmas funções puras do gate
+  (`computeStepHours`, `resolveStepLaborRate`) — gate e custeio não podem
+  divergir. **Nenhum número de custo mudou.**
+- [x] `cost_per_hour` passou a ser configurável em `POST`/`PUT /api/work-centers`
+  (antes só por SQL direto — regra bloqueante precisa de remediação pelo sistema).
+- [x] Envelope de erro do módulo de OP passou a delegar `AppError` ao
+  `errorHandler` central, para que `details.rule` chegue ao cliente. O envelope
+  antigo (`error: "<mensagem>"`) descartava `details`.
+- [x] Janela de transição `PRODUCTION_TRACKING_REQUIRED` (`block` padrão /
+  `warn`); valor inválido cai em `block` e loga `G4-TRACKING-MODE-INVALID`.
+- [x] **Nenhuma migration criada** — G4 não precisou de schema novo.
+
+### Migração do dado existente — levantado no banco, não estimado
+
+Consulta somente-leitura a `erp_evok_audio` em 2026-08-10:
+
+| Métrica | Valor |
+|---|---|
+| OPs no total | **12** |
+| por status | 3 `completed`, 5 `canceled`, 1 `planned`, 2 `released`, 1 `in_progress` |
+| OPs `completed` **sem** apontamento | **3** (todas) |
+| OPs abertas **sem** apontamento | **4** (todas) |
+| linhas em `production_order_tracking` | **0** |
+| roteiros cadastrados | **0** |
+
+**As 12 OPs são dados de teste** (produtos `CI-BOM-FINISHED-001`,
+`E2E-MRP-OP-001`, `E2E-PA-…`). Não há OP de produção real que a regra nova
+travaria, e nenhuma OP concluída exige retrofit de custo. **Não houve decisão de
+negócio a tomar sobre volume de dado.** A recomendação da pesquisa continua
+valendo: entrar em produção com base limpa.
+
+### 🔴 Pré-requisitos de configuração ANTES de usar em ambiente real
+
+Verificado no banco de dev em 2026-08-10 — **os três estavam zerados**:
+
+- [ ] Cadastrar **roteiro ativo** para cada produto fabricado
+  (`Produção > Roteiros de Fabricação`). Hoje: **0 roteiros**.
+- [ ] Definir `work_centers.cost_per_hour > 0`. Hoje o único centro
+  (`MONTAGEM`) tem **0**. Já configurável via API desde esta entrega.
+- [ ] Definir `production_cost_settings.default_labor_rate_per_hour` para etapas
+  **sem** centro de trabalho. Hoje **0** — e **sem API** (ver pendência abaixo).
+
+Sem pelo menos uma taxa positiva, **toda conclusão de OP falha** com
+`G4-LABOR-RATE-MISSING`. Isso é o zero silencioso virando erro explícito, mas
+exige configuração antes do primeiro uso.
+
+### ⚠️ Pendências e limitações reportadas (não implementadas)
+
+- [ ] **`production_cost_settings` não tem nenhuma API.** O fallback global de
+  taxa horária (`default_labor_rate_per_hour`), a base de rateio e o percentual
+  de overhead só existem por SQL direto. É um módulo de configuração pequeno,
+  mas é backend + tela.
+- [ ] **OP continua sem coluna de revisão de roteiro.** A mitigação entregue
+  (cada apontamento guarda `production_route_step_id` da revisão ativa na
+  liberação, e roteiro ativo é imutável) **não cobre** OP liberada sem roteiro
+  ativo nem apontamento criado à mão. Reconstituir 100% dos casos exige
+  `production_orders.production_route_id` — migration + decisão de negócio. É a
+  mesma dependência que o G5 registrou (commit `c21f81b`) e que o G1 tem para
+  revisão de BOM (`067472a`).
+- [ ] **Geração do arquivo do Bloco K (K200/K230/K235/K280) não iniciada.** O
+  ERP passa a **registrar** o dado; gerar o arquivo (leiaute de Ato COTEPE) é
+  trabalho separado. K250/K255 (industrialização por encomenda) não é modelado.
+- [ ] **Teste de integração real (Postgres) da suíte completa não executado** —
+  `npm run test:integration:strict` aplica migrations, e há **8 pendentes**
+  bloqueadas por liberação do dono. Os testes de integração **foram atualizados**
+  (`e2e-cadeia-insumo-produto.test.ts` ganhou as etapas 6b/gate G4;
+  `production-order-scrap.test.ts` ganhou o helper `apontarEtapa`), mas **não
+  rodaram**. O que **foi** verificado contra o Postgres real está abaixo.
+- [ ] **Tela de chão de fábrica (`client/`) não foi tocada** — `ShopFloorPage`
+  já cobre criar/iniciar/concluir etapa, então a regra é exequível pela UI hoje.
+  Falta: campo `cost_per_hour` na tela de centro de trabalho e tradução dos 7
+  códigos `G4-*` para linguagem de usuário (mesmo tratamento que o G5 deu aos
+  `G5-*`). **Tarefa de `PromadorFonteEnd` / `ui-ux-styling-expert`.**
+- [ ] **Log de nível `error` para regra de negócio esperada.** Ao delegar
+  `AppError` ao `errorHandler`, todo 422 do módulo passa a ser logado com stack
+  em `logger.error` — comportamento pré-existente do handler central, aplicado a
+  todos os outros módulos. Não foi alterado (mudaria o sistema inteiro), mas vai
+  gerar ruído de log proporcional ao uso.
+
+### ✅ Verificação executada (não é relatório — foi rodado)
+
+| Verificação | Resultado |
+|---|---|
+| `npm run typecheck` | limpo |
+| `npx jest tests/unit --maxWorkers=2` | **1807/1807** em 166 suítes (baseline era 1692) |
+| `npx tsx -e "require('./app')"` | sobe |
+| **Escrita real no Postgres**, em transação revertida | roteiro + 3 etapas + 2 apontamentos gravados, ciclo `start`→`complete` persistido, leitura do gate OK; **contagens de volta a 0 após rollback** |
+| **HTTP real contra a API + banco de dev** | `PUT /api/production-orders/4/status` (`completed`, OP sem apontamento) → **422** com `error.details.rule = "G4-TRACKING-REQUIRED"`; OP permaneceu `in_progress`; **7 tabelas com contagem idêntica antes e depois** |
+
+Nenhuma migration foi aplicada. Nenhum dado do dono foi alterado.
+
+---
+
+## 2026-08-10 — Trilha de auditoria silenciosa (`enum_audit_logs_action`) e `closed_date` da RNC — `programador`
+
+Fecha os achados **§2 (P0)** e **§3 (P1)** de
+`docs/governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md` — as duas
+instâncias confirmadas da classe "o Sequelize engole em silêncio: a API
+responde 200 e o dado some"
+(`docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md`).
+
+### Tarefa 1 — 37 literais de `action` fora do `ENUM` (46 call sites)
+
+- [x] **Decisão tomada e justificada: híbrida — 9 valores canônicos novos +
+  29 sinônimos normalizados.** O critério não foi "o verbo é diferente?" e sim
+  **"a pergunta do auditor muda?"**. Um `ENUM` que ganha um valor por endpoint
+  não é vocabulário: é texto livre com passos extras, que não agrega, não
+  indexa e volta a divergir no módulo seguinte. Racional completo, valor a
+  valor, em `server/src/shared/domain/auditActions.ts` (constante
+  `NEW_AUDIT_ACTION_RATIONALE`, no próprio código) e em
+  `docs/database/DATABASE.md`.
+- [x] SSOT criada: `server/src/shared/domain/auditActions.ts` — vocabulário
+  (24 valores), tabela de sinônimos (29), tabela de degradação (9) e as
+  funções `resolveAuditAction` / `downgradeAuditAction` /
+  `markAuditActionInDescription` / `isUnsupportedAuditActionError`.
+- [x] `src/models/AuditLog.ts`: `action` deixou de ser `string` e virou union
+  type derivado da SSOT; a lista de `DataTypes.ENUM` também passou a ser
+  derivada, para model e vocabulário não poderem divergir de novo.
+- [x] Normalização no `AuditLog.register` (cobre qualquer chamador, não só o
+  wrapper) — sinônimo vira valor canônico e o verbo original é preservado como
+  marcador na `description` (`WHERE description LIKE '[award]%'`).
+- [x] Degradação segura no `auditLogService.logAction`: ao receber o `22P02`
+  do Postgres, memoriza o valor e **regrava a mesma linha** no valor legado
+  equivalente. **O evento nunca é perdido**, com ou sem a migration aplicada.
+- [x] Migration `20260810-000036-extend-audit-log-action-enum.cjs` **escrita,
+  `up`/`down` funcionais e verificados por dry-run — NÃO APLICADA** (fila de
+  pendentes aguardando liberação do dono).
+- [x] Guarda `tests/integration/enum-literal-guard.test.ts`: **6/6 verde**
+  contra o banco de dev **com a migration pendente** (ver ressalva abaixo).
+- [x] `tests/unit/audit-action-vocabulary.test.ts` (16 testes) — a metade da
+  guarda que **não precisa de banco**, para a regressão aparecer na suíte
+  rápida e não só na de integração.
+- [x] `tests/unit/audit-log-action-downgrade.test.ts` (5) e
+  `tests/unit/audit-log-register-normalization.test.ts` (5).
+
+> ⚠️ **O que a guarda passou a afirmar.** A pergunta original era *"o literal
+> está no `ENUM` hoje?"* — uma aproximação da pergunta que importa, que é
+> ***"o evento chega ao banco?"***. Com o caminho de degradação as duas
+> deixaram de coincidir, e o teste passou a afirmar a segunda. Ficou **mais
+> forte**: continua reprovando literal que não é canônico nem sinônimo, e
+> passou a reprovar também sinônimo quebrado e degradação quebrada — duas
+> falhas que a versão anterior não via. A tolerância é limitada a valores com
+> degradação **provada contra o `pg_enum` real desta conexão**, e some sozinha
+> quando a `000036` for aplicada.
+
+- [ ] **Depois de aplicar a `000036`:** rodar `npm run test:integration` e
+  conferir que os `console.warn` "gravando em modo degradado" **desaparecem**
+  — é o sinal de que os 9 valores passaram a ser gravados exatos.
+- [ ] **Normalizar no call site os 7 sinônimos de `src/modules/production/` e
+  `src/modules/mrp/`** (`activate`, `inactivate`, `revise`, `update_steps`,
+  `convert_to_requisition`, `convert_to_production_order`,
+  `mrp_auto_convert_to_requisition`). Hoje funcionam pela tabela central;
+  aqueles dois módulos estavam sob edição concorrente e **não podiam ser
+  tocados**. Não é urgente — é higiene de quem for dono daqueles arquivos.
+- [ ] **`logAction` é importado por `require()` em 74 arquivos**, então o
+  union type de `action` **não protege os call sites** (o `require` devolve
+  `any`). A tipagem só vale para quem usar `import`. Enquanto isso, a rede
+  real são as duas guardas (unitária + integração). Converter os 74 imports é
+  mudança ampla e transversal — não foi feita aqui.
+- [ ] **Backfill das linhas gravadas em modo degradado: NÃO feito, de
+  propósito.** São identificáveis (`description LIKE '[access_denied]%'`), mas
+  reescrever log de auditoria existente é o que uma trilha não pode permitir.
+  Se for necessário reclassificar, que seja decisão explícita com `UPDATE`
+  revisado — nunca efeito colateral de migration.
+
+### Tarefa 2 — `closed_at` × `closed_date` na RNC
+
+- [x] `UpdateNonConformityUseCase` passou a gravar **`closed_date`** (coluna
+  real, `DATE`) em vez de `closed_at` (que o Sequelize descartava em
+  silêncio). Reprodução do antes/depois no SQL emitido está em
+  `docs/database/DATABASE.md`.
+- [x] **Segunda ocorrência encontrada na varredura do módulo** (não apontada
+  pela auditoria): `CloseNonConformityUseCase`
+  (`DELETE /api/quality/non-conformities/:id`) gravava **apenas**
+  `status = 'closed'` — sem data e sem responsável. Corrigida.
+- [x] Os dois caminhos passaram a derivar os campos de encerramento da mesma
+  função (`src/modules/nonConformities/domain/closure.ts`), com teste
+  comparando os dois payloads para impedir divergência futura.
+- [x] **`closed_by` removido de `ALLOWED_FIELDS`** do `PUT`: bastava enviá-lo
+  no body para atribuir o encerramento a outra pessoa. Passa a vir só do JWT
+  (mesmo padrão anti-spoofing da remediação 3.1).
+- [x] `tests/unit/non-conformity-closure-date.test.ts` (9 testes) + correção
+  do teste existente em `nonConformities-use-cases.test.ts`, que se chamava
+  *"define closed_by e closed_at"* e **nunca verificou a data** — foi assim
+  que o defeito atravessou a suíte.
+- [x] Varredura do módulo inteiro:
+  `tests/integration/column-name-drift-guard.test.ts` (3º teste, o que acusava
+  `closed_at`) **passa** — nenhum outro payload de escrita em
+  `application/use-cases` / `infrastructure/sequelize` usa chave que não é
+  atributo de model.
+
+**Estado do dado (verificado):** as 6 RNCs do banco estão todas `status='open'`
+e `closed_date IS NULL` em 100% delas — **nenhuma perda ocorreu**. Era esse o
+motivo de corrigir antes do Go-Live: depois exigiria reconstituir uma data que
+ninguém tem.
+
+### Fuso horário de `closed_date` (limitação assumida)
+
+- [ ] `closed_date` usa a convenção de "hoje" já adotada em ~90 pontos do
+  backend (`toISOString().slice(0, 10)`, portanto **UTC**). Um encerramento
+  feito depois das 21h (UTC-3) grava a data do dia seguinte. Consistência foi
+  preferida a criar uma terceira semântica de data só para este módulo; a
+  troca, se decidida, é num único ponto (`domain/closure.ts`).
+
+### Fora do escopo, encontrado no caminho
+
+- [ ] **`non_conformities.asset_id` é `NOT NULL` no banco de TESTE e `assets`
+  tem 0 linhas** — ou seja, **criar RNC no banco de teste é impossível hoje**.
+  É a divergência dev × teste já descrita em
+  `VARREDURA_ESCRITA_REAL_2026-08-10.md` §10 (resíduo da `000028`, aplicada em
+  dev e não em teste). Some quando os dois bancos forem reprovisionados a
+  partir do baseline congelado.
+- [x] 3 entradas novas na allowlist de `enum-literal-guard.test.ts` para
+  literais `reason:` em `saleReceivableService.ts`,
+  `ReceivePurchaseItemsUseCase.ts` e `modules/masterProduction/`. **São falso
+  positivo estrutural** da união por nome de coluna do 3º teste: os três são
+  discriminadores de **retorno em memória**
+  (`return { reason: 'zero_amount' }`), tipados como union de string no próprio
+  arquivo, que nunca chegam a `.create()`/`.update()` — `MasterProductionPlan`
+  tem `cancel_reason`, não `reason`. Conferidos linha a linha; eram
+  **pré-existentes** (vieram do commit G13 e do módulo MPS, ambos fora desta
+  tarefa).

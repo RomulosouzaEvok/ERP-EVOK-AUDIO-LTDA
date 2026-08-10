@@ -6,7 +6,7 @@
 
 import { Op, QueryTypes } from 'sequelize';
 import ProductionOrderRepository from '../../domain/repositories/ProductionOrderRepository';
-const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRouteStep, WorkCenter, Item, ProductionOrderReservation, sequelize }: any = require('../../../../models/index');
+const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRoute, ProductionRouteStep, WorkCenter, Item, ProductionOrderReservation, sequelize }: any = require('../../../../models/index');
 
 /**
  * Namespace (`classid`) do advisory lock que serializa a geracao do numero
@@ -230,6 +230,52 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
   /** @param data - Dados da etapa. @param transaction - Transacao opcional. @returns Apontamento criado. */
   public async createTracking(data: Record<string, unknown>, transaction?: any): Promise<any> {
     return ProductionOrderTracking.create(data, { transaction });
+  }
+
+  /**
+   * Cria varias linhas de apontamento numa unica ida ao banco (gap G4:
+   * materializacao das etapas do roteiro ativo na liberacao da OP).
+   *
+   * @param rows - Linhas de `production_order_tracking`.
+   * @param transaction - Transacao ativa.
+   * @returns Linhas criadas.
+   */
+  public async bulkCreateTracking(rows: Array<Record<string, unknown>>, transaction: any): Promise<any[]> {
+    if (!rows || rows.length === 0) return [];
+    return ProductionOrderTracking.bulkCreate(rows, { transaction });
+  }
+
+  /**
+   * Busca o roteiro ATIVO do produto com as etapas ATIVAS (gap G4).
+   *
+   * Somente `status = 'active'` — o ciclo de vida do G5 garante no maximo um
+   * roteiro ativo por produto, e revisoes `superseded` continuam existindo
+   * intactas para sustentar apontamentos ja feitos. Etapas `is_active = false`
+   * ficam de fora: elas nao entram no tempo padrao do roteiro
+   * (`computeTotalStandardTimeMinutes`) e, portanto, tambem nao devem virar
+   * etapa a apontar.
+   *
+   * A consulta traz `production_route_steps.id`, que e o que amarra cada
+   * apontamento a REVISAO efetivamente executada — o vinculo "como executado"
+   * que `production_orders` nao tem por falta de coluna.
+   *
+   * @param productId - `products.id`.
+   * @param transaction - Transacao ativa.
+   * @returns Roteiro ativo com `steps`, ou `null`.
+   */
+  public async findActiveRouteWithStepsByProduct(productId: number, transaction: any): Promise<any | null> {
+    return ProductionRoute.findOne({
+      where: { product_id: productId, status: 'active' },
+      include: [{
+        model: ProductionRouteStep,
+        as: 'steps',
+        required: false,
+        where: { is_active: true },
+        attributes: ['id', 'sequence', 'step_code', 'name', 'work_center', 'work_center_id', 'is_active'],
+      }],
+      order: [[{ model: ProductionRouteStep, as: 'steps' }, 'sequence', 'ASC']],
+      transaction,
+    });
   }
 
   /** @param id - ID da etapa. @param transaction - Transacao ativa. @returns Etapa travada ou null. */

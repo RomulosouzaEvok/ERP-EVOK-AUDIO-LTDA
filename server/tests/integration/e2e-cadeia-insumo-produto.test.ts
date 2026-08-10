@@ -528,6 +528,64 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
   });
 
   // ====================================================================
+  // ETAPA 6b — Roteiro de fabricacao (pre-requisito do G4)
+  // ====================================================================
+  /**
+   * Cadastra centro de trabalho COM custo/hora e um roteiro ATIVO para o
+   * produto acabado.
+   *
+   * Sem isto, a partir do gap G4 (2026-08-10) a OP simplesmente nao conclui:
+   * a lei exige apontamento por etapa (Bloco K / Livro modelo 3) e o custeio
+   * exige taxa horaria. O `cost_per_hour` do centro e o que evita
+   * `G4-LABOR-RATE-MISSING` — o fallback global
+   * (`production_cost_settings.default_labor_rate_per_hour`) ainda nao tem API.
+   */
+  it('etapa 6b: cadastra centro de trabalho com custo/hora e roteiro ATIVO do produto (G5, pre-requisito do G4)', async () => {
+    const workCenter = await api()
+      .post('/api/work-centers')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({
+        code: `${P}-WC-${SUFFIX}`.slice(0, 30),
+        name: 'Montagem E2E',
+        machines_count: 1,
+        capacity_hours_per_day: 8,
+        efficiency_factor: 1,
+        cost_per_hour: 60,
+      });
+    expectStatus(workCenter, 201, 'workCenter');
+    // Sem custo/hora aqui, a conclusao da OP falharia com G4-LABOR-RATE-MISSING.
+    expect(Number(workCenter.body.data.cost_per_hour)).toBeCloseTo(60, 4);
+    ctx.workCenterId = workCenter.body.data.id;
+
+    const route = await api()
+      .post('/api/production/routes')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({
+        product_id: ctx.finishedProductId,
+        route_code: `${P}-ROT-${SUFFIX}`.slice(0, 50),
+        revision: '01',
+        description: `${P} roteiro da validacao da cadeia`,
+        steps: [{
+          sequence: 1,
+          step_code: '010',
+          name: 'Montagem final',
+          work_center_id: ctx.workCenterId,
+          standard_time_minutes: 6,
+          setup_time_minutes: 15,
+        }],
+      });
+    expectStatus(route, 201, 'route');
+    ctx.productionRouteId = route.body.data.id;
+
+    const activated = await api()
+      .patch(`/api/production/routes/${ctx.productionRouteId}/activate`)
+      .set('Authorization', `Bearer ${token()}`)
+      .send({});
+    expectStatus(activated, 200, 'activated');
+    expect(activated.body.data.status).toBe('active');
+  });
+
+  // ====================================================================
   // ETAPA 7 — Ordem de producao e reserva
   // ====================================================================
   it('etapa 7: cria a ordem de producao e libera (reservando o material da OP)', async () => {
@@ -629,6 +687,71 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
       .send({ status: 'in_progress' });
     expectStatus(started, 200, 'started');
     expect(started.body.data.status).toBe('in_progress');
+  });
+
+  // ====================================================================
+  // GATE G4 — apontamento obrigatorio (Bloco K / Livro modelo 3)
+  // ====================================================================
+  /**
+   * Prova, na ordem em que acontece na fabrica:
+   * 1. a liberacao MATERIALIZOU a etapa do roteiro ativo como apontamento
+   *    `pending`, ja amarrada ao `production_route_step_id` da revisao 01
+   *    (vinculo "como executado");
+   * 2. concluir a OP com a etapa em aberto falha (`G4-TRACKING-STEP-OPEN`);
+   * 3. apos iniciar e concluir a etapa, o caminho fica livre.
+   */
+  it('gate G4: a liberacao materializa a etapa do roteiro e a OP nao conclui com etapa em aberto', async () => {
+    const tracking = await api()
+      .get(`/api/production-orders/${ctx.productionOrderId}/tracking`)
+      .set('Authorization', `Bearer ${token()}`);
+    expectStatus(tracking, 200, 'tracking');
+    expect(tracking.body.data).toHaveLength(1);
+
+    const step = tracking.body.data[0];
+    expect(step.status).toBe('pending');
+    expect(step.sequence).toBe(1);
+    // O apontamento nasce apontando para a ETAPA DA REVISAO ATIVA na liberacao
+    // — e o que permite reconstituir o processo COMO EXECUTADO sem a coluna
+    // `production_orders.production_route_id`, que nao existe.
+    expect(step.routeStep).toBeTruthy();
+    expect(step.routeStep.step_code).toBe('010');
+    ctx.trackingId = step.id;
+
+    const blocked = await api()
+      .put(`/api/production-orders/${ctx.productionOrderId}/status`)
+      .set('Authorization', `Bearer ${token()}`)
+      .send({
+        status: 'completed',
+        quantity_produced: OP_QTY,
+        lot_consumptions: [
+          { product_id: ctx.rawProductId, lot_control_id: ctx.rawLotId, quantity: OP_QTY * QTY_PER_UNIT },
+        ],
+      });
+    expectStatus(blocked, 422, 'blocked');
+    expect(blocked.body.error.details.rule).toBe('G4-TRACKING-STEP-OPEN');
+
+    const order = await api()
+      .get(`/api/production-orders/${ctx.productionOrderId}`)
+      .set('Authorization', `Bearer ${token()}`);
+    expect(order.body.data.status).toBe('in_progress');
+  });
+
+  it('gate G4: apontamento iniciado e concluido libera o caminho da conclusao', async () => {
+    const startedStep = await api()
+      .post(`/api/production-orders/tracking/${ctx.trackingId}/start`)
+      .set('Authorization', `Bearer ${token()}`)
+      .send({});
+    expectStatus(startedStep, 200, 'startedStep');
+    expect(startedStep.body.data.status).toBe('in_progress');
+    expect(startedStep.body.data.started_at).toBeTruthy();
+
+    const finishedStep = await api()
+      .post(`/api/production-orders/tracking/${ctx.trackingId}/complete`)
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ quantity_good: OP_QTY, quantity_scrapped: 0, notes: `${P} etapa concluida` });
+    expectStatus(finishedStep, 200, 'finishedStep');
+    expect(finishedStep.body.data.status).toBe('completed');
+    expect(finishedStep.body.data.finished_at).toBeTruthy();
   });
 
   // ====================================================================

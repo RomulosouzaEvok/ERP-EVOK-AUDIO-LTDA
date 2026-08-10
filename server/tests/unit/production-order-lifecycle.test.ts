@@ -83,6 +83,52 @@ const InventoryService = require('../../src/services/inventoryService');
 const CostingService = require('../../src/services/costingService');
 const { LotControl, ProductionLotConsumption, SerialNumber } = require('../../src/models/index');
 
+/**
+ * Apontamento minimo que ATRAVESSA o gate G4 (apontamento obrigatorio,
+ * 2026-08-10).
+ *
+ * Desde o G4, concluir OP sem apontamento e `G4-TRACKING-REQUIRED`. Sem este
+ * lastro, TODO teste de conclusao deste arquivo passaria a falhar (ou pior, a
+ * "passar") pelo gate em vez de pela regra que ele afirma cobrir — a armadilha
+ * de teste verde pelo motivo errado ja documentada neste projeto.
+ *
+ * Os quatro campos abaixo nao sao decorativos, cada um satisfaz uma regra:
+ * `status: 'completed'` → `G4-TRACKING-NO-COMPLETED`; `quantity_good` →
+ * `G4-TRACKING-QTY-EXCEEDS`; `started_at`/`finished_at` →
+ * `G4-TRACKING-TIME-MISSING`; `workCenter.cost_per_hour` →
+ * `G4-LABOR-RATE-MISSING`.
+ *
+ * @param quantityGood - Quantidade boa apontada na etapa final.
+ * @returns Lista com uma etapa concluida e integralmente apontada.
+ */
+function makeSufficientTracking(quantityGood = 10) {
+  return [{
+    id: 10,
+    sequence: 1,
+    status: 'completed',
+    quantity_good: quantityGood,
+    started_at: new Date('2026-08-19T08:00:00Z'),
+    finished_at: new Date('2026-08-19T10:00:00Z'),
+    routeStep: { id: 100, work_center_id: 5, workCenter: { id: 5, cost_per_hour: 50 } },
+  }];
+}
+
+/**
+ * Espalha o mesmo conjunto de apontamentos nas DUAS consultas do repositorio
+ * (a travada, lida pelo gate, e a que traz o centro de trabalho, lida pelo
+ * custeio) — em producao as duas leem as mesmas linhas.
+ *
+ * @param quantityGood - Quantidade boa apontada na etapa final.
+ * @returns Trecho de repositorio dublê pronto para espalhar no mock.
+ */
+function trackingRepoStubs(quantityGood = 10) {
+  const tracking = makeSufficientTracking(quantityGood);
+  return {
+    listTrackingByOrderForUpdate: jest.fn(async () => tracking),
+    listTrackingWithRouteStepByOrder: jest.fn(async () => tracking),
+  };
+}
+
 describe('Production Order Lifecycle (F.10)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -240,6 +286,10 @@ describe('Production Order Lifecycle (F.10)', () => {
     it('reserva materiais ao liberar, vinculando cada reserva a esta OP (G3)', async () => {
       const productionOrderRepository = {
         listTrackingByOrderForUpdate: jest.fn(async () => []),
+        // G4: a liberacao materializa as etapas do roteiro ATIVO. Sem roteiro
+        // ativo nada e criado e a liberacao segue — o bloqueio mora na conclusao.
+        findActiveRouteWithStepsByProduct: jest.fn(async () => null),
+        bulkCreateTracking: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'planned',
@@ -305,7 +355,7 @@ describe('Production Order Lifecycle (F.10)', () => {
 
     it('exige lot_consumptions explicitos ao concluir OP com componentes', async () => {
       const productionOrderRepository = {
-        listTrackingByOrderForUpdate: jest.fn(async () => []),
+        ...trackingRepoStubs(),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -343,8 +393,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       jest.clearAllMocks(); // Clear mocks from previous tests
 
       const productionOrderRepository = {
-        listTrackingByOrderForUpdate: jest.fn(async () => []),
-        listTrackingWithRouteStepByOrder: jest.fn(async () => []),
+        ...trackingRepoStubs(),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -397,8 +446,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       jest.clearAllMocks();
 
       const productionOrderRepository = {
-        listTrackingByOrderForUpdate: jest.fn(async () => []),
-        listTrackingWithRouteStepByOrder: jest.fn(async () => []),
+        ...trackingRepoStubs(),
         findByIdForUpdate: jest.fn(async () => ({
           id: 42,
           status: 'in_progress',
@@ -452,8 +500,8 @@ describe('Production Order Lifecycle (F.10)', () => {
       jest.clearAllMocks();
 
       const productionOrderRepository = {
-        listTrackingByOrderForUpdate: jest.fn(async () => []),
-        listTrackingWithRouteStepByOrder: jest.fn(async () => []),
+        // Etapa final apontou 7 boas — o mesmo `quantity_produced` da conclusao.
+        ...trackingRepoStubs(7),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -568,6 +616,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       ).rejects.toMatchObject({
         constructor: BusinessRuleError,
         details: {
+          rule: 'G4-TRACKING-STEP-OPEN',
           open_steps: [{ id: 2, sequence: 2, status: 'in_progress' }],
         },
       });
@@ -603,6 +652,7 @@ describe('Production Order Lifecycle (F.10)', () => {
         .catch((err: any) => err);
 
       expect(error).toBeInstanceOf(BusinessRuleError);
+      expect(error.details.rule).toBe('G4-TRACKING-STEP-OPEN');
       // As 3 etapas em aberto (pending/in_progress/paused) devem aparecer juntas, a etapa completed fica de fora.
       expect(error.details.open_steps).toHaveLength(3);
       expect(error.details.open_steps).toEqual([
@@ -639,6 +689,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       ).rejects.toMatchObject({
         constructor: BusinessRuleError,
         details: {
+          rule: 'G4-TRACKING-QTY-EXCEEDS',
           last_step_sequence: 2,
           last_step_quantity_good: 8,
           quantity_produced: 10,
@@ -652,7 +703,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       jest.clearAllMocks();
 
       const productionOrderRepository = {
-        listTrackingByOrderForUpdate: jest.fn(async () => []),
+        ...trackingRepoStubs(),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -701,7 +752,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       jest.clearAllMocks();
 
       const productionOrderRepository = {
-        listTrackingByOrderForUpdate: jest.fn(async () => []),
+        ...trackingRepoStubs(),
         findByIdForUpdate: jest.fn(async () => ({
           id: 1,
           status: 'in_progress',
@@ -802,8 +853,12 @@ describe('Production Order Lifecycle (F.10)', () => {
     // `due_date` e obrigatorio na validacao da entidade (ProductionOrderEntity.validate).
     // Sem ele o construtor estoura ValidationError e o teste nunca chega na regra
     // que pretende exercitar — cuidado ao copiar mocks de OP daqui.
+    // O apontamento suficiente (G4) e OBRIGATORIO nestes mocks: sem ele o gate
+    // do G4 reprovaria a conclusao antes de a explosao de BOM ser tentada, e os
+    // testes abaixo ficariam verdes provando a regra ERRADA. Por isso cada um
+    // afirma `details.rule === 'G2'` explicitamente.
     const makeRepo = () => ({
-      listTrackingByOrderForUpdate: jest.fn(async () => []),
+      ...trackingRepoStubs(),
       findByIdForUpdate: jest.fn(async () => ({
         id: 1,
         status: 'in_progress',
@@ -825,7 +880,7 @@ describe('Production Order Lifecycle (F.10)', () => {
 
       await expect(
         new ChangeProductionOrderStatusUseCase(repo).execute({ id: 1, status: 'completed', quantity_produced: 10, user_id: 1 })
-      ).rejects.toBeInstanceOf(BusinessRuleError);
+      ).rejects.toMatchObject({ constructor: BusinessRuleError, details: { rule: 'G2' } });
 
       // Nada pode ter entrado em estoque nem sido custeado, e a OP nao pode ter sido marcada concluida.
       expect(InventoryService.receive).not.toHaveBeenCalled();
@@ -850,7 +905,7 @@ describe('Production Order Lifecycle (F.10)', () => {
 
       await expect(
         new ChangeProductionOrderStatusUseCase(repo).execute({ id: 1, status: 'completed', quantity_produced: 0, user_id: 1 })
-      ).rejects.toBeInstanceOf(BusinessRuleError);
+      ).rejects.toMatchObject({ constructor: BusinessRuleError, details: { rule: 'G2' } });
 
       expect(InventoryService.receive).not.toHaveBeenCalled();
       expect(InventoryService.releaseReservation).not.toHaveBeenCalled();

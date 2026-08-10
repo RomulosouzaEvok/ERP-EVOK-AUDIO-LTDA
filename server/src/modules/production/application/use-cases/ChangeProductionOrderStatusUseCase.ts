@@ -7,6 +7,20 @@
 import UseCase from '../../../../shared/application/UseCase';
 import ProductionOrderEntity from '../../domain/entities/ProductionOrderEntity';
 import { NotFoundError, ValidationError, ConflictError, BusinessRuleError, AppError } from '../../../../errors';
+import logger from '../../../../config/logger';
+import {
+  PRODUCTION_TRACKING_RULES,
+  assertCompletedStepsHaveMeasurableTime,
+  assertHasCompletedStep,
+  assertLaborRateIsResolvable,
+  assertNoOpenSteps,
+  assertProducedQuantityMatchesTracking,
+  assertTrackingExists,
+  computeStepHours,
+  resolveStepLaborRate,
+  resolveTrackingEnforcementMode,
+  type TrackingEnforcementMode,
+} from '../../domain/productionTrackingRules';
 const InventoryService: any = require('../../../../services/inventoryService');
 const WarehouseStockService: any = require('../../../../services/warehouseStockService');
 const CostingService: any = require('../../../../services/costingService');
@@ -71,10 +85,11 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
 
       if (input.status === 'released') {
         await this.reserveMaterials(order, input.user_id, t);
+        await this.materializeTrackingFromActiveRoute(order, t);
       }
 
       if (input.status === 'completed') {
-        await this.reconcileTrackingOnCompletion(order, updateData.quantity_produced || 0, t);
+        await this.assertTrackingIsSufficientForCompletion(order, updateData.quantity_produced || 0, t);
         await this.completeOrder(order, previousStatus, updateData.quantity_produced || 0, input, t);
       }
 
@@ -94,46 +109,177 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
   }
 
   /**
-   * Reconcilia apontamentos de etapa com a conclusao da OP.
+   * Le o modo de vigencia do apontamento obrigatorio (gap G4).
    *
-   * Regras (aplicadas apenas quando a OP possui apontamentos):
-   * - Nenhuma etapa pode estar aberta (pending/in_progress/paused);
-   * - quantity_produced nao pode exceder o quantity_good da ultima etapa
-   *   concluida, pois a saida boa do processo e limitada pela etapa final.
+   * `PRODUCTION_TRACKING_REQUIRED` ausente ou invalido → `block` (a lei
+   * aplicada). Valor invalido tambem gera log de erro: um typo jamais pode
+   * DESLIGAR uma regra fiscal em silencio.
+   *
+   * A leitura acontece a cada chamada, de proposito — permite virar a chave
+   * durante a janela de UAT sem reiniciar o processo, e mantem o modulo de
+   * regras puro (ele recebe o valor bruto por parametro).
+   *
+   * @returns Modo aplicado (`block` ou `warn`).
+   */
+  private resolveEnforcementMode(): TrackingEnforcementMode {
+    const resolution = resolveTrackingEnforcementMode(process.env.PRODUCTION_TRACKING_REQUIRED);
+
+    if (resolution.invalidValue !== undefined) {
+      logger.error('PRODUCTION_TRACKING_REQUIRED com valor invalido; aplicando modo seguro "block".', {
+        rule: PRODUCTION_TRACKING_RULES.MODE_INVALID,
+        received: resolution.invalidValue,
+        accepted: ['block', 'warn'],
+        applied: resolution.mode,
+      });
+    }
+
+    return resolution.mode;
+  }
+
+  /**
+   * Materializa as etapas do roteiro ATIVO do produto como apontamentos
+   * `pending` da OP, no momento da liberacao (gap G4).
+   *
+   * ## Por que na liberacao, e por que isto e parte do G4
+   *
+   * Exigir apontamento sem dar ao operador contra o que apontar seria regra
+   * inexequivel — a mesma armadilha que o G5 evitou ao entregar a API de
+   * roteiro. Aqui a OP liberada ja nasce com sua lista de operacoes a executar,
+   * e o chao de fabrica (`Producao > Chao de Fabrica`) so precisa iniciar e
+   * concluir cada uma.
+   *
+   * ## O vinculo "como executado", sem coluna nova
+   *
+   * Cada linha criada guarda `production_route_step_id` da revisao que estava
+   * ATIVA no instante da liberacao. Como roteiro `active` e imutavel (regra G5
+   * `G5-ROUTE-NOT-DRAFT`) e uma revisao substituida vira `superseded` **com as
+   * etapas intactas**, o processo efetivamente executado fica reconstituivel a
+   * partir dos proprios apontamentos — sem a coluna
+   * `production_orders.production_route_id`, que exigiria migration e decisao
+   * de negocio (dependencia registrada pelo agente do G5, commit `c21f81b`).
+   *
+   * **Limite honesto desta mitigacao:** ela cobre a OP liberada COM roteiro
+   * ativo. Apontamento criado a mao (`POST /api/production-orders/:id/tracking`
+   * sem `production_route_step_id`) e OP liberada quando o produto ainda nao
+   * tinha roteiro continuam sem o vinculo. Reconstituir 100% dos casos exige a
+   * coluna — ver `docs/governance/TODO.md`.
+   *
+   * ## Idempotencia
+   *
+   * Se a OP ja tiver qualquer apontamento, nada e criado. Isso protege o
+   * caminho `released → canceled → ...` e qualquer reprocessamento, e evita
+   * colidir com o indice unico `(production_order_id, sequence)`.
+   *
+   * No modo `warn` a materializacao NAO acontece: criar etapas pendentes sem o
+   * bloqueio ligado apenas faria a regra pre-existente de "etapa em aberto"
+   * barrar a conclusao, tornando a janela de transicao inutil.
+   *
+   * @param order - OP travada.
+   * @param transaction - Transacao ativa.
+   * @returns void
+   */
+  private async materializeTrackingFromActiveRoute(order: any, transaction: any): Promise<void> {
+    if (this.resolveEnforcementMode() !== 'block') return;
+
+    const existing = await this.productionOrderRepository.listTrackingByOrderForUpdate(order.id, transaction);
+    if (existing && existing.length > 0) return;
+
+    const route = await this.productionOrderRepository.findActiveRouteWithStepsByProduct(order.product_id, transaction);
+    const steps = route?.steps ?? [];
+    if (steps.length === 0) {
+      // Sem roteiro ativo (ou roteiro sem etapa ativa) a liberacao segue: o
+      // bloqueio mora na CONCLUSAO, com mensagem dizendo o que cadastrar. Nao
+      // se trava a liberacao por falta de roteiro — isso pararia a fabrica por
+      // um problema de cadastro que ainda da tempo de resolver.
+      logger.warn('OP liberada sem roteiro ativo: nenhum apontamento foi materializado.', {
+        rule: PRODUCTION_TRACKING_RULES.TRACKING_REQUIRED,
+        production_order_id: order.id,
+        order_number: order.order_number,
+        product_id: order.product_id,
+      });
+      return;
+    }
+
+    await this.productionOrderRepository.bulkCreateTracking(
+      steps.map((step: any) => ({
+        production_order_id: order.id,
+        production_route_step_id: step.id,
+        sequence: step.sequence,
+        status: 'pending',
+        quantity_good: 0,
+        quantity_scrapped: 0,
+        notes: `Etapa ${step.step_code} - ${step.name} (roteiro ${route.route_code} rev. ${route.revision})`,
+      })),
+      transaction,
+    );
+  }
+
+  /**
+   * Porta de entrada da conclusao: exige apontamento de producao (gap G4).
+   *
+   * Roda ANTES de `completeOrder`, portanto antes de qualquer escrita de
+   * estoque, lote, custo ou status — se qualquer regra reprovar, **nada foi
+   * gravado**, e nem depende do rollback para isso.
+   *
+   * Regras aplicadas, em ordem, todas com `details.rule`:
+   *
+   * | Ordem | Regra | Codigo | Vale no modo `warn`? |
+   * |---|---|---|---|
+   * | 1 | nenhuma etapa em aberto | `G4-TRACKING-STEP-OPEN` | **sim** |
+   * | 2 | existe apontamento | `G4-TRACKING-REQUIRED` | nao |
+   * | 3 | existe etapa concluida | `G4-TRACKING-NO-COMPLETED` | nao |
+   * | 4 | quantidade x ultima etapa | `G4-TRACKING-QTY-EXCEEDS` | **sim** (quando ha etapa concluida) |
+   * | 5 | tempo apontado mensuravel | `G4-TRACKING-TIME-MISSING` | nao |
+   * | 6 | taxa horaria resolvivel | `G4-LABOR-RATE-MISSING` | nao |
+   *
+   * As regras 1 e 4 sao anteriores ao G4 (reconciliacao 1.3, "apontamento x OP
+   * desconectados") e por isso **nao** fazem parte da janela de transicao: se o
+   * chao de fabrica ja abriu etapas, fecha-las e obrigacao independente.
    *
    * @param order - OP travada.
    * @param producedQty - Quantidade produzida declarada na conclusao.
    * @param transaction - Transacao ativa.
    * @returns void
-   * @throws {BusinessRuleError} Se houver etapa aberta ou quantidade divergente.
+   * @throws {BusinessRuleError} 422 com `details.rule` em qualquer reprovacao.
    */
-  private async reconcileTrackingOnCompletion(order: any, producedQty: number, transaction: any): Promise<void> {
+  private async assertTrackingIsSufficientForCompletion(order: any, producedQty: number, transaction: any): Promise<void> {
+    const mode = this.resolveEnforcementMode();
     const trackings = await this.productionOrderRepository.listTrackingByOrderForUpdate(order.id, transaction);
-    if (!trackings || trackings.length === 0) {
-      return; // OP sem apontamento por etapa: fluxo simples permanece valido.
+
+    // Regra pre-existente (1.3): vale nos dois modos.
+    assertNoOpenSteps(order.order_number, trackings || []);
+
+    if (mode === 'warn') {
+      if (!trackings || trackings.length === 0) {
+        logger.warn('OP concluida SEM apontamento de producao (PRODUCTION_TRACKING_REQUIRED=warn).', {
+          rule: PRODUCTION_TRACKING_RULES.TRACKING_REQUIRED,
+          production_order_id: order.id,
+          order_number: order.order_number,
+          product_id: order.product_id,
+          quantity_produced: producedQty,
+        });
+      }
+      assertProducedQuantityMatchesTracking(order.order_number, trackings || [], producedQty);
+      return;
     }
 
-    const openSteps = trackings.filter((step: any) => !['completed', 'skipped'].includes(step.status));
-    if (openSteps.length > 0) {
-      throw new BusinessRuleError(
-        `OP ${order.order_number} nao pode ser concluida com ${openSteps.length} etapa(s) de apontamento em aberto.`,
-        { open_steps: openSteps.map((step: any) => ({ id: step.id, sequence: step.sequence, status: step.status })) }
-      );
-    }
+    assertTrackingExists(order.order_number, trackings || []);
+    assertHasCompletedStep(order.order_number, trackings);
+    assertProducedQuantityMatchesTracking(order.order_number, trackings, producedQty);
 
-    const completedSteps = trackings.filter((step: any) => step.status === 'completed');
-    if (completedSteps.length === 0) {
-      return; // Todas puladas: sem quantidade apontada para reconciliar.
-    }
+    // As duas ultimas regras precisam do centro de trabalho de cada etapa, que
+    // so a consulta com `include` traz. As linhas ja estao travadas pelo
+    // `listTrackingByOrderForUpdate` acima — esta segunda leitura acontece
+    // dentro da mesma transacao e enxerga exatamente as mesmas linhas.
+    const detailedTrackings = await this.productionOrderRepository.listTrackingWithRouteStepByOrder(order.id, transaction);
+    assertCompletedStepsHaveMeasurableTime(order.order_number, detailedTrackings || []);
 
-    const lastStep = completedSteps[completedSteps.length - 1];
-    const lastGood = parseFloat(String(lastStep.quantity_good || 0));
-    if (producedQty > lastGood + 0.0001) {
-      throw new BusinessRuleError(
-        `quantity_produced (${producedQty}) excede a quantidade boa apontada na ultima etapa (${lastGood}) da OP ${order.order_number}.`,
-        { last_step_sequence: lastStep.sequence, last_step_quantity_good: lastGood, quantity_produced: producedQty }
-      );
-    }
+    const settings = await this.getProductionCostSettings(transaction);
+    assertLaborRateIsResolvable(
+      order.order_number,
+      detailedTrackings || [],
+      parseFloat(String(settings.default_labor_rate_per_hour ?? 0)),
+    );
   }
 
   /**
@@ -300,7 +446,13 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    *   trabalho da etapa (`work_centers.cost_per_hour` quando
    *   `production_route_steps.work_center_id` estiver preenchido; senao,
    *   fallback `production_cost_settings.default_labor_rate_per_hour`).
-   *   Soma-se o custo de todas as etapas concluidas. OP sem nenhum
+   *   Soma-se o custo de todas as etapas concluidas.
+   *
+   *   **Gap G4 (2026-08-10):** com `PRODUCTION_TRACKING_REQUIRED=block`
+   *   (padrao) este caminho nunca mais e alcancado com mao-de-obra zero — a
+   *   conclusao ja foi barrada por
+   *   {@link assertTrackingIsSufficientForCompletion}. O tratamento tolerante
+   *   descrito abaixo so vale no modo de transicao `warn`: OP sem nenhum
    *   apontamento (ou sem etapas `completed`) nao gera lancamento de
    *   mao-de-obra (decisao: nao ha base para estimar horas trabalhadas em
    *   OPs legadas/sem rastreamento por etapa — nenhum custo e melhor que um
@@ -381,6 +533,18 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * trabalho de cada etapa (com fallback global quando a etapa nao tem
    * `work_center_id`).
    *
+   * **A matematica nao mudou no G4.** O que mudou e de onde ela vem: horas e
+   * taxa agora saem de {@link computeStepHours} e {@link resolveStepLaborRate},
+   * as MESMAS funcoes puras que a porta de entrada
+   * ({@link assertTrackingIsSufficientForCompletion}) usa para reprovar a
+   * conclusao. Se as duas implementacoes divergissem, o gate aprovaria uma OP
+   * cujo custo de mao-de-obra sairia zero assim mesmo — que e exatamente o
+   * defeito que o G4 elimina.
+   *
+   * No modo `block`, `null` (hora nao mensuravel ou taxa nao resolvivel) e
+   * inalcancavel aqui: o gate ja barrou. No modo `warn` o `continue` historico
+   * permanece, preservando o comportamento anterior durante a transicao.
+   *
    * @param order - OP travada.
    * @param settings - Configuracao de custeio (`production_cost_settings`).
    * @param transaction - Transacao ativa.
@@ -394,17 +558,15 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
     let total = 0;
 
     for (const step of trackings) {
-      if (step.status !== 'completed' || !step.started_at || !step.finished_at) continue;
+      if (step.status !== 'completed') continue;
 
-      const hours = (new Date(step.finished_at).getTime() - new Date(step.started_at).getTime()) / 3_600_000;
-      if (!Number.isFinite(hours) || hours <= 0) continue;
+      const hours = computeStepHours(step);
+      if (hours === null) continue;
 
-      const workCenter = step.routeStep?.workCenter;
-      const rate = workCenter && workCenter.cost_per_hour !== null && workCenter.cost_per_hour !== undefined
-        ? parseFloat(String(workCenter.cost_per_hour))
-        : fallbackRate;
+      const resolvedRate = resolveStepLaborRate(step, fallbackRate);
+      if (resolvedRate === null) continue;
 
-      total += hours * rate;
+      total += hours * resolvedRate.rate;
     }
 
     return total;
