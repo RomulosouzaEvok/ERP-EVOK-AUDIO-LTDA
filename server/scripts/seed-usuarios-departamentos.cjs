@@ -223,8 +223,11 @@ const SEEDS = [
     email: `manutencao${TEST_DOMAIN}`,
     perfil: 'Manutencao',
     role: 'operator',
+    // `garantia` cobre as ordens de servico (`/api/service-orders`), que a
+    // Manutencao opera no dia a dia — descoberto pelo smoke de apresentacao,
+    // que acusou 403 nessa tela.
     modules: [
-      ['manutencao', 'approve'], ['patrimonio', 'approve'],
+      ['manutencao', 'approve'], ['patrimonio', 'approve'], ['garantia', 'operate'],
       ['centros_de_trabalho', 'operate'], ['dashboard', 'operate'],
     ],
   },
