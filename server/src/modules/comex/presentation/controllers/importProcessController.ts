@@ -11,6 +11,8 @@ import GetImportProcessByIdUseCase = require('../../application/use-cases/GetImp
 import RegisterImportTrackingUseCase = require('../../application/use-cases/RegisterImportTrackingUseCase');
 import CancelImportProcessUseCase = require('../../application/use-cases/CancelImportProcessUseCase');
 import ReceiveImportProcessUseCase = require('../../application/use-cases/ReceiveImportProcessUseCase');
+import ApproveImportProcessUseCase = require('../../application/use-cases/ApproveImportProcessUseCase');
+import ListImportProcessApprovalsUseCase = require('../../application/use-cases/ListImportProcessApprovalsUseCase');
 const {
   createImportProcessSchema,
   listImportProcessQuerySchema,
@@ -25,9 +27,34 @@ const itemRepository = new SequelizeItemRepository();
 
 /**
  * Requisicao autenticada: `req.user` e populado pelo middleware
- * `authenticate` (mesmo padrao de `rfqController.ts`).
+ * `authenticate` (mesmo padrao de `rfqController.ts`). `permissions` e o
+ * mapa de modulos de acesso do perfil, usado pelo G11-COMEX para resolver o
+ * papel de aprovador (ver {@link resolveAvailableApproverRoles}).
  */
-type AuthenticatedRequest = Request & { user: { id: number; role: 'admin' | 'operator' | 'financial' } };
+type AuthenticatedRequest = Request & {
+  user: {
+    id: number;
+    role: 'admin' | 'operator' | 'financial';
+    permissions?: Record<string, string | undefined>;
+  };
+};
+
+/**
+ * G11-COMEX — resolve os papeis de aprovador de alcada que o usuario logado
+ * efetivamente possui, a partir do RBAC real (`req.user.permissions`),
+ * NUNCA do body. Copia fiel do padrao anti-spoofing ja aprovado no G11
+ * (`purchaseController.resolveAvailableApproverRoles`) e no Juridico
+ * (RF-JUR-003). `role === 'admin'` e tratado como tendo o papel (mesmo
+ * curto-circuito de `authorizeModule`).
+ *
+ * @param req - Requisicao autenticada.
+ * @returns Papeis disponiveis (hoje apenas `diretor`).
+ */
+function resolveAvailableApproverRoles(req: AuthenticatedRequest): string[] {
+  const user = req.user;
+  if (user?.role === 'admin') return ['diretor'];
+  return user?.permissions?.diretor ? ['diretor'] : [];
+}
 
 /**
  * `Transaction` do Sequelize expõe `finished` em runtime, mas a definição
@@ -111,7 +138,72 @@ exports.create = async (req: AuthenticatedRequest, res: Response, next: NextFunc
   }
 };
 
-/** `POST /api/comex/import-processes/:id/tracking` — registra embarque/chegada/desembaraco. */
+/**
+ * `POST /api/comex/import-processes/:id/approve` — G11-COMEX: registra a
+ * aprovacao da DIRETORIA sobre o processo de importacao (nao embarca o
+ * processo; o embarque continua sendo `POST /:id/tracking` com
+ * `event = 'shipped'`, que passa a exigir esta aprovacao).
+ *
+ * `approver_user_id` vem SEMPRE do JWT e `approver_role` e SEMPRE resolvido
+ * por RBAC (`resolveAvailableApproverRoles`) — nada disso e aceito do body
+ * (regra P0 anti-spoofing do projeto). Sem body: qualquer payload enviado e
+ * simplesmente ignorado.
+ *
+ * Transacional: a leitura do processo (com lock), a checagem de duplicidade
+ * de papel e a gravacao acontecem na mesma transacao, para que duas
+ * requisicoes simultaneas do mesmo diretor nao gerem duas linhas (a UNIQUE
+ * `uq_import_process_approvals_process_role` e a garantia final).
+ */
+exports.approveAuthority = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const t: Transaction = await sequelize.transaction();
+  try {
+    const useCase = new ApproveImportProcessUseCase(comexRepository);
+    const approval = await useCase.execute({
+      id: Number(req.params.id),
+      approverUserId: req.user.id,
+      availableRoles: resolveAvailableApproverRoles(req),
+      transaction: t,
+    });
+
+    await t.commit();
+
+    logAction(req, {
+      action: 'approve',
+      entityType: 'ImportProcessApproval',
+      entityId: approval?.id,
+      entityDescription: `Processo de importacao ${req.params.id}`,
+      newValues: {
+        import_process_id: approval?.import_process_id,
+        approver_role: approval?.approver_role,
+        approver_user_id: approval?.approver_user_id,
+      },
+      description: `Alcada G11-COMEX: aprovacao "${approval?.approver_role}" registrada para o processo de importacao ${req.params.id}`,
+    });
+
+    res.status(201).json({ success: true, data: approval });
+  } catch (error) {
+    await rollbackIfPending(t);
+    next(error);
+  }
+};
+
+/**
+ * `GET /api/comex/import-processes/:id/approvals` — G11-COMEX: situacao da
+ * alcada (papeis exigidos, aprovacoes registradas, o que falta e se o
+ * processo ainda pode receber aprovacao). Somente leitura, sem efeito
+ * colateral e sem transacao.
+ */
+exports.listApprovals = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const useCase = new ListImportProcessApprovalsUseCase(comexRepository);
+    const data = await useCase.execute({ id: Number(req.params.id) });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** `POST /api/comex/import-processes/:id/tracking` — registra embarque/chegada/desembaraco (embarque exige a alcada G11-COMEX). */
 exports.registerTracking = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const t: Transaction = await sequelize.transaction();
   try {

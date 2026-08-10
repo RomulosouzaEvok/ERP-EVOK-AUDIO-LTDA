@@ -85,6 +85,27 @@ class ComexRepository {
   async createLot(_data: Record<string, unknown>, _transaction: Transaction): Promise<any> {
     throw new Error('ComexRepository.createLot nao implementado.');
   }
+
+  // --- G11-COMEX: gate de aprovacao da diretoria (decisao D-G, 2026-08-10) --
+
+  /**
+   * Lista as aprovacoes de diretoria ja registradas para um processo,
+   * ordenadas por `approved_at`. Usada pelo gate do embarque e pelo
+   * endpoint de leitura da situacao da alcada.
+   */
+  async listImportProcessApprovals(_importProcessId: number | string, _transaction?: Transaction): Promise<any[]> {
+    throw new Error('ComexRepository.listImportProcessApprovals nao implementado.');
+  }
+
+  /** Busca a aprovacao de um papel especifico num processo (checagem de duplicidade antes de gravar). */
+  async findImportProcessApprovalByRole(_importProcessId: number | string, _approverRole: string, _transaction?: Transaction): Promise<any | null> {
+    throw new Error('ComexRepository.findImportProcessApprovalByRole nao implementado.');
+  }
+
+  /** Grava uma aprovacao de diretoria (`approver_user_id` sempre vindo do JWT). */
+  async createImportProcessApproval(_data: Record<string, unknown>, _transaction?: Transaction): Promise<any> {
+    throw new Error('ComexRepository.createImportProcessApproval nao implementado.');
+  }
 }
 
 export = ComexRepository;

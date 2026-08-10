@@ -49,8 +49,24 @@ function makeComexRepository(overrides: Partial<Record<string, any>> = {}) {
     // por `materialReceiptService.receiveMaterialIntoQuarantine`.
     findLotForReceipt: jest.fn(async () => null),
     createLot: jest.fn(async (data: any) => ({ id: 77, ...data })),
+    // G11-COMEX: o default e "sem aprovacao da diretoria" — o estado real de
+    // um processo recem-criado. Testes que precisam embarcar informam
+    // `listImportProcessApprovals` explicitamente (ver `approvedBy`).
+    listImportProcessApprovals: jest.fn(async () => []),
+    findImportProcessApprovalByRole: jest.fn(async () => null),
+    createImportProcessApproval: jest.fn(async (data: any) => ({ id: 501, ...data })),
     ...overrides,
   };
+}
+
+/**
+ * Aprovacao de diretoria ja registrada, no formato devolvido pelo
+ * repositorio (G11-COMEX).
+ *
+ * @param role - Papel aprovador (default `diretor`).
+ */
+function approvedBy(role: string = 'diretor') {
+  return jest.fn(async () => [{ id: 501, approver_role: role, approver_user_id: 4, approved_at: new Date() }]);
 }
 
 function makeItemRepository(overrides: Partial<Record<string, any>> = {}) {
@@ -195,6 +211,8 @@ describe('RegisterImportTrackingUseCase', () => {
   it('registra o proximo evento sequencial e grava a data correspondente', async () => {
     const comexRepository = makeComexRepository({
       findImportProcessByIdForUpdate: jest.fn(async () => ({ id: 1, status: 'draft' })),
+      // G11-COMEX: o embarque so passa com a diretoria ja tendo aprovado.
+      listImportProcessApprovals: approvedBy(),
     });
     const useCase = new RegisterImportTrackingUseCase(comexRepository as any);
 

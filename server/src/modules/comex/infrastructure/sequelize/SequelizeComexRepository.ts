@@ -2,7 +2,7 @@ import type { Transaction } from 'sequelize';
 
 const ComexRepository = require('../../domain/repositories/ComexRepository');
 const {
-  ImportProcess, ImportProcessItem, User, Item, Supplier, LotControl,
+  ImportProcess, ImportProcessItem, ImportProcessApproval, User, Item, Supplier, LotControl,
 } = require('../../../../models/index');
 
 /**
@@ -108,6 +108,30 @@ class SequelizeComexRepository extends ComexRepository {
   /** @inheritdoc */
   async createLot(data: Record<string, unknown>, transaction: Transaction) {
     return LotControl.create(data, { transaction });
+  }
+
+  // --- G11-COMEX: gate de aprovacao da diretoria (decisao D-G, 2026-08-10) --
+
+  /** @inheritdoc */
+  async listImportProcessApprovals(importProcessId: number | string, transaction?: Transaction) {
+    return ImportProcessApproval.findAll({
+      where: { import_process_id: importProcessId },
+      order: [['approved_at', 'ASC']],
+      ...(transaction ? { transaction } : {}),
+    });
+  }
+
+  /** @inheritdoc */
+  async findImportProcessApprovalByRole(importProcessId: number | string, approverRole: string, transaction?: Transaction) {
+    return ImportProcessApproval.findOne({
+      where: { import_process_id: importProcessId, approver_role: approverRole },
+      ...(transaction ? { transaction } : {}),
+    });
+  }
+
+  /** @inheritdoc */
+  async createImportProcessApproval(data: Record<string, unknown>, transaction?: Transaction) {
+    return ImportProcessApproval.create(data, transaction ? { transaction } : undefined);
   }
 }
 
