@@ -37,9 +37,19 @@ jest.mock('../../src/services/costingService', () => ({
 jest.mock('../../src/models/index', () => ({
   LotControl: {
     findOne: jest.fn(async () => null),
+    findAll: jest.fn(async () => []),
+    findByPk: jest.fn(async () => null),
     create: jest.fn(async () => ({ id: 1 })),
   },
   PurchaseReceipt: {
+    create: jest.fn(async () => ({ id: 1 })),
+  },
+  // Cancelamento de venda passou a devolver as saidas por lote (D-M,
+  // `services/saleLotService`) em 2026-08-10. Aqui nao ha expedicao por lote
+  // registrada: a devolucao e um no-op e o teste segue medindo o que sempre
+  // mediu — lock na leitura e restauracao do estoque faturado UMA vez.
+  SaleLotShipment: {
+    findAll: jest.fn(async () => []),
     create: jest.fn(async () => ({ id: 1 })),
   },
 }));

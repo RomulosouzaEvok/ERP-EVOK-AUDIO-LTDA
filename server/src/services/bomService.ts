@@ -59,6 +59,15 @@ interface BomCreateItemInput {
   notes?: string;
   alternative_product_id?: number | string | null;
   is_critical?: boolean;
+  /**
+   * G18 — como a explosao trata este componente quando ele tem BOM propria.
+   *
+   * `false` (padrao) = subconjunto **estocavel**: a explosao para nele e a OP
+   * do pai reserva/consome/custeia a peca pronta. `true` = subconjunto
+   * **fantasma**: a explosao desce e o pai consome os filhos dele.
+   * Ver {@link BomService.explodeBOM}.
+   */
+  is_phantom?: boolean;
 }
 
 /** Payload de entrada para {@link BomService.createBOM}. */
@@ -231,7 +240,13 @@ class BomService {
           total_cost: totalCost,
           notes: item.notes || null,
           alternative_product_id: item.alternative_product_id || null,
-          is_critical: item.is_critical || false
+          is_critical: item.is_critical || false,
+          // G18: sem valor informado, o componente e tratado como PECA
+          // (estocavel). `false` explicito e nao `null`: a coluna e
+          // `NOT NULL DEFAULT false`, e `null` explicito ANULA o default do
+          // Postgres — classe de defeito catalogada em
+          // docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md.
+          is_phantom: item.is_phantom === true
         }, { transaction });
 
         bomItems.push(bomItem);
@@ -248,19 +263,52 @@ class BomService {
   }
 
   /**
-   * Explode a BOM (expande todos os níveis hierárquicos).
-   * 
-   * Dado um produto e quantidade, retorna a lista plana de todos os 
-   * componentes necessários considerando a árvore completa da BOM 
-   * (incluindo sub-BOMs de subconjuntos).
-   * 
+   * Explode a BOM e devolve a lista plana do que a produção precisa
+   * efetivamente **consumir** para fabricar a quantidade pedida.
+   *
+   * ## Até onde a explosão desce (G18, 2026-08-10)
+   *
+   * A explosão **não** desce automaticamente em todo componente que tenha
+   * estrutura própria. Quem manda é `is_phantom`, na linha da BOM do pai:
+   *
+   * - `is_phantom = false` (padrão) — **subconjunto estocável**: a explosão
+   *   para nele. O componente entra na lista como peça, com o custo dele, e
+   *   a OP do pai reserva, consome e custeia a peça pronta. É o caso do
+   *   **REPARO** da Evok (conjunto móvel vendido no balcão e também montado
+   *   dentro do alto-falante): ele tem saldo, preço e NF-e próprios, então
+   *   produzir um alto-falante tem de **baixar o estoque de reparo**.
+   * - `is_phantom = true` — **subconjunto fantasma**: a explosão desce e o
+   *   pai consome os filhos. Serve para agrupamento de engenharia que não
+   *   existe fisicamente e nunca tem saldo.
+   *
+   * Consequência prática: `total_cost` de um pai com subconjunto estocável
+   * usa o `cost_price` do subconjunto (que já carrega material +
+   * mão-de-obra + overhead da OP dele), e **não** a soma das matérias-primas
+   * dele. Não há dupla contagem — o subconjunto entra uma vez, como peça.
+   *
+   * Esta explosão é a mesma que governa reserva na liberação da OP
+   * (`reserveMaterials`), consumo/baixa de lote e custeio na conclusão
+   * (`ChangeProductionOrderStatusUseCase`). Mudar a regra aqui muda os três.
+   *
+   * ## A visão de engenharia (multinível) continua existindo
+   *
+   * `options.throughSubassemblies = true` força a descida em TODO componente
+   * com estrutura própria, inclusive os estocáveis. É a lista "indentada"
+   * clássica: serve para ver a árvore inteira (o alto-falante até cone,
+   * bobina, aranha e suspensão) e para custeio a partir de matéria-prima.
+   * **Não é o que a produção consome** — a OP usa sempre o padrão (`false`),
+   * senão o estoque de reparo nunca seria baixado.
+   *
    * @param {number} productId - ID do produto acabado
    * @param {number} quantity - Quantidade desejada
    * @param {Object} [options] - Opções de explosão
    * @param {number} [options.maxDepth=10] - Profundidade máxima
    * @param {boolean} [options.includeCost=true] - Se deve incluir custos
-   * @returns {Promise<Object>} BOM explodida com todos os níveis
-   * 
+   * @param {boolean} [options.throughSubassemblies=false] - Visão de engenharia:
+   *   desce também nos subconjuntos estocáveis (`is_phantom = false`)
+   * @returns {Promise<Object>} BOM explodida (`components` traz `is_subassembly`
+   *   e `sub_bom_id` para distinguir peça simples de subconjunto estocável)
+   *
    * @example
    * // Para produzir 1000 alto-falantes 12":
    * await BomService.explodeBOM(1, 1000);
@@ -269,6 +317,10 @@ class BomService {
   static async explodeBOM(productId: number | string, quantity: number, options: any = {}) {
     const maxDepth = options.maxDepth || this.MAX_BOM_DEPTH;
     const includeCost = options.includeCost !== false;
+    // G18: visão de engenharia (multinível). Só `true` explícito liga —
+    // qualquer outro valor mantém a explosão de PRODUÇÃO, que é a que
+    // reserva, consome e custeia.
+    const throughSubassemblies = options.throughSubassemblies === true;
 
     // Busca a BOM ativa do produto
     const bom = await BillOfMaterial.findOne({
@@ -328,8 +380,36 @@ class BomService {
           where: { product_id: item.component_product_id, status: 'active' }
         });
 
-        if (subBOM) {
-          // Componente tem sub-BOM → explodir recursivamente
+        // G18 — subconjunto ESTOCÁVEL x subconjunto FANTASMA.
+        //
+        // Ter BOM própria NÃO basta para decidir se a explosão desce. Quem
+        // decide é a linha da BOM do pai (`is_phantom`):
+        //
+        // | `is_phantom` | Significado | O que a OP do pai faz |
+        // |---|---|---|
+        // | `false` (padrão) | subconjunto **estocável** (tem saldo próprio, é vendido e/ou produzido por OP própria) | reserva, consome e custeia a **peça pronta** |
+        // | `true` | subconjunto **fantasma** (agrupamento de engenharia, não existe fisicamente) | desce e consome os **filhos** dele |
+        //
+        // Antes disso a descida era incondicional, e o efeito real na fábrica
+        // era grave: o REPARO (conjunto móvel que a Evok vende no balcão E
+        // monta no alto-falante) era atravessado, a OP do alto-falante
+        // consumia cone/bobina/aranha/suspensão direto, o **estoque de reparo
+        // nunca era baixado** e o custo do alto-falante perdia a mão-de-obra e
+        // o overhead da OP do reparo.
+        const explodeIntoSubBom = subBOM && (item.is_phantom === true || throughSubassemblies);
+
+        if (item.is_phantom === true && !subBOM) {
+          // Cadastro contraditório: marcado como fantasma, mas não há o que
+          // explodir. Vira folha (comportamento seguro) e o problema aparece
+          // no `errors` da resposta em vez de sumir.
+          errors.push(
+            `Componente "${component.name}" (ID ${item.component_product_id}) está marcado como fantasma `
+            + 'na estrutura, mas não tem BOM ativa própria para explodir. Foi tratado como peça.'
+          );
+        }
+
+        if (explodeIntoSubBom) {
+          // Componente fantasma com sub-BOM → explodir recursivamente
           const subItems = await BillOfMaterialItem.findAll({
             where: { bom_id: subBOM.id },
             order: [['bom_level', 'ASC'], ['sequence_order', 'ASC']]
@@ -366,6 +446,12 @@ class BomService {
               stock_available: parseFloat(component.quantity || 0),
               stock_minimum: parseFloat(component.min_quantity || 0),
               is_critical: item.is_critical,
+              // G18: expõe para quem lê a explosão (tela, OP, custeio) que
+              // este componente é um subconjunto ESTOCÁVEL — tem estrutura
+              // própria, mas foi consumido como peça pronta. Sem isso, um
+              // reparo e um parafuso ficam indistinguíveis na resposta.
+              is_subassembly: !!subBOM,
+              sub_bom_id: subBOM ? subBOM.id : null,
               bom_level: level,
               notes: item.notes
             });
@@ -407,6 +493,10 @@ class BomService {
       product_id: productId,
       product_name: (await Product.findByPk(productId))?.name || 'N/A',
       requested_quantity: quantity,
+      // G18: diz ao leitor QUAL das duas visões ele recebeu. Sem isso, um
+      // custo de R$ 58,50 (matéria-prima) e um de R$ 62,10 (com o reparo já
+      // custeado) são indistinguíveis na resposta.
+      exploded_through_subassemblies: throughSubassemblies,
       total_cost: totalCost,
       total_components: totalComponents,
       total_quantity: totalQuantityNeeded,

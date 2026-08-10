@@ -78,7 +78,13 @@ exports.cancelSaleNfe = async (req: Request, res: Response, next: NextFunction) 
     if (!parsed.success) handleZodError(parsed.error);
 
     const useCase = new CancelSaleNfeUseCase(fiscalRepository);
-    const sale = await useCase.execute({ saleId: req.params.id, reason: parsed.data.reason });
+    // `userId` do JWT (nunca do body): é ele que assina o movimento de
+    // entrada da devolução de estoque do D-M.
+    const sale = await useCase.execute({
+      saleId: req.params.id,
+      reason: parsed.data.reason,
+      userId: (req as any).user?.id,
+    });
 
     logAction(req, {
       action: 'status_change',

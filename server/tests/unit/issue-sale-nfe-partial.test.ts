@@ -34,6 +34,16 @@ jest.mock('../../src/services/saleStockService', () => ({
   commitInvoicedStock: jest.fn(async () => []),
 }));
 
+// D-L (2026-08-10): a emissão pré-checa o gate de qualidade por lote antes de
+// queimar número de NF-e. Mesma justificativa do dublê acima — aqui a regra
+// medida é a quantidade faturada, não a liberação de lote; sem este dublê o
+// serviço carregaria os models reais contra o `config/database` fake.
+jest.mock('../../src/services/saleLotService', () => ({
+  assertLotsReleasedForInvoice: jest.fn(async () => undefined),
+  shipLotsForInvoice: jest.fn(async () => []),
+  returnLotShipments: jest.fn(async () => []),
+}));
+
 jest.mock('../../src/modules/fiscal/infrastructure/providers/NfeProviderFactory', () =>
   jest.fn(() => ({
     issue: jest.fn(async () => ({

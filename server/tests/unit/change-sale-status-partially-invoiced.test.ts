@@ -24,6 +24,14 @@ jest.mock('../../src/services/warehouseStockService', () => ({
   removeFromWarehouse: jest.fn(async () => ({})),
 }));
 
+// D-M (2026-08-10): cancelar venda passou a devolver as saídas por lote.
+// Dublado pelo mesmo motivo dos dois acima — este arquivo mede a máquina de
+// estados de `partially_invoiced`, e a devolução por lote (que precisa dos
+// models reais) tem cobertura própria.
+jest.mock('../../src/services/saleLotService', () => ({
+  returnLotShipments: jest.fn(async () => []),
+}));
+
 import ChangeSaleStatusUseCase = require('../../src/modules/sales/application/use-cases/ChangeSaleStatusUseCase');
 
 const InventoryService = require('../../src/services/inventoryService');

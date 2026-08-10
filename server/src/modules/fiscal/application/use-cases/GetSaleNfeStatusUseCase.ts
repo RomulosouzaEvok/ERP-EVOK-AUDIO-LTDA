@@ -32,6 +32,15 @@
  * baixar estoque e faturado sem nada a cobrar são o mesmo defeito visto de
  * dois lados.
  *
+ * GATE DE QUALIDADE NA SAÍDA (D-L, 2026-08-10): a baixa passa pelo mesmo
+ * `saleStockService.commitInvoicedStock`, que agora recusa a emissão cujo
+ * produto dependa de lote não liberado. Aqui, diferente do caminho síncrono,
+ * **não existe pré-checagem separada**: a nota já foi autorizada pelo
+ * provedor quando este use case roda, então o gate só pode falhar se o lote
+ * tiver sido bloqueado entre a emissão e a reconsulta — a transação inteira
+ * volta atrás e a reconciliação continua recuperável (o registro em
+ * `sale_invoices` permanece `processing`).
+ *
  * @module modules/fiscal/application/use-cases/GetSaleNfeStatusUseCase
  */
 
@@ -152,7 +161,13 @@ class GetSaleNfeStatusUseCase extends UseCase {
             })),
             userId ?? locked.user_id,
             transaction,
-            { description: `NF-e ${locked.nfe_series}/${locked.nfe_number} - Venda #${locked.id}` }
+            {
+              description: `NF-e ${locked.nfe_series}/${locked.nfe_number} - Venda #${locked.id}`,
+              // D-L/D-M: a saída por lote pertence a ESTA emissão, também no
+              // caminho assíncrono — senão o cancelamento desta nota não teria
+              // como devolver aos lotes certos.
+              saleInvoiceId: saleInvoice.id,
+            }
           );
 
           for (const { item, newInvoicedQuantity } of updates) {

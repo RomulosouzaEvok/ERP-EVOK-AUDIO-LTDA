@@ -125,6 +125,19 @@ jest.mock('../../src/models/index', () => ({
       return row;
     }),
   },
+  // O gate de lote (D-L, `services/saleLotService`) entrou no caminho da baixa
+  // em 2026-08-10. Esta suite exercita, de proposito, o produto SEM lote
+  // nenhum — estoque legado, que e o cenario que ela sempre testou: com
+  // `LotControl.findAll` vazio, `evaluateLotGate` devolve `governed: false` e
+  // nao ha expedicao por lote a gravar. A governanca de lote tem suite propria.
+  LotControl: {
+    findAll: jest.fn(async () => []),
+    findByPk: jest.fn(async () => null),
+  },
+  SaleLotShipment: {
+    findAll: jest.fn(async () => []),
+    create: jest.fn(async (data: any) => asInstance({ id: 1, ...data })),
+  },
 }));
 
 // O saldo por deposito vive em outro model (`ProductWarehouseStock`) e tem

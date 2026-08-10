@@ -32,6 +32,7 @@ interface BillOfMaterialItemAttributes {
   notes: string | null;
   alternative_product_id: number | null;
   is_critical: boolean;
+  is_phantom: boolean;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -63,7 +64,13 @@ const BillOfMaterialItem = sequelize.define('BillOfMaterialItem', {
   total_cost: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0, comment: 'Custo total (cache: qtd × unit_cost + scrap)' },
   notes: { type: DataTypes.TEXT, allowNull: true, comment: 'Observações específicas do item (opcional; NOT NULL indevido removido na migration 20260810-000028)' },
   alternative_product_id: { type: DataTypes.INTEGER, allowNull: true, defaultValue: null, comment: 'FK → Product.id (substituto aprovado, opcional; FK é ON DELETE SET NULL). NOT NULL indevido removido na migration 20260810-000028' },
-  is_critical: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, comment: 'Item crítico (único fornecedor, lead time longo)' }
+  is_critical: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, comment: 'Item crítico (único fornecedor, lead time longo)' },
+  is_phantom: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'G18: false = subconjunto ESTOCÁVEL (a explosão para nele; a OP do pai consome a peça pronta — caso do REPARO). true = subconjunto FANTASMA (a explosão desce e o pai consome os filhos). Só tem efeito quando o componente tem BOM ativa própria.'
+  }
 }, {
   tableName: 'bill_of_material_items',
   underscored: true,

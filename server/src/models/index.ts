@@ -82,6 +82,7 @@ import ImportProcess = require('./ImportProcess');
 import ImportProcessItem = require('./ImportProcessItem');
 import ImportProcessApproval = require('./ImportProcessApproval');
 import SaleInvoice = require('./SaleInvoice');
+import SaleLotShipment = require('./SaleLotShipment');
 import CompanyBankingConfig = require('./CompanyBankingConfig');
 import CnabRemittance = require('./CnabRemittance');
 import CnabRemittanceItem = require('./CnabRemittanceItem');
@@ -285,6 +286,29 @@ SaleItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
 // `docs/governance/TODO.md`; ver JSDoc de `models/SaleInvoice.ts`)
 Sale.hasMany(SaleInvoice, { foreignKey: 'sale_id', as: 'invoices' });
 SaleInvoice.belongsTo(Sale, { foreignKey: 'sale_id', as: 'sale' });
+
+// ---- SaleLotShipment (D-L/D-M, migration 20260810-000039) ----
+// O rastro de expedição por LOTE. Todos os atributos são snake_case e iguais
+// ao nome da coluna (o model não usa `field:`), então `foreignKey` abaixo é o
+// nome do ATRIBUTO — não cria atributo-fantasma.
+Sale.hasMany(SaleLotShipment, { foreignKey: 'sale_id', as: 'lot_shipments' });
+SaleLotShipment.belongsTo(Sale, { foreignKey: 'sale_id', as: 'sale' });
+
+// A emissão dona da saída: é por ela que o cancelamento da NF-e devolve a
+// quantidade DAQUELA nota (faturamento parcial), não a do pedido inteiro.
+SaleInvoice.hasMany(SaleLotShipment, { foreignKey: 'sale_invoice_id', as: 'lot_shipments' });
+SaleLotShipment.belongsTo(SaleInvoice, { foreignKey: 'sale_invoice_id', as: 'saleInvoice' });
+
+// O lote de onde a mercadoria saiu — o vínculo que responde "para qual
+// cliente foi o lote X" num recall, e o destino da devolução (D-M).
+LotControl.hasMany(SaleLotShipment, { foreignKey: 'lot_control_id', as: 'sale_shipments' });
+SaleLotShipment.belongsTo(LotControl, { foreignKey: 'lot_control_id', as: 'lotControl' });
+
+Product.hasMany(SaleLotShipment, { foreignKey: 'product_id', as: 'sale_lot_shipments' });
+SaleLotShipment.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+User.hasMany(SaleLotShipment, { foreignKey: 'user_id', as: 'sale_lot_shipments' });
+SaleLotShipment.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 // Sale ↔ AccountReceivable
 Sale.hasMany(AccountReceivable, { foreignKey: 'sale_id', as: 'accounts_receivable' });
@@ -1441,6 +1465,7 @@ export {
   BankStatement, BankStatementEntry,
   ImportProcess, ImportProcessItem, ImportProcessApproval,
   SaleInvoice,
+  SaleLotShipment,
   CompanyBankingConfig,
   CnabRemittance, CnabRemittanceItem, CnabReturnFile, CnabReturnOccurrence,
   SstTipoEpi, SstMatrizEpi, SstEntregaEpi, SstDevolucaoEpi, SstAcaoCorretiva,

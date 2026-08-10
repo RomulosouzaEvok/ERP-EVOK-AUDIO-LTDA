@@ -107,7 +107,18 @@ describe('Invariante 1 — faturamento/expedicao (saleStockService) so le/consom
       findByPk: jest.fn(async (id: number) => warehousesById[id] || null),
     };
 
-    jest.doMock('../../src/models/index', () => ({ Product, Warehouse, ProductWarehouseStock }));
+    // `LotControl` vazio + `SaleLotShipment` inerte: o gate de lote (D-L,
+    // `services/saleLotService`) entrou no caminho da baixa em 2026-08-10, e
+    // esta invariante e sobre DEPOSITO (ACABADOS x INSUMOS), nao sobre lote —
+    // produto sem lote cai no caminho legado (`governed: false`) e a
+    // invariante continua sendo medida isolada.
+    jest.doMock('../../src/models/index', () => ({
+      Product,
+      Warehouse,
+      ProductWarehouseStock,
+      LotControl: { findAll: jest.fn(async () => []), findByPk: jest.fn(async () => null) },
+      SaleLotShipment: { findAll: jest.fn(async () => []), create: jest.fn(async (data: any) => ({ id: 1, ...data })) },
+    }));
 
     InventoryService = {
       // InventoryService so mexe em products.quantity / na tabela de

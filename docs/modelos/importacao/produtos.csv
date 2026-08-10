@@ -1,0 +1,10 @@
+﻿codigo;descricao;tipo;unidade;preco_venda;custo_padrao;estoque_minimo;lote_minimo;lead_time_dias;ncm;cest;peso_kg;localizacao;desenho;revisao;observacao
+EXEMPLO-AF12;Alto-falante 12 polegadas;PRODUTO ACABADO;un;;;;;;;;;;;;EXEMPLO — o produto que a fabrica vende. Troque o codigo pelo codigo real.
+EXEMPLO-REP12;Reparo 12 polegadas;PRODUTO ACABADO;un;;;;;;;;;;;;EXEMPLO — vendido avulso E montado no alto-falante. Por isso e PRODUTO ACABADO e tem estrutura propria.
+EXEMPLO-CONE12;Cone 12 polegadas;COMPONENTE;un;;;;;;;;;;;;EXEMPLO
+EXEMPLO-BOB12;Bobina movel 12 polegadas;COMPONENTE;un;;;;;;;;;;;;EXEMPLO
+EXEMPLO-ARA12;Aranha 12 polegadas;COMPONENTE;un;;;;;;;;;;;;EXEMPLO
+EXEMPLO-SUS12;Suspensao 12 polegadas;COMPONENTE;un;;;;;;;;;;;;EXEMPLO
+EXEMPLO-IMA12;Ima 12 polegadas;COMPONENTE;un;;;;;;;;;;;;EXEMPLO
+EXEMPLO-CARC12;Carcaca 12 polegadas;COMPONENTE;un;;;;;;;;;;;;EXEMPLO
+EXEMPLO-TERM12;Terminais;COMPONENTE;un;;;;;;;;;;;;EXEMPLO

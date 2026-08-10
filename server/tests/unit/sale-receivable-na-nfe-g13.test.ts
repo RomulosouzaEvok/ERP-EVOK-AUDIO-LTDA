@@ -42,6 +42,15 @@ jest.mock('../../src/services/saleStockService', () => ({
   commitInvoicedStock: jest.fn(async () => []),
 }));
 
+// D-L (2026-08-10): o gate de lote da emissao tem arquivo dedicado. Dublado
+// aqui pela MESMA razao declarada logo abaixo para estoque/deposito: sem isto
+// o servico carrega os models reais contra o `config/database` dublado.
+jest.mock('../../src/services/saleLotService', () => ({
+  assertLotsReleasedForInvoice: jest.fn(async () => undefined),
+  shipLotsForInvoice: jest.fn(async () => []),
+  returnLotShipments: jest.fn(async () => []),
+}));
+
 // Idem para a reserva/estoque da confirmacao do pedido: dublados para que o
 // `jest.mock` de `config/database` acima nao arraste a definicao real dos
 // models (que precisa de uma instancia Sequelize de verdade).

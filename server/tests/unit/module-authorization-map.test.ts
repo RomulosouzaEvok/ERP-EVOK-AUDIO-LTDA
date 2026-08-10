@@ -94,6 +94,14 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   // qualquer autenticado com segregação POR CAMPO (RF-RH-006) — são dois
   // desenhos deliberadamente diferentes para o mesmo departamento.
   'rh',
+  // 2026-08-10: módulo NOVO `spreadsheetImport` — carga de cadastro por
+  // planilha (`/api/catalog-import`). Leitura/modelo atrás de
+  // `authorizeModule('produtos')`; simular e importar exigem `produtos` E
+  // `bom` em nível `operate`, porque a mesma operação escreve o cadastro
+  // (`products`/`items`) e a estrutura (`bill_of_materials`) — exigir só um
+  // abriria um caminho para criar BOM sem passar pelo módulo que a protege
+  // (ver cabeçalho de `presentation/routes/catalogImport.ts`).
+  'spreadsheetImport',
 ];
 
 /**

@@ -14,6 +14,11 @@ const bomItemSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
   alternative_product_id: z.coerce.number().int().positive().nullable().optional(),
   is_critical: z.boolean().optional(),
+  // G18: `true` só faz sentido em componente que TEM estrutura própria e
+  // NÃO tem estoque próprio (agrupamento de engenharia). O padrão `false`
+  // é o que faz um subconjunto estocável — como o REPARO — ser reservado,
+  // consumido e custeado como peça pela OP do pai.
+  is_phantom: z.boolean().optional(),
 }).strict();
 
 export const createBomSchema = z.object({

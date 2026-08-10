@@ -25,11 +25,16 @@ class ExplodeBOMUseCase extends UseCase {
    * @param {Object} input
    * @param {number} input.id - Id da BOM (usado apenas para descobrir o `product_id`).
    * @param {number} input.qty - Quantidade a produzir (deve ser > 0).
+   * @param {boolean} [input.throughSubassemblies=false] - G18: visão de
+   *   ENGENHARIA (multinível). Desce também nos subconjuntos estocáveis
+   *   (`is_phantom = false`), mostrando a árvore até a matéria-prima. O
+   *   padrão é a visão de PRODUÇÃO, que para no subconjunto estocável —
+   *   é ela que a OP reserva, consome e custeia.
    * @returns {Promise<Object>} BOM explodida.
    * @throws {ValidationError} Se `qty` estiver ausente ou <= 0.
    * @throws {NotFoundError} Se a BOM não existir.
    */
-  async execute({ id, qty }: { id: number; qty?: number | string }) {
+  async execute({ id, qty, throughSubassemblies }: { id: number; qty?: number | string; throughSubassemblies?: boolean }) {
     const parsedQty = parseFloat(String(qty));
     if (!qty || !Number.isFinite(parsedQty) || parsedQty <= 0) {
       throw new ValidationError('Parâmetro "qty" (quantidade) é obrigatório e deve ser > 0');
@@ -40,7 +45,9 @@ class ExplodeBOMUseCase extends UseCase {
       throw new NotFoundError('BOM não encontrada');
     }
 
-    return BomService.explodeBOM(bom.product_id, parsedQty);
+    return BomService.explodeBOM(bom.product_id, parsedQty, {
+      throughSubassemblies: throughSubassemblies === true,
+    });
   }
 }
 

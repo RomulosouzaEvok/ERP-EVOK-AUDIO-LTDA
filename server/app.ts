@@ -194,6 +194,10 @@ app.use('/api/engineering/bom', require('./src/modules/bom/presentation/routes/b
 app.use('/api/engineering', require('./src/modules/engineering/presentation/routes/engineering'));
 app.use('/api/laboratory', require('./src/modules/laboratory/presentation/routes/laboratory'));
 app.use('/api/items', require('./src/modules/items/presentation/routes/items'));
+// Importacao de cadastro por planilha (CSV): carrega insumos, produtos e a
+// estrutura de produto de uma vez. Escreve em `products` + `items` e delega a
+// estrutura ao `BomService` ja existente.
+app.use('/api/catalog-import', require('./src/modules/spreadsheetImport/presentation/routes/catalogImport'));
 app.use('/api/mrp', require('./src/modules/mrp/presentation/routes/mrp'));
 app.use('/api/traceability', require('./src/modules/traceability/presentation/routes/traceability'));
 app.use('/api/webhooks', require('./src/modules/webhooks/presentation/routes/webhooks'));

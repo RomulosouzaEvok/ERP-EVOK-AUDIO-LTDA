@@ -1,0 +1,9 @@
+﻿codigo_produto;codigo_componente;quantidade;unidade;perda_percentual;critico;revisao;observacao
+EXEMPLO-AF12;EXEMPLO-REP12;1;un;;sim;;EXEMPLO — nivel 1
+EXEMPLO-AF12;EXEMPLO-IMA12;1;un;;sim;;EXEMPLO — nivel 1
+EXEMPLO-AF12;EXEMPLO-CARC12;1;un;;;;EXEMPLO — nivel 1
+EXEMPLO-AF12;EXEMPLO-TERM12;2;un;;;;EXEMPLO — nivel 1
+EXEMPLO-REP12;EXEMPLO-CONE12;1;un;;sim;;EXEMPLO — nivel 2 (estrutura do proprio reparo)
+EXEMPLO-REP12;EXEMPLO-BOB12;1;un;;sim;;EXEMPLO — nivel 2
+EXEMPLO-REP12;EXEMPLO-ARA12;1;un;;;;EXEMPLO — nivel 2
+EXEMPLO-REP12;EXEMPLO-SUS12;1;un;;;;EXEMPLO — nivel 2

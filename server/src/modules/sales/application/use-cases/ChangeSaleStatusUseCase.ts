@@ -4,6 +4,7 @@ const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
 const InventoryService = require('../../../../services/inventoryService');
 const WarehouseStockService = require('../../../../services/warehouseStockService');
+const SaleLotService = require('../../../../services/saleLotService');
 
 /**
  * Maquina de estados de status da venda.
@@ -203,6 +204,18 @@ class ChangeSaleStatusUseCase extends UseCase {
         // de venda credita de volta o deposito ACABADOS na mesma transacao.
         await WarehouseStockService.addToWarehouse(item.product_id, acabadosWarehouse.id, invoicedQuantity, transaction);
       }
+
+      // (3) D-M (2026-08-10): o estoque faturado voltou acima em
+      // `products.quantity`/ACABADOS, mas o saldo dos LOTES de onde ele saiu
+      // continuaria baixado — o rastro por lote (`sale_lot_shipments`,
+      // criado pelo D-L) precisa voltar junto, ao MESMO lote. Idempotente:
+      // linha ja devolvida pelo cancelamento da NF-e e ignorada, entao
+      // cancelar a nota e depois a venda nao devolve duas vezes.
+      await SaleLotService.returnLotShipments({
+        saleId: sale.id,
+        transaction,
+        notes: `Cancelamento da venda #${sale.id} - devolucao ao lote de origem`
+      });
 
       await this.saleRepository.cancelPendingReceivables(sale.id, transaction);
     }

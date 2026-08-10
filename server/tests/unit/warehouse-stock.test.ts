@@ -626,6 +626,15 @@ describe('Integracao dual-write: venda -> ACABADOS (confirmacao reserva, NF-e ba
     };
     jest.doMock('../../src/services/warehouseStockService', () => WarehouseStockService);
 
+    // D-L/D-M (2026-08-10): faturar e cancelar passaram por
+    // `services/saleLotService` (expedicao e devolucao por lote). Este bloco
+    // mede DEPOSITO, nao lote: produto sem lote nenhum cai no caminho legado
+    // (`governed: false`) e sem saida por lote registrada a devolucao e no-op.
+    jest.doMock('../../src/models/index', () => ({
+      LotControl: { findAll: jest.fn(async () => []), findByPk: jest.fn(async () => null) },
+      SaleLotShipment: { findAll: jest.fn(async () => []), create: jest.fn(async (data: any) => ({ id: 1, ...data })) },
+    }));
+
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     SaleStockService = require('../../src/services/saleStockService');
     // eslint-disable-next-line @typescript-eslint/no-var-requires

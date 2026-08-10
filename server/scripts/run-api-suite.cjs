@@ -108,7 +108,7 @@ async function ensureFixtures() {
   const models = require(path.join(serverDir, 'dist', 'src', 'models', 'index.js'));
   const {
     sequelize, User, Supplier, Product, BillOfMaterial, CompanyFiscalConfig,
-    Warehouse, ProductWarehouseStock, Item, ProductionCostSettings,
+    Warehouse, ProductWarehouseStock, Item, ProductionCostSettings, LotControl,
   } = models;
 
   try {
@@ -231,6 +231,39 @@ async function ensureFixtures() {
       const topUp = ACABADOS_FIXTURE_QUANTITY - Number(acabadosStock.quantity);
       await acabadosStock.increment('quantity', { by: topUp });
       await purchaseProduct.increment('quantity', { by: topUp });
+    }
+
+    // Lote LIBERADO do produto de fixture — exigido pelo gate de qualidade na
+    // saida (decisao D-L, 2026-08-10): a partir dela, faturar um produto que
+    // TEM lote so e permitido enquanto houver saldo em lote `available`; se o
+    // saldo liberado nao cobrir a emissao e existir lote retido
+    // (`quarantine`/`blocked`), o faturamento e recusado com 422 `D-L`.
+    //
+    // O CI-PRODUCT-001 acumula lotes em QUARENTENA a cada rodada (os testes de
+    // recebimento de compra criam um lote novo por recebimento, e lote de
+    // compra nasce em quarentena desde o G7). Sem este lote liberado
+    // generoso, a suite passaria hoje e comecaria a falhar sozinha na rodada
+    // em que o saldo liberado acabasse — exatamente o tipo de fixture que
+    // esconde regressao. Mesmo padrao de reforco do saldo ACABADOS acima.
+    const CI_RELEASED_LOT_QUANTITY = 100000;
+    const [ciReleasedLot] = await LotControl.findOrCreate({
+      where: { product_id: purchaseProduct.id, lot_number: 'CI-LOTE-LIBERADO-001' },
+      defaults: {
+        product_id: purchaseProduct.id,
+        lot_number: 'CI-LOTE-LIBERADO-001',
+        status: 'available',
+        quantity_initial: CI_RELEASED_LOT_QUANTITY,
+        quantity_available: CI_RELEASED_LOT_QUANTITY,
+        created_by: admin.id,
+        notes: 'Fixture automatizada: lote liberado para o gate de qualidade na saida (D-L)',
+      },
+    });
+    if (Number(ciReleasedLot.quantity_available) < CI_RELEASED_LOT_QUANTITY) {
+      await ciReleasedLot.update({
+        status: 'available',
+        quantity_initial: CI_RELEASED_LOT_QUANTITY,
+        quantity_available: CI_RELEASED_LOT_QUANTITY,
+      });
     }
 
     const [lowStockProduct] = await Product.findOrCreate({

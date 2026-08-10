@@ -87,6 +87,17 @@ jest.mock('../../src/services/saleStockService', () => ({
   commitInvoicedStock: jest.fn(async () => []),
 }));
 
+// D-L (2026-08-10): a emissão passou a pré-checar o gate de qualidade por
+// lote antes de queimar número de NF-e. Mesma justificativa dos mocks acima —
+// este arquivo cobre RBAC, e o gate tem suíte própria
+// (`sale-lot-gate-*`/integração); dublado para não arrastar `lot_controls`
+// para dentro de um teste de autorização.
+jest.mock('../../src/services/saleLotService', () => ({
+  assertLotsReleasedForInvoice: jest.fn(async () => undefined),
+  shipLotsForInvoice: jest.fn(async () => []),
+  returnLotShipments: jest.fn(async () => []),
+}));
+
 // G13 (2026-08-10): a autorização da NF-e passou a gerar a conta a receber.
 // Mesma justificativa do mock acima — este arquivo cobre RBAC, e a regra do
 // recebível tem `sale-receivable-na-nfe-g13.test.ts` dedicado.

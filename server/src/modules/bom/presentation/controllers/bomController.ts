@@ -226,6 +226,13 @@ exports.remove = async (req: Request, res: Response, next: NextFunction) => {
 /**
  * `GET /api/engineering/bom/:id/explode?qty=` — explode a BOM para uma quantidade.
  *
+ * `?through_subassemblies=true` devolve a visão de ENGENHARIA (multinível):
+ * desce também nos subconjuntos estocáveis, mostrando a árvore até a
+ * matéria-prima. Sem o parâmetro, devolve a visão de PRODUÇÃO — a mesma que
+ * a OP usa para reservar, consumir e custear, que **para** no subconjunto
+ * estocável (o REPARO é consumido como peça, não desmontado). Ver G18 em
+ * `BomService.explodeBOM` e `docs/producao/06-BOM.md`.
+ *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
@@ -234,7 +241,11 @@ exports.remove = async (req: Request, res: Response, next: NextFunction) => {
 exports.explode = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new ExplodeBOMUseCase(bomRepository);
-    const result = await useCase.execute({ id: req.params.id, qty: req.query.qty });
+    const result = await useCase.execute({
+      id: req.params.id,
+      qty: req.query.qty,
+      throughSubassemblies: String(req.query.through_subassemblies ?? '') === 'true',
+    });
     res.json({ success: true, data: result });
   } catch (error) { handleError(error, res, next); }
 };

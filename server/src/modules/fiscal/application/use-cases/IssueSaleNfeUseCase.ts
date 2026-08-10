@@ -71,6 +71,7 @@ const TaxCalculationService = require('../../domain/services/TaxCalculationServi
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
 const SaleInvoiceAccumulator = require('../../domain/services/SaleInvoiceAccumulator');
 const SaleStockService = require('../../../../services/saleStockService');
+const SaleLotService = require('../../../../services/saleLotService');
 const SaleReceivableService = require('../../../../services/saleReceivableService');
 
 interface IssueSaleNfeItemInput {
@@ -156,6 +157,21 @@ class IssueSaleNfeUseCase extends UseCase {
       }
 
       const items = allItems.filter((item: any) => qtyToInvoiceByItemId.has(item.id));
+
+      // D-L (2026-08-10) — GATE DE QUALIDADE NA SAÍDA, e ele roda AQUI, na
+      // transação de reserva, de propósito: se rodasse só na transação final
+      // (junto da baixa), a venda já teria queimado um número de NF-e e
+      // ficaria presa em `nfe_status = 'processing'`, com um registro em
+      // `sale_invoices` órfão. Rodando antes, um lote não liberado devolve
+      // 422 e **nada é gravado**. A revalidação sob lock acontece depois, em
+      // `saleStockService.commitInvoicedStock`.
+      await SaleLotService.assertLotsReleasedForInvoice(
+        items.map((item: any) => ({
+          productId: item.product_id,
+          quantity: qtyToInvoiceByItemId.get(item.id) as number,
+        })),
+        transaction
+      );
 
       const client = await this.fiscalRepository.findClientById(sale.customer_id, { transaction });
       if (!client) throw new NotFoundError('Cliente da venda não encontrado.');
@@ -385,7 +401,13 @@ class IssueSaleNfeUseCase extends UseCase {
           })),
           userId ?? sale.user_id,
           transaction,
-          { description: `NF-e ${sale.nfe_series}/${sale.nfe_number} - Venda #${sale.id}` }
+          {
+            description: `NF-e ${sale.nfe_series}/${sale.nfe_number} - Venda #${sale.id}`,
+            // D-L/D-M: amarra a saída por lote À EMISSÃO. É o que permite
+            // devolver exatamente a quantidade desta nota, aos mesmos lotes,
+            // quando ela for cancelada.
+            saleInvoiceId: saleInvoice?.id ?? undefined,
+          }
         );
 
         for (const { item, newInvoicedQuantity } of updates) {
