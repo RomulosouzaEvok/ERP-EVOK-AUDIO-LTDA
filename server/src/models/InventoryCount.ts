@@ -80,18 +80,18 @@ const InventoryCount = sequelize.define('InventoryCount', {
     defaultValue: 'cycle',
     comment: 'cycle=inventário cíclico, full=inventário geral, spot=contagem pontual'
   },
-  location: { type: DataTypes.STRING(100), comment: 'Local/área física contada (opcional)' },
-  started_at: { type: DataTypes.DATE, comment: 'Data/hora de início da contagem' },
-  completed_at: { type: DataTypes.DATE, comment: 'Data/hora de envio para aprovação' },
-  approved_at: { type: DataTypes.DATE, comment: 'Data/hora da aprovação (ou rejeição)' },
+  location: { type: DataTypes.STRING(100), allowNull: true, comment: 'Local/área física contada (opcional). NOT NULL indevido removido na migration 20260810-000028' },
+  started_at: { type: DataTypes.DATE, allowNull: true, comment: 'Data/hora de início da contagem (NULL enquanto draft)' },
+  completed_at: { type: DataTypes.DATE, allowNull: true, comment: 'Data/hora de envio para aprovação (NULL antes disso)' },
+  approved_at: { type: DataTypes.DATE, allowNull: true, comment: 'Data/hora da aprovação (ou rejeição); NULL antes disso' },
   created_by: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → users.id (quem criou a contagem)' },
-  approved_by: { type: DataTypes.INTEGER, comment: 'FK → users.id (quem aprovou/rejeitou)' },
+  approved_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → users.id (quem aprovou/rejeitou); NULL até a aprovação. FK é ON DELETE SET NULL, o que exige coluna nullable' },
   assigned_to: {
     type: DataTypes.INTEGER,
     allowNull: true,
     comment: 'FK → users.id (funcionário responsável pela contagem; NULL = disponível no "pool" para qualquer funcionário autorizado pegar via POST /:id/start, que faz o claim atômico)'
   },
-  notes: DataTypes.TEXT
+  notes: { type: DataTypes.TEXT, allowNull: true, comment: 'Observações livres (opcional)' }
 }, {
   tableName: 'inventory_counts',
   underscored: true,

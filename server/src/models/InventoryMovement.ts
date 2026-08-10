@@ -19,9 +19,9 @@ interface InventoryMovementAttributes {
   type: 'in' | 'out' | 'adjustment';
   quantity: number;
   unit_cost: number;
-  description: string | null;
+  description: string;
   reference_id: number | null;
-  reference_type: 'sale' | 'purchase' | 'production' | 'adjustment' | 'transfer' | 'sst_epi_delivery' | 'import' | null;
+  reference_type: 'sale' | 'purchase' | 'production' | 'adjustment' | 'transfer' | 'sst_epi_delivery' | 'import';
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -34,12 +34,21 @@ const InventoryMovement = sequelize.define('InventoryMovement', {
   warehouse_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → warehouses.id (Bloco 4, UC-42) — NULL = movimento legado sem depósito' },
   type: { type: DataTypes.ENUM('in', 'out', 'adjustment'), allowNull: false, comment: 'Tipo: in=entrada, out=saída, adjustment=ajuste' },
   quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, comment: 'Quantidade movimentada' },
-  unit_cost: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, comment: 'Custo unitário no momento' },
-  description: DataTypes.TEXT,
-  reference_id: DataTypes.INTEGER,
+  unit_cost: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0, comment: 'Custo unitário no momento' },
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+    comment: 'Histórico do movimento. NOT NULL no banco e MANTIDO assim na migration 20260810-000028: os 2 únicos pontos de INSERT da tabela sempre preenchem (createMovement usa `data.description ?? \'\'`). O model é que declarava nullable indevidamente.',
+  },
+  reference_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'ID do documento de origem (polimórfico, pareado com reference_type). NULL em ajuste manual/aprovação de contagem/scan mobile, que não têm documento de origem — o NOT NULL indevido foi removido na migration 20260810-000028 (achado P0-01).',
+  },
   reference_type: {
     type: DataTypes.ENUM('sale', 'purchase', 'production', 'adjustment', 'transfer', 'sst_epi_delivery', 'import'),
-    comment: "'sst_epi_delivery' adicionado em 20260806-000131-create-sst-entrega-epi.cjs (BLOCO 1 SST, confirmação de EntregaEPI) — sincronizado aqui na auditoria cruzada, pois o valor já existia no ENUM do Postgres mas faltava neste model TS. 'import' adicionado em 20260809-000027 (gap G14): antes a entrada de material importado gravava 'purchase' com reference_id de import_processes, e a consulta reversa por (reference_type, reference_id) devolvia um pedido de compra alheio.",
+    allowNull: false,
+    comment: "Categoria de origem do movimento. NOT NULL no banco e MANTIDO assim na migration 20260810-000028: todo movimento tem categoria (ajuste manual grava 'adjustment') e todos os chamadores vivos passam o valor; era o model que declarava nullable indevidamente. 'sst_epi_delivery' adicionado em 20260806-000131-create-sst-entrega-epi.cjs (BLOCO 1 SST, confirmação de EntregaEPI) — sincronizado aqui na auditoria cruzada, pois o valor já existia no ENUM do Postgres mas faltava neste model TS. 'import' adicionado em 20260809-000027 (gap G14): antes a entrada de material importado gravava 'purchase' com reference_id de import_processes, e a consulta reversa por (reference_type, reference_id) devolvia um pedido de compra alheio.",
   }
 }, {
   tableName: 'inventory_movements',

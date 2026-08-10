@@ -53,17 +53,17 @@ const BillOfMaterialItem = sequelize.define('BillOfMaterialItem', {
     },
     comment: 'Quantidade para UMA unidade do produto pai'
   },
-  unit: { type: DataTypes.STRING(10), defaultValue: 'un', comment: 'Unidade: un, g, kg, m, l' },
-  bom_level: { type: DataTypes.INTEGER, defaultValue: 1, validate: { min: 0, max: 10 }, comment: 'Nível hierárquico (0=produto final)' },
-  parent_item_id: { type: DataTypes.INTEGER, defaultValue: null, comment: 'Auto-relacionamento: item pai' },
-  sequence_order: { type: DataTypes.INTEGER, defaultValue: 0, comment: 'Ordem de montagem' },
-  component_type: { type: DataTypes.ENUM('raw_material', 'component', 'semi_finished', 'packaging', 'consumable', 'other'), defaultValue: 'component' },
-  scrap_percentage: { type: DataTypes.DECIMAL(5, 2), defaultValue: 0, validate: { min: 0, max: 100 }, comment: '% de perda técnica esperada' },
-  unit_cost: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0, comment: 'Custo unitário (cache)' },
-  total_cost: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0, comment: 'Custo total (cache: qtd × unit_cost + scrap)' },
-  notes: { type: DataTypes.TEXT, comment: 'Observações específicas do item' },
-  alternative_product_id: { type: DataTypes.INTEGER, defaultValue: null, comment: 'FK → Product.id (substituto aprovado)' },
-  is_critical: { type: DataTypes.BOOLEAN, defaultValue: false, comment: 'Item crítico (único fornecedor, lead time longo)' }
+  unit: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'un', comment: 'Unidade: un, g, kg, m, l' },
+  bom_level: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1, validate: { min: 0, max: 10 }, comment: 'Nível hierárquico (0=produto final)' },
+  parent_item_id: { type: DataTypes.INTEGER, allowNull: true, defaultValue: null, comment: 'Auto-relacionamento: item pai. NULL em componente de 1º nível (FK fk_bom_items_parent_item_id é ON DELETE SET NULL). NOT NULL indevido removido na migration 20260810-000028' },
+  sequence_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, comment: 'Ordem de montagem' },
+  component_type: { type: DataTypes.ENUM('raw_material', 'component', 'semi_finished', 'packaging', 'consumable', 'other'), allowNull: false, defaultValue: 'component' },
+  scrap_percentage: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0, validate: { min: 0, max: 100 }, comment: '% de perda técnica esperada' },
+  unit_cost: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0, comment: 'Custo unitário (cache)' },
+  total_cost: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0, comment: 'Custo total (cache: qtd × unit_cost + scrap)' },
+  notes: { type: DataTypes.TEXT, allowNull: true, comment: 'Observações específicas do item (opcional; NOT NULL indevido removido na migration 20260810-000028)' },
+  alternative_product_id: { type: DataTypes.INTEGER, allowNull: true, defaultValue: null, comment: 'FK → Product.id (substituto aprovado, opcional; FK é ON DELETE SET NULL). NOT NULL indevido removido na migration 20260810-000028' },
+  is_critical: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, comment: 'Item crítico (único fornecedor, lead time longo)' }
 }, {
   tableName: 'bill_of_material_items',
   underscored: true,

@@ -42,8 +42,19 @@ class CreateClientUseCase extends UseCase<Record<string, any>, any> {
       return await this.clientsRepository.create({
         name: entity.name,
         cpf_cnpj: cleanedDoc,
-        phone: entity.phone,
-        email: entity.email,
+        // `phone`, `email` e `notes` sao `NOT NULL DEFAULT ''` no banco e
+        // `allowNull: false, defaultValue: ''` no model `Client` — sao
+        // strings vazias por ausencia, nao NULL. `ClientEntity` normaliza
+        // campo ausente para `null` (`props.phone ?? null`), e passar esse
+        // `null` explicito ANULA o DEFAULT do Postgres e estoura
+        // `null value in column "phone" violates not-null constraint`.
+        // Segunda camada do BUG-02 (a primeira, `cnae NOT NULL`, era drift
+        // de schema e saiu na migration 20260810-000028): aqui quem estava
+        // errado era o codigo, nao o schema — por isso a correcao e no use
+        // case e nao um DROP NOT NULL. As demais colunas abaixo sao
+        // legitimamente nullable e continuam podendo receber `null`.
+        phone: entity.phone ?? '',
+        email: entity.email ?? '',
         cep: entity.cep,
         street: entity.street,
         number: entity.number,
@@ -51,7 +62,7 @@ class CreateClientUseCase extends UseCase<Record<string, any>, any> {
         neighborhood: entity.neighborhood,
         city: entity.city,
         state: entity.state,
-        notes: entity.notes,
+        notes: entity.notes ?? '',
         tax_regime: entity.tax_regime,
         ie: entity.ie,
         im: entity.im,

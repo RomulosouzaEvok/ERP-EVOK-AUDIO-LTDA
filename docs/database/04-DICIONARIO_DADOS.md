@@ -18,6 +18,22 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 >    `erp_evok_audio` nesta data. `sale_invoices` e
 >    `production_order_reservations`, que existiam no banco e faltavam aqui,
 >    foram adicionadas.
+> 2b. **Correção S-1 (migration `20260810-000028-fix-nullable-columns-round-2.cjs`,
+>    aplicada em 2026-08-10).** 38 colunas indevidamente `NOT NULL` foram
+>    afrouxadas em `bill_of_material_items`, `inventory_counts`,
+>    `inventory_count_items`, `inventory_movements`, `sales`, `clients` e
+>    `accounts_receivable` — era o que tornava impossível criar BOM, cliente,
+>    venda, contagem de inventário e ajuste de estoque (achados **P0-01**,
+>    **P0-05** e **P1-06** da auditoria; **BUG-01** a **BUG-04** da validação
+>    E2E). As 128 colunas destas 7 tabelas foram reconferidas contra
+>    `information_schema` nesta data e **batem 1:1** com o banco — inclusive
+>    `clients` e `accounts_receivable`, que não faziam parte da regeneração do
+>    item 2 e tinham 12 colunas `NOT NULL DEFAULT` marcadas erradamente como
+>    nuláveis. Os models Sequelize dessas 7 tabelas passaram a declarar
+>    `allowNull` explícito em todas as colunas, de modo que o bootstrap
+>    canônico (`20260731-000001-baseline-schema.cjs`) reproduza exatamente
+>    este schema num banco criado do zero.
+>
 > 3. **As demais seções ainda não foram regeneradas** e sabidamente divergem
 >    do banco real em cerca de **120 colunas** (na maioria marcando como
 >    `sim`/nullable colunas que hoje são `NOT NULL`), além de o índice cobrir
@@ -185,19 +201,19 @@ Contas a Receber — origem em vendas, controle de inadimplência.
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `sale_id` | INTEGER | sim | - | FK → `sales.id` |
 | `customer_id` | INTEGER | NÃO | - | FK → `clients.id` |
-| `installment` | INTEGER | sim | 1 | - |
+| `installment` | INTEGER | NÃO | 1 | - |
 | `amount` | NUMERIC(10,2) | NÃO | - | - |
 | `due_date` | DATE | NÃO | - | - |
 | `payment_date` | DATE | sim | - | - |
-| `status` | enum_accounts_receivable_status | sim | 'pending'::enum_accounts_receivable_s... | - |
+| `status` | enum_accounts_receivable_status | NÃO | 'pending'::enum_accounts_receivable_s... | - |
 | `payment_method` | VARCHAR(30) | sim | - | - |
 | `invoice_number` | VARCHAR(50) | sim | - | - |
 | `barcode` | VARCHAR(50) | sim | - | - |
 | `pix_key` | VARCHAR(100) | sim | - | - |
-| `interest` | NUMERIC(10,2) | sim | 0 | - |
-| `fine` | NUMERIC(10,2) | sim | 0 | - |
-| `discount` | NUMERIC(10,2) | sim | 0 | - |
-| `collection_status` | enum_accounts_receivable_collection_status | sim | 'normal'::enum_accounts_receivable_co... | - |
+| `interest` | NUMERIC(10,2) | NÃO | 0 | - |
+| `fine` | NUMERIC(10,2) | NÃO | 0 | - |
+| `discount` | NUMERIC(10,2) | NÃO | 0 | - |
+| `collection_status` | enum_accounts_receivable_collection_status | NÃO | 'normal'::enum_accounts_receivable_co... | - |
 | `protest_date` | DATE | sim | - | - |
 | `negativation_date` | DATE | sim | - | - |
 | `notes` | TEXT | sim | - | - |
@@ -355,14 +371,14 @@ Componentes de uma BOM legada, dual-read `product_id`/`item_id`.
 | `quantity` | NUMERIC(12,4) | NÃO | 1 | - |
 | `unit` | VARCHAR(10) | NÃO | 'un'::character varying | - |
 | `bom_level` | INTEGER | NÃO | 1 | - |
-| `parent_item_id` | INTEGER | NÃO | - | FK → `bill_of_material_items.id` |
+| `parent_item_id` | INTEGER | sim | - | FK → `bill_of_material_items.id` |
 | `sequence_order` | INTEGER | NÃO | 0 | - |
 | `component_type` | enum_bill_of_material_items_component_type | NÃO | 'component'::enum_bill_of_material_it... | - |
 | `scrap_percentage` | NUMERIC(5,2) | NÃO | 0 | - |
 | `unit_cost` | NUMERIC(12,2) | NÃO | 0 | - |
 | `total_cost` | NUMERIC(12,2) | NÃO | 0 | - |
-| `notes` | TEXT | NÃO | - | - |
-| `alternative_product_id` | INTEGER | NÃO | - | FK → `products.id` |
+| `notes` | TEXT | sim | - | - |
+| `alternative_product_id` | INTEGER | sim | - | FK → `products.id` |
 | `is_critical` | BOOLEAN | NÃO | false | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
@@ -398,8 +414,8 @@ Clientes (schema mais novo) — usado por `customer_price_lists`, `service_order
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
 | `name` | VARCHAR(200) | NÃO | - | - |
 | `cpf_cnpj` | VARCHAR(18) | NÃO | - | UQ |
-| `phone` | VARCHAR(20) | sim | ''::character varying | - |
-| `email` | VARCHAR(100) | sim | ''::character varying | - |
+| `phone` | VARCHAR(20) | NÃO | ''::character varying | - |
+| `email` | VARCHAR(100) | NÃO | ''::character varying | - |
 | `cep` | VARCHAR(10) | sim | - | - |
 | `street` | VARCHAR(200) | sim | - | - |
 | `number` | VARCHAR(20) | sim | - | - |
@@ -407,13 +423,13 @@ Clientes (schema mais novo) — usado por `customer_price_lists`, `service_order
 | `neighborhood` | VARCHAR(100) | sim | - | - |
 | `city` | VARCHAR(100) | sim | - | - |
 | `state` | VARCHAR(2) | sim | - | - |
-| `status` | enum_clients_status | sim | 'active'::enum_clients_status | - |
-| `notes` | TEXT | sim | ''::text | - |
+| `status` | enum_clients_status | NÃO | 'active'::enum_clients_status | - |
+| `notes` | TEXT | NÃO | ''::text | - |
 | `tax_regime` | enum_clients_tax_regime | sim | - | - |
 | `ie` | VARCHAR(20) | sim | - | - |
 | `im` | VARCHAR(20) | sim | - | - |
-| `ind_final` | enum_clients_ind_final | sim | '0'::enum_clients_ind_final | - |
-| `ind_ie` | enum_clients_ind_ie | sim | '9'::enum_clients_ind_ie | - |
+| `ind_final` | enum_clients_ind_final | NÃO | '0'::enum_clients_ind_final | - |
+| `ind_ie` | enum_clients_ind_ie | NÃO | '9'::enum_clients_ind_ie | - |
 | `cnae` | VARCHAR(10) | sim | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
@@ -662,12 +678,12 @@ Itens de uma contagem cíclica — saldo esperado vs contado, dual-read `product
 | `product_id` | INTEGER | sim | - | FK → `products.id` |
 | `item_id` | UUID | sim | - | FK → `items.id` |
 | `system_quantity` | NUMERIC(12,3) | NÃO | 0 | - |
-| `counted_quantity` | NUMERIC(12,3) | NÃO | - | - |
-| `variance_quantity` | NUMERIC(12,3) | NÃO | - | - |
+| `counted_quantity` | NUMERIC(12,3) | sim | - | - |
+| `variance_quantity` | NUMERIC(12,3) | sim | - | - |
 | `status` | enum_inventory_count_items_status | NÃO | 'pending'::enum_inventory_count_items... | - |
-| `counted_by` | INTEGER | NÃO | - | FK → `users.id` |
-| `counted_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `notes` | TEXT | NÃO | - | - |
+| `counted_by` | INTEGER | sim | - | FK → `users.id` |
+| `counted_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
+| `notes` | TEXT | sim | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 
@@ -681,13 +697,13 @@ Contagem cíclica de inventário (cabeçalho) — depósito, atribuição (pool/
 | `count_number` | VARCHAR(30) | NÃO | - | UQ |
 | `status` | enum_inventory_counts_status | NÃO | 'draft'::enum_inventory_counts_status | - |
 | `count_type` | enum_inventory_counts_count_type | NÃO | 'cycle'::enum_inventory_counts_count_... | - |
-| `location` | VARCHAR(100) | NÃO | - | - |
-| `started_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `completed_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
-| `approved_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+| `location` | VARCHAR(100) | sim | - | - |
+| `started_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
+| `completed_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
+| `approved_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
 | `created_by` | INTEGER | NÃO | - | FK → `users.id` |
-| `approved_by` | INTEGER | NÃO | - | FK → `users.id` |
-| `notes` | TEXT | NÃO | - | - |
+| `approved_by` | INTEGER | sim | - | FK → `users.id` |
+| `notes` | TEXT | sim | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `warehouse_id` | INTEGER | sim | - | FK → `warehouses.id` |
@@ -708,7 +724,7 @@ Movimentações de estoque (entrada/saída/ajuste/transferência), dual-read `pr
 | `quantity` | NUMERIC(18,6) | NÃO | - | - |
 | `unit_cost` | NUMERIC(10,2) | NÃO | 0 | - |
 | `description` | TEXT | NÃO | - | - |
-| `reference_id` | INTEGER | NÃO | - | - |
+| `reference_id` | INTEGER | sim | - | - |
 | `reference_type` | enum_inventory_movements_reference_type | NÃO | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
@@ -1599,9 +1615,9 @@ Vendas — ciclo quote→confirmed→partially_invoiced→invoiced→shipped.
 | `payment_method` | enum_sales_payment_method | NÃO | 'pix'::enum_sales_payment_method | - |
 | `installments` | INTEGER | NÃO | 1 | - |
 | `notes` | TEXT | NÃO | ''::text | - |
-| `nfe_number` | VARCHAR(50) | NÃO | - | - |
+| `nfe_number` | VARCHAR(50) | sim | - | - |
 | `nfe_status` | enum_sales_nfe_status | NÃO | 'pending'::enum_sales_nfe_status | - |
-| `nfe_key` | VARCHAR(50) | NÃO | - | - |
+| `nfe_key` | VARCHAR(50) | sim | - | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `nfe_series` | INTEGER | sim | - | - |
