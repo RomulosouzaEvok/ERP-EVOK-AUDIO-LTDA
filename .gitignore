@@ -12,3 +12,5 @@ server/tmp/
 server/=1
 .claude/
 backups/
+# Credenciais de teste geradas por server/scripts/seed-usuarios-departamentos.cjs
+*.local.txt
