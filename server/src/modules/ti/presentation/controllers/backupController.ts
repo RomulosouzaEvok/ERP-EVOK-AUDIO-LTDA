@@ -14,6 +14,7 @@ const SequelizeTiSettingsRepository = require('../../infrastructure/sequelize/Se
 const RegisterBackupLogUseCase = require('../../application/use-cases/backup/RegisterBackupLogUseCase');
 const ListBackupLogsUseCase = require('../../application/use-cases/backup/ListBackupLogsUseCase');
 const CheckBackupHealthUseCase = require('../../application/use-cases/backup/CheckBackupHealthUseCase');
+const { registerBackupLogSchema, handleZodError } = require('../validators/backupValidators');
 
 const backupLogRepository = new SequelizeBackupLogRepository();
 const ticketRepository = new SequelizeTicketRepository();
@@ -31,7 +32,10 @@ exports.list = async (req: Request, res: Response, next: NextFunction) => {
 /** `POST /api/ti/backup-logs` */
 exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await new RegisterBackupLogUseCase(backupLogRepository, ticketRepository, settingsRepository).execute(req.body);
+    const parsed = registerBackupLogSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
+    const data = await new RegisterBackupLogUseCase(backupLogRepository, ticketRepository, settingsRepository).execute(parsed.data);
     res.status(201).json({ success: true, data });
   } catch (error) { next(error); }
 };

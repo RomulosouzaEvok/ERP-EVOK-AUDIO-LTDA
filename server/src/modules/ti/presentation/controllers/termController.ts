@@ -19,6 +19,7 @@ const GetEmployeeTermsUseCase = require('../../application/use-cases/term/GetEmp
 const ListPendingTermsForOffboardingUseCase = require('../../application/use-cases/term/ListPendingTermsForOffboardingUseCase');
 const ListResponsibilityTermsUseCase = require('../../application/use-cases/term/ListResponsibilityTermsUseCase');
 const GetResponsibilityTermByIdUseCase = require('../../application/use-cases/term/GetResponsibilityTermByIdUseCase');
+const { createTermSchema, returnTermSchema, handleZodError } = require('../validators/termValidators');
 
 const termRepository = new SequelizeResponsibilityTermRepository();
 const ticketRepository = new SequelizeTicketRepository();
@@ -45,8 +46,11 @@ exports.getById = async (req: Request, res: Response, next: NextFunction) => {
 /** `POST /api/ti/responsibility-terms` */
 exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const parsed = createTermSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
     const term = await new CreateResponsibilityTermUseCase(termRepository, assetLookupService).execute({
-      ...req.body,
+      ...parsed.data,
       deliveredBy: (req as any).user.id,
     });
     res.status(201).json({ success: true, data: term });
@@ -56,9 +60,12 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
 /** `POST /api/ti/responsibility-terms/:id/return` */
 exports.returnTerm = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const parsed = returnTermSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
     const term = await new ReturnResponsibilityTermUseCase(termRepository, assetLookupService, ticketRepository, settingsRepository).execute({
       id: Number(req.params.id),
-      ...req.body,
+      ...parsed.data,
       receivedBy: (req as any).user.id,
     });
     res.json({ success: true, data: term });

@@ -22,6 +22,7 @@ const ListAccessRequestsUseCase = require('../../application/use-cases/accessReq
 const GetAccessRequestByIdUseCase = require('../../application/use-cases/accessRequest/GetAccessRequestByIdUseCase');
 const ListPendingTermsForOffboardingUseCase = require('../../application/use-cases/term/ListPendingTermsForOffboardingUseCase');
 const { isEligibleApprover } = require('../../domain/services/approverEligibilityService');
+const { createAccessRequestSchema, handleZodError } = require('../validators/accessRequestValidators');
 
 const accessRequestRepository = new SequelizeAccessRequestRepository();
 const termRepository = new SequelizeResponsibilityTermRepository();
@@ -65,7 +66,10 @@ exports.getById = async (req: Request, res: Response, next: NextFunction) => {
 /** `POST /api/ti/access-requests` */
 exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await new CreateAccessRequestUseCase(accessRequestRepository).execute({ ...req.body, requestedBy: (req as any).user.id });
+    const parsed = createAccessRequestSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
+    const data = await new CreateAccessRequestUseCase(accessRequestRepository).execute({ ...parsed.data, requestedBy: (req as any).user.id });
     res.status(201).json({ success: true, data });
   } catch (error) { next(error); }
 };

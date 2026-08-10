@@ -31,6 +31,7 @@ const ListTicketCategoriesUseCase = require('../../application/use-cases/ticket/
 const ListActiveTicketCategoriesUseCase = require('../../application/use-cases/ticket/ListActiveTicketCategoriesUseCase');
 const CreateTicketCategoryUseCase = require('../../application/use-cases/ticket/CreateTicketCategoryUseCase');
 const UpdateTicketCategoryUseCase = require('../../application/use-cases/ticket/UpdateTicketCategoryUseCase');
+const { createTicketCategorySchema, updateTicketCategorySchema, changeTicketPrioritySchema, handleZodError } = require('../validators/ticketValidators');
 
 const ticketRepository = new SequelizeTicketRepository();
 const settingsRepository = new SequelizeTiSettingsRepository();
@@ -73,7 +74,10 @@ exports.listActiveCategories = async (_req: Request, res: Response, next: NextFu
 /** `POST /api/ti/ticket-categories` */
 exports.createCategory = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const category = await new CreateTicketCategoryUseCase(ticketRepository).execute(req.body);
+    const parsed = createTicketCategorySchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
+    const category = await new CreateTicketCategoryUseCase(ticketRepository).execute(parsed.data);
     res.status(201).json({ success: true, data: category });
   } catch (error) { next(error); }
 };
@@ -81,7 +85,10 @@ exports.createCategory = async (req: Request, res: Response, next: NextFunction)
 /** `PUT /api/ti/ticket-categories/:id` */
 exports.updateCategory = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const category = await new UpdateTicketCategoryUseCase(ticketRepository).execute({ id: Number(req.params.id), ...req.body });
+    const parsed = updateTicketCategorySchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
+    const category = await new UpdateTicketCategoryUseCase(ticketRepository).execute({ id: Number(req.params.id), ...parsed.data });
     res.json({ success: true, data: category });
   } catch (error) { next(error); }
 };
@@ -139,10 +146,13 @@ exports.assign = async (req: Request, res: Response, next: NextFunction) => {
 /** `PUT /api/ti/tickets/:id/priority` */
 exports.changePriority = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const parsed = changeTicketPrioritySchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
     const ticket = await new ChangeTicketPriorityUseCase(ticketRepository).execute({
       id: Number(req.params.id),
       changedBy: (req as any).user.id,
-      ...req.body,
+      ...parsed.data,
     });
     res.json({ success: true, data: ticket });
   } catch (error) { next(error); }

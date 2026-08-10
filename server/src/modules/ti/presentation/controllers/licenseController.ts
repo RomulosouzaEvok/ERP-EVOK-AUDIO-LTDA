@@ -23,6 +23,7 @@ const AllocateSeatUseCase = require('../../application/use-cases/license/Allocat
 const RevokeSeatUseCase = require('../../application/use-cases/license/RevokeSeatUseCase');
 const ListExpiringLicensesUseCase = require('../../application/use-cases/license/ListExpiringLicensesUseCase');
 const RequestRenewalUseCase = require('../../application/use-cases/license/RequestRenewalUseCase');
+const { createLicenseSchema, updateLicenseSchema, handleZodError } = require('../validators/licenseValidators');
 
 const licenseRepository = new SequelizeLicenseRepository();
 const settingsRepository = new SequelizeTiSettingsRepository();
@@ -57,7 +58,10 @@ exports.getById = async (req: Request, res: Response, next: NextFunction) => {
 /** `POST /api/ti/licenses` */
 exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await new CreateLicenseDetailUseCase(licenseRepository, assetLookupService).execute(req.body);
+    const parsed = createLicenseSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
+    const data = await new CreateLicenseDetailUseCase(licenseRepository, assetLookupService).execute(parsed.data);
     res.status(201).json({ success: true, data });
   } catch (error) { next(error); }
 };
@@ -65,7 +69,10 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
 /** `PUT /api/ti/licenses/:assetId` */
 exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await new UpdateLicenseDetailUseCase(licenseRepository).execute({ assetId: Number(req.params.assetId), ...req.body });
+    const parsed = updateLicenseSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+
+    const data = await new UpdateLicenseDetailUseCase(licenseRepository).execute({ assetId: Number(req.params.assetId), ...parsed.data });
     res.json({ success: true, data });
   } catch (error) { next(error); }
 };
