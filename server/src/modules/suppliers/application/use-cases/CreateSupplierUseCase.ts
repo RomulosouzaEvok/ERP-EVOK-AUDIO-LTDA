@@ -49,6 +49,8 @@ class CreateSupplierUseCase extends UseCase<Record<string, any>, any> {
         delivery_time: entity.delivery_time,
         rating: 3,
         status: 'active',
+        // G11: nunca `null` (coluna NOT NULL DEFAULT false).
+        is_foreign: entity.is_foreign,
         notes: entity.notes
       });
     } catch (error: any) {

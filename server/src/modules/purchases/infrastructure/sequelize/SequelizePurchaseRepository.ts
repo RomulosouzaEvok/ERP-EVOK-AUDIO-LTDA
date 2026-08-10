@@ -3,7 +3,7 @@ import type { Transaction } from 'sequelize';
 const { Op, QueryTypes } = require('sequelize');
 const PurchaseRepository = require('../../domain/repositories/PurchaseRepository');
 const { sequelize } = require('../../../../config/database');
-const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item, PurchaseRequisition, PurchaseRequisitionItem, PurchaseReceipt, LotControl } = require('../../../../models/index');
+const { Purchase, PurchaseItem, Product, Supplier, AccountPayable, Item, PurchaseRequisition, PurchaseRequisitionItem, PurchaseReceipt, LotControl, PurchaseOrderApproval } = require('../../../../models/index');
 
 class SequelizePurchaseRepository extends PurchaseRepository {
   async listPurchases(filters: any = {}, pagination: any = {}) {
@@ -247,6 +247,36 @@ class SequelizePurchaseRepository extends PurchaseRepository {
   /** @inheritdoc */
   async updateRequisitionStatus(requisitionId: number | string, status: string, transaction: Transaction) {
     await PurchaseRequisition.update({ status }, { where: { id: requisitionId }, transaction });
+  }
+
+  /** @inheritdoc */
+  async findSupplierByIdRaw(supplierId: number | string, transaction?: Transaction) {
+    return Supplier.findByPk(supplierId, {
+      attributes: ['id', 'company_name', 'is_foreign'],
+      transaction,
+    });
+  }
+
+  /** @inheritdoc */
+  async listPurchaseApprovals(purchaseId: number | string, transaction?: Transaction) {
+    return PurchaseOrderApproval.findAll({
+      where: { purchase_id: purchaseId },
+      order: [['approved_at', 'ASC']],
+      transaction,
+    });
+  }
+
+  /** @inheritdoc */
+  async findPurchaseApprovalByRole(purchaseId: number | string, approverRole: string, transaction?: Transaction) {
+    return PurchaseOrderApproval.findOne({
+      where: { purchase_id: purchaseId, approver_role: approverRole },
+      transaction,
+    });
+  }
+
+  /** @inheritdoc */
+  async createPurchaseApproval(data: Record<string, unknown>, transaction?: Transaction) {
+    return PurchaseOrderApproval.create(data, { transaction });
   }
 
   /** @inheritdoc */

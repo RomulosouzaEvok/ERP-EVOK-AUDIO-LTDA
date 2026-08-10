@@ -5140,3 +5140,75 @@ Auditoria feita em paralelo à validação E2E acima e **convergiu com ela de fo
   Contabilidade/Tesouraria/Controladoria) não foram auditadas.
 - `client/` não foi auditado nem tocado.
 - `03-MODELO_FISICO.md`/`schema.sql` não foram regenerados (dependem de S-1).
+
+---
+
+## G11 — Alçada de aprovação de compra por origem (2026-08-10)
+
+Decisão D-C do dono do produto
+(`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4). Regra: nacional
+até R$ 500.000 segue direto, acima exige a diretoria; **importação sempre
+exige a diretoria**.
+
+### Entregue
+
+- [x] **Regra de negócio isolada** em `server/src/modules/purchases/domain/constants.ts`
+  (`PURCHASE_APPROVAL_THRESHOLD_DIRECTOR`, `resolvePurchaseOrigin`,
+  `requiredApproverRoles`, `purchaseApprovalValue`). Evidência: 4 testes de
+  constante em `tests/unit/purchase-approval-authority.test.ts` (limite exato de
+  R$ 500.000 passa; R$ 500.000,01 exige).
+- [x] **Gate na aprovação do pedido** — `ChangePurchaseStatusUseCase` verifica a
+  alçada ANTES de gravar `approved`; sem aprovação, 422 `details.rule='G11'` e
+  nada é gravado (nem status, nem conta a pagar). Evidência: 8 testes do bloco
+  "aprovação do pedido".
+- [x] **Registro da aprovação** — `ApprovePurchaseUseCase` +
+  `POST /api/purchases/:id/approve` (`authorizeModule('diretor')`),
+  `approver_user_id` do JWT e `approver_role` do RBAC. Evidência: 6 testes.
+- [x] **Leitura da situação sem efeito colateral** — `ListPurchaseApprovalsUseCase`
+  + `GET /api/purchases/:id/approvals` (`compras` OU `diretor`), devolve
+  `origin_source` explicando por que caiu na alçada. Evidência: 3 testes.
+- [x] **Anti-burla** — origem escalation-only; `origin` não volta de `import` para
+  `national`; `supplier_id`/`freight_value`/`origin` congelados após a aprovação;
+  `suppliers.is_foreign` não pode ser desmarcado pela API. Evidência: 6 testes.
+- [x] **Migration `20260810-000029-purchase-approval-authority-g11.cjs`** criada
+  (`suppliers.is_foreign`, `purchase_orders.origin`, `purchase_order_approvals`),
+  com `up`/`down` — ⚠️ **NÃO aplicada ao banco** (aplicação é do dono do ambiente).
+- [x] `npm run typecheck` limpo; `npx jest tests/unit` **1480/1480**
+  (baseline 1453 + 27 novos, nenhuma falha nova); `npx tsx -e "require('./app')"` sobe.
+
+### Pendências e riscos residuais deste gap
+
+- [ ] **[PENDENTE] Aplicar a migration `20260810-000029`.** Enquanto não for
+  aplicada, `PUT /api/purchases/:id/status` para `approved` quebra em runtime
+  (coluna `origin`/tabela de aprovações inexistentes) — o código já lê os dois.
+  **Aplicar antes de subir este working tree.**
+- [ ] **[PENDENTE] Marcar `is_foreign = true` nos fornecedores estrangeiros já
+  cadastrados.** Nenhum dado atual permite inferir isso (o `cnpj` é obrigatório
+  para todos), então todos nascem `false` pelo DEFAULT. Sem essa ação, um pedido
+  de importação a fornecedor estrangeiro só cai na alçada se quem criou o pedido
+  marcar `origin='import'`. Responsável: Suprimentos.
+- [ ] **[PENDENTE — decisão do dono] Importação registrada no módulo COMEX fica
+  FORA da alçada.** `import_processes` não passa por `purchase_orders` e não tem
+  etapa de aprovação nenhuma hoje. Se os pedidos de ~R$ 1 milhão citados pelo dono
+  forem registrados lá, a regra "importação sempre exige a diretoria" **não os
+  alcança**. Falta definir em que ponto do ciclo (`draft → shipped → arrived →
+  customs_cleared → received`) a diretoria aprova.
+- [ ] **[PENDENTE] Sem segregação de função** (aprovador ≠ solicitante) — decisão
+  explícita do dono, não é defeito. Abaixo de R$ 500.000 no nacional, quem solicita
+  pode aprovar. Um usuário `admin` também satisfaz sozinho o papel `diretor`
+  (curto-circuito padrão de `authorizeModule` em todo o projeto).
+- [ ] **[PENDENTE] Teste de integração real (Postgres)** do fluxo
+  create → approve → status=approved e da UNIQUE
+  `uq_purchase_order_approvals_purchase_role` sob concorrência. A suíte unitária
+  usa repositório mockado e não toca o banco.
+- [ ] **[PENDENTE] Tela em `client/`** — os 2 endpoints novos ainda não têm UI
+  (fora do escopo desta entrega, que é backend). Sem tela, a diretoria só aprova
+  por API.
+- [ ] **[PENDENTE] Alçada não alcança pedido criado por RFQ/conversão de
+  requisição com origem correta:** `AwardRfqUseCase` e
+  `ConvertRequisitionToPurchaseOrdersUseCase` criam o pedido sem informar
+  `origin` (fica `national` pelo DEFAULT). Isso é seguro para fornecedor
+  estrangeiro (`is_foreign` prevalece), mas **importação por conta e ordem** via
+  trading nacional criada por esses caminhos nasce como nacional e precisa ser
+  corrigida à mão (`PUT /api/purchases/:id` com `origin='import'`, permitido
+  enquanto `pending`).

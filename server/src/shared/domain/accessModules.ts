@@ -156,11 +156,16 @@
  *
  * `diretor` foi adicionado em 2026-08-08 (correção RF-JUR-003, decisão do
  * dono do produto) para representar o papel de aprovador de alçada de
- * contrato — usado exclusivamente por `ApproveContractUseCase`
+ * contrato — usado por `ApproveContractUseCase`
  * (`server/src/modules/juridico/`) para determinar `approver_role` a partir
- * do perfil de acesso do usuário logado (nunca aceito do body). Não é usado
- * para bloquear rota inteira de nenhum outro módulo — é um papel
- * transversal de aprovação, não um domínio de dados. `financeiro` já
+ * do perfil de acesso do usuário logado (nunca aceito do body). Desde
+ * 2026-08-10 é usado também pela **alçada de aprovação de compra (G11**,
+ * decisão D-C do dono do produto): `POST /api/purchases/:id/approve`
+ * (`authorizeModule('diretor')`) e `GET /api/purchases/:id/approvals`
+ * (`compras` OU `diretor`) — ver
+ * `server/src/modules/purchases/domain/constants.ts`. Continua sendo um
+ * papel transversal de aprovação, não um domínio de dados: nunca bloqueia
+ * a rota inteira de um módulo. `financeiro` já
  * existia no catálogo (Contas a Pagar/Receber) e passou a ser reaproveitado
  * também como o segundo papel de aprovador nas faixas de maior valor
  * (RF-JUR-003, `server/src/modules/juridico/domain/constants.ts`).

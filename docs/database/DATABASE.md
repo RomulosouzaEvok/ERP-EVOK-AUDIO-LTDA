@@ -2758,3 +2758,84 @@ desta mudança continuam em `ordered` — o gatilho é o recebimento, e ele já
 passou. Não há backfill automático nesta entrega; se for necessário, o
 critério é exatamente o da regra pura
 (`syncRequisitionReceiptStatus.resolveRequisitionStatusAfterReceipt`).
+
+---
+
+## G11 — Alçada de aprovação de pedido de compra por ORIGEM (2026-08-10)
+
+**Migration:** `20260810-000029-purchase-approval-authority-g11.cjs`
+(**ainda não aplicada** — aplicação é do dono do ambiente).
+**Decisão de negócio:** D-C do dono do produto,
+`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4.
+**Regra em código:** `server/src/modules/purchases/domain/constants.ts`.
+
+### A regra
+
+| Origem | Regra |
+|---|---|
+| Nacional | até R$ 500.000 segue direto; **acima** exige aprovação da diretoria |
+| Importação | **sempre** exige a diretoria, em qualquer valor |
+
+### O problema de modelagem que existia
+
+Não havia **nenhuma** forma no schema de saber se uma compra é importação:
+
+- `suppliers` não tem país — só `cep/street/city/state` (UF) e um `cnpj`
+  obrigatório e único, que fornecedor estrangeiro também é obrigado a ter no
+  cadastro atual;
+- `purchase_orders` não tinha nada sobre origem;
+- `import_processes` (COMEX, UC-19) é um fluxo **paralelo**: não tem FK
+  nenhuma para `purchase_orders` e nunca gera um pedido de compra. Ou seja,
+  ele identifica importação apenas para o que passa por ele.
+
+### Estruturas criadas
+
+**`suppliers.is_foreign`** — `BOOLEAN NOT NULL DEFAULT false`. Dado de
+CADASTRO: é a fonte de origem que **não** está sob controle de quem monta o
+pedido. Toda compra de fornecedor marcado como estrangeiro cai na alçada da
+diretoria, independentemente do que o pedido declare.
+
+**`purchase_orders.origin`** — `ENUM('national','import') NOT NULL DEFAULT
+'national'`. Declaração explícita no pedido, necessária para **importação por
+conta e ordem** (trading nacional importando para a empresa), caso em que o
+fornecedor tem CNPJ e não é estrangeiro.
+
+A origem efetiva é o **OU** das duas (`resolvePurchaseOrigin`) —
+desenho **escalation-only**: a fonte editável pelo comprador só torna a
+alçada mais restritiva; declarar `national` num pedido de fornecedor
+estrangeiro não escapa da diretoria.
+
+**`purchase_order_approvals`** — mesmo padrão já aprovado de
+`jur_contract_approvals` (RF-JUR-003):
+
+| Coluna | Tipo | Nulo | Observação |
+|---|---|---|---|
+| `id` | INTEGER | não | PK, autoincrement |
+| `purchase_id` | INTEGER | não | FK → `purchase_orders.id`, `ON DELETE CASCADE` |
+| `approver_user_id` | INTEGER | não | FK → `users.id`, `ON DELETE RESTRICT`. Sempre do JWT |
+| `approver_role` | ENUM(`diretor`) | não | Sempre resolvido por RBAC, nunca aceito do body |
+| `approved_at` | TIMESTAMP | não | DEFAULT `CURRENT_TIMESTAMP` |
+| `created_at` / `updated_at` | TIMESTAMP | não | DEFAULT `CURRENT_TIMESTAMP` |
+
+- UNIQUE `uq_purchase_order_approvals_purchase_role` (`purchase_id`,
+  `approver_role`) — o mesmo papel não aprova duas vezes o mesmo pedido,
+  garantido pelo banco mesmo sob concorrência.
+- Índice `idx_purchase_order_approvals_purchase_id`.
+
+### Qual valor é comparado com o teto
+
+`total_amount` (mercadoria) **+** `freight_value` (frete), **sem impostos** —
+o pedido de compra nacional deste ERP não calcula tributo nenhum (não existe
+coluna de imposto em `purchase_orders`/`purchase_order_items`). Somar o frete
+fecha o desvio de dividir R$ 520.000 em R$ 499.000 de mercadoria +
+R$ 21.000 de frete. Consequência aceita: a base da alçada é **maior** que a
+da `AccountPayable` gerada na aprovação (que usa só `total_amount`) — a
+alçada é deliberadamente mais conservadora que o passivo lançado.
+
+### Dado existente
+
+Nenhuma linha muda: pedidos e fornecedores já cadastrados assumem o DEFAULT
+(`national` / `false`), preservando o comportamento atual. **Fornecedores
+estrangeiros já cadastrados precisam ser marcados manualmente** pelo
+Suprimentos — não há como inferir isso do dado atual, já que o `cnpj` é
+obrigatório para todos. Registrado em `docs/governance/TODO.md`.

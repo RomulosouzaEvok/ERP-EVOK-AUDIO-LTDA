@@ -17,6 +17,7 @@ interface PurchaseAttributes {
   supplier_id: number;
   requester_id: number | null;
   status: 'pending' | 'approved' | 'sent' | 'partial' | 'received' | 'canceled';
+  origin: 'national' | 'import';
   requisition_id: number | null;
   order_date: string;
   expected_date: string | null;
@@ -43,6 +44,15 @@ const Purchase = sequelize.define('Purchase', {
   supplier_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → suppliers.id' },
   requester_id: { type: DataTypes.INTEGER, comment: 'FK → users.id (solicitante)' },
   status: { type: DataTypes.ENUM('pending', 'approved', 'sent', 'partial', 'received', 'canceled'), defaultValue: 'pending' },
+  // G11 (alcada por ORIGEM, decisao D-C de 2026-08-10): origem declarada da
+  // compra. NUNCA gravar `null` aqui — a coluna e NOT NULL DEFAULT
+  // 'national' no banco e NULL explicito anularia o DEFAULT do Postgres.
+  origin: {
+    type: DataTypes.ENUM('national', 'import'),
+    allowNull: false,
+    defaultValue: 'national',
+    comment: 'G11: origem declarada (national|import). Escalation-only — suppliers.is_foreign prevalece'
+  },
   requisition_id: DataTypes.INTEGER,
   order_date: { type: DataTypes.DATEONLY, defaultValue: DataTypes.NOW },
   expected_date: DataTypes.DATEONLY,

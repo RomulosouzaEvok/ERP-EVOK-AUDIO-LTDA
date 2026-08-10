@@ -13178,3 +13178,139 @@ modificado nesta entrega.
   cobertura porque as duas operações estão quebradas (BUG-03/BUG-04).
 - **G12 foi provado pela máquina de estados**, não pelo filtro de saldo por item; o
   cenário de adjudicação parcial de RFQ continua sem teste de integração.
+
+---
+
+# Handoff — G11: alçada de aprovação de compra por ORIGEM (2026-08-10)
+
+**Escopo:** backend (`server/`). **Nada foi commitado** — tudo no working tree.
+**Nada foi aplicado ao banco** — a migration é do dono do ambiente.
+
+## 1. Resumo da feature
+
+Decisão D-C do dono do produto
+(`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4): a alçada de
+aprovação de compra é por **ORIGEM**, não por faixa de valor.
+
+| Origem | Regra |
+|---|---|
+| Nacional | até R$ 500.000 segue direto; **acima** exige a diretoria |
+| Importação | **sempre** exige a diretoria, em qualquer valor |
+
+**Como a origem é determinada (e por que é confiável).** Não existia forma
+alguma no schema de saber se uma compra é importação: `suppliers` não tem
+país (só UF) e exige CNPJ de todo mundo; `import_processes` (COMEX) é um
+fluxo paralelo sem FK para `purchase_orders`. Foram criados dois campos e a
+origem efetiva é o **OU** dos dois:
+
+- `suppliers.is_foreign` — **cadastro**, fora do fluxo do pedido;
+- `purchase_orders.origin` — declaração no pedido (cobre importação por conta
+  e ordem via trading nacional).
+
+Desenho **escalation-only**: o campo que o comprador controla no pedido só
+consegue tornar a alçada mais restritiva. Declarar `national` num pedido de
+fornecedor estrangeiro **não** escapa da diretoria. Complementos: `origin`
+nunca volta de `import` para `national`; `is_foreign` não pode ser desmarcado
+pela API; e depois que o pedido está `approved`, `supplier_id`,
+`freight_value` e `origin` ficam congelados (senão daria para aprovar
+R$ 450.000 sem a diretoria e acrescentar R$ 100.000 de frete depois).
+
+**Valor comparado com o teto:** `total_amount` (mercadoria) + `freight_value`
+(frete), **sem impostos** — o pedido de compra nacional não calcula tributo
+neste ERP. Somar o frete fecha o desvio de dividir R$ 520.000 em
+R$ 499.000 + R$ 21.000.
+
+**Padrão reaproveitado:** o do Jurídico (RF-JUR-003) — constantes de negócio
+em `domain/constants.ts`, tabela de aprovações com UNIQUE por papel,
+`approver_user_id` sempre do JWT, `approver_role` sempre do RBAC, e endpoint
+de leitura da situação sem efeito colateral.
+
+**Compra recorrente não travou:** nacional dentro do teto não ganhou passo
+novo nem consulta de aprovações (teste explícito assegura que
+`listPurchaseApprovals` não é chamado nesse caminho).
+
+## 2. Arquivos alterados
+
+**Novos**
+- `server/src/modules/purchases/domain/constants.ts` (regra de negócio)
+- `server/src/modules/purchases/application/use-cases/ApprovePurchaseUseCase.ts`
+- `server/src/modules/purchases/application/use-cases/ListPurchaseApprovalsUseCase.ts`
+- `server/src/models/PurchaseOrderApproval.ts`
+- `server/migrations/20260810-000029-purchase-approval-authority-g11.cjs`
+- `server/tests/unit/purchase-approval-authority.test.ts`
+
+**Alterados**
+- `server/src/modules/purchases/application/use-cases/ChangePurchaseStatusUseCase.ts` (gate da alçada antes de gravar `approved`)
+- `server/src/modules/purchases/application/use-cases/CreatePurchaseUseCase.ts` / `UpdatePurchaseUseCase.ts`
+- `server/src/modules/purchases/domain/entities/PurchaseEntity.ts`
+- `server/src/modules/purchases/domain/repositories/PurchaseRepository.ts` + `infrastructure/sequelize/SequelizePurchaseRepository.ts`
+- `server/src/modules/purchases/presentation/{controllers/purchaseController.ts,routes/purchases.ts,validators/purchaseValidators.ts}`
+- `server/src/modules/suppliers/{domain/entities/SupplierEntity.ts,application/use-cases/CreateSupplierUseCase.ts,application/use-cases/UpdateSupplierUseCase.ts,presentation/validators/supplierValidators.ts}`
+- `server/src/models/{Purchase.ts,Supplier.ts,index.ts}`
+- `server/src/shared/domain/accessModules.ts` (JSDoc do papel `diretor`)
+- `server/tests/unit/integrity-transaction-guards.test.ts` (mock completado)
+
+## 3. Documentações atualizadas
+
+- `docs/database/DATABASE.md` — seção G11 (tabela, colunas, tipos, FKs, UNIQUE, efeito no dado existente)
+- `docs/projeto/04-USE_CASES.md` — UC-15, seção "Alçada de aprovação do pedido — G11"
+- `docs/arquitetura/API.md` — `POST /:id/approve`, `GET /:id/approvals`, `origin` em compras e `is_foreign` em fornecedores
+- `docs/governance/TODO.md` — entregue (com evidência) + 7 pendências/riscos residuais
+- `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` — G11 em §3/§4/§6; risco residual de segregação de função **confirmado ainda válido**
+- `server/src/modules/purchases/README.md` — regras, endpoints, permissões (a seção de permissões estava desatualizada desde o retrofit de RBAC e foi corrigida)
+- JSDoc em todos os arquivos novos/alterados
+
+## 4. Instruções de teste
+
+**Antes de tudo:** aplicar a migration —
+`cd server && npm run migration:up` (deve aplicar `20260810-000029`).
+Sem ela, `PUT /api/purchases/:id/status` para `approved` quebra em runtime.
+
+Verificações automáticas já executadas (reprodutíveis):
+```bash
+cd server
+npm run typecheck                      # limpo
+npx jest tests/unit --maxWorkers=2     # 1480/1480 (baseline 1453 + 27 novos)
+npx tsx -e "require('./app')"          # sobe
+```
+
+Teste manual sugerido (com a migration aplicada):
+1. **Nacional pequeno (regressão do fluxo normal):** criar pedido de
+   R$ 10.000 e aprovar. Deve aprovar direto e gerar a conta a pagar.
+2. **Nacional acima do teto:** criar pedido de R$ 600.000 e tentar aprovar →
+   **422** com `details.rule = "G11"`; o pedido continua `pending` e **não**
+   nasce conta a pagar. `POST /:id/approve` com usuário `diretor` → 201.
+   Aprovar de novo o pedido → agora passa.
+3. **Importação em valor baixo:** criar pedido com `origin: "import"` de
+   R$ 1.200 e tentar aprovar → **422**.
+4. **Anti-burla:** marcar um fornecedor com `is_foreign: true`, criar um
+   pedido dele com `origin: "national"` de R$ 500 e tentar aprovar → **422**,
+   com `GET /:id/approvals` mostrando `origin_source: "supplier"`.
+5. **Segunda aprovação do mesmo papel:** repetir `POST /:id/approve` → 422 e
+   apenas 1 linha em `purchase_order_approvals`.
+6. **Anti-spoofing:** enviar `{"approver_user_id": 1, "role": "diretor"}` no
+   body do `approve` → o payload é ignorado (schema `.strict()` do módulo não
+   é usado nesta rota; o use case só lê JWT/RBAC); conferir no banco que
+   `approver_user_id` é o do token.
+7. **Congelamento:** aprovar um pedido e tentar `PUT /:id` com
+   `freight_value` → 422.
+
+## 5. Riscos residuais
+
+1. **Importação registrada no COMEX fica fora da alçada** — `import_processes`
+   não vira `purchase_orders` e não tem etapa de aprovação nenhuma. Se os
+   pedidos de ~R$ 1 milhão citados pelo dono forem registrados lá, a regra
+   não os alcança. **Precisa de decisão do dono** sobre em que ponto do ciclo
+   COMEX a diretoria aprova (recomendação técnica: a saída de `draft`).
+2. **`is_foreign` precisa ser marcado nos fornecedores estrangeiros já
+   cadastrados** — nada no dado atual permite inferir isso; todos nascem
+   `false`.
+3. **Sem segregação de função** (decisão explícita do dono) e **`admin`
+   satisfaz sozinho o papel `diretor`** (curto-circuito padrão do projeto).
+4. **Sem teste de integração real (Postgres)** do fluxo completo nem da
+   UNIQUE sob concorrência — a suíte unitária usa repositório mockado.
+5. **Sem tela** em `client/` para os 2 endpoints novos (fora do escopo).
+6. **RFQ e conversão de requisição** criam o pedido sem `origin` (fica
+   `national` pelo DEFAULT); seguro para fornecedor estrangeiro, mas
+   importação por conta e ordem criada por esses caminhos precisa de correção
+   manual enquanto o pedido está `pending`.

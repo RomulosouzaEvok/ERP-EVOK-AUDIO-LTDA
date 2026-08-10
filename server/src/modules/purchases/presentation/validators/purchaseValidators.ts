@@ -27,6 +27,10 @@ export const createPurchaseSchema = z.object({
   items: z.array(purchaseItemSchema).min(1),
   notes: z.string().trim().max(4000).optional(),
   expected_date: z.string().date().optional(),
+  // G11: origem declarada da compra. Omitir = 'national' (DEFAULT da
+  // coluna). Nunca aceita `null` — NULL explicito anularia o DEFAULT do
+  // Postgres numa coluna NOT NULL.
+  origin: z.enum(['national', 'import']).optional(),
 }).strict();
 
 export const updatePurchaseSchema = z.object({
@@ -35,6 +39,9 @@ export const updatePurchaseSchema = z.object({
   freight_type: z.enum(['cif', 'fob']).nullable().optional(),
   freight_value: z.coerce.number().min(0).optional(),
   notes: z.string().trim().max(4000).nullable().optional(),
+  // G11: escalation-only no use case ('import' -> 'national' e recusado) e
+  // congelado depois que o pedido e aprovado.
+  origin: z.enum(['national', 'import']).optional(),
 }).strict();
 
 export const updatePurchaseStatusSchema = z.object({

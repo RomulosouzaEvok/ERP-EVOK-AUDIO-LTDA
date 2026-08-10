@@ -192,16 +192,26 @@ describe('Integrity transaction guards', () => {
 
   it('aprova pedido usando lock no registro principal', async () => {
     const save = jest.fn(async () => ({}));
+    // G11 (alcada de aprovacao de compra, 2026-08-10): pedido NACIONAL de
+    // R$ 500 — muito abaixo do teto de R$ 500.000 e de fornecedor nao
+    // estrangeiro, portanto segue direto, sem exigir a diretoria. O mock
+    // precisa de `findSupplierByIdRaw` porque a origem efetiva passou a ser
+    // resolvida tambem pelo cadastro do fornecedor (`is_foreign`), e nao so
+    // pelo campo declarado no pedido.
     const purchaseRepository = {
       findPurchaseByIdRawForUpdate: jest.fn(async () => ({
         id: 5,
         status: 'pending',
         supplier_id: 3,
+        origin: 'national',
         total_amount: 500,
+        freight_value: 0,
         order_number: 'PO-500',
         expected_date: '2026-08-30',
         save,
       })),
+      findSupplierByIdRaw: jest.fn(async () => ({ id: 3, is_foreign: false })),
+      listPurchaseApprovals: jest.fn(async () => []),
       findAccountPayableByPurchaseId: jest.fn(async () => null),
       createAccountPayable: jest.fn(async () => ({})),
     };
@@ -219,6 +229,9 @@ describe('Integrity transaction guards', () => {
     expect(purchaseRepository.findPurchaseByIdRawForUpdate).toHaveBeenCalledWith(5, transaction);
     expect(save).toHaveBeenCalledWith({ transaction });
     expect(purchaseRepository.createAccountPayable).toHaveBeenCalledTimes(1);
+    // Nacional dentro do teto nao consulta aprovacoes de alcada (G11: compra
+    // recorrente nao pode ganhar friccao nova).
+    expect(purchaseRepository.listPurchaseApprovals).not.toHaveBeenCalled();
   });
 
   it('recebe itens de compra usando lock no pedido e nos itens finais', async () => {

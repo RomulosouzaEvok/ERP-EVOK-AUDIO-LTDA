@@ -17,6 +17,7 @@ import Product = require('./Product');
 import Supplier = require('./Supplier');
 import Purchase = require('./Purchase');
 import PurchaseItem = require('./PurchaseItem');
+import PurchaseOrderApproval = require('./PurchaseOrderApproval');
 import PurchaseRequisition = require('./PurchaseRequisition');
 import PurchaseRequisitionItem = require('./PurchaseRequisitionItem');
 import Sale = require('./Sale');
@@ -209,6 +210,12 @@ Purchase.belongsTo(User, { foreignKey: 'requester_id', as: 'requester' });
 // Purchase ↔ PurchaseItem
 Purchase.hasMany(PurchaseItem, { foreignKey: 'purchase_id', as: 'items' });
 PurchaseItem.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
+
+// Purchase ↔ PurchaseOrderApproval (G11 — alçada de aprovação por origem/valor)
+Purchase.hasMany(PurchaseOrderApproval, { foreignKey: 'purchase_id', as: 'approvals' });
+PurchaseOrderApproval.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
+User.hasMany(PurchaseOrderApproval, { foreignKey: 'approver_user_id', as: 'purchase_approvals' });
+PurchaseOrderApproval.belongsTo(User, { foreignKey: 'approver_user_id', as: 'approver' });
 
 // Purchase ↔ PurchaseRequisition (Bloco 2, UC-39 — leitura simples para o
 // Recebimento identificar pedidos originados de amostra de engenharia via
@@ -1319,7 +1326,7 @@ HrEmployeeJobHistory.belongsTo(Department, { foreignKey: 'department_id', as: 'd
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
-  Purchase, PurchaseItem, Sale, SaleItem,
+  Purchase, PurchaseItem, PurchaseOrderApproval, Sale, SaleItem,
   PurchaseRequisition, PurchaseRequisitionItem,
   AccountReceivable, AccountPayable,
   InventoryMovement, InventoryCount, InventoryCountItem, ProductCostLedger, Department, Employee,

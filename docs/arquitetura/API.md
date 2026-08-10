@@ -2055,8 +2055,17 @@ Cria um pedido de compra com itens (transacional).
 ```
 `order_number` (`PO-<timestamp>`) e `total_amount` são calculados no backend. Cada `product_id` deve existir.
 
+Aceita também `origin` (`"national"` — padrão — ou `"import"`, G11). Declarar
+`"national"` não escapa da alçada quando o fornecedor é estrangeiro
+(`suppliers.is_foreign`), ver seção **Alçada de aprovação (G11)** abaixo.
+
 ### PUT /api/purchases/:id
-Atualiza campos permitidos (`expected_date`, `freight_type`, `freight_value`, `notes`, `supplier_id`). Só permitido enquanto o pedido está `pending` ou `approved`.
+Atualiza campos permitidos (`expected_date`, `freight_type`, `freight_value`, `notes`, `supplier_id`, `origin`). Só permitido enquanto o pedido está `pending` ou `approved`.
+
+**Restrições da alçada (G11):** `origin` nunca volta de `"import"` para
+`"national"` (422); e com o pedido já `approved`, `supplier_id`,
+`freight_value` e `origin` ficam congelados (422) — são os campos que
+determinam a alçada.
 
 ### PUT /api/purchases/:id/status
 Altera o status conforme a máquina de estados `pending → approved → sent → partial/received/canceled`.
@@ -2064,6 +2073,64 @@ Altera o status conforme a máquina de estados `pending → approved → sent �
 { "status": "approved" }
 ```
 Ao transicionar para `approved`, gera automaticamente uma `AccountPayable` vinculada ao pedido (idempotente), em uma única transação com o `save()` do status.
+
+**Alçada de aprovação (G11):** a transição para `approved` é bloqueada com
+**422** (`details.rule = "G11"`) quando o pedido exige aprovação da diretoria
+e ela ainda não foi registrada. Nada é gravado nesse caso (nem status, nem
+conta a pagar).
+
+### Alçada de aprovação de compra (G11) — `approve` / `approvals`
+
+Decisão D-C do dono do produto (2026-08-10). A alçada é por **ORIGEM**:
+
+| Origem | Regra |
+|---|---|
+| Nacional | até R$ 500.000 segue direto; **acima** exige a diretoria |
+| Importação | **sempre** exige a diretoria, em qualquer valor |
+
+Origem efetiva = `purchase_orders.origin = 'import'` **OU**
+`suppliers.is_foreign = true` (escalation-only — o campo do pedido só torna a
+regra mais restritiva). Valor comparado com o teto = `total_amount` + `freight_value`,
+sem impostos.
+
+#### POST /api/purchases/:id/approve
+Registra **uma** aprovação de alçada. Módulo dono: `diretor`
+(`authorizeModule('diretor')`) — não `compras`, porque quem aprova a alçada é
+a diretoria, que não necessariamente opera compras. Sem body.
+
+`approver_user_id` vem do JWT e `approver_role` do RBAC — nenhum dos dois é
+aceito do body. Só é aceita enquanto o pedido está `pending`. O mesmo papel
+não aprova duas vezes (UNIQUE no banco → 422).
+
+```json
+{ "success": true, "data": { "id": 12, "purchase_id": 7, "approver_user_id": 42, "approver_role": "diretor", "approved_at": "2026-08-10T13:02:00.000Z" } }
+```
+
+Erros (422, `details.rule = "G11"`): usuário sem o papel; pedido que não
+exige alçada; pedido fora de `pending`; papel que já aprovou.
+
+#### GET /api/purchases/:id/approvals
+Situação da alçada, **sem efeito colateral**. Autorização: `compras` **OU**
+`diretor`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "origin": "import",
+    "origin_source": "supplier",
+    "approval_value": 1000000,
+    "required_roles": ["diretor"],
+    "approvals": [],
+    "missing_roles": ["diretor"],
+    "approval_complete": false
+  }
+}
+```
+
+`origin_source` explica **por que** o pedido caiu na alçada: `supplier`
+(cadastro do fornecedor), `declared` (declarado no pedido) ou `none`
+(nacional).
 
 ### POST /api/purchases/:id/receive
 Registra o recebimento (total ou parcial) dos itens do pedido. Só permitido enquanto o pedido está `sent` ou `partial`.
@@ -2332,13 +2399,23 @@ Cria um fornecedor.
   "contact_phone": "(11) 98888-0000",
   "payment_terms": "30/60/90",
   "delivery_time": 15,
-  "notes": "Fornecedor de bobinas"
+  "notes": "Fornecedor de bobinas",
+  "is_foreign": false
 }
 ```
 `company_name` e `cnpj` são obrigatórios. O CNPJ é validado (dígito verificador) e salvo sem formatação (apenas dígitos). `rating` é sempre `3` e `status` sempre `"active"` na criação. CNPJ duplicado retorna `409`.
 
+`is_foreign` (booleano, padrão `false`, G11): marca fornecedor estrangeiro.
+**Todo pedido de compra de fornecedor marcado assim exige aprovação da
+diretoria, em qualquer valor** — é a fonte de origem que não está sob
+controle de quem monta o pedido.
+
 ### PUT /api/suppliers/:id
-Atualiza campos cadastrais (`company_name`, `trade_name`, `ie`, `phone`, `email`, `cep`, `street`, `number`, `complement`, `neighborhood`, `city`, `state`, `contact_name`, `contact_phone`, `payment_terms`, `delivery_time`, `rating`, `notes`). Não permite alterar `cnpj` nem `status` por este endpoint.
+Atualiza campos cadastrais (`company_name`, `trade_name`, `ie`, `phone`, `email`, `cep`, `street`, `number`, `complement`, `neighborhood`, `city`, `state`, `contact_name`, `contact_phone`, `payment_terms`, `delivery_time`, `rating`, `notes`, `is_foreign`). Não permite alterar `cnpj` nem `status` por este endpoint.
+
+`is_foreign` é **escalation-only** (G11): marcar como estrangeiro é livre;
+desmarcar (`true → false`) retorna **422** — tirar um fornecedor da alçada
+obrigatória exige ação administrativa direta no banco, com trilha própria.
 
 ### DELETE /api/suppliers/:id
 Inativa (soft delete, `status="inactive"`) um fornecedor. Bloqueado (`400`) se o fornecedor possuir pedidos de compra com status `pending`/`approved`/`sent`/`partial`:

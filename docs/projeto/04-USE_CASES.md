@@ -325,6 +325,56 @@ reserva de venda a vincular.
 7. Sistema altera status para "sent"
 8. Pedido e registrado para acompanhamento
 
+### Alcada de aprovacao do pedido — G11 [IMPLEMENTADO 2026-08-10]
+
+Decisao D-C do dono do produto
+(`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4). A alcada e
+por **ORIGEM**, nao apenas por faixa de valor:
+
+| Origem | Regra |
+|---|---|
+| Nacional | ate R$ 500.000 segue direto; **acima** exige aprovacao da diretoria |
+| Importacao | **sempre** exige a diretoria, em qualquer valor |
+
+**Origem efetiva** (`resolvePurchaseOrigin`,
+`server/src/modules/purchases/domain/constants.ts`) = `import` se
+`purchase_orders.origin = 'import'` **OU** `suppliers.is_foreign = true`.
+Desenho escalation-only: a declaracao feita no pedido so consegue tornar a
+alcada mais restritiva; marcar como `national` um pedido de fornecedor
+estrangeiro **nao** escapa da diretoria.
+
+**Valor comparado com o teto:** `total_amount` (mercadoria) + `freight_value`
+(frete), sem impostos — o pedido de compra nacional nao calcula tributo neste
+ERP.
+
+**Fluxo quando a alcada e exigida:**
+1. Comprador cria o pedido normalmente (`pending`).
+2. `GET /api/purchases/:id/approvals` mostra origem, valor, papeis exigidos e
+   o que falta (somente leitura, sem efeito colateral).
+3. Um usuario com o modulo de acesso `diretor` registra a aprovacao em
+   `POST /api/purchases/:id/approve` — `approver_user_id` vem do JWT e
+   `approver_role` do RBAC, nunca do body; um papel so aprova uma vez por
+   pedido (UNIQUE no banco). So e aceita enquanto o pedido esta `pending`.
+4. `PUT /api/purchases/:id/status` com `status='approved'` passa a verificar
+   as aprovacoes registradas: sem a alcada satisfeita, devolve **422**
+   (`BUSINESS_RULE_VIOLATION`, `details.rule='G11'`) e **nao** grava o status
+   nem gera a conta a pagar automatica.
+
+**Fluxo normal (maioria dos pedidos):** nacional dentro do teto continua
+seguindo direto, sem passo novo e sem consulta extra de aprovacoes.
+
+**Congelamento pos-aprovacao:** depois que o pedido esta `approved`,
+`supplier_id`, `freight_value` e `origin` nao podem mais ser alterados em
+`PUT /api/purchases/:id` (senao daria para aprovar R$ 450.000 sem a diretoria
+e acrescentar R$ 100.000 de frete depois). `origin` tambem nunca volta de
+`import` para `national`, e `suppliers.is_foreign` nao pode ser desmarcado
+pela API.
+
+**NAO implementado (decisao explicita do dono):** segregacao de funcao
+(aprovador != solicitante). Abaixo de R$ 500.000 no nacional, quem solicita
+ainda pode aprovar — risco residual de controle interno registrado no plano
+de acao, nao um defeito.
+
 ---
 
 ## UC-16: Receber Pedido de Compra

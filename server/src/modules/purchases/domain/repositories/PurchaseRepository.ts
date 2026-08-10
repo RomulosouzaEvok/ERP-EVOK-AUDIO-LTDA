@@ -312,6 +312,60 @@ class PurchaseRepository {
   }
 
   /**
+   * Busca o fornecedor de um pedido de compra (G11 — alçada por origem).
+   * Leitura pontual do CADASTRO do fornecedor: `suppliers.is_foreign` é a
+   * única fonte confiável de "isto é importação" que não está sob controle
+   * de quem monta o pedido (ver `domain/constants.ts`).
+   *
+   * @abstract
+   * @param {number|string} supplierId
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object|null>} `{ id, is_foreign }` ou `null`.
+   */
+  async findSupplierByIdRaw(supplierId: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findSupplierByIdRaw não implementado.');
+  }
+
+  /**
+   * Lista as aprovações de alçada já registradas para um pedido de compra
+   * (G11).
+   *
+   * @abstract
+   * @param {number|string} purchaseId
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object[]>}
+   */
+  async listPurchaseApprovals(purchaseId: number | string, transaction?: Transaction): Promise<any[]> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.listPurchaseApprovals não implementado.');
+  }
+
+  /**
+   * Busca a aprovação de alçada de um papel específico sobre um pedido
+   * (checagem de duplicidade — o mesmo papel não aprova duas vezes, G11).
+   *
+   * @abstract
+   * @param {number|string} purchaseId
+   * @param {string} approverRole
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object|null>}
+   */
+  async findPurchaseApprovalByRole(purchaseId: number | string, approverRole: string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findPurchaseApprovalByRole não implementado.');
+  }
+
+  /**
+   * Registra uma aprovação de alçada de pedido de compra (G11).
+   *
+   * @abstract
+   * @param {Object} data - `{ purchase_id, approver_user_id, approver_role, approved_at }`.
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object>}
+   */
+  async createPurchaseApproval(data: Record<string, unknown>, transaction?: Transaction): Promise<any> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.createPurchaseApproval não implementado.');
+  }
+
+  /**
    * Busca um lote (`LotControl`) por produto, pedido de compra e número de
    * lote, com lock pessimista (leitura/escrita cross-module pontual —
    * `LotControl` pertence ao módulo de estoque/inventário; usado aqui para

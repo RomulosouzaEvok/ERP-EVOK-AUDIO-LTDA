@@ -3,6 +3,11 @@ import type PurchaseRepository = require('../../domain/repositories/PurchaseRepo
 
 const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
+const {
+  resolvePurchaseOrigin,
+  requiredApproverRoles,
+  purchaseApprovalValue,
+} = require('../../domain/constants');
 
 /**
  * Maquina de estados de status do pedido de compra.
@@ -41,6 +46,7 @@ class ChangePurchaseStatusUseCase extends UseCase {
    * @param {number} input.userId
    * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
+   * @throws {BusinessRuleError} G11 — transição para `approved` sem a alçada satisfeita (importação, ou nacional acima de R$ 500.000, sem aprovação registrada da diretoria).
    */
   async execute({ id, status, userId, transaction }: ChangePurchaseStatusInput) {
     if (!status) {
@@ -62,6 +68,13 @@ class ChangePurchaseStatusUseCase extends UseCase {
       );
     }
 
+    // G11: a alcada e verificada ANTES de gravar o novo status — pedido sem
+    // aprovacao da diretoria nao pode sequer ficar `approved` (e, por
+    // consequencia, nao gera a conta a pagar automatica).
+    if (status === 'approved') {
+      await this._assertApprovalAuthority(purchase, transaction);
+    }
+
     const previousStatus = purchase.status;
     purchase.status = status;
     await purchase.save({ transaction });
@@ -71,6 +84,51 @@ class ChangePurchaseStatusUseCase extends UseCase {
     }
 
     return { purchase, previousStatus };
+  }
+
+  /**
+   * G11 — alcada de aprovacao de pedido de compra por ORIGEM (decisao D-C do
+   * dono do produto em 2026-08-10).
+   *
+   * Nacional dentro do teto continua fluindo sem nenhuma friccao nova (a
+   * maioria dos pedidos): a funcao apenas resolve a origem e retorna. Acima
+   * do teto, ou em qualquer valor quando a origem e importacao, exige
+   * aprovacao previa registrada em `purchase_order_approvals`
+   * (`POST /api/purchases/:id/approve`).
+   *
+   * A origem NAO e lida apenas de `purchase_orders.origin` (campo que quem
+   * monta o pedido controla): `suppliers.is_foreign` prevalece, de modo que
+   * marcar um pedido de fornecedor estrangeiro como `national` nao escapa da
+   * diretoria — ver `../../domain/constants`.
+   *
+   * @param {Object} purchase - Pedido ja carregado com lock na transacao.
+   * @param {import('sequelize').Transaction} transaction
+   * @returns {Promise<void>}
+   * @throws {BusinessRuleError} Se faltar alguma aprovacao exigida.
+   */
+  async _assertApprovalAuthority(purchase: any, transaction: Transaction) {
+    const supplier = purchase.supplier_id
+      ? await this.purchaseRepository.findSupplierByIdRaw(purchase.supplier_id, transaction)
+      : null;
+
+    const origin = resolvePurchaseOrigin(purchase.origin, supplier ? supplier.is_foreign : false);
+    const approvalValue = purchaseApprovalValue(purchase);
+    const required = requiredApproverRoles(origin, approvalValue);
+    if (required.length === 0) return;
+
+    const approvals = (await this.purchaseRepository.listPurchaseApprovals(purchase.id, transaction)) || [];
+    const approvedRoles = new Set(approvals.map((approval: any) => approval.approver_role));
+    const missing = required.filter((role: string) => !approvedRoles.has(role));
+
+    if (missing.length > 0) {
+      const reason = origin === 'import'
+        ? 'pedido de importacao (exige a diretoria em qualquer valor)'
+        : `valor de R$ ${approvalValue.toFixed(2)} acima do teto da alcada`;
+      throw new BusinessRuleError(
+        `Aprovacao da diretoria pendente: ${reason}. Registre a aprovacao em POST /api/purchases/${purchase.id}/approve antes de aprovar o pedido.`,
+        { rule: 'G11', origin, approvalValue, missingRoles: missing },
+      );
+    }
   }
 
   async _createPurchasePayable(purchase: any, userId: number, transaction: Transaction) {

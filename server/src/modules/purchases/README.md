@@ -132,17 +132,19 @@ server/src/modules/purchases/
 - `server/src/models/Product.ts` (leitura na validação de itens; escrita de `quantity` feita exclusivamente por `InventoryService.receive`).
 - `server/src/models/Supplier.ts` (associação `belongsTo`, apenas leitura).
 - `server/src/models/AccountPayable.ts` (criada na aprovação do pedido).
+- `server/src/models/PurchaseOrderApproval.ts` (G11 — aprovações de alçada; mesmo padrão de `JurContractApproval`/RF-JUR-003).
 
 ## Regras de negócio
 
 - Criação: `supplier_id` obrigatório; `items` não pode ser vazio; cada item precisa de `product_id`/`quantity > 0`/`unit_price > 0` (validado por `PurchaseEntity`) e o produto deve existir no banco (validado no use case, dentro da transação). `total_amount` é calculado no backend a partir dos itens.
-- Edição (`update`): apenas pedidos `pending` ou `approved` podem ser editados; apenas os campos `expected_date`, `freight_type`, `freight_value`, `notes`, `supplier_id` são alteráveis.
+- Edição (`update`): apenas pedidos `pending` ou `approved` podem ser editados; apenas os campos `expected_date`, `freight_type`, `freight_value`, `notes`, `supplier_id`, `origin` são alteráveis. **G11:** `origin` nunca volta de `import` para `national`, e com o pedido já `approved` os campos que definem a alçada (`supplier_id`, `freight_value`, `origin`) ficam congelados.
 - Máquina de estados (`ChangePurchaseStatusUseCase.VALID_TRANSITIONS`, single source of truth):
   - `pending` → `approved` | `canceled`
   - `approved` → `sent` | `canceled`
   - `sent` → `partial` | `received` | `canceled`
   - `partial` → `received` | `canceled`
   - `received` / `canceled` → (terminal, sem transições)
+- **Alçada de aprovação por ORIGEM (G11, decisão D-C do dono em 2026-08-10 — regra em `domain/constants.ts`):** a transição para `approved` exige aprovação prévia da diretoria quando a origem efetiva é importação (qualquer valor) ou quando o pedido nacional passa de R$ 500.000 (`total_amount` + `freight_value`, sem impostos). Origem efetiva = `purchase_orders.origin = 'import'` **OU** `suppliers.is_foreign = true` — escalation-only: o campo do pedido só endurece a regra. Sem a alçada satisfeita, 422 (`details.rule = 'G11'`) e **nada** é gravado. Nacional dentro do teto continua seguindo direto, sem consulta extra.
 - Ao transicionar para `approved`, gera uma `AccountPayable` (idempotente — não duplica se já existir uma para o mesmo `purchase_id`), com vencimento em 30 dias após `expected_date` (ou 30 dias a partir de hoje, se não houver `expected_date`).
 - Recebimento (`receiveItems`): apenas pedidos `sent` ou `partial` podem receber itens; cada item recebido não pode exceder `quantity - received_quantity`; cada linha aciona `InventoryService.receive` (lock pessimista + `InventoryMovement`) na mesma transação; o pedido vira `received` quando todos os itens estiverem `received`, senão `partial`.
 
@@ -158,17 +160,32 @@ Base URL: `/api/purchases` (autenticação obrigatória via middleware `authenti
 | POST | `/api/purchases` | Cria pedido de compra com itens — transacional |
 | PUT | `/api/purchases/:id` | Atualiza campos permitidos do pedido |
 | PUT | `/api/purchases/:id/status` | Altera status (máquina de estados) — transacional; gera `AccountPayable` na aprovação |
+| POST | `/api/purchases/:id/approve` | **G11** — registra 1 aprovação de alçada da diretoria (módulo dono: `diretor`); não aprova o pedido |
+| GET | `/api/purchases/:id/approvals` | **G11** — situação da alçada (origem, valor, papéis exigidos/faltantes), somente leitura; `compras` OU `diretor` |
 | POST | `/api/purchases/:id/receive` | Registra recebimento de itens — transacional, lock pessimista via `InventoryService` |
 
 Ver `docs/arquitetura/API.md` para exemplos completos de request/response.
 
 ## Permissões
 
-Todas as rotas exigem JWT válido (`authenticate`). O projeto ainda não
-possui um middleware de RBAC granular por rota neste módulo — qualquer
-usuário autenticado pode criar/aprovar/receber pedidos de compra hoje.
-Isso está listado como pendência na Fase 12 do `docs/BLACKBOX_CRONOGRAMA_CHECKLIST.md` ("Revisar RBAC
-completo"), mesma pendência documentada nos demais módulos migrados.
+Todas as rotas exigem JWT válido (`authenticate`). O retrofit de RBAC
+(Bloco 1.2) já foi aplicado — a afirmação anterior de que "qualquer usuário
+autenticado pode criar/aprovar/receber" **não vale mais**:
+
+| Rota | Módulo dono | Nível |
+|---|---|---|
+| `GET /`, `GET /cockpit`, `GET /:id` | `compras` | padrão (leitura) |
+| `POST /`, `PUT /:id`, `PUT /:id/status`, `POST /:id/nfe` | `compras` | `operate` |
+| `POST /:id/receive` | `recebimento` | `operate` (módulo dono da ação ≠ módulo de origem) |
+| `POST /:id/approve` (G11) | `diretor` | padrão |
+| `GET /:id/approvals` (G11) | `compras` **OU** `diretor` | padrão |
+
+Quem opera compras **não** consegue registrar a aprovação de alçada da
+diretoria: são módulos de acesso diferentes. `role === 'admin'`, porém,
+satisfaz qualquer um deles (curto-circuito padrão de `authorizeModule` em
+todo o projeto) — ou seja, um admin sozinho fecha a alçada. Segregação de
+função (aprovador ≠ solicitante) **não** está implementada, por decisão
+explícita do dono do produto.
 
 ## Eventos / Auditoria
 

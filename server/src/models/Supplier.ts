@@ -32,6 +32,7 @@ interface SupplierAttributes {
   rating: number;
   quality_score: number;
   status: 'active' | 'inactive' | 'blocked';
+  is_foreign: boolean;
   notes: string | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
@@ -64,6 +65,18 @@ const Supplier = sequelize.define('Supplier', {
     comment: 'Avaliação calculada (0-100), NUNCA editável via API: recalculada de forma síncrona por CreateNonConformityUseCase (RNC → lote → recebimento → fornecedor). Distinta de `rating`.'
   },
   status: { type: DataTypes.ENUM('active', 'inactive', 'blocked'), defaultValue: 'active' },
+  // G11 (alcada de compra por ORIGEM, decisao D-C de 2026-08-10): unica
+  // fonte no schema capaz de dizer que um fornecedor e estrangeiro — o
+  // cadastro nao tem pais, so `state` (UF), e `import_processes` (COMEX) e
+  // um fluxo paralelo que nunca vira `purchase_orders`. Fica no CADASTRO de
+  // proposito: quem monta o pedido nao consegue rebaixar a alcada mexendo
+  // apenas no pedido. NUNCA gravar `null` (NOT NULL DEFAULT false).
+  is_foreign: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'G11: fornecedor estrangeiro — pedido de compra dele sempre exige aprovacao da diretoria'
+  },
   notes: DataTypes.TEXT
 }, {
   tableName: 'suppliers',

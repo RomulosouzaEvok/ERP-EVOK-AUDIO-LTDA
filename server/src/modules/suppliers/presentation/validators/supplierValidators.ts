@@ -16,6 +16,10 @@ export const createSupplierSchema = z.object({
   payment_terms: z.string().trim().max(120).optional(),
   delivery_time: z.coerce.number().int().nonnegative().optional(),
   notes: z.string().trim().max(2000).optional(),
+  // G11 (alçada de compra por origem): fornecedor estrangeiro. `z.boolean()`
+  // de propósito, NÃO `z.coerce.boolean()` — a coerção transformaria a
+  // string "false" em `true`, marcando fornecedor nacional como importação.
+  is_foreign: z.boolean().optional(),
 }).strict();
 
 export const updateSupplierSchema = createSupplierSchema.partial().strict();

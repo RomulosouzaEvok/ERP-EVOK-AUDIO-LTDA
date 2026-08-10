@@ -77,7 +77,7 @@ Estes causam dado errado hoje, e a correção é local e testável. **Executar p
 |---|---|---|
 | **G4** | Apontamento obrigatório para concluir OP? | **Pode ter resposta legal.** SPED Bloco K é obrigação acessória de controle de produção e estoque para indústria. Sem apontamento, mão de obra fica R$ 0,00 no custo do estoque. Confirmar enquadramento com o contador. |
 | **G9 + G7** | Gate de qualidade antes da saída + criar a entidade **inspeção** + mover a baixa de estoque da confirmação do pedido para a expedição. | ISO 9001:2015 (8.6 liberação, 8.7 saída não conforme) e a lógica fiscal da NF-e (a nota acompanha a mercadoria). **Alto risco** — muda o momento da baixa de estoque. Vai isolada, com migração dos pedidos confirmados e não expedidos. |
-| **G11** | Alçada de compra por valor + segregação de função (aprovador ≠ solicitante). | Já existe padrão aprovado e implementado para contratos jurídicos (3 faixas). Avaliar se as mesmas faixas servem para compra recorrente de insumo, que tem volume e frequência muito diferentes. |
+| **G11** | ✅ **Implementado em 2026-08-10** (parte da alçada; segregação de função **não** — não foi pedida). A regra real não era faixa de valor: é por **origem** (ver §4 D-C e §6). | Reaproveitou o padrão aprovado do Jurídico (RF-JUR-003): constantes em `domain/constants.ts`, tabela de aprovações com UNIQUE por papel, aprovador do JWT, endpoint de leitura sem efeito colateral. |
 | **G13** | Momento de criar conta a pagar (hoje: aprovação do pedido) e conta a receber (hoje: confirmação da venda, e à vista já nasce "paga" sem baixa). | CPC/IFRS: passivo nasce da obrigação presente; receita, da transferência de controle. **Alto risco** — afeta dado financeiro existente. **Escopo ampliado pelo G14 (2026-08-09):** a decisão precisa cobrir também os **tributos de importação** (II/IPI/PIS/COFINS/ICMS), que hoje não geram AP nenhuma. Fatos geradores e vencimentos distintos entre si, e `AccountPayable` não suporta moeda estrangeira. Implementar só para COMEX criaria um segundo padrão contábil dentro do mesmo ERP. |
 | **G1** | Unificar as duas estruturas de produto (BOM) numa só + definir quem aprova alteração de engenharia. | **Alto risco e alto valor.** É a raiz de vários outros problemas. Migração incremental, não big-bang. ISO 9001 8.5.6 exige controle de alterações. |
 | **G17** | Venda deve gerar produção? MRP deve ler carteira de pedidos e estoque mínimo? | Provavelmente **não** é "gerar OP automática no pedido" — o padrão da indústria é uma camada de Plano Mestre (MPS) entre a carteira e a ordem. |
@@ -115,6 +115,32 @@ Contexto: existem pedidos de importação na casa de **R$ 1 milhão**.
 ⚠️ Registrado como risco residual: abaixo de R$ 500.000 no nacional **quem
 solicita ainda pode aprovar** (sem segregação de função). Não foi pedida
 segregação; fica como recomendação de controle interno, não como implementação.
+**Confirmado ainda válido em 2026-08-10, na implementação do G11** — o
+código entregue não implementa segregação de função em nenhum ponto; o
+critério "quem aprova uma compra não é quem a solicitou" da §5 continua **não
+atendido de propósito**.
+
+**Implementado em 2026-08-10** (ver §6, linha do G11). Duas observações que
+saíram da implementação e precisam de atenção do dono:
+
+1. **Como o sistema sabe que é importação.** Não havia como saber: `suppliers`
+   não tem país e `import_processes` (COMEX) é um fluxo paralelo que nunca
+   vira pedido de compra. Foram criados `suppliers.is_foreign` (cadastro) e
+   `purchase_orders.origin` (declaração no pedido). A origem efetiva é o OU
+   dos dois, com a regra **escalation-only**: o campo que o comprador
+   controla no pedido só endurece a alçada — marcar como nacional um pedido
+   de fornecedor estrangeiro **não** escapa da diretoria. Ação operacional
+   necessária: **marcar `is_foreign` nos fornecedores estrangeiros já
+   cadastrados**, porque nenhum dado atual permite inferir isso.
+2. 🟡 **DECISÃO AINDA PENDENTE — importação registrada no módulo COMEX.** Os
+   pedidos de importação de ~R$ 1 milhão citados pelo dono, se forem
+   registrados em `import_processes` (`/api/comex/import-processes`) e não
+   como pedido de compra, **não passam pela alçada implementada** — aquele
+   fluxo não tem etapa de aprovação nenhuma hoje (todas as escritas são
+   `comex:operate`, sem `approve`). Falta o dono definir **em que ponto do
+   ciclo COMEX** (`draft → shipped → arrived → customs_cleared → received`) a
+   diretoria aprova; a recomendação técnica é a saída de `draft` (registro de
+   embarque), que é o primeiro passo irreversível.
 
 ### ✅ D-D — Aviso de férias: manter aceitando com alerta
 A CLT (Art. 135 caput) exige 30 dias de antecedência, mas o sistema continua
@@ -179,3 +205,4 @@ A cadeia só é considerada fechada quando, num teste ponta a ponta com dado rea
 | — | — | **G15** | ⚠️ Avaliado durante o G12 e **deliberadamente não usado**: o enum `purchase_requisitions.status` (`...ordered, partial, received...`) espelha o de `purchase_orders`, onde `partial` = "parcialmente **recebido**". Usá-lo para "parcialmente **pedido**" colidiria com a futura rotina de recebimento. O saldo de compra ficou em `purchase_requisition_items.status` (`pending\|ordered\|canceled`), que é inequívoco; a requisição permanece `approved` enquanto há saldo. `partial`/`received` continuam mortos — G15 segue em aberto. | — |
 | 2026-08-09 | 2 | **G14** | ✅ Corrigido — a importação (COMEX) entrava fora do padrão: sem lote, sem quarentena e sem dual-write de depósito. Os dois caminhos de entrada de material comprado passaram a chamar a MESMA função (`services/materialReceiptService.receiveMaterialIntoQuarantine`: estoque → depósito → lote nascendo em `quarantine` → custo real), extraída de `ReceivePurchaseItemsUseCase` sem mudar o comportamento dele. Lote de importação: `IMP-<ano>-XXXX-ITEM<id>-R001`, depósito `INSUMOS`, `received_at` = desembaraço. `reference_type`/`source_type` deixaram de mentir: de `'purchase'` (que fazia a consulta reversa por `(reference_type, reference_id)` cair num pedido de compra alheio) para `'import'`, via migration `20260809-000027` — **criada e aplicada ao banco** (confirmado em `SequelizeMeta`, auditoria de 2026-08-10). **AP dos tributos NÃO implementada de propósito** — é o G13 (Onda 3, decisão do dono). | *(working tree)* |
 | 2026-08-09 | 1 | **G15** | ✅ Corrigido — estados mortos **acionados** (não removidos): `ReceivePurchaseItemsUseCase` passou a recalcular o status da requisição de origem a cada recebimento, na mesma transação e com lock pessimista. Regra pura isolada em `modules/purchases/application/services/syncRequisitionReceiptStatus.ts`: `received` ⇔ todos os pedidos ativos da requisição `received` **e** nenhum item com saldo `pending`; `partial` ⇔ chegou algo mas não tudo; pedido `canceled` ignorado. **Requisição `approved` com saldo NÃO é tocada** — `approved` é o estado que autoriza cotar/converter o restante (G12 bloqueia `partial`/`received`), então empurrá-la para `partial` travaria a compra do saldo remanescente; quando o último saldo vira pedido ela passa a `ordered` e o recebimento fecha em `received`. `PATCH /:id/status` continua sem alcançar `ordered`/`partial`/`received` (fatos derivados, não declaráveis à mão). | *(working tree)* |
+| 2026-08-10 | 3 | **G11** | ✅ Implementado — alçada de aprovação de compra **por ORIGEM** (decisão D-C): nacional ≤ R$ 500.000 segue direto, acima exige `diretor`; **importação exige `diretor` em qualquer valor**. Regra em `modules/purchases/domain/constants.ts`; aprovação registrada em `purchase_order_approvals` (migration `20260810-000029`, **NÃO aplicada** — mesmo padrão de `jur_contract_approvals`/RF-JUR-003, `approver_user_id` do JWT, `approver_role` do RBAC, UNIQUE por papel). Origem efetiva = `purchase_orders.origin='import'` **OU** `suppliers.is_foreign=true` (escalation-only: o campo do pedido só endurece a regra). Valor comparado = `total_amount` + `freight_value`, sem impostos. Pós-aprovação, `supplier_id`/`freight_value`/`origin` ficam congelados. **Segregação de função NÃO implementada** — não foi pedida (ver §4 D-C); permanece como risco residual de controle interno. **Importação registrada em `import_processes` (COMEX) continua fora da alçada** — não passa por `purchase_orders`; falta decisão do dono sobre em que ponto do ciclo COMEX a diretoria aprova (ver §4, pendências). | *(working tree)* |

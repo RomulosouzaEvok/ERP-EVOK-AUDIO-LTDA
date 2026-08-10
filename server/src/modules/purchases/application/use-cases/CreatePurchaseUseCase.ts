@@ -10,6 +10,8 @@ interface CreatePurchaseInput {
   items: Array<{ product_id: number | string; quantity: number | string; unit_price: number | string }>;
   notes?: string;
   expected_date?: string | Date;
+  /** G11 — origem declarada da compra (`national` quando omitida). */
+  origin?: string | null;
   userId: number;
   transaction: Transaction;
 }
@@ -41,14 +43,15 @@ class CreatePurchaseUseCase extends UseCase {
    * @param {Array<{product_id:number, quantity:number, unit_price:number}>} input.items
    * @param {string} [input.notes]
    * @param {string|Date} [input.expected_date]
+   * @param {string} [input.origin] - G11: `'national'` (padrão) ou `'import'`. Declarar `'national'` não escapa da alçada quando o fornecedor é estrangeiro (`suppliers.is_foreign` prevalece na aprovação).
    * @param {number} input.userId - Id do usuário requisitante (`requester_id`).
    * @param {import('sequelize').Transaction} input.transaction - Transação Sequelize ativa (criada pelo controller).
    * @returns {Promise<Object>} Pedido de compra criado (sem includes; o controller busca a versão completa após o commit).
    * @throws {import('../../../../errors').ValidationError} Se os dados de entrada forem inválidos.
    * @throws {NotFoundError} Se algum `product_id` referenciado não existir.
    */
-  async execute({ supplier_id, items, notes, expected_date, userId, transaction }: CreatePurchaseInput) {
-    const entity = new PurchaseEntity({ supplier_id, items, notes, expected_date });
+  async execute({ supplier_id, items, notes, expected_date, origin, userId, transaction }: CreatePurchaseInput) {
+    const entity = new PurchaseEntity({ supplier_id, items, notes, expected_date, origin });
 
     let totalAmount = 0;
     for (const item of entity.items) {
@@ -72,6 +75,9 @@ class CreatePurchaseUseCase extends UseCase {
       freight_type: null,
       freight_value: 0,
       status: 'pending',
+      // G11: nunca `null` — a coluna e NOT NULL DEFAULT 'national' e a
+      // entidade ja normaliza a ausencia para 'national'.
+      origin: entity.origin,
       notes: entity.notes || null,
       invoice_number: null,
       invoice_date: null

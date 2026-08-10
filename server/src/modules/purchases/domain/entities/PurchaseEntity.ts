@@ -13,6 +13,8 @@ interface PurchaseEntityProps {
   items: PurchaseEntityItemInput[];
   notes?: string;
   expected_date?: string | Date;
+  /** G11 — origem declarada da compra (`national` quando omitida). */
+  origin?: string | null;
 }
 
 /**
@@ -41,6 +43,15 @@ class PurchaseEntity extends Entity {
   public items: PurchaseEntityItemInput[];
   public notes: string | null;
   public expected_date: string | Date | null;
+  /**
+   * G11 — origem declarada da compra. Normalizada para `'national'` quando
+   * ausente: `purchase_orders.origin` é `NOT NULL DEFAULT 'national'` e
+   * gravar `null` explícito anularia o DEFAULT do Postgres. Note que
+   * declarar `'national'` NÃO garante que o pedido seja tratado como
+   * nacional na alçada — `suppliers.is_foreign` prevalece
+   * (`domain/constants.ts`).
+   */
+  public origin: 'national' | 'import';
 
   constructor(props: PurchaseEntityProps) {
     super({ id: props.id });
@@ -48,6 +59,14 @@ class PurchaseEntity extends Entity {
     this.items = props.items;
     this.notes = props.notes ?? null;
     this.expected_date = props.expected_date ?? null;
+    // Valor invalido NAO e silenciosamente rebaixado para 'national' (isso
+    // seria exatamente o caminho para escapar da alcada por engano de
+    // digitacao) — `validate()` rejeita qualquer coisa fora do enum.
+    if (props.origin === undefined || props.origin === null) {
+      this.origin = 'national';
+    } else {
+      this.origin = props.origin as 'national' | 'import';
+    }
 
     this.validate();
   }
@@ -64,6 +83,9 @@ class PurchaseEntity extends Entity {
     }
     if (!this.items || this.items.length === 0) {
       throw new ValidationError('Adicione pelo menos um item.');
+    }
+    if (this.origin !== 'national' && this.origin !== 'import') {
+      throw new ValidationError('Origem do pedido deve ser "national" ou "import".');
     }
     for (const item of this.items) {
       if (!item.product_id || item.quantity === undefined || item.unit_price === undefined) {

@@ -9,6 +9,8 @@ const GetPurchaseByIdUseCase = require('../../application/use-cases/GetPurchaseB
 const CreatePurchaseUseCase = require('../../application/use-cases/CreatePurchaseUseCase');
 const UpdatePurchaseUseCase = require('../../application/use-cases/UpdatePurchaseUseCase');
 const ChangePurchaseStatusUseCase = require('../../application/use-cases/ChangePurchaseStatusUseCase');
+const ApprovePurchaseUseCase = require('../../application/use-cases/ApprovePurchaseUseCase');
+const ListPurchaseApprovalsUseCase = require('../../application/use-cases/ListPurchaseApprovalsUseCase');
 const ReceivePurchaseItemsUseCase = require('../../application/use-cases/ReceivePurchaseItemsUseCase');
 const GetPurchaseCockpitUseCase = require('../../application/use-cases/GetPurchaseCockpitUseCase');
 const {
@@ -34,6 +36,23 @@ async function rollbackIfPending(transaction: Transaction) {
   if (transaction && !(transaction as any).finished) {
     await transaction.rollback();
   }
+}
+
+/**
+ * G11 — resolve os papéis de aprovador de alçada que o usuário logado
+ * efetivamente possui, a partir do RBAC real (`req.user.permissions`),
+ * NUNCA do body. Mesmo padrão anti-spoofing de
+ * `resolveAvailableApproverRoles` do Jurídico (RF-JUR-003).
+ * `role === 'admin'` é tratado como tendo o papel (mesmo curto-circuito de
+ * `authorizeModule`).
+ *
+ * @param {import('express').Request} req
+ * @returns {string[]} Papéis disponíveis (hoje apenas `diretor`).
+ */
+function resolveAvailableApproverRoles(req: Request): string[] {
+  const user = (req as any).user;
+  if (user?.role === 'admin') return ['diretor'];
+  return user?.permissions?.diretor ? ['diretor'] : [];
 }
 
 /**
@@ -104,10 +123,10 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createPurchaseSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { supplier_id, items, notes, expected_date } = parsed.data;
+    const { supplier_id, items, notes, expected_date, origin } = parsed.data;
     const useCase = new CreatePurchaseUseCase(purchaseRepository);
     const { purchase, totalAmount } = await useCase.execute({
-      supplier_id, items, notes, expected_date, userId: (req as any).user.id, transaction: t
+      supplier_id, items, notes, expected_date, origin, userId: (req as any).user.id, transaction: t
     });
 
     await t.commit();
@@ -118,7 +137,7 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
       entityType: 'Purchase',
       entityId: purchase.id,
       entityDescription: purchase.order_number,
-      newValues: { supplier_id, total_amount: totalAmount, status: 'pending' },
+      newValues: { supplier_id, total_amount: totalAmount, status: 'pending', origin: purchase.origin },
       description: `Pedido de compra ${purchase.order_number} criado`
     });
 
@@ -204,6 +223,70 @@ exports.updateStatus = async (req: Request, res: Response, next: NextFunction) =
     await rollbackIfPending(t);
     next(error);
   }
+};
+
+/**
+ * `POST /api/purchases/:id/approve` — G11: registra a aprovação de alçada da
+ * DIRETORIA sobre um pedido de compra (não aprova o pedido; a aprovação do
+ * pedido continua sendo `PUT /api/purchases/:id/status`).
+ *
+ * `approver_user_id` vem sempre do JWT e `approver_role` é sempre resolvido
+ * por RBAC (`resolveAvailableApproverRoles`) — nada disso é aceito do body.
+ * Transacional: a leitura do pedido, a checagem de duplicidade de papel e a
+ * gravação da aprovação acontecem na mesma transação, para que duas
+ * requisições simultâneas do mesmo diretor não gerem duas linhas (a UNIQUE
+ * `uq_purchase_order_approvals_purchase_role` é a garantia final).
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.approveAuthority = async (req: Request, res: Response, next: NextFunction) => {
+  const t = await sequelize.transaction();
+  try {
+    const useCase = new ApprovePurchaseUseCase(purchaseRepository);
+    const approval = await useCase.execute({
+      purchaseId: req.params.id,
+      approverUserId: (req as any).user.id,
+      availableRoles: resolveAvailableApproverRoles(req),
+      transaction: t
+    });
+
+    await t.commit();
+
+    logAction(req, {
+      action: 'approve',
+      entityType: 'PurchaseOrderApproval',
+      entityId: approval.id,
+      entityDescription: `Pedido ${req.params.id}`,
+      newValues: { purchase_id: approval.purchase_id, approver_role: approval.approver_role, approver_user_id: approval.approver_user_id },
+      description: `Alcada G11: aprovacao "${approval.approver_role}" registrada para o pedido de compra ${req.params.id}`
+    });
+
+    res.status(201).json({ success: true, data: approval });
+  } catch (error) {
+    await rollbackIfPending(t);
+    next(error);
+  }
+};
+
+/**
+ * `GET /api/purchases/:id/approvals` — G11: situação da alçada do pedido
+ * (origem efetiva, valor comparado com o teto, papéis exigidos, aprovações
+ * já registradas e o que falta). Somente leitura, sem efeito colateral.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.listApprovals = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const useCase = new ListPurchaseApprovalsUseCase(purchaseRepository);
+    const data = await useCase.execute({ purchaseId: req.params.id });
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
 };
 
 /**

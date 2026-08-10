@@ -21,6 +21,8 @@ interface SupplierProps {
   payment_terms?: string | null;
   delivery_time?: number | null;
   notes?: string | null;
+  /** G11 — fornecedor estrangeiro (importação). Ausente = `false`. */
+  is_foreign?: boolean | null;
 }
 
 class SupplierEntity extends Entity {
@@ -36,6 +38,14 @@ class SupplierEntity extends Entity {
   public payment_terms: string | null;
   public delivery_time: number;
   public notes: string | null;
+  /**
+   * G11 — fornecedor estrangeiro. Normalizado para `false` quando ausente:
+   * `suppliers.is_foreign` é `NOT NULL DEFAULT false` e gravar `null`
+   * explícito anularia o DEFAULT do Postgres. Marcar `true` faz TODO pedido
+   * de compra deste fornecedor exigir aprovação da diretoria, em qualquer
+   * valor (`modules/purchases/domain/constants.ts`).
+   */
+  public is_foreign: boolean;
 
   /**
    * @param props - Propriedades do fornecedor.
@@ -55,6 +65,7 @@ class SupplierEntity extends Entity {
     this.payment_terms = props.payment_terms ?? null;
     this.delivery_time = props.delivery_time ?? 15;
     this.notes = props.notes ?? null;
+    this.is_foreign = props.is_foreign === true;
 
     this.validate();
   }
