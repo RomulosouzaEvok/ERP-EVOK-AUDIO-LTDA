@@ -8,6 +8,10 @@ const {
   requiredApproverRoles,
   purchaseApprovalValue,
 } = require('../../domain/constants');
+const {
+  assertApproverIsNotRequester,
+  SEGREGATION_RULES,
+} = require('../../../../shared/domain/segregationOfDuties');
 
 /**
  * `POST /api/purchases/:id/approve` — registra 1 aprovacao de alcada de
@@ -23,6 +27,15 @@ const {
  * `PUT /api/purchases/:id/status` com `status='approved'`
  * (`ChangePurchaseStatusUseCase`), que passa a exigir que as aprovacoes de
  * alcada exigidas ja estejam registradas.
+ *
+ * ## Segregacao de funcao (D-K, 2026-08-10)
+ *
+ * A alcada tambem e um ato de aprovacao, entao tambem esta sujeita a D-K:
+ * o diretor que ELE MESMO montou o pedido nao registra a propria alcada.
+ * Sem esta trava a segregacao do pedido teria uma porta lateral — um
+ * usuario `diretor` (ou `admin`) criaria o pedido, assinaria a alcada e so
+ * precisaria de um terceiro para o `PUT /status`, o que reduziria o
+ * controle a um carimbo. Ver `shared/domain/segregationOfDuties`.
  */
 interface ApprovePurchaseInput {
   purchaseId: number | string;
@@ -51,7 +64,8 @@ class ApprovePurchaseUseCase extends UseCase {
    * @param {import('sequelize').Transaction} [input.transaction]
    * @returns {Promise<Object>} Aprovacao criada.
    * @throws {NotFoundError} Pedido inexistente.
-   * @throws {BusinessRuleError} Usuario sem papel de aprovador; pedido em status que nao admite mais aprovacao de alcada; pedido que nao exige alcada; ou papel que ja aprovou este pedido.
+   * @throws {BusinessRuleError} D-K (`details.rule = 'D-K-ALCADA'`): o aprovador e o solicitante do pedido.
+   * @throws {BusinessRuleError} G11 (`details.rule = 'G11'`): usuario sem papel de aprovador; pedido em status que nao admite mais aprovacao de alcada; pedido que nao exige alcada; ou papel que ja aprovou este pedido.
    */
   async execute({ purchaseId, approverUserId, availableRoles, transaction }: ApprovePurchaseInput) {
     const purchase = await this.purchaseRepository.findPurchaseByIdRaw(purchaseId, transaction);
@@ -67,6 +81,15 @@ class ApprovePurchaseUseCase extends UseCase {
         { rule: 'G11' },
       );
     }
+
+    // D-K — segregacao de funcao, antes de qualquer escrita.
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.PURCHASE_ORDER_AUTHORITY,
+      requesterUserId: purchase.requester_id,
+      approverUserId: approverUserId,
+      documentLabel: `o pedido de compra ${purchase.order_number ?? purchaseId}`,
+      approverHint: 'outro usuario da diretoria (papel `diretor`)',
+    });
 
     const roles = availableRoles || [];
     if (roles.length === 0) {

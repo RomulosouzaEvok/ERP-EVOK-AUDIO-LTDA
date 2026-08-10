@@ -45,6 +45,46 @@
 9. Liberação para pagamento
 ```
 
+### Segregação de função — quem solicita não aprova (D-K, 2026-08-10)
+
+Decisão do dono do produto em 2026-08-10 (`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`
+§4, D-K): **o aprovador nunca pode ser o solicitante**. É controle interno
+clássico (nenhuma compra é pedida e aprovada pela mesma pessoa), e agora é
+regra **no código**, não recomendação escrita.
+
+Onde o sistema trava, e contra qual campo:
+
+| Ato | Endpoint | Solicitante comparado | `details.rule` |
+|---|---|---|---|
+| Aprovar requisição | `PATCH /api/purchase-requisitions/:id/status` (`approved`) | `purchase_requisitions.requester_id` | `D-K-REQUISICAO` |
+| Aprovar pedido | `PUT /api/purchases/:id/status` (`approved`) | `purchase_orders.requester_id` | `D-K-PEDIDO` |
+| Registrar alçada da diretoria | `POST /api/purchases/:id/approve` | `purchase_orders.requester_id` | `D-K-ALCADA` |
+| Aprovar importação (COMEX) | `POST /api/comex/import-processes/:id/approve` | `import_processes.created_by` | `D-K-COMEX` |
+
+Como isso aparece para o comprador: **HTTP 422** com uma mensagem que diz o
+que fazer ("peça a aprovação a outro usuário com acesso ao módulo de
+compras…"), não um erro seco. **Nada é gravado** quando a regra reprova.
+
+Três coisas que costumam gerar dúvida:
+
+1. **O administrador também é barrado.** É a única regra do ERP sem exceção
+   para `role = admin`. Permissão máxima não transforma uma pessoa em duas.
+2. **Só vale para aprovar.** Quem pediu continua submetendo a requisição,
+   cancelando, convertendo em pedido e enviando o pedido ao fornecedor
+   (`approved → sent`).
+3. 🔴 **Exige um segundo aprovador cadastrado.** Verificado no banco em
+   2026-08-10: existe **1 único usuário capaz de aprovar compra** e ele é o
+   autor de 100% dos documentos (18/18 pedidos, 13/13 requisições, 4/4
+   importações — com **7 de 7 requisições auto-aprovadas**). Antes de a regra
+   valer em produção, cadastrar em **Administração → Perfis de Acesso** um
+   segundo usuário com `requisicoes: aprovar` + `compras: operar`, e o módulo
+   `diretor` se ele também for assinar alçada/importação.
+
+Não travados por esta regra (avaliados e **não** autorizados nesta rodada):
+adjudicação de cotação (`POST /api/rfqs/:id/award`) e recebimento
+(`POST /api/purchases/:id/receive`) — ver §"Achados" em
+`docs/governance/TODO.md`, entrada 2026-08-10 D-K.
+
 ### Categorias de Compra
 
 | Categoria | Exemplos | Lead Time | Fornecedores Principais |

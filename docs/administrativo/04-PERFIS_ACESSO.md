@@ -27,6 +27,40 @@ Um usuário `admin` não precisa de Perfil de Acesso (passa direto). Usuários
 Acesso vinculado a eles — sem perfil vinculado, `authorizeModule` nega
 (`NO_ACCESS_PROFILE`).
 
+### ⚠️ A exceção onde `admin` NÃO passa direto: segregação de função (D-K)
+
+**(NOVO 2026-08-10 — decisão D-K do dono do produto,
+`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4.)** Existe uma
+terceira camada, e ela **não** é de permissão: na cadeia de compras, **quem
+solicitou um documento não pode aprová-lo**, qualquer que seja o `role` ou o
+Perfil de Acesso — **inclusive `admin`**.
+
+O motivo de a exceção existir só aqui: as duas camadas acima respondem a
+*"esta pessoa tem privilégio para isso?"*, e privilégio é concedível — faz
+sentido `admin` ter todos. Segregação responde a *"esta é a mesma pessoa?"*,
+e identidade não é concedível: nenhum nível de permissão transforma uma
+pessoa em duas. Um curto-circuito de `admin` aqui não seria uma exceção
+estreita, seria o cancelamento da regra.
+
+Pontos cobertos (todos com `details.rule` próprio, HTTP 422, nada gravado):
+aprovar requisição (`D-K-REQUISICAO`), aprovar pedido (`D-K-PEDIDO`),
+registrar alçada da diretoria (`D-K-ALCADA`) e aprovar processo de
+importação (`D-K-COMEX`). Detalhe em `docs/suprimentos/01-COMPRAS.md` e
+`docs/arquitetura/API.md`.
+
+🔴 **Consequência para a administração de usuários:** a partir desta regra,
+**a empresa precisa de pelo menos 2 usuários habilitados a aprovar compra**.
+Levantamento de 2026-08-10 no banco: existiam **2 usuários ativos**, e apenas
+1 (`admin`) com qualquer módulo de compras — ou seja, com a regra ativa e
+sem novo cadastro, **nenhuma compra é aprovável**. Perfil mínimo do segundo
+aprovador:
+
+| Módulo | Nível | Para quê |
+|---|---|---|
+| `requisicoes` | `approve` | aprovar requisição de compra |
+| `compras` | `operate` | aprovar o pedido (`PUT /api/purchases/:id/status`) |
+| `diretor` | `operate` | (só se ele também for assinar alçada G11 / importação) |
+
 ## O que é um Perfil de Acesso
 
 Um Perfil de Acesso representa uma "área/departamento" de permissões (ex.:

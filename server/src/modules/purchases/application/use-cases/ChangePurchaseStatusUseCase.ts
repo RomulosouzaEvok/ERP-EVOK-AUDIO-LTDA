@@ -8,6 +8,10 @@ const {
   requiredApproverRoles,
   purchaseApprovalValue,
 } = require('../../domain/constants');
+const {
+  assertApproverIsNotRequester,
+  SEGREGATION_RULES,
+} = require('../../../../shared/domain/segregationOfDuties');
 
 /**
  * Maquina de estados de status do pedido de compra.
@@ -52,6 +56,21 @@ interface ChangePurchaseStatusInput {
  * projeção de fluxo de caixa contaminada por pedidos que podem nunca
  * chegar (inclusive pedidos depois **cancelados**, que deixavam a AP para
  * trás) e vencimento fictício calculado sobre uma data prometida.
+ *
+ * ## Segregação de função (D-K, 2026-08-10)
+ *
+ * A transição `pending -> approved` passou a ter **dois** portões
+ * independentes, verificados nesta ordem e ambos ANTES do `save()`:
+ *
+ * 1. **D-K — quem aprova não é quem solicitou** (`purchase_orders.requester_id`
+ *    × `req.user.id`). Vale para todo pedido, em qualquer valor e origem,
+ *    inclusive `role = 'admin'`. Ver `shared/domain/segregationOfDuties`.
+ * 2. **G11 — alçada por origem** (a diretoria já registrou a aprovação
+ *    exigida?), ver {@link ChangePurchaseStatusUseCase._assertApprovalAuthority}.
+ *
+ * A ordem importa para a qualidade da mensagem: não adianta mandar o
+ * comprador buscar um diretor (G11) se, mesmo com a alçada satisfeita, ele
+ * continuaria barrado por ser o solicitante.
  */
 class ChangePurchaseStatusUseCase extends UseCase {
   private purchaseRepository: PurchaseRepository;
@@ -68,12 +87,13 @@ class ChangePurchaseStatusUseCase extends UseCase {
    * @param {Object} input
    * @param {number} input.id
    * @param {string} input.status
-   * @param {number} input.userId - Usuário do JWT (anti-spoofing). Mantido no contrato para auditoria; desde o G13 não é mais usado como `approved_by` de nenhuma conta a pagar.
+   * @param {number} input.userId - Usuário do JWT (anti-spoofing). Desde o G13 não é mais usado como `approved_by` de nenhuma conta a pagar; desde o D-K é a identidade comparada com `purchase_orders.requester_id` na segregação de função.
    * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
-   * @throws {BusinessRuleError} G11 — transição para `approved` sem a alçada satisfeita (importação, ou nacional acima de R$ 500.000, sem aprovação registrada da diretoria).
+   * @throws {BusinessRuleError} D-K (`details.rule = 'D-K-PEDIDO'`) — quem aprova é quem solicitou o pedido.
+   * @throws {BusinessRuleError} G11 (`details.rule = 'G11'`) — transição para `approved` sem a alçada satisfeita (importação, ou nacional acima de R$ 500.000, sem aprovação registrada da diretoria).
    */
-  async execute({ id, status, transaction }: ChangePurchaseStatusInput) {
+  async execute({ id, status, userId, transaction }: ChangePurchaseStatusInput) {
     if (!status) {
       throw new ValidationError('Status e obrigatorio');
     }
@@ -103,6 +123,17 @@ class ChangePurchaseStatusUseCase extends UseCase {
     // `approved`). A cadeia aprovacao -> passivo continua intacta, so ficou
     // mais longa e mais correta.
     if (status === 'approved') {
+      // D-K: segregacao de funcao antes da alcada — ver cabecalho da classe.
+      // `requester_id` e NULL-able no schema (pedidos legados); nesse caso a
+      // comparacao e impossivel e a regra nao bloqueia, por desenho.
+      assertApproverIsNotRequester({
+        rule: SEGREGATION_RULES.PURCHASE_ORDER,
+        requesterUserId: purchase.requester_id,
+        approverUserId: userId,
+        documentLabel: `o pedido de compra ${purchase.order_number ?? id}`,
+        approverHint: "outro usuario com acesso ao modulo de compras (ou outro administrador)",
+      });
+
       await this._assertApprovalAuthority(purchase, transaction);
     }
 

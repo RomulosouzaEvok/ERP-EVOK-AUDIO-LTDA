@@ -62,6 +62,24 @@
    └── Inspeção de qualidade
 ```
 
+### Aprovação da diretoria e segregação de função
+
+O sistema trava a saída de `draft` (registro de embarque) até a diretoria
+aprovar o processo — **G11-COMEX**, decisão D-G
+(`POST /api/comex/import-processes/:id/approve`, papel `diretor`, em
+qualquer valor: importação nunca tem faixa de isenção).
+
+**Segregação de função (D-K, 2026-08-10):** o analista que **registrou** o
+processo (`import_processes.created_by`) **não** aprova o próprio processo,
+ainda que tenha o papel `diretor` ou seja `admin`. Erro **422** com
+`details.rule = "D-K-COMEX"`, nada gravado, e mensagem dizendo a quem pedir a
+aprovação.
+
+Por que aqui a regra é mais importante do que em qualquer outro ponto: este
+gate é o **único** controle da importação antes do embarque. Sem ele, um
+processo na casa de R$ 1 milhão sairia com uma única pessoa envolvida do
+cadastro ao desembaraço.
+
 ### Contratação de Câmbio
 
 | Tipo | Prazo | Custo |

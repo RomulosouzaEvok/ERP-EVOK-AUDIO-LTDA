@@ -9,6 +9,19 @@
  * Ao aprovar (status = approved), registra `approved_by` (usuario logado) e
  * `approval_date` (data atual).
  *
+ * ## Segregacao de funcao (D-K, 2026-08-10)
+ *
+ * Aprovar exige, alem do nivel `requisicoes:approve` da rota, que o
+ * aprovador NAO seja o solicitante (`purchase_requisitions.requester_id`).
+ * A checagem roda ANTES do unico `UPDATE` deste caso de uso, entao uma
+ * auto-aprovacao reprovada nao deixa nada gravado — nem `status`, nem
+ * `approved_by`, nem `approval_date`. Ver
+ * `shared/domain/segregationOfDuties`.
+ *
+ * ⚠️ `role = 'admin'` NAO isenta (ver justificativa no cabecalho daquele
+ * modulo): 7 das 7 requisicoes aprovadas no banco de dev foram
+ * auto-aprovadas pelo admin, que e exatamente o furo que a regra fecha.
+ *
  * ## Os demais estados do ENUM sao AUTOMATICOS, nao manuais (gap G15)
  *
  * `purchase_requisitions.status` tem tambem `ordered`, `partial` e
@@ -34,6 +47,7 @@
 
 import UseCase from '../../../../shared/application/UseCase';
 import { BusinessRuleError, NotFoundError } from '../../../../errors';
+import { assertApproverIsNotRequester, SEGREGATION_RULES } from '../../../../shared/domain/segregationOfDuties';
 import PurchaseRequisitionRepository from '../../domain/repositories/PurchaseRequisitionRepository';
 
 type RequisitionStatus = 'draft' | 'pending' | 'approved' | 'canceled';
@@ -64,7 +78,7 @@ class ChangePurchaseRequisitionStatusUseCase extends UseCase<ChangePurchaseRequi
    * @param input - id da requisicao, status desejado e id do usuario logado.
    * @returns Requisicao atualizada.
    * @throws NotFoundError se a requisicao nao existir.
-   * @throws BusinessRuleError se a transicao nao for permitida.
+   * @throws BusinessRuleError se a transicao nao for permitida, ou (D-K, `details.rule = 'D-K-REQUISICAO'`) se o aprovador for o proprio solicitante.
    */
   public async execute(input: ChangePurchaseRequisitionStatusInput): Promise<any> {
     const requisition = await this.requisitionRepository.findRequisitionById(input.id);
@@ -85,6 +99,16 @@ class ChangePurchaseRequisitionStatusUseCase extends UseCase<ChangePurchaseRequi
     const updateData: Record<string, unknown> = { status: input.status };
 
     if (input.status === 'approved') {
+      // D-K — segregacao de funcao. Antes do UPDATE: reprovar aqui nao deixa
+      // estado parcial gravado.
+      assertApproverIsNotRequester({
+        rule: SEGREGATION_RULES.PURCHASE_REQUISITION,
+        requesterUserId: requisition.requester_id,
+        approverUserId: input.userId,
+        documentLabel: `a requisicao de compra ${requisition.requisition_number ?? input.id}`,
+        approverHint: "outro usuario com nivel 'aprovar' no modulo de requisicoes (ou outro administrador)",
+      });
+
       updateData.approved_by = input.userId;
       updateData.approval_date = new Date().toISOString().slice(0, 10);
     }

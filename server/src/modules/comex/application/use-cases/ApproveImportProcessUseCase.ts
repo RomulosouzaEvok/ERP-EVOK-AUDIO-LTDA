@@ -15,11 +15,22 @@
  * `approverUserId` vem SEMPRE de `req.user.id` (JWT); nenhum dos dois e
  * aceito do body.
  *
+ * ## Segregacao de funcao (D-K, 2026-08-10)
+ *
+ * O analista que registrou o processo (`import_processes.created_by`, coluna
+ * NOT NULL preenchida do JWT em `CreateImportProcessUseCase`) nao aprova o
+ * proprio processo, ainda que tenha o papel `diretor` (ou seja `admin`).
+ * Como este gate e o UNICO controle antes do embarque de uma importacao —
+ * o dono citou processos na casa de R$ 1 milhao —, permitir auto-aprovacao
+ * aqui deixaria a importacao inteira sem segunda pessoa em nenhum ponto.
+ * Ver `shared/domain/segregationOfDuties`.
+ *
  * @module modules/comex/application/use-cases/ApproveImportProcessUseCase
  */
 
 import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError, BusinessRuleError } from '../../../../errors';
+import { assertApproverIsNotRequester, SEGREGATION_RULES } from '../../../../shared/domain/segregationOfDuties';
 import ComexRepository from '../../domain/repositories/ComexRepository';
 import {
   IMPORT_APPROVAL_RULE,
@@ -48,6 +59,7 @@ class ApproveImportProcessUseCase extends UseCase<ApproveImportProcessInput, any
    * @param input - Id do processo, id do aprovador (JWT), papeis disponiveis (RBAC) e a transacao ativa.
    * @returns A aprovacao criada.
    * @throws {NotFoundError} Se o processo nao existir.
+   * @throws {BusinessRuleError} (422, `details.rule = 'D-K-COMEX'`) Se o aprovador e o analista que criou o processo (segregacao de funcao).
    * @throws {BusinessRuleError} (422, `details.rule = 'G11-COMEX'`) Se o processo ja passou do `draft` (aprovacao retroativa), se o usuario nao possui papel de aprovador, ou se o papel ja aprovou este processo.
    */
   public async execute(input: ApproveImportProcessInput): Promise<any> {
@@ -65,6 +77,15 @@ class ApproveImportProcessUseCase extends UseCase<ApproveImportProcessInput, any
         { rule: IMPORT_APPROVAL_RULE, current_status: importProcess.status },
       );
     }
+
+    // D-K — segregacao de funcao, antes de qualquer escrita.
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.IMPORT_PROCESS_AUTHORITY,
+      requesterUserId: importProcess.created_by,
+      approverUserId: input.approverUserId,
+      documentLabel: `o processo de importacao ${importProcess.process_number ?? input.id}`,
+      approverHint: 'outro usuario da diretoria (papel `diretor`)',
+    });
 
     const roles = input.availableRoles || [];
     const required = requiredImportApproverRoles();
