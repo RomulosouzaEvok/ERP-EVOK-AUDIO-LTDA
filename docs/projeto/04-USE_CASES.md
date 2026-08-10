@@ -81,19 +81,56 @@
 4. Sistema calcula subtotal, descontos e total
 5. Seleciona forma de pagamento (dinheiro, cartão, pix, boleto)
 6. Usuário confirma a venda
-7. Sistema dá baixa no estoque
-8. Sistema gera Conta a Receber (se parcelado)
+7. Sistema **reserva** o estoque de cada item (gap G9, 2026-08-10 — **não**
+   dá baixa; ver Regras de Negócio)
+8. Sistema **não** gera Conta a Receber neste momento (gap G13, 2026-08-10 —
+   ela nasce na autorização da NF-e; ver UC-06 e Regras de Negócio)
 9. Sistema exibe comprovante da venda
 
 **Fluxo Alternativo (estoque insuficiente):**
 - Sistema alerta "Estoque insuficiente para o produto X"
 - Venda não pode ser concluída
+- O que é comparado é o estoque **disponível**
+  (`products.quantity - products.reserved_quantity`), não o saldo bruto:
+  material já comprometido com outro pedido ou com uma OP não conta
 
 **Regras de Negócio:**
 - Venda não pode ser concluída sem cliente
 - Produtos com estoque zerado são sinalizados
-- Venda à vista gera recebimento imediato
-- Venda parcelado gera contas a receber futuras
+- **[G13, 2026-08-10 — decisão D-A do dono] Confirmar o pedido NÃO cobra;
+  autorizar a NF-e cobra.** A confirmação (`quote → confirmed`, ou criação
+  já `confirmed`) **não cria nenhuma parcela** em `accounts_receivable`; as
+  parcelas nascem quando a NF-e é autorizada, no valor **daquela emissão**
+  (faturamento parcial cobra em parcelas, com numeração de `installment`
+  contínua entre as notas). Base normativa: **CPC 47** item 31 (receita
+  quando o cliente obtém o controle), item 38 (na confirmação não há posse
+  física, titularidade, aceite nem direito presente a pagamento) e item 108
+  (recebível exige direito **incondicional**). Criar as parcelas na
+  confirmação antecipava receita e inflava o ativo.
+- **[G13] Venda à vista NÃO gera recebimento imediato.** A parcela nasce
+  `pending` com vencimento na data da emissão; a quitação é evento próprio
+  da Tesouraria (`PUT /api/finance/receivable/:id/pay`). Antes, a parcela
+  nascia `status: 'paid'` com `payment_date` preenchido sem que nenhum
+  dinheiro tivesse entrado — invisível para a conciliação bancária, para a
+  régua de cobrança e para a trilha de auditoria, e com quem vende dando
+  quitação (falha de segregação de funções).
+- Venda parcelada gera contas a receber futuras **a partir da NF-e**
+- **[G9, 2026-08-10 — decisão D-A do dono] Confirmar o pedido RESERVA;
+  autorizar a NF-e BAIXA.** A confirmação (`quote → confirmed`, ou criação
+  já `confirmed`) cria uma reserva em `production_order_reservations` com a
+  venda como dona; `products.quantity` só diminui quando a NF-e é
+  autorizada, e **na quantidade efetivamente faturada** (faturamento parcial
+  baixa em parcelas). Base normativa: Ajuste SINIEF 07/05, cláusula 1ª §1º e
+  cláusula 9ª §1º — a NF-e é autorizada antes do fato gerador e a mercadoria
+  só transita depois da autorização de uso; enquanto o pedido está apenas
+  confirmado, a mercadoria continua fisicamente na empresa. Ver
+  `docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md` e
+  `docs/database/DATABASE.md` (seção G9).
+- **Alteração de pedido confirmado** (`PUT /api/sales/:id/items`) ajusta a
+  reserva pelo delta, sem tocar em `products.quantity`
+- **Cancelamento** libera todo o saldo reservado e devolve ao estoque
+  apenas o que já tinha sido faturado (`sale_items.invoiced_quantity`).
+  Cancelar um orçamento (`quote`) não movimenta estoque nenhum
 
 ---
 
@@ -118,13 +155,33 @@
 ## UC-06: Receber Contas (Contas a Receber)
 
 **Ator:** Financeiro, Administrador  
-**Pré-condições:** Venda realizada com parcelamento  
+**Pré-condições:** NF-e da venda autorizada (parcelas de venda) **ou**
+lançamento avulso de cobrança  
 **Fluxo Principal:**
 1. Usuário acessa "Financeiro > Contas a Receber"
 2. Visualiza parcelas pendentes
 3. Registra o recebimento
 4. Sistema baixa a parcela como "Recebida"
 5. Sistema atualiza o fluxo de caixa
+
+**Fluxo Alternativo (cobrança avulsa, sem venda — decisão D-J):**
+- Reembolso, aluguel e venda de sucata são cobranças legítimas **sem pedido
+  de venda**. O usuário lança direto em `POST /api/finance/receivable`
+  informando cliente, valor, vencimento e a origem em `notes`.
+- A parcela nasce com `sale_id: null` e `status: 'pending'`.
+
+**Regras de Negócio:**
+- **[G13, 2026-08-10] Origem determina o caminho.** Recebível **de venda**
+  só nasce pela autorização da NF-e (`POST /api/sales/:id/nfe`) — informar
+  `sale_id` em `POST /api/finance/receivable` é recusado com 422 e
+  `details.rule = 'G13-AR'`. Recebível **avulso** (sem `sale_id`) passa
+  normalmente. Base: **CPC 47 item 108** (recebível exige direito
+  incondicional) + decisão **D-J** do dono do produto.
+- **Nenhuma parcela nasce baixada.** Informar `status` na criação é recusado
+  com 422 e `details.rule = 'G13-AR-PAID'`. Quitação exige valor, data,
+  usuário e contrapartida conciliável no extrato.
+- Baixa parcial acumula em `amount_paid` e a parcela fica `partial`;
+  `amount` (valor original) nunca é sobrescrito.
 
 ---
 
@@ -357,8 +414,14 @@ ERP.
    pedido (UNIQUE no banco). So e aceita enquanto o pedido esta `pending`.
 4. `PUT /api/purchases/:id/status` com `status='approved'` passa a verificar
    as aprovacoes registradas: sem a alcada satisfeita, devolve **422**
-   (`BUSINESS_RULE_VIOLATION`, `details.rule='G11'`) e **nao** grava o status
-   nem gera a conta a pagar automatica.
+   (`BUSINESS_RULE_VIOLATION`, `details.rule='G11'`) e **nao** grava o
+   status.
+
+**Interacao com o G13 (2026-08-10):** a aprovacao **nao gera mais conta a
+pagar** — o passivo nasce no recebimento (UC-16). A alcada continua sendo o
+portao do passivo, so que por um caminho mais longo: pedido que nao pode ser
+aprovado nunca chega a `sent`, e `sent`/`partial` sao os unicos status que o
+recebimento aceita. Nenhum passivo passa a existir sem aprovacao.
 
 **Fluxo normal (maioria dos pedidos):** nacional dentro do teto continua
 seguindo direto, sem passo novo e sem consulta extra de aprovacoes.
@@ -389,13 +452,45 @@ de acao, nao um defeito.
 5. Sistema da entrada no estoque (`products.quantity` incrementado normalmente)
 6. Sistema cria/atualiza o lote (`LotControl`) do item recebido em status
    **`quarantine`** (nao `available`) — o lote fica bloqueado para CONSUMO
-   ate a inspecao de recebimento liberar (ver UC-17B). O estoque fisico
-   entra normalmente; apenas o consumo rastreavel por lote fica retido.
+   ate a inspecao de recebimento (UC-17C) aprovar e a liberacao (UC-17B)
+   acontecer. O estoque FISICO entra normalmente (`products.quantity`),
+   mas **[G7, 2026-08-10]** esse saldo retido passou a ser descontado do
+   estoque que o PLANEJAMENTO enxerga (MRP e disponibilidade de OP) — antes
+   disso material nao inspecionado contava como disponivel e a quarentena
+   era decorativa para o planejamento.
 7. Sistema atualiza status do pedido para "received"
-8. Sistema gera conta a pagar para o fornecedor
+8. **[G13, 2026-08-10]** Sistema gera a conta a pagar do fornecedor **neste
+   momento** (nao mais na aprovacao do pedido), no valor do que foi
+   **efetivamente recebido nesta entrega**
+
+**Regra de negocio do passivo — G13 [IMPLEMENTADO 2026-08-10]**
+
+Decisao D-A do dono
+(`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4). Base
+normativa: **CPC 00 (R2) item 4.56** — pedido aprovado e nao entregue e
+*contrato executorio*, nao passivo — e **item 4.58** — o passivo surge
+quando a outra parte cumpre primeiro, isto e, quando o fornecedor entrega.
+
+| Aspecto | Regra |
+|---|---|
+| Gatilho | `POST /api/purchases/:id/receive` (era: transicao para `approved`) |
+| Valor | Soma de `quantidade recebida x preco unitario` **desta entrega**. Recebeu metade, deve a metade. Tres entregas = tres contas a pagar |
+| Documento | `invoice_number` = NF do fornecedor desta entrega (era: `null`) |
+| Vencimento | `due_date` informado prevalece; senao `invoice_date + 30`; senao data do recebimento + 30. ⚠️ Pergunta **C7** ao contador (prazo conta da NF ou do recebimento fisico?) segue aberta |
+| Aprovador | `approved_by`/`approval_date` **nulos** — quem recebe nao aprova pagamento (three-way match: pedido x recebimento x NF) |
+| Idempotencia | Par `(purchase_id, invoice_number)`, o mesmo do indice unico de `purchase_receipts` |
+| Frete | **Fora** do valor da AP, como ja ficava fora de `total_amount`; continua lancamento manual |
+
+**Dado legado.** Pedido aprovado antes do corte ja tem uma AP do valor
+cheio (reconhecivel por `invoice_number IS NULL`). Ao receber esse pedido, o
+sistema **nao lanca nada** e devolve `payable_skip_reason:
+"legacy_created_on_approval"`, para nao duplicar passivo. Nenhuma linha
+financeira existente e alterada — o destino delas (estorno ou congelamento)
+e a pergunta **C9** ao contador, em aberto.
 
 **Fluxo Alternativo (divergencia):**
-- Se quantidade recebida < quantidade pedida: recebimento parcial
+- Se quantidade recebida < quantidade pedida: recebimento parcial (e a
+  conta a pagar cobre so o que chegou)
 - Se produto com defeito: aciona qualidade (incoming inspection, UC-17B) —
   o inspetor pode bloquear o lote diretamente (`quarantine` → `blocked`) ou
   abrir uma RNC referenciando o `lot_number` (UC-17), que bloqueia o lote
@@ -456,13 +551,19 @@ de acao, nao um defeito.
    (`GET /api/inventory/lots?status=quarantine`)
 2. Sistema lista lotes com `product` (id, name, code) e `supplier` (id,
    company_name) incluidos, paginados
-3. Apos inspecao aprovar o material (ou apos tratativa de RNC concluida),
-   usuario aciona `POST /api/inventory/lots/:id/release` (body opcional
-   `{ notes }`)
-4. Sistema move o lote para `available` — a partir de `quarantine`
+3. **[G7, 2026-08-10]** Usuario registra a INSPECAO do lote
+   (`POST /api/quality/inspections`, UC-17C) — sem ela a liberacao e
+   recusada
+4. Apos a inspecao aprovar o material (ou apos tratativa de RNC concluida +
+   nova inspecao aprovada), usuario aciona
+   `POST /api/inventory/lots/:id/release` (body opcional `{ notes }`)
+5. **[G7]** Sistema verifica o gate de qualidade: a inspecao MAIS RECENTE do
+   lote precisa ter veredito `approved` ou `approved_under_concession`
+6. Sistema move o lote para `available` — a partir de `quarantine`
    (liberacao pos-inspecao de recebimento) OU `blocked` (liberacao manual
-   pos-tratativa de RNC)
-5. Sistema registra log de auditoria (`logAction`)
+   pos-tratativa de RNC) — gravando tambem `release_inspection_id`,
+   `released_by` (do JWT) e `released_at`
+7. Sistema registra log de auditoria (`logAction`)
 
 **Fluxo Alternativo (bloqueio manual):**
 1. Usuario aciona `POST /api/inventory/lots/:id/block` com
@@ -478,10 +579,79 @@ de acao, nao um defeito.
 - 400 (`ValidationError`) se `reason` do bloqueio estiver ausente ou tiver
   menos de 3 caracteres.
 - 404 (`NotFoundError`) se o lote nao existir.
+- **[G7]** 422 (`BusinessRuleError`) com `details.rule = 'G7'` se o gate de
+  qualidade recusar, e **nada e gravado no lote**:
+  - `details.reason = 'no_inspection'` — o lote nunca foi inspecionado;
+  - `details.reason = 'last_inspection_rejected'` — a inspecao mais recente
+    reprovou o material.
 - O FEFO da producao (`ChangeProductionOrderStatusUseCase`) so seleciona
   lotes `status = 'available'` — lotes em `quarantine` ou `blocked` ficam
   automaticamente fora do consumo automatico, sem necessidade de filtro
   adicional no motor de producao.
+- **[G7, achado colateral]** O saldo retido em lotes `quarantine`/`blocked`
+  passou a ser DESCONTADO do estoque que o PLANEJAMENTO enxerga (MRP e
+  checagem de disponibilidade de OP). Antes disso a quarentena era
+  decorativa para o planejamento: o recebimento incrementa
+  `products.quantity` no mesmo passo em que cria o lote em quarentena, entao
+  material nao inspecionado contava como disponivel e o MRP comprava de
+  menos. O desconto e sempre `max(0, fisico - retido)`.
+
+---
+
+## UC-17C: Registrar Inspecao de Qualidade de Lote (G7 — ISO 9001 8.6/8.7)
+
+**Ator:** Inspetor de Qualidade (`authorizeModule('qualidade','operate')`)
+**Pre-condicoes:** Lote existente (`LotControl`)
+**Decisao de negocio:** D-H do dono do produto, 2026-08-10 — a empresa
+pretende se certificar ISO 9001, entao o registro de inspecao nasce no
+formato que a norma pede, **sem** travar a operacao com burocracia que
+ninguem executa (`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4).
+
+**Fluxo Principal:**
+1. Usuario acessa "Qualidade > Inspecao de Lote"
+   (`GET /api/inventory/lots?status=quarantine`)
+2. Opcionalmente consulta `GET /api/quality/lots/:lotId/release-eligibility`
+   (leitura pura, sem efeito colateral) para ver se o lote ja tem inspecao
+3. Usuario registra a inspecao (`POST /api/quality/inspections`) informando
+   **criterio de aceitacao** (obrigatorio), veredito, e opcionalmente plano
+   de amostragem, tamanhos de lote/amostra, defeitos encontrados e notas
+4. Sistema grava `inspector_id = req.user.id` (do JWT, NUNCA do body) e
+   `inspected_at`
+5. Conforme o veredito:
+   - `approved` / `approved_under_concession` → a inspecao habilita a
+     liberacao do lote (UC-17B), mas **nao libera sozinha**: liberar e ato
+     separado, com permissao `qualidade:approve`
+   - `rejected` → o sistema aciona `CreateNonConformityUseCase` (UC-17),
+     que **abre a RNC e bloqueia o lote**, e grava `non_conformity_id` na
+     inspecao
+
+**Validacoes/Gatilhos (todas com `details.rule = 'G7'`):**
+- 400 se `lot_id` ausente — nao existe inspecao desvinculada de lote
+- 400 se `acceptance_criteria` tiver menos de 3 caracteres (§8.6 exige
+  evidencia do criterio de aceitacao aplicado)
+- 400 se `verdict`/`stage` estiverem fora do ENUM
+- 400 se `verdict = 'approved_under_concession'` sem
+  `concession_justification` (min. 10 caracteres) — a **aceitacao sob
+  concessao** da §8.7 e decisao registrada e justificada, nunca um "release
+  com observacao"
+- 404 se o lote nao existir
+
+**Regras de decisao:**
+- O gate de liberacao usa a inspecao **MAIS RECENTE** do lote, nao "existe
+  alguma aprovada". Com a segunda leitura, um lote aprovado na entrada e
+  reprovado depois continuaria liberavel para sempre — o oposto do que a
+  §8.7 manda. Assim, a re-inspecao apos retrabalho e o mecanismo natural de
+  reabertura.
+- Aprovar **nao** libera: inspecionar (evidencia, `operate`) e autorizar a
+  liberacao (decisao, `approve`) sao atos distintos na §8.6 e agora tambem
+  niveis de permissao distintos.
+
+**⚠️ Fora de escopo por falta de decisao de negocio:**
+Nao ha motor de amostragem Ac/Re. Nivel de inspecao e AQL por classe de
+defeito (ISO 2859-1) sao decisao da Engenharia da Qualidade e ainda **nao
+foram definidos** — a pesquisa normativa marca os valores de AQL como
+`[NAO CONFIRMADO NA FONTE]`. `sampling_plan`, `lot_size` e `sample_size` sao
+evidencia textual do que foi aplicado; o veredito e sempre humano.
 
 ---
 
@@ -559,11 +729,43 @@ origem também deixou de mentir — `reference_type`/`source_type` passaram de
 porque `reference_id` aponta para `import_processes.id` e a consulta reversa
 devolvia um pedido de compra alheio.
 
-**Pendência ligada ao G13 (Onda 3, decisão do dono):** a Conta a Pagar dos
-tributos continua não sendo gerada aqui **de propósito**. O momento de
-reconhecimento do passivo é a decisão em aberto do G13 e vale para compra
-nacional e importação ao mesmo tempo; implementar uma regra própria só para
-COMEX criaria um segundo padrão contábil dentro do mesmo ERP.
+**Pendência ligada ao G13 — PARADA E REPORTADA em 2026-08-10, aguarda
+decisão do dono/contador.** O G13 fechou o momento do passivo para a compra
+(nasce no recebimento, CPC 00 (R2) 4.58) e para o recebível de venda (nasce
+na NF-e, CPC 47 108). **A Conta a Pagar dos tributos de importação
+continua não sendo gerada** — e a razão deixou de ser "falta decidir o
+momento" e passou a ser um conjunto de lacunas concretas que o ERP não tem
+como preencher sozinho:
+
+1. **Vencimento por tributo.** II, IPI, PIS e COFINS na importação têm fato
+   gerador no **registro da Declaração de Importação**; o ICMS-Importação é
+   devido no desembaraço, com prazo e forma de recolhimento que **variam por
+   UF** e por eventual regime especial. O ERP hoje guarda
+   `import_processes.customs_cleared_at` (data do desembaraço), mas **não
+   guarda número nem data de registro da DI** — não há de onde derivar o
+   vencimento sem inventar.
+2. **Credor.** O beneficiário dos tributos é a União (DARF) ou o Estado
+   (GNRE/GARE), não o fornecedor estrangeiro do processo.
+   `accounts_payable.supplier_id` aponta para `suppliers`, e criar
+   fornecedores fictícios "União"/"Estado" é decisão de cadastro do dono,
+   não escolha técnica.
+3. **Uma AP ou cinco?** II, IPI, PIS, COFINS e ICMS têm guias, datas e
+   credores distintos — juntá-los numa AP única facilita o lançamento e
+   destrói a conciliação; separá-los exige o de-para tributo→credor do
+   item 2.
+4. **Moeda.** `AccountPayable` não tem coluna de moeda nem de câmbio. Os
+   tributos já são calculados em BRL (`import_processes.exchange_rate`
+   aplicado no cálculo), então esta é a **menor** das lacunas — mas o FOB do
+   fornecedor, esse sim, continua sem lugar para ser lançado como passivo em
+   moeda estrangeira.
+
+**O que o dono/contador precisa responder** antes de esta parte ser
+implementada: (a) o ERP deve passar a registrar número e data da DI?
+(b) cada tributo vira uma AP própria, e qual o credor cadastrado de cada
+um? (c) qual a UF e o prazo de ICMS-Importação aplicável? Nenhuma dessas
+respostas é técnica, e nenhuma delas está na pesquisa normativa — as datas
+de vencimento **não foram confirmadas em fonte oficial** nesta rodada e não
+devem ser assumidas.
 
 ---
 
@@ -578,6 +780,65 @@ COMEX criaria um segundo padrão contábil dentro do mesmo ERP.
 4. Define nivel hierarquico (0 = produto, 1 = subconjunto, 2 = componente)
 5. Define roteiro de fabricacao (operacoes, tempos, maquinas)
 6. Sistema salva versao da BOM
+
+### Fonte única da estrutura (gap G1, 2026-08-10) `[IMPLEMENTADO]`
+
+Até esta data o ERP tinha **duas** estruturas de produto paralelas e o
+usuário podia cadastrar em qualquer uma das duas, sem saber que a outra
+existia:
+
+- `item_estruturas` (mestre `items`, UUID) — lida **só pelo MRP** e pela
+  explosão de item
+- `bill_of_materials` (mestre `products`, INTEGER) — lida pela criação,
+  liberação (reserva), **consumo e custeio** da OP
+
+Ou seja: dava para o planejamento comprar contra uma árvore e o chão de
+fábrica consumir contra outra, e **ninguém percebia**. A ponte entre as duas
+era casamento de string (`products.code = items.codigo`), nunca exercida
+para estrutura.
+
+**A partir do G1, `bill_of_materials` é a fonte única.** O MRP e a explosão
+de item passaram a ler a **mesma** BOM ativa que a produção consome,
+projetada para UUID em tempo de leitura
+(`server/src/services/bomStructureProjection.ts`) — sem cópia de dado, sem
+réplica para dessincronizar. Racional da escolha em `docs/producao/06-BOM.md`
+§G1 (resumo: é a estrutura que governa dinheiro e estoque, sua chave é a que
+o resto do sistema usa, e `items.estoque_atual` é zero em 100% das linhas).
+
+**Efeito no fluxo deste UC:** o passo 3 vale **apenas** pelo módulo de BOM
+(`POST /api/engineering/bom`, tela *Produção > Estrutura de produto*).
+O caminho antigo `POST /api/items/:id/estrutura` (aba de estrutura na ficha
+do item) passa a responder **422 `G1-ESTRUTURA-DUPLA`** apontando para o
+módulo correto — recusar é melhor que aceitar: antes o usuário cadastrava a
+árvore, recebia 201, e a produção seguia sem enxergar nada.
+
+### Controle de alteração de engenharia (ISO 9001 §8.5.6) `[IMPLEMENTADO]`
+
+Mesmo ciclo do roteiro de manufatura (UC de roteiro, gap G5):
+
+| Situação | Resposta | Código |
+|---|---|---|
+| Alterar `revision`/`notes` de BOM vigente | 422 — crie uma revisão nova | `G1-BOM-ATIVA-IMUTAVEL` |
+| Alterar ou reativar BOM já substituída | 422 — ela sustenta o que as OPs consumiram | `G1-BOM-SUPERSEDED-IMUTAVEL` |
+| Voltar BOM vigente para rascunho | 422 — de vigente só para `inactive`/`superseded` | `G1-BOM-STATUS-INVALIDO` |
+| Repetir rótulo de revisão do produto | 409 — sem rótulo único não dá para dizer contra qual versão a OP rodou | `G1-BOM-REV-DUP` |
+| Produto como componente de si mesmo | 422 — ciclo | `G1-BOM-AUTO-REF` |
+
+Ativar uma revisão **rebaixa a anterior para `superseded` na mesma
+transação**, com os componentes intactos. Nunca duas vigentes (índice único
+parcial `uq_bill_of_materials_active_per_product`), nunca zero.
+
+⚠️ **Decisão de negócio ainda em aberto:** não existe coluna ligando a OP à
+revisão de BOM que ela executou (`production_orders` não tem `bom_id`) — a
+conclusão explode a revisão **vigente no momento da conclusão**. Se a
+engenharia revisar a estrutura no meio de uma OP aberta, ela é consumida e
+custeada pela revisão nova. Mesmo gap que o G5 registrou para roteiro.
+Registrado em `docs/governance/TODO.md`.
+
+**Testes:** `server/tests/unit/bom-single-source-g1.test.ts` (15 casos),
+`bom-engineering-change-control-g1.test.ts` (10), `bom-create-revision-rules-g1.test.ts`
+(6) — inclusive o teste de que **planejamento e consumo leem a mesma
+estrutura**; todo teste de erro afirma `details.rule`.
 
 ---
 
@@ -1127,8 +1388,14 @@ Controller
 - `shipped` é terminal: nenhuma transição sai dele (nem para `canceled`,
   nem para qualquer outro status) — mercadoria já saiu para o cliente
 - Única transição de entrada permitida: `invoiced -> shipped`
-- Não debita estoque nem gera/altera `AccountReceivable` (isso já ocorreu
-  em `quote -> confirmed` e na emissão da NF-e)
+- Não debita estoque nem gera/altera `AccountReceivable`. **Atualizado pelo
+  G9 (2026-08-10):** a baixa de estoque ocorre na **autorização da NF-e**
+  (não mais em `quote -> confirmed`), e como `shipped` exige a venda
+  totalmente `invoiced`, quando o embarque acontece o estoque já saiu e a
+  reserva da venda já foi integralmente consumida. **Atualizado pelo G13
+  (2026-08-10):** `AccountReceivable` também passou a nascer na autorização
+  da NF-e (não mais na confirmação do pedido), então no embarque as
+  parcelas já existem e nada mais é criado aqui
 
 **Pós-condição:** Venda com `status = 'shipped'`, imutável a partir daí
 
@@ -2281,6 +2548,69 @@ enum do validador contra o `ENUM` real da migration) e
 `rh-deactivate-employee-termination-guard` em `server/tests/unit/`.
 Ver `docs/governance/HANDOFF_CODEX.md` (entrada 2026-08-09) para o
 detalhamento, as divergências lei × requisito e os riscos residuais.
+
+---
+
+## UC-71 [IMPLEMENTADO — gap G5, 2026-08-10]: Cadastrar e Liberar Roteiro de Produção
+
+**Ator:** PCP / Engenharia de Processo (`producao:operate`) e Gerência de
+Produção (`producao:approve`) 🔒
+**Módulo:** `server/src/modules/production/` (arquivos `*ProductionRoute*`),
+base URL `/api/production/routes` — contrato em `docs/arquitetura/API.md` §33,
+visão de processo em `docs/producao/04-ROTEIROS.md`.
+
+**Problema que fecha.** `production_routes` / `production_route_steps` já eram
+**lidas** pelo custeio real de mão de obra na conclusão da OP, pela
+carga-máquina e pelo OEE — mas **não tinham nenhum endpoint**. Era impossível
+ao usuário cadastrar as etapas que geram o custo. É **pré-requisito** do
+apontamento obrigatório (**G4**, Bloco K do SPED Fiscal): exigir apontamento sem
+roteiro cadastrável seria regra inexequível
+(`docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`, Decisão 4).
+
+### Fluxo principal
+
+1. PCP cria o roteiro (`POST /api/production/routes`) informando produto,
+   `route_code`, revisão e (opcionalmente) já as etapas. **Nasce sempre em
+   `draft`**, com `created_by` vindo do JWT.
+2. PCP monta/ajusta as etapas (`PUT /:id/steps`, substituição total).
+3. Gerência libera (`PATCH /:id/activate`, exige `producao:approve`): grava
+   `approved_by`/`approved_at`, recalcula `total_standard_time_minutes`,
+   **congela o conteúdo** e torna `superseded` a revisão ativa anterior.
+4. Precisou mudar? `POST /:id/revise` clona em um rascunho novo; o roteiro
+   liberado só é substituído quando a nova revisão for ativada.
+
+### Validações e gatilhos
+
+| Regra | `details.rule` | Resposta |
+|---|---|---|
+| Sequência das operações **1..N contígua**, sem buraco | `G5-SEQ-GAP` | 422 |
+| Sem duas etapas na mesma `sequence` | `G5-SEQ-DUP` | 422 |
+| `step_code` único no roteiro | `G5-STEP-CODE-DUP` | 422 |
+| `work_center_id` deve existir | `G5-WC-NOT-FOUND` | 422 |
+| `work_center_id` deve estar ativo (revalidado **também na liberação**) | `G5-WC-INACTIVE` | 422 |
+| Roteiro liberado é imutável (cabeçalho, etapas e exclusão) | `G5-ROUTE-NOT-DRAFT` | 422 |
+| Transição de status inválida | `G5-ROUTE-STATUS-TRANSITION` | 422 |
+| Roteiro sem etapa não pode ser liberado | `G5-SEQ-EMPTY` | 422 |
+| Etapa já referenciada por apontamento não pode ser apagada | `G5-ROUTE-IN-USE` | 422 |
+| `route_code` único global / (produto, revisão) único | `G5-ROUTE-CODE-DUP` / `G5-REVISION-DUP` | 409 |
+| Produto inexistente, inativo, ou que não é `finished`/`semi_finished` | `G5-PRODUCT-NOT-PRODUCIBLE` | 422 |
+
+`sequence` é o **ordinal** (1..N, é por ele que o apontamento casa com a etapa);
+o número de operação de chão de fábrica ("OP 10", "OP 20") vai no `step_code`.
+
+### Efeito sobre OPs já abertas
+
+**Nenhum, por desenho.** Roteiro ativo não muda — muda-se por revisão, e a
+revisão anterior sobrevive `superseded` com as etapas intactas, continuando a
+sustentar os apontamentos já feitos e o custeio da OP em curso.
+⚠️ **Decisão de negócio ainda em aberto:** não existe coluna ligando a OP a uma
+revisão específica (`production_orders` não tem `production_route_id`), então
+relatórios derivados usam a revisão **ativa no momento da consulta**. Registrado
+em `docs/governance/TODO.md`.
+
+**Testes:** `server/tests/unit/production-routes.test.ts` (43 casos — regras de
+sequência, vínculo com centro de trabalho, imutabilidade, revisão, unicidade e
+guarda de apontamento; todo teste de erro afirma `details.rule`).
 
 ---
 

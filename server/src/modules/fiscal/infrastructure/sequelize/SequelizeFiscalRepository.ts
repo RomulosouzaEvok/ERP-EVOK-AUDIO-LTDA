@@ -5,7 +5,7 @@
  */
 
 const FiscalRepository = require('../../domain/repositories/FiscalRepository');
-const { CompanyFiscalConfig, Purchase, Sale, SaleItem, Client, Product, SaleInvoice } = require('../../../../models/index');
+const { CompanyFiscalConfig, Purchase, Sale, SaleItem, Client, Product, SaleInvoice, AccountReceivable } = require('../../../../models/index');
 
 interface FindOptions {
   transaction?: any;
@@ -72,6 +72,16 @@ class SequelizeFiscalRepository extends FiscalRepository {
   /** @inheritdoc */
   async findSaleInvoicesBySaleId(saleId: number | string, options?: FindOptions) {
     return SaleInvoice.findAll({ where: { sale_id: saleId }, order: [['created_at', 'DESC'], ['id', 'DESC']], ...options });
+  }
+
+  /** @inheritdoc */
+  async createAccountReceivable(data: Record<string, unknown>, options?: FindOptions) {
+    return AccountReceivable.create(data, options);
+  }
+
+  /** @inheritdoc */
+  async findReceivablesBySaleId(saleId: number | string, options?: FindOptions) {
+    return AccountReceivable.findAll({ where: { sale_id: saleId }, order: [['installment', 'ASC']], ...options });
   }
 }
 

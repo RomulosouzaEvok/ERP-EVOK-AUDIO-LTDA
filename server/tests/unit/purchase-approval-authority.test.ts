@@ -110,7 +110,10 @@ describe('G11 — aprovacao do pedido (ChangePurchaseStatusUseCase)', () => {
 
     expect(purchase.status).toBe('approved');
     expect(repository.listPurchaseApprovals).not.toHaveBeenCalled();
-    expect(repository.createAccountPayable).toHaveBeenCalledTimes(1);
+    // G13 (2026-08-10, CPC 00 (R2) 4.56/4.58): aprovar pedido NAO cria
+    // mais passivo — pedido aprovado e nao entregue e contrato executorio.
+    // A conta a pagar nasce no recebimento (ReceivePurchaseItemsUseCase).
+    expect(repository.createAccountPayable).not.toHaveBeenCalled();
   });
 
   it('nacional acima do teto sem aprovacao da diretoria e bloqueado', async () => {
@@ -139,7 +142,10 @@ describe('G11 — aprovacao do pedido (ChangePurchaseStatusUseCase)', () => {
     const { purchase } = await useCase.execute({ id: 7, status: 'approved', userId: 9, transaction });
 
     expect(purchase.status).toBe('approved');
-    expect(repository.createAccountPayable).toHaveBeenCalledTimes(1);
+    // G13 (2026-08-10, CPC 00 (R2) 4.56/4.58): aprovar pedido NAO cria
+    // mais passivo — pedido aprovado e nao entregue e contrato executorio.
+    // A conta a pagar nasce no recebimento (ReceivePurchaseItemsUseCase).
+    expect(repository.createAccountPayable).not.toHaveBeenCalled();
   });
 
   it('nacional dentro do teto na mercadoria mas acima somando o frete e bloqueado', async () => {

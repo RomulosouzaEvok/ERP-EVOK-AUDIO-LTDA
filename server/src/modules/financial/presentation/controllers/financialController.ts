@@ -6,6 +6,7 @@ const ListReceivablesUseCase = require('../../application/use-cases/ListReceivab
 const ReceivePaymentUseCase = require('../../application/use-cases/ReceivePaymentUseCase');
 const ListPayablesUseCase = require('../../application/use-cases/ListPayablesUseCase');
 const CreatePayableUseCase = require('../../application/use-cases/CreatePayableUseCase');
+const CreateReceivableUseCase = require('../../application/use-cases/CreateReceivableUseCase');
 const PayPayableUseCase = require('../../application/use-cases/PayPayableUseCase');
 const GetCashFlowUseCase = require('../../application/use-cases/GetCashFlowUseCase');
 const GetCashFlowProjectionUseCase = require('../../application/use-cases/GetCashFlowProjectionUseCase');
@@ -14,7 +15,7 @@ const UpdatePayableCostCenterUseCase = require('../../application/use-cases/Upda
 const UpdateReceivableCostCenterUseCase = require('../../application/use-cases/UpdateReceivableCostCenterUseCase');
 const SequelizeCostCenterRepository = require('../../infrastructure/sequelize/SequelizeCostCenterRepository');
 const {
-  createPayableSchema, payAccountSchema, cashFlowProjectionQuerySchema,
+  createPayableSchema, createReceivableSchema, payAccountSchema, cashFlowProjectionQuerySchema,
   dailyCashFlowProjectionQuerySchema, updateCostCenterAssignmentSchema, handleZodError,
 } = require('../validators/financialValidators');
 
@@ -123,6 +124,41 @@ exports.createPayable = async (req: Request, res: Response, next: NextFunction) 
       entityDescription: description,
       newValues: { description, amount, due_date, status: 'pending' },
       description: `Conta a pagar "${description}" criada`
+    });
+
+    res.status(201).json({ success: true, data: account });
+  } catch (error) { next(error); }
+};
+
+/**
+ * `POST /api/finance/receivable` — cria uma conta a receber **avulsa**
+ * (sem venda vinculada).
+ *
+ * Decisão D-J do dono do produto (2026-08-10): cobrança sem pedido de venda
+ * — reembolso, aluguel, venda de sucata — é caso legítimo da operação e
+ * este caminho permanece aberto. O que o G13 fechou foi o outro: recebível
+ * **de venda** agora nasce na autorização da NF-e (CPC 47 item 108), então
+ * informar `sale_id` aqui devolve 422 com `details.rule = 'G13-AR'`.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+exports.createReceivable = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = createReceivableSchema.safeParse(req.body);
+    if (!parsed.success) handleZodError(parsed.error);
+    const useCase = new CreateReceivableUseCase(financialRepository);
+    const account = await useCase.execute(parsed.data);
+
+    logAction(req, {
+      action: 'create',
+      entityType: 'AccountReceivable',
+      entityId: account.id,
+      entityDescription: parsed.data.notes || `Cobranca avulsa cliente #${parsed.data.customer_id}`,
+      newValues: { customer_id: parsed.data.customer_id, amount: parsed.data.amount, due_date: parsed.data.due_date, status: 'pending', sale_id: null },
+      description: 'Conta a receber avulsa (sem venda vinculada) criada'
     });
 
     res.status(201).json({ success: true, data: account });

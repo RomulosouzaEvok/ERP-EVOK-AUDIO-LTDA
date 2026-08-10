@@ -26,6 +26,12 @@
  * NF-e autorizada e mercadoria ainda em estoque — exatamente a divergência
  * que o G9 existe para eliminar.
  *
+ * CONTA A RECEBER (gap G13, 2026-08-10): pelo mesmo motivo, este caminho
+ * também gera as parcelas de `AccountReceivable` desta emissão
+ * (`services/saleReceivableService.ts`), na mesma transação. Faturado sem
+ * baixar estoque e faturado sem nada a cobrar são o mesmo defeito visto de
+ * dois lados.
+ *
  * @module modules/fiscal/application/use-cases/GetSaleNfeStatusUseCase
  */
 
@@ -38,6 +44,7 @@ const { NotFoundError, BusinessRuleError } = require('../../../../errors');
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
 const SaleInvoiceAccumulator = require('../../domain/services/SaleInvoiceAccumulator');
 const SaleStockService = require('../../../../services/saleStockService');
+const SaleReceivableService = require('../../../../services/saleReceivableService');
 
 interface GetSaleNfeStatusInput {
   saleId: number | string;
@@ -152,6 +159,22 @@ class GetSaleNfeStatusUseCase extends UseCase {
             item.invoiced_quantity = newInvoicedQuantity;
             await item.save({ transaction });
           }
+
+          // Gap G13: conta a receber desta emissão, na mesma transação do
+          // acúmulo e da baixa de estoque. Se este caminho só baixasse
+          // estoque sem gerar recebível, uma venda faturada por provedor
+          // real (assíncrono) ficaria com a mercadoria entregue e nada a
+          // cobrar — o espelho exato da divergência que o G9 corrigiu do
+          // lado do estoque. O valor vem de `sale_invoices.total_amount`,
+          // que é o total DESTA nota (pode ser parcial).
+          await SaleReceivableService.createInvoiceReceivables({
+            sale: locked,
+            invoiceTotal: parseFloat(String(saleInvoice.total_amount)),
+            invoiceNumber: saleInvoice.nfe_number || locked.nfe_number,
+            issuedAt: locked.nfe_issued_at,
+            gateway: this.fiscalRepository,
+            transaction,
+          });
 
           locked.status = SaleInvoiceAccumulator.resolveSaleStatus(locked.status, anyRemaining);
         } else if (locked.status === 'confirmed') {

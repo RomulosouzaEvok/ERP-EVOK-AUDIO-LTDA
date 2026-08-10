@@ -234,7 +234,8 @@ describe('Integrity transaction guards', () => {
 
     expect(purchaseRepository.findPurchaseByIdRawForUpdate).toHaveBeenCalledWith(5, transaction);
     expect(save).toHaveBeenCalledWith({ transaction });
-    expect(purchaseRepository.createAccountPayable).toHaveBeenCalledTimes(1);
+    // G13 (CPC 00 (R2) 4.56/4.58): a aprovacao nao lanca mais passivo.
+    expect(purchaseRepository.createAccountPayable).not.toHaveBeenCalled();
     // Nacional dentro do teto nao consulta aprovacoes de alcada (G11: compra
     // recorrente nao pode ganhar friccao nova).
     expect(purchaseRepository.listPurchaseApprovals).not.toHaveBeenCalled();
@@ -268,6 +269,10 @@ describe('Integrity transaction guards', () => {
         { id: 81, status: 'partial' },
       ])),
       createPurchaseReceipt: jest.fn(async () => ({ id: 1 })),
+      // G13: a conta a pagar nasce no recebimento (CPC 00 (R2) 4.58).
+      findLegacyPayableByPurchaseId: jest.fn(async () => null),
+      findAccountPayableByPurchaseAndInvoice: jest.fn(async () => null),
+      createAccountPayable: jest.fn(async (data: any) => ({ id: 1, ...data })),
       findLotForReceipt: jest.fn(async () => null),
       createLot: jest.fn(async () => ({ id: 1 })),
     };

@@ -77,6 +77,7 @@ Estes causam dado errado hoje, e a correção é local e testável. **Executar p
 |---|---|---|
 | **G4** | Apontamento obrigatório para concluir OP? | **Pode ter resposta legal.** SPED Bloco K é obrigação acessória de controle de produção e estoque para indústria. Sem apontamento, mão de obra fica R$ 0,00 no custo do estoque. Confirmar enquadramento com o contador. |
 | **G9 + G7** | Gate de qualidade antes da saída + criar a entidade **inspeção** + mover a baixa de estoque da confirmação do pedido para a expedição. | ISO 9001:2015 (8.6 liberação, 8.7 saída não conforme) e a lógica fiscal da NF-e (a nota acompanha a mercadoria). **Alto risco** — muda o momento da baixa de estoque. Vai isolada, com migração dos pedidos confirmados e não expedidos. |
+| **G7** | ✅ **Implementado em 2026-08-10** (decisão D-H). `quality_inspections` criada, `ReleaseLotUseCase` passou a exigir inspeção aprovada (a **mais recente**), rastreabilidade de quem autorizou gravada no lote. **Achado colateral fechado junto:** a quarentena deixou de ser decorativa — MRP e disponibilidade de OP passaram a descontar o saldo retido. **Não implementado por falta de decisão do dono:** motor de amostragem Ac/Re (nível de inspeção + AQL da ISO 2859-1). Migration `20260810-000032` **escrita, não aplicada**. Detalhes em `docs/governance/TODO.md` (entrada 2026-08-10 G7). |
 | **G11** | ✅ **Implementado em 2026-08-10** (parte da alçada; segregação de função **não** — não foi pedida). A regra real não era faixa de valor: é por **origem** (ver §4 D-C e §6). | Reaproveitou o padrão aprovado do Jurídico (RF-JUR-003): constantes em `domain/constants.ts`, tabela de aprovações com UNIQUE por papel, aprovador do JWT, endpoint de leitura sem efeito colateral. |
 | **G13** | Momento de criar conta a pagar (hoje: aprovação do pedido) e conta a receber (hoje: confirmação da venda, e à vista já nasce "paga" sem baixa). | CPC/IFRS: passivo nasce da obrigação presente; receita, da transferência de controle. **Alto risco** — afeta dado financeiro existente. **Escopo ampliado pelo G14 (2026-08-09):** a decisão precisa cobrir também os **tributos de importação** (II/IPI/PIS/COFINS/ICMS), que hoje não geram AP nenhuma. Fatos geradores e vencimentos distintos entre si, e `AccountPayable` não suporta moeda estrangeira. Implementar só para COMEX criaria um segundo padrão contábil dentro do mesmo ERP. |
 | **G1** | Unificar as duas estruturas de produto (BOM) numa só + definir quem aprova alteração de engenharia. | **Alto risco e alto valor.** É a raiz de vários outros problemas. Migração incremental, não big-bang. ISO 9001 8.5.6 exige controle de alterações. |
@@ -160,13 +161,51 @@ pedido de venda diretamente à ordem de produção.
 
 ---
 
+### ✅ D-G — Importação no COMEX: diretoria aprova na saída de `draft`
+A implementação do G11 (`ec1b499`) descobriu que **importação registrada no
+módulo COMEX ficava fora da alçada**: `import_processes` não vira pedido de
+compra e não tinha etapa de aprovação nenhuma — todas as escritas eram
+`comex:operate`. Um processo de ~R$ 1 milhão passava sem a diretoria.
+
+Decisão: **a diretoria aprova na transição `draft → shipped`**, ou seja,
+antes de comprometer câmbio e embarque. É o único ponto do ciclo em que ainda
+dá para desistir sem custo afundado; depois de embarcado, a aprovação seria
+formalidade. Mesmo padrão de `purchase_order_approvals`: papel `diretor`,
+`approver_user_id` sempre do JWT, UNIQUE por (processo, papel), endpoint de
+leitura sem efeito colateral.
+
+### ✅ D-H — ISO 9001: pretende certificar
+O registro de inspeção do **G7** deve nascer já no formato que a norma pede
+(ISO 9001:2015 §8.6 — evidência de conformidade com o critério de aceitação e
+rastreabilidade de quem liberou), **sem** travar a operação de hoje com
+burocracia que ninguém ainda executa. Na prática: a inspeção vira entidade
+com critério, resultado, responsável e vínculo ao lote — e a liberação da
+quarentena deixa de ser clique com observação livre.
+
+### ✅ D-I — CNAE no cadastro de cliente: sim, opcional
+Campo disponível no cadastro, **sem travar** a criação — não se aplica a
+pessoa física e a empresa não quer bloquear cadastro por causa dele. A coluna
+já existe no banco; falta expô-la na tela e no schema de criação.
+
+### ✅ D-J — Conta a receber avulsa é caso legítimo
+Existe cobrança sem venda vinculada (reembolso, aluguel, venda de sucata).
+O caminho **permanece aberto** e não deve ser tratado como achado de
+auditoria. Consequência: a validação do G13 (AR nasce na NF-e) precisa
+distinguir *recebível originado de venda* — que passa a exigir nota — de
+*recebível avulso*, que continua livre.
+
+---
+
 ### 🟡 Ainda pendente do dono
-- **D10** — a empresa é ou pretende ser certificada **ISO 9001**? Algum cliente
-  OEM exige plano de amostragem próprio? *(define o rigor do registro de
-  inspeção do G7 e do controle de alteração de engenharia)*
-- **CNAE no cadastro de cliente** — deve passar a ser coletado? Hoje o campo
-  nem existe no schema de criação, e não se aplica a pessoa física.
-- **Conta a receber avulsa** (sem venda vinculada) é caso legítimo de negócio?
+*(nenhuma decisão de negócio pendente nesta frente — ver bloqueio operacional
+abaixo)*
+
+### 🔴 Bloqueio operacional
+- **Aplicar migrations no banco local** — `node scripts/apply-pending-migrations.cjs`
+  está sendo barrado pelo classificador de permissão do ambiente. Enquanto não
+  for liberado, o G11 fica só no código e o **S-1b** (as 66 divergências
+  schema × model que bloqueiam o servidor de produção) não anda, por ser
+  inteiramente migration.
 
 ### 🟡 Pendente do contador
 - **C1** CNAE efetivamente escriturado e faturamento do segundo exercício anterior
@@ -206,3 +245,4 @@ A cadeia só é considerada fechada quando, num teste ponta a ponta com dado rea
 | 2026-08-09 | 2 | **G14** | ✅ Corrigido — a importação (COMEX) entrava fora do padrão: sem lote, sem quarentena e sem dual-write de depósito. Os dois caminhos de entrada de material comprado passaram a chamar a MESMA função (`services/materialReceiptService.receiveMaterialIntoQuarantine`: estoque → depósito → lote nascendo em `quarantine` → custo real), extraída de `ReceivePurchaseItemsUseCase` sem mudar o comportamento dele. Lote de importação: `IMP-<ano>-XXXX-ITEM<id>-R001`, depósito `INSUMOS`, `received_at` = desembaraço. `reference_type`/`source_type` deixaram de mentir: de `'purchase'` (que fazia a consulta reversa por `(reference_type, reference_id)` cair num pedido de compra alheio) para `'import'`, via migration `20260809-000027` — **criada e aplicada ao banco** (confirmado em `SequelizeMeta`, auditoria de 2026-08-10). **AP dos tributos NÃO implementada de propósito** — é o G13 (Onda 3, decisão do dono). | *(working tree)* |
 | 2026-08-09 | 1 | **G15** | ✅ Corrigido — estados mortos **acionados** (não removidos): `ReceivePurchaseItemsUseCase` passou a recalcular o status da requisição de origem a cada recebimento, na mesma transação e com lock pessimista. Regra pura isolada em `modules/purchases/application/services/syncRequisitionReceiptStatus.ts`: `received` ⇔ todos os pedidos ativos da requisição `received` **e** nenhum item com saldo `pending`; `partial` ⇔ chegou algo mas não tudo; pedido `canceled` ignorado. **Requisição `approved` com saldo NÃO é tocada** — `approved` é o estado que autoriza cotar/converter o restante (G12 bloqueia `partial`/`received`), então empurrá-la para `partial` travaria a compra do saldo remanescente; quando o último saldo vira pedido ela passa a `ordered` e o recebimento fecha em `received`. `PATCH /:id/status` continua sem alcançar `ordered`/`partial`/`received` (fatos derivados, não declaráveis à mão). | *(working tree)* |
 | 2026-08-10 | 3 | **G11** | ✅ Implementado — alçada de aprovação de compra **por ORIGEM** (decisão D-C): nacional ≤ R$ 500.000 segue direto, acima exige `diretor`; **importação exige `diretor` em qualquer valor**. Regra em `modules/purchases/domain/constants.ts`; aprovação registrada em `purchase_order_approvals` (migration `20260810-000029`, **NÃO aplicada** — mesmo padrão de `jur_contract_approvals`/RF-JUR-003, `approver_user_id` do JWT, `approver_role` do RBAC, UNIQUE por papel). Origem efetiva = `purchase_orders.origin='import'` **OU** `suppliers.is_foreign=true` (escalation-only: o campo do pedido só endurece a regra). Valor comparado = `total_amount` + `freight_value`, sem impostos. Pós-aprovação, `supplier_id`/`freight_value`/`origin` ficam congelados. **Segregação de função NÃO implementada** — não foi pedida (ver §4 D-C); permanece como risco residual de controle interno. **Importação registrada em `import_processes` (COMEX) continua fora da alçada** — não passa por `purchase_orders`; falta decisão do dono sobre em que ponto do ciclo COMEX a diretoria aprova (ver §4, pendências). | *(working tree)* |
+| 2026-08-10 | 3 | **G9** | ✅ Implementado (decisão D-A) — **a baixa de estoque da venda saiu da confirmação do pedido e passou para a autorização da NF-e**; confirmar passou a **reservar**. Base: Ajuste SINIEF 07/05, cláusula 1ª §1º e cláusula 9ª §1º (a nota é autorizada antes do fato gerador e a mercadoria só transita depois da autorização de uso). `production_order_reservations` foi generalizada exatamente como o cabeçalho da migration do G3 previu — `production_order_id` nullable, `sale_id` novo, CHECK de exatamente-um-dono, índices únicos parciais por dono (migration `20260810-000030`, **NÃO aplicada**). Baixa proporcional à quantidade faturada em `services/saleStockService.ts`, chamada pelos dois caminhos de autorização (síncrono e assíncrono/webhook) na MESMA transação que incrementa `invoiced_quantity`. Cancelamento libera a reserva e devolve só `invoiced_quantity`. **Migração do dado: 1 único pedido** no banco real (venda #10, 1 un. do produto #25) — confirma na prática a decisão **D-E**; backfill devolve o saldo a `products.quantity`/ACABADOS e converte em reserva. Desarmada de carona uma bomba do G3: `inventory_movements.reference_type` `'reservation'`/`'reservation_release'` **não existem no ENUM** e faziam toda reserva morrer em 500 — reserva deixou de gravar movimento (não altera `products.quantity`). Corrigido também o estoque fantasma ao cancelar orçamento. | *(working tree)* |

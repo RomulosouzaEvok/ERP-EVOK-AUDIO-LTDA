@@ -4,7 +4,6 @@ const UseCase = require('../../../../shared/application/UseCase');
 const { NotFoundError, ValidationError, BusinessRuleError } = require('../../../../errors');
 const InventoryService = require('../../../../services/inventoryService');
 const WarehouseStockService = require('../../../../services/warehouseStockService');
-const { toCents, fromCents } = require('../../../../shared/utils/money');
 
 /**
  * Maquina de estados de status da venda.
@@ -33,10 +32,27 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
  * Altera o status de uma venda respeitando `VALID_TRANSITIONS`.
  *
  * F22 — confirmacao de orcamento (`quote -> confirmed`): e neste momento
- * (e nao mais na criacao) que o estoque de cada item e comprometido e as
- * parcelas em `AccountReceivable` sao geradas, usando os mesmos dados
- * persistidos na venda (`total_amount`, `installments`, `payment_method`) e
- * nos itens (`SaleItem`) criados junto do orcamento.
+ * (e nao mais na criacao) que o estoque de cada item e comprometido,
+ * usando os itens (`SaleItem`) criados junto do orcamento.
+ *
+ * GAP G13 (2026-08-10 — decisao D-A do dono): a confirmacao **nao gera
+ * mais conta a receber**. Ate esta data ela criava as parcelas em
+ * `AccountReceivable`, e a venda a vista nascia com `status: 'paid'` e
+ * `payment_date` preenchido sem nenhum dinheiro ter entrado — quitacao sem
+ * lastro, invisivel para a conciliacao bancaria e para a regua de cobranca.
+ * Base normativa (CPC 47): item 31 (receita quando o cliente obtem o
+ * controle), item 38 (nenhum indicador de transferencia de controle existe
+ * na confirmacao) e item 108 (recebivel exige direito INCONDICIONAL). O
+ * recebivel passou para a autorizacao da NF-e, no valor de cada emissao
+ * (`services/saleReceivableService.ts`), sempre `pending` — a baixa e
+ * evento proprio em `PUT /api/finance/receivable/:id/pay`. Cobranca sem
+ * venda (reembolso, aluguel, sucata) continua livre por
+ * `POST /api/finance/receivable` (decisao D-J).
+ *
+ * `cancelPendingReceivables` continua sendo chamado no cancelamento: uma
+ * venda ja faturada tem parcelas geradas pela NF-e, e uma venda legada tem
+ * as parcelas criadas pela regra antiga — nos dois casos o cancelamento
+ * precisa derrubar o que ainda nao foi pago.
  *
  * GAP G9 (2026-08-10) — confirmar RESERVA, faturar BAIXA. A confirmacao
  * chamava `InventoryService.consume` e dava baixa imediata em
@@ -203,37 +219,10 @@ class ChangeSaleStatusUseCase extends UseCase {
         });
       }
 
-      // Gera as parcelas em AccountReceivable adiadas da criacao (F22),
-      // usando os mesmos dados persistidos na venda/itens do orcamento e a
-      // mesma logica de arredondamento em centavos (F24).
-      const totalNetCents = toCents(parseFloat(sale.total_amount));
-      const installments = sale.installments || 1;
-
-      if (installments > 1) {
-        const baseInstallmentCents = Math.floor(totalNetCents / installments);
-        const remainderCents = totalNetCents % installments;
-        const today = new Date();
-        const day = today.getDate();
-        for (let i = 1; i <= installments; i++) {
-          const nextMonth = today.getMonth() + i;
-          const year = today.getFullYear() + Math.floor(nextMonth / 12);
-          const month = nextMonth % 12;
-          const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-          const safeDay = Math.min(day, lastDayOfMonth);
-          const dueDate = new Date(year, month, safeDay);
-          const amount = fromCents(baseInstallmentCents + (i === installments ? remainderCents : 0));
-          await this.saleRepository.createAccountReceivable({
-            sale_id: sale.id, customer_id: sale.customer_id, installment: i,
-            amount, due_date: dueDate, status: 'pending'
-          }, transaction);
-        }
-      } else {
-        await this.saleRepository.createAccountReceivable({
-          sale_id: sale.id, customer_id: sale.customer_id, installment: 1,
-          amount: fromCents(totalNetCents), due_date: new Date(), status: 'paid',
-          payment_date: new Date(), payment_method: sale.payment_method
-        }, transaction);
-      }
+      // GAP G13 (2026-08-10): a confirmacao NAO gera mais parcelas em
+      // `AccountReceivable`. Confirmar reserva estoque e nada mais — o
+      // recebivel nasce na autorizacao da NF-e, no valor de cada emissao
+      // (`services/saleReceivableService.ts`). Ver o JSDoc da classe.
     }
 
     sale.status = status;

@@ -84,7 +84,7 @@ describe('CreateSaleUseCase - orcamento (F22)', () => {
     expect(saleRepository.createAccountReceivable).not.toHaveBeenCalled();
   });
 
-  it('G9: venda criada confirmed RESERVA (nao baixa) e gera parcela', async () => {
+  it('G9/G13: venda criada confirmed RESERVA (nao baixa) e NAO gera parcela', async () => {
     const saleRepository = buildRepository(10);
     const useCase = new CreateSaleUseCase(saleRepository);
 
@@ -100,7 +100,10 @@ describe('CreateSaleUseCase - orcamento (F22)', () => {
       expect.anything(),
       expect.objectContaining({ saleId: 500 })
     );
-    expect(saleRepository.createAccountReceivable).toHaveBeenCalledTimes(1);
+    // G13 (2026-08-10, CPC 47 itens 38/108): confirmar pedido NAO cria
+    // recebivel — o direito ainda e condicional ao faturamento. A parcela
+    // nasce na autorizacao da NF-e (`sale-receivable-na-nfe-g13.test.ts`).
+    expect(saleRepository.createAccountReceivable).not.toHaveBeenCalled();
   });
 
   it('bloqueia confirmed com estoque insuficiente mas permite quote', async () => {

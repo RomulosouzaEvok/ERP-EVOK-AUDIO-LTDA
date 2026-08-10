@@ -28,6 +28,31 @@ interface ChangePurchaseStatusInput {
   transaction: Transaction;
 }
 
+/**
+ * Transiciona o status de um pedido de compra respeitando
+ * `VALID_TRANSITIONS` e a alçada de aprovação por origem (G11).
+ *
+ * GAP G13 (2026-08-10, decisão D-A do dono em
+ * `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4) — **a
+ * aprovação do pedido NÃO cria mais conta a pagar.** Até esta data a
+ * transição `pending -> approved` chamava `_createPurchasePayable` e
+ * lançava uma `AccountPayable` do valor do pedido inteiro, com vencimento
+ * `expected_date + 30`.
+ *
+ * Base normativa (CPC 00 (R2), Estrutura Conceitual):
+ *  - **4.56** — pedido aprovado e não entregue é *contrato executório*;
+ *  - **4.58** — o passivo surge quando **a outra parte cumpre primeiro**,
+ *    isto é, quando o fornecedor entrega.
+ *
+ * O passivo passou para `ReceivePurchaseItemsUseCase`, no valor do que foi
+ * de fato recebido e amarrado à NF do fornecedor. Ver
+ * `../../domain/services/purchasePayableRules`.
+ *
+ * O que isso corrige, concretamente: passivo inexistente no balanço,
+ * projeção de fluxo de caixa contaminada por pedidos que podem nunca
+ * chegar (inclusive pedidos depois **cancelados**, que deixavam a AP para
+ * trás) e vencimento fictício calculado sobre uma data prometida.
+ */
 class ChangePurchaseStatusUseCase extends UseCase {
   private purchaseRepository: PurchaseRepository;
 
@@ -43,12 +68,12 @@ class ChangePurchaseStatusUseCase extends UseCase {
    * @param {Object} input
    * @param {number} input.id
    * @param {string} input.status
-   * @param {number} input.userId
+   * @param {number} input.userId - Usuário do JWT (anti-spoofing). Mantido no contrato para auditoria; desde o G13 não é mais usado como `approved_by` de nenhuma conta a pagar.
    * @param {import('sequelize').Transaction} input.transaction
    * @returns {Promise<{ purchase: Object, previousStatus: string }>}
    * @throws {BusinessRuleError} G11 — transição para `approved` sem a alçada satisfeita (importação, ou nacional acima de R$ 500.000, sem aprovação registrada da diretoria).
    */
-  async execute({ id, status, userId, transaction }: ChangePurchaseStatusInput) {
+  async execute({ id, status, transaction }: ChangePurchaseStatusInput) {
     if (!status) {
       throw new ValidationError('Status e obrigatorio');
     }
@@ -69,8 +94,14 @@ class ChangePurchaseStatusUseCase extends UseCase {
     }
 
     // G11: a alcada e verificada ANTES de gravar o novo status — pedido sem
-    // aprovacao da diretoria nao pode sequer ficar `approved` (e, por
-    // consequencia, nao gera a conta a pagar automatica).
+    // aprovacao da diretoria nao pode sequer ficar `approved`. Depois do G13
+    // a aprovacao nao gera mais passivo nenhum, mas a alcada continua sendo
+    // o portao: um pedido que nao pode ser aprovado nunca chega a `sent` e,
+    // portanto, nunca chega ao recebimento que hoje cria a conta a pagar
+    // (`sent`/`partial` sao os unicos status que `ReceivePurchaseItemsUseCase`
+    // aceita, e a maquina de estados so alcanca `sent` a partir de
+    // `approved`). A cadeia aprovacao -> passivo continua intacta, so ficou
+    // mais longa e mais correta.
     if (status === 'approved') {
       await this._assertApprovalAuthority(purchase, transaction);
     }
@@ -78,10 +109,6 @@ class ChangePurchaseStatusUseCase extends UseCase {
     const previousStatus = purchase.status;
     purchase.status = status;
     await purchase.save({ transaction });
-
-    if (status === 'approved') {
-      await this._createPurchasePayable(purchase, userId, transaction);
-    }
 
     return { purchase, previousStatus };
   }
@@ -131,46 +158,6 @@ class ChangePurchaseStatusUseCase extends UseCase {
     }
   }
 
-  async _createPurchasePayable(purchase: any, userId: number, transaction: Transaction) {
-    if (!purchase.supplier_id) return;
-
-    const totalPayable = parseFloat(purchase.total_amount) || 0;
-    if (totalPayable <= 0) return;
-
-    const existingPayable = await this.purchaseRepository.findAccountPayableByPurchaseId(purchase.id, transaction);
-    if (existingPayable) return;
-
-    const dueDate = purchase.expected_date
-      ? new Date(new Date(purchase.expected_date).getTime() + 30 * 24 * 60 * 60 * 1000)
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-    await this.purchaseRepository.createAccountPayable({
-      description: `Fornecimento PO ${purchase.order_number}`,
-      amount: totalPayable,
-      due_date: dueDate.toISOString().slice(0, 10),
-      payment_date: null,
-      status: 'pending',
-      category: 'Fornecedores',
-      supplier_id: purchase.supplier_id,
-      purchase_id: purchase.id,
-      invoice_number: null,
-      barcode: null,
-      payment_type: null,
-      cost_center: null,
-      // TODO(financeiro): a AP automática nasce sem centro de custo
-      // (cost_center_id null = "Sem centro de custo" no relatório de
-      // docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md). Quando a requisição de origem
-      // (purchase.requisition_id -> purchase_requisitions.department_id)
-      // estiver disponível aqui, mapear departamento -> centro de custo
-      // (ainda sem correspondência 1:1 definida entre as duas dimensões;
-      // depende de decisão de negócio sobre o de-para) e preencher
-      // cost_center_id automaticamente neste ponto.
-      cost_center_id: null,
-      approved_by: userId,
-      approval_date: new Date(),
-      notes: `Gerado automaticamente na aprovacao do pedido ${purchase.order_number}`
-    }, transaction);
-  }
 }
 
 module.exports = ChangePurchaseStatusUseCase;

@@ -28,6 +28,19 @@
  * transação** que incrementa `invoiced_quantity` e **na quantidade desta
  * emissão**, nunca do pedido inteiro (ver `services/saleStockService.ts`).
  *
+ * CONTA A RECEBER (gap G13, 2026-08-10 — decisão D-A do dono): até esta
+ * data as parcelas de `AccountReceivable` nasciam na CONFIRMAÇÃO do pedido
+ * (`CreateSaleUseCase`/`ChangeSaleStatusUseCase`), e a venda à vista nascia
+ * já com `status: 'paid'` sem nenhum dinheiro ter entrado. Isso antecipava
+ * receita e inflava o ativo: pelo CPC 47 item 108, recebível é o direito
+ * **incondicional** à contraprestação, e antes da nota o direito é
+ * condicional ao faturamento (item 38 — nenhum indicador de transferência
+ * de controle está presente na confirmação). Agora as parcelas nascem na
+ * **autorização da NF-e**, no valor **desta emissão** e sempre `pending`
+ * (ver `services/saleReceivableService.ts`). Recebível **avulso** — sem
+ * venda — continua livre por `POST /api/finance/receivable` (decisão D-J:
+ * reembolso, aluguel, venda de sucata são casos legítimos).
+ *
  * FATURAMENTO PARCIAL (gap 3/3 do módulo `sales` —
  * `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`, linha `sales`): quando o chamador
  * informa `items: [{ sale_item_id, quantity }]`, só essas quantidades
@@ -58,6 +71,7 @@ const TaxCalculationService = require('../../domain/services/TaxCalculationServi
 const createNfeProvider = require('../../infrastructure/providers/NfeProviderFactory');
 const SaleInvoiceAccumulator = require('../../domain/services/SaleInvoiceAccumulator');
 const SaleStockService = require('../../../../services/saleStockService');
+const SaleReceivableService = require('../../../../services/saleReceivableService');
 
 interface IssueSaleNfeItemInput {
   sale_item_id: number;
@@ -378,6 +392,21 @@ class IssueSaleNfeUseCase extends UseCase {
           item.invoiced_quantity = newInvoicedQuantity;
           await item.save({ transaction });
         }
+
+        // Gap G13: a conta a receber nasce AQUI, no valor DESTA emissão, na
+        // mesma transação da baixa de estoque e do `invoiced_quantity`.
+        // CPC 47 item 108 — só com a nota autorizada o direito à
+        // contraprestação vira incondicional (antes disso era condicional ao
+        // faturamento, logo não era recebível). Nenhuma parcela nasce
+        // `paid`: a baixa é evento próprio da Tesouraria.
+        await SaleReceivableService.createInvoiceReceivables({
+          sale,
+          invoiceTotal: reserved.totalAmount,
+          invoiceNumber: sale.nfe_number,
+          issuedAt: sale.nfe_issued_at,
+          gateway: this.fiscalRepository,
+          transaction,
+        });
 
         sale.status = SaleInvoiceAccumulator.resolveSaleStatus(sale.status, anyRemaining);
       }

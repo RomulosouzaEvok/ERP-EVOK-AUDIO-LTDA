@@ -7,9 +7,27 @@ const { toCents, fromCents } = require('../../../../shared/utils/money');
 const InventoryService = require('../../../../services/inventoryService');
 
 /**
- * Cria uma venda com seus itens, opcionalmente debitando estoque e gerando
- * as parcelas em `AccountReceivable`, cobrindo o fluxo do endpoint
- * `POST /api/sales`.
+ * Cria uma venda com seus itens, reservando estoque quando já nasce
+ * confirmada, cobrindo o fluxo do endpoint `POST /api/sales`.
+ *
+ * GAP G13 (2026-08-10 — decisão D-A do dono): **a venda não gera mais
+ * conta a receber.** Até esta data a criação confirmada lançava as parcelas
+ * em `AccountReceivable` na hora, e a venda à vista nascia com
+ * `status: 'paid'` e `payment_date: hoje` — dando quitação sem que nenhum
+ * dinheiro tivesse entrado.
+ *
+ * Base normativa (CPC 47 — Receita de Contrato com Cliente / IFRS 15):
+ *  - item **31**: receita quando o cliente obtém o **controle** do bem;
+ *  - item **38**: na confirmação do pedido não há posse física, nem
+ *    titularidade, nem aceite, nem direito presente a pagamento;
+ *  - item **108**: recebível exige direito **incondicional** — o direito
+ *    aqui ainda é condicional ao faturamento.
+ *
+ * O recebível passou para a autorização da NF-e, no valor de cada emissão
+ * (`services/saleReceivableService.ts`, chamado por `IssueSaleNfeUseCase` e
+ * `GetSaleNfeStatusUseCase`). Cobrança **sem venda** — reembolso, aluguel,
+ * venda de sucata — continua sendo caso legítimo e entra por
+ * `POST /api/finance/receivable` (decisão D-J).
  *
  * Migrado 1:1 do controller anterior
  * `server/src/controllers/saleController.ts#create`, preservando:
@@ -41,8 +59,8 @@ const InventoryService = require('../../../../services/inventoryService');
  *
  * F22 — fluxo de orçamento (`status: 'quote'`): quando o chamador informa
  * explicitamente `status: 'quote'`, a venda e seus itens são persistidos
- * normalmente, mas **nenhum estoque é reservado nem debitado** e **nenhuma
- * `AccountReceivable` é gerada**. A validação de quantidade disponível em
+ * normalmente, mas **nenhum estoque é reservado nem debitado**. A
+ * validação de quantidade disponível em
  * estoque também é adiada — um orçamento pode ser criado mesmo sem estoque
  * suficiente no momento, pois nada está sendo comprometido de fato. A
  * reserva (e a validação de estoque suficiente) só acontece quando o
@@ -164,42 +182,10 @@ class CreateSaleUseCase extends UseCase {
       }
     }
 
-    // Orçamento (F22): nenhuma parcela em `AccountReceivable` é gerada na
-    // criação — isso só acontece quando o orçamento for confirmado.
-    if (isQuote) {
-      return { sale, totalNet };
-    }
-
-    // Gera as contas a receber (parcelas).
-    if (entity.installments > 1) {
-      const baseInstallmentCents = Math.floor(totalNetCents / entity.installments);
-      const remainderCents = totalNetCents % entity.installments;
-      const today = new Date();
-      const day = today.getDate();
-      for (let i = 1; i <= entity.installments; i++) {
-        // Calcula o próximo mês com segurança - evita overflow de data do JS
-        // (ex.: 31/Jan + 1 mês = 03/Mar).
-        const nextMonth = today.getMonth() + i;
-        const year = today.getFullYear() + Math.floor(nextMonth / 12);
-        const month = nextMonth % 12;
-        const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-        const safeDay = Math.min(day, lastDayOfMonth);
-        const dueDate = new Date(year, month, safeDay);
-        // A última parcela absorve o resto da divisão inteira em centavos (F24).
-        const amount = fromCents(baseInstallmentCents + (i === entity.installments ? remainderCents : 0));
-        await this.saleRepository.createAccountReceivable({
-          sale_id: sale.id, customer_id: entity.customer_id, installment: i,
-          amount, due_date: dueDate, status: 'pending'
-        }, transaction);
-      }
-    } else {
-      await this.saleRepository.createAccountReceivable({
-        sale_id: sale.id, customer_id: entity.customer_id, installment: 1,
-        amount: totalNet, due_date: new Date(), status: 'paid',
-        payment_date: new Date(), payment_method: entity.payment_method
-      }, transaction);
-    }
-
+    // GAP G13 (2026-08-10): NENHUMA parcela em `AccountReceivable` é criada
+    // aqui — nem em orçamento, nem em venda já confirmada. Ver o JSDoc da
+    // classe. O recebível nasce na autorização da NF-e
+    // (`services/saleReceivableService.ts`).
     return { sale, totalNet };
   }
 }

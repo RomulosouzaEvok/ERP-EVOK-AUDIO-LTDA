@@ -91,6 +91,11 @@ class SequelizeFinancialRepository extends FinancialRepository {
   }
 
   /** @inheritdoc */
+  async createReceivable(data: Record<string, any>) {
+    return AccountReceivable.create(data);
+  }
+
+  /** @inheritdoc */
   async updatePayableCostCenter(id: number | string, costCenterId: number | null) {
     const payable = await AccountPayable.findByPk(id);
     if (!payable) return null;

@@ -104,6 +104,18 @@ padronização que o código não tem:
   (camel) no response — o controller lê `req.body.access_profile_id`
   manualmente, mas o use case (`AssignAccessProfileUseCase`) devolve o
   objeto já no shape do model `User` (`accessProfileId`).
+- **Correção de shape em 2026-08-10 (achado S-1b, commit `92cf555`):** até
+  esta data, objetos serializados de `User` e `AccessProfilePermission`
+  traziam a **mesma informação duplicada sob dois nomes** —
+  `accessProfileId` *e* `access_profile_id`. Não era intencional: as 4
+  associações de perfil de acesso em `server/src/models/index.ts` passavam
+  `foreignKey` com o nome da **coluna** em vez do nome do **atributo**, e o
+  Sequelize criava um segundo atributo homônimo apontando para a mesma
+  coluna. Corrigido: **agora só `accessProfileId` aparece no JSON.**
+  Nenhum consumidor lia a chave duplicada (verificado em `server/`,
+  `client/`, `mobile/` e `tv/`), e `PUT /api/users/:id/access-profile`
+  **continua aceitando `access_profile_id` no request** — o campo do
+  *payload* é lido manualmente pelo controller e não foi alterado.
 
 **Regra prática para quem consome a API:** não assuma nenhum padrão
 global — sempre confira o exemplo de request/response do endpoint
@@ -623,12 +635,42 @@ Cadastra um novo cliente.
   "phone": "(11) 97777-6666",
   "email": "maria@email.com",
   "address": "Rua B, 456",
-  "notes": "Cliente desde 2023"
+  "notes": "Cliente desde 2023",
+  "cnae": "2660-4/00"
 }
 ```
 
+**Campos:**
+| Campo | Tipo | Obrigatório | Observação |
+|-------|------|-------------|------------|
+| name | string | **sim** | Nome ou razão social |
+| cpf_cnpj | string | **sim** | CPF (11 díg.) ou CNPJ (14 díg.), validado por dígito verificador |
+| phone | string(20) | não | Ausente grava `''` (coluna `NOT NULL DEFAULT ''`), nunca `NULL` |
+| email | string(100) | não | Idem `phone`; aceita `''` |
+| notes | string(2000) | não | Idem `phone` |
+| tax_regime | string(50) | não | `simples_nacional` / `lucro_presumido` / `lucro_real` |
+| ie / im | string(20) | não | Inscrição estadual / municipal |
+| **cnae** | string(10) | **não** | **NOVO (2026-08-10)** — ver nota abaixo |
+| cep, street, number, complement, neighborhood, city, state | string | não | Endereço inteiro é opcional |
+
+> **`cnae` — decisão D-I do dono do produto (2026-08-10): "sim, mas opcional".**
+> O campo é aceito por `POST /api/clients` e `PUT /api/clients/:id`, mas **não
+> trava a criação** — CNAE não se aplica a pessoa física. Ausência (ou string
+> em branco) grava `NULL`, nunca `''`, porque `clients.cnae` é
+> `varchar(10) NULL` **sem `DEFAULT`**. Nenhuma máscara/regex de formato é
+> imposta: a decisão foi disponibilizar o campo, não normalizá-lo. O limite de
+> 10 caracteres é validado na API (422) para não virar erro 500 do Postgres.
+> Antes desta data a coluna existia no banco mas era inalcançável — o
+> `createClientSchema` é `.strict()` e rejeitava a chave.
+
+O schema é `.strict()`: qualquer campo não listado acima resulta em `422`.
+
 ### PUT /api/clients/:id
 Atualiza os dados de um cliente.
+
+Aceita os mesmos campos do `POST` (todos opcionais), **exceto `cpf_cnpj`**, que
+não é editável, mais `status`. `cnae` está na allowlist desde 2026-08-10, para
+que um cliente cadastrado sem CNAE possa recebê-lo depois.
 
 ### DELETE /api/clients/:id
 Inativa um cliente (soft delete - status = 'inactive').
@@ -807,14 +849,84 @@ Lista todas as categorias.
 > Nota de arquitetura: os endpoints de `/api/sales` sao servidos pelo
 > modulo `server/src/modules/sales/` (Clean Architecture). A criacao
 > reutiliza `server/src/services/inventoryService.ts` (lock pessimista +
-> transacao) para debitar estoque, e `server/src/shared/utils/money.ts`
-> (toCents/fromCents) para o calculo em centavos das parcelas geradas em
-> AccountReceivable (ultima parcela absorve o resto da divisao). Erros de
+> transacao) para **reservar** estoque. O calculo em centavos das parcelas
+> de `AccountReceivable` (ultima parcela absorve o resto da divisao)
+> continua usando `server/src/shared/utils/money.ts`, mas mudou de lugar:
+> desde o G13 vive em `server/src/services/saleReceivableService.ts` e roda
+> na **autorizacao da NF-e**, nao mais na venda. Erros de
 > validacao/regra de negocio retornam `{ success: false, error: { code,
 > message } }` (em vez de string simples, mesmo padrao ja adotado em
 > `inventory`/`bom`/`production`/`purchases`). Ver
-> `server/src/modules/sales/README.md` para detalhes, incluindo a
-> pendencia conhecida de reserva de estoque em orcamentos (`quote`).
+> `server/src/modules/sales/README.md` para detalhes.
+
+> ### ⚠️ Quando o estoque sai (gap **G9**, 2026-08-10)
+>
+> **Confirmar o pedido RESERVA. Autorizar a NF-e BAIXA.**
+>
+> | Momento | Efeito em `products.quantity` | Efeito em `production_order_reservations` | Efeito no deposito ACABADOS |
+> |---|---|---|---|
+> | `POST /api/sales` com `status: 'quote'` | nenhum | nenhum | nenhum |
+> | `POST /api/sales` com `status: 'confirmed'` (default) | **nenhum** | cria reserva (dona = a venda) | nenhum |
+> | `PUT /api/sales/:id/status` `quote → confirmed` | **nenhum** | cria reserva | nenhum |
+> | `PUT /api/sales/:id/items` (venda `confirmed`) | **nenhum** | ajusta a reserva pelo delta | nenhum |
+> | `POST /api/sales/:id/nfe` **autorizada** | **-quantidade faturada** | consome a reserva no mesmo montante | **-quantidade faturada** |
+> | `GET /api/sales/:id/nfe` que reconcilia uma autorizacao assincrona | idem acima | idem acima | idem acima |
+> | `PUT /api/sales/:id/status` `→ canceled` | **+`invoiced_quantity`** (so o que ja virou NF-e) | libera todo o saldo reservado | **+`invoiced_quantity`** |
+> | `PUT /api/sales/:id/status` `invoiced → shipped` | nenhum | nenhum | nenhum |
+>
+> Base normativa: Ajuste SINIEF 07/05, clausula 1a §1o e clausula 9a §1o — a
+> NF-e e autorizada antes do fato gerador e a mercadoria so transita depois
+> da autorizacao de uso. Ate 2026-08-10 a baixa ocorria na confirmacao do
+> pedido, registrando saida de mercadoria que ainda estava fisicamente na
+> empresa. Decisao D-A do dono
+> (`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4).
+
+> ### ⚠️ Quando nasce a conta a receber (gap **G13**, 2026-08-10)
+>
+> **Confirmar o pedido NAO cobra. Autorizar a NF-e cobra.**
+>
+> | Momento | Efeito em `accounts_receivable` |
+> |---|---|
+> | `POST /api/sales` com `status: 'quote'` | nenhum |
+> | `POST /api/sales` com `status: 'confirmed'` (default) | **nenhum** (antes criava as parcelas) |
+> | `PUT /api/sales/:id/status` `quote → confirmed` | **nenhum** (antes criava as parcelas) |
+> | `POST /api/sales/:id/nfe` **autorizada** | **cria as parcelas do valor DESTA emissao**, sempre `pending` |
+> | `GET /api/sales/:id/nfe` que reconcilia uma autorizacao assincrona | idem acima |
+> | `PUT /api/sales/:id/status` `→ canceled` | cancela as parcelas ainda nao pagas |
+>
+> Base normativa: **CPC 47** item 31 (receita quando o cliente obtem o
+> CONTROLE), item 38 (na confirmacao nao ha posse fisica, titularidade,
+> aceite nem direito presente a pagamento) e item 108 (recebivel exige
+> direito **incondicional**). Ate 2026-08-10 as parcelas nasciam na
+> confirmacao — antecipando receita e inflando o ativo — e a venda a vista
+> nascia com `status: 'paid'` e `payment_date` preenchido **sem que nenhum
+> dinheiro tivesse entrado**, o que quebrava conciliacao bancaria, trilha de
+> auditoria e segregacao de funcoes.
+>
+> Regras derivadas:
+> - **Faturamento parcial**: uma venda faturada em duas notas gera duas
+>   levas de parcelas, cada uma no valor da sua nota, com **numeracao
+>   continua** (`installment` 1..N, depois N+1..M) — o mesmo criterio que o
+>   G9 ja aplicava ao estoque.
+> - **Nenhuma parcela nasce `paid`**: mesmo venda a vista nasce `pending`
+>   com vencimento na data da emissao; a baixa e evento proprio
+>   (`PUT /api/finance/receivable/:id/pay`), com valor, data, usuario e
+>   contrapartida conciliavel no extrato.
+> - **Dado legado**: venda confirmada **antes** do corte ja tem parcelas
+>   criadas pela regra antiga, reconheciveis por `invoice_number IS NULL`.
+>   Faturar essa venda **nao recria** o recebivel (evita duplicacao) e nao
+>   altera nenhuma linha existente.
+> - **Cobranca avulsa continua livre** (decisao D-J): reembolso, aluguel e
+>   venda de sucata entram por `POST /api/finance/receivable`, sem
+>   `sale_id`.
+>
+> Consequencia para quem consome a API: entre confirmar e faturar, o produto
+> aparece com `quantity` inalterada e `reserved_quantity` maior. O estoque
+> **disponivel** para novas vendas/OPs e `quantity - reserved_quantity` — e
+> e esse o numero validado ao confirmar um pedido (422 quando insuficiente).
+>
+> Requer a migration `20260810-000030-generalize-stock-reservations-for-sales-g9.cjs`
+> aplicada (ver `docs/database/DATABASE.md`, secao G9).
 
 ### GET /api/sales
 Lista vendas com paginação.
@@ -897,26 +1009,17 @@ Registra uma nova venda.
         "total_price": 39.90
       }
     ],
-    "accounts_receivable": [
-      {
-        "installment": 1,
-        "amount": 413.23,
-        "due_date": "2024-02-15"
-      },
-      {
-        "installment": 2,
-        "amount": 413.23,
-        "due_date": "2024-03-15"
-      },
-      {
-        "installment": 3,
-        "amount": 413.24,
-        "due_date": "2024-04-15"
-      }
-    ]
+    "accounts_receivable": []
   }
 }
 ```
+
+> **⚠️ G13 (2026-08-10): `accounts_receivable` vem VAZIO na criação da
+> venda.** Até esta data as parcelas eram criadas aqui (e a venda à vista
+> nascia `paid`). Agora elas nascem na autorização da NF-e
+> (`POST /api/sales/:id/nfe`), no valor de cada emissão — CPC 47 item 108,
+> recebível exige direito incondicional. Ver o quadro "Quando nasce a conta
+> a receber" no início desta seção.
 
 ### GET /api/sales/:id
 Detalhes completos de uma venda.
@@ -952,6 +1055,19 @@ Só é aceito a partir de `invoiced`. Qualquer outra origem retorna 422
 com a mensagem "Venda já foi expedida (status shipped) e não pode ser
 cancelada."
 
+**(G9, 2026-08-10) Efeito em estoque desta rota:**
+- `quote → confirmed`: **reserva** o produto acabado de cada item (não
+  baixa). 422 com `details.rule = 'reservation_requires_owner'` é erro de
+  programação (dono ausente); 422 de estoque insuficiente é validado contra
+  `quantity - reserved_quantity` sob lock.
+- `→ canceled`: libera **todo** o saldo reservado da venda e devolve ao
+  estoque **apenas** `sale_items.invoiced_quantity` (o que já tinha virado
+  NF-e). Cancelar um `quote` não movimenta estoque nenhum — antes do G9
+  este caminho devolvia a quantidade inteira do item e criava estoque
+  fantasma em orçamento cancelado.
+- `invoiced → shipped`: não movimenta estoque (a baixa já ocorreu na
+  autorização da NF-e). Continua exigindo `nfe_status === 'authorized'`.
+
 ### PUT /api/sales/:id/items
 **(Novo, 2026-08-06)** Gap 2/3 do módulo `sales` ("Alteração de pedido",
 `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`). Substitui **todo** o conjunto de
@@ -962,8 +1078,10 @@ Permitido apenas com a venda em `quote` ou `confirmed`. A partir de
 `partially_invoiced`/`invoiced`/`shipped`/`canceled` retorna **422**
 `BUSINESS_RULE_VIOLATION` com `details.status` — a venda já tem NF-e
 emitida (total ou parcial) ou já foi encerrada. Em `quote` nada foi
-debitado do estoque ainda; em `confirmed`, o estoque já debitado na
-confirmação é ajustado (delta por produto) na mesma transação.
+comprometido do estoque ainda; em `confirmed`, **a reserva** criada na
+confirmação é ajustada (delta por produto) na mesma transação — desde o G9
+(2026-08-10) esta rota **não altera `products.quantity` nem saldo de
+depósito**, porque a baixa só acontece na autorização da NF-e.
 
 **Request:**
 ```json
@@ -976,8 +1094,8 @@ confirmação é ajustado (delta por produto) na mesma transação.
 ```
 `sale_item_id` omitido = linha nova; informado = atualiza a linha
 existente daquele id (precisa pertencer à venda). Toda linha existente
-cujo `sale_item_id` não aparecer no payload é removida (com restauração
-de estoque, se aplicável). `product_id` duplicado no payload é rejeitado
+cujo `sale_item_id` não aparecer no payload é removida (com **liberação da
+reserva**, se aplicável). `product_id` duplicado no payload é rejeitado
 (422).
 
 **Response:** `200 OK`, venda atualizada no mesmo formato de
@@ -1003,15 +1121,63 @@ automaticamente para `invoiced`; enquanto houver saldo pendente em pelo
 menos um item, fica em `partially_invoiced`. Response continua `202
 Accepted` com a venda atualizada (`nfe_status`, `nfe_key`, etc.).
 
-**Risco residual documentado (não bloqueante para mock/dev):**
-`Sale.nfe_*` guarda apenas a NF-e **mais recente** — múltiplas emissões
-parciais sobrescrevem chave/protocolo/XML uma da outra, sem histórico por
-emissão. Não há tabela `sale_invoices` (1 venda : N NF-e) nesta v1. Ver
-`docs/governance/TODO.md`. Além disso, `GetSaleNfeStatusUseCase` (path
-assíncrono de provedores reais — `focus_nfe`/`enotas`, não o mock usado em
-dev) ainda **não** atualiza `invoiced_quantity`/`partially_invoiced`; só
-finaliza a transição `confirmed → invoiced`. Afeta apenas o fluxo com
-provedor real, não o mock.
+**(G9, 2026-08-10) É esta rota que baixa o estoque.** Quando a NF-e é
+autorizada, e **na mesma transação** que incrementa `invoiced_quantity`,
+o serviço `server/src/services/saleStockService.ts`:
+1. libera a reserva da venda no montante faturado;
+2. consome `products.quantity` (gera `InventoryMovement` `type='out'`,
+   `reference_type='sale'`, `reference_id` = id da venda, `user_id` do JWT);
+3. debita o depósito `ACABADOS`.
+
+A baixa é **proporcional à quantidade desta emissão**, nunca ao pedido
+inteiro: faturar 10 unidades em 4 + 6 gera duas baixas (4 e 6). NF-e
+`denied` não baixa nada.
+
+Se a baixa falhar (estoque insuficiente — só possível em venda legada sem
+reserva ou após ajuste manual), a transação inteira volta atrás:
+`invoiced_quantity` **não** avança sem a baixa correspondente. A emissão
+continua recuperável — `sale_invoices` já foi gravado com o snapshot de
+itens na transação de reserva, então, depois de corrigir o estoque,
+`GET /api/sales/:id/nfe` reconsulta o provedor e reaplica.
+
+**Nota histórica (já resolvido, corrigido aqui em 2026-08-10):** o texto
+anterior desta seção dizia que não existia tabela `sale_invoices` e que
+`GetSaleNfeStatusUseCase` não atualizava `invoiced_quantity`. As duas coisas
+foram entregues em 2026-08-06 — `sale_invoices` (1 venda : N NF-e) guarda 1
+registro por emissão com snapshot de itens, e o caminho assíncrono
+(`focus_nfe`/`enotas`) aplica a mesma lógica de acúmulo do síncrono via
+`SaleInvoiceAccumulator`, além da baixa de estoque do G9. `Sale.nfe_*`
+continua em dual-write com a emissão **mais recente**, por
+compatibilidade de leitura.
+
+**(G13, 2026-08-10) É também esta rota que cria a conta a receber.** Na
+mesma transação da baixa de estoque e do `invoiced_quantity`, o serviço
+`server/src/services/saleReceivableService.ts` gera as parcelas em
+`accounts_receivable`:
+- valor = total **desta emissão** (não do pedido), rateado por
+  `sales.installments`, com a última parcela absorvendo o resto da divisão
+  em centavos (regra F24 preservada);
+- `installment` continua a numeração da emissão anterior (nota 1 → 1..N,
+  nota 2 → N+1..M);
+- vencimento: parcela única vence na data da emissão; N parcelas vencem
+  +1, +2… meses a partir dela (sem overflow de data);
+- `status` sempre `pending`, `payment_date` sempre `null` —
+  **nenhuma parcela nasce paga**, nem em venda à vista;
+- `invoice_number` recebe o número da NF-e, o que distingue o recebível
+  novo do legado (criado na confirmação, sem nota).
+
+Venda **legada** (confirmada antes do corte, com parcelas já criadas pela
+regra antiga) **não** ganha parcelas novas ao ser faturada — a duplicação
+de recebível é bloqueada e nenhuma linha existente é alterada.
+
+**Risco residual:** cancelar uma NF-e autorizada
+(`POST /api/sales/:id/nfe/cancel`) **não** reverte `invoiced_quantity`, não
+devolve o estoque baixado e **não cancela as parcelas geradas por essa
+emissão** — comportamento pré-existente ao G9, mantido de propósito para as
+três coisas permanecerem coerentes entre si (baixado == faturado ==
+cobrado). A reversão, hoje, é manual (ajuste de estoque + baixa/cancelamento
+da parcela) ou pelo cancelamento da venda, que já derruba os recebíveis
+pendentes. Ver `docs/governance/TODO.md`.
 
 ### Tabela de preços por cliente (`/api/sales/customers/:id/prices`)
 **(Novo, 2026-08-06)** Gap 1/3 do módulo `sales`. Preço unitário negociado
@@ -1041,12 +1207,51 @@ pedido (editável manualmente).
 
 Implementado no módulo `server/src/modules/financial/` (Clean Architecture). Todas as rotas exigem `authenticate`; `POST /api/finance/payable` exige adicionalmente `authorize('admin', 'financial')`.
 
+> **⚠️ Gap G13 (2026-08-10) — quando cada conta nasce.** A conta a **pagar**
+> de compra nasce no **recebimento** (`POST /api/purchases/:id/receive`), não
+> mais na aprovação do pedido: pelo **CPC 00 (R2) itens 4.56/4.58**, pedido
+> aprovado e não entregue é contrato executório, não passivo. A conta a
+> **receber** de venda nasce na **autorização da NF-e**
+> (`POST /api/sales/:id/nfe`), não mais na confirmação do pedido: pelo
+> **CPC 47 itens 31/38/108**, recebível exige direito incondicional, que só
+> existe com a nota. **Nenhuma parcela nasce `paid`** — quitação é evento
+> próprio (`PUT /api/finance/receivable/:id/pay`). Cobrança **avulsa**, sem
+> venda, continua livre em `POST /api/finance/receivable` (decisão D-J).
+
 ### GET /api/finance/receivable
 Contas a receber, com paginação.
 
 **Query Params:** status, start_date, end_date, customer_id, page, limit
 
 **Response:** `{ success: true, data: AccountReceivable[], pagination: { total, page, limit, totalPages } }` (cada item inclui `customer` e `sale`).
+
+### POST /api/finance/receivable
+Registra uma cobrança **avulsa**, sem venda vinculada — reembolso, aluguel,
+venda de sucata (decisão D-J do dono do produto). RBAC:
+`authorizeModule('financeiro', 'operate')`.
+
+**Request:**
+```json
+{
+  "customer_id": 12,
+  "amount": 350.50,
+  "due_date": "2026-09-15",
+  "installment": 1,
+  "invoice_number": "REC-2026-014",
+  "notes": "Venda de sucata de alumínio",
+  "cost_center_id": 3
+}
+```
+Campos obrigatórios: `customer_id`, `amount` (> 0), `due_date`. Opcionais:
+`installment` (default 1), `invoice_number`, `notes`, `cost_center_id`.
+Criada sempre com `sale_id: null` e `status: "pending"`.
+
+**Erros de regra (422, `BusinessRuleError`) — sempre com `details.rule`:**
+
+| `details.rule` | Quando | Mensagem resumida |
+|---|---|---|
+| `G13-AR` | `sale_id` informado | Recebível de venda nasce na autorização da NF-e (`POST /api/sales/:id/nfe`), não neste endpoint. Cobrança avulsa deve vir **sem** `sale_id`. |
+| `G13-AR-PAID` | `status` informado | Conta a receber sempre nasce pendente; registre o recebimento em `PUT /api/finance/receivable/:id/pay`, para existir data, valor, usuário e contrapartida conciliável no extrato. |
 
 ### PUT /api/finance/receivable/:id/pay
 Registra recebimento de conta a receber (total ou parcial via `amount`).
@@ -1867,6 +2072,57 @@ pela inspeção de recebimento (pós-quarentena) e pela qualidade
 
 **Request:** `{ "notes": "Inspecionado, aprovado no lote-piloto" }` (`notes` opcional.)
 
+> ⚠️ **G7 (2026-08-10) — a liberação deixou de ser um clique.** Este endpoint
+> agora **exige** que a inspeção MAIS RECENTE do lote
+> (`POST /api/quality/inspections`, seção 16.1) tenha veredito `approved` ou
+> `approved_under_concession`. Antes disso, liberar gravava apenas um texto
+> livre em `notes` — sem inspetor, sem critério, sem resultado —, o que não
+> atende à ISO 9001:2015 §8.6. Decisão D-H do dono do produto.
+
+Quem autoriza a liberação vem **sempre** do JWT (`req.user.id`) e é gravado
+no lote, junto com a inspeção que autorizou:
+
+| Campo gravado em `lot_controls` | Origem |
+|---|---|
+| `release_inspection_id` | id da inspeção aprovada mais recente |
+| `released_by` | `req.user.id` (nunca do body) |
+| `released_at` | data/hora do servidor |
+
+**Erros (422 `BUSINESS_RULE_VIOLATION`)** — todos com `details.rule = "G7"` e
+**sem gravar nada** no lote:
+
+| `details.reason` | Quando |
+|---|---|
+| `no_inspection` | o lote não tem nenhuma inspeção registrada |
+| `last_inspection_rejected` | a inspeção mais recente reprovou o material (trate a RNC e registre uma NOVA inspeção aprovada) |
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BUSINESS_RULE_VIOLATION",
+    "message": "Lote LOT-2026-077 não tem inspeção de qualidade registrada. Registre a inspeção em POST /api/quality/inspections antes de liberar (ISO 9001 8.6).",
+    "details": {
+      "rule": "G7",
+      "lot_id": 77,
+      "lot_number": "LOT-2026-077",
+      "current_status": "quarantine",
+      "reason": "no_inspection",
+      "inspection_id": null,
+      "inspection_verdict": null
+    }
+  }
+}
+```
+
+O status inválido (`available`, `consumed`, ...) continua sendo recusado
+antes de qualquer consulta à qualidade, com
+`details: { rule: "G7", current_status, allowed_statuses: ["quarantine","blocked"] }`.
+
+> 💡 Para saber **antes de clicar** se a liberação vai passar, use
+> `GET /api/quality/lots/:lotId/release-eligibility` (leitura pura, sem efeito
+> colateral).
+
 ### POST /api/inventory/lots/:id/block
 Bloqueia um lote (`quarantine`/`available` → `blocked`).
 `authorizeModule('qualidade', 'approve')`. Usado pela inspeção de
@@ -2138,10 +2394,69 @@ Registra o recebimento (total ou parcial) dos itens do pedido. Só permitido enq
 {
   "items": [
     { "item_id": 7, "quantity": 60 }
-  ]
+  ],
+  "invoice_number": "NF-1001",
+  "warehouse_code": "INSUMOS",
+  "invoice_date": "2026-08-08",
+  "due_date": "2026-09-07"
 }
 ```
 Cada item não pode exceder a quantidade pendente (`quantity - received_quantity`). Dá entrada no estoque via `InventoryService.receive` (lock pessimista + transação) e atualiza o status do pedido e dos itens.
+
+**Conta a pagar (gap G13, 2026-08-10 — decisão D-A do dono):** é **este**
+endpoint que cria a `AccountPayable` da compra, não mais a aprovação do
+pedido (`PUT /api/purchases/:id/status` → `approved`). Base normativa:
+**CPC 00 (R2) item 4.56** (pedido aprovado e não entregue é *contrato
+executório*) e **item 4.58** (o passivo surge quando a outra parte cumpre
+primeiro — a entrega do fornecedor).
+
+- **Valor:** soma de `quantidade recebida × preço unitário` **desta entrega**.
+  Recebeu metade, deve a metade. Um pedido recebido em três entregas gera
+  três contas a pagar, uma por NF do fornecedor. `freight_value` continua
+  fora (como já ficava fora de `total_amount`) e é lançamento manual em
+  `POST /api/finance/payable`.
+- **Vencimento:** `due_date` informado prevalece; senão `invoice_date + 30`
+  dias; senão data do recebimento + 30 dias. Os 30 dias são o mesmo default
+  que já existia — o que mudou é a data-base, que era `expected_date` (data
+  prometida) e passou a ser um fato ocorrido. ⚠️ A pergunta **C7** ao
+  contador (prazo conta da NF ou do recebimento físico?) segue em aberto;
+  quando respondida, muda apenas a data-base do item 2.
+- **Aprovador:** `approved_by`/`approval_date` nascem **nulos** — quem recebe
+  não aprova pagamento (segregação de funções / three-way match). Quem
+  recebeu fica em `purchase_receipts.received_by`, em `notes` e no log de
+  auditoria.
+- **Idempotência:** chave `(purchase_id, invoice_number)`, a mesma do índice
+  único de `purchase_receipts`.
+- **Dado legado:** pedido aprovado **antes** do corte já tem uma AP do valor
+  cheio, criada pela regra antiga e reconhecível por `invoice_number IS
+  NULL`. Nesse caso o recebimento **não lança nada** (evita duplicar
+  passivo) e devolve `payable_skip_reason: "legacy_created_on_approval"`.
+  Nenhuma linha financeira existente é alterada — o destino dessas APs
+  (estorno ou congelamento) é a pergunta **C9** ao contador.
+
+**Campos novos do payload (ambos opcionais):**
+
+| Campo | Formato | Efeito |
+|---|---|---|
+| `invoice_date` | `YYYY-MM-DD` | Data de emissão da NF do fornecedor; base do vencimento quando `due_date` não vem |
+| `due_date` | `YYYY-MM-DD` | Vencimento negociado; prevalece sobre qualquer cálculo |
+
+**Campos novos da resposta (fora de `data`):**
+
+```json
+{
+  "success": true,
+  "data": { "...": "pedido completo" },
+  "requisition_status": null,
+  "account_payable": { "id": 91, "amount": "125.00", "due_date": "2026-09-07", "invoice_number": "NF-1001" },
+  "payable_skip_reason": null
+}
+```
+
+`account_payable` é `null` quando nada foi lançado; nesse caso
+`payable_skip_reason` explica: `legacy_created_on_approval`, `no_supplier`
+(pedido sem fornecedor — lançamento fica manual), `zero_amount` ou
+`already_exists`.
 
 **Entrada em estoque (caminho único, gap G14):** desde 2026-08-09 os quatro
 passos ficam em `materialReceiptService.receiveMaterialIntoQuarantine`
@@ -2444,6 +2759,28 @@ Inativa (soft delete, `status="inactive"`) um fornecedor. Bloqueado (`400`) se o
 
 ### POST /api/mrp/plan
 Roda o MRP contra o estoque real (não congelado) e cria ordens planejadas a partir de uma lista de demandas.
+
+> ⚠️ **G7 (achado colateral, 2026-08-10) — o que o MRP conta como "estoque"
+> mudou.** O recebimento cria o lote em `quarantine` mas **já incrementa
+> `products.quantity`** no mesmo passo. Enquanto o MRP lia esse número cru,
+> material recebido e **não inspecionado** contava como disponível — o plano
+> **comprava de menos**, e a quarentena era decorativa para o planejamento
+> (exatamente o "uso não pretendido" que a ISO 9001 §8.7 manda prevenir).
+>
+> A partir do G7, `estoque_disponivel` desconta o saldo retido em lotes
+> `quarantine`/`blocked` (`max(0, físico − retido)`). O efeito é
+> **conservador**: o MRP passa a ver MENOS estoque, então o erro possível é
+> planejar a mais, nunca planejar sobre material bloqueado. As posições
+> internas do MRP expõem também `estoque_fisico` e `estoque_retido_qualidade`
+> para diagnóstico. Implementação em `server/src/services/quarantineBalanceService.ts`.
+>
+> A mesma correção vale para a **checagem de disponibilidade de OP**
+> (`BomService.explodeBOM` → `checkAvailability`, usada por
+> `POST /api/production-orders` e pela conversão de plano em OP): antes ela
+> aprovava a OP contra material que o FEFO da produção — que só consome lote
+> `available` — nunca conseguiria consumir, e a falha só aparecia lá na
+> frente, na conclusão da OP. Cada componente agora traz `stock_available`
+> (líquido), `stock_physical` (bruto) e `stock_quality_withheld`.
 ```json
 {
   "demands": [
@@ -2770,6 +3107,144 @@ o payload fechar a RNC, `closed_by` vem de `req.user.id`.
 ### DELETE /api/quality/non-conformities/:id
 Fecha (soft delete lógico, `status → closed`) uma RNC.
 `authorizeModule('qualidade', 'approve')`.
+
+---
+
+## 16.1 Qualidade — Inspeção de Lote (G7, ISO 9001 §8.6/§8.7)
+
+Módulo `server/src/modules/quality/`, base URL `/api/quality`.
+`authorizeModule('qualidade', ...)`: leitura exige `view` implícito,
+registrar inspeção exige `operate`. **Liberar o lote continua exigindo
+`approve`**, na rota de estoque (`POST /api/inventory/lots/:id/release`) — a
+separação é deliberada: inspecionar (evidência) e autorizar a liberação
+(decisão) são atos distintos na §8.6, e agora também níveis de permissão
+distintos.
+
+**Por que este recurso existe.** Até 2026-08-10 não havia entidade de
+inspeção no ERP: liberar um lote da quarentena era um POST com um campo
+`notes` livre — sem inspetor identificado, sem critério de aceitação, sem
+resultado. Decisão **D-H** do dono (a empresa pretende se certificar
+ISO 9001) em `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4.
+
+⚠️ O texto integral da ISO 9001 é paywalled (iso.org devolve 403); as
+cláusulas são citadas por número e assunto, conforme
+`docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md` §Decisão 5.
+
+⚠️ **Não há motor de amostragem Ac/Re.** Nível de inspeção e AQL por classe
+de defeito (ISO 2859-1) são decisão da Engenharia da Qualidade e ainda não
+foram definidos — a própria pesquisa normativa marca os valores de AQL como
+`[NÃO CONFIRMADO NA FONTE]`. `sampling_plan`, `lot_size` e `sample_size` são
+**evidência textual do que foi aplicado**, não entrada de cálculo. O veredito
+é sempre do inspetor humano.
+
+**Associações disponíveis (registradas em 2026-08-10).** Na entrega do G7 o
+model `QualityInspection` ficou fora de `server/src/models/index.ts` (o arquivo
+estava sob edição concorrente), então a tabela existia mas **nenhuma consulta
+podia usar `include`**. O registro foi feito e os aliases abaixo estão
+disponíveis para as respostas deste módulo evoluírem sem nova migration:
+
+| Origem | Alias | Destino | FK |
+|--------|-------|---------|-----|
+| `QualityInspection` | `lot` | `LotControl` | `lot_id` |
+| `QualityInspection` | `inspector` | `User` | `inspector_id` |
+| `QualityInspection` | `nonConformity` | `NonConformity` | `non_conformity_id` |
+| `QualityInspection` | `released_lots` | `LotControl` | `release_inspection_id` |
+| `LotControl` | `inspections` | `QualityInspection` | `lot_id` |
+| `LotControl` | `releaseInspection` | `QualityInspection` | `release_inspection_id` |
+| `LotControl` | `releasedBy` | `User` | `released_by` |
+| `User` | `quality_inspections` | `QualityInspection` | `inspector_id` |
+| `NonConformity` | `quality_inspections` | `QualityInspection` | `non_conformity_id` |
+
+⚠️ O **payload das respostas não mudou** nesta rodada — o registro habilita o
+`include`, não o utiliza ainda. E a migration `20260810-000032`, que cria
+`quality_inspections` e as 3 colunas de liberação em `lot_controls`, **continua
+pendente de aplicação**; nenhuma rota deste módulo funciona antes dela.
+
+### POST /api/quality/inspections
+Registra uma inspeção sobre um lote. `authorizeModule('qualidade','operate')`.
+
+**Request:**
+```json
+{
+  "lot_id": 77,
+  "stage": "incoming",
+  "acceptance_criteria": "Inspeção visual e dimensional conforme desenho DES-1042 rev. C",
+  "sampling_plan": "ISO 2859-1 nível II",
+  "lot_size": 500,
+  "sample_size": 20,
+  "defects_found": 0,
+  "verdict": "approved",
+  "notes": "Amostra conforme"
+}
+```
+
+| Campo | Obrigatório | Observação |
+|---|---|---|
+| `lot_id` | **sim** | `lot_controls.id`. Não existe inspeção desvinculada de lote |
+| `stage` | não (default `incoming`) | `incoming` \| `in_process` \| `final` |
+| `acceptance_criteria` | **sim** (mín. 3 caract.) | §8.6 — o critério contra o qual o lote foi verificado |
+| `verdict` | **sim** | `approved` \| `rejected` \| `approved_under_concession` |
+| `concession_justification` | **sim quando** `verdict = approved_under_concession` (mín. 10 caract.) | §8.7 — aceitação sob concessão é decisão registrada e justificada |
+| `sampling_plan`, `lot_size`, `sample_size`, `defects_found`, `notes` | não | evidência; `lot_size` omitido herda `lot_controls.quantity_initial` |
+
+`inspector_id` **nunca** vem do body: é sempre `req.user.id` (anti-spoofing,
+regra P0 — e é literalmente o requisito da §8.6).
+
+**Efeitos por veredito:**
+
+| Veredito | Efeito |
+|---|---|
+| `approved` | grava a evidência. **Não libera o lote** — liberar é ato separado |
+| `approved_under_concession` | idem, com a justificativa retida |
+| `rejected` | delega a `CreateNonConformityUseCase` (mesmo caminho do **G8/G10**), que **abre a RNC e bloqueia o lote**; o `non_conformity_id` volta gravado na inspeção |
+
+**Erros (400 `VALIDATION_ERROR`, todos com `details.rule = "G7"` e `details.field`):**
+`lot_id` ausente, `stage`/`verdict` fora do ENUM, `acceptance_criteria` curto,
+`concession_justification` ausente na concessão, `defects_found`/`sample_size`
+não numéricos. **Erro (404)** — lote inexistente, com
+`details: { rule: "G7", lot_id }`.
+
+### GET /api/quality/inspections
+Lista inspeções. **Query params:** `lot_id`, `verdict`, `stage`,
+`inspector_id`, `page`, `limit` (máx. 100).
+
+Filtro de enum com valor inválido é **ignorado** (não vira `where`) em vez de
+ser repassado ao Postgres — repassar produziria um 500 a partir de um query
+string digitado errado.
+
+### GET /api/quality/lots/:lotId/release-eligibility
+Diagnóstico do gate de liberação de um lote. **Leitura pura, sem efeito
+colateral** — a tela usa isto para saber se o botão "Liberar" vai funcionar
+antes de o usuário clicar. Responde exatamente à mesma regra que o POST de
+release aplica.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "rule": "G7",
+    "lot_id": 77,
+    "lot_number": "LOT-2026-077",
+    "lot_status": "quarantine",
+    "status_allows_release": true,
+    "quality_gate_passed": false,
+    "can_release": false,
+    "reason": "no_inspection",
+    "releasing_verdicts": ["approved", "approved_under_concession"],
+    "latest_inspection": null
+  }
+}
+```
+
+`reason` é `null` quando o gate passa; caso contrário `no_inspection` ou
+`last_inspection_rejected`.
+
+> **A regra é "a inspeção MAIS RECENTE", não "existe alguma aprovada".** É a
+> única leitura que sobrevive ao retrabalho e à reprovação posterior: com
+> "existe alguma aprovada", um lote aprovado na entrada e reprovado depois
+> continuaria liberável para sempre — o oposto do que a §8.7 manda. A
+> re-inspeção após retrabalho é, então, o mecanismo natural de reabertura.
 
 ---
 
@@ -3444,17 +3919,28 @@ item, usado como sugestão automática em `POST /api/mrp/planned-orders/convert`
 **(Seção adicionada em 2026-08-06 — módulo novo, UC-19.)** Módulo
 `server/src/modules/comex/`, base URL `/api/comex/import-processes`.
 `authorizeModule('comex', ...)`: leituras aceitam qualquer nível
-atribuído ao módulo, escritas exigem `operate` — **sem etapa de
-`approve`** (diferente da adjudicação de RFQ, seção 11.1): o UC-19 define
-um único ator (Analista de Comex). Reaproveita o cadastro de `Supplier`
-existente (sem campo dedicado de "fornecedor estrangeiro"). Todos os
-valores monetários calculados (`customs_value`, `ii_value`, `ipi_value`,
-`pis_value`, `cofins_value`, `icms_value`, `nationalized_unit_cost`) são
-`DECIMAL(18,6)`. **Sem tela web ainda** — próxima rodada de frontend.
+atribuído ao módulo, escritas exigem `operate`. Reaproveita o cadastro de
+`Supplier` existente (sem campo dedicado de "fornecedor estrangeiro").
+Todos os valores monetários calculados (`customs_value`, `ii_value`,
+`ipi_value`, `pis_value`, `cofins_value`, `icms_value`,
+`nationalized_unit_cost`) são `DECIMAL(18,6)`. **Tela web:**
+`/purchases/comex` (menu Compras → Importação (Comex)) — cobre o ciclo
+completo, incluindo o gate de aprovação abaixo (o bloco "Aprovação da
+diretoria" consome exclusivamente `GET /:id/approvals`, nunca infere estado a
+partir de tentativa de escrita).
 
-Máquina de status: `draft → shipped → arrived → customs_cleared →
-received | cancelled` (marcos de acompanhamento gravados em
-`shipped_at`/`arrived_at`/`customs_cleared_at`/`received_at`).
+**Alterado em 2026-08-10 (G11-COMEX, decisão D-G do dono do produto):** o
+módulo deixou de ter "um único ator sem etapa de aprovação". O G11 (seção
+11) colocou a alçada da diretoria sobre o pedido de compra — importação
+exigindo `diretor` em qualquer valor —, mas `import_processes` é um fluxo
+**paralelo**, que nunca vira `purchase_orders`; com todas as escritas em
+`comex:operate`, uma importação de R$ 1 milhão registrada aqui embarcava
+sem passar por ninguém. Agora **a diretoria aprova antes do embarque**
+(2 rotas novas abaixo, tabela `import_process_approvals`).
+
+Máquina de status: `draft →(gate da diretoria)→ shipped → arrived →
+customs_cleared → received | cancelled` (marcos de acompanhamento
+gravados em `shipped_at`/`arrived_at`/`customs_cleared_at`/`received_at`).
 
 ### GET /api/comex/import-processes
 Lista paginada.
@@ -3509,15 +3995,93 @@ Siscomex/NCM**.
 (`IMP-<ano>-XXXX`, sequencial por ano) e itens já com `customs_value`/
 `*_value`/`nationalized_unit_cost` calculados.
 
+### POST /api/comex/import-processes/:id/approve
+**(NOVO 2026-08-10 — G11-COMEX.)** Registra **1 aprovação da diretoria**
+sobre o processo. Não embarca o processo: quem embarca continua sendo
+`POST /:id/tracking` com `event = 'shipped'`, que passa a exigir esta
+aprovação.
+
+**Módulo dono: `diretor`** (`authorizeModule('diretor')`) — diferente do
+resto da seção. Um Analista de Comex, mesmo com `comex:approve`, **não**
+consegue registrar a aprovação; `role === 'admin'` satisfaz (curto-circuito
+padrão de `authorizeModule` em todo o projeto).
+
+**Request:** sem body. `approver_user_id` vem **sempre** do JWT
+(`req.user.id`) e `approver_role` é **sempre** resolvido pelo RBAC do
+usuário logado (`req.user.permissions.diretor`) — nenhum dos dois é aceito
+do body (regra P0 anti-spoofing; mesmo padrão de
+`POST /api/purchases/:id/approve` e do Jurídico/RF-JUR-003). Qualquer
+payload enviado é ignorado.
+
+**Response (201):** `{ id, import_process_id, approver_user_id,
+approver_role: "diretor", approved_at }`.
+
+**Erros (422, todos com `error.details.rule = "G11-COMEX"`):**
+- processo fora de `draft` (`details.current_status`) — aprovação
+  retroativa não existe: depois do embarque o compromisso já foi assumido;
+- usuário sem o papel `diretor` (`details.required_roles`);
+- o papel já aprovou este processo (garantia final: UNIQUE
+  `uq_import_process_approvals_process_role`).
+
+**Erro (404):** processo inexistente.
+
+### GET /api/comex/import-processes/:id/approvals
+**(NOVO 2026-08-10 — G11-COMEX.)** Situação da alçada. **Somente leitura,
+sem efeito colateral** — existe para a tela não precisar descobrir o estado
+tentando `POST /approve` (que grava de verdade) ou tentando embarcar e
+tomando 422.
+
+**Permissão:** `comex` **OU** `diretor` (`authorizeAnyModule`) — os dois
+lados precisam enxergar.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "rule": "G11-COMEX",
+    "process_status": "draft",
+    "gate_event": "shipped",
+    "can_register_approval": true,
+    "required_roles": ["diretor"],
+    "approvals": [],
+    "missing_roles": ["diretor"],
+    "approval_complete": false
+  }
+}
+```
+
 ### POST /api/comex/import-processes/:id/tracking
 Registra o próximo marco do acompanhamento — precisa ser exatamente o
 próximo da sequência `shipped → arrived → customs_cleared`; pular etapa
 ou repetir dá `422`.
 
+**Gate da diretoria no embarque (G11-COMEX, 2026-08-10):** `event =
+"shipped"` só passa se a aprovação já estiver registrada. Sem ela, `422`
+com `error.details = { rule: "G11-COMEX", required_roles: ["diretor"],
+missing_roles: ["diretor"] }` e **nada é gravado** — nem o status, nem o
+recálculo de tributos. O gate está no embarque porque é o último ponto do
+ciclo em que ainda dá para desistir sem custo afundado (depois disso,
+câmbio e frete já estão comprometidos). **Não há faixa de valor:**
+importação é sempre da diretoria, coerente com o G11 (seção 11).
+
+**Campos monetários congelados no embarque (mesma decisão):** no evento
+`shipped`, `exchange_rate`/`freight_value`/`insurance_value`/
+`other_expenses_value` são **rejeitados** (`422`, `details = { rule:
+"G11-COMEX", frozen_fields: [...] }`). Sem isso, a mesma requisição que
+consome a aprovação poderia inflar o valor e a diretoria teria aprovado um
+processo diferente do que embarcou — o equivalente do congelamento de
+`supplier_id`/`freight_value`/`origin` após `approved` no G11. Para
+corrigir valores antes de embarcar, cancele e recrie o processo (mesma
+regra que já valia para fornecedor e itens, que também não têm endpoint de
+edição). Os eventos `arrived` e `customs_cleared` **continuam aceitando**
+dados monetários — despesas aduaneiras reais (armazenagem, capatazia) só
+aparecem depois e são posteriores ao compromisso.
+
 **Request:**
 ```json
 {
-  "event": "shipped",
+  "event": "arrived",
   "event_date": "2026-08-10",
   "exchange_rate": 5.40,
   "freight_value": 1600.00,
@@ -3527,9 +4091,11 @@ ou repetir dá `422`.
 }
 ```
 `event` obrigatório (`shipped`/`arrived`/`customs_cleared`); `event_date`
-opcional (`YYYY-MM-DD`). Campos monetários opcionais — se informados, o
-cabeçalho é atualizado e **todos os itens são recalculados** na mesma
-chamada.
+opcional (`YYYY-MM-DD`). Campos monetários opcionais — se informados **em
+`arrived`/`customs_cleared`**, o cabeçalho é atualizado e **todos os itens
+são recalculados** na mesma chamada; em `shipped` eles são rejeitados
+(ver o congelamento G11-COMEX acima) — por isso o exemplo acima usa
+`arrived`. O embarque aceita apenas `event`, `event_date` e `notes`.
 
 ### POST /api/comex/import-processes/:id/receive
 Sem body — o backend recalcula tudo fresco antes de dar entrada. Exige
@@ -3586,6 +4152,199 @@ Cancela o processo.
 > Ver `docs/governance/HANDOFF_CODEX.md`, seção "UC-19 — Importação/COMEX", para o
 > detalhamento completo das decisões de escopo (fórmula fiscal
 > simplificada, sem AP automática de tributos, sem integração Siscomex).
+
+---
+
+## 33. Roteiro de Produção (Rotas de Manufatura)
+
+**NOVO em 2026-08-10 (gap G5).** Módulo `server/src/modules/production/`
+(arquivos `*ProductionRoute*`), base URL `/api/production/routes`.
+
+As tabelas `production_routes` e `production_route_steps` **já existiam** e já
+eram **lidas** pelo sistema — custeio real de mão de obra na conclusão da OP
+(`ChangeProductionOrderStatusUseCase`), carga-máquina por centro de trabalho
+(seção 30) e OEE (seção 7) —, mas **não tinham nenhum endpoint**: só eram
+populáveis por script. Esta seção documenta a API que fechou esse buraco. Ela é
+**pré-requisito** do apontamento de produção obrigatório (**G4**, Bloco K do
+SPED Fiscal — ver `docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`,
+Decisão 4): exigir apontamento sem poder cadastrar roteiro seria regra
+inexequível.
+
+**RBAC** (`server/src/shared/domain/accessModules.ts`):
+
+| Ação | Middleware |
+|---|---|
+| Leitura (`GET`) | `authorizeModule('producao')` (nível `operate` implícito) |
+| Escrita de rascunho (`POST`, `PUT`, `POST /:id/revise`, `DELETE`) | `authorizeModule('producao', 'operate')` |
+| **Liberação/aposentadoria** (`PATCH /:id/activate`, `PATCH /:id/inactivate`) | `authorizeModule('producao', 'approve')` |
+
+`created_by` e `approved_by` vêm **sempre** de `req.user.id` (JWT) — os schemas
+são `.strict()` e sequer aceitam esses campos no body (regra anti-spoofing P0).
+
+### Ciclo de vida e imutabilidade
+
+```
+draft ──activate──> active ──(nova revisão ativada)──> superseded (final)
+                      │
+                      └──inactivate──> inactive ──activate──> active
+```
+
+- **`draft`** — editável à vontade (cabeçalho e etapas).
+- **`active`** — **CONGELADO**. Nenhum `PUT` de cabeçalho ou de etapas é aceito
+  (422 `G5-ROUTE-NOT-DRAFT`). No máximo **1 ativo por produto**, garantido em
+  transação pelo use case **e** pelo índice único parcial
+  `uq_production_routes_active_per_product` (migration `20260810-000034`).
+- **`inactive`** — aposentado, reversível.
+- **`superseded`** — substituído automaticamente quando uma revisão mais nova é
+  ativada. Estado final.
+
+**Efeito sobre OPs já abertas: nenhum.** Um roteiro liberado nunca muda; quem
+precisa alterar cria uma **nova revisão** (`POST /:id/revise`), e a revisão
+anterior fica `superseded` com todas as etapas intactas — continuando a servir
+os apontamentos (`production_order_tracking.production_route_step_id`) que já
+apontaram para ela. ⚠️ **Limitação estrutural conhecida:** não existe coluna
+que amarre uma OP a uma revisão específica de roteiro (`production_orders` não
+tem `production_route_id`), então relatórios derivados (carga-máquina) sempre
+usam a revisão **ativa no momento da consulta**. Vincular OP → revisão na
+liberação é decisão de negócio em aberto, registrada em
+`docs/governance/TODO.md`.
+
+### Códigos de regra (`error.details.rule`)
+
+Todo erro 422/409 deste módulo carrega um código estável em `details.rule`
+(catálogo em `server/src/modules/production/domain/productionRouteRules.ts`):
+
+| Código | HTTP | Significado |
+|---|---|---|
+| `G5-ROUTE-NOT-DRAFT` | 422 | Escrita de conteúdo em roteiro já liberado |
+| `G5-ROUTE-STATUS-TRANSITION` | 422 | Transição de status não permitida |
+| `G5-ROUTE-CODE-DUP` | 409 | `route_code` já usado (único global) |
+| `G5-REVISION-DUP` | 409 | Par (produto, revisão) já existe |
+| `G5-PRODUCT-NOT-PRODUCIBLE` | 422 | Produto inexistente/inativo ou que não é `finished`/`semi_finished` |
+| `G5-SEQ-EMPTY` | 422 | Ativação de roteiro sem nenhuma etapa |
+| `G5-SEQ-DUP` | 422 | Duas etapas com a mesma `sequence` |
+| `G5-SEQ-GAP` | 422 | Sequência com buraco (deve ser 1..N contígua) |
+| `G5-STEP-CODE-DUP` | 422 | `step_code` repetido no mesmo roteiro |
+| `G5-WC-NOT-FOUND` | 422 | `work_center_id` inexistente |
+| `G5-WC-INACTIVE` | 422 | `work_center_id` existe mas está inativo |
+| `G5-ROUTE-IN-USE` | 422 | Etapa já referenciada por apontamento |
+
+### GET /api/production/routes?product_id=&status=&route_code=&search=&page=&limit=
+Lista paginada (cabeçalho + produto + item), ordenada por `product_id` e
+`revision` decrescente. `status` aceita `draft`/`active`/`inactive`/`superseded`.
+
+### GET /api/production/routes/:id
+Detalhe com `steps` ordenadas por `sequence`, `workCenter` de cada etapa,
+`createdBy`/`approvedBy`, e os totais:
+
+- `total_standard_time_minutes` — soma de `standard_time_minutes` das etapas
+  **ativas** (tempo padrão **por unidade**);
+- `total_setup_time_minutes` — **derivado na leitura**, não persistido;
+- `steps_count`.
+
+⚠️ **Setup NÃO entra no tempo padrão total**, de propósito: `setup_time_minutes`
+é tempo por **lote**, e somá-lo ao tempo por unidade distorceria o OEE (mesma
+convenção já documentada em `GetOeeReportUseCase`). O relatório de
+carga-máquina (seção 30) soma os dois, mas lá o setup é contado **uma vez por
+etapa**, não por unidade.
+
+### POST /api/production/routes
+Cria o roteiro. **Sempre nasce em `draft`**, independente do body.
+
+**Request:**
+```json
+{
+  "product_id": 7,
+  "route_code": "ROT-ALT15",
+  "revision": "00",
+  "description": "Roteiro principal do alto-falante 15\"",
+  "steps": [
+    {
+      "sequence": 1,
+      "step_code": "BOB-01",
+      "name": "Enrolamento da bobina",
+      "work_center_id": 3,
+      "standard_time_minutes": 4.5,
+      "setup_time_minutes": 20,
+      "instructions": "Fio 0,25mm, 42 espiras",
+      "quality_check_required": true
+    },
+    { "sequence": 2, "step_code": "MONT-01", "name": "Montagem do conjunto móvel", "work_center_id": 5, "standard_time_minutes": 8 }
+  ]
+}
+```
+
+- `route_code` e `step_code` são normalizados para **uppercase/trim**;
+- `revision` default `"00"`;
+- `steps` é opcional (rascunho pode nascer vazio) e limitado a 200 etapas;
+- `work_center_id` é **opcional** (coluna nullable, fase expand de
+  `work_centers`): etapa sem centro estruturado é válida, apenas não entra na
+  carga-máquina nem no custeio por hora-máquina. Quando informado, o campo
+  legado `work_center` (texto) é preenchido automaticamente com o `code` do
+  centro, se o cliente não mandar texto próprio;
+- `item_id` (UUID, Fase 4.8 expand-contract) é resolvido automaticamente pelo
+  `products.code` ⇄ `items.codigo` — **best-effort**, a ausência de Item
+  equivalente não bloqueia o cadastro.
+
+**Resposta:** `201` com o cabeçalho criado.
+
+### PUT /api/production/routes/:id
+Atualiza `route_code`, `revision` e/ou `description`. **Só em `draft`.**
+
+### PUT /api/production/routes/:id/steps
+**Substituição total** das etapas (delete + insert na mesma transação), mesmo
+padrão de `PUT /api/work-centers/:id/shifts`. **Só em `draft`.**
+
+**Request:** `{ "steps": [ ...mesmo formato de etapa do POST... ] }`
+
+Validações antes de qualquer escrita: sequência 1..N contígua e sem repetição,
+`step_code` único no roteiro, centros de trabalho existentes e ativos. Recalcula
+`total_standard_time_minutes`.
+
+**Erro (422 `G5-ROUTE-IN-USE`)** — se alguma etapa do roteiro já tiver
+apontamento vinculado: apagar as etapas zeraria o vínculo do apontamento com a
+operação, e com ele o custeio de mão de obra daquela OP.
+
+### PATCH /api/production/routes/:id/activate
+Libera o roteiro (`draft`/`inactive` → `active`), grava `approved_by` (JWT) e
+`approved_at`, recalcula `total_standard_time_minutes` e **torna `superseded` a
+revisão ativa anterior do mesmo produto**.
+
+Revalida o conteúdo inteiro na ativação — o que **não** é redundante: entre o
+rascunho e a liberação um centro de trabalho pode ter sido desativado, e um
+roteiro ativo apontando para centro morto quebraria o custeio silenciosamente.
+
+**Resposta:** `{ "success": true, "data": { ...roteiro }, "meta": { "superseded_route_id": 55 } }`
+(`superseded_route_id` é `null` quando o produto ainda não tinha revisão ativa).
+
+### PATCH /api/production/routes/:id/inactivate
+`active` → `inactive`. O produto fica sem roteiro ativo até que uma revisão
+nova seja liberada.
+
+### POST /api/production/routes/:id/revise
+**Caminho oficial para alterar um roteiro já liberado.** Clona cabeçalho e
+etapas do roteiro de origem em um **novo rascunho**.
+
+**Request (todos opcionais):**
+```json
+{ "revision": "01", "route_code": "ROT-ALT15-R01", "description": "Troca de adesivo da bobina" }
+```
+
+- `revision` ausente → sugerida como `max(revisões numéricas) + 1` com 2 dígitos;
+- `route_code` ausente → derivado como `<code de origem>-R<revisão>`.
+
+O roteiro de origem **não é alterado aqui** — ele só vira `superseded` quando a
+nova revisão for **ativada**.
+
+**Resposta:** `201` com o rascunho criado.
+
+### DELETE /api/production/routes/:id
+Remove o roteiro e suas etapas. **Só rascunho nunca usado** — roteiro liberado
+(ou já substituído) é histórico industrial que alimenta o custeio de OPs
+concluídas e a rastreabilidade do Bloco K: não se apaga, se inativa.
+
+**Erros:** `422 G5-ROUTE-NOT-DRAFT` (não é rascunho), `422 G5-ROUTE-IN-USE`
+(há apontamento vinculado às etapas).
 
 ---
 

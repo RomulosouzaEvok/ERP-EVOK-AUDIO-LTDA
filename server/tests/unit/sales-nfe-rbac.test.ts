@@ -87,6 +87,13 @@ jest.mock('../../src/services/saleStockService', () => ({
   commitInvoicedStock: jest.fn(async () => []),
 }));
 
+// G13 (2026-08-10): a autorização da NF-e passou a gerar a conta a receber.
+// Mesma justificativa do mock acima — este arquivo cobre RBAC, e a regra do
+// recebível tem `sale-receivable-na-nfe-g13.test.ts` dedicado.
+jest.mock('../../src/services/saleReceivableService', () => ({
+  createInvoiceReceivables: jest.fn(async () => ({ created: [], reason: 'created' })),
+}));
+
 const mockProviderIssue = jest.fn();
 const mockProviderCancel = jest.fn();
 jest.mock('../../src/modules/fiscal/infrastructure/providers/NfeProviderFactory', () => {

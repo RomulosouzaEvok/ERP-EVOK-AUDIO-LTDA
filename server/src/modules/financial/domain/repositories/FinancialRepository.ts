@@ -19,6 +19,7 @@ export interface IFinancialRepository {
   findPayableById(id: number | string): Promise<any>;
   findPayableByIdForUpdate(id: number | string, transaction: Transaction): Promise<any>;
   createPayable(data: Record<string, any>): Promise<any>;
+  createReceivable(data: Record<string, any>): Promise<any>;
   updatePayableCostCenter(id: number | string, costCenterId: number | null): Promise<any>;
   updateReceivableCostCenter(id: number | string, costCenterId: number | null): Promise<any>;
   sumReceivableByStatus(start: Date, end: Date): Promise<Array<{ status: string; total: number }>>;
@@ -127,6 +128,23 @@ class FinancialRepository {
    */
   async createPayable(data: Record<string, any>) { // eslint-disable-line no-unused-vars
     throw new Error('FinancialRepository.createPayable não implementado.');
+  }
+
+  /**
+   * Cria uma conta a receber **avulsa** (sem venda vinculada) — decisão
+   * D-J: reembolso, aluguel e venda de sucata são cobranças legítimas sem
+   * pedido de venda por trás.
+   *
+   * Recebível **de venda** NÃO passa por aqui: ele nasce na autorização da
+   * NF-e (gap G13, CPC 47 item 108), em
+   * `services/saleReceivableService.ts` via `FiscalRepository`.
+   *
+   * @abstract
+   * @param {Object} data
+   * @returns {Promise<Object>}
+   */
+  async createReceivable(data: Record<string, any>) { // eslint-disable-line no-unused-vars
+    throw new Error('FinancialRepository.createReceivable não implementado.');
   }
 
   /**

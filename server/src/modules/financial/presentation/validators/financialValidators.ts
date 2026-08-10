@@ -15,6 +15,28 @@ export const createPayableSchema = z.object({
   cost_center_id: z.coerce.number().int().positive().optional(),
 }).strict();
 
+/**
+ * `POST /api/finance/receivable` — cobrança **avulsa**, sem venda
+ * vinculada (decisão D-J: reembolso, aluguel, venda de sucata).
+ *
+ * `sale_id` e `status` são aceitos pelo schema **de propósito**, mesmo
+ * sendo sempre recusados: assim a recusa vem do use case, com
+ * `details.rule` (`G13-AR` / `G13-AR-PAID`) e uma mensagem que explica o
+ * caminho correto, em vez de um erro genérico de campo desconhecido do
+ * `.strict()`.
+ */
+export const createReceivableSchema = z.object({
+  customer_id: z.coerce.number().int().positive('Cliente (customer_id) é obrigatório.'),
+  amount: z.coerce.number().positive('Valor deve ser maior que zero.'),
+  due_date: z.string().min(1, 'Vencimento é obrigatório.'),
+  installment: z.coerce.number().int().positive().optional(),
+  invoice_number: z.string().trim().max(50).optional(),
+  notes: z.string().trim().max(2000).optional(),
+  cost_center_id: z.coerce.number().int().positive().optional(),
+  sale_id: z.coerce.number().int().positive().optional(),
+  status: z.string().trim().max(20).optional(),
+}).strict();
+
 export const payAccountSchema = z.object({
   payment_date: z.string().optional(),
   payment_method: z.string().trim().max(50).optional(),
@@ -43,7 +65,7 @@ export const updateCostCenterAssignmentSchema = z.object({
 }).strict();
 
 const schemas = {
-  createPayableSchema, payAccountSchema, cashFlowQuerySchema, cashFlowProjectionQuerySchema,
+  createPayableSchema, createReceivableSchema, payAccountSchema, cashFlowQuerySchema, cashFlowProjectionQuerySchema,
   dailyCashFlowProjectionQuerySchema, updateCostCenterAssignmentSchema,
 };
 

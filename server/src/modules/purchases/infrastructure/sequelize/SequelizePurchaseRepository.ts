@@ -151,6 +151,26 @@ class SequelizePurchaseRepository extends PurchaseRepository {
     return AccountPayable.findOne({ where: { purchase_id: purchaseId }, transaction });
   }
 
+  /** @inheritdoc */
+  async findLegacyPayableByPurchaseId(purchaseId: number | string, transaction?: Transaction) {
+    // Conta a pagar nascida na APROVAÇÃO (regra anterior ao G13) — nunca
+    // teve NF do fornecedor, porque a nota não existia naquele momento.
+    // `invoice_number` é, portanto, o discriminador natural do dado legado:
+    // toda AP criada a partir do G13 nasce com o número da NF preenchido.
+    return AccountPayable.findOne({
+      where: { purchase_id: purchaseId, invoice_number: null },
+      transaction,
+    });
+  }
+
+  /** @inheritdoc */
+  async findAccountPayableByPurchaseAndInvoice(purchaseId: number | string, invoiceNumber: string, transaction?: Transaction) {
+    return AccountPayable.findOne({
+      where: { purchase_id: purchaseId, invoice_number: invoiceNumber },
+      transaction,
+    });
+  }
+
   async createAccountPayable(data: Record<string, unknown>, transaction?: Transaction) {
     return AccountPayable.create(data, { transaction });
   }

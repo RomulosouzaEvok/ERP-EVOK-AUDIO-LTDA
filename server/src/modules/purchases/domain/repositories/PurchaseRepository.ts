@@ -195,6 +195,40 @@ class PurchaseRepository {
   }
 
   /**
+   * Busca a conta a pagar LEGADA do pedido — a que nasceu na aprovação,
+   * antes do G13, e por isso não tem número de NF do fornecedor
+   * (`invoice_number IS NULL`).
+   *
+   * Existe para impedir **duplicação de passivo** na virada da regra: um
+   * pedido aprovado antes do corte já tem AP do valor cheio; ao ser
+   * recebido depois do corte, o recebimento criaria uma segunda AP para a
+   * mesma obrigação. Ver `ReceivePurchaseItemsUseCase`.
+   *
+   * @abstract
+   * @param {number} purchaseId
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object|null>} A AP legada, ou `null` se o pedido não tiver nenhuma.
+   */
+  async findLegacyPayableByPurchaseId(purchaseId: number | string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findLegacyPayableByPurchaseId não implementado.');
+  }
+
+  /**
+   * Busca a conta a pagar de um recebimento específico, identificada pelo
+   * par (pedido, NF do fornecedor) — chave de idempotência do G13, a mesma
+   * do índice único de `purchase_receipts`.
+   *
+   * @abstract
+   * @param {number} purchaseId
+   * @param {string} invoiceNumber
+   * @param {import('sequelize').Transaction} [transaction]
+   * @returns {Promise<Object|null>}
+   */
+  async findAccountPayableByPurchaseAndInvoice(purchaseId: number | string, invoiceNumber: string, transaction?: Transaction): Promise<any | null> { // eslint-disable-line no-unused-vars
+    throw new Error('PurchaseRepository.findAccountPayableByPurchaseAndInvoice não implementado.');
+  }
+
+  /**
    * Cria uma conta a pagar.
    *
    * @abstract

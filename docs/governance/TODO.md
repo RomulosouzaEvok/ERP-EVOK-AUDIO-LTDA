@@ -5003,9 +5003,28 @@ Artefato: `server/tests/integration/e2e-cadeia-insumo-produto.test.ts` (26 casos
   `bill_of_material_items.parent_item_id`/`notes`/`alternative_product_id` são
   `NOT NULL` no banco e o model/`BomService` gravam `NULL`. **Não é possível
   cadastrar estrutura de produto pelo sistema.**
-- [ ] **BUG-02 (P0)** `POST /api/clients` responde **500 sempre** — `clients.cnae`
-  (entre outras) é `NOT NULL` e o schema Zod `.strict()` nem aceita o campo.
-  **Nenhum cliente pode ser cadastrado** (`clients` = 0 linhas no banco do dono).
+- [x] **BUG-02 (P0)** ✅ **FECHADO em 2026-08-10.** `POST /api/clients` respondia
+  **500 sempre** — `clients.cnae` (entre outras) era `NOT NULL` e o schema Zod
+  `.strict()` nem aceitava o campo. Fechado em duas metades:
+  - **Schema** (`94e0f14` + migration `20260810-000028`): as colunas que o
+    cadastro não preenche deixaram de ser `NOT NULL`; `phone`/`email`/`notes`
+    continuam `NOT NULL DEFAULT ''` e o `CreateClientUseCase` passou a mandar
+    `''` em vez do `null` que **anulava o `DEFAULT`**.
+  - **Campo `cnae` exposto** (2026-08-10, decisão **D-I** do dono: *"sim, mas
+    opcional"*): entrou em `createClientSchema`/`updateClientSchema`
+    (`max(10)`, protege o `varchar(10)`), em `ClientEntity` (ausente ou em
+    branco → `NULL`, nunca `''` — a coluna é nullable **sem** `DEFAULT`,
+    conferido em `information_schema.columns`), no `CreateClientUseCase` e na
+    allowlist do `UpdateClientUseCase`. **Não trava a criação** — não se aplica
+    a pessoa física.
+  - **Evidência de escrita real** (o aceite honesto do §6.5 da análise de
+    classe de defeito, não dublê): `INSERT` no PostgreSQL **com** CNAE, **sem**
+    CNAE e com CNAE em branco, mais releitura via `SELECT` e `UPDATE`
+    preenchendo depois — 15/15 verificações verdes, tudo dentro de transação
+    **revertida** (o banco tem dado real do dono; nenhum `DELETE` usado).
+  - Cobertura permanente: `server/tests/unit/client-cnae-optional.test.ts`
+    (16 testes), incluindo a regressão de que `phone`/`email`/`notes` seguem
+    saindo como `''`. Contrato em `docs/arquitetura/API.md` §2.
 - [ ] **BUG-03 (P0)** `POST /api/sales` responde **500 sempre** —
   `sales.nfe_number`/`nfe_key` são `NOT NULL` e só são preenchidos na emissão.
   **Nenhuma venda pode ser criada** (`sales` = 0 linhas).
@@ -5187,12 +5206,12 @@ exige a diretoria**.
   para todos), então todos nascem `false` pelo DEFAULT. Sem essa ação, um pedido
   de importação a fornecedor estrangeiro só cai na alçada se quem criou o pedido
   marcar `origin='import'`. Responsável: Suprimentos.
-- [ ] **[PENDENTE — decisão do dono] Importação registrada no módulo COMEX fica
-  FORA da alçada.** `import_processes` não passa por `purchase_orders` e não tem
-  etapa de aprovação nenhuma hoje. Se os pedidos de ~R$ 1 milhão citados pelo dono
-  forem registrados lá, a regra "importação sempre exige a diretoria" **não os
-  alcança**. Falta definir em que ponto do ciclo (`draft → shipped → arrived →
-  customs_cleared → received`) a diretoria aprova.
+- [x] **[RESOLVIDO 2026-08-10 — decisão D-G do dono] Importação registrada no
+  módulo COMEX ficava FORA da alçada.** `import_processes` não passa por
+  `purchase_orders` e não tinha etapa de aprovação nenhuma, então os pedidos de
+  ~R$ 1 milhão citados pelo dono passariam sem a diretoria. O dono decidiu: a
+  diretoria aprova na transição `draft → shipped`, sem faixa de valor. Ver a
+  seção **G11-COMEX** abaixo.
 - [ ] **[PENDENTE] Sem segregação de função** (aprovador ≠ solicitante) — decisão
   explícita do dono, não é defeito. Abaixo de R$ 500.000 no nacional, quem solicita
   pode aprovar. Um usuário `admin` também satisfaz sozinho o papel `diretor`
@@ -5212,3 +5231,1003 @@ exige a diretoria**.
   trading nacional criada por esses caminhos nasce como nacional e precisa ser
   corrigida à mão (`PUT /api/purchases/:id` com `origin='import'`, permitido
   enquanto `pending`).
+
+---
+
+## G11-COMEX — Gate de aprovação da diretoria na importação (2026-08-10)
+
+Decisão **D-G** do dono do produto, 2026-08-10 — fecha o furo deixado em
+aberto pelo G11 (item marcado como resolvido acima). Regra: **a diretoria
+aprova na transição `draft → shipped`**, antes de comprometer câmbio e
+embarque; **sem faixa de valor** — importação é sempre da diretoria, coerente
+com o G11.
+
+### Entregue
+
+- [x] **Regra de negócio isolada** em `server/src/modules/comex/domain/constants.ts`
+  (`IMPORT_APPROVAL_RULE`, `IMPORT_APPROVAL_STATUS`, `IMPORT_APPROVAL_GATE_EVENT`,
+  `MONETARY_FIELDS_FROZEN_ON_SHIPMENT`, `requiredImportApproverRoles`).
+  Evidência: 3 testes de constante em `tests/unit/comex-directorate-approval.test.ts`.
+- [x] **Gate no embarque** — `RegisterImportTrackingUseCase` verifica a alçada
+  ANTES de gravar `shipped`; sem aprovação, 422 `details.rule='G11-COMEX'` e
+  **nada** é gravado (nem status, nem recálculo de tributos dos itens).
+  Evidência: 7 testes do bloco "gate no embarque", incluindo o que afirma
+  `updateImportProcess`/`updateImportProcessItem` não chamados e o que garante
+  que `arrived`/`customs_cleared` não consultam a alçada.
+- [x] **Registro da aprovação** — `ApproveImportProcessUseCase` +
+  `POST /api/comex/import-processes/:id/approve` (`authorizeModule('diretor')`),
+  `approver_user_id` sempre do JWT e `approver_role` sempre do RBAC (nunca do
+  body). Evidência: 7 testes, incluindo bloqueio de aprovação retroativa
+  (processo já `shipped`/`cancelled`) e leitura com lock na transação.
+- [x] **Leitura da situação sem efeito colateral** —
+  `ListImportProcessApprovalsUseCase` +
+  `GET /api/comex/import-processes/:id/approvals` (`comex` OU `diretor`),
+  devolve `process_status`, `gate_event`, `can_register_approval`,
+  `missing_roles`. Evidência: 4 testes.
+- [x] **Anti-decoração do gate** — no evento `shipped`, os 4 campos monetários
+  do cabeçalho (`exchange_rate`, `freight_value`, `insurance_value`,
+  `other_expenses_value`) são rejeitados: `POST /:id/tracking` é o único
+  caminho de escrita capaz de alterá-los (não existe `PUT /:id` no módulo),
+  então sem isso daria para aprovar R$ 50 mil e embarcar R$ 1 milhão na mesma
+  chamada. Evidência: 6 testes (4 parametrizados por campo + data/observação
+  ainda aceitas + valores voltando a ser editáveis em `arrived`).
+- [x] **Migration `20260810-000031-comex-directorate-approval-gate.cjs`** criada
+  (`import_process_approvals`: FK CASCADE p/ processo, FK RESTRICT p/ `users`,
+  ENUM(`diretor`), UNIQUE processo×papel, índice na FK), com `up`/`down` —
+  ⚠️ **NÃO aplicada ao banco** (aplicação é do dono do ambiente).
+- [x] `npm run typecheck` limpo; `npx jest tests/unit --maxWorkers=2`
+  **1507/1507** (baseline 1480 + 27 novos, nenhuma falha nova);
+  `npx tsx -e "require('./app')"` sobe.
+
+### Pendências e riscos residuais deste gap
+
+- [ ] **[PENDENTE] Aplicar a migration `20260810-000031`.** Enquanto não for
+  aplicada, `POST /api/comex/import-processes/:id/tracking` com
+  `event='shipped'` e as 2 rotas novas quebram em runtime (tabela inexistente).
+  **Aplicar antes de subir este working tree** — junto com a `20260810-000029`
+  do G11, que também está pendente.
+- [ ] **[PENDENTE — comunicar ao COMEX] Sem grandfathering:** processos já em
+  `draft` quando a migration subir passam a exigir a aprovação da diretoria
+  para embarcar. Decisão consciente (o gate só protege se valer para o estoque
+  de processos abertos). Processos já em `shipped` ou adiante não são afetados
+  e **não** têm como receber aprovação retroativa.
+- [ ] **[PENDENTE — validar com o dono] Corrigir câmbio/frete antes de embarcar
+  exige cancelar e recriar o processo.** Consequência direta do congelamento:
+  como o módulo nunca teve endpoint de edição (fornecedor e itens também são
+  imutáveis desde a criação), a única saída é `POST /:id/cancel` + novo
+  processo. Se o COMEX precisar ajustar câmbio no embarque com frequência, o
+  dono precisa decidir entre (a) permitir a edição invalidando a aprovação, ou
+  (b) criar um `PUT /:id` restrito a `draft` que zere as aprovações. **Nenhuma
+  das duas foi inventada aqui.**
+- [ ] **[PENDENTE] Sem segregação de função** (aprovador ≠ solicitante) — mesma
+  decisão explícita do dono registrada no G11. Um usuário `admin` satisfaz
+  sozinho o papel `diretor` (curto-circuito padrão de `authorizeModule`).
+- [ ] **[PENDENTE] Teste de integração real (Postgres)** do fluxo
+  create → approve → tracking(shipped) e da UNIQUE
+  `uq_import_process_approvals_process_role` sob concorrência. A suíte unitária
+  usa repositório mockado e não toca o banco.
+- [ ] **[PENDENTE] Tela em `client/`** — o módulo COMEX inteiro ainda não tem
+  UI (pendência anterior a esta entrega); os 2 endpoints novos entram na mesma
+  fila. Sem tela, a diretoria só aprova por API.
+- [ ] **[PENDENTE — decisão do dono] O gate não cobre o valor do que já
+  embarcou.** Depois de `shipped`, `arrived`/`customs_cleared` continuam
+  podendo elevar `other_expenses_value`/`freight_value` (despesas aduaneiras
+  reais), sem novo aval. Isso é intencional — são custos posteriores ao
+  compromisso —, mas significa que o custo final nacionalizado pode superar o
+  valor visto pela diretoria. Se o dono quiser um segundo gate por variação
+  percentual, é regra nova.
+
+---
+
+## G9 — Baixa de estoque da venda migra da confirmação para a NF-e (2026-08-10)
+
+Onda 3 do `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`, decisão
+**D-A** do dono ("seguir a lei nas 3 decisões com resposta normativa,
+isoladas, uma por vez, com caminho de migração do dado existente").
+Base normativa: **Ajuste SINIEF 07/05, cláusula 1ª §1º e cláusula 9ª §1º** —
+a NF-e é autorizada antes do fato gerador e a mercadoria só transita depois
+da autorização de uso (`docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`).
+
+### Regra nova
+
+**Confirmar o pedido RESERVA. Autorizar a NF-e BAIXA.** A baixa é
+proporcional à quantidade **desta emissão** — faturamento parcial de 10
+unidades em 4 + 6 gera duas baixas (4 e 6), consumindo a reserva aos poucos.
+
+- [x] `CreateSaleUseCase` (venda criada `confirmed`) — `consume` -> `reserve({ saleId })`
+- [x] `ChangeSaleStatusUseCase` `quote -> confirmed` — `consume` -> `reserve({ saleId })`
+- [x] `ChangeSaleStatusUseCase` `-> canceled` — libera toda a reserva
+  (`releaseAllReservationsForSale`) e devolve ao estoque **apenas**
+  `sale_items.invoiced_quantity`
+- [x] `EditSaleItemsUseCase` (venda `confirmed`) — ajusta a **reserva** pelo
+  delta; não toca mais em `products.quantity` nem em depósito
+- [x] `services/saleStockService.ts` **(novo)** — `commitInvoicedStock`:
+  libera a reserva no montante faturado -> `consume` -> debita ACABADOS
+- [x] `IssueSaleNfeUseCase` (caminho síncrono) e `GetSaleNfeStatusUseCase`
+  (caminho assíncrono/webhook) chamam a baixa **na mesma transação** que
+  incrementa `invoiced_quantity`
+- [x] `fiscalController` repassa o `userId` do JWT (autor do
+  `InventoryMovement`); no webhook, sem usuário autenticado, assina o
+  vendedor da venda (`Sale.user_id`, NOT NULL)
+- [x] Dual-write de depósito ACABADOS migrado junto (reserva **não**
+  movimenta depósito) — invariante `BUSINESS_RULES.md` §12 item 3 preservada
+
+### Schema
+
+- [x] **Migration `20260810-000030-generalize-stock-reservations-for-sales-g9.cjs`**
+  criada — generaliza `production_order_reservations` exatamente como o
+  cabeçalho da migration do G3 previu: `production_order_id` vira nullable,
+  entra `sale_id` (FK -> `sales`, `ON DELETE RESTRICT`), CHECK
+  `chk_stock_reservations_exactly_one_owner`, índices únicos parciais por
+  dono. ⚠️ **NÃO aplicada ao banco** (aplicação é do dono do ambiente).
+- [x] Tabela **não** renomeada para `stock_reservations` — decisão
+  consciente (renomear tabela num banco com drift é risco sem ganho
+  funcional). Nome histórico documentado em `COMMENT ON TABLE`, no model e
+  em `docs/database/04-DICIONARIO_DADOS.md`.
+
+### Migração do dado existente
+
+- [x] **Levantado por consulta ao banco real antes de codificar:**
+  `SELECT status, COUNT(*) FROM sales GROUP BY status` -> **`confirmed: 1`**
+  (nenhuma venda em `quote`/`partially_invoiced`/`invoiced`/`shipped`/
+  `canceled`). Um único pedido no estado "já baixou e não faturou": venda
+  **#10**, 1 unidade do produto **#25**, `invoiced_quantity = 0`, movimento
+  de saída **#46**. **Confirma a decisão D-E do dono** ("entre confirmar e
+  faturar passa o mesmo dia") — migração indolor, **nenhuma decisão
+  adicional do dono foi necessária**.
+- [x] Backfill escrito genérico (funciona para N pedidos): para cada item de
+  venda `confirmed`/`partially_invoiced` com saldo não faturado, cria a
+  reserva, **devolve** o saldo a `products.quantity`, devolve ao depósito
+  ACABADOS, grava o `inventory_movements` de entrada e recalcula
+  `products.reserved_quantity`. Vendas `invoiced`/`shipped` não são tocadas
+  (efeito líquido idêntico entre a regra antiga e a nova).
+- [x] `SELECT` do backfill validado em modo somente-leitura contra o banco
+  real: devolve exatamente 1 linha (venda 10 × produto 25 × qty 1), e
+  `product_warehouse_stock` de ACABADOS (9) bate com `products.quantity`
+  (9) — os dois voltam para 10 juntos.
+
+### Bomba desarmada de tabela (achado desta entrega)
+
+- [x] **`inventory_movements.reference_type = 'reservation'` /
+  `'reservation_release'` não existem no ENUM do Postgres.** O G3 gravava
+  esses dois valores a cada `reserve`/`releaseReservation`; o ENUM real
+  (verificado por `pg_enum` em 2026-08-10) é `sale, purchase, production,
+  adjustment, transfer, sst_epi_delivery, import`. **Toda reserva real
+  morria em 500** — invisível para `tsc` (campo tipado como `string`) e para
+  a suíte (dublês em memória). Como o G9 faz a confirmação de pedido
+  reservar, isso passaria a derrubar **toda venda confirmada**.
+- [x] Correção escolhida: **parar de gravar o movimento**, não adicionar
+  valores ao ENUM. `inventory_movements` documenta alteração de
+  `products.quantity`; reserva não altera quantidade nenhuma — gravar
+  `'adjustment'` de N unidades que não se moveram é o mesmo tipo de dado
+  factualmente errado que a migration `20260809-000027` corrigiu. O rastro
+  da reserva é a própria linha de `production_order_reservations`.
+- [x] Guarda de regressão em `sale-stock-baixa-na-nfe-g9.test.ts`: confirmar
+  pedido não gera movimento; a baixa gera movimento com `reference_type`
+  pertencente à lista real do ENUM.
+
+### Bug de tabela corrigido de carona
+
+- [x] **Cancelar um orçamento (`quote`) criava estoque fantasma.** O ramo de
+  cancelamento fazia `receive(item.quantity)` para todos os itens,
+  independentemente do status de origem — mas um `quote` nunca tinha
+  debitado nada. Com a regra nova (`quote` não tem reserva nem quantidade
+  faturada), o cancelamento não movimenta estoque. Coberto por teste.
+
+### Verificação
+
+- [x] `npm run typecheck` limpo
+- [x] `npx jest tests/unit --maxWorkers=2` -> **1533/1533**, 149 suítes, zero
+  falhas (baseline 1507 desta mesma sessão — 1480 + 27 do G11-COMEX — mais
+  26 testes novos/refeitos deste gap)
+- [x] `npx tsx -e "require('./app')"` sobe
+
+### Pendências e riscos residuais deste gap
+
+- [ ] **[PENDENTE — bloqueia o deploy] Aplicar a migration `20260810-000030`.**
+  O código do working tree já grava `sale_id`; com o schema antigo, confirmar
+  pedido falha (coluna inexistente). Aplicar **antes** de subir o código,
+  junto com `20260810-000029` (G11) e `20260810-000031` (G11-COMEX), que
+  também estão pendentes.
+- [ ] **[PENDENTE] Teste de integração real (Postgres)** do CHECK
+  `chk_stock_reservations_exactly_one_owner`, dos dois índices únicos
+  parciais novos, do backfill da migration e do fluxo
+  confirmar -> faturar parcial -> faturar o restante -> cancelar. A suíte
+  unitária usa dublê em memória e não exercita constraint nenhuma do banco.
+- [ ] **[PENDENTE] Cancelar NF-e não devolve estoque.**
+  `CancelSaleNfeUseCase` não reverte `invoiced_quantity` nem o consumo —
+  comportamento **pré-existente**, mantido de propósito para as duas coisas
+  seguirem coerentes (baixado == faturado). Hoje a devolução é manual
+  (ajuste de estoque) ou pelo cancelamento da venda. Se o dono quiser
+  reversão automática, é regra nova (e precisa decidir o que fazer com a
+  reserva: recriar ou não).
+- [ ] **[PENDENTE] Falha de baixa depois da autorização deixa a venda em
+  `processing`.** Se o estoque não bastar no momento do faturamento (só
+  possível em venda legada sem reserva ou após ajuste manual), a transação
+  final volta atrás — a nota está autorizada no provedor e o registro local
+  fica `nfe_status='processing'`. A recuperação existe e é documentada
+  (`GET /api/sales/:id/nfe` reconsulta e reaplica, usando o snapshot já
+  gravado em `sale_invoices`), mas não é automática.
+- [ ] **[PENDENTE — frontend, fora do escopo deste agente] Telas de venda
+  não explicam a reserva.** Entre confirmar e faturar, o produto agora
+  aparece com `quantity` inalterada e `reserved_quantity` maior — quem olhar
+  só o saldo bruto vai achar que a venda "não baixou". As telas de
+  Vendas/Produtos/Estoque precisam exibir **disponível =
+  `quantity - reserved_quantity`** e o motivo da reserva. Tarefa de
+  `PromadorFonteEnd`.
+- [ ] **[PENDENTE — operacional] `products.reserved_quantity` passa a somar
+  reservas de venda além das de OP.** Semanticamente correto ("comprometido"),
+  mas muda o número que MRP, dual-read de `Item.estoque_reservado` e as telas
+  já liam. Vale um aviso ao PCP na virada.
+- [ ] **[PENDENTE] Backfill do G3 (`05_production_order_reservations.ts`)
+  continua sem rodar com `--apply`.** Não é deste gap, mas interage: OPs
+  liberadas antes de 2026-08-09 seguem sem linha de reserva, então o cache
+  `reserved_quantity` delas pode estar inflado sem lastro — e agora ele
+  também limita o que a venda consegue reservar.
+
+---
+
+## 2026-08-10 — `AdmDBA`: drift schema × model, rodada 3 (P0, bloqueia o servidor de produção)
+
+**Entrega:** migration `server/migrations/20260810-000033-fix-nullable-columns-round-3.cjs`
+(**escrita, NÃO aplicada** — aplicar está bloqueado por permissão do ambiente),
+7 models alinhados e a guarda `tests/integration/schema-model-drift-guard.test.ts`
+corrigida. Racional completo em `docs/database/DATABASE.md`, seção "S-1 rodada 3".
+
+Fecha o escopo que a rodada 2 (`20260810-000028`, commit `94e0f14`) deixou
+declarado como pendente para `assets`/`employees`/`service_orders`/`maintenance_orders`.
+
+Medição pela guarda contra o banco de dev: **65 → 1** divergência de
+nulabilidade e **12 → 0** FKs `ON DELETE SET NULL` sobre coluna `NOT NULL`.
+
+### O que foi feito
+
+- [x] **59 colunas afrouxadas** (`DROP NOT NULL`) em `assets` (15),
+  `employees` (18), `maintenance_orders` (14), `service_orders` (11) e
+  `departments` (1) — todas com model + interface de atributos + semântica da
+  FK já concordando que o valor é opcional. As 4 tabelas estão com **0 linhas**
+  (evidência de que `POST /api/assets` e `POST /api/employees` nunca
+  funcionaram: 500 em 100% dos casos).
+- [x] **4 colunas NÃO afrouxadas — o model é que mentia.**
+  `purchase_orders.order_date`, `maintenance_orders.report_date`,
+  `service_orders.entry_date`, `bill_of_materials.revision_date` continuam
+  `NOT NULL`; os models passaram a `allowNull: false` (o Sequelize já as
+  preenche via `defaultValue: DataTypes.NOW`, aplicado no cliente).
+- [x] Todos os models tocados passaram a declarar `allowNull` **explícito**
+  (mesma convenção da rodada 2), para que o bootstrap produza este schema.
+
+### Pendências abertas por esta entrega
+
+- [ ] **Aplicar** `20260810-000033` (junto com `…-000030` a `…-000032`) e
+  reexecutar `RUN_INTEGRATION=true npx jest tests/integration/schema-model-drift-guard.test.ts`
+  — critério de aceite: 0 divergências. **Dono** (permissão de ambiente).
+- [x] **`src/models/index.ts` — atributo-fantasma de FK.** ✅ **CORRIGIDO em
+  2026-08-10** (agente com posse exclusiva de `models/index.ts`). As 4
+  associações de `AccessProfile` passavam `foreignKey: 'access_profile_id'`
+  (nome da **coluna**) enquanto os models `User`/`AccessProfilePermission`
+  declaram o atributo como `accessProfileId` com `field:`; o Sequelize criava
+  um **segundo** atributo homônimo da coluna, com `allowNull: true` no default,
+  ao lado do `accessProfileId` declarado `allowNull: false`. Trocado para
+  `foreignKey: 'accessProfileId'` nas 4 (`AccessProfile↔AccessProfilePermission`
+  e `AccessProfile↔User`).
+  - **Varredura, não amostragem:** scan de todos os models da instância
+    agrupando atributos por coluna física — **2 grupos-fantasma no ERP inteiro
+    (`User` e `AccessProfilePermission`), 0 depois da correção**. Não havia
+    um quinto caso escondido.
+  - **Efeito colateral real, verificado antes de mudar:** o atributo-fantasma
+    aparecia no JSON serializado (`access_profile_id` **e** `accessProfileId`).
+    Grep em `server/`, `client/`, `mobile/` e `tv/`: **nenhum consumidor lê a
+    chave duplicada** — todos usam `accessProfileId`. `req.body.access_profile_id`
+    (controller de users) é campo de *payload*, não de resposta, e não muda; o
+    `group: ['access_profile_id']` de `SequelizeAccessProfilesRepository` é nome
+    de **coluna** em SQL cru — SQL gerado e resultado conferidos idênticos
+    contra o Postgres real, antes e depois.
+  - **Guarda permanente:** `server/tests/unit/model-association-attribute-guard.test.ts`
+    falha se qualquer model voltar a ter dois atributos na mesma coluna.
+    `docs/arquitetura/API.md` §convenções de nomenclatura documenta a mudança
+    de shape.
+- [ ] **Banco reproduzível — a raiz ainda de pé (BLOQUEIA a compra do servidor).**
+  `20260731-000001-baseline-schema.cjs` **não é DDL congelado**: gera as tabelas
+  a partir dos models compilados em `dist/` em tempo de execução
+  (`DYNAMIC_MODEL_FILES` → `createTableFromModel`). O schema que uma máquina
+  nova produz depende de **quando** o bootstrap rodou — foi exatamente isso que
+  fez dev e teste divergirem com as mesmas migrations (o mapeador só foi
+  corrigido em `f9f03ea`, e bancos já criados caem no atalho
+  `shouldBootstrapCanonicalSchema` e nunca são reparados). Plano de 4 passos em
+  `docs/database/DATABASE.md`, §"Por que os dois bancos divergiram". Enquanto o
+  passo 4 (provisionar banco descartável **só por migrations** e a guarda de
+  drift passar contra ele) não for executado, **provisionar produção gera um
+  terceiro schema**.
+
+### Deliberadamente NÃO corrigido
+
+- `production_order_reservations.production_order_id`: já tratado por
+  `20260810-000030` (G9). Duplicar criaria conflito de ordem entre migrations.
+- `access_profile_permissions.access_profile_id`: não é drift de schema (ver
+  acima) — banco e model concordam; a guarda é que precisava ser corrigida.
+  ✅ A associação foi corrigida em 2026-08-10 e o atributo-fantasma não existe
+  mais; **nenhuma migration foi necessária**, exatamente como previsto aqui.
+- Precisão de `assets.purchase_value`/`current_value` (`DECIMAL(10,2)`): fora
+  do escopo de drift. Se valor de ativo deve migrar para `DECIMAL(18,6)` como
+  os demais campos industriais, é **decisão de negócio/contábil do dono**.
+
+---
+
+## 2026-08-10 — Cadeia do produto, gap G5: API de Roteiro de Produção — `programador`
+
+**Por que este gap veio antes do G4 (apontamento obrigatório).** O G4 é
+exigência legal (Bloco K do SPED Fiscal — Ajuste SINIEF 2/09 cláusula 3ª §7º
+III, com o §10 fechando a saída pelo Livro modelo 3;
+`docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`, Decisão 4).
+Mas `production_routes` / `production_route_steps` **existiam, eram lidas pelo
+custeio de mão de obra, pela carga-máquina e pelo OEE — e não tinham nenhum
+endpoint**. Exigir apontamento sem poder cadastrar roteiro é regra inexequível:
+o operador não teria contra o que apontar. **Escopo desta entrega é o G5
+apenas — o apontamento continua NÃO obrigatório.**
+
+**Entrega:** módulo `server/src/modules/production/` (arquivos
+`*ProductionRoute*`, Clean Architecture: domínio puro → repositório como
+interface → use cases sem Sequelize → controller fino), base URL
+`/api/production/routes`, montada em `server/app.ts`.
+
+### O que foi feito
+
+- [x] **9 endpoints**: `GET /` (lista paginada + filtros), `GET /:id` (detalhe
+  com etapas e totais derivados), `POST /` (cria rascunho, com etapas
+  opcionais), `PUT /:id` (cabeçalho), `PUT /:id/steps` (substituição total das
+  etapas), `PATCH /:id/activate`, `PATCH /:id/inactivate`,
+  `POST /:id/revise` (nova revisão), `DELETE /:id` (só rascunho nunca usado).
+  Contrato em `docs/arquitetura/API.md` §33.
+- [x] **Ciclo de vida com imutabilidade** — `draft` editável; `active`
+  **congelado**; `inactive` reversível; `superseded` final (automático quando
+  uma revisão mais nova é liberada). Alterar roteiro liberado só por
+  `POST /:id/revise`. **Efeito nas OPs já abertas: nenhum** — a revisão
+  anterior sobrevive com as etapas intactas, sustentando os apontamentos já
+  feitos e o custeio da OP em curso.
+- [x] **Regras de sequência**: `sequence` obrigatoriamente **1..N contígua**,
+  sem buraco (`G5-SEQ-GAP`) e sem duplicidade (`G5-SEQ-DUP`); `step_code` único
+  no roteiro (`G5-STEP-CODE-DUP`); roteiro sem etapa não é liberável
+  (`G5-SEQ-EMPTY`).
+- [x] **Vínculo com centro de trabalho** validado em UMA consulta (sem N+1):
+  `work_center_id` opcional, mas quando informado precisa existir
+  (`G5-WC-NOT-FOUND`) e estar ativo (`G5-WC-INACTIVE`) — **revalidado também na
+  liberação**, porque um centro pode ser desativado entre o rascunho e a
+  ativação e roteiro ativo apontando para centro morto zera o custo de mão de
+  obra sem avisar. O campo legado `work_center` (texto) é preenchido
+  automaticamente com o `code` do centro.
+- [x] **Guarda de histórico** (`G5-ROUTE-IN-USE`): etapa já referenciada por
+  `production_order_tracking.production_route_step_id` não pode ser apagada nem
+  reescrita — apagá-la zeraria o vínculo do apontamento com a operação, e com
+  ele o custeio daquela OP.
+- [x] **Anti-spoofing P0**: `created_by` e `approved_by` vêm **sempre** de
+  `req.user.id`; os schemas Zod são `.strict()` e sequer aceitam esses campos.
+- [x] **RBAC**: leitura `authorizeModule('producao')`; escrita de rascunho
+  `('producao','operate')`; **liberar/aposentar** `('producao','approve')` —
+  liberar roteiro é ato de aprovação (o model já tinha
+  `approved_by`/`approved_at`), mesmo critério de `contabilidade`
+  (`post`/`reverse`) e `tesouraria` (`settle`/`cancel`).
+- [x] **Migration `20260810-000034-production-route-active-unique-g5.cjs`
+  (escrita, NÃO aplicada)** — índice único **parcial**
+  `uq_production_routes_active_per_product` (1 roteiro `active` por produto) +
+  `COMMENT ON COLUMN`. Nenhuma tabela ou coluna criada/alterada. Racional em
+  `docs/database/DATABASE.md`, seção "G5".
+- [x] **Bug latente corrigido junto**:
+  `SequelizeWorkCenterRepository.aggregateLoadByWorkCenter` somava **todas** as
+  revisões de roteiro do produto — inofensivo com a tabela vazia, passaria a
+  **dobrar a carga-máquina** na primeira revisão criada pela nova API. Agora
+  filtra `pr.status = 'active'`.
+- [x] **43 testes** em `server/tests/unit/production-routes.test.ts`, todo teste
+  de erro afirmando `details.rule`.
+
+### Decisões que precisam de confirmação do dono (não inventadas, mas discutíveis)
+
+- [ ] **`sequence` contígua 1..N × numeração de 10 em 10.**
+  `docs/producao/04-ROTEIROS.md` documenta as operações do chão de fábrica como
+  "OP 10, OP 20, OP 30..." (prática que deixa espaço para inserir etapa no
+  meio). A API separa: `sequence` é o **ordinal** 1..N (é por ele que o
+  apontamento casa com a etapa, sem tabela de-para) e o número de operação vai
+  no `step_code` (texto livre). **Confirmar com o PCP** que isso atende — o
+  custo é ter de renumerar em rascunho para inserir uma operação no meio.
+- [ ] **OP não é amarrada a uma revisão de roteiro.** `production_orders` não
+  tem `production_route_id`; relatórios derivados usam sempre a revisão **ativa
+  no momento da consulta**. Amarrar a OP à revisão vigente na liberação é
+  decisão de negócio (e coluna nova) — **fora do escopo do G5**, mas é
+  pré-requisito honesto do G4 se o Fisco exigir reconstituir o processo
+  exatamente como executado.
+- [ ] **`total_standard_time_minutes` não inclui setup.** Tempo padrão é por
+  **unidade**; setup é por **lote**. Somá-los distorceria o OEE (mesma convenção
+  de `GetOeeReportUseCase`). O total de setup é devolvido como campo derivado no
+  detalhe (`total_setup_time_minutes`), não persistido.
+
+### Pendências abertas por esta entrega
+
+- [ ] **Aplicar `20260810-000034`** (junto com as demais migrations não
+  aplicadas de 2026-08-10). ⚠️ Se o banco já tiver 2+ roteiros `active` para o
+  mesmo produto, a criação do índice falha — a consulta de diagnóstico está no
+  rodapé do arquivo de migration. **Dono** (permissão de ambiente).
+- [ ] **Teste de integração real (Postgres)** do ciclo
+  create → steps → activate → revise → activate, verificando que o índice
+  parcial e o `superseded` automático concordam sob concorrência (2 ativações
+  simultâneas do mesmo produto).
+- [ ] **Tela web** do roteiro em `client/` (backend pronto, sem UI) — sem ela o
+  PCP continua dependendo de chamada HTTP direta, e o G4 continua inexequível
+  na prática. **Escopo de `PromadorFonteEnd`.**
+- [ ] **G4 (apontamento obrigatório) segue não iniciado** — desbloqueado por
+  esta entrega, mas exige a tela acima e decisão sobre o modo de transição
+  (`warn` → `block`) descrita na Decisão 4 da pesquisa normativa.
+
+---
+
+## 2026-08-10 — Cadeia do produto, gap G7: inspeção de qualidade como entidade + gate de liberação de lote — `programador`
+
+**Decisão de negócio:** D-H do dono, 2026-08-10 — a empresa pretende se
+certificar ISO 9001, então o registro de inspeção nasce no formato que a norma
+pede (§8.6 evidência do critério de aceitação + rastreabilidade de quem
+autorizou; §8.7 controle de saída não conforme), **sem** travar a operação com
+burocracia que ninguém ainda executa
+(`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4).
+
+### O problema (confirmado no código, não assumido)
+
+- [x] **A inspeção não existia como entidade.** Liberar um lote da quarentena
+  era `POST /api/inventory/lots/:id/release` gravando **apenas
+  `lot_controls.notes`** (texto livre). Nenhum inspetor identificado, nenhum
+  critério, nenhum resultado. As únicas tabelas "inspeção" do ERP
+  (`sst_inspecoes_seguranca`/`sst_inspecao_itens`) são de SST e não têm
+  relação com lote.
+- [x] **Achado colateral CONFIRMADO: a quarentena era decorativa.**
+  `materialReceiptService.receiveMaterialIntoQuarantine` chama
+  `InventoryService.receive` (incrementa `products.quantity`) e só então cria
+  o lote em `quarantine`. Os dois leitores de planejamento usavam esse saldo
+  bruto: `SequelizeItemRepository.listMrpInventoryPositions`
+  (`estoque_atual = products.quantity`) e `BomService.explodeBOM`
+  (`stock_available = products.quantity`, base de `checkAvailability`, usada
+  na criação/conversão de OP). Material não inspecionado contava como
+  disponível → **MRP comprava de menos** e a OP era aprovada contra material
+  que o FEFO (só consome lote `available`) nunca conseguiria consumir.
+
+### O que foi implementado
+
+- [x] **Migration `20260810-000032-create-quality-inspections-g7.cjs`
+  (escrita, NÃO aplicada)** — tabela `quality_inspections` (lote, estágio,
+  critério de aceitação, plano/tamanhos de amostra, defeitos, veredito,
+  justificativa de concessão, RNC, inspetor, data) + 3 colunas nullable em
+  `lot_controls` (`release_inspection_id`, `released_by`, `released_at`).
+  `up`/`down` exercitados contra `queryInterface` falso; sem `comment:` em
+  `addColumn`. Racional completo em `docs/database/DATABASE.md` §G7.
+- [x] **Model `QualityInspection`** + 3 campos novos em `LotControl`.
+- [x] **Módulo novo `server/src/modules/quality/`** (Clean Architecture):
+  `domain/constants.ts` (regra pura `decideLotRelease`),
+  `QualityRepository` + `SequelizeQualityRepository`,
+  `CreateQualityInspectionUseCase`, `ListQualityInspectionsUseCase`,
+  `GetLotReleaseEligibilityUseCase`, controller, rotas.
+- [x] **3 endpoints novos:** `POST /api/quality/inspections`,
+  `GET /api/quality/inspections`,
+  `GET /api/quality/lots/:lotId/release-eligibility` (leitura pura, sem efeito
+  colateral — mesmo padrão do endpoint de leitura de alçada do G11).
+- [x] **`ReleaseLotUseCase` passou a exigir inspeção aprovada.** O gateway de
+  qualidade é **parâmetro obrigatório** do construtor de propósito: opcional
+  criaria um caminho silencioso em que o gate não roda. A verificação acontece
+  integralmente **antes** do único `update` — teste explícito de que **nada é
+  gravado** quando recusa.
+- [x] **Regra é "a inspeção MAIS RECENTE"**, não "existe alguma aprovada" —
+  senão um lote aprovado na entrada e reprovado depois continuaria liberável
+  para sempre (§8.7). Re-inspeção após retrabalho é o mecanismo de reabertura.
+- [x] **Anti-spoofing:** `inspector_id` e `released_by` vêm sempre de
+  `req.user.id`; teste envia `inspector_id` no body e prova que é ignorado.
+- [x] **Integrou G8/G10 em vez de reinventar:** `verdict = 'rejected'` delega a
+  `CreateNonConformityUseCase` (que já abre a RNC, bloqueia o lote, herda o
+  fornecedor e recalcula `quality_score`), e guarda `non_conformity_id`.
+- [x] **Quarentena deixou de ser decorativa** —
+  `server/src/services/quarantineBalanceService.ts` (novo): o planejamento
+  desconta `SUM(quantity_available)` dos lotes `quarantine`/`blocked`, sempre
+  `max(0, físico − retido)`. Ligado em `listMrpInventoryPositions` e em
+  `explodeBOM`. **`services/inventoryService.ts` NÃO foi tocado** (está sob
+  refatoração concorrente G3/G9) — a correção é toda do lado da leitura.
+- [x] **36 testes novos** (`quality-inspection-release-gate.test.ts` 24 +
+  `quarantine-blocks-planning-balance.test.ts` 12), todo teste de erro
+  afirmando `details.rule = 'G7'`. Um deles achou um defeito real durante a
+  implementação: `Number(null) === 0` fazia um `null` na lista virar
+  `product_id = 0` no `WHERE` — corrigido.
+
+### Verificado
+
+- [x] `npm run typecheck` limpo
+- [x] `npx jest tests/unit --maxWorkers=2` → **152 suites / 1615 testes**
+  (baseline medida antes de começar: 149 / 1533)
+- [x] `npx tsx -e "require('./app')"` sobe (exit 0)
+- [x] `up`/`down` da migration exercitados contra `queryInterface` falso
+
+### Testes existentes ajustados (e por quê)
+
+- [x] `quality-lot-lifecycle.test.ts` e `warehouse-invariants.test.ts` —
+  codificavam a liberação **sem** inspeção (o comportamento que o G7 fecha).
+  Passaram a informar explicitamente uma inspeção aprovada, para continuarem
+  medindo o que existiam para medir (máquina de estados do lote e invariante
+  de depósito). O gate em si tem suite própria.
+- [x] `item-repository-live-inventory.test.ts` — fixtures de `Product` sem
+  `id` (agora necessário para casar o lote) e novos campos de diagnóstico.
+- [x] `module-authorization-map.test.ts` — registro do módulo novo `quality`.
+
+### ⚠️ Pendências abertas por esta entrega
+
+- [ ] **Aplicar `20260810-000032`** (junto com as demais migrations não
+  aplicadas de 2026-08-10). **Enquanto não for aplicada, o código não roda**:
+  os models já declaram `quality_inspections` e as 3 colunas de
+  `lot_controls`, então qualquer `SELECT` em lote quebra. **Dono** (permissão
+  de ambiente). Mesma situação já registrada para `20260810-000029` (G11).
+  - **Confirmado empiricamente em 2026-08-10** contra o banco de dev:
+    `LotControl.findAll({ limit: 1 })` — **sem nenhum `include`** — já falha com
+    `column "release_inspection_id" does not exist`, e
+    `information_schema.columns` não tem nenhuma das 3 colunas em
+    `lot_controls`. Ou seja, **hoje toda leitura de lote no dev está quebrada**,
+    não só as consultas novas de inspeção. É drift model→banco pré-existente
+    (o model foi entregue adiantado em relação à migration), **não** efeito do
+    registro das associações — verificado revertendo `models/index.ts`, o erro
+    é idêntico.
+- [x] **Registrar `QualityInspection` em `server/src/models/index.ts`** e criar
+  as associações. ✅ **FEITO em 2026-08-10** pelo agente com posse exclusiva do
+  arquivo. Import + export no barrel e **9 associações** (o dobro do previsto,
+  porque o desenho real da migration `20260810-000032` tem 4 FKs, não 3 —
+  `lot_controls.release_inspection_id` e `.released_by` também precisavam de
+  lado):
+  - `QualityInspection`: `lot` (→`LotControl`), `inspector` (→`User`),
+    `nonConformity` (→`NonConformity`), `released_lots` (→`LotControl`);
+  - lado inverso: `LotControl.inspections`, `LotControl.releaseInspection`,
+    `LotControl.releasedBy`, `User.quality_inspections`,
+    `NonConformity.quality_inspections`.
+  - **Verificação:** boot da app OK (erro de associação mata o boot); SQL do
+    `findAll` com os 3 `include` gerado e enviado ao PostgreSQL real, com os
+    nomes de coluna batendo 1:1 com a migration — o único erro devolvido é o
+    esperado `relation "quality_inspections" does not exist`, porque a
+    migration segue pendente. Cobertura em
+    `server/tests/unit/model-association-attribute-guard.test.ts`.
+  - ⚠️ **O payload das respostas não mudou**: o registro *habilita* o `include`,
+    nenhuma consulta do módulo `quality/` passou a usá-lo (o módulo é de outro
+    agente nesta rodada). A listagem continua devolvendo `lot_id`/`inspector_id`
+    crus — usar os aliases é trabalho de quem tocar `modules/quality/`.
+- [ ] **Impacto operacional no dia da aplicação:** os **9 lotes em quarentena
+  (281 un.) e 1 bloqueado (100 un.)** hoje no banco de dev passam a exigir
+  inspeção registrada para serem liberados. **Não há backfill** — inventar
+  inspeção retroativa seria fabricar evidência de auditoria. A Qualidade
+  precisa registrar a inspeção desses lotes na virada.
+- [ ] **Teste de integração real (Postgres)** do ciclo
+  recebimento → quarentena → inspeção → liberação, e do desconto de saldo
+  retido no MRP. A suíte unitária usa repositório mockado e **não pega** erro
+  de enum/coluna.
+- [ ] **Tela web** em `client/`: registrar inspeção e mostrar o motivo do
+  bloqueio na tela de lotes em quarentena. Sem ela, o botão "Liberar" passa a
+  falhar com 422 e o usuário não saberá o que fazer — o endpoint
+  `GET /api/quality/lots/:lotId/release-eligibility` existe exatamente para
+  alimentar essa tela. **Escopo de `PromadorFonteEnd`.**
+- [ ] **Risco residual herdado (não introduzido aqui):** na reprovação, a RNC
+  nasce em transação PRÓPRIA depois do commit da inspeção
+  (`CreateNonConformityUseCase` abre a sua). Se ela falhar, fica uma inspeção
+  reprovada sem RNC e a resposta é 500 — a falha é **conservadora** (reprovada
+  continua reprovada, o gate não abre). Idêntico ao já registrado em
+  `CreateAcousticTestUseCase` (G8); fechar exige aquele caso de uso aceitar
+  transação externa, o que afeta todos os seus chamadores.
+- [ ] **`inspection_number` usa `INSP-<timestamp>`**, mesma convenção de
+  `NC-<timestamp>` já em uso. Colisão sob concorrência no mesmo milissegundo é
+  teoricamente possível (o UNIQUE do banco a detectaria como 500). Trocar por
+  sequência anual com advisory lock (padrão do G16) é melhoria, não bug ativo.
+
+### Decisão de negócio NÃO tomada — não inventei a regra
+
+- [ ] **Nível de inspeção e AQL por classe de defeito (ISO 2859-1).** A norma
+  fornece as tabelas; a escolha dos números é da Engenharia da Qualidade /
+  contrato. A pesquisa normativa marca os valores de AQL como
+  `[NÃO CONFIRMADO NA FONTE]` e registra que `ABNT NBR 5426:1985` está
+  **cancelada**. Por isso `sampling_plan`/`lot_size`/`sample_size` são
+  evidência textual **sem efeito de cálculo**, e **não há motor Ac/Re nem
+  comutação de regime (normal/severo/atenuado)**. Pendente do dono:
+  (1) aquisição da ISO 2859-1 vigente; (2) definição dos níveis/AQL por classe;
+  (3) se há contrato OEM com plano de amostragem próprio.
+- [ ] **Inspeção sem lote não é suportada** (`lot_id` é `NOT NULL`). Se a
+  Qualidade precisar inspecionar algo que não tem lote (ex.: inspeção de
+  processo sem material rastreável), é decisão de modelagem nova — não assumi.
+
+---
+
+## 2026-08-10 — Cadeia do produto, gap G1: estrutura de produto (BOM) passa a ter fonte única — `AdmDBA`
+
+### O problema (confirmado no banco e no código, não assumido)
+
+O ERP mantinha **duas árvores de produto paralelas**, com mestres e chaves
+diferentes, e **nada reconciliava as duas**:
+
+| Estrutura | Mestre | Chave | Quem lia |
+|---|---|---|---|
+| `item_estruturas` | `items` | UUID | MRP (`SequelizeMrpRepository.listActiveEdges`), explosão de item |
+| `bill_of_materials` | `products` | INTEGER | `BomService` → criação, liberação (reserva), **conclusão** (consumo + custeio) da OP |
+
+A única ponte era casamento de string (`products.code = items.codigo`), nunca
+exercida para estrutura. **Planejamento e consumo podiam discordar sobre o que
+compõe um produto sem nada acusar.**
+
+### O que o banco disse antes de eu agir (somente leitura)
+
+O dono informou (D-B) que ninguém mantinha nenhuma das duas. **Confirmado:**
+
+- `item_estruturas`: **4 linhas**, 100% resíduo de teste (`PA-TESTE-001`, `E2E-*`)
+- `bill_of_materials`: **2 linhas** — uma de CI **sem nenhum item** (cabeçalho
+  órfão, `total_components = 1`) e uma de e2e de hoje
+- `bill_of_material_items`: **2 linhas**, ambas da mesma BOM e2e
+
+**Zero engenharia real.** Risco rebaixado de "migração de base viva" para
+**escolha técnica** — foi isso que autorizou converter agora.
+
+Achado colateral que fecha a decisão: **`items.estoque_atual` é `0.000000` em
+100% das 17 linhas**, enquanto `products.quantity` carrega os saldos reais. O
+mestre da árvore "canônica" não é sistema de registro de nada transacional — o
+próprio MRP já o abandonava para ler número
+(`listMrpInventoryPositions` faz o crosswalk para `products`).
+
+### Decisão: `bill_of_materials` sobrevive
+
+Argumentada com o código em `docs/producao/06-BOM.md` §G1 e no cabeçalho de
+`server/src/services/bomStructureProjection.ts`. Resumo: é a estrutura que
+governa dinheiro e estoque (e desde o **G2** é obrigatória para concluir OP);
+sua chave é a de `inventory_movements`/`lot_controls`/`stock_reservations`/
+`production_orders`; e já tem o vocabulário de revisão que a ISO 9001 §8.5.6
+exige — o mesmo que o **G5** exercitou em roteiro.
+
+> `CLAUDE.md` §7 ("Item core intocado + extensões por domínio") **segue
+> valendo para cadastro** (código, descrição, tipo, custo padrão, catálogo
+> item×fornecedor, requisição, RFQ). Muda só a **estrutura**: ela não é
+> extensão de cadastro, é regra de consumo e de custo.
+
+### O que foi feito (convergência incremental, sem big-bang)
+
+**Nenhuma linha copiada, migrada ou apagada.** A convergência é de **leitura**:
+
+- **`server/src/services/bomStructureProjection.ts` (novo)** — projeta a BOM
+  ativa para arestas em UUID via o crosswalk que o resto do ERP já usa.
+  Projeção feita na hora ⇒ **não existe réplica para dessincronizar**
+- `SequelizeMrpRepository.listActiveEdges` → lê a projeção; novo
+  `listStructureGaps()` expõe as arestas invisíveis ao MRP
+- `SequelizeItemEstruturaRepository` → todas as leituras pela projeção;
+  `create()` bloqueado
+- `CreateItemStructureUseCase` → `POST /api/items/:id/estrutura` responde
+  **422 `G1-ESTRUTURA-DUPLA`**
+- `UpdateBOMUseCase`/`ApproveBOMUseCase`/`BomService.createBOM` → ciclo de
+  revisão ISO (tabela de regras em `docs/producao/06-BOM.md` §G1)
+- Migration **`20260810-000035-bom-single-source-g1.cjs`** — índice único
+  parcial `uq_bill_of_materials_active_per_product` + `COMMENT ON` marcando
+  `item_estruturas` como legado congelado
+
+### Bugs latentes corrigidos de carona
+
+- [x] **`superseded` rodava FORA da transação de `createBOM`**, antes dela. Se
+  a criação falhasse depois, o produto ficava com **zero BOM ativa** — e, desde
+  o G2, produto sem BOM ativa **não conclui OP**. Um cadastro malsucedido
+  derrubava a produção de um produto que estava funcionando.
+- [x] **Guarda de inativação de item estava cego para a BOM de produção.**
+  `hasActiveParentOrComponent` olhava só `item_estruturas` (vazia): dava para
+  inativar um item que é componente de uma BOM ativa, e a OP só descobria na
+  conclusão.
+- [x] **`PUT /api/engineering/bom/:id` era `UPDATE` cru** — dava para ativar
+  uma **segunda** BOM do mesmo produto. Com duas ativas,
+  `findOne({ status: 'active' })` devolve revisão **arbitrária**: o G1
+  renascendo por dentro do próprio módulo de BOM.
+
+### Verificado por fora
+
+- `npm run typecheck` limpo
+- **31 testes novos** em 3 suítes, incluindo o teste de que **planejamento e
+  consumo leem a mesma estrutura** (mesma SQL, mesmo `bom_id`, mesmo
+  `product_id`); todo teste de erro afirma `details.rule`
+- `npx tsx -e "require('./app')"` sobe
+- **SQL da projeção executada contra o Postgres real** (leitura) — e ela já
+  revelou uma lacuna de catálogo no dado de dev, ver abaixo
+- **`up`/`down` da migration exercitados contra o Postgres real dentro de
+  `BEGIN … ROLLBACK`** (banco byte-idêntico): índice criado → presente →
+  removido → ausente; os 4 `COMMENT ON` aplicados e zerados
+
+⚠️ **Suíte unitária completa:** 1646 testes / 155 suítes. **17 falhas em 9
+suítes** — todas em `sales/`, `purchases/`, `fiscal/` e
+`saleReceivableService`, módulos **sob trabalho concorrente de outro agente**,
+nenhum deles tocado por esta entrega (rastro das falhas confirmado:
+`IssueSaleNfeUseCase`, `SequelizeFiscalRepository`,
+`ReceivePurchaseItemsUseCase`, `saleReceivableService`). Excluindo essas
+suítes: **148/148 verdes**. Baseline de entrada era 1615/1615 em 152 suítes;
+1615 + 31 = 1646, ou seja **nenhum teste foi perdido por esta entrega**.
+
+### ⚠️ Pendências abertas por esta entrega
+
+- [ ] **MIGRATION NÃO APLICADA** — `20260810-000035`. Passam a ser **7**
+  pendentes (000029 a 000035) aguardando liberação do dono.
+- [ ] **Tela `ItemMasterDetailPage` (`client/`) continua oferecendo o cadastro
+  de estrutura** que agora responde 422. O erro é didático e o frontend já
+  traduz `details`, mas a aba deveria apontar para o módulo de BOM em vez de
+  oferecer um formulário que não grava mais. **Não toquei em `client/` —
+  trabalho em voo.** Handoff registrado.
+- [ ] **Lacuna de catálogo já existente no dado de dev:** o componente
+  `E2E-MP2-1786338099090` (produto 18) está numa BOM ativa e **não tem
+  `items.codigo`** — invisível para o MRP, visível para a produção. Agora é
+  reportado por `MrpRepository.listStructureGaps()`, mas **não há endpoint nem
+  tela expondo isso**. Enquanto não houver, a lacuna só aparece para quem
+  chamar o repositório.
+- [ ] **`listStructureGaps` sem rota.** Decidi não criar endpoint novo nesta
+  rodada para não ampliar superfície no meio de trabalho concorrente; o método
+  existe e está testado.
+- [ ] **Teste de integração real (Postgres) do fluxo convergido** —
+  criar BOM → gerar plano MRP → liberar OP → concluir, provando que os três
+  leem a mesma revisão. A suíte de integração continua pulando em silêncio
+  (`RUN_INTEGRATION`), ver
+  `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md` §1.
+- [ ] **`item_estruturas` não foi dropada** — de propósito. `DROP TABLE` é
+  passo de **contração** e só deve acontecer depois da baseline congelada de
+  schema; sem ela o `DROP` sai diferente em cada banco divergente.
+
+### Decisão de negócio NÃO tomada — não inventei a regra
+
+- [ ] **`production_orders.bom_id` — amarrar a OP à revisão de BOM que ela
+  executou.** Hoje a conclusão explode a BOM **vigente no momento da
+  conclusão**: se a engenharia revisar a estrutura no meio de uma OP aberta,
+  ela é consumida e custeada pela revisão **nova**, não pela reservada na
+  liberação. É o mesmo gap que o G5 registrou para roteiro
+  (`production_route_id`), e pela mesma razão: é coluna nova **mais** decisão
+  de negócio — *a OP em curso segue a revisão antiga ou migra para a nova?* —
+  e implementá-la mexe em `ChangeProductionOrderStatusUseCase`, que está sob
+  trabalho concorrente (G2/G3/G7). **Pré-requisito honesto se o Fisco ou a
+  auditoria ISO 9001 exigirem reconstituir o produto COMO FABRICADO.**
+- [ ] **Rótulo de revisão passou a ser obrigatoriamente único por produto**
+  (`G1-BOM-REV-DUP`). Como o default do payload é `'00'`, criar a **segunda**
+  revisão de um produto sem informar `revision` agora falha com 409 didático.
+  É o comportamento ISO correto (a revisão identifica a versão), mas é
+  **mudança de contrato** para quem chamava a API sem `revision` — confirmar
+  com a Engenharia antes de treinar o usuário.
+
+---
+
+## 2026-08-10 — Três pendências pequenas retidas por disputa de arquivo (models/index.ts)
+
+**Contexto:** três itens ficaram abertos não por dificuldade técnica, mas porque
+`server/src/models/index.ts` estava sob edição concorrente e os agentes anteriores
+foram instruídos a não tocá-lo. Fechados nesta passada com posse exclusiva do
+arquivo. Escopo: `models/index.ts`, `models/QualityInspection.ts`,
+`models/Client.ts` e o módulo `clients/`. **Nenhuma migration aplicada**
+(as 7 pendentes continuam pendentes) e **nenhum commit** — o dono verifica antes.
+
+- [x] **Tarefa 1 — `QualityInspection` registrado no barrel** com 9 associações.
+  Detalhe e evidência na seção do G7 acima.
+- [x] **Tarefa 2 — atributo-fantasma de `access_profile_id` corrigido** nas 4
+  associações. Detalhe, varredura completa e análise de consumidores na seção
+  da correção de nulabilidade (round 3) acima.
+- [x] **Tarefa 3 — CNAE opcional no cadastro de cliente (decisão D-I).**
+  Detalhe e evidência de escrita real no BUG-02 acima. **Backend apenas** — a
+  tela é escopo de `PromadorFonteEnd`.
+
+### Evidência de aceite
+
+| Verificação | Resultado |
+|---|---|
+| `npm run typecheck` (server) | limpo |
+| `npx tsx -e "require('./app')"` | `BOOT OK` — erro de associação mata o boot, então isto é o teste que importa aqui |
+| Suíte unitária | **+2 suítes, +22 testes, todos verdes** (155→157 suítes, 1646→1668 testes) |
+| Escrita real no PostgreSQL (CNAE) | 15/15 verificações verdes, em transação **revertida** |
+| Varredura de atributo-fantasma | 2 grupos antes → **0** depois, em todos os models |
+
+⚠️ **Sobre a contagem de falhas da suíte:** no momento desta entrega a suíte tem
+falhas em `create-sale-quote`, `integrity-transaction-guards`,
+`issue-sale-nfe-partial` e `purchase-approval-authority`. **Não são desta
+entrega** — foi verificado revertendo os arquivos desta tarefa e rodando a suíte
+completa: as mesmas suítes falham, com os mesmos testes. São trabalho em voo de
+outros agentes em `sales/`, `purchases/`, `fiscal/`, `bom/`, `items/`, `mrp/` e
+`bomService.ts` (a contagem oscilou de 9 para 5 suítes durante a própria sessão,
+conforme eles avançavam). O baseline de 1615/1615 em 152 suítes citado na tarefa
+já não existia quando esta entrega começou.
+
+### Pendências abertas por esta entrega
+
+- [ ] **Usar os aliases novos em `modules/quality/`.** O registro habilita
+  `include`, mas nenhuma consulta foi alterada — o módulo é de outro agente
+  nesta rodada. `GET /api/quality/inspections` continua devolvendo
+  `lot_id`/`inspector_id` crus, sem `lot`/`inspector`/`nonConformity` aninhados.
+- [ ] **Nada de `QualityInspection` foi exercitado contra o banco**, porque a
+  migration `20260810-000032` não foi aplicada (proibido nesta tarefa). A
+  verificação possível — SQL gerado com nomes de coluna reais, batendo com a
+  migration — foi feita; o `INSERT`/`SELECT` real fica para depois de aplicar.
+- [ ] **CNAE não tem validação de formato, de propósito.** A decisão D-I foi
+  disponibilizar o campo, não normalizá-lo. Se a Contabilidade precisar do CNAE
+  no formato fiscal (7 dígitos, `NNNN-N/NN`), é **decisão de negócio do dono** —
+  não inventei máscara nem tabela de CNAEs válidos. Hoje `varchar(10)` aceita
+  qualquer texto até 10 caracteres.
+- [ ] **`clientValidators.ts` mistura `export const` com `module.exports =`**
+  (pré-existente, não introduzido aqui). Funciona porque o `module.exports =`
+  vem depois e sobrescreve, mas é exatamente o padrão que morre em runtime sem
+  o typecheck acusar. Não mexi para não misturar refatoração com entrega, mas
+  vale um passe de limpeza.
+
+---
+
+## G13 — Momento em que nascem a conta a pagar e a conta a receber (2026-08-10)
+
+Onda 3 do `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`, decisão
+**D-A** do dono ("seguir a lei nas 3 decisões com resposta normativa,
+isoladas, uma por vez, com caminho de migração do dado existente"), com a
+restrição da decisão **D-J** ("conta a receber avulsa, sem venda vinculada,
+é caso legítimo").
+
+Base normativa (`docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`,
+Decisão 6):
+- **CPC 00 (R2) itens 4.56/4.58** — pedido aprovado e não entregue é
+  *contrato executório*; o passivo surge quando a outra parte cumpre
+  primeiro (o fornecedor entrega).
+- **CPC 47 itens 31/38/108** — receita quando o cliente obtém o controle;
+  recebível exige direito **incondicional**.
+
+### Regra nova
+
+| Conta | Nascia em | Passa a nascer em |
+|---|---|---|
+| A pagar (compra) | aprovação do pedido, valor **do pedido inteiro**, vencimento `expected_date + 30` | **recebimento**, valor **do que chegou**, vencimento da NF do fornecedor |
+| A receber (venda) | confirmação do pedido, valor **do pedido inteiro**; à vista já nascia `paid` | **autorização da NF-e**, valor **da emissão**, sempre `pending` |
+| A receber (avulsa) | — (não havia endpoint) | `POST /api/finance/receivable`, sem `sale_id` (decisão D-J) |
+
+### Conta a pagar — recebimento
+
+- [x] `ChangePurchaseStatusUseCase` — `_createPurchasePayable` **removido**;
+  a transição para `approved` não cria mais passivo. A alçada do G11 continua
+  sendo o portão: pedido não aprovado nunca chega a `sent`, e `sent`/`partial`
+  são os únicos status que o recebimento aceita — **nenhum passivo passa a
+  existir sem aprovação**.
+- [x] `purchases/domain/services/purchasePayableRules.ts` **(novo)** — funções
+  puras `calculateReceiptAmount` (soma em centavos) e `resolvePayableDueDate`
+  (`due_date` informado > `invoice_date + 30` > `recebimento + 30`).
+- [x] `ReceivePurchaseItemsUseCase.createReceiptPayable` — cria a AP na
+  **mesma transação** do recebimento, com `invoice_number` = NF do fornecedor,
+  `approved_by`/`approval_date` **nulos** (quem recebe não aprova pagamento).
+- [x] Payload de `POST /api/purchases/:id/receive` ganhou `invoice_date` e
+  `due_date` (ambos opcionais, `YYYY-MM-DD`); resposta ganhou
+  `account_payable` e `payable_skip_reason` fora de `data`.
+- [x] Repositório: `findLegacyPayableByPurchaseId` e
+  `findAccountPayableByPurchaseAndInvoice` (abstrato + Sequelize).
+- [x] Frete continua **fora** do valor da AP — como já ficava fora de
+  `total_amount`. Nenhuma mudança de comportamento; lançamento manual.
+
+### Conta a receber — NF-e
+
+- [x] `CreateSaleUseCase` e `ChangeSaleStatusUseCase` (`quote -> confirmed`)
+  — **toda** criação de `AccountReceivable` removida, inclusive a parcela à
+  vista que nascia `paid`.
+- [x] `services/saleReceivableService.ts` **(novo)** — `buildInstallmentPlan`
+  (pura: rateio em centavos, última parcela absorve o resto, vencimento sem
+  overflow de mês) e `createInvoiceReceivables`.
+- [x] `IssueSaleNfeUseCase` (síncrono) e `GetSaleNfeStatusUseCase`
+  (assíncrono/webhook) criam as parcelas na **mesma transação** que incrementa
+  `invoiced_quantity` e baixa o estoque (G9). Faturado sem baixar e faturado
+  sem nada a cobrar são o mesmo defeito visto de dois lados.
+- [x] Numeração de `installment` **contínua** entre emissões parciais
+  (nota 1 -> 1..N, nota 2 -> N+1..M) — sem isso, duas emissões criariam dois
+  pares `(sale_id, installment)` iguais.
+- [x] Repositório fiscal: `createAccountReceivable` e `findReceivablesBySaleId`.
+- [x] `cancelPendingReceivables` mantido no cancelamento da venda (cobre tanto
+  as parcelas geradas pela NF-e quanto as legadas).
+
+### Conta a receber avulsa (decisão D-J)
+
+- [x] `CreateReceivableUseCase` **(novo)** + `POST /api/finance/receivable`
+  (`authorizeModule('financeiro','operate')`).
+- [x] Recusa `sale_id` com 422 e `details.rule = 'G13-AR'` — recebível de
+  venda só nasce na NF-e; a porta dos fundos fica fechada.
+- [x] Recusa `status` com 422 e `details.rule = 'G13-AR-PAID'` — nenhuma
+  parcela nasce baixada.
+- [x] `sale_id` e `status` são **aceitos pelo schema Zod de propósito**, para
+  a recusa vir do use case com `details.rule` e mensagem útil, em vez do erro
+  genérico de campo desconhecido do `.strict()`.
+
+### Schema
+
+- [x] **Nenhuma migration foi necessária.** O discriminador do dado legado é
+  `invoice_number IS NULL` (conta criada pela regra antiga nunca teve nota,
+  porque a nota não existia naquele momento) — não foi preciso criar coluna
+  de flag `legacy_created_on_approval`/`legacy_created_on_confirmation`. Isso
+  mantém as 7 migrations pendentes como 7, e faz o G13 funcionar contra o
+  banco atual sem depender de liberação de aplicação.
+- [x] Todos os literais de ENUM conferidos contra `pg_enum`
+  (`enum_accounts_payable_status` e `enum_accounts_receivable_status` =
+  `pending, paid, overdue, canceled, partial` — só `pending` é usado) e todos
+  os nomes de coluna contra `information_schema.columns`.
+
+### Migração do dado existente
+
+- [x] **Levantado por consulta somente-leitura ao banco real antes de
+  codificar** (números de 2026-08-10):
+
+  | Levantamento | Qtd | Valor |
+  |---|---|---|
+  | AP de pedido **não recebido** (criadas na aprovação) | **8** | R$ 3.675,02 |
+  | por status do pedido | 1 `approved`, 6 `sent`, **1 de pedido `canceled`** | — |
+  | AR de venda **não faturada** | **2** (1 venda) | R$ 150,00 |
+  | AR que nasceram `paid` sem baixa registrada | **0** | R$ 0,00 |
+  | AP/AR com `payment_date` preenchido | **0** | — |
+
+- [x] **Volume trivial e nada foi pago/recebido de fato** -> tratado sem
+  parar a entrega: as linhas legadas **permanecem exatamente como estão** e o
+  sistema apenas se recusa a criar uma segunda conta para a mesma obrigação
+  (`payable_skip_reason: 'legacy_created_on_approval'` /
+  `reason: 'legacy_created_on_confirmation'`). **Nenhum `UPDATE`, `DELETE` ou
+  reclassificação foi aplicado a lançamento financeiro do dono.**
+- [x] A AP do pedido **cancelado** (R$ 26,88) é o exemplo didático do defeito
+  que o G13 corrige: passivo de uma compra que nunca vai existir, ainda
+  contaminando a projeção de fluxo de caixa.
+- [x] Consultas de levantamento documentadas em
+  `docs/financeiro/01-FINANCEIRO.md` para o contador reproduzir.
+
+### Verificação
+
+- [x] `npm run typecheck` limpo
+- [x] `npx jest tests/unit --maxWorkers=2` -> **1692/1692**, 159 suítes
+  (era 1668/1668 em 157 antes desta entrega — subiu, não caiu)
+- [x] `npx tsx -e "require('./app')"` sobe
+- [x] **Escrita real contra o PostgreSQL de dev, dentro de transação com
+  ROLLBACK:** os três payloads exatos que o código novo monta (AP do
+  recebimento, AR da NF-e, AR avulsa) foram aceitos pelo schema físico;
+  contagens de `accounts_payable`/`accounts_receivable` conferidas antes e
+  depois (18 e 2, inalteradas). Fecha parte da lacuna descrita em
+  `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md`
+  (typecheck + unitário não provam escrita).
+- [x] Testes novos: `purchase-payable-no-recebimento-g13.test.ts` (11) e
+  `sale-receivable-na-nfe-g13.test.ts` (13) — incluindo recebimento
+  **parcial** (recebeu metade, deve a metade), faturamento **parcial**, AR de
+  venda exigindo NF-e, AR avulsa funcionando, e todo teste de erro afirmando
+  `details.rule`.
+
+### PARADO E REPORTADO — Conta a pagar dos tributos de importação (COMEX)
+
+O escopo registrado no plano (§3, linha do G13) incluía os tributos de
+importação (II/IPI/PIS/COFINS/ICMS), que hoje não geram AP nenhuma.
+**Não foi implementado, de propósito**, e a razão deixou de ser "falta
+decidir o momento" (que o G13 resolveu) para virar quatro lacunas concretas:
+
+1. **Vencimento por tributo.** II/IPI/PIS/COFINS têm fato gerador no
+   **registro da DI**; ICMS-Importação varia por **UF** e regime especial. O
+   ERP guarda `import_processes.customs_cleared_at` mas **não guarda número
+   nem data de registro da DI** — não há de onde derivar vencimento sem
+   inventar. As datas **não foram confirmadas em fonte oficial** na pesquisa
+   normativa e não devem ser assumidas.
+2. **Credor.** O beneficiário é a União (DARF) ou o Estado (GNRE/GARE), não o
+   fornecedor estrangeiro. `accounts_payable.supplier_id` aponta para
+   `suppliers`; criar fornecedores "União"/"Estado" é decisão de cadastro.
+3. **Uma AP ou cinco?** Guias, datas e credores distintos por tributo.
+4. **Moeda.** `AccountPayable` não tem coluna de moeda/câmbio. Os tributos já
+   saem em BRL, então esta é a menor lacuna — mas o **FOB do fornecedor**
+   continua sem lugar para virar passivo em moeda estrangeira.
+
+- [ ] **Decisão do dono/contador necessária:** (a) o ERP passa a registrar
+  número e data da DI? (b) cada tributo vira uma AP própria, com qual credor
+  cadastrado? (c) qual UF e prazo de ICMS-Importação? (d) o FOB do fornecedor
+  estrangeiro deve virar AP, e em qual moeda?
+
+### Pendências abertas por esta entrega
+
+- [ ] **Cancelar NF-e autorizada não cancela as parcelas daquela emissão.**
+  Mantido coerente com o G9 (que também não devolve estoque no cancelamento
+  de nota): baixado == faturado == cobrado. A reversão hoje é manual, ou pelo
+  cancelamento da venda (que derruba os recebíveis pendentes). Se o dono
+  quiser reversão automática, é uma entrega própria — e precisa tratar os
+  três lados juntos.
+- [ ] **Nada foi exercitado ponta a ponta contra o banco por HTTP.** A escrita
+  real foi validada por transação com rollback (payloads aceitos pelo schema),
+  não por um `POST` completo de recebimento/faturamento. O teste de integração
+  real de `POST /api/purchases/:id/receive` e `POST /api/sales/:id/nfe`
+  continua pendente — mesmo débito registrado em
+  `CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md` item 3.
+- [ ] **Mapeamento departamento -> centro de custo na AP automática** segue em
+  aberto (TODO pré-existente, apenas transplantado da aprovação para o
+  recebimento): a AP nasce com `cost_center_id NULL` e pode ser atribuída
+  depois em `PUT /api/finance/payable/:id/cost-center`.
+- [ ] **Compromisso de compra não tem tela.** Pedido aprovado e não recebido
+  deixou de aparecer em contas a pagar (correto), mas a visão gerencial que
+  deveria substituí-la — "pedidos em aberto / desembolso previsto", separada
+  do passivo contábil — não existe. Sem ela, Compras perde visibilidade que
+  antes tinha, ainda que pelo lugar errado.
+- [ ] **Tela do `POST /api/finance/receivable`** (cobrança avulsa) não existe
+  em `client/` — endpoint pronto, front pendente (escopo dos agentes de
+  frontend).
+- [ ] **Pergunta C7 ao contador** (prazo de pagamento conta da NF do
+  fornecedor ou do recebimento físico?) muda apenas a data-base do default de
+  30 dias; **C9** (destino das AP legadas: estorno ou congelamento) segue sem
+  resposta e as 8 linhas continuam intactas aguardando.

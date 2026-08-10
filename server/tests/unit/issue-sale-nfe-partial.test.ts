@@ -86,6 +86,7 @@ function buildRepository({ saleStatus = 'confirmed', items = [buildSaleItem()] }
   // registro (com `.save()` stub), reproduzindo o comportamento real o
   // suficiente para o fluxo de IssueSaleNfeUseCase.
   const saleInvoices: any[] = [];
+  const receivables: any[] = [];
 
   return {
     __sale: sale,
@@ -107,6 +108,16 @@ function buildRepository({ saleStatus = 'confirmed', items = [buildSaleItem()] }
     }),
     findSaleInvoiceByProviderRef: jest.fn(async (ref: string) => saleInvoices.find((invoice) => invoice.nfe_provider_ref === ref) || null),
     findSaleInvoicesBySaleId: jest.fn(async () => saleInvoices),
+    // G13 (2026-08-10): a conta a receber nasce na autorização da NF-e.
+    // `accounts_receivable` fake em memória, mesmo padrão de `saleInvoices`
+    // — a regra em si tem `sale-receivable-na-nfe-g13.test.ts` dedicado.
+    __receivables: receivables,
+    createAccountReceivable: jest.fn(async (data: any) => {
+      const receivable = { ...data, id: receivables.length + 1 };
+      receivables.push(receivable);
+      return receivable;
+    }),
+    findReceivablesBySaleId: jest.fn(async () => receivables),
   };
 }
 

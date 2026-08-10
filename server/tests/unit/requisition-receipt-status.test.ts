@@ -153,6 +153,10 @@ describe('G15 — ReceivePurchaseItemsUseCase reflete o recebimento na requisica
       updatePurchaseItem: jest.fn(async () => ({})),
       findPurchaseItemsForUpdate: jest.fn(async () => ([{ id: 81, status: 'received' }])),
       createPurchaseReceipt: jest.fn(async () => ({ id: 1 })),
+      // G13: a conta a pagar nasce no recebimento (CPC 00 (R2) 4.58).
+      findLegacyPayableByPurchaseId: jest.fn(async () => null),
+      findAccountPayableByPurchaseAndInvoice: jest.fn(async () => null),
+      createAccountPayable: jest.fn(async (data: any) => ({ id: 1, ...data })),
       findRequisitionOriginById: jest.fn(async () => ({ id: 55, origin: 'manual' })),
       findLotForReceipt: jest.fn(async () => null),
       createLot: jest.fn(async () => ({ id: 1 })),

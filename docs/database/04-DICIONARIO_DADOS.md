@@ -1191,12 +1191,15 @@ Consumo de lotes específicos por uma OP (FEFO).
 
 ## `production_order_reservations`
 
-Reserva de material **vinculada a uma Ordem de Produção** (gap G3, migration `20260809-000026`, aplicada). Fonte da verdade da reserva: cada linha amarra uma OP a um produto e à quantidade que só ela pode liberar/consumir. `products.reserved_quantity` passou a ser **cache derivado** desta tabela (`SUM(quantity - quantity_released)` das reservas `active`).
+Reserva de estoque **vinculada a um documento dono** (gap G3, migration `20260809-000026`, aplicada; generalizada pelo gap G9, migration `20260810-000030`, **ainda não aplicada**). Fonte da verdade da reserva: cada linha amarra um documento a um produto e à quantidade que só ele pode liberar/consumir. `products.reserved_quantity` passou a ser **cache derivado** desta tabela (`SUM(quantity - quantity_released)` das reservas `active`, somando OP e venda).
+
+⚠️ **Nome histórico.** Desde o G9 o dono pode ser uma **ordem de produção OU uma venda** (a confirmação de pedido reserva; a baixa só ocorre na autorização da NF-e). A tabela não foi renomeada para `stock_reservations` de propósito — renomear tabela num banco com drift é risco desnecessário. Leia "reserva de estoque", não "reserva de OP".
 
 | Coluna | Tipo | Nulo? | Default | Chave |
 |---|---|---|---|---|
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
-| `production_order_id` | INTEGER | NÃO | - | FK → `production_orders.id` |
+| `production_order_id` | INTEGER | sim (desde G9) | - | FK → `production_orders.id` |
+| `sale_id` (G9) | INTEGER | sim | - | FK → `sales.id` (`ON DELETE RESTRICT`) |
 | `product_id` | INTEGER | NÃO | - | FK → `products.id` |
 | `quantity` | NUMERIC(18,6) | NÃO | - | - |
 | `quantity_released` | NUMERIC(18,6) | NÃO | 0 | - |
@@ -1209,7 +1212,9 @@ Reserva de material **vinculada a uma Ordem de Produção** (gap G3, migration `
 
 Restrições adicionais não representadas na tabela acima:
 
-- `uq_production_order_reservations_active` — índice **UNIQUE parcial** em `(production_order_id, product_id) WHERE status = 'active'` (uma única reserva viva por OP × produto).
+- `uq_production_order_reservations_active` — índice **UNIQUE parcial** em `(production_order_id, product_id) WHERE status = 'active'` (uma única reserva viva por OP × produto). Pelo G9 ganha `AND production_order_id IS NOT NULL`.
+- `uq_sale_reservations_active` (G9) — índice **UNIQUE parcial** em `(sale_id, product_id) WHERE status = 'active' AND sale_id IS NOT NULL` (uma única reserva viva por venda × produto).
+- `chk_stock_reservations_exactly_one_owner` (G9) — exatamente **um** entre `production_order_id` e `sale_id` preenchido. Zero donos seria a reserva anônima que o G3 eliminou; dois donos tornaria ambíguo quem pode liberar o material.
 - `chk_production_order_reservations_quantity` — `quantity > 0`.
 - `chk_production_order_reservations_released_range` — `0 <= quantity_released <= quantity`.
 - `chk_production_order_reservations_status_coherence` — `status='active' AND quantity_released < quantity` **OU** `status='released' AND quantity_released = quantity`.

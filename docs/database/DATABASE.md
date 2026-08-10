@@ -1944,6 +1944,12 @@ custo nacionalizado é feito em código (`ImportTaxCalculator`, módulo
 
 **Índices:** `idx_import_processes_supplier_id`, `idx_import_processes_status`, `idx_import_processes_created_by`.
 
+> **Atualizado em 2026-08-10 (G11-COMEX):** a transição `draft → shipped`
+> passou a exigir aprovação da diretoria, registrada na tabela nova
+> `import_process_approvals` — ver a seção
+> "G11-COMEX — Gate de aprovação da diretoria no processo de importação"
+> no fim deste arquivo.
+
 #### Tabela: `import_process_items` (itens importados)
 | Coluna | Tipo | Restrições | Descrição |
 |--------|------|------------|-----------|
@@ -2839,3 +2845,608 @@ Nenhuma linha muda: pedidos e fornecedores já cadastrados assumem o DEFAULT
 estrangeiros já cadastrados precisam ser marcados manualmente** pelo
 Suprimentos — não há como inferir isso do dado atual, já que o `cnpj` é
 obrigatório para todos. Registrado em `docs/governance/TODO.md`.
+
+---
+
+## G11-COMEX — Gate de aprovação da diretoria no processo de importação (2026-08-10)
+
+**Migration:** `20260810-000031-comex-directorate-approval-gate.cjs`
+(**ainda não aplicada** — aplicação é do dono do ambiente).
+**Decisão de negócio:** D-G do dono do produto, 2026-08-10.
+**Regra em código:** `server/src/modules/comex/domain/constants.ts`;
+aplicada em `RegisterImportTrackingUseCase`.
+
+### O furo que existia
+
+O G11 (seção anterior) resolveu a alçada de `purchase_orders` — e lá
+importação exige a diretoria em qualquer valor. Mas ele mesmo registrou que
+`import_processes` **não tem FK nenhuma para `purchase_orders` e nunca gera
+um pedido de compra**. Como todas as escritas do módulo COMEX eram
+`comex:operate` e **não havia nenhuma tabela de aprovação**, um processo de
+importação de R$ 1 milhão podia percorrer o ciclo inteiro
+(`draft → shipped → arrived → customs_cleared → received`, com entrada em
+estoque e custo nacionalizado) sem passar pela diretoria. A regra do G11 não
+alcançava esse caminho porque ele não toca as tabelas que ela protege.
+
+### Estrutura criada
+
+**`import_process_approvals`** — mesmo desenho de
+`purchase_order_approvals` (G11) e `jur_contract_approvals` (RF-JUR-003):
+
+| Coluna | Tipo | Nulo | Observação |
+|---|---|---|---|
+| `id` | INTEGER | não | PK, autoincrement |
+| `import_process_id` | INTEGER | não | FK → `import_processes.id`, `ON DELETE CASCADE` |
+| `approver_user_id` | INTEGER | não | FK → `users.id`, `ON DELETE RESTRICT`. Sempre do JWT |
+| `approver_role` | ENUM(`diretor`) | não | Sempre resolvido por RBAC, nunca aceito do body |
+| `approved_at` | TIMESTAMP | não | DEFAULT `CURRENT_TIMESTAMP` |
+| `created_at` / `updated_at` | TIMESTAMP | não | DEFAULT `CURRENT_TIMESTAMP` |
+
+- UNIQUE `uq_import_process_approvals_process_role` (`import_process_id`,
+  `approver_role`) — o mesmo papel não aprova duas vezes o mesmo processo,
+  garantido pelo banco mesmo sob concorrência.
+- Índice `idx_import_process_approvals_process_id` (o gate consulta por
+  processo a cada tentativa de embarque).
+- `CASCADE` na FK do processo × `RESTRICT` na FK do usuário: a aprovação não
+  sobrevive ao processo que ela aprova, mas o aprovador de um compromisso de
+  importação não pode ser apagado.
+
+### Onde a regra trava, e por quê
+
+Na transição **`draft → shipped`** (evento `shipped` de
+`POST /:id/tracking`) — o último ponto do ciclo em que ainda dá para
+desistir sem custo afundado; depois dele, câmbio e frete estão
+comprometidos. **Sem faixa de valor:** importação é sempre da diretoria,
+coerente com o G11. Sem a aprovação, `422` (`details.rule = 'G11-COMEX'`) e
+**nada** é gravado — nem o status, nem o recálculo de tributos dos itens.
+
+### Congelamento dos valores aprovados
+
+`POST /:id/tracking` é o **único** caminho de escrita capaz de alterar o
+cabeçalho monetário de um processo (não existe `PUT /:id` neste módulo, e os
+itens são imutáveis desde a criação). Por isso, no evento `shipped`,
+`exchange_rate`/`freight_value`/`insurance_value`/`other_expenses_value` são
+rejeitados: sem isso, a mesma requisição que consome a aprovação poderia
+inflar o valor, e a diretoria teria aprovado um processo diferente do que
+embarcou — o gate viraria decoração. É o equivalente do congelamento de
+`supplier_id`/`freight_value`/`origin` após `approved` no G11. Os eventos
+`arrived`/`customs_cleared` continuam aceitando valores (despesas aduaneiras
+reais só aparecem depois e são posteriores ao compromisso).
+
+### Dado existente
+
+Migration puramente aditiva — nenhuma coluna é adicionada a tabelas
+existentes e nenhuma linha muda. **Efeito operacional a comunicar ao
+COMEX:** processos que já estiverem em `draft` quando a migration subir
+passam a exigir a aprovação da diretoria para embarcar (sem
+grandfathering — decisão consciente: o gate só protege se valer para o
+estoque de processos abertos). Processos já em `shipped` ou adiante não são
+afetados. Registrado em `docs/governance/TODO.md`.
+
+---
+
+## G9 — Baixa de estoque da venda migra da confirmação para a NF-e (2026-08-10)
+
+**Migration:** `20260810-000030-generalize-stock-reservations-for-sales-g9.cjs`
+(Onda 3 do `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`, decisão
+D-A do dono).
+**Status:** ⏳ **escrita, NÃO aplicada** (aplicar migration está bloqueado por
+permissão do ambiente). Última aplicada no banco: `20260810-000028`.
+
+### O problema
+
+A venda baixava `products.quantity` na **confirmação do pedido**
+(`quote → confirmed`, e também na criação com `status: 'confirmed'`). O
+faturamento (`POST /api/sales/:id/nfe`) não tocava em estoque nenhum.
+
+Ajuste SINIEF 07/05, cláusula 1ª §1º e cláusula 9ª §1º: a NF-e é autorizada
+**antes** do fato gerador e a mercadoria só pode transitar **depois** da
+autorização de uso. Entre confirmar e faturar, portanto, a mercadoria ainda
+está fisicamente na empresa — o saldo do sistema ficava menor que o saldo real
+do galpão, e um inventário nesse intervalo acusaria sobra inexistente.
+
+### Alteração de schema
+
+`production_order_reservations` (criada pelo G3) deixou de ser exclusiva de
+ordem de produção. A generalização é exatamente a que o cabeçalho daquela
+migration previu ("tornar a coluna nullable, adicionar `sale_id` e um CHECK de
+exatamente-um-dono"):
+
+| Alteração | Detalhe |
+|---|---|
+| `production_order_id` | passa a **NULLABLE** (`ALTER COLUMN ... DROP NOT NULL`) |
+| `sale_id` (nova) | INTEGER nullable, FK → `sales.id`, `ON DELETE RESTRICT` |
+| `chk_stock_reservations_exactly_one_owner` | CHECK: exatamente um entre `production_order_id` e `sale_id` preenchido — nunca zero (seria a reserva anônima do G3 de volta), nunca dois (dono ambíguo) |
+| `uq_production_order_reservations_active` | recriado com `WHERE status='active' AND production_order_id IS NOT NULL` |
+| `uq_sale_reservations_active` (novo) | UNIQUE parcial `(sale_id, product_id) WHERE status='active' AND sale_id IS NOT NULL` |
+| `idx_production_order_reservations_sale_id` (novo) | índice auxiliar |
+
+⚠️ **A tabela NÃO foi renomeada** (viraria `stock_reservations`). Renomear
+tabela num banco que já apresenta drift em relação às migrations é risco
+desnecessário para ganho cosmético. O nome ficou **histórico**: trate-a como
+"reserva de estoque", não como "reserva de OP". Registrado em
+`COMMENT ON TABLE` e no JSDoc de `models/ProductionOrderReservation.ts`.
+
+`products.reserved_quantity` continua sendo o mesmo cache derivado do G3 —
+agora somando reservas de OP **e** de venda, que é a semântica correta de
+"comprometido".
+
+### Migração do dado existente
+
+Levantamento feito no banco real **antes** de escrever a migration:
+
+```sql
+SELECT status, COUNT(*) FROM sales GROUP BY status;
+-- confirmed: 1   (nenhuma venda em quote/partially_invoiced/invoiced/shipped/canceled)
+```
+
+**1 único pedido** em estado "já baixou estoque e ainda não faturou" (venda
+#10, 1 unidade do produto #25, `invoiced_quantity = 0`, movimento de saída
+#46). Confirma na prática a decisão D-E do dono ("entre confirmar e faturar
+passa o mesmo dia"): a migração é indolor e **não exigiu decisão adicional**.
+O backfill mesmo assim é genérico (funciona para N pedidos), porque o banco de
+produção definitivo ainda não existe.
+
+Para cada item de venda `confirmed`/`partially_invoiced` com saldo não
+faturado (`quantity - invoiced_quantity > 0`), o backfill:
+
+1. cria a reserva equivalente (dona = a venda, `created_by` = vendedor);
+2. **devolve** esse saldo a `products.quantity` (a baixa era indevida);
+3. devolve o mesmo saldo ao depósito `ACABADOS` em `product_warehouse_stock`,
+   preservando a invariante "saldo_total = SOMA por depósito"
+   (`BUSINESS_RULES.md` §12 item 3) — `UPDATE` para o par existente, `INSERT`
+   para o que faltar;
+4. grava o `inventory_movements` de entrada correspondente (`type='in'`,
+   `reference_type='sale'`, `reference_id=sales.id`) — o estorno precisa
+   aparecer no extrato do produto;
+5. recalcula `products.reserved_quantity` dos produtos tocados.
+
+Vendas `invoiced`/`shipped` **não são tocadas**: na regra antiga o estoque saiu
+na confirmação, na nova sai no faturamento — efeito líquido idêntico. `quote`
+nunca baixou nada; `canceled` já teve o estoque restaurado.
+
+### Correção de dado colateral — reserva não gera `inventory_movements`
+
+O G3 gravava um `InventoryMovement` a cada `reserve`/`releaseReservation` com
+`reference_type` `'reservation'` / `'reservation_release'`. **Esses dois
+valores não existem** em `enum_inventory_movements_reference_type` (verificado
+por `pg_enum` em 2026-08-10: `sale, purchase, production, adjustment,
+transfer, sst_epi_delivery, import`) — toda reserva real morria em 500
+(`invalid input value for enum`), erro invisível para `tsc` e para a suíte
+(o campo é tipado como `string` e os testes usam dublês em memória).
+
+A correção **não** foi adicionar os valores ao ENUM, e sim **parar de gravar o
+movimento**: `inventory_movements` documenta alteração de `products.quantity`
+(ver JSDoc de `models/InventoryMovement.ts`), e reserva não altera quantidade
+nenhuma — gravar `'adjustment'` de N unidades que não se moveram é o mesmo
+tipo de dado factualmente errado que a migration `20260809-000027` corrigiu. O
+rastro da reserva é a própria linha de `production_order_reservations` (dono,
+`created_by`, `created_at`, `released_at`, `notes`).
+
+Guarda de regressão: `tests/unit/sale-stock-baixa-na-nfe-g9.test.ts` afirma
+que a confirmação de pedido não gera movimento e que a baixa gera movimento
+com `reference_type` pertencente à lista real do ENUM.
+
+### ATENÇÃO — ordem de deploy
+
+O código do working tree **já depende desta migration** (a confirmação de
+pedido grava `sale_id`). Aplicar **antes** de subir o código: com o schema
+antigo, confirmar pedido falha (coluna inexistente). O caminho inverso é
+inofensivo — aplicar a migration sem subir o código deixa o estoque no estado
+fisicamente correto e o código antigo apenas não cria reservas novas.
+
+---
+
+## S-1 rodada 3 — drift schema × model e a irreprodutibilidade do banco (2026-08-10)
+
+**Migration:** `20260810-000033-fix-nullable-columns-round-3.cjs`
+**Status:** ⏳ **escrita, NÃO aplicada** (aplicar migration está bloqueado por
+permissão do ambiente). Última aplicada no banco: `20260810-000028`.
+
+Fecha o escopo que a rodada 2 (`20260810-000028`, commit `94e0f14`) deixou
+declaradamente para depois, e responde à segunda metade do problema: **por que
+o banco não é reproduzível a partir das migrations versionadas**.
+
+### Medição
+
+Guarda `server/tests/integration/schema-model-drift-guard.test.ts` rodada
+contra o banco de dev (`RUN_INTEGRATION=true`):
+
+| Métrica | Antes | Depois (simulado) |
+|---|---|---|
+| Colunas `NOT NULL` sem default que o model declara opcionais | 65 | 1 |
+| FKs `ON DELETE SET NULL` sobre coluna `NOT NULL` | 12 | 0 |
+
+A única remanescente é `production_order_reservations.production_order_id`,
+já resolvida pela migration `20260810-000030` (G9) — não duplicada aqui.
+
+### Causa raiz — 3 causas, 65 sintomas
+
+**Causa A (59 colunas) — o bootstrap traduzia "model calado" para `NOT NULL`.**
+Nenhuma das tabelas afetadas nasce de SQL versionado: `01_schema.sql` só cria
+o schema PT legado. `assets`, `employees`, `service_orders`,
+`maintenance_orders`, `departments`, `bill_of_materials` e `purchase_orders`
+são criadas por `20260731-000001-baseline-schema.cjs`, que gera o DDL a partir
+dos **models compilados em tempo de execução** (`DYNAMIC_MODEL_FILES` →
+`createTableFromModel`). Na versão vigente até `f9f03ea` (2026-08-05), o
+mapeador fazia `allowNull: attribute.allowNull` e repassava `undefined` a
+`queryInterface.createTable`. Como a forma predominante de declarar coluna
+opcional neste projeto é a abreviada (`notes: DataTypes.TEXT`, sem a chave
+`allowNull`), `undefined` virou `NOT NULL` no Postgres.
+
+**Causa B (4 colunas) — o model é que mentia.** `purchase_orders.order_date`,
+`maintenance_orders.report_date`, `service_orders.entry_date` e
+`bill_of_materials.revision_date` são `NOT NULL` corretamente: a interface de
+atributos as declara não-nulas e o Sequelize as preenche via `defaultValue:
+DataTypes.NOW` (aplicado no cliente, então o INSERT nunca as omite). Aqui
+**não** se afrouxou o banco — os models passaram a declarar `allowNull: false`.
+
+**Causa C (1 coluna) — atributo-fantasma do Sequelize, não drift.**
+`access_profile_permissions.access_profile_id`: o model declara
+`accessProfileId` com `allowNull: false` e `field: 'access_profile_id'`, mas a
+associação em `src/models/index.ts` usa `foreignKey: 'access_profile_id'` (o
+nome da **coluna**, não o do atributo). O Sequelize então cria um **segundo**
+atributo, homônimo da coluna, com `allowNull` no default (`true`). Banco e
+model concordam; só a guarda enxergava divergência. A guarda passou a avaliar
+nulabilidade **por coluna**, tomando a declaração mais estrita entre os
+atributos que apontam para ela. Mesmo padrão existe em `users.access_profile_id`.
+
+### Impacto real do defeito (causa A)
+
+`assets`, `employees`, `service_orders` e `maintenance_orders` estão com **0
+linhas** — a mesma espécie de evidência que denunciou a rodada 2 ("35
+movimentações, nenhuma `reference_type='adjustment'`). `CreateAssetUseCase`
+exige apenas `tag` e `name`, e sequer repassa `product_id`, `qr_code` ou
+`last_inventory_date`: **nenhum payload possível** satisfazia o `NOT NULL`.
+`POST /api/assets` e `POST /api/employees` respondiam 500 em 100% dos casos.
+
+### Por que os dois bancos divergiram — e o caminho para reprodutibilidade
+
+O banco de dev foi provisionado com a versão pré-`f9f03ea` do bootstrap. O
+`f9f03ea` corrigiu o mapeador, mas **não reparou o banco já criado**: bancos
+existentes caem no atalho `shouldBootstrapCanonicalSchema` ("schema já
+existe") e nunca mais passam pelo `createTable`. O banco de teste, criado
+depois, pegou o mapeador corrigido. Daí dois bancos diferentes com as mesmas
+migrations aplicadas.
+
+**A raiz é estrutural e continua de pé:** `20260731-000001-baseline-schema.cjs`
+não é DDL congelado — ele lê os models de `dist/` em tempo de execução. O
+schema que uma máquina nova produz depende de **quando** o bootstrap rodou.
+Enquanto isso valer, "banco reproduzível" é impossível por construção, e
+provisionar o servidor de produção gera um terceiro schema.
+
+Caminho recomendado (não executado nesta entrega — exige aplicar migrations):
+
+1. aplicar `…-000030` a `…-000033` ao banco de dev;
+2. `pg_dump --schema-only` do banco de dev já convergido → congelar como
+   `database/postgresql/00_baseline_frozen.sql`;
+3. trocar o corpo de `20260731-000001-baseline-schema.cjs` por esse arquivo
+   estático, eliminando `DYNAMIC_MODEL_FILES`/`createTableFromModel` e o
+   atalho `shouldBootstrapCanonicalSchema` (bancos já migrados não reexecutam
+   a migration, então o atalho deixa de ter função);
+4. provisionar um banco descartável **só por migrations** e rodar a guarda de
+   drift contra ele — schema idêntico ao de dev é o critério de aceite.
+
+Até o passo 4 passar, **o servidor de produção não deve ser provisionado**.
+
+---
+
+## G5 — API de Roteiro de Produção: índice único parcial de roteiro ativo (2026-08-10)
+
+**Migration:** `server/migrations/20260810-000034-production-route-active-unique-g5.cjs`
+(**escrita, NÃO aplicada** — aplicar migration está bloqueado por permissão do
+ambiente nesta rodada; `up`/`down` estão funcionais).
+
+### O que NÃO mudou
+
+Nenhuma tabela criada, nenhuma coluna adicionada, alterada ou removida.
+`production_routes` e `production_route_steps` **já existiam** desde a baseline
+(`20260731-000001`, criadas por sync a partir dos models
+`server/src/models/ProductionRoute.ts` / `ProductionRouteStep.ts`), com FKs em
+`database/postgresql/05_add_critical_foreign_keys.sql` e a coluna
+`work_center_id` adicionada em `20260803-000004`. O que faltava era **API**, não
+schema — as tabelas já eram lidas pelo custeio de mão de obra, pela
+carga-máquina e pelo OEE, mas só eram populáveis por script.
+
+### O que a migration acrescenta
+
+1. **`uq_production_routes_active_per_product`** — índice **único parcial**:
+
+   ```sql
+   CREATE UNIQUE INDEX uq_production_routes_active_per_product
+     ON production_routes (product_id)
+   WHERE status = 'active';
+   ```
+
+   Só pode existir **um roteiro `active` por produto**. Sem isso, dois roteiros
+   ativos do mesmo produto fazem
+   `SequelizeWorkCenterRepository.aggregateLoadByWorkCenter` (que junta
+   `production_routes` por `product_id`) **somar a carga duas vezes**, e deixam
+   indefinido qual roteiro a fábrica deve executar. O use case já garante a
+   regra em transação com lock pessimista (ativar uma revisão torna a anterior
+   `superseded`); o índice é a rede de baixo — mesmo padrão já adotado no índice
+   único parcial de `production_downtimes` (2026-08-06).
+
+   O índice é **parcial de propósito**: revisões `draft`, `inactive` e
+   `superseded` continuam podendo coexistir aos montes para o mesmo produto — é
+   esse histórico que preserva o roteiro que as OPs já abertas usaram.
+
+2. **`COMMENT ON COLUMN`** em `production_routes.status`, `.revision`,
+   `.total_standard_time_minutes` e `production_route_steps.sequence`,
+   documentando no próprio banco o ciclo de vida, a regra de revisão e a
+   convenção de tempo (tempo padrão **por unidade**, sem setup — que é por
+   lote). `comment:` em `addColumn` continua proibido neste projeto (corrompe o
+   SQL gerado); os comentários vão por `COMMENT ON COLUMN`.
+
+### Risco de aplicação
+
+⚠️ Se o banco de destino já tiver **2+ roteiros `active` para o mesmo produto**,
+a criação do índice **falha** — comportamento desejado: é dado ambíguo que
+precisa de decisão do PCP, não de correção automática. A consulta de diagnóstico
+está no rodapé do próprio arquivo de migration. No banco de dev atual o risco é
+nulo na prática, porque até esta data não havia como cadastrar roteiro.
+
+`down()` remove o índice e zera os comentários — reversível sem perda de dado.
+
+### Correção de leitura acoplada (fora da migration)
+
+`SequelizeWorkCenterRepository.aggregateLoadByWorkCenter` passou a filtrar
+`pr.status = 'active'`. A query somava **todas** as revisões de roteiro do
+produto; era inofensivo enquanto a tabela estava vazia e passaria a **dobrar a
+carga-máquina** na primeira revisão criada pela nova API.
+
+---
+
+## G7 — Inspeção de qualidade como entidade + gate de liberação de lote (2026-08-10)
+
+**Migration:** `20260810-000032-create-quality-inspections-g7.cjs`
+**Decisão:** D-H do dono do produto, 2026-08-10
+(`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4) — a empresa
+pretende se certificar ISO 9001, então o registro de inspeção nasce no
+formato que a norma pede, **sem** travar a operação com burocracia que
+ninguém executa.
+
+⚠️ **MIGRATION NÃO APLICADA** — aplicar migrations está bloqueado pelo
+classificador de permissão do ambiente nesta rodada. O `up`/`down` foram
+escritos e exercitados contra um `queryInterface` falso (ordem das operações
+e ausência de `comment:` em `addColumn` verificadas), mas **o banco ainda não
+tem estas colunas/tabela**. Como os models já as declaram, o código só é
+executável depois de `migration:up` — mesma situação já registrada para
+`20260810-000029` (G11).
+
+### O problema de modelagem que ela resolve
+
+Não existia **nenhuma** entidade de inspeção de qualidade no ERP. As únicas
+tabelas com "inspeção" no nome (`sst_inspecoes_seguranca`,
+`sst_inspecao_itens`) são de Segurança do Trabalho e não têm relação com
+lote. A liberação de um lote da quarentena
+(`POST /api/inventory/lots/:id/release`) gravava **apenas
+`lot_controls.notes`** — texto livre. Não havia coluna nenhuma dizendo quem
+autorizou, quando, nem contra qual critério.
+
+Isso não satisfaz a **ISO 9001:2015 §8.6** (reter informação documentada da
+liberação, incluindo evidência de conformidade com os critérios de aceitação
+e rastreabilidade à pessoa que autorizou) nem a **§8.7** (controle de saída
+não conforme, incluindo a aceitação sob concessão como decisão registrada).
+
+⚠️ O texto integral da ISO 9001 é paywalled (iso.org devolve 403); as
+cláusulas são citadas por número e assunto — ver
+`docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md` §Decisão 5.
+
+### 1. Tabela nova: `quality_inspections`
+
+| Coluna | Tipo | Nulo | Observação |
+|---|---|---|---|
+| `id` | SERIAL | não | PK |
+| `inspection_number` | VARCHAR(30) | não | UNIQUE, `INSP-<timestamp>` |
+| `lot_id` | INTEGER | **não** | FK → `lot_controls.id` `ON DELETE RESTRICT`. Toda inspeção é sobre um lote |
+| `stage` | ENUM | não | `incoming` \| `in_process` \| `final`, DEFAULT `incoming` |
+| `acceptance_criteria` | TEXT | **não** | §8.6 — critério aplicado |
+| `sampling_plan` | VARCHAR(120) | sim | evidência textual, **sem efeito de cálculo** |
+| `lot_size` / `sample_size` | DECIMAL(12,4) | sim | idem |
+| `defects_found` | INTEGER | não | DEFAULT 0 |
+| `verdict` | ENUM | **não** | `approved` \| `rejected` \| `approved_under_concession` |
+| `concession_justification` | TEXT | sim | obrigatória por REGRA DE APLICAÇÃO quando `verdict = approved_under_concession` (§8.7) |
+| `non_conformity_id` | INTEGER | sim | FK → `non_conformities.id` `ON DELETE SET NULL` |
+| `inspector_id` | INTEGER | **não** | FK → `users.id` `ON DELETE RESTRICT`. Sempre do JWT |
+| `inspected_at` | TIMESTAMPTZ | não | DEFAULT `CURRENT_TIMESTAMP` |
+| `notes` | TEXT | sim | |
+
+Índices: `idx_quality_inspections_lot_id`, `..._verdict`, `..._inspector_id`,
+mais o UNIQUE de `inspection_number`. O índice por `lot_id` é o que sustenta
+a consulta do gate (`ORDER BY inspected_at DESC, id DESC LIMIT 1`).
+
+> **Por que `concession_justification` é nullable no banco e obrigatória na
+> aplicação:** ela só se aplica a um dos três vereditos. Um `NOT NULL` a
+> tornaria obrigatória também em aprovação e reprovação, e um `CHECK`
+> condicional amarraria a regra de negócio ao DDL num ponto em que ela ainda
+> pode evoluir (a §8.7 admite outros desfechos). A obrigatoriedade fica em
+> `CreateQualityInspectionUseCase`, com teste explícito.
+
+### 2. Colunas novas em `lot_controls` (todas nullable)
+
+| Coluna | Tipo | Observação |
+|---|---|---|
+| `release_inspection_id` | INTEGER | FK → `quality_inspections.id`, a inspeção que autorizou a saída da quarentena |
+| `released_by` | INTEGER | FK → `users.id` — **quem autorizou** (§8.6); pode diferir do inspetor |
+| `released_at` | TIMESTAMPTZ | data/hora da liberação |
+
+Nullable de propósito: lotes nunca liberados e **liberações legadas
+anteriores ao G7** ficam com `NULL` — e é exatamente esse `NULL` que
+identifica, numa auditoria, a liberação feita sem evidência. Nenhum default
+foi inventado para não fabricar rastreabilidade que não existiu.
+
+### Efeito nas linhas existentes
+
+`quality_inspections` nasce vazia. **Consequência operacional intencional:**
+depois de aplicada a migration, liberar um lote passa a exigir uma inspeção
+aprovada — inclusive para os lotes que já estão em quarentena hoje (9 lotes /
+281 un. no banco de dev em 2026-08-10). **Não há backfill possível**: inventar
+inspeção retroativa seria fabricar evidência de auditoria, o oposto do que a
+norma pede.
+
+### O que esta migration deliberadamente NÃO modela
+
+Nenhuma tabela de plano de amostragem, nível de inspeção ou AQL por classe de
+defeito. A ISO 2859-1 fornece as tabelas, mas **a escolha dos números é
+decisão da Engenharia da Qualidade / contrato** e o dono não a tomou. Modelar
+isso agora exigiria inventar valores, o que a pesquisa normativa marca
+explicitamente como `[NÃO CONFIRMADO NA FONTE]`.
+
+### Correção de leitura acoplada (fora da migration)
+
+O achado colateral do G7: o recebimento cria o lote em `quarantine` **mas já
+incrementa `products.quantity`**, e as duas rotinas de planejamento liam esse
+saldo bruto — MRP (`SequelizeItemRepository.listMrpInventoryPositions`) e
+disponibilidade de OP (`BomService.explodeBOM`). Material não inspecionado
+contava como disponível.
+
+Corrigido **no lado da leitura**, via `services/quarantineBalanceService.ts`:
+o planejamento desconta `SUM(quantity_available)` dos lotes
+`quarantine`/`blocked`, sempre com `max(0, físico − retido)`. `products.quantity`
+continua significando saldo **físico** — nenhuma escrita de estoque foi
+alterada, e `services/inventoryService.ts` não foi tocado (está sob
+refatoração concorrente de reserva por documento, G3/G9).
+
+---
+
+## G1 — Estrutura de produto (BOM) passa a ter fonte única (2026-08-10)
+
+**Migration:** `server/migrations/20260810-000035-bom-single-source-g1.cjs`
+(**escrita, NÃO aplicada** — aplicar migration segue bloqueado por permissão do
+ambiente nesta rodada; `up`/`down` estão funcionais e foram exercitados de fato
+contra o Postgres real dentro de uma transação revertida por `ROLLBACK`, que
+deixa o banco byte-idêntico: `CREATE INDEX` → índice presente → `DROP INDEX` →
+índice ausente, os quatro `COMMENT ON` aplicados e zerados).
+
+### O defeito estrutural
+
+O ERP mantinha **duas árvores de produto paralelas**, com mestres e chaves
+diferentes, e **nada reconciliava as duas**:
+
+| Estrutura | Mestre | Chave | Quem lia |
+|---|---|---|---|
+| `item_estruturas` | `items` | UUID | MRP, explosão de item |
+| `bill_of_materials` + `bill_of_material_items` | `products` | INTEGER | `BomService` → criação, liberação (reserva), **conclusão** (consumo + custeio) da OP |
+
+A única ponte era casamento de string (`products.code = items.codigo`), nunca
+exercida para estrutura. Planejamento e consumo podiam discordar sobre o que
+compõe um produto sem nada acusar.
+
+### Estado do dado antes de decidir (consulta somente leitura, 2026-08-10)
+
+O dono informou (D-B) que **ninguém mantinha nenhuma das duas ainda**.
+Confirmado no banco de dev antes de qualquer ação:
+
+| Tabela | Linhas | Natureza |
+|---|---|---|
+| `item_estruturas` | 4 | 100% resíduo de teste (`PA-TESTE-001`, `E2E-MRP-*`, `E2E-PAI-*`) |
+| `bill_of_materials` | 2 | resíduo de CI (`CI-BOM-FINISHED-001`, **sem itens** — cabeçalho órfão com `total_components = 1`) e de e2e (`E2E-PA-1786338099090`) |
+| `bill_of_material_items` | 2 | ambos da BOM #18 (e2e) |
+
+**Zero linha de engenharia real.** Isso rebaixou o risco de "migração de base
+viva" para **escolha técnica** — e é o que autorizou converter agora, antes de
+alguém começar a usar.
+
+### A decisão: `bill_of_materials` sobrevive
+
+Racional completo em `docs/producao/06-BOM.md` §G1 e no cabeçalho de
+`server/src/services/bomStructureProjection.ts`. Em resumo, com o código:
+
+1. É a única estrutura que governa **dinheiro e estoque** (reserva, consumo,
+   custeio); depois do **G2**, concluir OP sem BOM ativa falha.
+2. Sua chave (`products.id`, INTEGER) é a de `inventory_movements`,
+   `lot_controls`, `stock_reservations`, `sale_items`,
+   `purchase_order_items` e `production_orders`. `item_estruturas` era a única
+   ilha de UUID da cadeia física.
+3. O mestre de `item_estruturas` **não é sistema de registro transacional**:
+   `items.estoque_atual = 0.000000` em 100% das 17 linhas, enquanto
+   `products.quantity` carrega os saldos reais. O próprio MRP já abandonava
+   `items` para ler número (`listMrpInventoryPositions` faz o crosswalk).
+4. Já tem o vocabulário de controle de alteração de engenharia que a
+   ISO 9001 §8.5.6 exige (`draft`/`active`/`inactive`/`superseded`, `revision`,
+   `approved_by`, `approval_date`) — o mesmo ciclo do **G5**.
+
+### O que a migration acrescenta
+
+Nenhuma tabela criada, nenhuma coluna adicionada/alterada/removida, nenhum
+backfill, nenhuma linha apagada. Puramente aditiva e reversível.
+
+1. **`uq_bill_of_materials_active_per_product`** — índice **único parcial**:
+
+   ```sql
+   CREATE UNIQUE INDEX uq_bill_of_materials_active_per_product
+     ON bill_of_materials (product_id)
+   WHERE status = 'active';
+   ```
+
+   Só pode existir **uma BOM `active` por produto**. Sem isso,
+   `BillOfMaterial.findOne({ product_id, status: 'active' })` — usada pela
+   explosão, pela reserva na liberação da OP e pelo custeio na conclusão —
+   devolve uma revisão **arbitrária** quando há duas ativas, reabrindo o G1
+   por dentro do próprio módulo de BOM. A aplicação já garante a regra em
+   transação (`SequelizeBOMRepository.activateExclusively`); o índice é a rede
+   de baixo — mesmo padrão do G5 e de `production_downtimes`.
+
+   Parcial **de propósito**: `draft`, `inactive` e `superseded` continuam
+   podendo coexistir aos montes por produto — é esse histórico que sustenta o
+   consumo e o custo das OPs já concluídas.
+
+2. **`COMMENT ON`** em `bill_of_materials` (tabela), `.revision`, `.status` e
+   em `item_estruturas` (tabela), registrando **no próprio banco** o ciclo de
+   revisão e o fato de `item_estruturas` ter virado **legado congelado**.
+   `comment:` em `addColumn` segue proibido no projeto (corrompe o SQL gerado).
+
+### Risco de aplicação
+
+⚠️ Se o banco de destino já tiver **2+ BOMs `active` do mesmo produto**, a
+criação do índice **falha** — desejado: é dado ambíguo que pede decisão da
+engenharia. Consultas de diagnóstico no rodapé do arquivo de migration
+(inclusive a de lacuna de catálogo). No banco de dev atual as 2 BOMs ativas são
+de **produtos diferentes** — conferido, o índice passa.
+
+`down()` remove o índice e zera os comentários — reversível sem perda de dado.
+
+### `item_estruturas` — legado congelado, **não** removida
+
+A tabela **não é dropada** nesta migration. Remover tabela é passo de
+**contração**, que só deve acontecer depois da baseline congelada de schema
+(plano de 4 passos mais acima neste documento) — sem ela o `DROP` sai
+diferente em cada um dos bancos divergentes. O que muda agora é que o banco
+passa a **dizer** que ela é legado, para o próximo a abrir o schema não supor
+que ainda vale.
+
+### Mudanças de leitura/escrita acopladas (fora da migration)
+
+| Onde | O que mudou |
+|---|---|
+| `services/bomStructureProjection.ts` (**novo**) | Projeta a BOM ativa (em `products.id`) para arestas em UUID, via `products.code = items.codigo`. **Projeção de leitura, feita na hora — não existe réplica para dessincronizar.** SQL exercitada contra o Postgres real |
+| `SequelizeMrpRepository.listActiveEdges` | Passou a ler a projeção. Novo `listStructureGaps()` expõe as arestas de BOM ativa invisíveis ao MRP por falta de item canônico |
+| `SequelizeItemEstruturaRepository` | Todas as leituras passaram à projeção; `create()` bloqueado. Corrige de quebra o guarda de inativação de item, que olhava só a tabela vazia e estava **cego para a BOM de produção** |
+| `CreateItemStructureUseCase` | `POST /api/items/:id/estrutura` responde **422 `G1-ESTRUTURA-DUPLA`**. Validações de payload (404, `G1-ESTRUTURA-AUTO-REF`, `G1-ESTRUTURA-CICLO`) continuam vindo antes |
+| `UpdateBOMUseCase` / `ApproveBOMUseCase` | Ciclo de revisão ISO: `G1-BOM-ATIVA-IMUTAVEL`, `G1-BOM-SUPERSEDED-IMUTAVEL`, `G1-BOM-STATUS-INVALIDO`; ativação exclusiva transacional |
+| `BomService.createBOM` | `superseded` da revisão anterior movido para **dentro** da transação; `G1-BOM-REV-DUP`; `G1-BOM-AUTO-REF` |
+
+**Bug latente corrigido:** o `superseded` rodava **fora** da transação, antes
+dela. Criação que falhasse depois deixava o produto com **zero** BOM ativa — e,
+desde o G2, produto sem BOM ativa **não conclui OP**. Um cadastro malsucedido
+derrubava a produção de um produto que estava funcionando.
+
+### Lacuna de catálogo já presente no dado de dev
+
+A projeção rodada contra o banco real devolve **2 arestas da BOM #18, e uma
+delas com `item_componente_id` NULL**: o produto `E2E-MP2-1786338099090` não
+tem `items.codigo` correspondente. Ou seja, ele é **invisível para o MRP e
+visível para a produção** — exatamente o sintoma que o G1 fecha. Por isso a
+projeção reporta `unmapped` em vez de engolir.
+
+### Pendência de decisão de negócio (não implementada de propósito)
+
+**`production_orders.bom_id`** — amarrar a OP à revisão de BOM que ela
+executou. Hoje a conclusão explode a BOM **vigente no momento da conclusão**;
+se a engenharia revisar no meio de uma OP aberta, ela é consumida e custeada
+pela revisão nova, não pela reservada na liberação. Mesmo gap que o G5 registrou
+para roteiro. É coluna nova **mais** decisão de negócio, e mexeria em
+`ChangeProductionOrderStatusUseCase`, sob trabalho concorrente (G2/G3/G7).
+**Pré-requisito honesto se o Fisco ou a auditoria ISO exigirem reconstituir o
+produto COMO FABRICADO.**

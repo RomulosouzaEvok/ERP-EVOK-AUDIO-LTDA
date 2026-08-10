@@ -59,6 +59,16 @@ export const receivePurchaseItemsSchema = z.object({
   // 'LABORATORIO' e usado para requisicoes de amostra de engenharia
   // (UC-39/Bloco 2), quando o Recebimento sabe que a origem e uma amostra.
   warehouse_code: z.enum(['INSUMOS', 'LABORATORIO']).optional(),
+  // G13 — a conta a pagar nasce NESTE recebimento (CPC 00 (R2) 4.56/4.58).
+  // Os dois campos abaixo alimentam o vencimento dessa conta:
+  //  - `invoice_date`: data de emissao da NF do fornecedor (base do prazo);
+  //  - `due_date`: vencimento negociado, que prevalece sobre qualquer
+  //    calculo (o prazo real e o que esta na nota, nao um default).
+  // Ambos opcionais: sem eles o vencimento cai em "data do recebimento + 30
+  // dias" — o mesmo prazo default que a regra anterior ja usava, agora
+  // ancorado num fato ocorrido em vez da data prometida de entrega.
+  invoice_date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'invoice_date deve estar no formato YYYY-MM-DD.').optional(),
+  due_date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'due_date deve estar no formato YYYY-MM-DD.').optional(),
 }).strict();
 
 const schemas = {

@@ -308,9 +308,18 @@ exports.receiveItems = async (req: Request, res: Response, next: NextFunction) =
   try {
     const parsed = receivePurchaseItemsSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { items, invoice_number, warehouse_code } = parsed.data;
+    const { items, invoice_number, warehouse_code, invoice_date, due_date } = parsed.data;
     const useCase = new ReceivePurchaseItemsUseCase(purchaseRepository);
-    const { purchase, previousStatus, requisitionStatus } = await useCase.execute({ id: req.params.id, items, invoiceNumber: invoice_number, warehouseCode: warehouse_code, userId: (req as any).user.id, transaction: t });
+    const { purchase, previousStatus, requisitionStatus, payable, payableSkipReason } = await useCase.execute({
+      id: req.params.id,
+      items,
+      invoiceNumber: invoice_number,
+      warehouseCode: warehouse_code,
+      invoiceDate: invoice_date,
+      dueDate: due_date,
+      userId: (req as any).user.id,
+      transaction: t
+    });
 
     await t.commit();
 
@@ -321,14 +330,31 @@ exports.receiveItems = async (req: Request, res: Response, next: NextFunction) =
       entityId: purchase.id,
       entityDescription: purchase.order_number,
       oldValues: { status: previousStatus },
-      newValues: { status: purchase.status, requisition_status: requisitionStatus ?? null },
+      newValues: {
+        status: purchase.status,
+        requisition_status: requisitionStatus ?? null,
+        // G13: rastro de qual conta a pagar este recebimento gerou (ou por
+        // que não gerou nenhuma).
+        account_payable_id: payable?.id ?? null,
+        payable_skip_reason: payableSkipReason ?? null
+      },
       description: requisitionStatus
         ? `Recebimento de itens do pedido ${purchase.order_number} (requisicao de origem -> ${requisitionStatus})`
         : `Recebimento de itens do pedido ${purchase.order_number}`
     });
 
     const fullPurchase = await purchaseRepository.findPurchaseById(purchase.id);
-    res.json({ success: true, data: fullPurchase, requisition_status: requisitionStatus ?? null });
+    res.json({
+      success: true,
+      data: fullPurchase,
+      requisition_status: requisitionStatus ?? null,
+      // G13 — a conta a pagar deste recebimento (CPC 00 (R2) 4.58).
+      // `account_payable` é `null` quando nada foi lançado; nesse caso
+      // `payable_skip_reason` explica (`legacy_created_on_approval`,
+      // `no_supplier`, `zero_amount`, `already_exists`).
+      account_payable: payable ? { id: payable.id, amount: payable.amount, due_date: payable.due_date, invoice_number: payable.invoice_number } : null,
+      payable_skip_reason: payableSkipReason ?? null
+    });
   } catch (error) {
     await rollbackIfPending(t);
     next(error);

@@ -23,6 +23,10 @@ const reconciliationRouter = require('./reconciliation');
 
 // Contas a Receber
 router.get('/receivable', authenticate, authorizeModule('financeiro'), financialController.listReceivable);
+// Cobrança AVULSA, sem venda vinculada (decisão D-J: reembolso, aluguel,
+// venda de sucata). Recebível DE VENDA não passa por aqui — nasce na
+// autorização da NF-e (gap G13, CPC 47 item 108).
+router.post('/receivable', authenticate, authorizeModule('financeiro', 'operate'), financialController.createReceivable);
 router.put('/receivable/:id/pay', authenticate, authorizeModule('financeiro', 'operate'), financialController.receivePayment);
 router.put('/receivable/:id/cost-center', authenticate, authorizeModule('financeiro', 'operate'), financialController.updateReceivableCostCenter);
 

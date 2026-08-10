@@ -160,6 +160,40 @@ class FiscalRepository {
   async findSaleInvoicesBySaleId(saleId: number | string, options?: FindOptions): Promise<any[]> { // eslint-disable-line no-unused-vars
     throw new Error('FiscalRepository.findSaleInvoicesBySaleId não implementado.');
   }
+
+  /**
+   * Cria uma parcela em `accounts_receivable` (gap G13).
+   *
+   * O módulo fiscal ganhou esta responsabilidade porque, pelo CPC 47 itens
+   * 31/38/108, é a **autorização da NF-e** que torna o direito à
+   * contraprestação incondicional — antes dela não existe recebível. Ver
+   * `services/saleReceivableService`.
+   *
+   * @abstract
+   * @param {Object} data
+   * @param {FindOptions} [options] - Transação (a mesma do faturamento).
+   * @returns {Promise<Object>}
+   */
+  async createAccountReceivable(data: Record<string, unknown>, options?: FindOptions): Promise<any> { // eslint-disable-line no-unused-vars
+    throw new Error('FiscalRepository.createAccountReceivable não implementado.');
+  }
+
+  /**
+   * Lista as contas a receber já existentes de uma venda.
+   *
+   * Usado pelo G13 para (a) detectar parcela **legada** — criada na
+   * confirmação, portanto sem `invoice_number` — e não duplicar o
+   * recebível, e (b) continuar a numeração de parcelas entre emissões
+   * parciais sucessivas.
+   *
+   * @abstract
+   * @param {number|string} saleId
+   * @param {FindOptions} [options] - Transação opcional.
+   * @returns {Promise<Object[]>} Parcelas ordenadas por número.
+   */
+  async findReceivablesBySaleId(saleId: number | string, options?: FindOptions): Promise<any[]> { // eslint-disable-line no-unused-vars
+    throw new Error('FiscalRepository.findReceivablesBySaleId não implementado.');
+  }
 }
 
 export = FiscalRepository;
