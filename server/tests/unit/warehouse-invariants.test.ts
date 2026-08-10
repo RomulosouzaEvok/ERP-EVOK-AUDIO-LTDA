@@ -202,6 +202,16 @@ describe('Invariante 1 — faturamento/expedicao (saleStockService) so le/consom
   });
 });
 
+/**
+ * Gateway de inspecao (G7) devolvendo sempre inspecao APROVADA — usado pelos
+ * testes de invariante de deposito, que nao sao sobre o gate de qualidade.
+ *
+ * @returns Gateway com `findLatestInspectionForLot` aprovado.
+ */
+function approvedQualityGateway() {
+  return { findLatestInspectionForLot: jest.fn(async () => ({ id: 501, verdict: 'approved' })) };
+}
+
 describe('Invariante 2 — quarentena/bloqueio/liberacao de lote (BlockLotUseCase/ReleaseLotUseCase) nao move saldo de deposito', () => {
   let LotControl: any;
   let ProductWarehouseStock: any;
@@ -271,10 +281,14 @@ describe('Invariante 2 — quarentena/bloqueio/liberacao de lote (BlockLotUseCas
   });
 
   it('ReleaseLotUseCase (quarantine -> available) muda apenas status/notes, sem tocar warehouse_id nem ProductWarehouseStock', async () => {
-    const useCase = new ReleaseLotUseCase(repository);
+    // G7 (2026-08-10): a liberacao passou a exigir inspecao aprovada
+    // (ISO 9001 8.6). Este teste mede a INVARIANTE DE DEPOSITO, entao informa
+    // uma inspecao aprovada para nao medir o gate por acidente — o gate tem
+    // suite propria em `quality-inspection-release-gate.test.ts`.
+    const useCase = new ReleaseLotUseCase(repository, approvedQualityGateway());
     const warehouseIdBefore = LotControl.__row.warehouse_id;
 
-    const updated = await useCase.execute({ id: 77, notes: 'Inspecao aprovada' });
+    const updated = await useCase.execute({ id: 77, notes: 'Inspecao aprovada', releasedBy: 9 });
 
     expect(updated.status).toBe('available');
     expect(LotControl.__row.warehouse_id).toBe(warehouseIdBefore);
@@ -289,10 +303,10 @@ describe('Invariante 2 — quarentena/bloqueio/liberacao de lote (BlockLotUseCas
 
   it('ReleaseLotUseCase (blocked -> available, pos-tratativa de RNC) tambem nao move o lote de deposito', async () => {
     LotControl.__row.status = 'blocked';
-    const useCase = new ReleaseLotUseCase(repository);
+    const useCase = new ReleaseLotUseCase(repository, approvedQualityGateway());
     const warehouseIdBefore = LotControl.__row.warehouse_id;
 
-    const updated = await useCase.execute({ id: 77, notes: 'RNC tratada' });
+    const updated = await useCase.execute({ id: 77, notes: 'RNC tratada', releasedBy: 9 });
 
     expect(updated.status).toBe('available');
     expect(LotControl.__row.warehouse_id).toBe(warehouseIdBefore);

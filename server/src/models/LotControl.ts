@@ -29,6 +29,9 @@ interface LotControlAttributes {
   expires_at: string | null;
   received_at: string | null;
   created_by: number | null;
+  release_inspection_id: number | null;
+  released_by: number | null;
+  released_at: Date | null;
   notes: string | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
@@ -65,6 +68,15 @@ const LotControl = sequelize.define('LotControl', {
   expires_at: { type: DataTypes.DATEONLY, allowNull: true },
   received_at: { type: DataTypes.DATEONLY, allowNull: true },
   created_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id' },
+  // G7 (ISO 9001:2015 8.6) — rastreabilidade da LIBERACAO. Ate 2026-08-10 a
+  // saida da quarentena so deixava um texto em `notes`: nao havia quem
+  // autorizou, quando, nem contra qual evidencia. Todos nullable de
+  // proposito: lote nunca liberado e liberacao legada (anterior ao G7)
+  // ficam com NULL — e esse NULL que identifica, numa auditoria, a
+  // liberacao sem evidencia.
+  release_inspection_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> quality_inspections.id que autorizou a liberacao (G7)' },
+  released_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id de quem autorizou a liberacao (do JWT) — pode diferir do inspetor' },
+  released_at: { type: DataTypes.DATE, allowNull: true, comment: 'Data/hora da liberacao do lote' },
   notes: { type: DataTypes.TEXT, allowNull: true }
 }, {
   tableName: 'lot_controls',

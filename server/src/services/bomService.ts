@@ -26,6 +26,9 @@ const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const { BillOfMaterial, BillOfMaterialItem, Product } = require('../models/index');
 const { roundQuantity } = require('../shared/utils/decimal');
+// G7 (achado colateral): desconta do saldo de PLANEJAMENTO o material retido
+// em quarentena/bloqueio — ver o cabeçalho de `quarantineBalanceService`.
+const QuarantineBalanceService = require('./quarantineBalanceService');
 
 const VALID_COMPONENT_TYPES = new Set(['raw_material', 'component', 'semi_finished', 'packaging', 'consumable', 'other']);
 
@@ -334,6 +337,27 @@ class BomService {
     await explodeLevel(bom.items, 1, quantity);
 
     const components = Array.from(componentMap.values());
+
+    // G7 (achado colateral) — a quarentena deixa de ser decorativa aqui.
+    // `stock_available` vinha de `products.quantity`, que já inclui o
+    // material recebido e AINDA NÃO INSPECIONADO (o recebimento incrementa o
+    // saldo e cria o lote em `quarantine` no mesmo passo). Resultado: a
+    // criação/liberação de OP aprovava contra material que o FEFO da
+    // produção — que só consome lote `available` — nunca conseguiria
+    // consumir, e a falha só aparecia lá na frente, na conclusão da OP.
+    // Agora o número desconta o que está retido em quarentena/bloqueio, e o
+    // bruto continua exposto em `stock_physical` para a tela poder explicar
+    // a diferença ao usuário em vez de só recusar.
+    const withheldByProduct = await QuarantineBalanceService.sumWithheldByProduct(
+      components.map((component: any) => component.component_id)
+    );
+    for (const component of components) {
+      const withheld = withheldByProduct.get(Number(component.component_id)) ?? 0;
+      component.stock_physical = component.stock_available;
+      component.stock_quality_withheld = withheld;
+      component.stock_available = QuarantineBalanceService.planningQuantity(component.stock_physical, withheld);
+    }
+
     const totalComponents = components.length;
     const totalQuantityNeeded = roundQuantity(components.reduce((sum, c) => sum + c.quantity, 0));
 

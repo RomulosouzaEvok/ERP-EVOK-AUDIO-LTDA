@@ -2,6 +2,9 @@ import { Op } from 'sequelize';
 import ItemRepository from '../../domain/repositories/ItemRepository';
 const { Item, Product } = require('../../../../models/index');
 const Validators = require('../../../../utils/validators');
+// G7 (achado colateral): o MRP não pode contar como disponível o material
+// que está em quarentena/bloqueio — ver `services/quarantineBalanceService`.
+const QuarantineBalanceService = require('../../../../services/quarantineBalanceService');
 type ItemListOptions = { limit: number; offset: number; search?: string; tipo?: string; status?: string };
 
 /**
@@ -64,20 +67,44 @@ class SequelizeItemRepository extends ItemRepository {
     const products = codes.length
       ? await Product.findAll({
         where: { code: { [Op.in]: codes } },
-        attributes: ['code', 'quantity', 'reserved_quantity', 'min_quantity', 'lead_time'],
+        // `id` é necessário desde o G7: a retenção por qualidade é agregada
+        // por `lot_controls.product_id`, e sem o id não há como casar o lote
+        // com a posição de estoque do MRP.
+        attributes: ['id', 'code', 'quantity', 'reserved_quantity', 'min_quantity', 'lead_time'],
       })
       : [];
 
     const productByCode = new Map<string, any>(products.map((product: any) => [String(product.code), product]));
 
+    // G7 (achado colateral, 2026-08-10): `products.quantity` é saldo FÍSICO e
+    // inclui o material recebido que ainda não passou por inspeção — o
+    // recebimento incrementa o saldo e cria o lote em `quarantine` no mesmo
+    // passo. Enquanto o MRP lia esse número cru, material não inspecionado
+    // contava como disponível e o plano **comprava de menos**. O desconto é
+    // conservador por construção (`max(0, físico − retido)`): o pior caso
+    // agora é planejar a mais, nunca planejar sobre material bloqueado.
+    const withheldByProduct = await QuarantineBalanceService.sumWithheldByProduct(
+      products.map((product: any) => product.id).filter((id: unknown) => id !== undefined && id !== null)
+    );
+
     return items.map((item: any) => {
       const liveProduct = productByCode.get(String(item.codigo));
+      const physicalQuantity = liveProduct?.quantity ?? item.estoque_atual;
+      const withheldQuantity = liveProduct ? (withheldByProduct.get(Number(liveProduct.id)) ?? 0) : 0;
 
       return {
         id: item.id,
         codigo: item.codigo,
         descricao: item.descricao,
-        estoque_atual: liveProduct?.quantity ?? item.estoque_atual,
+        // Só desconta quando há retenção: sem lote em quarentena/bloqueio o
+        // valor devolvido continua sendo exatamente o de antes (inclusive o
+        // tipo string vindo do Sequelize), para não alterar o contrato de
+        // quem já consome este método.
+        estoque_atual: withheldQuantity > 0
+          ? QuarantineBalanceService.planningQuantity(physicalQuantity, withheldQuantity)
+          : physicalQuantity,
+        estoque_fisico: physicalQuantity,
+        estoque_retido_qualidade: withheldQuantity,
         estoque_reservado: liveProduct?.reserved_quantity ?? item.estoque_reservado,
         estoque_seguranca: liveProduct?.min_quantity ?? item.estoque_seguranca,
         lote_minimo: liveProduct?.min_quantity ?? item.lote_minimo,

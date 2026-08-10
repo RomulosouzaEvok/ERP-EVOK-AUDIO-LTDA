@@ -13,6 +13,10 @@ const GetLotByCodeUseCase = require('../../application/use-cases/GetLotByCodeUse
 const GenerateEntityQrCodeUseCase = require('../../../../shared/application/GenerateEntityQrCodeUseCase');
 const { LotControl, Product } = require('../../../../models/index');
 const ReleaseLotUseCase = require('../../application/use-cases/ReleaseLotUseCase');
+// G7: a liberação de lote passou a depender do registro de inspeção
+// (ISO 9001 8.6). O repositório de qualidade é injetado como gateway de
+// leitura — ver `ReleaseLotUseCase`.
+const SequelizeQualityRepository = require('../../../quality/infrastructure/sequelize/SequelizeQualityRepository');
 const BlockLotUseCase = require('../../application/use-cases/BlockLotUseCase');
 const CreateWarehouseTransferUseCase = require('../../application/use-cases/CreateWarehouseTransferUseCase');
 const ApproveWarehouseTransferUseCase = require('../../application/use-cases/ApproveWarehouseTransferUseCase');
@@ -44,6 +48,7 @@ const {
  * `server/src/modules/inventory/README.md`).
  */
 const inventoryRepository = new SequelizeInventoryRepository();
+const qualityRepository = new SequelizeQualityRepository();
 
 /**
  * `GET /api/inventory/movements` — lista movimentações de estoque com filtros e paginação.
@@ -294,6 +299,12 @@ exports.getLotQrCode = async (req: Request, res: Response, next: NextFunction) =
  * (pós-quarentena) e pela qualidade (pós-tratativa de RNC). `body.notes` é
  * opcional.
  *
+ * G7 (2026-08-10): exige que a inspeção MAIS RECENTE do lote
+ * (`POST /api/quality/inspections`) tenha aprovado — caso contrário devolve
+ * 422 com `details.rule = 'G7'` e **não grava nada**. Quem autoriza a
+ * liberação vem sempre do JWT (`req.user.id`), nunca do body (ISO 9001 8.6 +
+ * regra P0 de anti-spoofing).
+ *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
@@ -301,16 +312,24 @@ exports.getLotQrCode = async (req: Request, res: Response, next: NextFunction) =
  */
 exports.releaseLot = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const useCase = new ReleaseLotUseCase(inventoryRepository);
-    const lot = await useCase.execute({ id: req.params.id, notes: req.body?.notes });
+    const useCase = new ReleaseLotUseCase(inventoryRepository, qualityRepository);
+    const lot = await useCase.execute({
+      id: req.params.id,
+      notes: req.body?.notes,
+      releasedBy: (req as any).user.id,
+    });
 
     logAction(req, {
       action: 'update',
       entityType: 'LotControl',
       entityId: lot.id,
       entityDescription: `Lote ${lot.lot_number}`,
-      newValues: { status: 'available' },
-      description: `Lote ${lot.lot_number} liberado para consumo`
+      newValues: {
+        status: 'available',
+        release_inspection_id: lot.release_inspection_id,
+        released_by: lot.released_by,
+      },
+      description: `Lote ${lot.lot_number} liberado para consumo (inspecao #${lot.release_inspection_id})`
     });
 
     res.json({ success: true, data: lot });

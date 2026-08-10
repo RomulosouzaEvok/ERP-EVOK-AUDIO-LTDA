@@ -10,6 +10,22 @@ docs/qualidade/
 └── 03-CERTIFICACOES.md           <- ISO, INMETRO, normativas
 ```
 
+## O que está implementado no sistema (endpoints reais)
+
+| Recurso | Endpoint | Documentação |
+|---|---|---|
+| **Inspeção de lote (G7)** | `POST/GET /api/quality/inspections` | `01-CONTROLE_QUALIDADE.md` §4, `docs/arquitetura/API.md` §16.1 |
+| **Diagnóstico do gate de liberação** | `GET /api/quality/lots/:lotId/release-eligibility` | idem |
+| Liberação/bloqueio de lote | `POST /api/inventory/lots/:id/release` · `/block` | `docs/arquitetura/API.md` §8 |
+| Não conformidade (RNC) | `/api/quality/non-conformities` | `docs/arquitetura/API.md` §16 |
+| Testes acústicos / Thiele-Small | `/api/laboratory/tests` | `02-TESTES_ACUSTICOS.md` |
+
+> **Desde 2026-08-10 (G7):** liberar um lote da quarentena **exige uma
+> inspeção aprovada registrada** — não é mais um clique com observação livre.
+> Ver `01-CONTROLE_QUALIDADE.md` §4 para o fluxo completo, a base normativa
+> (ISO 9001:2015 §8.6/§8.7) e o que ainda **depende da Engenharia da
+> Qualidade** (nível de inspeção e AQL da ISO 2859-1, que o ERP não inventa).
+
 ## Departamentos Cobertos
 
 > Códigos conforme o seed oficial do banco (`server/src/config/seeds.ts`, 17 departamentos).

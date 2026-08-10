@@ -53,6 +53,24 @@ const { LotControl, Supplier, NonConformity } = require('../../src/models/index'
 
 const inventoryRepository = new SequelizeInventoryRepository();
 
+/**
+ * Gateway de inspecao (G7) usado nos testes de liberacao.
+ *
+ * Desde 2026-08-10 `ReleaseLotUseCase` exige o registro de inspecao (ISO 9001
+ * 8.6) — os testes abaixo, que existiam para provar a maquina de estados do
+ * LOTE, passam a informar explicitamente uma inspecao aprovada para isolar o
+ * que estao medindo. O gate em si (nenhuma inspecao / inspecao reprovada) tem
+ * suite propria em `tests/unit/quality-inspection-release-gate.test.ts`.
+ *
+ * @param verdict - Veredito da inspecao mais recente, ou `null` para "nenhuma inspecao".
+ */
+function buildQualityGateway(verdict: string | null = 'approved') {
+  return {
+    findLatestInspectionForLot: jest.fn(async () =>
+      (verdict ? { id: 77, verdict } : null)),
+  };
+}
+
 describe('Quality Lot Lifecycle (item 8)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -69,8 +87,8 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         update,
       });
 
-      const useCase = new ReleaseLotUseCase(inventoryRepository);
-      await useCase.execute({ id: 1, notes: 'Inspecao aprovada' });
+      const useCase = new ReleaseLotUseCase(inventoryRepository, buildQualityGateway());
+      await useCase.execute({ id: 1, notes: 'Inspecao aprovada', releasedBy: 42 });
 
       expect(update).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'available' })
@@ -87,8 +105,8 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         update,
       });
 
-      const useCase = new ReleaseLotUseCase(inventoryRepository);
-      await useCase.execute({ id: 2 });
+      const useCase = new ReleaseLotUseCase(inventoryRepository, buildQualityGateway());
+      await useCase.execute({ id: 2, releasedBy: 42 });
 
       expect(update).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'available' })
@@ -104,9 +122,9 @@ describe('Quality Lot Lifecycle (item 8)', () => {
         update: jest.fn(),
       });
 
-      const useCase = new ReleaseLotUseCase(inventoryRepository);
+      const useCase = new ReleaseLotUseCase(inventoryRepository, buildQualityGateway());
 
-      await expect(useCase.execute({ id: 3 })).rejects.toMatchObject({
+      await expect(useCase.execute({ id: 3, releasedBy: 42 })).rejects.toMatchObject({
         constructor: BusinessRuleError,
         details: {
           lot_id: 3,
@@ -119,9 +137,9 @@ describe('Quality Lot Lifecycle (item 8)', () => {
     it('lanca NotFoundError quando lote nao existe', async () => {
       LotControl.findByPk.mockResolvedValue(null);
 
-      const useCase = new ReleaseLotUseCase(inventoryRepository);
+      const useCase = new ReleaseLotUseCase(inventoryRepository, buildQualityGateway());
 
-      await expect(useCase.execute({ id: 999 })).rejects.toBeInstanceOf(NotFoundError);
+      await expect(useCase.execute({ id: 999, releasedBy: 42 })).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('corrigir o pre-requisito (status do lote) e tentar novamente reflete o checklist atualizado — bloqueia em blocked, libera apos quarantine', async () => {
@@ -132,13 +150,13 @@ describe('Quality Lot Lifecycle (item 8)', () => {
       const lot = { id: 6, lot_number: 'LOT-006', status: 'blocked', notes: null, update };
       LotControl.findByPk.mockResolvedValue(lot);
 
-      const useCase = new ReleaseLotUseCase(inventoryRepository);
+      const useCase = new ReleaseLotUseCase(inventoryRepository, buildQualityGateway());
 
       // 1a tentativa: lote em status nao permitido teria sido bloqueado se
       // estivesse em 'available' — aqui simulamos a leitura do estado real
       // ('blocked' e permitido) para confirmar que o dado reflete o status
       // atual a cada chamada (sem cache stale).
-      await useCase.execute({ id: 6, notes: 'Tratativa concluida' });
+      await useCase.execute({ id: 6, notes: 'Tratativa concluida', releasedBy: 42 });
       expect(update).toHaveBeenCalledWith(expect.objectContaining({ status: 'available' }));
 
       // Corrige o pre-requisito: o mock agora reflete o novo status
@@ -148,7 +166,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
       // Reabrir a tela / re-chamar a checagem com o status corrigido agora
       // rejeita liberar de novo (ja esta available) — prova que a leitura
       // subsequente reflete o estado atualizado, nao um snapshot antigo.
-      await expect(useCase.execute({ id: 6 })).rejects.toMatchObject({
+      await expect(useCase.execute({ id: 6, releasedBy: 42 })).rejects.toMatchObject({
         constructor: BusinessRuleError,
         details: { lot_id: 6, current_status: 'available', allowed_statuses: ['quarantine', 'blocked'] },
       });

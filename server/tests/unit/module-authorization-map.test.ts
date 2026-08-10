@@ -59,6 +59,11 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   'mrp',
   'workCenters',
   'nonConformities',
+  // G7 (2026-08-10): módulo NOVO `quality` — registro de inspeção
+  // (`/api/quality/inspections`) e diagnóstico do gate de liberação de lote.
+  // Todas as rotas atrás de `authorizeModule('qualidade', ...)`, no mesmo
+  // módulo de acesso já usado por `nonConformities`.
+  'quality',
   'assets',
   'traceability',
   'financial',
