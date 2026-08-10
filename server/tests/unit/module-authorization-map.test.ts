@@ -58,6 +58,13 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   'bom',
   'mrp',
   'workCenters',
+  // G17 (2026-08-10): módulo NOVO `masterProduction` — Plano Mestre de
+  // Produção (`/api/production/master-plans`), a camada de decisão entre a
+  // carteira de pedidos e a OP. Todas as rotas atrás de
+  // `authorizeModule('mrp', ...)`: o caminho é de produção, mas o ator é o
+  // PCP — mesmo módulo de acesso de quem já opera o MRP e converte ordem
+  // planejada em OP (ver cabeçalho de `presentation/routes/masterProductionPlans.ts`).
+  'masterProduction',
   'nonConformities',
   // G7 (2026-08-10): módulo NOVO `quality` — registro de inspeção
   // (`/api/quality/inspections`) e diagnóstico do gate de liberação de lote.

@@ -69,6 +69,106 @@ Previsão de Vendas / Pedidos Firmes
     └── Paradas: 45 min
 ```
 
+---
+
+## Plano Mestre de Produção (MPS) — IMPLEMENTADO em 2026-08-10 (gap G17)
+
+> **Status:** implementado no backend (`/api/production/master-plans`,
+> `server/src/modules/masterProduction/`). Tela web pendente.
+> **Decisão do dono:** D-F — *existe PCP formal, há quem planeje*
+> (`docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4).
+> **Contrato completo da API:** `docs/arquitetura/API.md` §34.
+
+### O que existia antes, de verdade
+
+O fluxo desenhado acima ("Previsão / Pedidos Firmes → MPS → MRP") era
+**documentação, não código**. Conferido no sistema em 2026-08-09:
+
+| Fato | Onde |
+|---|---|
+| Confirmar venda não gerava produção nenhuma | `ChangeSaleStatusUseCase` (só reserva estoque, G9) |
+| O MRP calculava apenas contra a demanda digitada no payload | `GenerateMrpPlanUseCase` → `input.demands` |
+| Nada lia a carteira de pedidos aberta | não havia consulta de saldo não faturado fora do faturamento |
+| Nada tratava o estoque mínimo como demanda | `products.min_quantity` só alimentava alerta |
+
+A ponte entre "o cliente comprou" e "a fábrica produz" era **memória do
+planejador** — sem registro da decisão e sem rastro de origem na OP.
+
+### A regra: o sistema informa, a pessoa decide
+
+**Não existe geração automática de OP na confirmação do pedido**, e isso é
+deliberado. O padrão da indústria — e a decisão D-F — é a camada de plano
+mestre: o ERP consolida a informação, o PCP decide, e a **decisão registrada**
+é o que gera ordem.
+
+Na prática: a linha do plano nasce `pending` com `planned_quantity = 0` mesmo
+quando a sugestão do cálculo é positiva. Um plano em que ninguém decidiu nada
+**não pode ser firmado** e não gera OP nenhuma.
+
+### O ciclo
+
+```
+POST   /api/production/master-plans            → draft    (demanda consolidada)
+PATCH  /api/production/master-plans/:id/lines/:lineId → decisão do planejador
+POST   /api/production/master-plans/:id/firm   → firm     (decisão congelada)
+POST   /api/production/master-plans/:id/release→ released (OPs criadas)
+POST   /api/production/master-plans/:id/cancel → canceled
+```
+
+### A conta
+
+```
+necessidade líquida = max(0,
+    (carteira de pedidos + estoque mínimo + previsão manual)
+  − (saldo de planejamento + saldo a produzir das OPs abertas))
+```
+
+| Componente | Fonte real |
+|---|---|
+| Carteira de pedidos | `Σ (sale_items.quantity − invoiced_quantity)` das vendas `confirmed`/`partially_invoiced` |
+| Estoque mínimo | `products.min_quantity` |
+| Previsão | digitada pelo planejador (não existe entidade de forecast no ERP) |
+| Saldo de planejamento | `max(0, products.quantity − quarentena/bloqueio − reservado)` |
+| Em produção | `Σ max(0, quantity − quantity_produced)` das OPs abertas |
+
+O saldo é o **saldo de planejamento**, não o físico: material em quarentena
+(G7) e material reservado por OP/venda (G3/G9) **não** contam como disponível.
+Planejar em cima deles é planejar em cima de material que a produção não pode
+consumir — e o estouro só apareceria lá na frente, quando o FEFO não achasse
+lote liberado.
+
+`suggested_quantity` (cálculo) e `planned_quantity` (decisão) são colunas
+separadas, e a primeira **nunca** é sobrescrita: a divergência entre as duas é
+o que uma auditoria de PCP procura.
+
+### Da decisão para a fábrica
+
+Liberar o plano firmado gera **uma OP por linha decidida**, com as **mesmas
+validações** do caminho manual e do caminho MRP (produto ativo e fabricável,
+BOM ativa — G2, material mínimo disponível), para não recriar a divergência de
+rigor que o G16 fechou. A liberação é **tudo ou nada**.
+
+O rastro de origem fica em `master_production_plan_lines.production_order_id`:
+da OP se chega à linha, ao plano, ao planejador e à demanda que a justificou.
+`production_orders.sales_order_id` fica **NULL de propósito** — a demanda é
+consolidada de vários pedidos, e apontar um só seria rastreabilidade falsa.
+
+### O que ficou de fora (e por quê)
+
+Três políticas de PCP que o dono **não** decidiu e que o sistema se recusou a
+inventar:
+
+| Pendência | Consequência prática hoje |
+|---|---|
+| **Horizonte de planejamento** | sem default; o planejador declara `horizon_start`/`horizon_end` a cada plano |
+| **Lote mínimo / múltiplo de produção** | a sugestão é a necessidade líquida crua, sem arredondamento |
+| **Pedido que chega depois do plano fechado** | não há replanejamento automático; o plano é fotografia datada (`consolidated_at`) |
+
+Limitação estrutural relacionada: **`sales` não tem data de entrega
+prometida**. A demanda é consolidada por produto no horizonte inteiro, **sem
+baldes de tempo** — o "Semana 1 / Semana 2 / Semana 3" do desenho no topo desta
+página ainda não é possível. Um MPS por semana depende dessa coluna existir.
+
 ### Tabelas SQL
 
 > ### ⚠️ DDL de projeto, NÃO é o schema implementado (verificado em 2026-08-10)
