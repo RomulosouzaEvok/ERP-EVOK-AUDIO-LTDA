@@ -26,11 +26,18 @@ jest.mock('../../src/services/bomService', () => ({
   explodeBOM: jest.fn(),
 }));
 
+// ATENCAO (armadilha ja paga caro neste projeto): este mock precisa expor
+// TODAS as funcoes de `inventoryService` que o caso de uso chama. Faltando
+// uma, o erro real vira "X is not a function" — que `completeOrder` embrulha
+// em ConflictError — e o teste passa/falha pelo motivo errado.
 jest.mock('../../src/services/inventoryService', () => ({
   reserve: jest.fn(async () => ({})),
   consume: jest.fn(async () => ({})),
   receive: jest.fn(async () => ({ product: { id: 1, name: 'Test Product', quantity: 10 } })),
   releaseReservation: jest.fn(async () => ({})),
+  releaseAllReservationsForOrder: jest.fn(async () => []),
+  listOrderReservations: jest.fn(async () => []),
+  recalculateReservedCache: jest.fn(async () => 0),
 }));
 
 jest.mock('../../src/services/warehouseStockService', () => ({
@@ -230,7 +237,7 @@ describe('Production Order Lifecycle (F.10)', () => {
       expect(productionOrderRepository.update).not.toHaveBeenCalled();
     });
 
-    it('reserva materiais ao liberar com disponibilidade confirmada', async () => {
+    it('reserva materiais ao liberar, vinculando cada reserva a esta OP (G3)', async () => {
       const productionOrderRepository = {
         listTrackingByOrderForUpdate: jest.fn(async () => []),
         findByIdForUpdate: jest.fn(async () => ({
@@ -258,6 +265,11 @@ describe('Production Order Lifecycle (F.10)', () => {
       await useCase.execute({ id: 1, status: 'released', user_id: 1 });
 
       expect(InventoryService.reserve).toHaveBeenCalledTimes(2);
+      // G3: sem `productionOrderId` a reserva seria anonima de novo — e o
+      // proprio inventoryService recusa (400).
+      for (const call of InventoryService.reserve.mock.calls) {
+        expect(call[4]).toMatchObject({ productionOrderId: 1 });
+      }
     });
 
     it('libera reservas ao cancelar OP em status released/in_progress/paused', async () => {
@@ -274,17 +286,21 @@ describe('Production Order Lifecycle (F.10)', () => {
         })),
         update: jest.fn(),
         findByIdWithProductSummary: jest.fn(async () => ({ id: 1, status: 'canceled' })),
-        findProductById: jest.fn(async () => ({ id: 101, reserved_quantity: 5 })),
       };
-
-      BomService.explodeBOM.mockResolvedValueOnce({
-        components: [{ component_id: 101, quantity: 5 }],
-      });
 
       const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
       await useCase.execute({ id: 1, status: 'canceled', user_id: 1 });
 
-      expect(InventoryService.releaseReservation).toHaveBeenCalled();
+      // G3: o cancelamento nao reexplode mais a BOM (que pode ter mudado
+      // desde a liberacao) nem mexe no contador global — devolve exatamente
+      // o que ESTA OP reservou.
+      expect(BomService.explodeBOM).not.toHaveBeenCalled();
+      expect(InventoryService.releaseAllReservationsForOrder).toHaveBeenCalledWith(
+        1,
+        1,
+        expect.anything(),
+        expect.objectContaining({ referenceId: 1, referenceType: 'production' }),
+      );
     });
 
     it('exige lot_consumptions explicitos ao concluir OP com componentes', async () => {
@@ -371,6 +387,65 @@ describe('Production Order Lifecycle (F.10)', () => {
 
       expect(productionOrderRepository.update).toHaveBeenCalled();
       expect(LotControl.create).toHaveBeenCalled();
+    });
+
+    // G3: a conclusao libera a reserva DESTA OP antes de consumir. Antes de
+    // 2026-08-09 ela reexplodia a BOM e chamava a liberacao sobre o contador
+    // global do produto (`MIN(reserved_quantity, desejado)`) — o que devolvia
+    // ao estoque livre material que pertencia a outra ordem.
+    it('conclusao libera a reserva vinculada a esta OP (e nao o contador global do produto)', async () => {
+      jest.clearAllMocks();
+
+      const productionOrderRepository = {
+        listTrackingByOrderForUpdate: jest.fn(async () => []),
+        listTrackingWithRouteStepByOrder: jest.fn(async () => []),
+        findByIdForUpdate: jest.fn(async () => ({
+          id: 42,
+          status: 'in_progress',
+          order_number: 'OP-2026-0042',
+          product_id: 1,
+          quantity: 10,
+          due_date: new Date('2026-08-20'),
+          get: function() { return this; }
+        })),
+        update: jest.fn(),
+        findByIdWithProductSummary: jest.fn(async () => ({ id: 42, status: 'completed' })),
+      };
+
+      BomService.explodeBOM.mockResolvedValue({
+        components: [{ component_id: 101, quantity: 5 }],
+        total_cost: 100,
+      });
+
+      LotControl.findOne.mockResolvedValue({
+        id: 1,
+        lot_number: 'LOT-2026-001',
+        status: 'available',
+        expires_at: null,
+        quantity_available: 10,
+        update: jest.fn(async () => ({})),
+      });
+
+      const useCase = new ChangeProductionOrderStatusUseCase(productionOrderRepository);
+      await useCase.execute({
+        id: 42,
+        status: 'completed',
+        quantity_produced: 10,
+        user_id: 3,
+        lot_consumptions: [{ product_id: 101, lot_control_id: 1, quantity: 5 }],
+      });
+
+      expect(InventoryService.releaseAllReservationsForOrder).toHaveBeenCalledWith(
+        42,
+        3,
+        expect.anything(),
+        expect.objectContaining({ referenceId: 42, referenceType: 'production' }),
+      );
+      // A liberacao acontece ANTES do consumo — senao o proprio material
+      // reservado pela OP bloquearia o consumo dela mesma.
+      const releaseOrder = InventoryService.releaseAllReservationsForOrder.mock.invocationCallOrder[0];
+      const consumeOrder = InventoryService.consume.mock.invocationCallOrder[0];
+      expect(releaseOrder).toBeLessThan(consumeOrder);
     });
 
     it('conclui OP registrando quantity_scrapped e scrap_reason sem afetar estoque de insumos', async () => {

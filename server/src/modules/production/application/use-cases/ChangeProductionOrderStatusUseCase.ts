@@ -194,7 +194,14 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       if (explosion) {
         this.assertTrackedConsumptionInput(explosion.components, input.lot_consumptions);
         if (['released', 'in_progress', 'paused'].includes(previousStatus)) {
-          await this.releaseReservationsForQuantity(order, input.user_id, producedQty, transaction);
+          // G3: libera exatamente o que ESTA OP reservou (nem mais, nem
+          // menos), antes de consumir de fato. Ver `releaseOwnReservations`.
+          await this.releaseOwnReservations(
+            order,
+            input.user_id,
+            transaction,
+            `Liberacao de reserva antes do consumo - Producao ${order.order_number}`
+          );
         }
         const normalizedConsumptions = this.normalizeLotConsumptions(input.lot_consumptions);
         for (const component of explosion.components) {
@@ -422,7 +429,8 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
   }
 
   /**
-   * Reserva materiais da BOM ao liberar a OP.
+   * Reserva materiais da BOM ao liberar a OP, **vinculando cada reserva a
+   * esta OP** (`production_order_reservations`, gap G3 — 2026-08-09).
    *
    * @param order - Ordem travada.
    * @param userId - Usuario executor.
@@ -446,6 +454,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
     const explosion = await BomService.explodeBOM(order.product_id, Number(order.quantity), { includeCost: false });
     for (const component of explosion.components) {
       await InventoryService.reserve(component.component_id, component.quantity, userId, transaction, {
+        productionOrderId: order.id,
         description: `Reserva de componente - Producao ${order.order_number}`,
         referenceId: order.id,
         referenceType: 'production'
@@ -454,7 +463,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
   }
 
   /**
-   * Libera reservas inteiras da quantidade planejada quando a OP e cancelada.
+   * Libera o material reservado por ESTA OP quando ela e cancelada.
    *
    * @param order - Ordem travada.
    * @param userId - Usuario executor.
@@ -467,74 +476,43 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       return;
     }
 
-    const explosion = await BomService.explodeBOM(order.product_id, Number(order.quantity), { includeCost: false });
-    for (const component of explosion.components) {
-      await this.releaseReservedQuantity(component.component_id, component.quantity, order.id, userId, transaction, description);
-    }
+    await this.releaseOwnReservations(order, userId, transaction, description);
   }
 
   /**
-   * Libera a reserva planejada antes do consumo real da conclusao.
+   * Libera integralmente o saldo reservado desta OP — e apenas dela.
+   *
+   * Gap G3 (2026-08-09). Substitui as duas rotinas anteriores
+   * (`releaseMaterialsIfReserved` reexplodindo a BOM no cancelamento e
+   * `releaseReservationsForQuantity` reexplodindo duas vezes na conclusao),
+   * que tinham dois defeitos graves:
+   *
+   * 1. **Canibalizacao**: a liberacao caia em `releaseReservedQuantity`, que
+   *    fazia `MIN(products.reserved_quantity, desejado)` sobre o contador
+   *    GLOBAL do produto — ou seja, uma OP liberava (e em seguida consumia)
+   *    material reservado por outra OP;
+   * 2. **Reserva presa**: a quantidade a liberar era recalculada explodindo a
+   *    BOM de novo. Se a estrutura do produto mudasse entre a liberacao da OP
+   *    e a conclusao/cancelamento, a diferenca ficava reservada para sempre.
+   *
+   * Agora a origem do numero e a propria reserva persistida
+   * (`production_order_reservations`), que registra o que aquela OP de fato
+   * reservou. Nao depende mais da BOM atual, e por construcao nao alcanca a
+   * reserva de nenhuma outra ordem.
+   *
+   * Sobre-producao (produzido > planejado) continua permitida: o excedente
+   * consome estoque livre e e validado por `InventoryService.consume`.
    *
    * @param order - Ordem travada.
-   * @param userId - Usuario executor.
-   * @param producedQty - Quantidade real produzida.
+   * @param userId - Usuario executor (vem do JWT).
    * @param transaction - Transacao ativa.
+   * @param description - Motivo da liberacao, gravado na movimentacao.
    * @returns void
    */
-  private async releaseReservationsForQuantity(order: any, userId: number, producedQty: number, transaction: any): Promise<void> {
-    const plannedExplosion = await BomService.explodeBOM(order.product_id, Number(order.quantity), { includeCost: false });
-    const actualExplosion = await BomService.explodeBOM(order.product_id, producedQty, { includeCost: false });
-    const actualByComponent = new Map<number, number>();
-
-    for (const component of actualExplosion.components) {
-      actualByComponent.set(component.component_id, component.quantity);
-    }
-
-    for (const component of plannedExplosion.components) {
-      const actualQty = actualByComponent.get(component.component_id) ?? 0;
-      const quantityToRelease = Math.max(component.quantity, actualQty);
-      await this.releaseReservedQuantity(
-        component.component_id,
-        quantityToRelease,
-        order.id,
-        userId,
-        transaction,
-        `Liberacao de reserva antes do consumo - Producao ${order.order_number}`
-      );
-    }
-  }
-
-  /**
-   * Libera uma quantidade reservada sem falhar quando a reserva real for menor.
-   *
-   * @param productId - Produto do componente.
-   * @param desiredQuantity - Quantidade desejada.
-   * @param orderId - Ordem de producao relacionada.
-   * @param userId - Usuario executor.
-   * @param transaction - Transacao ativa.
-   * @param description - Motivo da liberacao.
-   * @returns void
-   */
-  private async releaseReservedQuantity(
-    productId: number,
-    desiredQuantity: number,
-    orderId: number,
-    userId: number,
-    transaction: any,
-    description: string
-  ): Promise<void> {
-    const product = await this.productionOrderRepository.findProductById(productId, transaction);
-    const reservedQuantity = parseFloat(String(product?.reserved_quantity || 0));
-    const quantityToRelease = Math.min(reservedQuantity, desiredQuantity);
-
-    if (quantityToRelease <= 0) {
-      return;
-    }
-
-    await InventoryService.releaseReservation(productId, quantityToRelease, userId, transaction, {
+  private async releaseOwnReservations(order: any, userId: number, transaction: any, description: string): Promise<void> {
+    await InventoryService.releaseAllReservationsForOrder(order.id, userId, transaction, {
       description,
-      referenceId: orderId,
+      referenceId: order.id,
       referenceType: 'production'
     });
   }

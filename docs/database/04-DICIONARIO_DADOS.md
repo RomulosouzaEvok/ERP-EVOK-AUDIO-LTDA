@@ -6,6 +6,19 @@ Legenda: **PK** = chave primária, **FK → tabela.coluna** = chave estrangeira,
 
 Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em português (schema-fantasma nunca adotado pelo app real, `COMMENT ON TABLE` aplicado em 2026-08-06) e **não devem ser usadas em código novo** — ver `docs/database/DATABASE.md` seção "Tabelas órfãs do schema-fantasma em português".
 
+> ⚠️ **Pendente de regeneração (2026-08-09).** A migration
+> `20260809-000026-create-production-order-reservations.cjs` (gap **G3** —
+> reserva de material vinculada à OP) foi entregue mas **ainda não aplicada**
+> ao banco. Como este arquivo é gerado por introspecção do schema real, a
+> tabela `production_order_reservations` **ainda não aparece aqui** —
+> propositalmente, para não descrever um schema que não existe. Assim que a
+> migration for aplicada, regenere este dicionário. A especificação completa
+> da tabela (colunas, FKs, índice único parcial e CHECKs) está em
+> `docs/database/DATABASE.md`, seção "G3 — Reserva de material vinculada à
+> Ordem de Produção (2026-08-09)". Nessa mesma migration,
+> `products.reserved_quantity` deixa de ser contador autoritativo e passa a
+> ser **cache derivado** daquela tabela.
+
 ---
 
 ## Índice de tabelas (80)

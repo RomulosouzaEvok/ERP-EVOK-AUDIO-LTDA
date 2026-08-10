@@ -246,6 +246,41 @@
   linhas: `COUNT` colidia entre criações concorrentes e regredia quando uma
   OP era removida, reemitindo um número já usado (`order_number` é `UNIQUE`).
 
+**Regras de Negócio — reserva de material (gap G3, 2026-08-09):**
+
+A criação da OP (`planned`) **não** reserva nada. A reserva acontece na
+**liberação** (`PUT /api/production/orders/:id/status`, `status: 'released'`)
+e, desde 2026-08-09, é **vinculada à ordem**, em
+`production_order_reservations` (uma linha por OP × produto). O contador
+`products.reserved_quantity` continua existindo apenas como **cache
+derivado** — soma das reservas vivas.
+
+| Evento | Efeito na reserva |
+|---|---|
+| `planned → released` | Explode a BOM na quantidade planejada e cria uma reserva **da OP** para cada componente. Falha se faltar material disponível (`quantity - reserved_quantity`), listando **todos** os itens faltantes de uma vez. |
+| `released → in_progress → paused` | Nenhum. A reserva permanece viva. |
+| `→ canceled` | Libera **integralmente e apenas** o saldo reservado por esta OP. Não reexplode a BOM: devolve o que a própria reserva registra. |
+| `→ completed` | Libera a reserva desta OP **antes** de consumir (senão a própria reserva bloquearia o consumo), depois consome os componentes de fato. Concluir com quantidade zero é proibido (gap G2) — deixaria a reserva presa. |
+| Remoção da OP (`DELETE`) | **Bloqueada** enquanto houver reserva ativa. O caminho correto é cancelar (o que devolve o material) e só então remover. |
+
+Invariantes que o sistema passa a garantir:
+
+1. **Uma OP não consegue liberar nem consumir material reservado por outra.**
+   A liberação é limitada ao saldo da própria ordem; pedir mais devolve
+   apenas o que é seu. Antes desta correção a liberação fazia
+   `MIN(reservado_total_do_produto, desejado)` sobre o contador global — e
+   qualquer OP canibalizava a reserva de qualquer outra.
+2. **A pergunta "quanto deste item está reservado para a OP X?" tem resposta**
+   (`inventoryService.listOrderReservations`).
+3. **Reserva anônima não existe mais:** reservar sem informar a ordem dona é
+   erro 400 do serviço de estoque.
+4. Sobreprodução (produzido > planejado) continua permitida — o excedente
+   consome estoque livre e é validado normalmente na baixa.
+
+Escopo declarado: apenas produção. **Venda não reserva estoque** neste ERP
+(orçamento não toca estoque; a confirmação já dá baixa direta), então não há
+reserva de venda a vincular.
+
 ---
 
 ## UC-13: Apontar Producao (Chao de Fabrica)

@@ -12798,3 +12798,135 @@ passada 1 — mas dois erros de literal **na documentação** foram:
    P1/P2 do contrato de API; e a integração real com o módulo SST
    (`SstAsoServiceAdapter` só é usado como valor informativo em
    `request-aso`, o gate real é o snapshot em `hr_employee_documents`).
+
+---
+
+## 2026-08-09 — Cadeia do produto, Onda 2: G3 — reserva de material vinculada à ordem — `programador`
+
+### Resumo da feature
+
+Fecha o **G3**, o gap de maior risco operacional da cadeia do produto: a
+reserva de material de uma Ordem de Produção deixou de ser um **contador
+global no produto** e passou a ser um **registro vinculado à ordem**.
+
+Antes: `inventoryService.reserveStock` fazia
+`product.increment('reserved_quantity')`. Nenhum vínculo com a OP. A
+liberação (`releaseReservedQuantity`) usava `MIN(reservado_total, desejado)`
+sobre esse contador — ou seja, **qualquer OP conseguia liberar e, na
+sequência, consumir o material reservado por outra** (canibalização). E não
+havia como responder "quanto deste item está reservado para a OP X?".
+
+Agora a fonte da verdade é `production_order_reservations` (OP × produto ×
+quantidade reservada × quantidade liberada). `products.reserved_quantity`
+continua existindo como **cache derivado**, recalculado na mesma transação.
+
+**Desenho e por quê:**
+
+| Decisão | Motivo |
+|---|---|
+| Tabela própria como fonte da verdade, cache mantido | Não quebrar nenhum leitor existente de `reserved_quantity` (havia 5 caminhos vivos, listados abaixo) |
+| FK real e dura para `production_orders` em vez de par polimórfico (tipo + id) | **Venda não reserva** neste ERP — consome direto. Par polimórfico impediria integridade referencial, que é padrão do projeto (159+ FKs) |
+| `quantity` imutável + `quantity_released` acumulando (em vez de decrementar) | Preserva histórico auditável; mesmo padrão de `sale_items.invoiced_quantity` |
+| Cache **recalculado** (soma) e não incrementado | Torna o cache auto-corrigível: divergência herdada some na primeira operação daquele produto |
+| Soma feita em memória, não com `SUM()` no banco | O conjunto é minúsculo (uma linha por OP aberta) e evita expressão SQL literal — a classe de erro que só aparece em runtime contra o Postgres |
+| Liberação **integral da própria reserva** em vez de reexplodir a BOM | A BOM pode ter mudado entre liberar e concluir; reexplodir prendia a diferença para sempre |
+| `productionOrderId` obrigatório em `reserve`/`releaseReservation` | Reserva anônima é o próprio bug — sem dono não há como impedir a canibalização |
+
+### Consumidores de `reserved_quantity` encontrados e como cada um foi preservado
+
+| Consumidor | Uso | Situação |
+|---|---|---|
+| `services/inventoryService.validateAndLock` | `available = quantity - reserved` (bloqueia consumo/reserva acima do livre) | **Preservado** — lê o cache, que continua correto |
+| `modules/items/.../SequelizeItemRepository` (dual-read) | Alimenta `Item.estoque_reservado` com o valor vivo de `products.reserved_quantity` | **Preservado** |
+| `modules/mrp/.../GenerateMrpPlanUseCase` | `reserved: Number(item.estoque_reservado)` no cálculo da necessidade líquida | **Preservado** (via dual-read acima) |
+| `client/src/pages/products/ItemMasterDetailPage.tsx` + `client/src/api/items.ts` | Campo "Estoque reservado" na tela do item | **Preservado** — nenhuma alteração em `client/` |
+| `ChangeProductionOrderStatusUseCase.releaseReservedQuantity` | `MIN(reserved_quantity_global, desejado)` — **este era o bug** | **Substituído** por liberação escopada na reserva da própria OP |
+| `scripts/backfill/02b_product_to_item.ts` | Migração histórica Product→Item | Intocado (script legado, já executado) |
+| `models/Product.ts`, `types/models.d.ts`, `database/postgresql/01_schema.sql` | Definição da coluna | Intocados; a semântica nova está no `COMMENT ON COLUMN` aplicado pela migration |
+
+### Arquivos alterados
+
+**Banco**
+- `server/migrations/20260809-000026-create-production-order-reservations.cjs` **(novo, NÃO aplicado)**
+- `server/src/models/ProductionOrderReservation.ts` (novo)
+- `server/src/models/index.ts` (import, 3 associações, export)
+
+**Domínio / aplicação**
+- `server/src/services/inventoryService.ts` — `reserve`/`releaseReservation` escopados por OP + `releaseAllReservationsForOrder`, `listOrderReservations`, `recalculateReservedCache`; removidos 2 stubs mortos (`previousReserve`, `previousReleaseReservation`) cujo JSDoc afirmava que a coluna `reserved_quantity` "ainda não existe"
+- `server/src/modules/production/application/use-cases/ChangeProductionOrderStatusUseCase.ts` — 3 métodos de liberação (2 reexplodindo BOM + 1 com `MIN` global) reduzidos a `releaseOwnReservations`
+- `server/src/modules/production/application/use-cases/RemoveProductionOrderUseCase.ts` — bloqueia remoção de OP com reserva ativa
+- `server/src/modules/production/domain/repositories/ProductionOrderRepository.ts` e `.../infrastructure/sequelize/SequelizeProductionOrderRepository.ts` — `countActiveMaterialReservations`
+
+**Backfill**
+- `server/src/scripts/backfill/05_production_order_reservations.ts` (novo)
+
+**Testes**
+- `server/tests/unit/production-order-material-reservation.test.ts` (novo, 17 casos)
+- `server/tests/unit/inventory-service-contract.test.ts` (novo)
+- `server/tests/unit/production-order-lifecycle.test.ts`, `production-labor-overhead-cost.test.ts`, `warehouse-stock.test.ts` — mocks de `inventoryService` completados (estavam incompletos) + 1 caso novo de conclusão
+
+### Documentações atualizadas
+
+- `docs/database/DATABASE.md` — seção "G3 — Reserva de material vinculada à Ordem de Produção (2026-08-09)": tabela, colunas, FKs, índice único parcial, CHECKs, rebaixamento de `reserved_quantity` a cache, escopo declarado e limites do backfill
+- `docs/database/04-DICIONARIO_DADOS.md` — aviso de "pendente de regeneração" (o arquivo é gerado por introspecção; a tabela ainda não existe no banco, e descrevê-la ali seria mentir sobre o schema aplicado)
+- `docs/projeto/04-USE_CASES.md` — UC-12: tabela de efeito na reserva por transição de status + as 4 invariantes garantidas
+- `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` — registro de execução da Onda 2
+- `docs/governance/TODO.md` — entrada com escopo declarado fora e 5 riscos residuais
+- JSDoc: cabeçalho de módulo de `inventoryService`, todas as funções novas, `ProductionOrderReservation`, `releaseOwnReservations`, `countActiveMaterialReservations`, e o cabeçalho da migration (que carrega o racional completo do desenho)
+
+### Como testar (o próximo agente ou humano)
+
+**Antes de qualquer coisa — a ordem importa:**
+
+1. Aplicar a migration: `cd server && npm run migration:up`
+   (confira `npm run migration:status`: deve aparecer
+   `20260809-000026-create-production-order-reservations.cjs`).
+2. Rodar o backfill **em dry-run** e **ler o relatório**:
+   `npx tsx server/src/scripts/backfill/05_production_order_reservations.ts`
+   Preste atenção em duas listas: OPs vivas sem BOM ativa (não serão
+   reconstruídas) e divergências entre o contador antigo e a soma das
+   reservas (diferença negativa = contador estava inflado; aquele material
+   estava indisponível sem dono).
+3. Só então: `... 05_production_order_reservations.ts --apply`.
+
+⚠️ **Não pule o passo 3.** Enquanto o backfill não rodar, produto com
+`reserved_quantity` inflado herdado tem menos disponibilidade do que deveria
+e pode recusar a liberação de OP nova — há teste unitário provando esse
+comportamento (`cache inflado sem reserva por tras bloqueia reserva nova`).
+
+**Roteiro funcional (o que de fato prova o G3):**
+
+1. Dois produtos acabados A e B que compartilhem o mesmo componente C, com
+   BOM ativa nos dois. Deixe o estoque de C **apertado** de propósito
+   (ex.: 100 un, e cada OP precisando de 60).
+2. Crie e libere a **OP-A** (`PUT /api/production/orders/:id/status`,
+   `{"status":"released"}`). Confira: `SELECT * FROM
+   production_order_reservations WHERE production_order_id = <OP-A>` traz a
+   linha de C, e `products.reserved_quantity` de C ficou igual à soma.
+3. Tente liberar a **OP-B**: deve dar **422** listando C como faltante —
+   o material da OP-A não pode ser oferecido para a OP-B.
+4. Cancele a OP-A (`{"status":"canceled"}`). A reserva vira `released`,
+   `reserved_quantity` de C volta a 0, e agora a OP-B **libera**.
+5. Conclua a OP-B com `lot_consumptions` válidos. Confira que a reserva dela
+   foi liberada **antes** do consumo e que sobrou reserva zero.
+6. Tente `DELETE /api/production/orders/:id` de uma OP em `released`:
+   deve dar **erro de negócio** mandando cancelar antes. Cancele e apague de
+   novo: agora passa.
+7. **Regressão dos leitores** (é onde um erro passaria despercebido):
+   com a OP-A liberada, confira que `GET /api/items/:id` mostra
+   `estoque_reservado` de C batendo com a soma das reservas, que a tela de
+   detalhe do item no `client/` mostra o mesmo número, e que o MRP
+   (`POST /api/mrp/...`) considera esse reservado na necessidade líquida.
+
+**Regressão automatizada já rodada:**
+`npm run typecheck` limpo · `npx jest tests/unit` **1430/1430** (baseline
+1402/1402) · `npx tsx -e "require('./app')"` sobe sem erro.
+
+### O que **não** foi feito (deliberado)
+
+- Vendas continuam **sem** reserva (consomem direto) — declarado como fora de
+  escopo, não esquecido.
+- Nenhuma rota HTTP expõe a reserva por OP ainda (`listOrderReservations`
+  existe no serviço, sem controller) — não havia consumidor pedindo.
+- Nenhuma alteração em `client/`.
+- Migration **não aplicada**, por instrução explícita.

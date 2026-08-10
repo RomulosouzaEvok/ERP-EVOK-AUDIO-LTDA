@@ -84,6 +84,24 @@ class ProductionOrderRepository {
     throw new Error('Nao implementado');
   }
 
+  /**
+   * Conta as reservas de material ainda vivas da OP
+   * (`production_order_reservations.status = 'active'`, gap G3).
+   *
+   * Usado por `RemoveProductionOrderUseCase` para impedir que uma OP seja
+   * apagada segurando material: a FK e `ON DELETE CASCADE`, entao a remocao
+   * levaria as reservas junto e deixaria o cache
+   * `products.reserved_quantity` alto para sempre.
+   *
+   * @abstract
+   * @param productionOrderId - ID da OP.
+   * @returns Quantidade de reservas ativas.
+   * @throws {Error} Se nao implementado.
+   */
+  public async countActiveMaterialReservations(productionOrderId: number): Promise<number> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    throw new Error('Nao implementado');
+  }
+
   /** @param filters - Filtros do relatorio. @returns OPs do relatorio. @throws {Error} Se nao implementado. */
   public async listForReport(filters: Record<string, unknown>): Promise<any[]> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('Nao implementado');

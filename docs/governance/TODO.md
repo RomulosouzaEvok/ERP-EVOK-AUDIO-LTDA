@@ -4743,3 +4743,95 @@ de apresentação**). Artefatos: `docs/business/BLOCO_6_RH_REQUISITOS.md`,
 - [ ] **Sem teste de integração real** dos 2 fluxos transacionais
   (conclusão de admissão e de demissão) nem dos triggers de imutabilidade
   de contrato/período aquisitivo — mesma pendência das entregas anteriores.
+
+---
+
+## 2026-08-09 — Cadeia do produto, Onda 2: gap G3 (reserva vinculada à ordem) — `programador`
+
+**Contexto:** `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`,
+Onda 2. Classificado como **alto risco** e executado **isolado**, como manda o
+princípio 4 do plano ("mudança de alto risco vai isolada, com caminho de
+migração descrito para o dado que já existe").
+
+**O problema (verificado no código, não suposto):** a reserva de material de
+uma OP era só um contador global no produto — `products.reserved_quantity`,
+incrementado por `inventoryService.reserveStock`. Sem vínculo com a ordem, a
+liberação fazia `MIN(reservado_total, desejado)`
+(`ChangeProductionOrderStatusUseCase.releaseReservedQuantity`), então
+**qualquer OP liberava e consumia o material reservado por outra**.
+
+- [x] **Tabela nova `production_order_reservations`** (OP × produto ×
+  quantidade) como **fonte da verdade** da reserva — migration
+  `20260809-000026-create-production-order-reservations.cjs`. Índice UNIQUE
+  parcial `(production_order_id, product_id) WHERE status='active'` + 3 CHECKs
+  (quantidade > 0, faixa de `quantity_released`, coerência `status` ×
+  `quantity_released`). `up`/`down` funcionais; nenhum `comment:` dentro de
+  `addColumn` (bug conhecido) — só `COMMENT ON COLUMN`.
+- [x] **`products.reserved_quantity` mantido como cache derivado**, atualizado
+  na mesma transação como `SUM(quantity - quantity_released)` das reservas
+  vivas. Foi a escolha explícita para **não quebrar nenhum leitor existente**
+  (ver lista de consumidores no handoff). Como é **recalculado** e não
+  incrementado, o cache é auto-corrigível.
+- [x] **Liberar e consumir passaram a operar sobre a reserva da própria OP.**
+  `releaseMaterialsIfReserved` e `releaseReservationsForQuantity` (que
+  reexplodiam a BOM para adivinhar o quanto liberar) e
+  `releaseReservedQuantity` (o `MIN` sobre o contador global) foram
+  substituídos por um único `releaseOwnReservations` →
+  `InventoryService.releaseAllReservationsForOrder`. Efeito colateral bom: a
+  liberação deixou de depender da BOM atual, então **alteração de engenharia
+  entre a liberação e a conclusão não prende mais reserva**.
+- [x] **Reserva anônima virou erro 400.** `inventoryService.reserve` e
+  `releaseReservation` exigem `options.productionOrderId`.
+- [x] **`RemoveProductionOrderUseCase` bloqueia remover OP com reserva ativa**
+  (`BusinessRuleError`, regra `G3`), orientando a cancelar antes — o
+  cancelamento devolve o material. Sem isso o `ON DELETE CASCADE` apagaria as
+  reservas e deixaria o cache alto para sempre. (O vazamento já existia antes,
+  em silêncio.)
+- [x] **Backfill** `server/src/scripts/backfill/05_production_order_reservations.ts`
+  — dry-run por padrão, `--apply` para gravar, idempotente, uma única
+  transação. Reconstrói a reserva das OPs `released`/`in_progress`/`paused`
+  pela explosão da BOM na quantidade planejada (que é exatamente o que a
+  rotina de liberação fazia) e relata, sem inventar, o que não consegue
+  reconstruir.
+- [x] **Testes:** `tests/unit/production-order-material-reservation.test.ts`
+  (17 casos, com dublê em memória dos models implementando a semântica real) e
+  `tests/unit/inventory-service-contract.test.ts` (guarda do
+  `module.exports` do serviço). Suíte unitária: **1430/1430** (baseline era
+  1402/1402). `npm run typecheck` limpo e `npx tsx -e "require('./app')"`
+  sobe sem erro.
+- [x] **Mock incompleto encontrado e corrigido em 3 suítes existentes**
+  (`production-order-lifecycle`, `production-labor-overhead-cost`,
+  `warehouse-stock`): o mock de `inventoryService` não expunha a função nova,
+  e o erro real (`is not a function`) era embrulhado por `completeOrder` em
+  `ConflictError` — teste falhando/passando pelo motivo errado.
+
+### Escopo declarado como fora
+
+- [ ] **Vendas não entraram** — e não precisavam: venda **não reserva** estoque
+  neste ERP (`CreateSaleUseCase`/`ChangeSaleStatusUseCase` chamam
+  `InventoryService.consume`, baixa direta; `quote` não toca estoque).
+  Se um dia expedição/venda precisar reservar, é migration própria
+  (`production_order_id` nullable + `sale_id` + CHECK de exatamente-um-dono).
+  Preferiu-se FK real e dura a par polimórfico sem integridade referencial.
+
+### Riscos residuais
+
+- [ ] **Migration `20260809-000026` NÃO aplicada** (deliberado — aguarda
+  aprovação do dono). Enquanto não for aplicada, **o código novo não funciona
+  contra o banco**: `reserve`/`releaseReservation` gravam em uma tabela que
+  ainda não existe. Aplicar migration e rodar o backfill são um **único**
+  passo operacional, nesta ordem.
+- [ ] **Sem teste de integração contra Postgres real** do índice único
+  parcial, dos 3 CHECKs, do `SELECT ... FOR UPDATE` e do backfill. Os testes
+  unitários usam dublê em memória — a mesma limitação estrutural apontada no
+  princípio 2 do plano de ação.
+- [ ] **Cache inflado herdado bloqueia reserva nova até o backfill rodar**
+  (há teste unitário provando o comportamento). É o motivo de a ordem
+  migration → backfill não poder ser invertida nem adiada.
+- [ ] **O backfill usa a BOM ATUAL.** Se a engenharia mudou a estrutura depois
+  de a OP ter sido liberada, a reserva reconstruída difere da que foi feita de
+  fato. Não existe histórico da explosão no banco; o script relata a
+  divergência produto a produto em vez de inventar número.
+- [ ] **Nenhuma tela em `client/`** expõe a reserva por OP (o endpoint de
+  consulta é `inventoryService.listOrderReservations`, ainda sem rota HTTP) —
+  escopo dos agentes de frontend.

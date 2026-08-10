@@ -27,11 +27,18 @@ jest.mock('../../src/services/bomService', () => ({
   explodeBOM: jest.fn(),
 }));
 
+// Mock precisa cobrir TODA a superficie de `inventoryService` usada pelo caso
+// de uso (inclusive `releaseAllReservationsForOrder`, G3/2026-08-09): uma
+// funcao faltando vira "is not a function" embrulhado em ConflictError, e o
+// teste falha (ou passa) por um motivo que nao e o que ele afirma testar.
 jest.mock('../../src/services/inventoryService', () => ({
   reserve: jest.fn(async () => ({})),
   consume: jest.fn(async () => ({})),
   receive: jest.fn(),
   releaseReservation: jest.fn(async () => ({})),
+  releaseAllReservationsForOrder: jest.fn(async () => []),
+  listOrderReservations: jest.fn(async () => []),
+  recalculateReservedCache: jest.fn(async () => 0),
 }));
 
 jest.mock('../../src/services/warehouseStockService', () => ({

@@ -6,7 +6,7 @@
 
 import { Op, QueryTypes } from 'sequelize';
 import ProductionOrderRepository from '../../domain/repositories/ProductionOrderRepository';
-const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRouteStep, WorkCenter, Item, sequelize }: any = require('../../../../models/index');
+const { ProductionOrder, Product, Employee, User, ProductionOrderTracking, ProductionRouteStep, WorkCenter, Item, ProductionOrderReservation, sequelize }: any = require('../../../../models/index');
 
 /**
  * Namespace (`classid`) do advisory lock que serializa a geracao do numero
@@ -149,6 +149,18 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
   /** @param id - ID do produto. @param transaction - Transacao opcional. @returns Produto ou null. */
   public async findProductById(id: number, transaction?: any): Promise<any | null> {
     return Product.findByPk(id, { transaction });
+  }
+
+  /**
+   * Conta reservas de material ainda vivas da OP (gap G3).
+   *
+   * @param productionOrderId - ID da OP.
+   * @returns Quantidade de linhas `active` em `production_order_reservations`.
+   */
+  public async countActiveMaterialReservations(productionOrderId: number): Promise<number> {
+    return ProductionOrderReservation.count({
+      where: { production_order_id: productionOrderId, status: 'active' }
+    });
   }
 
   /** @param filters - Filtros. @returns OPs para relatorio. */

@@ -36,6 +36,7 @@ import ProductionOrderTracking = require('./ProductionOrderTracking');
 import LotControl = require('./LotControl');
 import SerialNumber = require('./SerialNumber');
 import ProductionLotConsumption = require('./ProductionLotConsumption');
+import ProductionOrderReservation = require('./ProductionOrderReservation');
 import ServiceOrder = require('./ServiceOrder');
 import Asset = require('./Asset');
 import NonConformity = require('./NonConformity');
@@ -443,6 +444,17 @@ ProductionLotConsumption.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 // Item ↔ ProductionLotConsumption (Fase 4.5 expand-contract)
 Item.hasMany(ProductionLotConsumption, { foreignKey: 'item_id', as: 'production_lot_consumptions' });
 ProductionLotConsumption.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
+// Reserva de material por OP (G3, 2026-08-09) — fonte da verdade da reserva.
+// `products.reserved_quantity` e apenas o cache derivado desta relacao.
+ProductionOrder.hasMany(ProductionOrderReservation, { foreignKey: 'production_order_id', as: 'material_reservations' });
+ProductionOrderReservation.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+Product.hasMany(ProductionOrderReservation, { foreignKey: 'product_id', as: 'production_reservations' });
+ProductionOrderReservation.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+User.hasMany(ProductionOrderReservation, { foreignKey: 'created_by', as: 'created_production_reservations' });
+ProductionOrderReservation.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
 
 // Product cost ledger (F07)
 Product.hasMany(ProductCostLedger, { foreignKey: 'product_id', as: 'cost_ledgers' });
@@ -1312,7 +1324,7 @@ export {
   AccountReceivable, AccountPayable,
   InventoryMovement, InventoryCount, InventoryCountItem, ProductCostLedger, Department, Employee,
   ProductionOrder, ProductionRoute, ProductionRouteStep, ProductionOrderTracking,
-  LotControl, SerialNumber, ProductionLotConsumption,
+  LotControl, SerialNumber, ProductionLotConsumption, ProductionOrderReservation,
   ServiceOrder, Asset,
   NonConformity, MaintenanceOrder, AuditLog, WebhookEvent, CompanyFiscalConfig, PurchaseReceipt,
   BillOfMaterial, BillOfMaterialItem,

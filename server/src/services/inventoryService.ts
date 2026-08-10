@@ -9,6 +9,21 @@
  * Toda movimentação passa por este serviço e gera registro em
  * `InventoryMovement`.
  *
+ * ## Reserva de material (gap G3, 2026-08-09)
+ *
+ * A fonte da verdade da reserva é a tabela `production_order_reservations`
+ * (OP × produto × quantidade). `products.reserved_quantity` continua sendo
+ * mantido, porém como **cache derivado** — recalculado como
+ * `SUM(quantity - quantity_released)` das reservas ativas do produto, dentro
+ * da mesma transação, para não quebrar os leitores existentes
+ * (`validateAndLock` aqui, dual-read de `Item.estoque_reservado`, MRP e as
+ * telas do `client/`). Nenhum código deve escrever nesse campo diretamente.
+ *
+ * Consequência prática: `reserve`/`releaseReservation` exigem a OP dona
+ * (`options.productionOrderId`) e a liberação é limitada ao saldo daquela
+ * ordem — uma OP não consegue mais liberar/consumir material reservado por
+ * outra.
+ *
  * @module services/inventoryService
  */
 
@@ -16,7 +31,13 @@ import { Transaction } from 'sequelize';
 
 // Modelos carregados via CommonJS (hybrid mode)
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Product, InventoryMovement } = require('../models/index');
+const { Product, InventoryMovement, ProductionOrderReservation } = require('../models/index');
+
+/**
+ * Tolerância para comparação de quantidades decimais (DECIMAL(18,6)).
+ * Abaixo disso, uma diferença é ruído de ponto flutuante, não saldo real.
+ */
+const RESERVATION_EPSILON = 0.0000005;
 
 /**
  * Resultado de uma operação de estoque.
@@ -30,6 +51,21 @@ export interface InventoryResult {
   movementId?: number;
   product?: any;
   error?: string;
+  /** Quantidade efetivamente reservada/liberada nesta chamada (operações de reserva). */
+  quantityAffected?: number;
+}
+
+/**
+ * Opções das operações de reserva. `productionOrderId` é **obrigatório**:
+ * desde o gap G3 (2026-08-09) não existe mais reserva anônima — toda reserva
+ * tem uma ordem dona, e só ela pode liberá-la.
+ */
+export interface ReservationOptions {
+  /** OP dona da reserva (obrigatória). */
+  productionOrderId: number;
+  description?: string;
+  referenceId?: number;
+  referenceType?: string;
 }
 
 /**
@@ -302,32 +338,141 @@ export async function adjust(
 }
 
 /**
- * Reserva estoque (stub defensivo).
+ * Extrai e valida a OP dona da operação de reserva.
  *
- * A coluna `reserved_quantity` ainda não existe no schema Product.
- * Este método é um no-op documentado que sempre retorna sucesso,
- * mas registra a movimentação para rastreabilidade.
- *
- * @deprecated A reserva real depende da migration da coluna `reserved_quantity`.
+ * @param options - Opções recebidas pela operação de reserva.
+ * @returns ID da ordem de produção dona.
+ * @throws {Error} 400 se a OP dona não for informada.
  */
-async function previousReserve(
+function requireOwnerOrderId(options: Partial<ReservationOptions>): number {
+  const productionOrderId = Number(options?.productionOrderId);
+  if (!Number.isFinite(productionOrderId) || productionOrderId <= 0) {
+    throw Object.assign(
+      new Error(
+        'Reserva de estoque exige a ordem de producao dona (options.productionOrderId). ' +
+        'Reserva anonima foi eliminada no gap G3 (2026-08-09): sem dono nao ha como impedir ' +
+        'que outra ordem libere e consuma este material.'
+      ),
+      { statusCode: 400 }
+    );
+  }
+  return productionOrderId;
+}
+
+/**
+ * Recalcula o cache `products.reserved_quantity` a partir da fonte da
+ * verdade (`production_order_reservations`).
+ *
+ * O valor gravado é sempre `SUM(quantity - quantity_released)` das reservas
+ * `active` do produto. Isso torna o cache **auto-corrigível**: qualquer
+ * divergência herdada some na primeira operação de reserva daquele produto.
+ *
+ * Requer que a linha do produto já esteja travada (`FOR UPDATE`) pelo
+ * chamador — todas as operações de reserva passam por `validateAndLock`
+ * antes, o que serializa reservas concorrentes do mesmo produto.
+ *
+ * A soma é feita em memória (e não com `SUM()` no banco) de propósito: o
+ * conjunto é pequeno (uma linha por OP aberta que consome aquele item) e
+ * evita depender de expressão SQL literal, que é a classe de erro que só
+ * aparece em runtime contra o Postgres real.
+ *
+ * @param productId - ID do produto.
+ * @param transaction - Transação Sequelize ativa.
+ * @returns Novo total reservado do produto.
+ */
+export async function recalculateReservedCache(
+  productId: number,
+  transaction: Transaction
+): Promise<number> {
+  const activeReservations = await ProductionOrderReservation.findAll({
+    where: { product_id: productId, status: 'active' },
+    transaction
+  });
+
+  const total = (activeReservations ?? []).reduce(
+    (sum: number, row: any) => sum + (Number(row.quantity || 0) - Number(row.quantity_released || 0)),
+    0
+  );
+  const normalized = Number.isFinite(total) && total > RESERVATION_EPSILON ? total : 0;
+
+  await Product.update({ reserved_quantity: normalized }, { where: { id: productId }, transaction });
+
+  return normalized;
+}
+
+/**
+ * Reserva estoque de um produto **para uma ordem de produção específica**.
+ *
+ * Cria (ou reforça) a linha em `production_order_reservations` daquela OP e
+ * recalcula o cache `products.reserved_quantity` na mesma transação. A
+ * disponibilidade continua sendo validada contra
+ * `quantity - reserved_quantity`, então uma OP não consegue reservar
+ * material já reservado por outra.
+ *
+ * @param productId - ID do produto a reservar.
+ * @param quantity - Quantidade a reservar (> 0).
+ * @param userId - ID do usuário responsável (vem do JWT, nunca do body).
+ * @param transaction - Transação Sequelize ativa.
+ * @param options - Opções; `productionOrderId` é obrigatório.
+ * @returns Resultado com o total reservado do produto antes/depois.
+ * @throws {Error} 400 sem OP dona ou quantidade inválida; 404 produto inexistente; 422 estoque insuficiente.
+ */
+async function reserveStock(
   productId: number,
   quantity: number,
   userId: number,
   transaction: Transaction,
-  options: { description?: string; referenceId?: number; referenceType?: string } = {}
+  options: Partial<ReservationOptions> = {}
 ): Promise<InventoryResult> {
-  // Stub defensivo: não altera estoque, apenas registra
-  const product = await validateAndLock(productId, undefined, transaction);
+  const productionOrderId = requireOwnerOrderId(options);
+  const quantityToReserve = Number(quantity);
+  if (!Number.isFinite(quantityToReserve) || quantityToReserve <= 0) {
+    throw Object.assign(new Error('Quantidade de reserva deve ser maior que zero'), { statusCode: 400 });
+  }
+
+  const product = await validateAndLock(productId, quantityToReserve, transaction);
+  const reservedBefore = Number(product.reserved_quantity || 0);
+
+  const existing = await ProductionOrderReservation.findOne({
+    where: { production_order_id: productionOrderId, product_id: productId, status: 'active' },
+    transaction,
+    lock: transaction.LOCK.UPDATE
+  });
+
+  if (existing) {
+    // Mesma OP reservando o mesmo produto de novo (ex.: componente repetido
+    // em explosoes distintas): reforca a reserva existente em vez de criar
+    // uma segunda linha viva — o indice unico parcial do banco tambem impede.
+    await existing.update(
+      { quantity: Number(existing.quantity) + quantityToReserve },
+      { transaction }
+    );
+  } else {
+    await ProductionOrderReservation.create(
+      {
+        production_order_id: productionOrderId,
+        product_id: productId,
+        quantity: quantityToReserve,
+        quantity_released: 0,
+        status: 'active',
+        created_by: userId ?? null,
+        notes: options.description ?? null
+      },
+      { transaction }
+    );
+  }
+
+  const reservedAfter = await recalculateReservedCache(productId, transaction);
+  await product.reload({ transaction });
 
   const movement = await createMovement(
     {
       productId,
       userId,
       type: 'adjustment',
-      quantity,
-      description: options.description ?? 'Reserva de estoque anterior',
-      referenceId: options.referenceId,
+      quantity: quantityToReserve,
+      description: options.description ?? 'Reserva de estoque',
+      referenceId: options.referenceId ?? productionOrderId,
       referenceType: options.referenceType ?? 'reservation'
     },
     transaction
@@ -337,102 +482,84 @@ async function previousReserve(
     success: true,
     productId,
     productName: product.name,
-    quantityBefore: product.quantity,
-    quantityAfter: product.quantity,
+    quantityBefore: reservedBefore,
+    quantityAfter: reservedAfter,
+    quantityAffected: quantityToReserve,
     product,
     movementId: movement.id
   };
 }
 
 /**
- * Libera reserva de estoque (stub defensivo).
+ * Libera reserva de estoque **da ordem informada, e somente dela**.
  *
- * @deprecated A reserva real depende da migration da coluna `reserved_quantity`.
+ * A quantidade efetivamente liberada é limitada ao saldo vivo da reserva
+ * daquela OP (`quantity - quantity_released`). Se a OP não tiver reserva
+ * daquele produto, a operação é um no-op — nunca "empresta" saldo reservado
+ * por outra ordem (essa era exatamente a canibalização do gap G3).
+ *
+ * O no-op silencioso (em vez de erro) é deliberado: OPs liberadas **antes**
+ * desta migration não têm linha de reserva, e concluí-las/cancelá-las precisa
+ * continuar funcionando (ver script de backfill
+ * `05_production_order_reservations.ts`).
+ *
+ * @param productId - ID do produto.
+ * @param quantity - Quantidade desejada de liberação.
+ * @param userId - ID do usuário responsável (do JWT).
+ * @param transaction - Transação Sequelize ativa.
+ * @param options - Opções; `productionOrderId` é obrigatório.
+ * @returns Resultado com o total reservado do produto antes/depois e o quanto foi liberado.
+ * @throws {Error} 400 se a OP dona não for informada; 404 se o produto não existir.
  */
-async function previousReleaseReservation(
-  productId: number,
-  quantity: number,
-  userId: number,
-  transaction: Transaction,
-  options: { description?: string; referenceId?: number; referenceType?: string } = {}
-): Promise<InventoryResult> {
-  const product = await validateAndLock(productId, undefined, transaction);
-
-  const movement = await createMovement(
-    {
-      productId,
-      userId,
-      type: 'adjustment',
-      quantity,
-      description: options.description ?? 'Liberacao de reserva anterior',
-      referenceId: options.referenceId,
-      referenceType: options.referenceType ?? 'reservation_release'
-    },
-    transaction
-  );
-
-  return {
-    success: true,
-    productId,
-    productName: product.name,
-    quantityBefore: product.quantity,
-    quantityAfter: product.quantity,
-    product,
-    movementId: movement.id
-  };
-}
-
-async function reserveStock(
-  productId: number,
-  quantity: number,
-  userId: number,
-  transaction: Transaction,
-  options: { description?: string; referenceId?: number; referenceType?: string } = {}
-): Promise<InventoryResult> {
-  const product = await validateAndLock(productId, quantity, transaction);
-  const reservedBefore = Number(product.reserved_quantity || 0);
-  await product.increment('reserved_quantity', { by: quantity, transaction });
-  await product.reload({ transaction });
-
-  const movement = await createMovement(
-    {
-      productId,
-      userId,
-      type: 'adjustment',
-      quantity,
-      description: options.description ?? 'Reserva de estoque',
-      referenceId: options.referenceId,
-      referenceType: options.referenceType ?? 'reservation'
-    },
-    transaction
-  );
-
-  return {
-    success: true,
-    productId,
-    productName: product.name,
-    quantityBefore: reservedBefore,
-    quantityAfter: reservedBefore + quantity,
-    product,
-    movementId: movement.id
-  };
-}
-
 async function releaseStockReservation(
   productId: number,
   quantity: number,
   userId: number,
   transaction: Transaction,
-  options: { description?: string; referenceId?: number; referenceType?: string } = {}
+  options: Partial<ReservationOptions> = {}
 ): Promise<InventoryResult> {
+  const productionOrderId = requireOwnerOrderId(options);
   const product = await validateAndLock(productId, undefined, transaction);
   const reservedBefore = Number(product.reserved_quantity || 0);
-  if (reservedBefore < quantity) {
-    throw Object.assign(new Error(`Reserva insuficiente. Reservado: ${reservedBefore}, solicitado: ${quantity}`), {
-      statusCode: 400
-    });
+
+  const reservation = await ProductionOrderReservation.findOne({
+    where: { production_order_id: productionOrderId, product_id: productId, status: 'active' },
+    transaction,
+    lock: transaction.LOCK.UPDATE
+  });
+
+  const reservedTotal = reservation ? Number(reservation.quantity || 0) : 0;
+  const releasedSoFar = reservation ? Number(reservation.quantity_released || 0) : 0;
+  const outstanding = Math.max(reservedTotal - releasedSoFar, 0);
+  const desired = Number(quantity);
+  const quantityToRelease = Math.min(outstanding, Number.isFinite(desired) && desired > 0 ? desired : 0);
+
+  if (quantityToRelease <= RESERVATION_EPSILON) {
+    return {
+      success: true,
+      productId,
+      productName: product.name,
+      quantityBefore: reservedBefore,
+      quantityAfter: reservedBefore,
+      quantityAffected: 0,
+      product
+    };
   }
-  await product.decrement('reserved_quantity', { by: quantity, transaction });
+
+  // Liberação total: grava exatamente `quantity` (e não a soma) para que o
+  // CHECK de coerência status × quantity_released nunca falhe por resíduo de
+  // ponto flutuante.
+  const fullyReleased = quantityToRelease >= outstanding - RESERVATION_EPSILON;
+  await reservation.update(
+    {
+      quantity_released: fullyReleased ? reservedTotal : releasedSoFar + quantityToRelease,
+      status: fullyReleased ? 'released' : 'active',
+      released_at: fullyReleased ? new Date() : reservation.released_at ?? null
+    },
+    { transaction }
+  );
+
+  const reservedAfter = await recalculateReservedCache(productId, transaction);
   await product.reload({ transaction });
 
   const movement = await createMovement(
@@ -440,9 +567,9 @@ async function releaseStockReservation(
       productId,
       userId,
       type: 'adjustment',
-      quantity,
+      quantity: quantityToRelease,
       description: options.description ?? 'Liberacao de reserva de estoque',
-      referenceId: options.referenceId,
+      referenceId: options.referenceId ?? productionOrderId,
       referenceType: options.referenceType ?? 'reservation_release'
     },
     transaction
@@ -453,13 +580,99 @@ async function releaseStockReservation(
     productId,
     productName: product.name,
     quantityBefore: reservedBefore,
-    quantityAfter: reservedBefore - quantity,
+    quantityAfter: reservedAfter,
+    quantityAffected: quantityToRelease,
     product,
     movementId: movement.id
   };
 }
 
-export { reserveStock as reserve, releaseStockReservation as releaseReservation };
+/**
+ * Libera **todo** o saldo reservado por uma ordem de produção.
+ *
+ * Usado no cancelamento e imediatamente antes do consumo na conclusão da OP.
+ * Substitui a antiga rotina que reexplodia a BOM para adivinhar o que
+ * liberar — que vazava reserva quando a estrutura mudava entre a liberação e
+ * a conclusão, e que (por operar sobre o contador global) liberava material
+ * de terceiros.
+ *
+ * As reservas são percorridas em ordem estável de `product_id`, e cada
+ * liberação trava primeiro o produto e depois a reserva — mesma ordem de
+ * `reserveStock`, para não criar ciclo de deadlock entre OPs concorrentes.
+ *
+ * @param productionOrderId - ID da OP dona das reservas.
+ * @param userId - ID do usuário responsável (do JWT).
+ * @param transaction - Transação Sequelize ativa.
+ * @param options - Descrição/referência da movimentação gerada.
+ * @returns Lista de resultados, um por produto liberado.
+ */
+async function releaseAllReservationsForOrder(
+  productionOrderId: number,
+  userId: number,
+  transaction: Transaction,
+  options: { description?: string; referenceId?: number; referenceType?: string } = {}
+): Promise<InventoryResult[]> {
+  const reservations = await ProductionOrderReservation.findAll({
+    where: { production_order_id: productionOrderId, status: 'active' },
+    order: [['product_id', 'ASC']],
+    transaction
+  });
 
-// CommonJS compatibility for previous JS modules
-module.exports = { consume, receive, adjust, reserve: reserveStock, releaseReservation: releaseStockReservation };
+  const results: InventoryResult[] = [];
+  for (const reservation of reservations) {
+    const outstanding = Number(reservation.quantity || 0) - Number(reservation.quantity_released || 0);
+    if (outstanding <= RESERVATION_EPSILON) continue;
+
+    results.push(
+      await releaseStockReservation(reservation.product_id, outstanding, userId, transaction, {
+        ...options,
+        productionOrderId
+      })
+    );
+  }
+
+  return results;
+}
+
+/**
+ * Lista as reservas vivas de uma ordem de produção.
+ *
+ * Responde à pergunta que o contador global não respondia: "quanto deste
+ * item está reservado para a OP X?".
+ *
+ * @param productionOrderId - ID da OP.
+ * @param transaction - Transação Sequelize ativa (opcional).
+ * @returns Reservas `active` da OP, ordenadas por produto.
+ */
+async function listOrderReservations(
+  productionOrderId: number,
+  transaction?: Transaction
+): Promise<any[]> {
+  return ProductionOrderReservation.findAll({
+    where: { production_order_id: productionOrderId, status: 'active' },
+    order: [['product_id', 'ASC']],
+    transaction
+  });
+}
+
+export {
+  reserveStock as reserve,
+  releaseStockReservation as releaseReservation,
+  releaseAllReservationsForOrder,
+  listOrderReservations
+};
+
+// CommonJS compatibility for previous JS modules.
+// ATENÇÃO: este objeto SUBSTITUI os named exports acima em tempo de execução
+// (require). Toda função nova precisa aparecer aqui também — há teste
+// dedicado (`inventory-service-contract.test.ts`) garantindo isso.
+module.exports = {
+  consume,
+  receive,
+  adjust,
+  reserve: reserveStock,
+  releaseReservation: releaseStockReservation,
+  releaseAllReservationsForOrder,
+  listOrderReservations,
+  recalculateReservedCache
+};

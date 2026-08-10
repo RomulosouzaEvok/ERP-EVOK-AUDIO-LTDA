@@ -506,6 +506,12 @@ describe('Integracao dual-write: ReceivePurchaseItemsUseCase e ChangeProductionO
       consume: jest.fn(async () => ({})),
       receive: jest.fn(async () => ({ product: { id: 1, name: 'Produto Acabado', quantity: 10 } })),
       releaseReservation: jest.fn(async () => ({})),
+      // G3 (2026-08-09): a conclusao/cancelamento da OP libera a reserva
+      // vinculada a ela por aqui. Sem esta funcao no mock o teste falha em
+      // `completeOrder` antes de exercitar o dual-write que ele testa.
+      releaseAllReservationsForOrder: jest.fn(async () => []),
+      listOrderReservations: jest.fn(async () => []),
+      recalculateReservedCache: jest.fn(async () => 0),
     }));
     const WarehouseStockService = {
       getWarehouseByCode: jest.fn(async (code: string) => ({ id: code === 'ACABADOS' ? 2 : 1, code })),

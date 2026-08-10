@@ -2524,3 +2524,104 @@ produção como `invalid input value for enum ...` — um 500 que o
 Ver `docs/governance/HANDOFF_CODEX.md` (entrada 2026-08-09, BLOCO 6 RH) e
 `docs/governance/TODO.md` para endpoints, divergências lei × requisito e
 riscos residuais.
+
+---
+
+## G3 — Reserva de material vinculada à Ordem de Produção (2026-08-09)
+
+**Migration:** `20260809-000026-create-production-order-reservations.cjs`
+(Onda 2 do `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`).
+**Aplicação:** ⚠️ migration **entregue mas ainda não aplicada** — depende de
+aprovação do dono e de rodar o backfill logo em seguida (ver abaixo).
+
+### O problema de modelagem
+
+A reserva de material de uma OP era apenas um **contador global no produto**:
+`products.reserved_quantity`, incrementado por `inventoryService.reserve`.
+Não existia nenhum vínculo entre a reserva e a ordem que reservou, o que
+produzia dois defeitos concretos:
+
+1. **Canibalização.** A liberação fazia `MIN(reservado_total, desejado)` sobre
+   esse contador global (`ChangeProductionOrderStatusUseCase.releaseReservedQuantity`),
+   então **qualquer OP conseguia liberar — e em seguida consumir — o material
+   reservado por outra**.
+2. Não havia como responder "quanto deste item está reservado para a OP X?".
+
+### Tabela nova — `production_order_reservations`
+
+| Coluna | Tipo | Nulo | Descrição |
+|---|---|---|---|
+| `id` | INTEGER PK | não | Identidade |
+| `production_order_id` | INTEGER | não | FK → `production_orders.id`, `ON DELETE CASCADE` — a OP dona |
+| `product_id` | INTEGER | não | FK → `products.id`, `ON DELETE RESTRICT` — o material reservado |
+| `quantity` | DECIMAL(18,6) | não | Quantidade originalmente reservada (imutável após a criação) |
+| `quantity_released` | DECIMAL(18,6) | não | Quanto já foi devolvido. **Saldo vivo = `quantity - quantity_released`** |
+| `status` | ENUM(`active`,`released`) | não | `active` = ainda há saldo; `released` = devolvido integralmente (histórico) |
+| `released_at` | TIMESTAMP | sim | Momento da liberação total |
+| `created_by` | INTEGER | sim | FK → `users.id` (vem do JWT, nunca do body — P0 anti-spoofing) |
+| `notes` | TEXT | sim | Origem da reserva (inclusive a marca do backfill) |
+| `created_at` / `updated_at` | TIMESTAMP | não | Timestamps |
+
+**Restrições:**
+
+- `uq_production_order_reservations_active` — índice **UNIQUE parcial**
+  `(production_order_id, product_id) WHERE status = 'active'`: no máximo uma
+  reserva viva por OP × produto. O histórico (`released`) não concorre.
+- `chk_..._quantity` — `quantity > 0`.
+- `chk_..._released_range` — `0 <= quantity_released <= quantity`.
+- `chk_..._status_coherence` — `active` ⇔ `quantity_released < quantity`;
+  `released` ⇔ `quantity_released = quantity`. Não existe estado decorativo.
+  Por causa dele o serviço grava `quantity_released := quantity` (e não a
+  soma) na liberação total, para que resíduo de ponto flutuante não viole o
+  CHECK.
+- Índices auxiliares em `production_order_id` e `product_id`.
+
+### `products.reserved_quantity` foi rebaixado a cache derivado
+
+A coluna **continua existindo e continua sendo mantida**, na mesma transação,
+como `SUM(quantity - quantity_released)` das reservas `active` do produto. A
+decisão foi deliberada: há leitores em produção que dependem dela
+(`inventoryService.validateAndLock` para calcular disponibilidade, o
+dual-read `SequelizeItemRepository` → `Item.estoque_reservado` → MRP e telas
+do `client/`). Trocar a fonte da verdade **sem** quebrar esses leitores era
+requisito da correção.
+
+A migration reescreve o `COMMENT ON COLUMN` de `products.reserved_quantity`
+declarando o rebaixamento. Nenhum código deve escrever nesse campo
+diretamente — só `services/inventoryService`.
+
+Como o valor é **recalculado** (e não incrementado/decrementado), o cache é
+auto-corrigível: qualquer divergência herdada some na primeira operação de
+reserva daquele produto.
+
+### Escopo declarado: só produção
+
+Vendas **não reservam** estoque neste ERP — `CreateSaleUseCase` e
+`ChangeSaleStatusUseCase` chamam `InventoryService.consume` (baixa direta), e
+orçamento (`quote`) não toca estoque. Por isso a FK aqui é real e dura
+(`production_order_id`) em vez de um par polimórfico (tipo + id), que
+impediria integridade referencial. Se um dia expedição/vendas precisarem
+reservar, a generalização é migration própria (tornar a coluna nullable,
+adicionar `sale_id` e um CHECK de exatamente-um-dono).
+
+### Backfill obrigatório
+
+`server/src/scripts/backfill/05_production_order_reservations.ts`
+(dry-run por padrão; `--apply` para gravar; idempotente; tudo em uma
+transação). Para cada OP em `released`/`in_progress`/`paused` sem reserva
+migrada, reconstrói a reserva pela explosão da BOM ativa na quantidade
+planejada — que é exatamente o que a rotina de liberação fazia.
+
+**O que o backfill não consegue reconstruir** (relata, não inventa):
+BOM alterada depois da liberação da OP; OP viva cujo produto perdeu a BOM
+ativa; e saldo reservado órfão (`reserved_quantity > 0` sem OP viva por trás
+— resquício de OP removida em `released`, ou de conclusão com quantidade zero
+anterior à correção do gap G2). O script lista cada divergência produto a
+produto antes de gravar.
+
+### Efeito colateral de integridade
+
+`RemoveProductionOrderUseCase` passou a **bloquear** a remoção de OP com
+reserva ativa (`BusinessRuleError`, regra `G3`), orientando a cancelar antes.
+Sem isso o `ON DELETE CASCADE` levaria as reservas junto e deixaria o cache
+alto para sempre — material invisivelmente indisponível.
