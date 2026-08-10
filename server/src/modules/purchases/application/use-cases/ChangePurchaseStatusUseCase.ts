@@ -124,8 +124,11 @@ class ChangePurchaseStatusUseCase extends UseCase {
     // mais longa e mais correta.
     if (status === 'approved') {
       // D-K: segregacao de funcao antes da alcada — ver cabecalho da classe.
-      // `requester_id` e NULL-able no schema (pedidos legados); nesse caso a
-      // comparacao e impossivel e a regra nao bloqueia, por desenho.
+      // `requester_id` passou a ser NOT NULL na migration `20260810-000040`,
+      // fechando a unica frouxidao real da regra (linha sem solicitante era
+      // aprovavel por qualquer pessoa). A guarda de `isSelfApproval` para
+      // solicitante ausente continua no lugar de proposito: ela protege o
+      // caminho contra dado carregado por fora do ERP.
       assertApproverIsNotRequester({
         rule: SEGREGATION_RULES.PURCHASE_ORDER,
         requesterUserId: purchase.requester_id,

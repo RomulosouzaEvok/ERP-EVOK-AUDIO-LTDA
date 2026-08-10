@@ -286,6 +286,10 @@ export default function MasterProductionPlanPage() {
       decideMutation.mutate({ lineId: line.id, body: { dismiss: true } });
       return;
     }
+    // Sem nada digitado, "Planejar" aceita a sugestão do sistema. Isso não
+    // contradiz a decisão D-F: o clique **é** o ato humano, e ele fica
+    // registrado em `decided_by`/`decided_at`. O que a regra proíbe é a linha
+    // nascer decidida sozinha — e ela nasce com zero, sempre.
     const typed = draftQuantities[line.id];
     decideMutation.mutate({
       lineId: line.id,
