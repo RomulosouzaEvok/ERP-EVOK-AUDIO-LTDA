@@ -2,7 +2,8 @@
 
 **Projeto:** ERP Evok Áudio LTDA — indústria de auto-falantes profissionais, manufatura discreta, ~100-150 funcionários
 **Data:** 2026-08-09
-**Status:** 🟡 EM ELABORAÇÃO (escrito incrementalmente — seções marcadas ⏳ ainda não preenchidas)
+**Status:** ✅ COMPLETO — 6 de 6 decisões preenchidas. Lacunas de verificação estão marcadas `[NÃO CONFIRMADO NA FONTE]` e consolidadas na seção final.
+**Escopo:** documento de pesquisa. **Nenhum código foi alterado.** Referências a `arquivo:linha` são do estado do repositório em 2026-08-09.
 **Objetivo:** Dar ao dono do produto recomendações **fechadas com fonte normativa** onde a lei/norma já responde, e recomendações de **boa prática de mercado claramente rotuladas como tal** onde não há norma.
 
 ## Convenção de confiabilidade
@@ -367,7 +368,13 @@ Outros dispositivos relevantes confirmados no mesmo texto:
 A regra é: quem mantém **sistema de contabilidade de custo integrado e coordenado com o restante da escrituração** avalia o estoque pelo custo real apurado; quem **não** mantém fica sujeito ao **arbitramento do custo** por percentuais fixos sobre o preço de venda / preço de compra dos insumos, o que quase sempre resulta em lucro tributável maior.
 
 - Norma-base: **Decreto 9.580/2018 (RIR/2018)** — <https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/decreto/D9580.htm>
-- ⚠️ `[NÃO CONFIRMADO NA FONTE]` — **o número do artigo.** A pesquisa aponta consistentemente para o **art. 306 do RIR/2018** (e seu §2º, que define quando o sistema é "integrado e coordenado": apoiado em valores originados da escrituração contábil — matéria-prima, mão de obra direta, gastos gerais de fabricação; apuração de custo por período; e apoio em inventários físicos), com o arbitramento de lucro no **art. 603**. **Não consegui abrir o texto oficial do Planalto nesta rodada** (o arquivo do decreto é grande e a conexão caiu). **O contador deve confirmar o número do artigo antes de este documento ser citado em qualquer parecer.** A *substância* da regra (custo integrado e coordenado × arbitramento) é pacífica e antiga (vinha do art. 294 do RIR/1999); o que não está confirmado aqui é a numeração no RIR/2018.
+**Corroboração em publicação oficial da Receita Federal** (não é o texto do decreto, mas é fonte de governo): *Perguntas e Respostas Pessoa Jurídica — Capítulo VIII, Lucro Operacional*, publicado pela RFB, trata do tema e indica o **art. 306 do RIR/2018**:
+<https://www.gov.br/receitafederal/pt-br/assuntos/orientacao-tributaria/declaracoes-e-demonstrativos/ecf/perguntas-e-respostas-pessoa-juridica-2021-arquivos/capitulo-viii-lucro-operacional-2021.pdf>
+Segundo essa publicação, considera-se sistema integrado e coordenado aquele **apoiado em valores originados da escrituração contábil** (matéria-prima, mão de obra direta, gastos gerais de fabricação), **apoiado em livros auxiliares/mapas de apropriação ou rateio** com registros coincidentes com a escrituração principal, e **que permita avaliar os estoques na data de encerramento do período segundo os custos efetivamente incorridos**.
+
+**E o que acontece se NÃO houver o sistema integrado — os números do arbitramento.** Ainda segundo a mesma publicação da RFB, sem custo integrado e coordenado os estoques constam no Livro de Inventário por avaliação legal: **produtos acabados a 70% do maior preço de venda do período**, e **materiais em processamento a 80% do valor dos produtos acabados assim determinado, ou a uma vez e meia o maior custo das matérias-primas adquiridas no período**. ⚠️ `[NÃO CONFIRMADO NA FONTE]` — **estes percentuais não foram lidos no texto do decreto**, apenas na publicação da RFB via resultado de busca; o download do PDF completo falhou nesta máquina. **Confirmar com o contador antes de usar como número.** O ponto qualitativo, esse sim, é seguro: **a alternativa ao custo real não é "custo aproximado", é uma fórmula legal que quase sempre é pior para o contribuinte.**
+
+- ⚠️ `[NÃO CONFIRMADO NA FONTE]` — **o número do artigo, no texto oficial.** A pesquisa aponta consistentemente para o **art. 306 do RIR/2018** (e seu §2º, que define quando o sistema é "integrado e coordenado": apoiado em valores originados da escrituração contábil — matéria-prima, mão de obra direta, gastos gerais de fabricação; apuração de custo por período; e apoio em inventários físicos), com o arbitramento de lucro no **art. 603**. **Não consegui abrir o texto oficial do Planalto nesta rodada** (o arquivo do decreto é grande e a conexão caiu). **O contador deve confirmar o número do artigo antes de este documento ser citado em qualquer parecer.** A *substância* da regra (custo integrado e coordenado × arbitramento) é pacífica e antiga (vinha do art. 294 do RIR/1999); o que não está confirmado aqui é a numeração no RIR/2018.
 
 **O que isso significa para o gap real do ERP.** Hoje `calculateLaborCost()` retorna **0 quando não há apontamento** (`server/src/modules/production/application/use-cases/ChangeProductionOrderStatusUseCase.ts:382-404`, guarda em `:384`) e a OP conclui normalmente sem nenhum apontamento (`:113`). Um estoque de produto acabado valorizado **sem mão de obra direta e sem gastos gerais de fabricação** não é custo integrado e coordenado por definição — é custo incompleto. O efeito é duplo e ambos ruins:
 1. **Estoque subavaliado** → CPV inflado no período de venda, lucro distorcido entre exercícios.
@@ -667,4 +674,96 @@ Por que não transplantar:
 <a name="perguntas"></a>
 ## Perguntas para o dono / contador
 
-⏳ *em elaboração*
+### Resumo executivo — o que já está fechado com fonte e o que não está
+
+| # | Decisão | Base | Status |
+|---|---|---|---|
+| 1 | MTO vs MTS + MPS | ASCM/APICS CPIM (oficial, público) | 📘 **boa prática** — nenhuma lei aplicável. Recomendação fechada. |
+| 2 | Unificação de BOM | Engenharia de migração; amarração indireta a Bloco K e ISO 9001 8.3.6 | 📘 **boa prática** — nenhuma lei sobre "como unificar". Recomendação fechada. |
+| 3 | ECO/ECN | ISO 9001:2015 **8.3.6** e **8.5.6** | ✅ **norma quanto ao REGISTRO** (texto paywalled) / ⚠️ composição do comitê **não é normativa** |
+| 4 | Apontamento obrigatório | **Ajuste SINIEF 2/09 cl. 3ª §§7º-10, 13** (texto literal obtido) + RIR/2018 | ✅ **NORMA — a mais forte das seis** / ⚠️ artigo do RIR pendente |
+| 5 | Baixa de estoque e gate de qualidade | **Ajuste SINIEF 07/05 cl. 1ª §1º e cl. 9ª §1º** (texto literal obtido); ISO 9001 8.5.2/8.6/8.7; ISO 2859-1 | ✅ **NORMA quanto à NF-e** / 📘 boa prática quanto ao momento do lançamento interno / ⚠️ ISO paywalled |
+| 6 | Alçada e reconhecimento financeiro | **CPC 00 (R2) 4.26/4.27/4.56-4.58** e **CPC 47 31/33/38/105/108** (texto literal obtido) | ✅ **NORMA quanto a AP e AR** / 📘 boa prática quanto à alçada / ⚠️ COSO paywalled |
+
+### Itens marcados `[NÃO CONFIRMADO NA FONTE]` — nenhum deve ser citado sem verificação
+
+1. **Número do artigo do RIR/2018** sobre custo integrado e coordenado (Decisão 4). Indicado como **art. 306**; corroborado por publicação oficial da RFB, **não** pelo texto do Planalto (o site não respondeu nesta máquina em múltiplas tentativas, incluindo download com retomada).
+2. **Alcance do Ajuste SINIEF 31/24** — prorrogação de prazo do Bloco K citada no consolidado do Ajuste SINIEF 2/09; não verificada se atinge a divisão 26 da CNAE (Decisão 4).
+3. **Texto literal das cláusulas da ISO 9001:2015** (8.3.6, 8.4, 8.5.2, 8.5.6, 8.6, 8.7) — iso.org retorna HTTP 403; sínteses feitas a partir de consultorias de certificação (Decisões 3, 5, 6).
+4. **Texto literal do COSO** Internal Control–Integrated Framework 2013, Princípio 10 e *point of focus* de segregação de funções — framework pago (Decisão 6).
+5. **Data e ato de cancelamento da ABNT NBR 5426** e **existência/ano da adoção ABNT da ISO 2859-1 vigente** (Decisão 5).
+6. **Valores de NQA/AQL** disponíveis nas tabelas da ISO 2859-1 (Decisão 5) — a norma precisa ser adquirida.
+7. **Paridade de colunas entre `item_estruturas` e `bill_of_material_items`** (Decisão 2) — verificação de código não concluída.
+
+### Perguntas consolidadas — para o CONTADOR
+
+| # | Pergunta | Decisão | Por quê |
+|---|---|---|---|
+| C1 | **CNAE efetivamente escriturado** no cadastro estadual e **faturamento anual** do segundo exercício anterior | 4 | Fixa em qual inciso do §7º da cl. 3ª do Aj. SINIEF 2/09 a empresa cai |
+| C2 | A **UF da fábrica** tem exigência antecipada, regime especial ou dispensa própria do Bloco K? | 4 | Legislação estadual pode antecipar |
+| C3 | O **Ajuste SINIEF 31/24** atinge a divisão 26? | 4 | Prorrogação não verificada |
+| C4 | A empresa escritura hoje o **Livro modelo 3**? | 4 | §10: só o Bloco K **completo** desobriga |
+| C5 | Confirmar o **número do artigo do RIR/2018** sobre custo integrado e coordenado | 4 | Indicado art. 306, não confirmado no Planalto |
+| C6 | Como o **Bloco H (Registro de Inventário)** é montado hoje — saldo do ERP, contagem física, ou contabilidade? | 5 | Se vem do ERP, a divergência da baixa antecipada já está sendo declarada |
+| C7 | **Prazo de pagamento** conta da NF do fornecedor ou do recebimento físico? | 6 | Define o vencimento correto da AP |
+| C8 | **Incoterm padrão de venda** (FOB/CIF) e existência de **aceite formal** em OEM | 6 | Define o momento da transferência de controle (CPC 47 item 38) |
+| C9 | **Destino das APs** criadas na aprovação e ainda não recebidas: estorno ou congelamento? | 6 | Passivo que, pelo CPC 00 4.58, não deveria existir |
+| C10 | **Destino das OPs concluídas com custo de MO = R$ 0,00** | 4 | Purga pré-Go-Live ou ajuste contábil |
+| C11 | A empresa é **auditada** ou tem **covenant bancário**? | 6 | Se sim, AP/AR deixam de ser melhoria e viram correção de erro material |
+
+### Perguntas consolidadas — para o DONO DO PRODUTO
+
+| # | Pergunta | Decisão |
+|---|---|---|
+| D1 | **Mix real** catálogo × OEM customizado (% de faturamento e de itens) | 1 |
+| D2 | **Prazo prometido ao cliente** × **lead time real de produção** — define o ponto de desacoplamento | 1 |
+| D3 | Existe **previsão de vendas**? Existe **quem exerça a função de PCP**? | 1 |
+| D4 | **Setup é relevante** entre modelos? | 1 |
+| D5 | **Quantos itens têm BOM**, e quantos têm nas duas estruturas? | 2 |
+| D6 | **Qual estrutura os usuários estão de fato mantendo hoje** — `/api/bom` (B) ou CRUD de itens (A)? *(pode inverter a recomendação de qual sobrevive)* | 2 |
+| D7 | **`N` dias de comparador limpo** como critério de corte da BOM; existe janela com **zero OPs abertas**? | 2 |
+| D8 | **Engenharia de Produto é separada da Produção**, ou a mesma pessoa acumula? | 3 |
+| D9 | Há **contrato OEM** exigindo notificação/aprovação prévia do cliente para mudança de projeto/fornecedor, ou plano de amostragem próprio? | 3, 5 |
+| D10 | A empresa **é ou será certificada ISO 9001**? | 3, 5 |
+| D11 | **Frequência de alteração de engenharia** por mês | 3 |
+| D12 | Qual **regra de corte** é a praticada de fato hoje? | 3 |
+| D13 | **Janela real entre confirmação do pedido e faturamento** (horas? semanas?) | 5 |
+| D14 | Viabilidade de **contagem física de corte** na virada | 5 |
+| D15 | **Ticket médio e percentis 50/80/95** dos pedidos de compra | 6 |
+| D16 | **Quem, na estrutura real, pode aprovar compra** (cargos que existem) | 6 |
+| D17 | **Volume de recebíveis legados com `status='paid'` sem baixa** e capacidade da Tesouraria de reconciliá-los antes do Go-Live | 6 |
+
+---
+
+## Anexo — Ordem de execução sugerida (dependências entre as 6 decisões)
+
+As seis decisões **não são independentes**. Executá-las fora de ordem custa retrabalho:
+
+```
+      ┌─────────────────────────────────────────────┐
+      │ API de ROTEIRO de fabricação (pré-requisito)│  ← bloqueia 4 e parte de 1
+      └──────────────────┬──────────────────────────┘
+                         │
+   ┌─────────────────────┼──────────────────────────┐
+   │                     │                          │
+   ▼                     ▼                          ▼
+[2] BOM unificada   [4] Apontamento          [6-A] Segregação de
+   (F0 comparador       obrigatório                funções (permissão
+    já pode rodar)      + custeio real             approve ≠ operate)
+   │                     │                          │
+   ▼                     │                          ▼
+[3] ECO/ECN              │                    [6-B] AP no recebimento
+   (depende de BOM       │                    [6-C] AR na expedição
+    versionada)          │                          │
+                         │                          ▼
+                         └──────────────────> [5] Baixa na expedição
+                                                   + gate de qualidade
+                                                   (mesmo evento que 6-C)
+   [1] MPS ── independente das demais, mas se beneficia de 2 e da API de roteiro
+```
+
+**Três observações sobre a ordem:**
+
+1. **A API de roteiro de fabricação é o pré-requisito mais subestimado.** As tabelas existem (`server/src/models/ProductionRoute.ts:42`, `ProductionRouteStep.ts:43`), são lidas no cálculo de custo de MO (`server/src/modules/production/infrastructure/sequelize/SequelizeProductionOrderRepository.ts:177`, `:207`), e **não têm nenhum endpoint**. Sem elas o apontamento obrigatório é inexequível e o rough-cut capacity do MPS não existe.
+2. **A Decisão 5 (expedição) e a 6-C (AR na expedição) são a mesma mudança.** Ambas dependem de uma entidade de expedição que hoje não existe. Fazer as duas juntas é mais barato e mais seguro que fazer em sequência.
+3. **A F0 da Decisão 2 (comparador de BOM) pode e deve começar imediatamente** — é somente-leitura, risco zero, e o resultado dela é que informa o tamanho real do problema de BOM. É o único item deste documento que não tem razão para esperar decisão do dono.
