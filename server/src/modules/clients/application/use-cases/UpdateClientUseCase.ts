@@ -8,9 +8,15 @@ import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError, ConflictError } from '../../../../errors';
 import ClientsRepository from '../../domain/repositories/ClientsRepository';
 
-/** Campos aceitos pelo `PUT /api/clients/:id`, identico ao controller anterior. */
+/**
+ * Campos aceitos pelo `PUT /api/clients/:id`.
+ *
+ * `cnae` entrou em 2026-08-10 pela decisão D-I do dono ("sim, mas opcional"):
+ * quem cadastrou o cliente sem CNAE precisa poder completá-lo depois, e quem
+ * cadastrou uma pessoa física precisa poder deixá-lo vazio para sempre.
+ */
 const ALLOWED_FIELDS = [
-  'name', 'phone', 'email', 'notes', 'tax_regime', 'ie', 'im', 'status',
+  'name', 'phone', 'email', 'notes', 'tax_regime', 'ie', 'im', 'cnae', 'status',
   'cep', 'street', 'number', 'complement', 'neighborhood', 'city', 'state'
 ];
 

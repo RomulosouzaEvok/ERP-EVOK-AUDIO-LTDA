@@ -60,10 +60,11 @@ const Client = sequelize.define('Client', {
   im: { type: DataTypes.STRING(20), allowNull: true, comment: 'Inscrição municipal; só se aplica a prestador de serviço' },
   ind_final: { type: DataTypes.ENUM('0', '1'), allowNull: false, defaultValue: '0', comment: 'Consumidor final (0=não, 1=sim)' },
   ind_ie: { type: DataTypes.ENUM('1', '2', '9'), allowNull: false, defaultValue: '9', comment: 'Contribuinte ICMS (1=contribuinte, 2=isento, 9=não contribuinte)' },
-  // ATENÇÃO: `cnae` não é aceito por createClientSchema (.strict()) — hoje
-  // nenhum endpoint consegue preenchê-lo. Se o negócio decidir passar a
-  // coletar CNAE, o campo precisa entrar no validador ANTES de qualquer
-  // discussão sobre torná-lo obrigatório.
+  // `cnae` é OPCIONAL por decisão D-I do dono (2026-08-10): "sim, mas
+  // opcional" — o campo é aceito por `createClientSchema`/`updateClientSchema`
+  // desde essa data, mas NUNCA trava a criação, porque não se aplica a pessoa
+  // física. Continua `allowNull: true` no model e nullable sem default no
+  // banco; ausência grava `NULL` (nunca `''`), normalizado em `ClientEntity`.
   cnae: { type: DataTypes.STRING(10), allowNull: true, comment: 'CNAE (classificação de atividade econômica); só se aplica a pessoa jurídica' },
   city_ibge_code: { type: DataTypes.STRING(7), allowNull: true }
 }, {

@@ -13,6 +13,12 @@ export const createClientSchema = z.object({
   tax_regime: z.string().trim().max(50).optional(),
   ie: z.string().trim().max(20).optional(),
   im: z.string().trim().max(20).optional(),
+  // CNAE (decisão D-I do dono, 2026-08-10: "sim, mas opcional"). NUNCA trava a
+  // criação — pessoa física não tem CNAE. O `.max(10)` não é preciosismo: a
+  // coluna é `varchar(10)` e um valor maior seria rejeitado pelo Postgres com
+  // 500 em vez de 422. Nenhuma regex de formato é imposta de propósito: o dono
+  // decidiu disponibilizar o campo, não normalizá-lo.
+  cnae: z.string().trim().max(10).optional(),
   city: z.string().trim().max(100).optional(),
   state: z.string().trim().max(2).optional(),
   cep: z.string().trim().max(10).optional(),

@@ -26,13 +26,26 @@
  * `lot_size` e `sample_size` são **evidência do que foi aplicado**, não
  * entrada de cálculo. O veredito é sempre humano.
  *
- * ⚠️ Este model NÃO está registrado em `server/src/models/index.ts` (arquivo
- * sob edição concorrente de outros agentes nesta rodada). Ele é carregado
- * diretamente por `SequelizeQualityRepository`, o que é suficiente para
- * `sequelize.define` registrar a tabela; o que falta são apenas as
- * **associações** (`belongsTo` de lote/inspetor/RNC), então as consultas
- * deste módulo não usam `include`. Registro pendente reportado em
- * `docs/governance/TODO.md`.
+ * ✅ Registrado em `server/src/models/index.ts` desde 2026-08-10 (o registro
+ * ficou pendente na entrega do G7 porque aquele arquivo estava sob edição
+ * concorrente). Associações disponíveis para `include`:
+ *
+ * | alias | destino | FK |
+ * |---|---|---|
+ * | `lot` | `LotControl` | `lot_id` |
+ * | `inspector` | `User` | `inspector_id` |
+ * | `nonConformity` | `NonConformity` | `non_conformity_id` |
+ * | `released_lots` | `LotControl` | `release_inspection_id` |
+ *
+ * E o lado inverso: `LotControl.inspections`, `LotControl.releaseInspection`,
+ * `LotControl.releasedBy`, `User.quality_inspections` e
+ * `NonConformity.quality_inspections`.
+ *
+ * ⚠️ A migration `20260810-000032` que cria a tabela ainda **não foi aplicada**
+ * ao banco de desenvolvimento (está na fila de pendentes). Registrar o model e
+ * as associações é inócuo até lá — Sequelize não valida contra o banco em
+ * tempo de `define` —, mas nenhuma consulta a `quality_inspections` funciona
+ * antes de a migration rodar.
  */
 
 import { DataTypes } from 'sequelize';

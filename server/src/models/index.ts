@@ -41,6 +41,7 @@ import ProductionOrderReservation = require('./ProductionOrderReservation');
 import ServiceOrder = require('./ServiceOrder');
 import Asset = require('./Asset');
 import NonConformity = require('./NonConformity');
+import QualityInspection = require('./QualityInspection');
 import MaintenanceOrder = require('./MaintenanceOrder');
 import AuditLog = require('./AuditLog');
 import WebhookEvent = require('./WebhookEvent');
@@ -77,6 +78,7 @@ import ProductionDowntime = require('./ProductionDowntime');
 import CustomerPriceList = require('./CustomerPriceList');
 import ImportProcess = require('./ImportProcess');
 import ImportProcessItem = require('./ImportProcessItem');
+import ImportProcessApproval = require('./ImportProcessApproval');
 import SaleInvoice = require('./SaleInvoice');
 import CompanyBankingConfig = require('./CompanyBankingConfig');
 import CnabRemittance = require('./CnabRemittance');
@@ -452,10 +454,16 @@ ProductionLotConsumption.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 Item.hasMany(ProductionLotConsumption, { foreignKey: 'item_id', as: 'production_lot_consumptions' });
 ProductionLotConsumption.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
 
-// Reserva de material por OP (G3, 2026-08-09) — fonte da verdade da reserva.
+// Reserva de estoque (G3, 2026-08-09) — fonte da verdade da reserva.
 // `products.reserved_quantity` e apenas o cache derivado desta relacao.
+// Desde o G9 (2026-08-10) a reserva tem DOIS donos possiveis, exatamente um
+// por linha: ordem de producao OU venda (confirmacao de pedido reserva; a
+// baixa so ocorre na autorizacao da NF-e).
 ProductionOrder.hasMany(ProductionOrderReservation, { foreignKey: 'production_order_id', as: 'material_reservations' });
 ProductionOrderReservation.belongsTo(ProductionOrder, { foreignKey: 'production_order_id', as: 'productionOrder' });
+
+Sale.hasMany(ProductionOrderReservation, { foreignKey: 'sale_id', as: 'stock_reservations' });
+ProductionOrderReservation.belongsTo(Sale, { foreignKey: 'sale_id', as: 'sale' });
 
 Product.hasMany(ProductionOrderReservation, { foreignKey: 'product_id', as: 'production_reservations' });
 ProductionOrderReservation.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
@@ -567,6 +575,41 @@ NonConformity.belongsTo(User, { foreignKey: 'responsible_id', as: 'responsible' 
 User.hasMany(NonConformity, { foreignKey: 'closed_by', as: 'closed_ncs' });
 NonConformity.belongsTo(User, { foreignKey: 'closed_by', as: 'closer' });
 
+// ---- QualityInspection (G7, migration 20260810-000032) ----
+// Registro que faltava: o model era carregado direto do arquivo por
+// `SequelizeQualityRepository` (bastava para `sequelize.define` conhecer a
+// tabela), mas SEM associação alguma — nenhuma consulta do módulo podia usar
+// `include`. As FKs abaixo espelham exatamente as da migration.
+//
+// ⚠️ Todos os atributos de `QualityInspection` são snake_case e iguais ao nome
+// da coluna (o model não usa `field:`), então passar `lot_id`/`inspector_id`/
+// `non_conformity_id` como `foreignKey` é o nome do ATRIBUTO — não repete o
+// defeito de atributo-fantasma corrigido em `access_profile_id` logo abaixo.
+
+// LotControl ↔ QualityInspection (toda inspeção é sobre um lote — ISO 9001 8.6)
+LotControl.hasMany(QualityInspection, { foreignKey: 'lot_id', as: 'inspections' });
+QualityInspection.belongsTo(LotControl, { foreignKey: 'lot_id', as: 'lot' });
+
+// User ↔ QualityInspection (inspetor — SEMPRE do JWT, nunca do body)
+User.hasMany(QualityInspection, { foreignKey: 'inspector_id', as: 'quality_inspections' });
+QualityInspection.belongsTo(User, { foreignKey: 'inspector_id', as: 'inspector' });
+
+// NonConformity ↔ QualityInspection (RNC aberta quando `verdict = 'rejected'`,
+// ISO 9001 8.7; NULL nos demais vereditos)
+NonConformity.hasMany(QualityInspection, { foreignKey: 'non_conformity_id', as: 'quality_inspections' });
+QualityInspection.belongsTo(NonConformity, { foreignKey: 'non_conformity_id', as: 'nonConformity' });
+
+// LotControl.release_inspection_id / released_by — a rastreabilidade de QUEM
+// autorizou a saída da quarentena (ISO 9001 8.6). NULL = lote nunca liberado
+// OU liberação legada anterior ao G7 (é o NULL que denuncia, numa auditoria,
+// a liberação sem evidência). `released_by` pode diferir de `inspector_id`:
+// inspecionar e liberar são atos distintos.
+QualityInspection.hasMany(LotControl, { foreignKey: 'release_inspection_id', as: 'released_lots' });
+LotControl.belongsTo(QualityInspection, { foreignKey: 'release_inspection_id', as: 'releaseInspection' });
+
+User.hasMany(LotControl, { foreignKey: 'released_by', as: 'released_lot_controls' });
+LotControl.belongsTo(User, { foreignKey: 'released_by', as: 'releasedBy' });
+
 // MaintenanceOrder associations
 Asset.hasMany(MaintenanceOrder, { foreignKey: 'asset_id', as: 'maintenance_orders' });
 MaintenanceOrder.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
@@ -646,13 +689,29 @@ AcousticTestResult.belongsTo(NonConformity, { foreignKey: 'non_conformity_id', a
 // RELACIONAMENTOS - PERFIS DE ACESSO CONFIGURÁVEIS (Bloco 1.1)
 // ============================================
 
+// ⚠️ `foreignKey` aqui é o nome do ATRIBUTO do model, não o da coluna.
+// `User` e `AccessProfilePermission` declaram o atributo `accessProfileId` com
+// `field: 'access_profile_id'`. Até 2026-08-10 estas 4 associações passavam
+// `'access_profile_id'`, e o Sequelize, não encontrando atributo com esse
+// nome, CRIAVA um segundo atributo homônimo apontando para a mesma coluna —
+// com `allowNull: true` (o default de associação), ao lado do `accessProfileId`
+// declarado `allowNull: false`. Banco e model sempre concordaram; o problema
+// era o atributo-fantasma, que aparecia duplicado no JSON das respostas
+// (`access_profile_id` E `accessProfileId`) e desalinhava a guarda de drift
+// de schema. Achado S-1b (commit `92cf555`), documentado na migration
+// `20260810-000033-fix-nullable-columns-round-3.cjs` §`access_profile_permissions`.
+// Nenhum consumidor lia o nome antigo (verificado em server/, client/, mobile/
+// e tv/ — todos usam `accessProfileId`; `req.body.access_profile_id` é campo de
+// PAYLOAD e não é afetado, e o `group: ['access_profile_id']` de
+// `SequelizeAccessProfilesRepository` é nome de COLUNA em SQL cru, idem).
+
 // AccessProfile ↔ AccessProfilePermission
-AccessProfile.hasMany(AccessProfilePermission, { foreignKey: 'access_profile_id', as: 'permissions', onDelete: 'CASCADE' });
-AccessProfilePermission.belongsTo(AccessProfile, { foreignKey: 'access_profile_id', as: 'accessProfile', onDelete: 'CASCADE' });
+AccessProfile.hasMany(AccessProfilePermission, { foreignKey: 'accessProfileId', as: 'permissions', onDelete: 'CASCADE' });
+AccessProfilePermission.belongsTo(AccessProfile, { foreignKey: 'accessProfileId', as: 'accessProfile', onDelete: 'CASCADE' });
 
 // AccessProfile ↔ User (null = sem perfil = bloqueio total, UC-35-Exceção)
-AccessProfile.hasMany(User, { foreignKey: 'access_profile_id', as: 'users' });
-User.belongsTo(AccessProfile, { foreignKey: 'access_profile_id', as: 'accessProfile' });
+AccessProfile.hasMany(User, { foreignKey: 'accessProfileId', as: 'users' });
+User.belongsTo(AccessProfile, { foreignKey: 'accessProfileId', as: 'accessProfile' });
 
 // ============================================
 // RELACIONAMENTOS - MULTIPLOS DEPOSITOS (Bloco 4, UC-42)
@@ -816,6 +875,12 @@ ImportProcessItem.belongsTo(ImportProcess, { foreignKey: 'import_process_id', as
 // Item ↔ ImportProcessItem
 Item.hasMany(ImportProcessItem, { foreignKey: 'item_id', as: 'import_process_items' });
 ImportProcessItem.belongsTo(Item, { foreignKey: 'item_id', as: 'item' });
+
+// ImportProcess ↔ ImportProcessApproval (G11-COMEX — gate da diretoria em `draft → shipped`)
+ImportProcess.hasMany(ImportProcessApproval, { foreignKey: 'import_process_id', as: 'approvals', onDelete: 'CASCADE' });
+ImportProcessApproval.belongsTo(ImportProcess, { foreignKey: 'import_process_id', as: 'importProcess', onDelete: 'CASCADE' });
+User.hasMany(ImportProcessApproval, { foreignKey: 'approver_user_id', as: 'import_process_approvals' });
+ImportProcessApproval.belongsTo(User, { foreignKey: 'approver_user_id', as: 'approver' });
 
 // ============================================
 // RELACIONAMENTOS - COBRANCA CNAB 240 (remessa/retorno)
@@ -1333,7 +1398,7 @@ export {
   ProductionOrder, ProductionRoute, ProductionRouteStep, ProductionOrderTracking,
   LotControl, SerialNumber, ProductionLotConsumption, ProductionOrderReservation,
   ServiceOrder, Asset,
-  NonConformity, MaintenanceOrder, AuditLog, WebhookEvent, CompanyFiscalConfig, PurchaseReceipt,
+  NonConformity, QualityInspection, MaintenanceOrder, AuditLog, WebhookEvent, CompanyFiscalConfig, PurchaseReceipt,
   BillOfMaterial, BillOfMaterialItem,
   Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada,
   ItemSupplier,
@@ -1347,7 +1412,7 @@ export {
   ProductionDowntime,
   CustomerPriceList,
   BankStatement, BankStatementEntry,
-  ImportProcess, ImportProcessItem,
+  ImportProcess, ImportProcessItem, ImportProcessApproval,
   SaleInvoice,
   CompanyBankingConfig,
   CnabRemittance, CnabRemittanceItem, CnabReturnFile, CnabReturnOccurrence,

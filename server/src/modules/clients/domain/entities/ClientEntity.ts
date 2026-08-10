@@ -18,6 +18,7 @@ interface ClientProps {
   tax_regime?: string | null;
   ie?: string | null;
   im?: string | null;
+  cnae?: string | null;
   cep?: string | null;
   street?: string | null;
   number?: string | null;
@@ -37,6 +38,7 @@ class ClientEntity extends Entity {
   public tax_regime: string | null;
   public ie: string | null;
   public im: string | null;
+  public cnae: string | null;
   public cep: string | null;
   public street: string | null;
   public number: string | null;
@@ -60,6 +62,16 @@ class ClientEntity extends Entity {
     this.tax_regime = props.tax_regime ?? null;
     this.ie = props.ie ?? null;
     this.im = props.im ?? null;
+    // CNAE opcional (decisão D-I do dono, 2026-08-10). `null` é o valor
+    // CORRETO para ausência aqui — diferente de `phone`/`email`/`notes`, que
+    // são `NOT NULL DEFAULT ''` e onde o `null` explícito ANULARIA o DEFAULT do
+    // Postgres (BUG-02, ver `CreateClientUseCase`). Conferido em
+    // `information_schema.columns`: `clients.cnae` é `varchar(10)`,
+    // `is_nullable = YES`, `column_default = NULL`.
+    // String vazia vira `null` para não gravar '' num campo que "não se
+    // aplica" (pessoa física) — '' e NULL significariam a mesma coisa e
+    // sujariam relatório e futura emissão fiscal.
+    this.cnae = props.cnae && props.cnae.trim() !== '' ? props.cnae.trim() : null;
     this.cep = props.cep ?? null;
     this.street = props.street ?? null;
     this.number = props.number ?? null;

@@ -66,6 +66,11 @@ class CreateClientUseCase extends UseCase<Record<string, any>, any> {
         tax_regime: entity.tax_regime,
         ie: entity.ie,
         im: entity.im,
+        // CNAE opcional (decisão D-I do dono, 2026-08-10): campo disponível,
+        // nunca obrigatório — não se aplica a pessoa física. Coluna nullable
+        // SEM default, então `null` por ausência é seguro (não repete o
+        // BUG-02 descrito acima, que só afeta coluna `NOT NULL DEFAULT`).
+        cnae: entity.cnae,
         status: 'active'
       }, transaction);
     } catch (error: any) {
