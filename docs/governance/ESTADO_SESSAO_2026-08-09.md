@@ -1,10 +1,15 @@
-# Estado da sessão — 2026-08-09
+# Estado da sessão — 2026-08-09 / madrugada de 10
 
 **Documento de retomada.** Serve para parar o trabalho numa máquina e continuar em
 outra sem perder contexto. Leia este arquivo primeiro, depois `git log`, depois a
 seção "Fila de próximos passos".
 
 Documento anterior equivalente: `ESTADO_SESSAO_2026-08-07.md`.
+
+> ⚙️ **Nota de ambiente (não versionada):** as definições de agente em `.claude/agents/`
+> estão no `.gitignore`. Nesta máquina os 21 agentes foram migrados para
+> `model: opus` + `effort: high`. **Em outra máquina eles voltam a ser `sonnet`** —
+> se quiser o mesmo comportamento, repita a troca lá.
 
 ---
 
@@ -34,8 +39,27 @@ Blocos 0–5 fechados (LGPD, SST, TI, Jurídico, Facilities, Marketing).
 | `b04e21d` | **Build de produção do client destravado** + telas do gap Jurídico. |
 | `a2947b9` | **Correção de 500 no widget de Jurídico** da home (enum inexistente). |
 | `60e1362` | **Design do Bloco 6 RH** — requisitos, schema (20 tabelas `hr_*`, 16 migrations), API (~77 endpoints), auditoria cruzada. |
+| `41b92cc` | Primeira versão deste documento de retomada. |
+| `4f4122e` | Validação de enums de entrada no módulo TI (400 em vez de 500) + **plano de ação dos 17 gaps**. |
+| `5ec0651` | **G2** — OP não conclui mais sem BOM ativa (entrava com custo zero) nem com quantidade zero (deixava reserva presa). |
+| `0d5812e` | **Onda 1** — G16 (rigor do MRP + numeração de OP serializada), G8 (teste acústico reprovado sempre abre NC), G10 (NC avisa quando não bloqueia), G12 (fim do pedido duplicado). G6 analisado e conscientemente não implementado. |
+| `9b169a7` | **RH passada 1** — 34/77 endpoints, núcleo legal da CLT. |
+| `fed3129` | **G3** — reserva de material vinculada à OP (fim da canibalização entre ordens). |
+| `bf07136` | **Pesquisa normativa** das 6 decisões, com fonte. |
+| `9df39c7` | **G14/G15** — importação com lote e quarentena; ciclo `partial`/`received` da requisição. |
 
-### Dois achados desta sessão que valem registro permanente
+### Estado do banco local
+**Todas as migrations aplicadas**, incluindo as 16 do RH (`20260808-000010..025`),
+a `20260809-000026` (reservas por OP) e a `000027` (valor `import` nos enums).
+Backup pré-migração em `scratchpad/bkp_pre_migrations.sql` (929 KB).
+Backfill de reservas executado (`--apply`) — base estava limpa, zero divergência.
+API rebuildada e `GET /health/ready` respondendo 200.
+
+### Suíte
+**1453/1453 testes unitários**, typecheck limpo, e `npx tsx -e "require('./app')"`
+sobe — este último passou a ser critério de aceite, ver achado C abaixo.
+
+### Quatro achados desta sessão que valem registro permanente
 
 **A. O build de produção estava quebrado no `main` e ninguém sabia.**
 `npm run build` do `client/` falhava com 25 erros em 13 arquivos (Facilities,
@@ -58,6 +82,30 @@ completa foi feita e **não achou outra ocorrência**; o módulo `ti` recebeu
 validadores Zod para fechar a superfície adjacente (valor inválido agora
 retorna 400, não 500).
 
+**C. `export =` junto com qualquer outro `export` derruba o servidor em runtime.**
+O esbuild do `tsx` transpila em modo ESM e o `export =` vira referência a um
+símbolo inexistente → `ReferenceError` no `require`. O `tsc` aceita e o Jest
+também (transform CJS), então **passa por typecheck e por 1400 testes**.
+Afetava 10 arquivos, incluindo um commitado em `97628ae` — ou seja,
+`npm run server` estava quebrado e não aparecia porque o Docker compila com
+`tsc`. Existe agora `tests/unit/export-assignment-guard.test.ts` varrendo `src/`.
+👉 **Regra que passa a valer**: `npx tsx -e "require('./app')"` é critério de
+aceite de backend, junto com typecheck e testes. Constante de negócio vai em
+`domain/constants.ts`, nunca no arquivo do use case.
+
+**D. Mock incompleto deixa teste verde pelo motivo errado.**
+Encontrados **7 casos** nesta remediação — um deles literalmente afirmava o bug
+como comportamento correto ("NÃO cria RNC quando a flag não é informada"), outro
+só passava por causa do gap, e vários mocks de OP sem `due_date` estouravam na
+validação da entidade sem nunca chegar na regra que diziam testar.
+👉 **Regra que passa a valer**: ao escrever teste que espera erro, garanta que o
+erro vem **da regra alvo**, não de uma validação anterior. Asserção por mensagem
+específica, não só `toBeInstanceOf`.
+
+**E. `inventoryService.ts` termina com `module.exports = {...}`, que substitui os
+named exports.** Função nova exportada só com `export` some em runtime, passando
+por typecheck e pela suíte. Guardado por `tests/unit/inventory-service-contract.test.ts`.
+
 ---
 
 ## 3. Auditoria do fluxo do produto final — 17 gaps
@@ -66,7 +114,30 @@ Mapeamento do fluxo **real do código** (não da documentação), 21 estações.
 Artefato visual publicado para o dono:
 <https://claude.ai/code/artifact/aad98974-1e2e-4980-bf24-01192b5e1128>
 
-### Os 6 que quebram a corrente
+Plano de execução: `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`.
+
+### Placar (atualizado na madrugada de 10/08)
+
+| Gap | Estado |
+|---|---|
+| **G2** custo zero + reserva presa | ✅ corrigido (`5ec0651`) |
+| **G3** canibalização de reserva | ✅ corrigido (`fed3129`) |
+| **G16** rigor do MRP + numeração de OP | ✅ corrigido (`0d5812e`) |
+| **G8** teste acústico sem consequência | ✅ corrigido (`0d5812e`) |
+| **G10** NC que não bloqueia, em silêncio | ✅ corrigido (`0d5812e`) |
+| **G12** pedido duplicado | ✅ corrigido (`0d5812e`) |
+| **G14** importação sem rastreabilidade | ✅ corrigido (`9df39c7`) |
+| **G15** ciclo da requisição que não fecha | ✅ corrigido (`9df39c7`) |
+| **G6** início de produção sem validação | ⚪ analisado, **conscientemente não implementado** (a proteção que importa já existe; o resto exigiria mudança de schema ou depende do G4) |
+| **G1** duas BOMs paralelas | 🟡 **decisão do dono** (D6 é a pergunta-chave) |
+| **G4** apontamento opcional | 🟡 **decisão do dono — mas a lei já responde** (Bloco K) |
+| **G5** roteiro sem API | 🟡 pré-requisito do G4 |
+| **G7 + G9** inspeção inexistente e sem gate de qualidade | 🟡 **decisão do dono** |
+| **G11** alçada de compra | 🟡 **decisão do dono** (falta ticket médio) |
+| **G13** momento de AP/AR | 🟡 **decisão do dono — a norma contábil já responde** |
+| **G17** venda não gera produção; MRP não lê carteira | 🟡 **decisão do dono** |
+
+### Os 6 que quebram a corrente (diagnóstico original)
 
 | ID | Gap | Etapa |
 |---|---|---|
@@ -120,42 +191,65 @@ Mais uma correção obrigatória (não é decisão): `'pcd'` entra em
 qualquer usuário autenticado, porque `GET /api/employees` não passa pelo gate `rh`.
 
 ### Status da implementação
-Backend **passada 1 (só os 19 RF P0)** em andamento: férias, contrato de
-experiência, admissão e demissão. Passada 2 (P1/P2: benefícios, treinamentos,
-recrutamento, avaliação, importação de folha/ponto, KPIs) fica para depois —
-mesmo modelo de 2 passadas usado no Jurídico.
+**Passada 1 ENTREGUE** (`9b169a7`): 34 de ~77 endpoints, os 19 RF P0 fechados —
+férias, contrato de experiência, admissão, demissão e documentos.
+Migrations **aplicadas**. Telas ainda não existem.
 
-⚠️ **Exigência dada ao implementador**: toda regra de origem legal deve seguir a
-legislação verificada na fonte (Planalto), não a paráfrase do documento de
-requisitos — CLT arts. 130, 134, 137, 143 (férias), 445/451 (experiência),
-477 §6º (prazo de verbas). Divergência entre lei e requisito deve ser reportada,
-não corrigida em silêncio.
+**Passada 2 pendente**: benefícios, treinamentos, recrutamento, avaliação,
+importação de folha/ponto, KPIs (~43 endpoints), gatilho de afastamentos,
+histórico de cargo no `PUT /api/employees/:id`, e as telas em `client/`.
+
+#### 4 bugs encontrados no RH que passavam por typecheck e por 1400 testes
+1. **`export =` + outro `export`** derrubava o servidor em runtime (achado C acima).
+2. **Aviso prévio 3 dias menor que a lei**: `floor(dias/365,25)` dava 9 anos para
+   exatamente 10 de casa → 57 em vez de 60 dias (Lei 12.506/2011).
+3. **`calculateConcessiveEnd` violaria CHECK do Postgres em 29/02** (JS transborda
+   para 01/03; Postgres satura em 28/02).
+4. **Contrato `prorrogado` nunca vencia sozinho** — a verificação só olhava
+   `'ativo'`, deixando de fora justamente o cenário do Art. 451.
+
+#### Divergências lei × requisito
+- **CORRIGIDA**: a vedação de início de férias antes de feriado/DSR é o
+  **Art. 134 §3º**, não §2º — o §2º foi **revogado** pela Lei 13.467/2017.
+  Requisitos, contrato de API e código diziam §2º.
+- **EM ABERTO, precisa do dono**: **Art. 135 caput** fixa 30 dias como mínimo
+  **obrigatório** do aviso de férias; RF-RH-037 manda aceitar menos com
+  justificativa. Seguiu-se o requisito, mas o aviso passou a citar o
+  descumprimento. **Bloquear é uma linha** — falta a decisão.
+- **Gap**: feriados não são verificáveis (não existe calendário de feriados no ERP).
+
+`server/tests/unit/rh-validators.test.ts` **lê as migrations** e compara literal a
+literal com cada `z.enum` (14 pares) — a classe de bug de enum não passa silenciosa
+neste módulo. Achou 2 literais errados na documentação.
 
 ---
 
 ## 5. Fila de próximos passos (retomar exatamente daqui)
 
-1. **[EM ANDAMENTO]** Backend RH passada 1 (P0) — validar typecheck + suíte, commitar.
-2. **[EM ANDAMENTO]** Pesquisa normativa das 6 decisões de processo (3 agentes:
-   produção/BOM/apontamento; qualidade/estoque; compras/financeiro). Resultado vira
-   recomendação fechada com fonte para o dono validar.
-3. **[EM ANDAMENTO]** Auditoria de consistência **banco × documentação × código** da
-   cadeia do produto → `docs/governance/auditorias/AUDITORIA_CONSISTENCIA_CADEIA_PRODUTO_2026-08-09.md`.
-4. **[PENDENTE]** Consolidar 2 e 3 num **plano de ação priorizado dos 17 gaps**,
-   registrado em `docs/governance/`.
-5. **[PENDENTE]** Executar as correções dos gaps por prioridade.
-6. **[PENDENTE]** Aplicar as 16 migrations `hr_*` (exige aprovação do dono) —
-   usar `server/scripts/apply-pending-migrations.cjs`, **nunca `migration:up` cru**.
-7. **[PENDENTE]** Telas do RH + passada 2 do backend.
-8. **[PENDENTE]** **Teste ponta a ponta**: cadastrar um insumo real e levá-lo até
-   produto acabado expedido, provando que a corrente fecha (critério de aceite da seção 1).
-9. **[PENDENTE]** Limpeza de resíduos (`cleanliness-review`).
+1. **[PENDENTE — decisão do dono]** Validar as 6 decisões de processo.
+   Artefato pronto: <https://claude.ai/code/artifact/34b933ad-33a6-4ec1-b5a5-ea8e9cc20804>
+   Documento completo: `docs/business/PESQUISA_NORMATIVA_CADEIA_PRODUTO_2026-08-09.md`.
+   **3 têm resposta legal** (apontamento/Bloco K, baixa de estoque/NF-e, AP-AR/CPC);
+   as outras 3 têm recomendação de boa prática pronta.
+2. **[PENDENTE — bloqueado por 1]** Onda 3 dos gaps: G1, G4, G5, G7, G9, G11, G13, G17.
+   Ordem de execução e dependências no anexo da pesquisa normativa.
+3. **[PENDENTE]** RH passada 2 + telas do RH.
+4. **[PENDENTE]** Telas: aba de Atos Societários e alçada de contrato do Jurídico
+   já existem; falta expor **reserva por OP** (`listOrderReservations` existe no
+   serviço, sem rota HTTP) e a tela de **Importação/COMEX**.
+5. **[PENDENTE]** Teste de integração real (Postgres) das features de maior risco —
+   os unitários usam repositório mockado e não pegam erro de enum/constraint.
+6. **[PENDENTE]** Polimento visual (`webdesiner`) de Jurídico e Facilities.
 
-### Decisões que ainda dependem do dono
-As 6 perguntas do artefato de fluxo (produção sob encomenda, unificação de BOM +
-quem aprova alteração de engenharia, gate de qualidade, alçada de compra,
-apontamento obrigatório, MRP automático). **Onde houver lei ou norma que já
-responda, a recomendação vem fechada com a fonte e o dono só valida.**
+### Perguntas que travam trabalho
+Consolidadas no artefato de decisões. As mais bloqueantes:
+- **D6** — qual das duas estruturas de produto a equipe **realmente mantém** hoje?
+  (pode inverter qual sobrevive na unificação do G1)
+- **D15/D16** — ticket médio dos pedidos de compra e quem pode aprovar
+  (sem isso, qualquer faixa de alçada é chute; as faixas do Jurídico **não servem**)
+- **C1/C4** — CNAE escriturado e se a empresa mantém o Livro modelo 3
+  (confirmam o enquadramento no Bloco K, que sustenta o G4)
+- **D13** — janela entre confirmar pedido e faturar (dimensiona o risco do G9)
 
 ---
 
