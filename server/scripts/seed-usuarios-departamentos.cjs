@@ -123,7 +123,7 @@ const SEEDS = [
     ],
   },
   {
-    dept: 'Producao',
+    dept: 'Produção',
     cargo: 'Supervisor de Producao',
     email: `producao${TEST_DOMAIN}`,
     perfil: 'Producao',
@@ -207,7 +207,7 @@ const SEEDS = [
     ],
   },
   {
-    dept: 'Expedicao',
+    dept: 'Expedição',
     cargo: 'Auxiliar de Expedicao',
     email: `expedicao${TEST_DOMAIN}`,
     perfil: 'Expedicao',
@@ -218,7 +218,7 @@ const SEEDS = [
     ],
   },
   {
-    dept: 'Manutencao',
+    dept: 'Manutenção',
     cargo: 'Tecnico de Manutencao',
     email: `manutencao${TEST_DOMAIN}`,
     perfil: 'Manutencao',
@@ -248,7 +248,7 @@ const SEEDS = [
     modules: [['marketing', 'approve'], ['clientes', 'operate'], ['dashboard', 'operate']],
   },
   {
-    dept: 'Seguranca do Trabalho',
+    dept: 'Segurança do Trabalho',
     cargo: 'Tecnico de Seguranca do Trabalho',
     email: `sst${TEST_DOMAIN}`,
     perfil: 'Seguranca e Saude do Trabalho',
@@ -256,7 +256,7 @@ const SEEDS = [
     modules: [['sst', 'approve'], ['dashboard', 'operate']],
   },
   {
-    dept: 'Juridico',
+    dept: 'Jurídico',
     cargo: 'Advogado',
     email: `juridico${TEST_DOMAIN}`,
     perfil: 'Juridico',

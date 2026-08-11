@@ -50,7 +50,7 @@
 
 ### Status Atual
 - ✅ Backend: Node.js + Express + Sequelize (30+ módulos, Clean Architecture — use-cases desacoplados do Sequelize direto em 22+ módulos desde 2026-08-05)
-- ✅ Database: PostgreSQL 16 — **160 migrations versionadas e aplicadas**, **200 tabelas**, **459 foreign keys** (medido no banco em 2026-08-10, não estimado). Os dois bancos (`erp_evok_audio` e `erp_evok_audio_test`) são **idênticos**, e o baseline passou a ser **DDL estático congelado** (`server/database/postgresql/00_baseline_frozen.sql`) em vez de gerado a partir dos models — banco novo nasce igual ao atual. Ver `docs/database/DATABASE.md`, seção *"Baseline congelado"*
+- ✅ Database: PostgreSQL 16 — **164 migrations versionadas e aplicadas**, **201 tabelas**, **464 foreign keys** (medido no banco em 2026-08-11, não estimado). Os dois bancos (`erp_evok_audio` e `erp_evok_audio_test`) são **idênticos**, e o baseline passou a ser **DDL estático congelado** (`server/database/postgresql/00_baseline_frozen.sql`) em vez de gerado a partir dos models — banco novo nasce igual ao atual. Ver `docs/database/DATABASE.md`, seção *"Baseline congelado"*
 - ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela. **A tela de Importação/COMEX existe** (`/purchases/comex`, `client/src/pages/purchases/ComexPage.tsx`, commit `612e116`) e já conhece o gate de aprovação da diretoria; a **tela de roteiro de fabricação** entrou em `b52470d`. A **tela do Plano Mestre de Produção (MPS)** entrou em 2026-08-10 (`/production/master-plans`), fechando o último módulo de backend sem interface. As exceções restantes são por desenho, não por atraso: inventário mobile (QR, propositalmente mobile-only) e endpoints de webhook (integração backend-to-backend, sem UI)
 - ✅ **App mobile novo** (`mobile/`, Expo/React Native): login JWT, scan de estoque QR, histórico de movimentações, execução de contagens cíclicas (pool/atribuídas) — entregue em 2026-08-06, validado só por typecheck/bundle, **sem teste em dispositivo real ainda**
 - ✅ **App Android TV novo** (`tv/`, react-native-tvos): painel de demandas por departamento (recebimento, requisições, expedição, qualidade), auto-refresh 60s — entregue em 2026-08-06, mesma ressalva de validação (sem hardware real testado)
@@ -68,7 +68,7 @@
   - **Compras (G11 `ec1b499`, G11-COMEX `4b60a81`, D-K `bc13006`):** alçada por **origem** (nacional acima de R$ 500 mil e **toda** importação exigem diretoria), gate da diretoria na saída de `draft` do COMEX, e **segregação de função: quem solicita não aprova** — nos 4 pontos de aprovação, **sem exceção para `admin`**
   - 🟡 **Ação operacional antes de produção (parcialmente resolvida):** a segregação de função (D-K) é sobre identidade, não privilégio. O impasse original — **1 único usuário capaz de aprovar**, autor de 18/18 pedidos e 13/13 requisições — foi desfeito **para teste** em 2026-08-10 por `scripts/seed-usuarios-departamentos.cjs`, que criou 20 usuários departamentais, entre eles **Diretor** (perfil `Diretoria`, com `diretor:approve`) e **Gerente de Compras** (perfil `Compras (gerente)`) — ambos distintos do `admin` autor dos documentos, portanto aptos a aprovar. **O que ainda falta para produção:** esses usuários são deliberadamente de teste (domínio `@teste.evokaudio`, senha aleatória em `CREDENCIAIS_TESTE.local.txt`, e o próprio script recusa rodar com `NODE_ENV=production`). O Go-Live exige **pelo menos um aprovador real no domínio `@evokaudio.com.br`**, que é decisão de pessoa, não de código. Ver `PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4, D-K item 2
   - ✅ **G6 (2026-08-10, último a fechar):** iniciar a produção deixou de "só gravar a data". A OP só entra em `in_progress` se houver **etapa contra a qual apontar** (`G6-START-NO-ROUTE`) e **nenhum centro de trabalho inativo** (`G6-START-WC-INACTIVE`), e a partida registra quem assumiu a ordem. O gap ficou três rodadas aberto por falta de apoio no schema; o que destravou foi o par G5 (roteiro tem API) + G4 (apontamento obrigatório): a pré-condição real passou a existir **sem coluna nova**. O ganho de processo é mover a recusa da conclusão para a partida — antes, produto sem roteiro era liberado, o lote era montado e só então recusado, com material já consumido
-- ✅ **Rede de segurança armada (2026-08-10).** Os 34 arquivos de teste de integração **pulavam em silêncio** e reportavam verde, porque `npm run test:integration` não definia `RUN_INTEGRATION`. O script passou a apontar para o runner que sobe a API e usa o banco de teste isolado (`node scripts/run-api-suite.cjs integration`). Três guardas novas contra a classe de defeito que passava por typecheck **e** por 1800 testes: `schema-model-drift-guard`, `column-name-drift-guard` e `enum-literal-guard` (`server/tests/integration/`) — **as três verdes**. **Quarta guarda, 2026-08-10:** `cross-database-drift-guard` — as três anteriores rodam **todas** contra `erp_evok_audio_test`, e por isso nenhuma viu a migration do G18 aplicada só ali, com a coluna faltando no banco real; a guarda nova executa `scripts/comparar-bancos.cjs` e reprova quando os dois bancos divergem
+- ✅ **Rede de segurança armada (2026-08-10).** Os 34 arquivos de teste de integração **pulavam em silêncio** e reportavam verde, porque `npm run test:integration` não definia `RUN_INTEGRATION`. O script passou a apontar para o runner que sobe a API e usa o banco de teste isolado (`node scripts/run-api-suite.cjs integration`). Três guardas novas contra a classe de defeito que passava por typecheck **e** por 1800 testes: `schema-model-drift-guard`, `column-name-drift-guard` e `enum-literal-guard` (`server/tests/integration/`) — **as três verdes**. **Quarta guarda, 2026-08-10:** `cross-database-drift-guard` — as três anteriores rodam **todas** contra `erp_evok_audio_test`, e por isso nenhuma viu a migration do G18 aplicada só ali, com a coluna faltando no banco real; a guarda nova executa `server/scripts/comparar-bancos.cjs` e reprova quando os dois bancos divergem (caminho corrigido em 2026-08-11 — o doc citava `scripts/`, que não existe)
 
 ---
 
@@ -266,10 +266,17 @@ docker compose up -d
 npm run server
 # Seed automático na primeira execução (admin, departamentos, categorias)
 
-# 5. Teste
-npm test                    # Suíte completa
-npm run test:unit          # Apenas unitários
-npm run test:integration   # Apenas integração
+# 5. Teste — os scripts vivem em `server/` e `client/`, NÃO na raiz
+#    (a raiz só tem start/server/client/dev/install-all — auditoria 2026-08-11)
+cd server
+npm run test:unit          # 1811 testes / 167 suítes (repositório dublê)
+npm run test:integration   # 167 testes / 44 suítes contra PostgreSQL real
+npm run test               # unit + integration + edge
+npm run typecheck
+
+cd ../client
+npm test                   # 74 testes / 13 arquivos (Vitest)
+npm run lint
 ```
 
 ### Migrations
@@ -372,7 +379,7 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 - **[docs/producao/06-BOM.md](docs/producao/06-BOM.md)** — Estrutura de produtos (detalhado)
 - **[docs/00-ESTRUTURA_ORGANIZACIONAL.md](docs/00-ESTRUTURA_ORGANIZACIONAL.md)** — 17 departamentos reais (seed) + 6 subáreas funcionais, índice por módulo
 - **[docs/administrativo/04-PERFIS_ACESSO.md](docs/administrativo/04-PERFIS_ACESSO.md)** — RBAC + Perfis de Acesso configuráveis (`/api/access-profiles`), 29 módulos atribuíveis
-- **[docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md](docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md)** — Organograma executivo consolidado (CEO → 3 diretorias → 17 departamentos)
+- **[docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md](docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md)** — **SSOT da hierarquia** (CEO → 4 diretorias → 17 departamentos → 6 subáreas). A 4ª diretoria (Suprimentos & Logística: Compras + Almoxarifado + Expedição) foi criada em 2026-08-11; cargo previsto, ainda vago. `client/src/lib/departments.ts` espelha esta estrutura e a guarda `departments.seeds.test.ts` reprova se divergir de `server/src/config/seeds.ts`
 - Mais em `docs/comercial/`, `docs/financeiro/`, `docs/qualidade/`, etc.
 
 ### Arquitetura, Diagramas e Manual do Usuário (NOVO, 2026-08-06)

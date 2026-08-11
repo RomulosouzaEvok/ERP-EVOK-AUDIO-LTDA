@@ -76,7 +76,11 @@ têm sua documentação funcional hospedada dentro de `docs/patrimonio/`
 afinidade de conteúdo. Ver tabela "Departamentos Cobertos" em
 [patrimonio/00-README.md](patrimonio/00-README.md).
 
-## Departamentos por Área (agrupamento)
+## Departamentos por Área (agrupamento das pastas `docs/`)
+
+Este agrupamento é **por pasta de documentação**, não por hierarquia — duas
+coisas diferentes que já se confundiram. A hierarquia (quem responde a qual
+diretoria) tem um dono só: [administrativo/05-ORGANOGRAMA_EXECUTIVO.md](administrativo/05-ORGANOGRAMA_EXECUTIVO.md).
 
 - **administrativo** → DIR (01), TI (13), FAC (17)
 - **comercial** → VEND (08), MKT (14)
@@ -90,6 +94,31 @@ afinidade de conteúdo. Ver tabela "Departamentos Cobertos" em
 - **seguranca_trabalho** → SST (15)
 - **suprimentos** → COMP (07) + subárea COMEX
 
+## Hierarquia executiva (resumo)
+
+Detalhe e diagrama em [administrativo/05-ORGANOGRAMA_EXECUTIVO.md](administrativo/05-ORGANOGRAMA_EXECUTIVO.md).
+**Quatro diretorias** desde 2026-08-11 — a de Suprimentos & Logística é nova
+e o cargo ainda está vago:
+
+| Diretoria | Departamentos |
+|---|---|
+| CEO / Diretoria | DIR (01) |
+| Industrial | ENG (03), PCP (04), PROD (05), QUAL (10), MANUT (12) |
+| Suprimentos & Logística ⚠️ *vago* | COMP (07), ALM (06), EXP (11) |
+| Comercial | VEND (08), MKT (14) |
+| Administrativo-Financeiro | RH (02), FIN (09), JUR (16), TI (13), FAC (17) |
+| Transversal | SST (15) |
+
+## Consumo pelo código
+
+A navegação do ERP espelha esta estrutura em
+`client/src/lib/departments.ts`, e a guarda
+`client/src/lib/departments.seeds.test.ts` **reprova** quando o frontend
+divergir de `server/src/config/seeds.ts` (nome, código, sigla ou
+quantidade). Antes de 2026-08-11 não havia vínculo nenhum entre este
+documento e a tela — foi por isso que o menu passou meses agrupando
+departamentos que não existiam.
+
 ---
 
-**Última atualização:** 2026-08-06
+**Última atualização:** 2026-08-11

@@ -6,7 +6,10 @@ import AppLayout from '@/layouts/AppLayout';
 import LoginPage from '@/pages/LoginPage';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/ResetPasswordPage';
-import DashboardPage from '@/pages/DashboardPage';
+// Sala de Comando da Diretoria — ocupa `/dashboard`, que era rota órfã
+// (auditoria de 2026-08-11). O antigo `DashboardPage` de 4 KPIs foi
+// substituído por esta visão de cadeia completa.
+const CommandCenterPage = lazy(() => import('@/pages/executive/CommandCenterPage'));
 import HomePage from '@/pages/home/HomePage';
 
 // Paginas internas carregadas sob demanda (code-splitting): reduz o bundle
@@ -87,7 +90,7 @@ export default function App() {
             path="/dashboard"
             element={
               <Suspense fallback={<PageFallback />}>
-                <DashboardPage />
+                <CommandCenterPage />
               </Suspense>
             }
           />

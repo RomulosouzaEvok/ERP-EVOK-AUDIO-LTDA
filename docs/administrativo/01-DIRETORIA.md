@@ -20,6 +20,12 @@
 | [Nome] | Diretor Industrial | Engenharia | Produção, engenharia, qualidade |
 | [Nome] | Diretor Comercial | Marketing/Vendas | Comercial, marketing, expansão |
 | [Nome] | Diretor Adm-Financeiro | Ciências Contábeis | Finanças, RH, jurídico, TI |
+| *(vago)* | Diretor de Suprimentos & Logística | Supply Chain / Logística | Compras, almoxarifado, expedição |
+
+> **Diretor de Suprimentos & Logística** — cargo definido pelo dono em
+> 2026-08-11 e **ainda não provido**. Até ser preenchido, Compras (07),
+> Almoxarifado (06) e Expedição (11) reportam à Diretoria. Ver
+> [05-ORGANOGRAMA_EXECUTIVO.md](05-ORGANOGRAMA_EXECUTIVO.md).
 
 ### Funções da Diretoria
 

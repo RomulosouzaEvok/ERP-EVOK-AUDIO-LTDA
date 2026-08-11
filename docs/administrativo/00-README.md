@@ -37,27 +37,12 @@ docs/administrativo/
 
 ## Organograma Executivo
 
-> Versão resumida. Diagrama completo, com IDs do banco e notas de
-> divergência, em [05-ORGANOGRAMA_EXECUTIVO.md](05-ORGANOGRAMA_EXECUTIVO.md).
+**→ [05-ORGANOGRAMA_EXECUTIVO.md](05-ORGANOGRAMA_EXECUTIVO.md)**
 
-```
-                    ┌──────────────────┐
-                    │      CEO         │
-                    │  (Diretor Pres.) │
-                    └────────┬─────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-   ┌────┴─────┐        ┌────┴─────┐        ┌─────┴──────┐
-   │  Diretor  │        │  Diretor  │        │  Diretor   │
-   │ Industrial│        │ Comercial │        │  Admin-Fin │
-   └────┬──────┘        └────┬──────┘        └──────┬─────┘
-        │                    │                      │
-   ┌────┼────┬────┬────┐   ┌─┴──┐            ┌──────┼──────┬──────┐
-   │    │    │    │    │   │    │            │      │      │      │
-  ENG  PCP  PROD QUAL MANUT VEND MKT        RH    FIN    JUR    TI/FAC
-   │                    │                          │
-   └── EXP, ALM (fluxo de materiais)          └── CONT, CTR, TES (subáreas)
-```
+O diagrama vivia duplicado aqui em "versão resumida", e as duas cópias
+divergiram: esta mostrava três diretorias com EXP e ALM soltos no rodapé,
+enquanto a canônica já tratava ALM de outro jeito. A cópia foi **removida em
+2026-08-11** — organograma tem um dono só. Toda a estrutura (4 diretorias,
+17 departamentos com IDs do seed, 6 subáreas) está no arquivo acima.
 
-**Última atualização:** 2026-08-06
+**Última atualização:** 2026-08-11

@@ -231,10 +231,60 @@ export type AccessModuleKey =
 /** Nível de permissão de um perfil sobre um módulo (ver `AccessProfilePermission.level`). */
 export type AccessModuleLevel = 'operate' | 'approve';
 
-/** Descritor de um módulo atribuível (chave + rótulo pt-BR para telas administrativas). */
+/**
+ * Sigla do departamento dono do módulo — mesma sigla de
+ * `server/src/config/seeds.ts` (`DIR`, `ENG`, `PCP`, …).
+ *
+ * Dois valores não são departamentos:
+ * - `PESSOAL` — espaço do próprio usuário (painel, auto-serviço);
+ * - `SISTEMA` — administração do ERP, não é área da fábrica.
+ */
+export type AccessModuleOwner =
+  | 'DIR'
+  | 'RH'
+  | 'ENG'
+  | 'PCP'
+  | 'PROD'
+  | 'ALM'
+  | 'COMP'
+  | 'VEND'
+  | 'FIN'
+  | 'QUAL'
+  | 'EXP'
+  | 'MANUT'
+  | 'TI'
+  | 'MKT'
+  | 'SST'
+  | 'JUR'
+  | 'FAC'
+  | 'PESSOAL'
+  | 'SISTEMA';
+
+/** Descritor de um módulo atribuível (chave + rótulo pt-BR + departamento dono). */
 export interface AccessModuleDescriptor {
   key: AccessModuleKey;
   label: string;
+  /**
+   * Departamento dono do processo (sigla de `seeds.ts`).
+   *
+   * **Por que existe (2026-08-11).** Até esta data o catálogo declarava
+   * apenas `key` e `label`, e o backend não tinha como responder "de quem é
+   * este módulo". O mapeamento módulo→departamento existia **só no
+   * frontend** (`client/src/lib/departments.ts`), escrito de memória — foi
+   * assim que o menu passou meses agrupando departamentos que não existem
+   * na empresa (achado F-8 de
+   * `docs/governance/auditorias/AUDITORIA_AMPLA_2026-08-11.md`).
+   *
+   * O consumidor imediato é a guarda que cruza este catálogo com o menu.
+   * O próximo é o Bloco 7 (assistente WhatsApp): `whatsapp_contacts`
+   * define o escopo do funcionário por departamento, e o sub-agente
+   * precisa saber quais módulos pertencem àquela área — sem isto, o n8n
+   * inventaria o próprio mapeamento e o desvio voltaria em outro lugar.
+   *
+   * `owner` **não concede nem restringe acesso** — a regra continua sendo
+   * `AccessProfilePermission`. É metadado de organização.
+   */
+  owner: AccessModuleOwner;
 }
 
 /**
@@ -243,45 +293,54 @@ export interface AccessModuleDescriptor {
  * telas administrativas (`GET /api/access-profiles/modules`).
  */
 export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'produtos', label: 'Produtos' },
-  { key: 'contagens', label: 'Contagens de Inventário' },
-  { key: 'vendas', label: 'Vendas' },
-  { key: 'clientes', label: 'Clientes' },
-  { key: 'compras', label: 'Compras' },
-  { key: 'requisicoes', label: 'Requisições de Compra' },
-  { key: 'fornecedores', label: 'Fornecedores' },
-  { key: 'comex', label: 'Importação (Comex)' },
-  { key: 'producao', label: 'Produção' },
-  { key: 'bom', label: 'Estrutura de Produtos (BOM)' },
-  { key: 'mrp', label: 'MRP' },
-  { key: 'chao_de_fabrica', label: 'Chão de Fábrica' },
-  { key: 'centros_de_trabalho', label: 'Centros de Trabalho' },
-  { key: 'qualidade', label: 'Qualidade' },
-  { key: 'laboratorio', label: 'Laboratório' },
-  { key: 'engenharia', label: 'Engenharia' },
-  { key: 'estoque', label: 'Estoque' },
-  { key: 'recebimento', label: 'Recebimento' },
-  { key: 'expedicao', label: 'Expedição' },
-  { key: 'patrimonio', label: 'Patrimônio' },
-  { key: 'manutencao', label: 'Manutenção' },
-  { key: 'garantia', label: 'Garantia/Assistência Técnica' },
-  { key: 'diretor', label: 'Diretoria (aprovador de alçada, RF-JUR-003)' },
-  { key: 'rh', label: 'Recursos Humanos (dados sensíveis)' },
-  { key: 'sst', label: 'Segurança e Saúde do Trabalho (dados sensíveis)' },
-  { key: 'ti', label: 'Tecnologia da Informação (helpdesk, patrimônio de TI, acessos)' },
-  { key: 'facilities', label: 'Facilities (frota, limpeza, manutenção predial)' },
-  { key: 'marketing', label: 'Marketing (campanhas, leads, materiais)' },
-  { key: 'juridico', label: 'Jurídico (contratos, contencioso, procurações, PI, LGPD — dados sensíveis)' },
-  { key: 'contabilidade', label: 'Contabilidade (plano de contas, lançamentos, balancete)' },
-  { key: 'tesouraria', label: 'Tesouraria (contas bancárias, operações financeiras)' },
-  { key: 'controladoria', label: 'Controladoria (orçamento, custos industriais)' },
-  { key: 'rastreabilidade', label: 'Rastreabilidade' },
-  { key: 'financeiro', label: 'Financeiro' },
-  { key: 'relatorios.producao', label: 'Relatórios de Produção' },
-  { key: 'relatorios.compras', label: 'Relatórios de Compras' },
-  { key: 'relatorios.custos', label: 'Relatórios de Custos' },
-  { key: 'relatorios.financeiro', label: 'Relatórios Financeiros' },
+  { key: 'dashboard', label: 'Dashboard', owner: 'PESSOAL' },
+  { key: 'produtos', label: 'Produtos', owner: 'ENG' },
+  { key: 'contagens', label: 'Contagens de Inventário', owner: 'ALM' },
+  { key: 'vendas', label: 'Vendas', owner: 'VEND' },
+  { key: 'clientes', label: 'Clientes', owner: 'VEND' },
+  { key: 'compras', label: 'Compras', owner: 'COMP' },
+  { key: 'requisicoes', label: 'Requisições de Compra', owner: 'COMP' },
+  { key: 'fornecedores', label: 'Fornecedores', owner: 'COMP' },
+  { key: 'comex', label: 'Importação (Comex)', owner: 'COMP' },
+  { key: 'producao', label: 'Produção', owner: 'PROD' },
+  // BOM é da Engenharia do Produto: `docs/producao/06-BOM.md` abre dizendo
+  // que "o BOM é o coração da Engenharia do Produto".
+  { key: 'bom', label: 'Estrutura de Produtos (BOM)', owner: 'ENG' },
+  { key: 'mrp', label: 'MRP', owner: 'PCP' },
+  { key: 'chao_de_fabrica', label: 'Chão de Fábrica', owner: 'PROD' },
+  { key: 'centros_de_trabalho', label: 'Centros de Trabalho', owner: 'PROD' },
+  { key: 'qualidade', label: 'Qualidade', owner: 'QUAL' },
+  // Laboratório de Testes é subárea LAB de Qualidade.
+  { key: 'laboratorio', label: 'Laboratório', owner: 'QUAL' },
+  { key: 'engenharia', label: 'Engenharia', owner: 'ENG' },
+  { key: 'estoque', label: 'Estoque', owner: 'ALM' },
+  { key: 'recebimento', label: 'Recebimento', owner: 'ALM' },
+  { key: 'expedicao', label: 'Expedição', owner: 'EXP' },
+  { key: 'patrimonio', label: 'Patrimônio', owner: 'MANUT' },
+  { key: 'manutencao', label: 'Manutenção', owner: 'MANUT' },
+  // Garantia/Assistência Técnica = produto vendido que volta com defeito,
+  // ou seja **pós-venda**, atribuído ao Assistente Comercial em
+  // `docs/comercial/00-README.md`. Não confundir com a subárea "Garantia
+  // da Qualidade" (GQ), que é a função de QA dentro de Qualidade.
+  { key: 'garantia', label: 'Garantia/Assistência Técnica', owner: 'VEND' },
+  { key: 'diretor', label: 'Diretoria (aprovador de alçada, RF-JUR-003)', owner: 'DIR' },
+  { key: 'rh', label: 'Recursos Humanos (dados sensíveis)', owner: 'RH' },
+  { key: 'sst', label: 'Segurança e Saúde do Trabalho (dados sensíveis)', owner: 'SST' },
+  { key: 'ti', label: 'Tecnologia da Informação (helpdesk, patrimônio de TI, acessos)', owner: 'TI' },
+  { key: 'facilities', label: 'Facilities (frota, limpeza, manutenção predial)', owner: 'FAC' },
+  { key: 'marketing', label: 'Marketing (campanhas, leads, materiais)', owner: 'MKT' },
+  { key: 'juridico', label: 'Jurídico (contratos, contencioso, procurações, PI, LGPD — dados sensíveis)', owner: 'JUR' },
+  // Contabilidade, Tesouraria e Controladoria são subáreas CONT/TES/CTR do
+  // Financeiro — não têm linha própria em `departments`.
+  { key: 'contabilidade', label: 'Contabilidade (plano de contas, lançamentos, balancete)', owner: 'FIN' },
+  { key: 'tesouraria', label: 'Tesouraria (contas bancárias, operações financeiras)', owner: 'FIN' },
+  { key: 'controladoria', label: 'Controladoria (orçamento, custos industriais)', owner: 'FIN' },
+  { key: 'rastreabilidade', label: 'Rastreabilidade', owner: 'QUAL' },
+  { key: 'financeiro', label: 'Financeiro', owner: 'FIN' },
+  { key: 'relatorios.producao', label: 'Relatórios de Produção', owner: 'PROD' },
+  { key: 'relatorios.compras', label: 'Relatórios de Compras', owner: 'COMP' },
+  { key: 'relatorios.custos', label: 'Relatórios de Custos', owner: 'FIN' },
+  { key: 'relatorios.financeiro', label: 'Relatórios Financeiros', owner: 'FIN' },
 ];
 
 /** Set de chaves válidas, para validação O(1) (`ACCESS_MODULE_KEYS.has(module)`). */

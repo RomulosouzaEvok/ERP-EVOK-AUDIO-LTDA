@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import type { DepartmentKey } from '@/lib/departments';
 
 type ReportTab = 'production' | 'oee' | 'purchasing' | 'costs' | 'financial';
 
@@ -32,6 +33,40 @@ const TAB_QUERY_VALUE: Record<ReportTab, string> = {
   purchasing: 'purchasing',
   costs: 'costs',
   financial: 'financial',
+};
+
+const ALL_TABS: readonly ReportTab[] = ['production', 'oee', 'purchasing', 'costs', 'financial'];
+
+function isReportTab(value: string | null): value is ReportTab {
+  return value !== null && (ALL_TABS as readonly string[]).includes(value);
+}
+
+/**
+ * Departamento dono de cada relatório — mesma chave de `@/lib/departments`.
+ *
+ * Existe porque esta tela é **uma página compartilhada por vários
+ * departamentos**, e sem escopo ela entrega a área errada: quem clicava em
+ * "Relatórios de Compras" caía numa página que também oferecia as abas
+ * Produção, OEE, Custos e Financeiro — a mesma mistura departamental que a
+ * auditoria de 2026-08-11 apontou no menu (F1–F3), um nível mais fundo.
+ *
+ * Regra: com `?tab=` na URL (que é como todo item de menu chega aqui), só
+ * aparecem as abas **do departamento daquela aba**. Sem `?tab=` — entrada
+ * genérica por `/reports` — aparecem todas as que o perfil permitir.
+ */
+const TAB_DEPARTMENT: Record<ReportTab, DepartmentKey> = {
+  production: 'producao',
+  oee: 'producao',
+  purchasing: 'compras',
+  costs: 'financeiro',
+  financial: 'financeiro',
+};
+
+/** Cabeçalho da página por departamento de entrada. */
+const DEPARTMENT_HEADING: Partial<Record<DepartmentKey, { title: string; subtitle: string }>> = {
+  producao: { title: 'Relatórios de Produção', subtitle: 'Aderência ao plano, refugo, lead time e OEE.' },
+  compras: { title: 'Relatórios de Compras', subtitle: 'Volume comprado, desempenho e pontualidade por fornecedor.' },
+  financeiro: { title: 'Relatórios Financeiros', subtitle: 'Fluxo de caixa e variação de custo.' },
 };
 
 const OP_STATUS_LABEL: Record<string, string> = {
@@ -140,14 +175,21 @@ export default function ReportsPage() {
   const canSeeTab = (candidate: ReportTab): boolean =>
     hasRole('admin') || permissionsFetchFailed || hasModuleAccess(TAB_MODULE[candidate]);
 
-  const availableTabs = (['production', 'oee', 'purchasing', 'costs', 'financial'] as const).filter(canSeeTab);
-
   const tabFromQuery = searchParams.get('tab');
+  const entryTab: ReportTab | null = isReportTab(tabFromQuery) ? tabFromQuery : null;
+
+  // Departamento de entrada: o dono da aba pedida na URL. `null` = entrada
+  // genérica por `/reports`, sem contexto de área.
+  const entryDepartment: DepartmentKey | null = entryTab ? TAB_DEPARTMENT[entryTab] : null;
+
+  // Abas visíveis = permissão do perfil ∩ departamento de entrada. É o que
+  // impede a página de Compras de oferecer Produção e Financeiro.
+  const availableTabs = ALL_TABS.filter(canSeeTab).filter(
+    (candidate) => entryDepartment === null || TAB_DEPARTMENT[candidate] === entryDepartment,
+  );
+
   const initialTab: ReportTab =
-    (tabFromQuery === 'purchasing' || tabFromQuery === 'costs' || tabFromQuery === 'production' || tabFromQuery === 'oee' || tabFromQuery === 'financial') &&
-    availableTabs.includes(tabFromQuery)
-      ? tabFromQuery
-      : (availableTabs[0] ?? 'production');
+    entryTab && availableTabs.includes(entryTab) ? entryTab : (availableTabs[0] ?? 'production');
 
   const [tab, setTabState] = React.useState<ReportTab>(initialTab);
 
@@ -158,6 +200,11 @@ export default function ReportsPage() {
       next.set('tab', TAB_QUERY_VALUE[nextTab]);
       return next;
     });
+  };
+
+  const heading = (entryDepartment && DEPARTMENT_HEADING[entryDepartment]) ?? {
+    title: 'Relatórios',
+    subtitle: 'Indicadores de produção, OEE, compras, custos e financeiro.',
   };
 
   const [startInput, setStartInput] = React.useState(isoDaysAgo(30));
@@ -217,8 +264,8 @@ export default function ReportsPage() {
           <BarChart3 className="size-5" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold">Relatórios</h1>
-          <p className="text-sm text-muted-foreground">Indicadores de produção, OEE, compras, custos e financeiro.</p>
+          <h1 className="text-2xl font-semibold">{heading.title}</h1>
+          <p className="text-sm text-muted-foreground">{heading.subtitle}</p>
         </div>
       </div>
 
@@ -230,7 +277,11 @@ export default function ReportsPage() {
       )}
 
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex gap-2">
+        {/* Faixa de abas só quando há mais de um relatório no departamento.
+            Em Compras existe um só — mostrar uma aba solitária sugeriria que
+            há outras escondidas, que é justamente a confusão que esta tela
+            causava antes de ser escopada por departamento. */}
+        <div className={availableTabs.length > 1 ? 'flex gap-2' : 'hidden'}>
           {availableTabs.includes('production') && (
             <Button
               variant={tab === 'production' ? 'default' : 'outline'}
