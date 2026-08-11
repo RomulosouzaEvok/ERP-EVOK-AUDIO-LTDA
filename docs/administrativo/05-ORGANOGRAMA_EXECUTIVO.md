@@ -55,17 +55,30 @@
 > documento descreve a estrutura para a qual a empresa está indo — não
 > afirma um ocupante atual.
 
-> **Nota sobre hierarquia e banco de dados:** o seed **não** define
-> hierarquia entre departamentos (`Employee`/`Asset` têm apenas
-> `department_id` plano, sem FK entre departamentos). Este agrupamento é
-> convenção de leitura executiva e de navegação no ERP, não regra de
-> negócio codificada — mudá-lo não exige migration.
+> **Este organograma existe no banco de dados** (desde 2026-08-11, migration
+> `20260811-000043-create-directorates-hierarchy.cjs`). Não é mais só
+> convenção de leitura:
 >
-> **Onde ele é consumido pelo código:** `client/src/lib/departments.ts`
-> espelha esta tabela, e a guarda
-> `client/src/lib/departments.seeds.test.ts` reprova quando o frontend
-> divergir de `server/src/config/seeds.ts`. Alterou aqui, altere lá — o
-> teste avisa se esquecer.
+> | Objeto | Papel |
+> |---|---|
+> | `directorates` | Uma linha por diretoria, com `code` (`CEO`/`IND`/`SUP`/`COM`/`ADM`) e `manager_id` (**NULL = cargo vago**, hoje `SUP`) |
+> | `departments.directorate_id` | FK. **NULL = transversal**, sem diretoria fixa — hoje só SST |
+> | `access_profiles.department_id` | FK n:1 — `Compras (analista)` e `Compras (gerente)` apontam para o mesmo departamento. NULL = perfil de sistema |
+>
+> **Por que uma tabela e não `departments.parent_id`:** a modelagem clássica
+> de árvore (*adjacency list*) pressupõe que pai e filho sejam a mesma
+> entidade. Aqui não são — `Diretoria (01)` é UM departamento e os quatro
+> diretores são cargos dentro dele. `parent_id` obrigaria a criar linhas
+> falsas em `departments` chamadas "Diretoria Industrial", só para servir de
+> nó. Hierarquia fixa de dois níveis → uma tabela por nível.
+>
+> **Guardas que mantêm isto honesto:**
+> `client/src/lib/departments.seeds.test.ts` (frontend × seed: nome, código,
+> sigla, **e a diretoria de cada departamento**) e
+> `server/tests/unit/organizational-structure-guard.test.ts` (catálogo de
+> módulos × seed). Alterou aqui, altere `seeds.ts` e
+> `client/src/lib/departments.ts` na mesma rodada — os testes avisam se
+> esquecer de um.
 
 ## Tabela de agrupamento (mesma fonte de `00-ESTRUTURA_ORGANIZACIONAL.md`)
 

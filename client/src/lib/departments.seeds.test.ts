@@ -117,6 +117,66 @@ describe('estrutura organizacional: frontend × seeds.ts', () => {
     expect(duplicated).toEqual([]);
   });
 
+  it('as diretorias batem com as do seed, por código', () => {
+    const source = readFileSync(SEEDS_PATH, 'utf8');
+    const seedDirectorates = [
+      ...source.matchAll(/\{\s*code:\s*'([A-Z]{3})',\s*name:\s*'([^']+)',\s*position_title:/g),
+    ].map((match) => ({ code: match[1], name: match[2] }));
+
+    // Âncora: sem isto, uma mudança de formatação esvaziaria a lista e o
+    // teste passaria comparando nada com nada.
+    expect(seedDirectorates).toHaveLength(5);
+
+    const front = DIRECTORATES.filter((directorate) => directorate.code);
+    const seedByCode = new Map(seedDirectorates.map((directorate) => [directorate.code, directorate.name]));
+
+    const divergent: string[] = [];
+    for (const directorate of front) {
+      const seedName = seedByCode.get(directorate.code as string);
+      if (!seedName) {
+        divergent.push(`${directorate.code}: não existe no seed`);
+      } else if (seedName !== directorate.label) {
+        divergent.push(`${directorate.code}: "${directorate.label}" ≠ seed "${seedName}"`);
+      }
+    }
+    const missing = seedDirectorates
+      .filter((directorate) => !front.some((f) => f.code === directorate.code))
+      .map((directorate) => `${directorate.code} sem aba no frontend`);
+
+    expect([...divergent, ...missing]).toEqual([]);
+  });
+
+  it('cada departamento está na mesma diretoria que o seed declara', () => {
+    const source = readFileSync(SEEDS_PATH, 'utf8');
+
+    // `DEPARTMENT_DIRECTORATE` no seed: sigla → código da diretoria.
+    // Sigla ausente = transversal (`directorate_id` NULL no banco).
+    const block = source.match(/DEPARTMENT_DIRECTORATE:\s*Record<string,\s*string>\s*=\s*\{([\s\S]*?)\};/);
+    expect(block).not.toBeNull();
+
+    const seedMap = new Map<string, string>(
+      [...(block?.[1] ?? '').matchAll(/(\w+):\s*'([A-Z]{3})'/g)].map((match) => [match[1], match[2]]),
+    );
+    expect(seedMap.size).toBe(16); // 17 departamentos menos SST, que é transversal
+
+    const codeByKey = new Map(DIRECTORATES.map((directorate) => [directorate.key, directorate.code]));
+
+    const divergent = real
+      .filter((department) => department.sigla)
+      .map((department) => {
+        const expected = seedMap.get(department.sigla as string); // undefined = transversal
+        const actual = codeByKey.get(department.directorate); // undefined = 'transversal'
+        return { department, expected, actual };
+      })
+      .filter(({ expected, actual }) => expected !== actual)
+      .map(
+        ({ department, expected, actual }) =>
+          `${department.sigla}: frontend diz ${actual ?? 'transversal'}, seed diz ${expected ?? 'transversal'}`,
+      );
+
+    expect(divergent).toEqual([]);
+  });
+
   it('toda diretoria declarada é usada, e todo departamento aponta para uma existente', () => {
     const known = new Set(DIRECTORATES.map((directorate) => directorate.key));
     const used = new Set(DEPARTMENTS.map((department) => department.directorate));

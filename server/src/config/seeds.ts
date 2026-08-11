@@ -12,7 +12,45 @@
 import { loadRuntimeEnv } from './runtimeEnv';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { User, Department, Category } = require('../models/index');
+const { User, Department, Directorate, Category } = require('../models/index');
+
+/**
+ * Diretorias do organograma — nível acima de `Department`.
+ * Fonte: `docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md`.
+ *
+ * `code` é a chave natural usada pelo seed, pelas guardas e pelo frontend
+ * (`client/src/lib/departments.ts`) — nunca o `id` serial.
+ */
+interface DirectorateData {
+  code: string;
+  name: string;
+  position_title: string;
+}
+
+const DIRECTORATES: DirectorateData[] = [
+  { code: 'CEO', name: 'Diretoria', position_title: 'CEO / Diretor Presidente' },
+  { code: 'IND', name: 'Diretoria Industrial', position_title: 'Diretor Industrial' },
+  // Criada em 2026-08-11 por decisão do dono: reúne Compras, Almoxarifado e
+  // Expedição. Cargo previsto e ainda VAGO — `manager_id` nasce NULL.
+  { code: 'SUP', name: 'Suprimentos & Logística', position_title: 'Diretor de Suprimentos & Logística' },
+  { code: 'COM', name: 'Diretoria Comercial', position_title: 'Diretor Comercial' },
+  { code: 'ADM', name: 'Administrativo-Financeiro', position_title: 'Diretor Administrativo-Financeiro' },
+];
+
+/**
+ * Sigla do departamento → código da diretoria.
+ *
+ * Sigla ausente = **transversal**, `directorate_id` fica NULL. Hoje só `SST`,
+ * que "reporta tipicamente à Diretoria/RH, varia por porte de empresa"
+ * (organograma). NULL diz isso com honestidade; um valor inventado, não.
+ */
+const DEPARTMENT_DIRECTORATE: Record<string, string> = {
+  DIR: 'CEO',
+  ENG: 'IND', PCP: 'IND', PROD: 'IND', QUAL: 'IND', MANUT: 'IND',
+  COMP: 'SUP', ALM: 'SUP', EXP: 'SUP',
+  VEND: 'COM', MKT: 'COM',
+  RH: 'ADM', FIN: 'ADM', JUR: 'ADM', TI: 'ADM', FAC: 'ADM',
+};
 
 /**
  * Interface dos dados de departamento.
@@ -109,14 +147,29 @@ async function seedDatabase(): Promise<void> {
       active: true
     });
 
-    // Criar departamentos iniciais
-    await Department.bulkCreate(DEPARTMENTS);
+    // Criar diretorias ANTES dos departamentos — `departments.directorate_id`
+    // referencia esta tabela. Um banco novo precisa nascer já com a
+    // hierarquia do organograma, não só com a lista plana de departamentos
+    // (F-6 da auditoria de 2026-08-11).
+    const directorates = await Directorate.bulkCreate(DIRECTORATES);
+    const directorateIdByCode = new Map<string, number>(
+      directorates.map((d: { code: string; id: number }) => [d.code, d.id]),
+    );
+
+    // Criar departamentos iniciais, já vinculados à diretoria
+    await Department.bulkCreate(
+      DEPARTMENTS.map((department) => ({
+        ...department,
+        directorate_id: directorateIdByCode.get(DEPARTMENT_DIRECTORATE[department.sigla]) ?? null,
+      })),
+    );
 
     // Criar categorias de produto iniciais
     await Category.bulkCreate(CATEGORIES);
 
     console.log('🌱 Seeds concluídos com sucesso!');
     console.log('   - Usuário admin: admin@evokaudio.com.br');
+    console.log(`   - ${DIRECTORATES.length} diretorias`);
     console.log(`   - ${DEPARTMENTS.length} departamentos`);
     console.log(`   - ${CATEGORIES.length} categorias de produtos`);
   } catch (error: unknown) {
@@ -130,5 +183,5 @@ async function seedDatabase(): Promise<void> {
   }
 }
 
-export { seedDatabase, DEPARTMENTS, CATEGORIES };
+export { seedDatabase, DEPARTMENTS, DIRECTORATES, DEPARTMENT_DIRECTORATE, CATEGORIES };
 export default seedDatabase;

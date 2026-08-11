@@ -30,6 +30,7 @@ interface AccessProfileAttributes {
   descricao: string | null;
   allowedWarehouses: string[] | null;
   active: boolean;
+  department_id: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -41,6 +42,7 @@ interface AccessProfileCreationAttributes {
   descricao?: string | null;
   allowedWarehouses?: string[] | null;
   active?: boolean;
+  department_id?: number | null;
 }
 
 const AccessProfile = sequelize.define('AccessProfile', {
@@ -72,6 +74,12 @@ const AccessProfile = sequelize.define('AccessProfile', {
     allowNull: false,
     defaultValue: true,
     comment: 'Status ativo/inativo (soft delete) — bloqueado enquanto houver usuário ativo vinculado (UC-32)',
+  },
+  department_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment:
+      'FK → departments.id (n:1 — um departamento pode ter vários perfis, ex.: Compras analista/gerente). NULL = perfil de sistema, sem departamento',
   },
 }, {
   tableName: 'access_profiles',

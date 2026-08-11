@@ -29,6 +29,7 @@ import InventoryCount = require('./InventoryCount');
 import InventoryCountItem = require('./InventoryCountItem');
 import ProductCostLedger = require('./ProductCostLedger');
 import Department = require('./Department');
+import Directorate = require('./Directorate');
 import Employee = require('./Employee');
 import ProductionOrder = require('./ProductionOrder');
 import ProductionRoute = require('./ProductionRoute');
@@ -199,6 +200,23 @@ Employee.belongsTo(Department, { foreignKey: 'department_id', as: 'department' }
 // Department self-reference (manager)
 Department.belongsTo(Employee, { foreignKey: 'manager_id', as: 'manager' });
 Employee.hasMany(Department, { foreignKey: 'manager_id', as: 'managed_departments' });
+
+// Directorate ↔ Department (hierarquia do organograma, F-6 de 2026-08-11).
+// `directorate_id` é NULL-ável de propósito: SST é transversal, "reporta
+// tipicamente à Diretoria/RH, varia por porte de empresa" — forçar NOT NULL
+// obrigaria o banco a afirmar uma subordinação que a empresa não definiu.
+Directorate.hasMany(Department, { foreignKey: 'directorate_id', as: 'departments' });
+Department.belongsTo(Directorate, { foreignKey: 'directorate_id', as: 'directorate' });
+
+// Directorate ↔ Employee (diretor responsável; NULL = cargo vago)
+Directorate.belongsTo(Employee, { foreignKey: 'manager_id', as: 'manager' });
+Employee.hasMany(Directorate, { foreignKey: 'manager_id', as: 'managed_directorates' });
+
+// AccessProfile ↔ Department (n:1 — Compras tem perfil de analista E de
+// gerente). Substitui o casamento por NOME digitado à mão, que já havia
+// derivado em 2 dos 21 perfis (F-7).
+Department.hasMany(AccessProfile, { foreignKey: 'department_id', as: 'access_profiles' });
+AccessProfile.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
 
 // Category ↔ Product
 Category.hasMany(Product, { foreignKey: 'category_id', as: 'products' });
@@ -1444,7 +1462,7 @@ export {
   Purchase, PurchaseItem, PurchaseOrderApproval, Sale, SaleItem,
   PurchaseRequisition, PurchaseRequisitionItem,
   AccountReceivable, AccountPayable,
-  InventoryMovement, InventoryCount, InventoryCountItem, ProductCostLedger, Department, Employee,
+  InventoryMovement, InventoryCount, InventoryCountItem, ProductCostLedger, Department, Directorate, Employee,
   ProductionOrder, ProductionRoute, ProductionRouteStep, ProductionOrderTracking,
   LotControl, SerialNumber, ProductionLotConsumption, ProductionOrderReservation,
   ServiceOrder, Asset,

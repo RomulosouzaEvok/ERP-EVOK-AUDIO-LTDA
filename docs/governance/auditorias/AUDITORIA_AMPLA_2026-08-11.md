@@ -347,8 +347,51 @@ mecânico** criado entre documentação e código, que não existia:
 | **F-8** — backend não sabia o dono de cada módulo | ✅ **Fechado** | `AccessModuleDescriptor` ganhou `owner` (sigla do seed). Os 39 módulos declarados. Guarda `server/tests/unit/organizational-structure-guard.test.ts`: dono precisa existir no seed, nenhum módulo órfão, nenhum departamento sem módulo |
 | **F-8-bis** — menu × catálogo | ✅ **Fechado** | `AppLayout.navigation.test.tsx` cruza cada item com o `owner` do módulo. Verificada quebrando de propósito: devolver Garantia para Qualidade reprova com `módulo garantia é de VEND (vendas)` — a guarda que teria pego meu erro sozinha |
 | **F-10** *(novo, achado ao remediar F-7)* — `users.department` gravava departamento inexistente | ✅ **Fechado** | `users.department` é **texto livre** (não existe `users.department_id`), e o seed de usuários de teste escrevia **sem acento**: `Producao`, `Expedicao`, `Manutencao`, `Juridico`, `Seguranca do Trabalho`. **5 dos 17 departamentos não casavam** — quem filtrasse usuário por nome de área não achava ninguém dessas cinco. Script corrigido, 5 linhas do banco atualizadas (0 divergências agora), guarda nova impede regressão |
-| **F-7** — nomes de perfil divergem do seed | 🟡 **Aceito** | *"Tecnologia da Informacao"* e *"Seguranca e Saude do Trabalho"*. Perfil **não é** departamento — `Compras (analista)` e `Compras (gerente)` provam que a relação é n:1 por desenho. Cosmético; não foi renomeado para não inventar acoplamento onde não há |
-| **F-6** — hierarquia não existe no banco | 🔴 **Aberto, aguarda decisão** | `departments` não tem coluna de diretoria. Enquanto nenhum relatório agregar por diretoria, a convenção em doc + navegação basta. Quando precisar: coluna `directorate` + backfill dos 17 registros. **É migration — decisão do dono, não efeito colateral desta rodada** |
+| **F-7** — perfil se ligava a departamento por nome | ✅ **Fechado** | A correção não foi renomear as duas strings divergentes — foi dar **FK**: `access_profiles.department_id`, n:1 (`Compras (analista)` e `Compras (gerente)` apontam para o mesmo departamento). Nome de perfil volta a ser só rótulo legível, sem risco de drift. Só `Administrador Geral` ficou NULL — é perfil de sistema |
+| **F-6** — hierarquia não existia no banco | ✅ **Fechado** | Tabela `directorates` (5 linhas) + `departments.directorate_id`. Relatórios já podem agregar por diretoria. Ver decisão de modelagem abaixo |
+
+### A decisão de modelagem de F-6 (e por que não foi `parent_id`)
+
+Migration `20260811-000043-create-directorates-hierarchy.cjs`, aplicada nos
+**dois** bancos e conferida com `comparar-bancos.cjs` (0 divergências).
+
+A literatura recomenda *adjacency list* — auto-referência `parent_id` — como
+padrão para hierarquia em SQL, e ela seria a escolha certa **se pai e filho
+fossem a mesma entidade**. Aqui não são: `Diretoria (01)` é UM departamento
+no seed, e os quatro diretores são *cargos dentro dele*
+(`docs/administrativo/01-DIRETORIA.md`). Usar `parent_id` obrigaria a criar
+linhas falsas em `departments` chamadas "Diretoria Industrial", "Diretoria
+Comercial" — departamentos que não existem na empresa, inventados só para
+servir de nó de árvore. Seria fabricar dado para caber no modelo.
+
+Diretoria é entidade distinta: agrupa departamentos, tem cargo próprio e
+pode estar vaga. Hierarquia fixa de dois níveis → **uma tabela por nível**.
+
+Duas decisões de nulidade, ambas para o banco não afirmar o que a empresa
+não decidiu:
+
+- `directorates.manager_id` **NULL** — `SUP` nasce com o cargo vago, porque
+  a diretoria foi decidida e o ocupante não;
+- `departments.directorate_id` **NULL** — SST é transversal, "reporta
+  tipicamente à Diretoria/RH, varia por porte de empresa". `NOT NULL`
+  forçaria escolher uma subordinação inexistente.
+
+Resultado medido no banco, batendo com o organograma linha a linha:
+
+```
+CEO Diretoria ................. 1  DIR
+IND Diretoria Industrial ...... 5  ENG, PCP, PROD, QUAL, MANUT
+SUP Suprimentos & Logística ... 3  ALM, COMP, EXP
+COM Diretoria Comercial ....... 2  VEND, MKT
+ADM Administrativo-Financeiro . 5  RH, FIN, TI, JUR, FAC
+(transversal) ................. 1  SST
+```
+
+Duas guardas existentes pegaram defeitos meus durante esta rodada — vale
+registrar, porque é a rede funcionando: `export-assignment-guard` reprovou
+`Directorate.ts` por misturar `export =` com outro export de topo
+(armadilha ESM+CJS do projeto), e `seeds-production-boot` reprovou porque o
+dublê de `models/index` não conhecia o model novo.
 
 ### Correções de conteúdo do organograma
 

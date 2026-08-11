@@ -55,6 +55,14 @@ export type DirectorateKey = 'ceo' | 'industrial' | 'suprimentos' | 'comercial' 
 
 export interface DirectorateDescriptor {
   key: DirectorateKey;
+  /**
+   * `directorates.code` no banco (`CEO`, `IND`, `SUP`, `COM`, `ADM`).
+   *
+   * Ausente em `transversal`, que **não é** uma diretoria: no banco é
+   * `departments.directorate_id IS NULL` — a forma honesta de dizer "sem
+   * diretoria fixa", que é o caso de SST.
+   */
+  code?: string;
   label: string;
   /** Rótulo curto para a faixa de navegação. */
   shortLabel: string;
@@ -76,11 +84,11 @@ export interface DirectorateDescriptor {
  * estrutura-alvo, não ocupante atual.
  */
 export const DIRECTORATES: readonly DirectorateDescriptor[] = [
-  { key: 'ceo', label: 'Diretoria', shortLabel: 'Diretoria' },
-  { key: 'industrial', label: 'Diretoria Industrial', shortLabel: 'Industrial' },
-  { key: 'suprimentos', label: 'Suprimentos & Logística', shortLabel: 'Suprimentos' },
-  { key: 'comercial', label: 'Diretoria Comercial', shortLabel: 'Comercial' },
-  { key: 'adminfin', label: 'Administrativo-Financeiro', shortLabel: 'Adm-Financeiro' },
+  { key: 'ceo', code: 'CEO', label: 'Diretoria', shortLabel: 'Diretoria' },
+  { key: 'industrial', code: 'IND', label: 'Diretoria Industrial', shortLabel: 'Industrial' },
+  { key: 'suprimentos', code: 'SUP', label: 'Suprimentos & Logística', shortLabel: 'Suprimentos' },
+  { key: 'comercial', code: 'COM', label: 'Diretoria Comercial', shortLabel: 'Comercial' },
+  { key: 'adminfin', code: 'ADM', label: 'Administrativo-Financeiro', shortLabel: 'Adm-Financeiro' },
   { key: 'transversal', label: 'Transversal', shortLabel: 'Transversal' },
 ];
 

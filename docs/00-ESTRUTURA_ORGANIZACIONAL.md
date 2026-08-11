@@ -111,11 +111,16 @@ e o cargo ainda está vago:
 
 ## Consumo pelo código
 
-A navegação do ERP espelha esta estrutura em
-`client/src/lib/departments.ts`, e a guarda
-`client/src/lib/departments.seeds.test.ts` **reprova** quando o frontend
-divergir de `server/src/config/seeds.ts` (nome, código, sigla ou
-quantidade). Antes de 2026-08-11 não havia vínculo nenhum entre este
+A hierarquia **existe no banco** desde 2026-08-11: tabela `directorates`,
+`departments.directorate_id` (NULL = transversal) e
+`access_profiles.department_id` (n:1). Relatórios podem agregar por
+diretoria; perfil não se liga mais a departamento por nome digitado.
+
+A navegação espelha a mesma estrutura em `client/src/lib/departments.ts`, e
+duas guardas **reprovam** divergência: `departments.seeds.test.ts` (nome,
+código, sigla e a diretoria de cada departamento) e
+`server/tests/unit/organizational-structure-guard.test.ts` (dono de cada
+módulo RBAC). Antes de 2026-08-11 não havia vínculo nenhum entre este
 documento e a tela — foi por isso que o menu passou meses agrupando
 departamentos que não existiam.
 

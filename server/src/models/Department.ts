@@ -30,6 +30,7 @@ interface DepartmentAttributes {
   manager_id: number | null;
   active: boolean;
   cost_center_id: number | null;
+  directorate_id: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -42,7 +43,8 @@ const Department = sequelize.define('Department', {
   description: { type: DataTypes.TEXT, allowNull: true },
   manager_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → employees.id (gestor)' },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
-  cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = departamento sem centro de custo mapeado)' }
+  cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = departamento sem centro de custo mapeado)' },
+  directorate_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → directorates.id. NULL = transversal, sem diretoria fixa (hoje só SST)' }
 }, {
   tableName: 'departments',
   underscored: true,
