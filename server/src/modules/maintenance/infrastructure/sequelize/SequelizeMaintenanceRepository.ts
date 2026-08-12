@@ -4,9 +4,18 @@
  * @module modules/maintenance/infrastructure/sequelize/SequelizeMaintenanceRepository
  */
 
-import { Op } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import MaintenanceRepository from '../../domain/repositories/MaintenanceRepository';
 const { MaintenanceOrder, Asset, User }: any = require('../../../../models/index');
+const { sequelize } = require('../../../../config/database');
+
+/**
+ * Classe do `pg_advisory_xact_lock` da numeração de OM. A produção usa 41001
+ * para `production_orders` (`SequelizeProductionOrderRepository`); 41002 é o
+ * espaço deste módulo — classes distintas para os dois geradores não se
+ * serializarem entre si.
+ */
+const ORDER_NUMBER_LOCK_CLASS_ID = 41002;
 
 /**
  * Status "abertos" (não-terminais) de uma ordem de manutenção — usados para
@@ -56,8 +65,30 @@ class SequelizeMaintenanceRepository extends MaintenanceRepository {
   }
 
   /** @inheritdoc */
-  public async create(data: Record<string, unknown>): Promise<any> {
-    return MaintenanceOrder.create(data);
+  public async nextOrderNumberForYear(yearPrefix: string, transaction: any): Promise<string> {
+    const year = Number(yearPrefix.split('-').pop());
+
+    await sequelize.query(
+      'SELECT pg_advisory_xact_lock(:classId, :year)',
+      { replacements: { classId: ORDER_NUMBER_LOCK_CLASS_ID, year }, transaction }
+    );
+
+    // `LIKE 'OM-2026-%'` também isola a numeração dos chamados prediais de
+    // Facilities, que gravam nesta MESMA tabela com prefixo `MO-FAC-`.
+    const rows: any[] = await sequelize.query(
+      `SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM '([0-9]+)$') AS INTEGER)), 0) AS max_sequence
+         FROM maintenance_orders
+        WHERE order_number LIKE :prefix`,
+      { replacements: { prefix: `${yearPrefix}-%` }, type: QueryTypes.SELECT, transaction }
+    );
+
+    const nextSequence = Number(rows[0]?.max_sequence ?? 0) + 1;
+    return `${yearPrefix}-${String(nextSequence).padStart(4, '0')}`;
+  }
+
+  /** @inheritdoc */
+  public async create(data: Record<string, unknown>, transaction?: any): Promise<any> {
+    return MaintenanceOrder.create(data, { transaction });
   }
 
   /** @inheritdoc */

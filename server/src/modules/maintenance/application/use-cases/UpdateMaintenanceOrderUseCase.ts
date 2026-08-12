@@ -9,20 +9,35 @@ import { NotFoundError } from '../../../../errors';
 import MaintenanceRepository from '../../domain/repositories/MaintenanceRepository';
 import { sequelize } from '../../../../config/database';
 
-const ALLOWED_FIELDS = [
-  'description',
-  'diagnosis',
-  'solution',
-  'parts_used',
-  'cost',
-  'status',
-  'priority',
-  'maintenance_type',
-  'technician_id',
-  'start_date',
-  'completion_date',
-  'notes'
-];
+/**
+ * Campo da API → coluna real de `maintenance_orders`.
+ *
+ * Corrigido em 2026-08-12 (mesmo achado de UAT do
+ * `CreateMaintenanceOrderUseCase`): a lista anterior copiava os nomes da API
+ * direto para o UPDATE, mas `description`/`diagnosis`/`solution`/`cost` não
+ * são colunas — o Sequelize ignora chave desconhecida em silêncio, então a
+ * tela "salvava" diagnóstico, serviço executado e custo e **nada era
+ * gravado**. `parts_used` foi removido do contrato: não existe coluna
+ * correspondente (o custo de peças é `parts_cost`, numérico).
+ *
+ * `Map` em vez de objeto literal de propósito: entradas identidade como
+ * `status: 'status'` casariam com o padrão que a `enum-literal-guard`
+ * varre (`coluna: 'literal'`) e seriam acusadas como valor de enum
+ * inexistente.
+ */
+const FIELD_TO_COLUMN = new Map<string, string>([
+  ['description', 'problem_description'],
+  ['diagnosis', 'diagnosed_problem'],
+  ['solution', 'service_performed'],
+  ['cost', 'total_cost'],
+  ['status', 'status'],
+  ['priority', 'priority'],
+  ['maintenance_type', 'maintenance_type'],
+  ['technician_id', 'technician_id'],
+  ['start_date', 'start_date'],
+  ['completion_date', 'completion_date'],
+  ['notes', 'notes']
+]);
 
 interface UpdateMaintenanceOrderInput {
   id: number | string;
@@ -58,8 +73,8 @@ class UpdateMaintenanceOrderUseCase extends UseCase<UpdateMaintenanceOrderInput,
    */
   public async execute({ id, body }: UpdateMaintenanceOrderInput): Promise<any> {
     const updateData: Record<string, unknown> = {};
-    for (const field of ALLOWED_FIELDS) {
-      if (body[field] !== undefined) updateData[field] = body[field];
+    for (const [field, column] of FIELD_TO_COLUMN) {
+      if (body[field] !== undefined) updateData[column] = body[field];
     }
     if (body.status === 'in_progress' && !updateData.start_date) updateData.start_date = new Date();
     if (body.status === 'completed' && !updateData.completion_date) updateData.completion_date = new Date();

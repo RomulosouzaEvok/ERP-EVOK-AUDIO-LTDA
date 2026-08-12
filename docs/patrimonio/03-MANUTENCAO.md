@@ -50,8 +50,15 @@ campos centrais do fluxo:
 
 1. **Abertura (UC-18):** operador/gestor identifica um problema em um
    ativo e cria a ordem (`POST /api/maintenance`) — `asset_id` e
-   `problem_description`/`description` são obrigatórios; `status` nasce
-   `open`, `maintenance_type` default `corrective`.
+   `description` são obrigatórios; `status` nasce `open`,
+   `maintenance_type` default `corrective`, `priority` default `normal`.
+   O número `order_number` é gerado pelo backend no formato
+   `OM-<ano>-NNNN`, serializado por advisory lock (correção de
+   2026-08-12 — antes o use case não gerava número nem mapeava
+   `description → problem_description`, e **toda criação morria em
+   500**; o UPDATE tinha a versão silenciosa do mesmo defeito, com
+   `diagnosis`/`solution`/`cost` ignorados sem gravar. Prova real em
+   `server/tests/integration/maintenance-order-lifecycle.test.ts`).
 2. **Necessidade de peças/insumos:** se a manutenção depende de compra,
    abre-se uma requisição de compra com `origin='manutencao'` em
    `/maintenance/requisitions` (mesmo workflow de aprovação/conversão de

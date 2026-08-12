@@ -37,8 +37,28 @@ class MaintenanceRepository {
     throw new Error('MaintenanceRepository.findByIdForUpdate não implementado.');
   }
 
-  /** @param data - Dados da ordem de manutenção. @returns Ordem criada. @throws {Error} Se nao implementado. */
-  public async create(data: Record<string, unknown>): Promise<any> { // eslint-disable-line @typescript-eslint/no-unused-vars
+  /**
+   * Gera o próximo número de OM do ano (`OM-2026-0001`, `OM-2026-0002`, ...)
+   * de forma serializada (advisory lock transacional) — duas criações
+   * concorrentes nunca recebem o mesmo número. Ignora os chamados prediais
+   * de Facilities (`MO-FAC-*`), que dividem a tabela `maintenance_orders`.
+   *
+   * @param yearPrefix - Prefixo anual (ex.: `OM-2026`).
+   * @param transaction - Transação Sequelize ativa (obrigatória para o lock).
+   * @returns Próximo número completo.
+   * @throws {Error} Se nao implementado.
+   */
+  public async nextOrderNumberForYear(yearPrefix: string, transaction: unknown): Promise<string> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    throw new Error('MaintenanceRepository.nextOrderNumberForYear não implementado.');
+  }
+
+  /**
+   * @param data - Dados da ordem de manutenção.
+   * @param transaction - Transação Sequelize ativa (opcional).
+   * @returns Ordem criada.
+   * @throws {Error} Se nao implementado.
+   */
+  public async create(data: Record<string, unknown>, transaction?: unknown): Promise<any> { // eslint-disable-line @typescript-eslint/no-unused-vars
     throw new Error('MaintenanceRepository.create não implementado.');
   }
 

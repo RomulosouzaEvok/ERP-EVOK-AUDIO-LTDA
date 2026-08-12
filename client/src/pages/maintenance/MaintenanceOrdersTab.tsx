@@ -296,7 +296,6 @@ const updateSchema = z.object({
   technician_id: z.coerce.number().int().positive().optional().or(z.literal(undefined)),
   diagnosis: z.string().trim().max(2000).optional(),
   solution: z.string().trim().max(2000).optional(),
-  parts_used: z.string().trim().max(1000).optional(),
   cost: z.coerce.number().min(0).optional(),
   notes: z.string().trim().max(2000).optional(),
 });
@@ -337,7 +336,6 @@ function ManageOrderDialog({
         technician_id: values.technician_id || undefined,
         diagnosis: values.diagnosis?.trim() || undefined,
         solution: values.solution?.trim() || undefined,
-        parts_used: values.parts_used?.trim() || undefined,
         cost: values.cost,
         notes: values.notes?.trim() || undefined,
       }),
@@ -365,7 +363,6 @@ function ManageOrderDialog({
         technician_id: order.technician_id ?? undefined,
         diagnosis: order.diagnosed_problem ?? '',
         solution: order.service_performed ?? '',
-        parts_used: '',
         cost: order.total_cost ? Number(order.total_cost) : undefined,
         notes: order.notes ?? '',
       });
@@ -426,16 +423,10 @@ function ManageOrderDialog({
               <Label htmlFor="update-solution">Serviço executado</Label>
               <Textarea id="update-solution" rows={2} {...register('solution')} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="update-parts">Peças utilizadas</Label>
-                <Input id="update-parts" {...register('parts_used')} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="update-cost">Custo total (R$)</Label>
-                <Input id="update-cost" type="number" step="0.01" min="0" {...register('cost')} />
-                {errors.cost && <p className="text-sm text-destructive">{errors.cost.message}</p>}
-              </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="update-cost">Custo total (R$)</Label>
+              <Input id="update-cost" type="number" step="0.01" min="0" {...register('cost')} />
+              {errors.cost && <p className="text-sm text-destructive">{errors.cost.message}</p>}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="update-notes">Observações</Label>

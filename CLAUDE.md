@@ -291,8 +291,8 @@ npm run server
 # 5. Teste — os scripts vivem em `server/` e `client/`, NÃO na raiz
 #    (a raiz só tem start/server/client/dev/install-all — auditoria 2026-08-11)
 cd server
-npm run test:unit          # 1950 testes / 177 suítes (repositório dublê) — medido 2026-08-12
-npm run test:integration   # 236 testes / 57 suítes contra PostgreSQL real, sem skips — medido 2026-08-12
+npm run test:unit          # 1952 testes / 177 suítes (repositório dublê) — medido 2026-08-12
+npm run test:integration   # 240 testes / 58 suítes contra PostgreSQL real, sem skips — medido 2026-08-12
 npm run test               # unit + integration + edge
 npm run typecheck
 

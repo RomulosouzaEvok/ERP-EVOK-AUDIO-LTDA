@@ -6,17 +6,12 @@ import type { ItemResponse, ListResponse } from './types';
  * equipamentos), montadas sob `/api/maintenance`
  * (`server/src/modules/maintenance/presentation/routes/maintenance.ts`).
  *
- * **Risco conhecido de backend** (não corrigido nesta entrega — fora do
- * escopo de frontend): `CreateMaintenanceOrderUseCase.ts` envia ao
- * repositório os campos `description` e não gera `order_number`, mas o
- * model `MaintenanceOrder` exige `problem_description` (NOT NULL) e
- * `order_number` (NOT NULL, UNIQUE, sem valor padrão). Isso faz com que
- * **toda chamada `POST /api/maintenance` retorne 500** hoje
- * (`SequelizeValidationError`/`SequelizeUniqueConstraintError` de coluna
- * nula). A tela envia o payload no formato que o use case espera
- * (`description`, não `problem_description`) — quando o backend for
- * corrigido para mapear corretamente os campos, nenhuma mudança é
- * necessária aqui. Ver relatório de handoff para detalhes.
+ * O contrato usa nomes "de API" (`description`, `diagnosis`, `solution`,
+ * `cost`) e o backend os traduz para as colunas reais
+ * (`problem_description`, `diagnosed_problem`, `service_performed`,
+ * `total_cost`) — mapeamento em `UpdateMaintenanceOrderUseCase.ts`
+ * (`FIELD_TO_COLUMN`), corrigido em 2026-08-12 junto com a geração de
+ * `order_number` (`OM-<ano>-NNNN`) na criação.
  */
 
 export type MaintenanceOrderStatus = 'open' | 'scheduled' | 'in_progress' | 'waiting_parts' | 'completed' | 'canceled';
@@ -84,7 +79,6 @@ export interface UpdateMaintenanceOrderInput {
   description?: string;
   diagnosis?: string;
   solution?: string;
-  parts_used?: string;
   cost?: number;
   status?: MaintenanceOrderStatus;
   priority?: MaintenanceOrderPriority;

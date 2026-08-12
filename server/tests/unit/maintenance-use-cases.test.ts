@@ -26,6 +26,7 @@ import { ValidationError, NotFoundError } from '../../src/errors';
 
 function buildMaintenanceRepository(overrides: Partial<Record<string, jest.Mock>> = {}) {
   return {
+    nextOrderNumberForYear: jest.fn(async () => 'OM-2026-0001'),
     create: jest.fn(async (data: any) => ({ id: 1, ...data })),
     findById: jest.fn(async (id: number) => ({ id, status: 'in_progress', asset_id: 5 })),
     findByIdForUpdate: jest.fn(async (id: number) => ({ id, status: 'in_progress', asset_id: 5 })),
@@ -49,15 +50,48 @@ describe('Use cases de ordens de manutenção', () => {
     expect(maintenanceRepository.create).not.toHaveBeenCalled();
   });
 
-  it('aplica valores default de priority e maintenance_type na criação', async () => {
+  it('cria a ordem com numero gerado, colunas reais do model e defaults validos', async () => {
+    // Regressao do achado de UAT de 2026-08-12: a versao anterior gravava
+    // `description` (coluna inexistente), nao gerava `order_number` e usava
+    // default `priority: 'medium'` — valor que NEM EXISTE no enum do banco
+    // (`low/normal/high/emergency`). Este proprio teste afirmava o
+    // comportamento quebrado, porque o dublê aceita qualquer chave.
     const maintenanceRepository = buildMaintenanceRepository();
     const useCase = new CreateMaintenanceOrderUseCase(maintenanceRepository as any);
 
-    await useCase.execute({ asset_id: 5, description: 'Correia rompida', reportedBy: 10 });
+    const order = await useCase.execute({ asset_id: 5, description: 'Correia rompida', reportedBy: 10 });
 
-    expect(maintenanceRepository.create).toHaveBeenCalledWith(
-      expect.objectContaining({ priority: 'medium', maintenance_type: 'corrective', reported_by: 10, status: 'open' })
+    expect(maintenanceRepository.nextOrderNumberForYear).toHaveBeenCalledWith(
+      `OM-${new Date().getFullYear()}`,
+      mockTransaction
     );
+    expect(maintenanceRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order_number: 'OM-2026-0001',
+        problem_description: 'Correia rompida',
+        priority: 'normal',
+        maintenance_type: 'corrective',
+        reported_by: 10,
+        created_by: 10,
+        status: 'open',
+      }),
+      mockTransaction
+    );
+    // Nenhuma chave fora do model escapa para o INSERT.
+    expect(maintenanceRepository.create.mock.calls[0][0]).not.toHaveProperty('description');
+    expect(mockTransaction.commit).toHaveBeenCalled();
+    expect(order.order_number).toBe('OM-2026-0001');
+  });
+
+  it('faz rollback da criação se a numeração ou o INSERT falharem', async () => {
+    const maintenanceRepository = buildMaintenanceRepository({
+      create: jest.fn(async () => { throw new Error('falha de banco'); }),
+    });
+    const useCase = new CreateMaintenanceOrderUseCase(maintenanceRepository as any);
+
+    await expect(useCase.execute({ asset_id: 5, description: 'x', reportedBy: 10 })).rejects.toThrow('falha de banco');
+    expect(mockTransaction.rollback).toHaveBeenCalled();
+    expect(mockTransaction.commit).not.toHaveBeenCalled();
   });
 
   it('lança NotFoundError ao buscar ordem de manutenção inexistente', async () => {
@@ -100,6 +134,33 @@ describe('Use cases de ordens de manutenção', () => {
       expect(maintenanceRepository.releaseAssetFromMaintenanceIfNoOtherOpenOrders).toHaveBeenCalledWith(42, 7, mockTransaction);
       expect(maintenanceRepository.markAssetInMaintenance).not.toHaveBeenCalled();
       expect(mockTransaction.commit).toHaveBeenCalled();
+    });
+
+    it('traduz os campos da API para as colunas reais do model no UPDATE', async () => {
+      // Regressao do achado de UAT de 2026-08-12: `diagnosis`/`solution`/
+      // `cost` iam direto para o UPDATE com o nome da API, o Sequelize
+      // ignorava as chaves desconhecidas em silencio e a tela "salvava" sem
+      // gravar nada.
+      const maintenanceRepository = buildMaintenanceRepository({
+        findByIdForUpdate: jest.fn(async () => ({ id: 7, status: 'in_progress', asset_id: 42 })),
+      });
+      const useCase = new UpdateMaintenanceOrderUseCase(maintenanceRepository as any);
+
+      await useCase.execute({
+        id: 7,
+        body: { diagnosis: 'Rolamento gasto', solution: 'Rolamento trocado', cost: 250.5, notes: 'ok' },
+      });
+
+      expect(maintenanceRepository.update).toHaveBeenCalledWith(
+        7,
+        {
+          diagnosed_problem: 'Rolamento gasto',
+          service_performed: 'Rolamento trocado',
+          total_cost: 250.5,
+          notes: 'ok',
+        },
+        mockTransaction
+      );
     });
 
     it('atualização sem mudança de status não sincroniza Asset.status', async () => {
