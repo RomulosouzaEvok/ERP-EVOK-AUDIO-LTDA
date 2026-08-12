@@ -1,5 +1,15 @@
 # Validação ponta a ponta da cadeia do produto — 2026-08-10
 
+> ## ⚠️ SUPERADO em 2026-08-10 pelos commits `92cf555` / `e2a8d7e`
+>
+> As lacunas apontadas neste documento foram fechadas por esses dois commits.
+> **Mantido como registro histórico** da execução daquele dia (o rastro de
+> *como* a cadeia foi provada continua útil), mas **não use como lista de
+> pendências** — para isso vale
+> [`RESIDUAIS_ABERTOS_2026-08-10.md`](RESIDUAIS_ABERTOS_2026-08-10.md).
+>
+> *Banner adicionado em 2026-08-12 pela auditoria documental.*
+
 **Objetivo (critério de aceite do dono, `ESTADO_SESSAO_2026-08-09.md` §1):**
 
 > "Um insumo é cadastrado e segue seu curso até virar produto finalizado, passando

@@ -1,4 +1,19 @@
 # 🎯 Plano de Implementação — 4 Bloqueadores Críticos
+
+> ## ⚠️ REGISTRO DATADO — plano de 2026-08-02, executado
+>
+> Plano de ataque aos 4 bloqueadores P0, **escrito antes da implementação**.
+> Os caminhos de arquivo listados são o **layout proposto** na época; o código
+> real ficou em outros módulos (ex.: `server/src/modules/purchaseRequisitions/`
+> em vez de `server/src/modules/purchases/`). Os 4 bloqueadores foram
+> remediados no commit `d1d3aff`.
+>
+> Estado atual: `CLAUDE.md` §5.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
 **Versão 1.0** | **Escopo:** 30h | **Go-Live G6**
 
 ---

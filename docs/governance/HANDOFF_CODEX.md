@@ -1,5 +1,21 @@
 ﻿# Handoff Codex — Migração Product/Item
 
+> ## ⚠️ REGISTRO APPEND-ONLY — cada seção é datada
+>
+> Este arquivo é um **log de handoffs empilhados**: cada seção descreve o que
+> foi entregue numa data e o que se sabia naquele dia. Seções antigas citam
+> migrations como "não aplicadas" e arquivos que depois foram renomeados —
+> **isso é o registro funcionando**, não defeito. Nada aqui é reescrito
+> retroativamente; entradas novas vão ao fim.
+>
+> Para o estado atual do projeto: `CLAUDE.md`. Para pendências vivas:
+> `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 Documento de handoff entre desenvolvimento (Backend Engineer) e QA/auditoria (Codex agent).
 
 > ## ⚠️ Estado do banco em 2026-08-10 — leia antes de qualquer entrada abaixo
@@ -4530,7 +4546,7 @@ registrado como pendência futura.
 
 ### 2. Suíte de integração saudável pela primeira vez contra Postgres real
 
-Uma rodada completa de `node scripts/run-api-suite.cjs integration`
+Uma rodada completa de `node server/scripts/run-api-suite.cjs integration`
 contra o container `evok-postgres` encontrou 5 suítes falhando. Causa
 raiz identificada e corrigida em cada caso — nenhuma era regressão de
 produto:
@@ -5587,7 +5603,7 @@ referência direta).
   agora exige o módulo `garantia` no perfil.
 - `server/tests/integration/rbac-maintenance-service-orders-access-denied.test.ts`
   (novo) — teste de regressão RBAC HTTP fim-a-fim (Supertest + servidor
-  + PostgreSQL reais via `scripts/run-api-suite.cjs`), seguindo
+  + PostgreSQL reais via `server/scripts/run-api-suite.cjs`), seguindo
   exatamente o padrão de
   `server/tests/integration/rbac-module-access-denied.test.ts`: cria um
   usuário `operator` com `AccessProfile` que só tem o módulo `vendas`
@@ -5615,7 +5631,7 @@ rotas foram atualizados para descrever o novo RBAC).
 2. `cd server && npm run test:unit` — 456/456 passando (nenhuma
    regressão).
 3. `cd server && npm run test:integration:strict` — sobe a API própria
-   na porta 3101 via `scripts/run-api-suite.cjs` (não usa os containers
+   na porta 3101 via `server/scripts/run-api-suite.cjs` (não usa os containers
    Docker `evok-api`/`evok-postgres`, que podem continuar rodando em
    paralelo sem conflito). O novo arquivo
    `rbac-maintenance-service-orders-access-denied.test.ts` deve mostrar
@@ -5972,7 +5988,7 @@ com `allowNull` implícito divergente da migration original —
 
 - `npx tsc --noEmit` limpo; `npm run test:unit` 67 suítes/473 testes
   passando.
-- `node scripts/run-api-suite.cjs api` (suíte de integração completa)
+- `node server/scripts/run-api-suite.cjs api` (suíte de integração completa)
   rodou contra `erp_evok_audio_test` do início ao fim — confirmado por
   leitura direta do banco que `admin@evokaudio.com.br` (banco de
   desenvolvimento real) **não** teve `updated_at`/`password_version`
@@ -13188,7 +13204,7 @@ modificado nesta entrega.
   do que já existia; nenhum usuário foi criado ou teve senha alterada em
   `erp_evok_audio`.
 - **O usuário sintético `ci-admin@evok.local`** existe apenas em
-  `erp_evok_audio_test` (convenção já usada por `scripts/run-api-suite.cjs`);
+  `erp_evok_audio_test` (convenção já usada por `server/scripts/run-api-suite.cjs`);
   nenhuma senha foi gravada por esta entrega.
 - **A estação 9 não está validada** — só NF-e e expedição foram exercitadas de
   verdade. O débito de estoque da venda e a geração de conta a receber seguem sem
@@ -14843,7 +14859,7 @@ passar `null` explícito — e isso é código, não schema.
 ### Infraestrutura de teste (o que destravou a cadeia)
 
 - **Segundo administrador** `ci-approver@evok.local` provisionado por
-  `scripts/run-api-suite.cjs`, com `TEST_APPROVER_TOKEN` exportado. A
+  `server/scripts/run-api-suite.cjs`, com `TEST_APPROVER_TOKEN` exportado. A
   segregação de função **D-K** proíbe que o solicitante aprove, e `admin`
   deliberadamente **não** isenta (permissão é concedível; identidade não).
   Com um único usuário, nenhuma compra do ERP é aprovável — a suíte travava na
@@ -14860,7 +14876,7 @@ passar `null` explícito — e isso é código, não schema.
   Configuração de Custeio). Sem taxa, o G4 recusa concluir OP cuja etapa não
   tenha centro de trabalho com `cost_per_hour`.
 - `run-api-suite.cjs` aceita filtro opcional de caminho para depuração
-  (`node scripts/run-api-suite.cjs integration sale-`).
+  (`node server/scripts/run-api-suite.cjs integration sale-`).
 
 ### Testes trazidos para a regra nova
 
@@ -14886,7 +14902,7 @@ Nenhuma regra de produção foi afrouxada para fazer teste passar.
   correções de fixture, a verificação medida e **3 pendências abertas**.
 - `docs/governance/HANDOFF_CODEX.md` — este bloco.
 - JSDoc novo/revisado em: `tests/helpers/testApi.ts` (`approverToken`,
-  `mintToken`), `scripts/run-api-suite.cjs` (segundo aprovador, taxa horária,
+  `mintToken`), `server/scripts/run-api-suite.cjs` (segundo aprovador, taxa horária,
   `runJestSuite` com filtro), `SaleEntity.ts`, `SupplierEntity.ts`,
   `CreateSaleUseCase.ts`, e o cabeçalho do E2E (tabela "o que mudou e por quê").
 
@@ -14936,3 +14952,626 @@ Para conferir os dois bugs corrigidos sem a suíte, contra a API no ar:
 4. A suíte de integração roda contra um banco **persistente e acumulativo**.
    Ela é idempotente hoje, mas cada rodada deixa registros (`CI-*`, `E2E-*`).
    Não há rotina de limpeza versionada.
+
+---
+
+## 2026-08-11 — Backend → QA / `AuditorIntegrador`: os 2 defeitos CRÍTICOS do MRP
+
+## 1. Resumo da feature
+
+Correção dos dois defeitos **críticos** que a auditoria de 2026-08-11 achou no
+módulo de MRP, mais o achado BAIXO 15 (que vivia no mesmo caminho de código).
+**Nenhuma mudança de schema** — não há migration nesta entrega.
+
+### Defeito 1 — netagem multi-demanda: o plano comprava a menos
+
+`GenerateMrpPlanUseCase` chamava o motor **uma vez por demanda**
+(`calculateMrpPlan([demand], …)`), sempre com a posição de estoque íntegra.
+Cada demanda abatia o saldo inteiro, como se fosse a única da fábrica.
+
+| | bruta | estoque considerado | líquida |
+|---|---|---|---|
+| demanda A | 100 | 100 (íntegro) | 0 |
+| demanda B | 100 | 100 (**de novo**) | 0 |
+| **realidade** | **200** | **100** | **100** |
+
+Com líquida 0 nas duas, o filtro `plannedQuantity > 0` do motor descartava as
+duas linhas: **nenhuma ordem planejada, nenhuma requisição, e uma falta de 100
+peças que só aparece no chão de fábrica.** O motor (`mrpEngine.ts`) sempre
+soube agregar várias demandas — era o chamador que não deixava.
+
+Agora a netagem é **conjunta** (uma passagem do motor com todas as demandas) e
+a necessidade líquida agregada é **rateada por origem**, proporcionalmente à
+necessidade bruta de cada uma, preservando `origem`/`origem_id` — que é o que
+motivava o laço defeituoso. O rateio ficou isolado em
+`support/allocatePlanByOrigin.ts`, com o racional das decisões no cabeçalho.
+
+Três decisões de desenho do rateio, para quem for auditar:
+
+1. **Base = necessidade bruta da origem.** É a única medida que existe por
+   origem antes da netagem. A alternativa (quem precisa antes leva o estoque)
+   é alocação por prioridade: muda a decisão de compra e é assunto do dono do
+   processo, não de uma correção de defeito.
+2. **`estoque_disponivel` também é rateado.** Repetir o saldo inteiro em cada
+   linha (comportamento antigo) produz linha que não fecha na tela:
+   "bruta 100 − disponível 100 = líquida 50". Rateado, cada linha fecha
+   sozinha e a soma continua sendo o saldo real.
+3. **Lote mínimo vive no agregado.** O motor arredonda antes do rateio, então
+   a linha individual pode não ser múltipla do lote — o pedido que a fábrica
+   coloca (a soma) é. Arredondar por linha compraria a mais a cada rodada.
+   A última parcela de cada medida é o **resto**, nunca um arredondamento
+   independente: a soma das linhas é idêntica ao agregado, sem resíduo.
+
+### Defeito 2 — reexecução do plano ressuscitava ordem convertida
+
+Duas falhas somadas transformavam a rotina do planejador (rodar o MRP várias
+vezes por dia) em compra duplicada:
+
+1. `SequelizeMrpRepository.upsertPlannedOrders` aplicava o payload inteiro
+   sobre a linha existente — e o plano é sempre montado com
+   `status: 'RASCUNHO'`. Uma ordem já convertida (`EM_EXECUCAO`) voltava a
+   `RASCUNHO` e, portanto, a ser elegível para conversão automática.
+2. `createRequisitionFromPlannedOrders` não tinha idempotência nenhuma: criava
+   cabeçalho e itens novos a cada chamada.
+
+Resultado: item com `items.conversao_automatica = true` gerava **uma
+requisição de compra nova a cada rodada do MRP**, para o mesmo material,
+descoberta só no recebimento. Medido antes da correção: 3 rodadas → 3
+requisições.
+
+Correções: `status` saiu do UPDATE do upsert (é máquina de estados, não dado
+recalculado — linha nova continua nascendo com o status do payload via
+`defaults`); o helper ignora ordem fora de `RASCUNHO`/`APROVADA`, deduplica a
+mesma ordem repetida no lote e devolve `null` — sem cabeçalho vazio — quando
+nada é convertível.
+
+**Achado colateral, corrigido junto:** as ordens devolvidas por
+`POST /api/mrp/plan` diziam `RASCUNHO` mesmo depois de promovidas a
+`EM_EXECUCAO` (a promoção é um `UPDATE … WHERE id IN (…)`, que não toca as
+instâncias já carregadas). Como `mrpController.generatePlan` decide gravar o
+audit log `mrp_auto_convert_to_requisition` filtrando por esse status, **o log
+da conversão automática nunca era escrito** — e a API devolvia um status que
+não era o do banco.
+
+### Achado BAIXO 15 — numeração da requisição
+
+`RQ-${Date.now()}` virou a série anual `RQ-YYYY-NNNN` do resto do ERP,
+emitida por `SequelizePurchaseRequisitionRepository.nextRequisitionNumberForYear`
+(advisory lock `41003` + `MAX`, mesmo padrão do G16 para OP). Aplicado nos
+**dois** caminhos de criação: MRP e requisição manual
+(`CreatePurchaseRequisitionUseCase`). Números legados permanecem no histórico
+e são ignorados pela geração.
+
+### Arquivos alterados
+
+| Arquivo | O que mudou |
+|---|---|
+| `server/src/modules/mrp/application/use-cases/support/allocatePlanByOrigin.ts` | **novo** — rateio por origem + `normalizeOrigem` (movida do use case) |
+| `server/src/modules/mrp/application/use-cases/GenerateMrpPlanUseCase.ts` | netagem conjunta; consumo do rateio; sincroniza `status` das instâncias promovidas; trata `null` do helper |
+| `server/src/modules/mrp/infrastructure/sequelize/SequelizeMrpRepository.ts` | `status` fora do UPDATE do upsert (+ JSDoc do porquê) |
+| `server/src/modules/mrp/application/use-cases/support/createRequisitionFromPlannedOrders.ts` | idempotência por ordem planejada; numeração `RQ-YYYY-NNNN`; retorno `null` |
+| `server/src/modules/mrp/application/use-cases/ConvertPlannedOrdersToRequisitionUseCase.ts` | guarda explícita para o retorno `null` do helper |
+| `server/src/modules/mrp/application/mrpEngine.ts` | `MrpDemandSourceType` aceita também o enum do banco (o único chamador real nunca usou a união em inglês) |
+| `server/src/modules/purchaseRequisitions/domain/repositories/PurchaseRequisitionRepository.ts` | contrato `nextRequisitionNumberForYear` |
+| `server/src/modules/purchaseRequisitions/infrastructure/sequelize/SequelizePurchaseRequisitionRepository.ts` | implementação com advisory lock + `MAX` |
+| `server/src/modules/purchaseRequisitions/application/use-cases/CreatePurchaseRequisitionUseCase.ts` | usa a numeração serializada |
+| `server/scripts/run-api-suite.cjs` | `--testPathPattern` → `--testPathPatterns` (Jest 30 abortava antes de rodar qualquer teste) |
+
+Testes: 2 novos de integração (`mrp-multi-demand-netting`,
+`mrp-rerun-idempotency`), 2 novos unitários
+(`mrp-multi-demand-allocation`, `mrp-requisition-helper-idempotency`), 1 caso
+novo em `mrp-auto-convert` e dublês de repositório atualizados em 5 arquivos
+unitários (o método de numeração passou a ser do repositório).
+
+## 2. Documentações atualizadas
+
+- `docs/arquitetura/API.md` §13 — `POST /api/mrp/plan`: netagem conjunta,
+  novo significado de `estoque_disponivel` por linha, lote mínimo no agregado
+  e idempotência da reexecução; §14 — `requisition_number` no padrão
+  `RQ-YYYY-NNNN` (exemplo de payload atualizado)
+- `docs/projeto/04-USE_CASES.md` — UC-24b ganhou a seção "Correções de
+  2026-08-11", incluindo o audit log que nunca era escrito
+- `docs/database/DATABASE.md` — entrada nova "MRP: o `status` da ordem
+  planejada deixa de ser dado recalculado" (sem migration; registra a regra
+  "coluna de máquina de estados não entra em payload de recálculo") e a
+  numeração anual de `purchase_requisitions.requisition_number`
+- `docs/database/04-DICIONARIO_DADOS.md` — nota de série anual na coluna
+  `requisition_number`
+- `docs/governance/TODO.md` — bloco 2026-08-11 com evidência por item e as
+  pendências que a entrega deixa
+- JSDoc: módulo novo `allocatePlanByOrigin.ts` (cabeçalho explicando o defeito
+  e as três decisões de rateio), `upsertPlannedOrders`,
+  `createRequisitionFromPlannedOrders`, `nextRequisitionNumberForYear`,
+  `MrpDemandSourceType`
+
+## 3. Instruções de teste
+
+Pré-requisito: PostgreSQL de pé (`docker compose up -d` na raiz) e o banco
+`erp_evok_audio_test` provisionado (`server/.env.test`).
+
+```bash
+cd server
+npm run typecheck          # esperado: verde
+npm run test:unit          # esperado: 1826/1826, 170 suítes
+npm run test:integration   # esperado: 179/179, 47 suítes (sobe a API e usa o banco de teste)
+```
+
+Para provar que os testes novos realmente pegam os defeitos (recomendado ao
+auditor — é o que separa teste de decoração):
+
+1. Reverta só uma linha de `SequelizeMrpRepository.upsertPlannedOrders`
+   (volte `record.update(order, …)`) → `mrp-rerun-idempotency` reprova nas
+   etapas 3 e 4 (a 2ª rodada cria requisição nova e rebaixa o status).
+2. Volte `GenerateMrpPlanUseCase` a chamar `calculateMrpPlan([demand], …)`
+   dentro do laço → `mrp-multi-demand-netting` reprova na etapa 2 com **zero**
+   linhas planejadas (foi exatamente o que se mediu antes da correção).
+
+Verificação manual no banco de teste, depois de rodar a suíte:
+
+```sql
+-- Duas origens, um saldo: 200 brutos, 100 disponíveis, 100 a comprar.
+SELECT i.codigo, o.origem_id, o.necessidade_bruta, o.estoque_disponivel,
+       o.necessidade_liquida, o.quantidade_planejada, o.status
+  FROM mrp_ordens_planejadas o JOIN items i ON i.id = o.item_id
+ WHERE i.codigo LIKE 'MRPNET-%';
+
+-- Numeração anual em uso (os RQ-<timestamp> antigos seguem no histórico).
+SELECT requisition_number, origin FROM purchase_requisitions ORDER BY id DESC LIMIT 10;
+```
+
+## 4. Riscos residuais
+
+1. **`origem_id NULL` não é coberto pelo índice único** `uq_mrp_sem_duplicidade`
+   — no PostgreSQL `NULL` é distinto de `NULL`, então duas rodadas
+   **concorrentes** do MRP com demanda `MANUAL` (sem documento de origem)
+   ainda podem inserir duas linhas iguais. O `findOrCreate` cobre o caso
+   sequencial, não o concorrente. Correção seria índice único parcial com
+   `COALESCE(origem_id, …)` ou `NULLS NOT DISTINCT` (PG 15+). Nada observado:
+   a rodada do MRP hoje é síncrona e disparada por gente.
+2. **Necessidade que cresce depois da conversão fica silenciosa.** Se uma
+   rodada posterior aumentar a quantidade de uma ordem já convertida
+   (`EM_EXECUCAO`), a ordem é recalculada mas a requisição **não** é ajustada
+   e nenhuma complementar é criada. É o lado conservador do trade-off (melhor
+   não comprar sozinho do que comprar duas vezes), mas precisa virar sinal na
+   tela do planejador.
+3. **A base do rateio é decisão de processo.** Rateio proporcional à
+   necessidade bruta é a escolha desta correção; alocação por prioridade de
+   data é outra política, e mudá-la muda o que a fábrica compra. Precisa de
+   decisão do dono, não de código.
+4. **Escopo do teste de integração.** Os dois testes novos exercitam a cadeia
+   real (HTTP → use case → PostgreSQL), mas o cenário é de laboratório: BOM
+   1:1, um nível, saldo controlado. Netagem em BOM multinível com
+   subconjuntos e perdas continua coberta apenas por unitário.
+5. **`estoque_disponivel` mudou de significado por linha** (parcela, não saldo
+   total). A tela de MRP (`client/src/pages/production/MrpPage.tsx`) apenas
+   exibe o número, então não quebra — mas quem já tinha lido a coluna como
+   "saldo do item" precisa saber que agora é "saldo alocado a esta origem".
+
+---
+
+# HANDOFF — 5 brechas ALTAS da auditoria de 2026-08-11 (working tree, sem commit)
+
+> Entrega **separada** da correção do MRP documentada acima; as duas convivem
+> no mesmo working tree e não se tocam (módulos distintos, testes distintos).
+
+## 1. Resumo da feature
+
+Cinco brechas de severidade ALTA, todas com a mesma assinatura: **a regra
+existia e estava testada, mas era satisfeita por um caminho lateral.**
+
+| # | Brecha | O que a fechou |
+|---|---|---|
+| 1 | **G6** — uma linha de apontamento manual (`production_route_step_id: null`) destravava a partida de OP **sem roteiro nenhum** | o gate passou a exigir *lastro de roteiro*: alguma linha ligada a etapa **ou** roteiro ativo do produto. Novo código `G6-START-NO-ROUTE-STEP` |
+| 2 | **G7** — lote bloqueado era re-liberado com a inspeção aprovada de **antes** do bloqueio (bloqueio decorativo, ISO 9001 §8.7) | coluna `lot_controls.blocked_at` (migration nova) + exigência de `inspected_at > blocked_at` + liberação em transação com `FOR UPDATE` |
+| 3 | `PRODUCTION_TRACKING_REQUIRED=warn` desligava G4 **e** G6 sem existir em nenhum arquivo do repositório | validação de boot em `runtimeEnv` (produção recusa `warn`), declaração em `.env.example` (raiz e `server/`) |
+| 4 | **G11** — `is_foreign` opcional + `DEFAULT false` fazia fornecedor estrangeiro nascer nacional, e a alçada de importação simplesmente não acontecia | `is_foreign` obrigatório na criação; origem **efetiva** gravada no pedido; recusa da combinação incoerente (`G11-ORIGIN-SUPPLIER-MISMATCH`) na criação e na aprovação |
+| 5 | **G1** — BOM aceitava ciclo multinível (`A→B`, depois `B→A`); só a auto-referência era barrada | detecção de caminho no espaço de `products.id` (`hasProductPathBetween`), 422 `G1-BOM-CICLO`, antes da transação |
+
+### Decisões de desenho que valem registro
+
+- **G6 destrava por roteiro, não por apagar a linha manual.** Recusar
+  simplesmente deixaria a OP encalhada (a materialização de etapas só acontece
+  na liberação, e ela é idempotente). Aceitar "existe roteiro ativo" faz a
+  mensagem de erro ser executável: cadastre o roteiro e a MESMA OP parte.
+- **`blocked_at` é coluna, não inferência.** `notes` é texto livre e
+  `updated_at` muda a cada escrita de qualquer natureza; derivar o instante do
+  bloqueio de qualquer um dos dois seria adivinhar — e adivinhar errado, aqui,
+  é liberar material contido.
+- **Bloqueio NÃO apaga `release_inspection_id`/`released_by`/`released_at`.**
+  São evidência de auditoria da liberação anterior, e o gate não depende deles.
+- **Comparação estrita entre inspeção e bloqueio:** empate de instante fica do
+  lado seguro. O custo é registrar uma inspeção nova.
+- **Typo em `PRODUCTION_TRACKING_REQUIRED` não derruba o boot** — ele resolve
+  para `block` (o lado seguro) e só gera log. Derrubar produção por um valor
+  que não desliga nada seria punir o lado certo.
+- **Fornecedor estrangeiro declarado como "nacional" não é erro** — a origem é
+  reescrita para `import`. Erro é o inverso (`import` com fornecedor nacional),
+  porque aí há contradição de cadastro com correção clara e barata.
+- **Detecção de ciclo no espaço de `products.id`, não em UUID.** A projeção
+  `hasPathBetween` depende do crosswalk `products.code = items.codigo`;
+  produto sem item correspondente sumiria do grafo e o ciclo passaria
+  justamente onde o cadastro está mais incompleto.
+
+## 2. Arquivos alterados
+
+**Backend — regra**
+- `server/src/modules/production/domain/productionTrackingRules.ts` (regra G6 + código novo)
+- `server/src/modules/production/application/use-cases/ChangeProductionOrderStatusUseCase.ts`
+- `server/src/modules/quality/domain/constants.ts` (`decideLotRelease` recebe `blockedAt`)
+- `server/src/modules/inventory/application/use-cases/ReleaseLotUseCase.ts` (transação + lock + gate novo)
+- `server/src/modules/inventory/application/use-cases/BlockLotUseCase.ts` (`blocked_at`)
+- `server/src/modules/nonConformities/application/use-cases/CreateNonConformityUseCase.ts` (`blocked_at` no bloqueio por RNC)
+- `server/src/modules/quality/application/use-cases/GetLotReleaseEligibilityUseCase.ts` (mesma decisão do POST)
+- `server/src/modules/inventory/domain/repositories/InventoryRepository.ts` + `infrastructure/sequelize/SequelizeInventoryRepository.ts` (`findLotByIdForUpdate`)
+- `server/src/modules/purchases/domain/constants.ts` (`checkPurchaseOriginAgainstSupplier`, `PURCHASE_ORIGIN_MISMATCH_RULE`)
+- `server/src/modules/purchases/application/use-cases/CreatePurchaseUseCase.ts` e `ChangePurchaseStatusUseCase.ts`
+- `server/src/modules/suppliers/presentation/validators/supplierValidators.ts` (`is_foreign` obrigatório na criação)
+- `server/src/services/bomStructureProjection.ts` (`hasProductPathBetween`)
+- `server/src/services/bomService.ts` (chamada da detecção de ciclo)
+- `server/src/config/runtimeEnv.ts` (validação de boot) e `server/src/models/LotControl.ts`
+
+**Migration:** `server/migrations/20260811-000044-lot-blocked-at-quality-gate.cjs`
+— aplicada em `erp_evok_audio` **e** `erp_evok_audio_test`.
+
+**Configuração:** `.env.example` (raiz) e `server/.env.example`.
+
+**Fixture:** `server/scripts/run-api-suite.cjs` — o produto de BOM de CI ganhou
+centro de trabalho + roteiro ATIVO. Sem isso, `production-order-scrap.test.ts`
+não conseguiria iniciar a OP: ele dependia, sem saber, exatamente da brecha 1.
+
+**Frontend (pontual):** `client/src/pages/purchases/SuppliersPage.tsx` e
+`client/src/api/suppliers.ts` — campo "Origem do fornecedor" (sem preseleção).
+Foi necessário: sem ele, a tela "Novo fornecedor" passaria a receber 400.
+
+**Testes novos:** 4 de integração (`production-start-manual-tracking-bypass`,
+`quality-release-after-block`, `purchase-origin-foreign-supplier`,
+`bom-cycle-multilevel`) e 2 unitários
+(`runtime-env-production-tracking`, `production-start-gate-route-step-g6`),
+mais casos novos em `quality-inspection-release-gate`,
+`bom-create-revision-rules-g1` e `purchase-approval-authority`.
+
+**Testes ajustados por mudança de contrato** (payload de fornecedor / `update`
+com transação): `bom-two-level-reparo`, `e2e-cadeia-insumo-produto`,
+`sale-lot-quality-gate`, `clients-suppliers-financial-bom-validation`,
+`quality-lot-lifecycle`.
+
+## 3. Documentação atualizada
+
+- `docs/arquitetura/API.md` — `POST /api/suppliers` (campo obrigatório),
+  `POST /api/purchases` (tabela origem x cadastro), `PUT /api/production-orders/:id/status`
+  (seção nova do gate de partida), `POST /api/inventory/lots/:id/release` e `/block`,
+  `POST /api/engineering/bom` (erros de ciclo), `GET .../release-eligibility`
+- `docs/database/DATABASE.md` — entrada de changelog da migration
+- `docs/database/04-DICIONARIO_DADOS.md` — `lot_controls` (4 colunas do G7)
+- `docs/tributario/04-BLOCO_K.md` — `PRODUCTION_TRACKING_REQUIRED` em produção
+- `docs/governance/TODO.md` — entrada da entrega + pendências
+- JSDoc: todos os módulos citados acima explicam **o furo** que fecharam, não
+  só o que fazem
+
+## 4. Instruções de teste
+
+Pré-requisito: `docker compose up -d` na raiz; `erp_evok_audio_test`
+provisionado (`server/.env.test`). A migration nova precisa estar nos **dois**
+bancos (a guarda `cross-database-drift-guard` reprova se divergirem):
+
+```bash
+cd server
+npm run migration:up        # aplica em erp_evok_audio (.env)
+npm run typecheck           # verde
+npm run test:unit           # 1848/1848, 172 suites
+npm run test:integration    # 196/196, 51 suites (aplica a migration no banco de teste)
+npm run test:edge:strict    # 3/3
+cd ../client && npx tsc -b  # verde
+```
+
+Para provar que os testes novos pegam os defeitos (o que separa teste de
+decoração) — cada reversão abaixo faz a suíte correspondente reprovar:
+
+1. Remova o bloco `G6-START-NO-ROUTE-STEP` de `assertOrderCanStart` →
+   `production-start-manual-tracking-bypass` etapa 2 recebe **200** onde
+   espera 422.
+2. Volte `decideLotRelease(latestInspection)` (sem `blockedAt`) em
+   `ReleaseLotUseCase` → `quality-release-after-block` etapas 2 e 4 liberam o
+   lote bloqueado com a inspeção antiga.
+3. Volte `is_foreign` para `.optional()` no validador → o teste de origem passa
+   a aceitar cadastro sem declaração (etapa 1 recebe 201).
+4. Remova a chamada de `hasProductPathBetween` em `bomService.createBOM` →
+   `bom-cycle-multilevel` grava `B→A` com 201. **Atenção:** isso deixa um
+   ciclo real no banco de teste, que faz `catalog-spreadsheet-import` falhar
+   nas rodadas seguintes (foi observado). Limpe as BOMs `G1CIC-*` antes de
+   seguir.
+
+Conferência manual no banco, depois da suíte:
+
+```sql
+-- O bloqueio tem data, e a liberação a zera.
+SELECT id, lot_number, status, blocked_at, release_inspection_id
+  FROM lot_controls WHERE lot_number LIKE 'G7BLK-%' ORDER BY id;
+
+-- Nenhum ciclo ativo na estrutura (deve devolver 0 linhas).
+WITH RECURSIVE edges AS (
+  SELECT b.product_id AS parent, i.component_product_id AS child
+    FROM bill_of_materials b JOIN bill_of_material_items i ON i.bom_id = b.id
+   WHERE b.status = 'active'
+), walk AS (
+  SELECT parent AS root, child, 1 AS depth FROM edges
+  UNION ALL
+  SELECT w.root, e.child, w.depth + 1 FROM walk w JOIN edges e ON e.parent = w.child WHERE w.depth < 12
+)
+SELECT DISTINCT root FROM walk WHERE child = root;
+
+-- Fornecedor estrangeiro nunca fica registrado como compra nacional
+-- (deve devolver 0 linhas).
+SELECT p.order_number, p.origin, s.company_name, s.is_foreign
+  FROM purchase_orders p JOIN suppliers s ON s.id = p.supplier_id
+ WHERE s.is_foreign = true AND p.origin <> 'import';
+```
+
+## 5. Riscos residuais
+
+1. **Fornecedores antigos com `is_foreign = false` por omissão.** A
+   obrigatoriedade só vale para cadastros novos; não há backfill possível por
+   código (é informação de negócio). Enquanto Compras não revisar a lista, uma
+   importação daquele fornecedor continua passando por baixo da alçada se o
+   pedido não declarar `import`. **Ação humana, não de código.**
+2. **Lotes já `blocked` antes da migration** ficam com `blocked_at = NULL` e
+   seguem liberáveis pela regra antiga (grandfathering deliberado).
+3. **O gate de partida aceita "existe roteiro ativo" sem exigir que as linhas
+   de apontamento sejam do roteiro.** É a escolha que evita OP encalhada; a
+   consequência é que uma OP liberada antes de o roteiro existir continua com
+   linhas manuais, e o vínculo "como executado" dela permanece incompleto —
+   limitação já conhecida e registrada desde o G4.
+4. **A recusa de `origin='import'` com fornecedor nacional vale também para
+   pedidos legados** no momento da aprovação. Se existir esse dado hoje, o
+   pedido só será aprovado depois de corrigir o cadastro do fornecedor (que é
+   escalation-only) ou a origem. Nenhum caso observado nos dois bancos.
+5. **Detecção de ciclo é por consulta, não por constraint.** Duas criações de
+   BOM concorrentes que fechem o ciclo entre si podem, teoricamente, passar
+   (leitura fora da transação). Fechar exigiria constraint recursiva, que o
+   PostgreSQL não oferece diretamente; a criação de BOM é ato humano e raro.
+6. **Nada foi commitado** — tudo permanece no working tree, junto com a
+   entrega do MRP.
+
+---
+
+# HANDOFF — As 2 provas de integração que faltavam: G13 e quarentena no MRP (2026-08-12, working tree, sem commit)
+
+> Terceira entrega do mesmo working tree. Convive com a correção do MRP
+> (netagem multi-demanda) e com as 5 brechas ALTAS de 2026-08-11 documentadas
+> acima; **nenhum arquivo daquelas entregas foi tocado**. Esta entrega é
+> composta de **dois arquivos de teste novos** — nenhuma linha de código de
+> produção foi alterada.
+
+## 1. Resumo da feature
+
+A auditoria de 2026-08-11 apontou dois comportamentos que o `CLAUDE.md`
+afirma há dois dias e que **nunca tinham sido executados contra o
+PostgreSQL**:
+
+| Afirmação | Cobertura que existia | O que faltava |
+|---|---|---|
+| "conta a pagar nasce no recebimento, conta a receber na NF-e" (G13) | 24 testes unitários com repositório **dublê** | dublê não tem `NOT NULL`, `ENUM`, `DEFAULT` nem transação — nada provava que o `INSERT` funciona |
+| "MRP e disponibilidade de OP descontam o saldo retido" (G7) | testes unitários do serviço puro | quarentena só existe em `lot_controls`; sem lote de verdade, a regra nunca roda |
+
+As duas suítes novas percorrem a cadeia **real** (nada de escrita direta no
+banco em caminho de negócio) e conferem cada afirmação financeira **duas
+vezes**: pela API e por **SQL cru**, nomeando coluna a coluna. Nomear as
+colunas é o ponto: é assim que um drift de nome/enum/default derruba o teste,
+em vez de passar batido lendo um objeto que só existe na memória do Node.
+
+| Arquivo | Testes | O que prova |
+|---|---|---|
+| `server/tests/integration/g13-payable-receivable.test.ts` | 8 | pedido aprovado/enviado **não** é passivo; o recebimento cria a AP `pending`, não baixada, sem aprovador, no valor **da entrega**; venda confirmada **não** é recebível; a NF-e autorizada cria as parcelas `pending` somando exatamente a nota |
+| `server/tests/integration/mrp-quarantine-discount.test.ts` | 7 | material em quarentena **não** abate demanda no MRP; o desconto é de leitura (banco intacto); liberado o lote, a necessidade cai **exatamente** o que estava retido |
+
+### Decisões de desenho que valem registro
+
+- **Números escolhidos para o defeito não ter onde se esconder.** No teste do
+  MRP: 45 livres + 60 em quarentena + segurança 5, e demanda de **100**. Se o
+  desconto sumir, o disponível vira 100, a necessidade líquida vira zero, o
+  motor filtra `plannedQuantity > 0` e o plano volta **vazio** — a suíte falha
+  por ausência de linha, que é o sintoma real do defeito na fábrica.
+- **Uma demanda por rodada, no teste do MRP.** Depois da correção de
+  2026-08-11 o plano é netado em conjunto e rateado por origem
+  (`allocatePlanByOrigin.ts`), então `estoque_disponivel` de uma linha é a
+  *parcela* alocada. Com origem única o rateio devolve a linha integral e cada
+  asserto fala do número agregado sem ambiguidade. O rateio em si já é provado
+  por `mrp-multi-demand-netting.test.ts` — duas suítes medindo a mesma coisa
+  se contradizem cedo ou tarde.
+- **Recebimento parcial no teste do G13, não só total.** "Recebeu metade,
+  deve a metade" é a consequência mais fácil de quebrar do G13 (basta alguém
+  usar `purchase.total_amount` no lugar das linhas da entrega) e a que custa
+  dinheiro em duplicidade.
+- **A venda usa lote de verdade, liberado pela Qualidade.** Seria mais barato
+  vender um produto sem lote (o gate D-L degrada e deixa passar), mas aí o
+  teste provaria o caminho fácil. O cenário monta compra -> quarentena (G14) ->
+  inspeção -> liberação (G7) -> transferência INSUMOS->ACABADOS -> venda -> NF-e.
+- **`jest.setTimeout(60_000)` nos dois arquivos.** O default de 5 s do Jest é
+  dimensionado para teste unitário; aqui ele transforma lentidão de banco em
+  "falha" e esconde o resultado verdadeiro (ver risco residual 2).
+- **O achado do plano que nunca encolhe NÃO foi transformado em asserto.**
+  Nem "a linha some" (não some) nem "a linha fica" (fixar comportamento errado
+  num teste o promove a contrato). Fica registrado em JSDoc e no `TODO.md`.
+
+## 2. Documentações atualizadas
+
+- `docs/governance/TODO.md` — seção **"2026-08-12 — As 2 provas de integração
+  que faltavam"**: o que cada suíte prova, os números das execuções reais e
+  **3 achados abertos** (plano de MRP que não encolhe; intermitência de 5 s da
+  suíte de integração; `estoque_retido_qualidade` que não chega a payload
+  nenhum).
+- `docs/governance/HANDOFF_CODEX.md` — esta seção.
+- **JSDoc**: cabeçalho de módulo em cada arquivo novo (o buraco que fecha, o
+  cenário com a tabela de números, a tabela "pergunta x etapa") e JSDoc em
+  todas as funções auxiliares, no padrão das suítes existentes.
+- **Nada em `docs/database/`**: nenhuma migration, nenhum model, nenhuma
+  coluna. **Nada em `docs/projeto/04-USE_CASES.md`**: nenhuma regra de negócio
+  mudou — estas suítes *descrevem* regras que já existiam.
+
+## 3. Instruções de teste
+
+Pré-requisitos: PostgreSQL de teste no ar (`erp_evok_audio_test`,
+`server/.env.test`).
+
+```bash
+cd server
+npm run typecheck            # verde
+npm run test:unit            # 1848/1848, 172 suites (inalterado)
+npm run test:integration     # 211/211, 53 suites
+```
+
+Para rodar só as duas suítes novas (o filtro é regex de caminho):
+
+```bash
+cd server
+node scripts/run-api-suite.cjs integration "g13-payable|mrp-quarantine"
+```
+
+Para provar que os testes novos pegam os defeitos (o que separa teste de
+decoração) — cada reversão abaixo faz a suíte correspondente reprovar:
+
+1. Em `ReceivePurchaseItemsUseCase.createReceiptPayable`, troque o valor por
+   `purchase.total_amount` -> `g13-payable-receivable` etapa 4 acusa
+   R$ 750,00 onde espera R$ 450,00.
+2. Volte `approved_by: userId` na mesma função -> etapa 4 falha no asserto de
+   segregação de funções.
+3. Recoloque a criação das parcelas em `ChangeSaleStatusUseCase`
+   (`quote -> confirmed`) -> etapa 7 encontra recebível antes da nota.
+4. Em `SequelizeItemRepository.listMrpInventoryPositions`, devolva
+   `estoque_atual: physicalQuantity` sem o desconto -> `mrp-quarantine-discount`
+   etapa 3 recebe **zero linhas** (o plano volta vazio, que é o defeito real).
+5. Em `quarantineBalanceService.WITHHELD_LOT_STATUSES`, remova `'quarantine'`
+   -> mesmo efeito da reversão 4.
+
+Conferência manual no banco, depois da suíte:
+
+```sql
+-- G13: nenhuma conta a pagar de pedido que ainda nao foi recebido
+-- (0 linhas para os pedidos criados por esta suite).
+SELECT p.order_number, p.status, ap.id, ap.amount, ap.invoice_number
+  FROM purchase_orders p
+  JOIN accounts_payable ap ON ap.purchase_id = p.id
+ WHERE p.status IN ('pending', 'approved', 'sent')
+   AND ap.invoice_number IS NOT NULL;
+
+-- G13: nenhuma parcela de venda nasceu baixada.
+SELECT COUNT(*) FROM accounts_receivable
+ WHERE invoice_number IS NOT NULL AND (status <> 'pending' OR payment_date IS NOT NULL);
+
+-- G7/MRP: saldo fisico x saldo retido do componente da suite do MRP.
+SELECT pr.code, pr.quantity AS fisico,
+       COALESCE(SUM(l.quantity_available) FILTER (WHERE l.status IN ('quarantine','blocked')), 0) AS retido
+  FROM products pr LEFT JOIN lot_controls l ON l.product_id = pr.id
+ WHERE pr.code LIKE 'MRPQUAR-COMP-%'
+ GROUP BY pr.code, pr.quantity;
+```
+
+## 4. Riscos residuais
+
+1. **O plano de MRP cresce mas nunca encolhe** (achado novo, não corrigido).
+   A ordem planejada criada enquanto o material estava em quarentena continua
+   `RASCUNHO` em `mrp_ordens_planejadas` depois da liberação, dizendo "comprar
+   60" quando a necessidade real virou zero — e segue conversível em
+   requisição. Causa: `upsertPlannedOrders` só toca as linhas que o motor
+   devolveu, e o motor filtra `plannedQuantity > 0`. Corrigir exige decidir o
+   destino da linha órfã (zerar? novo status? apagar?), e o ENUM de
+   `mrp_ordens_planejadas.status` não tem valor para "não é mais necessária" —
+   **decisão de processo, do dono, não de teste**.
+2. **A suíte de integração é intermitente por timeout de 5 s.** Em 4
+   execuções houve 3 falhas, em 3 arquivos diferentes, todas por estouro de
+   5 s sob carga — **duas delas antes** destes arquivos novos. Os 51 arquivos
+   antigos continuam sem `jest.setTimeout`.
+3. **A prova do G13 cobre o caminho síncrono da NF-e** (provedor `mock`, que
+   autoriza na hora). O caminho assíncrono — `GetSaleNfeStatusUseCase`, que
+   cria as mesmas parcelas quando o provedor real responde depois — continua
+   provado apenas por unitário com dublê.
+4. **A AP dos tributos de importação (COMEX) continua fora do G13**, como já
+   registrado; nada nesta entrega mudou isso.
+5. **O desconto de quarentena na disponibilidade de OP** (`BomService.explodeBOM`,
+   o outro leitor citado em `quarantineBalanceService`) **não** é coberto por
+   estas suítes — só o caminho do MRP.
+6. **Nada foi commitado** — os dois arquivos novos ficam no working tree,
+   junto com as duas entregas anteriores.
+
+---
+
+## 2026-08-12 — Guardas documentais ampliadas (drift de doc × realidade)
+
+### Resumo da feature
+
+A auditoria de 2026-08-11 achou a mesma classe de drift documental em 12+
+arquivos: documento vivo afirmando estado falso (migration "não aplicada" que
+está aplicada) ou citando caminho de arquivo que não existe. Havia **uma**
+guarda para isso, e ela olhava um único arquivo (`TODO.md`). Esta entrega
+generaliza a cobertura e institui a convenção mecânica que separa
+**documento vivo** (deve ser verdade hoje) de **registro datado** (descreve um
+dia específico e não se reescreve).
+
+1. **`docs-reality-drift-guard` ampliada** (integração, Postgres real) —
+   varre `docs/**/*.md` + `CLAUDE.md` + `AGENTS.md` em vez de só o `TODO.md`.
+   Ganhou uma segunda asserção: o total de migrations declarado nos **dois
+   pontos de medição canônica** (`CLAUDE.md` §1 e `docs/database/00-INDICE.md`)
+   tem de bater com `SequelizeMeta`. Se o marcador "medição canônica" sumir do
+   documento, a guarda **falha** em vez de passar em silêncio.
+2. **`docs-path-reference-guard` nova** (unitária, sem banco) — todo caminho
+   citado em crase que se pareça com arquivo do repo tem de existir no disco.
+3. **`docsGuardConventions.ts` novo** — a convenção compartilhada (R1 banner de
+   arquivo histórico, R2 citação `>`, R3 caixa `- [x]`), com o raciocínio de
+   projeto: **nenhuma lista de exceções mora no teste**; o documento se declara
+   histórico escrevendo o banner no próprio topo, onde o humano também lê.
+4. **Auto-verificação nas duas guardas** — casos sintéticos que exigem que a
+   detecção reprove quando deve e isente quando deve. Guarda documental verde
+   por regex quebrada é decoração; é a mesma classe das 34 suítes que pulavam
+   em silêncio até 2026-08-10.
+
+### Documentações atualizadas
+
+- `CLAUDE.md` §1 (bloco de guardas reescrito; e correção de caminho:
+  `scripts/seed-usuarios-departamentos.cjs` → `server/scripts/…`)
+- `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md` §2 — a correção proposta
+  foi marcada **implementada em 2026-08-12** (a parte automatizável; a
+  separação editorial `TODO.md` × diário continua aberta)
+- `docs/database/00-INDICE.md` — marcador "Medição canônica" instituído
+- **13 documentos ganharam banner de registro datado/append-only** (topo, sem
+  reescrita do corpo — corrigir relatório de auditoria é falsificá-lo)
+- **9 citações de caminho corrigidas** em docs vivos
+- JSDoc completo nos 3 arquivos de teste/helper novos
+
+### Instruções de teste
+
+```bash
+cd server
+npm run typecheck        # verde
+npm run test:unit        # 173 suítes / 1857 testes — inclui a guarda nova
+npm run test:integration # 52 suítes verdes / 215 testes (ver ressalva abaixo)
+```
+
+Para provar que as guardas **realmente reprovam** (não confie no verde):
+
+1. Em qualquer doc vivo, cite `` `docs/arquivo-que-nao-existe.md` `` →
+   `npm run test:unit` deve falhar apontando arquivo e linha.
+2. No `CLAUDE.md` §1, troque o número de migrations da linha 📏 →
+   `npm run test:integration` deve falhar dizendo o valor real.
+3. Ponha o banner `> ## ⚠️ DOCUMENTO HISTÓRICO` no topo do arquivo do passo 1 →
+   as duas voltam ao verde.
+
+### Risco residual
+
+- **1 falha pré-existente na suíte de integração**, NÃO causada e NÃO mascarada
+  por esta entrega: `traceability-and-audit-log-regression.test.ts` estoura o
+  timeout de 5 s. Provado pré-existente removendo os 3 arquivos desta entrega e
+  rodando de novo (mesma falha única). Causa medida: `GET /api/traceability/items/:id`
+  carrega o histórico **inteiro** do item numa query com 4 níveis de `include`
+  aninhado, **sem paginação e sem limite**; o banco de teste acumulou **286
+  lotes** no produto-fixture (`lot_controls`, 1147 linhas no total) e a
+  expansão passou de 5 s. **Não subi o timeout de propósito** — seria mascarar
+  um provável N+1 num endpoint de produto, que em produção degrada do mesmo
+  jeito para item de alto giro. Precisa de decisão: paginar o endpoint ou
+  limpar/isolar o banco de teste entre execuções.
+- As guardas checam **existência e número**, não semântica. "Tela pendente"
+  continua fora do alcance — juízo humano não é grep.
+- 13 arquivos saíram da varredura pelo banner R1. É deliberado (são auditorias
+  datadas e diários append-only), mas cada banner novo é cobertura a menos:
+  usar só quando o documento for genuinamente um registro de data.
+- **Nada foi commitado** — tudo fica no working tree, junto com as quatro
+  entregas anteriores.

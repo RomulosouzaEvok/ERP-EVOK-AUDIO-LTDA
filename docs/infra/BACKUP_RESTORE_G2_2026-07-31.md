@@ -1,5 +1,18 @@
 # Backup, Restore e Rollback de Migration — Gate G2 (2026-07-31)
 
+> ## ⚠️ REGISTRO DATADO — execução do gate G2 em 2026-07-31
+>
+> Registro da execução real daquela sessão. Cita documentos de UAT da época
+> que não existem mais no repositório.
+>
+> Procedimento vigente de backup/restore: `docs/infra/DEPLOY_UBUNTU.md` e
+> `docs/database/07-DISASTER_RECOVERY.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 Este documento registra a execucao real, nesta sessao, dos itens `DB-10` a
 `DB-13` do cronograma de correcao e go-live. Todos os comandos abaixo foram
 executados de fato neste ambiente (Windows + Docker Desktop + Git Bash) e os

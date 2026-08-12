@@ -1,5 +1,19 @@
 # Estado da sessão — 2026-08-09 / madrugada de 10
 
+> ## ⚠️ DOCUMENTO HISTÓRICO DE SESSÃO — SUPERADO
+>
+> Retrato de **uma sessão específica (2026-08-09 / madrugada de 10)**, não o
+> estado atual. As migrations aqui listadas como "commitadas, NÃO aplicadas ao
+> banco" **estão todas aplicadas** desde 2026-08-10.
+>
+> Para o estado atual: `CLAUDE.md` e
+> `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Documento de retomada.** Serve para parar o trabalho numa máquina e continuar em
 outra sem perder contexto. Leia este arquivo primeiro, depois `git log`, depois a
 seção "Fila de próximos passos".

@@ -670,37 +670,53 @@ evidencia textual do que foi aplicado; o veredito e sempre humano.
 
 ---
 
-## UC-19 [IMPLEMENTADO] (backend; tela web pendente): Gerenciar Importacao (COMEX)
+## UC-19 [IMPLEMENTADO]: Gerenciar Importacao (COMEX)
 
-**Ator:** Analista de Comex
-**Pre-condicoes:** Fornecedor internacional cadastrado
+**Ator:** Analista de Comex (registro) + Diretoria (aprovacao)
+**Pre-condicoes:** Fornecedor internacional cadastrado (`suppliers.is_foreign = true`)
 **Fluxo Principal:**
-1. Usuario acessa "Suprimentos > Importacao"
-2. Registra processo de importacao
+1. Usuario acessa "Compras > Importacao" (tela `/purchases/comex`)
+2. Registra processo de importacao (nasce em `draft`)
 3. Informa dados: fornecedor, produto, quantidade, valor FOB
 4. Sistema calcula tributos de importacao (II, IPI, PIS, COFINS, ICMS)
-5. Registra acompanhamento (embarque, chegada, desembaraco)
-6. Apos recebimento, da entrada no estoque com custo nacionalizado, **no
+5. **Gate da diretoria (G11-COMEX / decisao D-G, commit `4b60a81`, 2026-08-10):**
+   o processo **nao sai de `draft`** sem aprovacao registrada em
+   `import_process_approvals` por usuario com `diretor:approve`. Toda
+   importacao exige diretoria **em qualquer valor** — nao ha faixa de
+   dispensa, ao contrario da compra nacional (que so escala acima de
+   R$ 500.000). Vale a segregacao de funcao D-K: **quem registrou o
+   processo nao pode ser quem aprova**, inclusive `admin`
+6. Registra acompanhamento (embarque, chegada, desembaraco)
+7. Apos recebimento, da entrada no estoque com custo nacionalizado, **no
    mesmo padrao de rastreabilidade do recebimento de compra nacional**: lote
    proprio (`IMP-<ano>-XXXX-ITEM<id>-R001`) nascendo em **quarentena**,
    dual-write no deposito `INSUMOS` e custo medio ponderado (gap G14,
    2026-08-09)
-7. A liberacao do material para a producao depende da inspecao de
+8. A liberacao do material para a producao depende da inspecao de
    recebimento (`POST /api/inventory/lots/:id/release`) — o FEFO da producao
    so consome lote `available`
 
-**Status real (2026-08-06):** backend completo em
+**Status real (atualizado em 2026-08-12):** backend completo em
 `server/src/modules/comex/` (`/api/comex/import-processes`, RBAC via
 módulo `comex`), models `ImportProcess`/`ImportProcessItem`, RF-COM-12
 `[IMPLEMENTADO]` (`docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md` §3), API
-documentada em `docs/arquitetura/API.md` §32. **Tela web (`client/`) ainda não existe**
-— próxima rodada de frontend.
+documentada em `docs/arquitetura/API.md` §32. **A tela web existe desde
+2026-08-10**: `/purchases/comex` (`client/src/pages/purchases/ComexPage.tsx`,
+commit `612e116`), e já conhece o gate de aprovação da diretoria. A afirmação
+"tela web ainda não existe" que constava aqui era resíduo de 2026-08-06 e foi
+corrigida pela auditoria documental de 2026-08-11.
 
 **Decisões de escopo tomadas (não pedidas explicitamente pelo UC, mas
 necessárias para implementar; detalhadas em `docs/governance/HANDOFF_CODEX.md`, seção
 "UC-19 — Importação/COMEX"):**
-- Reaproveitado o cadastro de `Supplier` existente — sem campo dedicado de
-  "fornecedor estrangeiro"; qualquer fornecedor cadastrado pode ser usado.
+- Reaproveitado o cadastro de `Supplier` existente. ⚠️ **Superado em
+  2026-08-10 (G11):** o campo dedicado passou a existir —
+  `suppliers.is_foreign` (BOOLEAN NOT NULL DEFAULT false, migration
+  `20260810-000029`). Ele é a fonte de verdade da alçada: fornecedor marcado
+  como estrangeiro torna a aprovação da diretoria obrigatória em qualquer
+  valor, e **desde 2026-08-12 força `purchase_orders.origin='import'` já na
+  criação do pedido** (declarar `import` para fornecedor nacional é recusado
+  com 422 `G11-ORIGIN-SUPPLIER-MISMATCH`).
 - Alíquotas de II/IPI/PIS/COFINS/ICMS são **informadas manualmente** por
   item, por processo — **sem integração Siscomex/tabela NCM** para
   resolvê-las automaticamente.
@@ -725,7 +741,9 @@ qualidade, enquanto o mesmo insumo comprado no Brasil ficava retido. A
 correção não duplicou lógica: os dois caminhos passaram a chamar
 `services/materialReceiptService.receiveMaterialIntoQuarantine`. O rastro de
 origem também deixou de mentir — `reference_type`/`source_type` passaram de
-`'purchase'` para `'import'` (migration `20260809-000027`, **não aplicada**),
+`'purchase'` para `'import'` (migration `20260809-000027`, **aplicada** — a
+nota de "não aplicada" era de quando a migration acabara de ser escrita;
+conferido em `SequelizeMeta` em 2026-08-12),
 porque `reference_id` aponta para `import_processes.id` e a consulta reversa
 devolvia um pedido de compra alheio.
 
@@ -1068,6 +1086,42 @@ evento relevante, não em batch agendado" (`CLAUDE.md` §7).
   `PATCH /api/items/:id` + UI de edição do item ficam como próximo passo
   (fora do escopo desta entrega, que ficou restrita a `modules/mrp/**` e
   `models/Item*.ts`)
+
+**Correções de 2026-08-11 (auditoria — dois defeitos críticos do MRP):**
+
+1. **Netagem conjunta (crítico 1).** O plano netava demanda a demanda
+   contra o estoque íntegro: cada demanda abatia o saldo inteiro, e duas
+   demandas de 100 do mesmo item contra 100 em estoque produziam necessidade
+   líquida **zero** nas duas — nenhuma ordem planejada, nenhuma requisição, e
+   falta de 100 peças descoberta só no chão de fábrica. Agora todas as
+   demandas do payload disputam **uma** posição de estoque numa única
+   passagem pelo motor, e a necessidade líquida agregada é **rateada por
+   origem** (proporcional à necessidade bruta de cada uma), preservando
+   `origem`/`origem_id`. `estoque_disponivel` passou a ser a parcela do saldo
+   alocada à linha (antes o saldo inteiro era repetido em cada linha, e a
+   linha não fechava). O lote mínimo é aplicado no **agregado**: a soma das
+   linhas é múltipla do lote, a linha individual pode não ser.
+2. **Reexecução idempotente (crítico 2).** Rodar o MRP de novo sobre a mesma
+   demanda — rotina diária do planejador — ressuscitava ordens já
+   convertidas: o upsert reaplicava `status: 'RASCUNHO'` sobre a linha
+   existente, a ordem em `EM_EXECUCAO` voltava a ser elegível e **uma
+   requisição de compra nova nascia a cada rodada**, para o mesmo material.
+   Duas defesas: `status` saiu do UPDATE do upsert (é máquina de estados,
+   não dado recalculado) e o helper compartilhado
+   `createRequisitionFromPlannedOrders` passou a ignorar ordem que já foi
+   convertida (e a deduplicar a mesma ordem repetida no lote), devolvendo
+   `null` — sem cabeçalho vazio — quando nada é convertível.
+   Efeito colateral corrigido no mesmo passo: as instâncias devolvidas por
+   `POST /api/mrp/plan` refletiam `RASCUNHO` mesmo depois da promoção para
+   `EM_EXECUCAO`, e como o controller decide gravar o audit log
+   `mrp_auto_convert_to_requisition` olhando esse status, **o log da
+   conversão automática nunca era escrito** (passo 5 do fluxo acima).
+   A requisição gerada passou também a usar a numeração anual do ERP
+   (`RQ-YYYY-NNNN`) no lugar de `RQ-<timestamp>`.
+
+Provas contra PostgreSQL real:
+`server/tests/integration/mrp-multi-demand-netting.test.ts` e
+`server/tests/integration/mrp-rerun-idempotency.test.ts`.
 
 ---
 
@@ -2242,9 +2296,13 @@ E1-E4/A1), `facilities-driver-use-cases.test.ts` (6, novo — CNH/suspensão),
 `docs/governance/HANDOFF_CODEX.md` e `docs/business/BLOCO_4_FAC_API.md`
 (contrato completo).
 
-**Migrations `20260807-000290..300` ainda NÃO aplicadas** (aguardando
-teste contra cópia de banco com dados reais, RNF-FAC-03) — código de
-aplicação já assume o schema-alvo.
+**Migrations `20260807-000290..300` — APLICADAS.** Estavam marcadas aqui como
+"ainda NÃO aplicadas" (aguardando teste contra cópia de banco com dados reais,
+RNF-FAC-03). A auditoria de 2026-08-11 conferiu `SequelizeMeta` nos dois bancos
+e encontrou as **11 migrations aplicadas** (`000290` a `000300`), além de
+estarem no baseline congelado
+(`server/database/postgresql/00_baseline_frozen.sql`). Nota corrigida em
+2026-08-12.
 
 **Pendência:** telas web (`client/src/pages/facilities/`) ainda consomem o
 contrato antigo e vão quebrar com os breaking changes — fora do escopo

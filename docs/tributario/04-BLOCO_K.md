@@ -136,7 +136,20 @@ lançamento próprio de `product_cost_ledgers`
 | Roteiro ativo por produto fabricado | `Produção > Roteiros de Fabricação` | **0 roteiros cadastrados** |
 | `work_centers.cost_per_hour > 0` | `POST`/`PUT /api/work-centers` | único centro (`MONTAGEM`) com **0** |
 | `production_cost_settings.default_labor_rate_per_hour` | **sem API** ⚠️ | **0** |
-| `PRODUCTION_TRACKING_REQUIRED` | variável de ambiente | ausente → `block` (a lei) |
+| `PRODUCTION_TRACKING_REQUIRED` | variável de ambiente (declarada em `.env.example`) | ausente → `block` (a lei) |
+
+> ⚠️ **Em produção, `warn` derruba o boot (2026-08-11).** A variável desliga,
+> de uma vez, o apontamento obrigatório (G4) e o gate de partida da OP (G6) —
+> as duas regras que sustentam este capítulo. A auditoria de 2026-08-11
+> encontrou-a **sem declaração em lugar nenhum** do repositório (nem
+> `.env.example`, nem docker-compose, nem script de boot): só o código a lia.
+> Uma linha esquecida num `.env` de produção depois do UAT desligaria as duas
+> obrigações **em silêncio**. Agora, com `NODE_ENV=production`, o processo
+> recusa subir com o modo resolvido em `warn`
+> (`server/src/config/runtimeEnv.ts`, ao lado das exigências de `JWT_SECRET`/
+> `DB_PASSWORD`). Valor com typo (ex.: `blok`) **não** derruba o boot: ele
+> resolve para `block`, o lado seguro, e só gera log
+> `G4-TRACKING-MODE-INVALID`.
 
 Sem pelo menos uma taxa horária positiva, **toda conclusão de OP falha** com
 `G4-LABOR-RATE-MISSING`. Isso é intencional (é o zero silencioso virando erro

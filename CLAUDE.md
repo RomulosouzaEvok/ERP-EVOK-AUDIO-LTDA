@@ -1,23 +1,39 @@
 # CLAUDE.md — ERP Evok Áudio LTDA
 **Single Source of Truth (SSOT) para o projeto ERP**
 
-**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 entregue (2026-08-04/07); **cadeia do produto: os 17 gaps fechados em 2026-08-09/10** (o G6 fechou por último, com aprovação do dono); o **banco voltou a ser reproduzível** (2026-08-10); **banco de dev limpo + carga inicial real: 327 insumos da fábrica carregados via API** (2026-08-10, tarde) | **Data:** 10 de agosto de 2026
+**Status:** 🟡 Pré-Go-Live G6 — bloqueadores P0 remediados (commit `d1d3aff`, 2026-08-02); Fase 2/P1 entregue (2026-08-04/07); **cadeia do produto: os 17 de 17 gaps fechados em 2026-08-09/10** (o G6 fechou por último, com aprovação do dono) e **endurecidos em 2026-08-12** (brechas de G6/G7/G11/G1 fechadas); o **banco voltou a ser reproduzível** (2026-08-10); **banco de dev limpo + carga inicial real: 327 insumos da fábrica carregados via API** (2026-08-10, tarde) | **Data:** 12 de agosto de 2026
 **Próximo passo:** fábrica conferir os 59 insumos marcados e completar o cadastro (custos, produtos acabados, BOM, roteiros, inventário — ver `docs/carga-inicial/GUIA_CARGA_INICIAL.md`) → teste ponta a ponta com escrita real → UAT completo → aprovação formal G6 → servidor de produção → Go-Live. Em paralelo, frente nova: n8n + IA + integração Meta (webhook `POST /api/webhooks/n8n` já existe; criar perfil de acesso dedicado ao robô antes do 1º fluxo)
 
 > 📌 **Fonte de pendências: `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`**
 > (retrato MEDIDO contra banco/código/suíte), **não** o `TODO.md` — auditoria de
 > 2026-08-10 encontrou ~12 alegações falsas nas 190 caixas abertas do TODO.md
 > (migrations "não aplicadas" já aplicadas, telas "pendentes" que existem).
-> Duas guardas novas seguram isso: `tests/unit/audit-coverage-guard.test.ts`
+> Três guardas seguram isso: `server/tests/unit/audit-coverage-guard.test.ts`
 > (módulo de escrita sem `logAction` reprova; 14 módulos em débito congelado,
-> lista só encolhe) e `tests/integration/docs-reality-drift-guard.test.ts`
-> (TODO.md citando migration pendente já aplicada reprova).
+> lista só encolhe), `server/tests/integration/docs-reality-drift-guard.test.ts`
+> e `server/tests/unit/docs-path-reference-guard.test.ts` — as duas últimas
+> **ampliadas/criadas em 2026-08-12**, depois que a auditoria de 2026-08-11
+> achou a mesma classe de drift em 12+ arquivos:
+>
+> - **`docs-reality-drift-guard`** varre `docs/**/*.md` + `CLAUDE.md` +
+>   `AGENTS.md` (antes só o `TODO.md`) e reprova migration citada como
+>   pendente que já consta em `SequelizeMeta`; confere também o total de
+>   migrations declarado nos **dois pontos de medição canônica**
+>   (a linha 📏 abaixo e `docs/database/00-INDICE.md`).
+> - **`docs-path-reference-guard`** (unitária, sem banco) reprova caminho de
+>   arquivo citado em crase que não existe no disco.
+>
+> Convenção de isenção (banner de arquivo histórico, citação `>`, caixa
+> `- [x]`, marcador `(a criar)`) em
+> `server/tests/helpers/docsGuardConventions.ts`. **Nenhuma lista de exceções
+> mora no teste** — um documento se declara registro datado escrevendo o
+> banner no próprio topo, onde o leitor humano também o vê.
 > **Cadastro carregado mas cru:** 327 itens com custo 0/estoque 0/unidade UN;
 > 59 marcados `revisar=SIM` no CSV (5 bobinas CRÍTICAS: MP-057/060/061/064/090);
 > sem produto acabado, sem BOM, sem roteiro → **nenhuma OP consegue iniciar**.
 
 > ⚠️ **Critério de aceite corrigido em 2026-08-10.** Typecheck + suíte unitária
-> verdes **não** provam que um módulo funciona: os 1807 testes unitários usam
+> verdes **não** provam que um módulo funciona: os 1848 testes unitários usam
 > repositório dublê e nenhum toca o PostgreSQL. Quatro rodadas de defeito
 > silencioso vieram daí. O aceite honesto é **uma escrita real bem-sucedida no
 > fluxo principal**. Leitura obrigatória antes de declarar qualquer coisa
@@ -50,7 +66,7 @@
 
 ### Status Atual
 - ✅ Backend: Node.js + Express + Sequelize (30+ módulos, Clean Architecture — use-cases desacoplados do Sequelize direto em 22+ módulos desde 2026-08-05)
-- ✅ Database: PostgreSQL 16 — **165 migrations versionadas e aplicadas**, **202 tabelas**, **467 foreign keys** (medido no banco em 2026-08-11, não estimado). Os dois bancos (`erp_evok_audio` e `erp_evok_audio_test`) são **idênticos**, e o baseline passou a ser **DDL estático congelado** (`server/database/postgresql/00_baseline_frozen.sql`) em vez de gerado a partir dos models — banco novo nasce igual ao atual. Ver `docs/database/DATABASE.md`, seção *"Baseline congelado"*
+- ✅ Database: PostgreSQL 16 — **📏 MEDIÇÃO CANÔNICA (2026-08-12, contada no PostgreSQL): 166 migrations aplicadas · 202 tabelas · 467 foreign keys.** Esta é a **única** linha do projeto que carrega esses números; qualquer outro documento deve apontar para cá em vez de repeti-los (a repetição foi a causa de 3 contagens divergentes convivendo até 2026-08-11). A 166ª é `20260811-000044-lot-blocked-at-quality-gate.cjs`. Os dois bancos (`erp_evok_audio` e `erp_evok_audio_test`) são **idênticos**, e o baseline passou a ser **DDL estático congelado** (`server/database/postgresql/00_baseline_frozen.sql`) em vez de gerado a partir dos models — banco novo nasce igual ao atual. Ver `docs/database/DATABASE.md`, seção *"Baseline congelado"*
 - ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela. **A tela de Importação/COMEX existe** (`/purchases/comex`, `client/src/pages/purchases/ComexPage.tsx`, commit `612e116`) e já conhece o gate de aprovação da diretoria; a **tela de roteiro de fabricação** entrou em `b52470d`. A **tela do Plano Mestre de Produção (MPS)** entrou em 2026-08-10 (`/production/master-plans`), fechando o último módulo de backend sem interface. As exceções restantes são por desenho, não por atraso: inventário mobile (QR, propositalmente mobile-only) e endpoints de webhook (integração backend-to-backend, sem UI)
 - ✅ **App mobile novo** (`mobile/`, Expo/React Native): login JWT, scan de estoque QR, histórico de movimentações, execução de contagens cíclicas (pool/atribuídas) — entregue em 2026-08-06, validado só por typecheck/bundle, **sem teste em dispositivo real ainda**
 - ✅ **App Android TV novo** (`tv/`, react-native-tvos): painel de demandas por departamento (recebimento, requisições, expedição, qualidade), auto-refresh 60s — entregue em 2026-08-06, mesma ressalva de validação (sem hardware real testado)
@@ -58,7 +74,7 @@
 - ✅ **Auditoria multi-agente de 7 frentes concluída em 2026-08-06** (geral, segurança, DBA, infra, frontend, mobile/TV, documentação) com remediação imediata de 4 frentes no mesmo dia — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada 2026-08-06, e pendências residuais em `docs/governance/TODO.md`
 - ✅ **Terceira rodada de entregas em 2026-08-06** (auth refresh deslizante + logging estruturado Winston, paginação/renovação de sessão em `mobile/`/`tv/`, telas web de reatribuição de contagem e fornecedor padrão do item, e 3 gaps de negócio fechados — tabela de preços por cliente, alteração de pedido confirmado, faturamento parcial de NF-e em Vendas; paradas de máquina com OEE preciso em Produção; conciliação bancária OFX em Financeiro) — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`, entrada "terceira rodada", e `docs/governance/HANDOFF_CODEX.md`
 - ✅ **Quarta rodada de entregas em 2026-08-06** (`Asset.status` passou a sincronizar automaticamente com o ciclo de vida da ordem de manutenção — RF-PAT-05 `[IMPLEMENTADO]`, `docs/patrimonio/03-MANUTENCAO.md` §6; e o módulo **Importação/COMEX** (UC-19, RF-COM-12) foi implementado do zero — backend completo em `server/src/modules/comex/`, `/api/comex/import-processes`) — veja `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` e `docs/governance/HANDOFF_CODEX.md`
-- ✅ **Cadeia do produto — 16 dos 17 gaps fechados em 2026-08-09/10.** SSOT do estado: `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` (§3 ondas, §4 decisões D-A a D-K do dono, §5 critério de pronto, §6 registro de execução commit a commit). O que mudou no comportamento do sistema:
+- ✅ **Cadeia do produto — 17 dos 17 gaps fechados em 2026-08-09/10** (o G6 foi o último; ver o item dele no fim desta lista). SSOT do estado: `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` (§3 ondas, §4 decisões D-A a D-K do dono, §5 critério de pronto, §6 registro de execução commit a commit). O que mudou no comportamento do sistema:
   - **Engenharia (G1, `067472a`):** as duas BOMs paralelas viraram **fonte única** (`bill_of_materials`); escrita paralela em `item_estruturas` encerrada com 422; MRP lê por projeção em tempo de leitura, sem réplica
   - **Produção (G5 `c21f81b` + G4 `b954fa5`):** roteiro de fabricação ganhou API e tela, e **concluir OP sem apontamento passa a falhar** — obrigação do SPED Bloco K (Ajuste SINIEF 2/09 cl. 3ª §7º III), documentada em `docs/tributario/04-BLOCO_K.md`
   - **PCP (G17, `3e3827e`):** **Plano Mestre de Produção (MPS)** entre a carteira e a ordem. Venda **não** gera OP automática (decisão D-F: existe PCP formal). Limitação conhecida: `sales` não tem data de entrega prometida, então não há baldes de tempo
@@ -66,9 +82,14 @@
   - **Vendas (G9, `ed47e10`):** a **baixa de estoque saiu da confirmação do pedido e passou para a autorização da NF-e**; confirmar passou a reservar
   - **Financeiro (G13, `2648686`):** **conta a pagar nasce no recebimento**, **conta a receber na NF-e** (CPC 00 R2 4.56/4.58 e CPC 47); nenhuma parcela nasce paga
   - **Compras (G11 `ec1b499`, G11-COMEX `4b60a81`, D-K `bc13006`):** alçada por **origem** (nacional acima de R$ 500 mil e **toda** importação exigem diretoria), gate da diretoria na saída de `draft` do COMEX, e **segregação de função: quem solicita não aprova** — nos 4 pontos de aprovação, **sem exceção para `admin`**
-  - 🟡 **Ação operacional antes de produção (parcialmente resolvida):** a segregação de função (D-K) é sobre identidade, não privilégio. O impasse original — **1 único usuário capaz de aprovar**, autor de 18/18 pedidos e 13/13 requisições — foi desfeito **para teste** em 2026-08-10 por `scripts/seed-usuarios-departamentos.cjs`, que criou 20 usuários departamentais, entre eles **Diretor** (perfil `Diretoria`, com `diretor:approve`) e **Gerente de Compras** (perfil `Compras (gerente)`) — ambos distintos do `admin` autor dos documentos, portanto aptos a aprovar. **O que ainda falta para produção:** esses usuários são deliberadamente de teste (domínio `@teste.evokaudio`, senha aleatória em `CREDENCIAIS_TESTE.local.txt`, e o próprio script recusa rodar com `NODE_ENV=production`). O Go-Live exige **pelo menos um aprovador real no domínio `@evokaudio.com.br`**, que é decisão de pessoa, não de código. Ver `PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4, D-K item 2
+  - 🟡 **Ação operacional antes de produção (parcialmente resolvida):** a segregação de função (D-K) é sobre identidade, não privilégio. O impasse original — **1 único usuário capaz de aprovar**, autor de 18/18 pedidos e 13/13 requisições — foi desfeito **para teste** em 2026-08-10 por `server/scripts/seed-usuarios-departamentos.cjs`, que criou 20 usuários departamentais, entre eles **Diretor** (perfil `Diretoria`, com `diretor:approve`) e **Gerente de Compras** (perfil `Compras (gerente)`) — ambos distintos do `admin` autor dos documentos, portanto aptos a aprovar. **O que ainda falta para produção:** esses usuários são deliberadamente de teste (domínio `@teste.evokaudio`, senha aleatória em `CREDENCIAIS_TESTE.local.txt`, e o próprio script recusa rodar com `NODE_ENV=production`). O Go-Live exige **pelo menos um aprovador real no domínio `@evokaudio.com.br`**, que é decisão de pessoa, não de código. Ver `PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4, D-K item 2
   - ✅ **G6 (2026-08-10, último a fechar):** iniciar a produção deixou de "só gravar a data". A OP só entra em `in_progress` se houver **etapa contra a qual apontar** (`G6-START-NO-ROUTE`) e **nenhum centro de trabalho inativo** (`G6-START-WC-INACTIVE`), e a partida registra quem assumiu a ordem. O gap ficou três rodadas aberto por falta de apoio no schema; o que destravou foi o par G5 (roteiro tem API) + G4 (apontamento obrigatório): a pré-condição real passou a existir **sem coluna nova**. O ganho de processo é mover a recusa da conclusão para a partida — antes, produto sem roteiro era liberado, o lote era montado e só então recusado, com material já consumido
-- ✅ **Rede de segurança armada (2026-08-10).** Os 34 arquivos de teste de integração **pulavam em silêncio** e reportavam verde, porque `npm run test:integration` não definia `RUN_INTEGRATION`. O script passou a apontar para o runner que sobe a API e usa o banco de teste isolado (`node scripts/run-api-suite.cjs integration`). Três guardas novas contra a classe de defeito que passava por typecheck **e** por 1800 testes: `schema-model-drift-guard`, `column-name-drift-guard` e `enum-literal-guard` (`server/tests/integration/`) — **as três verdes**. **Quarta guarda, 2026-08-10:** `cross-database-drift-guard` — as três anteriores rodam **todas** contra `erp_evok_audio_test`, e por isso nenhuma viu a migration do G18 aplicada só ali, com a coluna faltando no banco real; a guarda nova executa `server/scripts/comparar-bancos.cjs` e reprova quando os dois bancos divergem (caminho corrigido em 2026-08-11 — o doc citava `scripts/`, que não existe)
+- ✅ **Rede de segurança armada (2026-08-10).** Os 34 arquivos de teste de integração **pulavam em silêncio** e reportavam verde, porque `npm run test:integration` não definia `RUN_INTEGRATION`. O script passou a apontar para o runner que sobe a API e usa o banco de teste isolado (`node server/scripts/run-api-suite.cjs integration`, ou `node scripts/run-api-suite.cjs integration` a partir de `server/`). Três guardas novas contra a classe de defeito que passava por typecheck **e** por 1800 testes: `schema-model-drift-guard`, `column-name-drift-guard` e `enum-literal-guard` (`server/tests/integration/`) — **as três verdes**. **Quarta guarda, 2026-08-10:** `cross-database-drift-guard` — as três anteriores rodam **todas** contra `erp_evok_audio_test`, e por isso nenhuma viu a migration do G18 aplicada só ali, com a coluna faltando no banco real; a guarda nova executa `server/scripts/comparar-bancos.cjs` e reprova quando os dois bancos divergem (caminho corrigido em 2026-08-11 — o doc citava `scripts/`, que não existe)
+- ✅ **Remediação de 2026-08-12 — os gates deixaram de ter porta dos fundos.** A auditoria adversarial de 2026-08-11 (tripla: ampla, varredura dupla e escrita real) **reprovou** o estado e produziu esta rodada:
+  - **2 defeitos críticos no MRP corrigidos.** O plano deixou de misturar demandas de origens diferentes num balde só (`allocatePlanByOrigin.ts` novo) e a criação de requisição a partir de ordens planejadas ficou idempotente — rodar o MRP duas vezes não gera mais requisição duplicada. Provados contra PostgreSQL real em `mrp-multi-demand-netting`, `mrp-rerun-idempotency` e `mrp-quarantine-discount`
+  - **5 brechas de gate fechadas.** Fornecedor estrangeiro passou a **forçar** `origin='import'` já na criação do pedido (antes a origem só era resolvida na aprovação, e o registro ficava contradizendo `suppliers.is_foreign`); declarar `import` para fornecedor nacional virou 422 `G11-ORIGIN-SUPPLIER-MISMATCH`; a partida de OP não aceita mais desvio por apontamento manual; a liberação de lote depois de bloqueio pela Qualidade ganhou trava (`lot_blocked_at_quality_gate`, migration `20260811-000044`); e o ciclo de BOM passou a ser detectado em multinível
+  - **G13 e quarentena provados de verdade**, não por teste de dublê: `g13-payable-receivable.test.ts` e `mrp-quarantine-discount.test.ts` escrevem no banco real
+  - 🟡 **Achado que ficou aberto — decisão de processo, não de código:** o plano de MRP **não encolhe** quando a necessidade some (o material chega, a OP é cancelada). Hoje as ordens planejadas obsoletas permanecem no plano e cabe ao PCP ignorá-las. Fechar isso é escolher entre expirar automaticamente e exigir baixa manual — pergunta para o dono, não para o programador. Rastreado em `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`
 
 ---
 
@@ -104,7 +125,7 @@ NODE_ENV             # development | production
 erp-evok-audio/
 ├── server/
 │   ├── src/
-│   │   ├── models/                  # 18 modelos Sequelize (Item, Fornecedor, OP, etc)
+│   │   ├── models/                  # 175 modelos Sequelize (medido 2026-08-12; o número "18" que estava aqui era de 2026-08-02)
 │   │   ├── modules/                 # Módulos por domínio
 │   │   │   ├── auth/                  # Login, JWT, perfis (admin, operator, financial)
 │   │   │   ├── products/              # Produtos/Items (HANDOFF em Fase 4)
@@ -116,7 +137,7 @@ erp-evok-audio/
 │   │   │   └── ...
 │   │   ├── controllers/             # Camada HTTP
 │   │   ├── middlewares/             # Auth, errorHandler
-│   │   ├── routes/                  # 19 arquivos de rotas
+│   │   ├── routes/                  # 1 arquivo residual — as rotas vivem em `modules/*/presentation/routes/` (52 arquivos, medido 2026-08-12)
 │   │   ├── services/                # Dashboard, relatórios, QR, upload
 │   │   ├── scripts/backfill/        # Migrations Product→Item (Fase 4)
 │   │   └── config/
@@ -140,14 +161,15 @@ erp-evok-audio/
 │   ├── arquitetura/                 # Requisitos + diagramas (sequência, infra, BPMN) — NOVO 2026-08-06
 │   ├── database/                    # Modelo de dados estruturado (00-INDICE.md a 07-DISASTER_RECOVERY.md) — NOVO 2026-08-06
 │   ├── business/                    # Casos de uso em draft (UC-30+) + regras de negócio — a consolidar em projeto/04-USE_CASES.md conforme implementado
-│   ├── governance/                  # TODO.md (SSOT de pendências dia a dia) + reorganização de departamentos
+│   ├── governance/                  # RESIDUAIS_ABERTOS_*.md (fonte MEDIDA de pendências) + TODO.md (diário/rastreamento histórico) + reorganização de departamentos
 │   ├── manual/                      # Manual do usuário final — NOVO 2026-08-06
 │   ├── infra/                       # Deploy Ubuntu/produção, Docker/Postgres, backup/restore
 │   ├── governance/
 │   │   ├── auditorias/                # AUDITORIA_PRE_PRODUCAO_*, CONFORMIDADE_CHECK_*, LEVANTAMENTO_ERP_* — achados
 │   │   ├── go-live/                   # GO_LIVE_G6_CHECKLIST, DIARIO_BORDO_GO_LIVE_G6 (append-only), PLANO_IMPLEMENTACAO_*
 │   │   ├── HANDOFF_CODEX.md           # Product/Item migration (Phase 1–4.1) + handoffs de bloco
-│   │   └── TODO.md                    # SSOT de pendências dia a dia
+│   │   ├── RESIDUAIS_ABERTOS_2026-08-10.md  # FONTE DE PENDÊNCIAS (medida contra banco/código/suíte)
+│   │   └── TODO.md                    # Diário/rastreamento histórico dia a dia (NÃO é fonte confiável de pendências)
 │   ├── producao/, administrativo/, comercial/, financeiro/, juridico/,
 │   │   logistica/, patrimonio/, qualidade/, rh/, seguranca_trabalho/,
 │   │   suprimentos/, tributario/    # docs departamentais (00-README.md + NN-TEMA.md cada)
@@ -269,8 +291,8 @@ npm run server
 # 5. Teste — os scripts vivem em `server/` e `client/`, NÃO na raiz
 #    (a raiz só tem start/server/client/dev/install-all — auditoria 2026-08-11)
 cd server
-npm run test:unit          # 1811 testes / 167 suítes (repositório dublê)
-npm run test:integration   # 167 testes / 44 suítes contra PostgreSQL real
+npm run test:unit          # 1848 testes / 172 suítes (repositório dublê) — medido 2026-08-12
+npm run test:integration   # 211 testes / 53 suítes contra PostgreSQL real, sem skips — medido 2026-08-12
 npm run test               # unit + integration + edge
 npm run typecheck
 
@@ -336,10 +358,19 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 **Tradeoff:** Menos previsível (não há "MRP run" com hora específica), mas mais preciso.
 
 ### Foreign Keys Obrigatórias
-**Decisão:** Integridade referencial obrigatória — **459 FKs** no banco (contadas em `pg_constraint` em 2026-08-10; base de 133 em 2026-08-02), aplicadas via migrations versionadas, com `ON DELETE RESTRICT` (padrão) ou `CASCADE`/`SET NULL` (quando apropriado). A guarda `schema-model-drift-guard` reprova FK `ON DELETE SET NULL` sobre coluna `NOT NULL` — contradição que já escondeu 12 colunas indevidamente obrigatórias.
+**Decisão:** Integridade referencial obrigatória — contagem de FKs em §1 (medição canônica; base de 133 em 2026-08-02), aplicadas via migrations versionadas, com `ON DELETE RESTRICT` (padrão) ou `CASCADE`/`SET NULL` (quando apropriado). A guarda `schema-model-drift-guard` reprova FK `ON DELETE SET NULL` sobre coluna `NOT NULL` — contradição que já escondeu 12 colunas indevidamente obrigatórias.
 
 **Por quê:** Integridade referencial, sem órfãos, auditoria
 **Tradeoff:** Mais rígido (ex: não pode deletar fornecedor com compras abertas), mas banco garante consistência
+
+⚠️ **Exceção conhecida e aberta (P1-07, promovida em 2026-08-12):** esta regra
+tem **2 violações medidas**. `purchase_receipts` **não tem nenhuma FK** (nem
+`purchase_id`, nem `received_by`) e `product_cost_ledgers.product_id` também
+não tem (só `created_by` tem). As duas tabelas estão vazias hoje, então não há
+órfão a limpar e a correção é uma migration aditiva sem backfill — mas o
+recebimento de compra é justamente o evento que dispara entrada de estoque e
+nascimento de conta a pagar (G13). **Corrigir antes da carga inicial gerar
+recebimento real.** Rastreado em `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md` §3.2b.
 
 ### Sem Soft Delete Padrão (Apenas Category)
 **Decisão:** Apenas `Category` tem soft delete (`active` flag); outras tabelas usam `status` enum ou `deleted_at`.
@@ -352,7 +383,7 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 ## 8. Links Críticos
 
 ### Documentação Técnica
-- **[docs/projeto/01-PLANO.md](docs/projeto/01-PLANO.md)** — Arquitetura, 18 modelos, stack, roadmap técnico
+- **[docs/projeto/01-PLANO.md](docs/projeto/01-PLANO.md)** — Arquitetura, modelos, stack, roadmap técnico (o doc descreve os 18 modelos do núcleo original; hoje são 175 — ver §3)
 - **[docs/projeto/02-PLANO_INDUSTRIAL.md](docs/projeto/02-PLANO_INDUSTRIAL.md)** — 21 departamentos, BOM de auto-falante, processos produção
 - **[docs/projeto/04-USE_CASES.md](docs/projeto/04-USE_CASES.md)** — Casos de uso (UC-01 a UC-XX)
 - **[docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md](docs/arquitetura/DOCUMENTO_DE_REQUISITOS.md)** — Índice executivo de Requisitos Funcionais por módulo (link para UC/rota real cada um), + RNFs por referência
@@ -361,12 +392,13 @@ npm run migration:up --name 01_schema.sql  # Aplica específica
 - **[docs/manual/00-MANUAL_DO_USUARIO.md](docs/manual/00-MANUAL_DO_USUARIO.md)** — Manual do usuário (conteúdo prático completo em Vendas, Compras, Estoque/Inventário e Produção; demais módulos ainda esqueleto)
 - **[docs/governance/HANDOFF_CODEX.md](docs/governance/HANDOFF_CODEX.md)** — Migração Product → Item (Fase 1–4.1, backfill scripts)
 - **[docs/database/DATABASE.md](docs/database/DATABASE.md)** — Changelog histórico narrativo de modelagem/migrations
-- **[docs/database/00-INDICE.md](docs/database/00-INDICE.md)** — Documentação de dados de referência sempre-atual (Modelo Conceitual/MER, Modelo Lógico/DER, Modelo Físico/DDL, Dicionário de Dados das 78 tabelas, Acessos e Isolamento, Estruturas Programáveis, Disaster Recovery) — NOVO, 2026-08-06
+- **[docs/database/00-INDICE.md](docs/database/00-INDICE.md)** — Documentação de dados de referência sempre-atual (Modelo Conceitual/MER, Modelo Lógico/DER, Modelo Físico/DDL, Dicionário de Dados, Acessos e Isolamento, Estruturas Programáveis, Disaster Recovery) — contagem de tabelas em §1; o "78 tabelas" que constava aqui era de 2026-08-06
 
 ### Crítico — Go-Live
 - **[docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md](docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md)** — 4 bloqueadores P0, 15 altos P1, plano 30h
 - **[docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md](docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md)** — Plano operacional/checklist de Go-Live, gate atual (UAT + servidor de produção pendente)
-- **[docs/governance/TODO.md](docs/governance/TODO.md)** — Rastreamento dia a dia de tarefas/bugs/achados de auditoria (SSOT de pendências)
+- **[docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md](docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md)** — **Fonte de pendências abertas**, medida contra banco/código/suíte. É esta que vale quando divergir do `TODO.md`
+- **[docs/governance/TODO.md](docs/governance/TODO.md)** — Diário/rastreamento histórico dia a dia de tarefas/bugs/achados. **Não é fonte confiável do que ainda está aberto** (auditoria de 2026-08-10 achou ~12 alegações falsas entre as 190 caixas `- [ ]`)
 - **[docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md](docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md)** — Diário de bordo append-only da execução do Go-Live G6
 - **[docs/arquitetura/API.md](docs/arquitetura/API.md)** — Endpoints, payloads, erros
 
@@ -422,8 +454,8 @@ R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de 
 
 ---
 
-**Versão:** 1.4 SSOT
-**Última atualização:** 10 de agosto de 2026 (cadeia do produto: 16/17 gaps fechados · baseline do schema congelado, banco reproduzível · rede de segurança de integração armada)
+**Versão:** 1.5 SSOT
+**Última atualização:** 12 de agosto de 2026 (cadeia do produto: **17/17** gaps fechados e endurecidos · 2 críticos de MRP corrigidos · 5 brechas de gate fechadas · baseline do schema congelado, banco reproduzível · suíte de integração real 211/211 · consolidação documental: `AGENTS.md` aposentado, 11 alegações falsas corrigidas, fonte de pendências unificada em `RESIDUAIS_ABERTOS_2026-08-10.md`)
 **Próxima revisão:** Pós-Go-Live (semana 1 de setembro)
 
 Remova referências a análises antigas. Este documento é o guia único de verdade.

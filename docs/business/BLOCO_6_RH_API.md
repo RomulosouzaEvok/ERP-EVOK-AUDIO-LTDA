@@ -5,7 +5,7 @@
 existe parcialmente. `server/src/modules/employees/` (CRUD de `Employee`,
 segregação de campo sensível BR-RH-020) e `/api/departments` já estão em
 produção e **não são reescritos aqui** — apenas estendidos. Este é o sexto e
-último bloco do pipeline (`docs/business/pipeline-modulos-novos.md`): SST →
+último bloco do pipeline de módulos novos: SST →
 TI → Jurídico → Facilities → Marketing → **RH (este documento)**.
 **Insumo:** `docs/business/BLOCO_6_RH_REQUISITOS.md` (81 RF-RH, UC-67 a
 UC-71, RNF-RH-01..05).

@@ -13,7 +13,7 @@ copiado do `TODO.md`. Onde o `TODO.md` diverge da realidade, está marcado.
 | O que | Resultado | Como foi medido |
 |-------|-----------|-----------------|
 | Migrations | **164 aplicadas**, última `20260810-000041` | `npm run migration:status` |
-| Dev × Teste | **Bancos idênticos** — 0 divergência de coluna, tipo, índice ou constraint | `node scripts/comparar-bancos.cjs` |
+| Dev × Teste | **Bancos idênticos** — 0 divergência de coluna, tipo, índice ou constraint | `node server/scripts/comparar-bancos.cjs` |
 | Suíte de integração real | **43 suítes, 166 testes, 100% passando, sem skips** | `npm run test:integration` |
 | `purchase_orders.requester_id` | **NOT NULL** | `information_schema.columns` |
 | Telas de Roteiro e Plano Mestre | **Existem** (`ProductionRoutesPage.tsx`, `MasterProductionPlanPage.tsx`) | `ls client/src/pages/production/` |
@@ -58,7 +58,24 @@ documentação. Não há CI que pergunte "esta pendência ainda existe?".
 | "Tela web pendente (Plano Mestre)" | `MasterProductionPlanPage.tsx` existe |
 | "G4 (apontamento obrigatório) segue não iniciado" | Entregue em `b954fa5` |
 
-### A correção proposta (não implementada ainda)
+### A correção proposta — guarda automática ✅ IMPLEMENTADA em 2026-08-12
+
+> **Status:** a parte automatizável desta proposta **foi implementada em
+> 2026-08-12**. A separação editorial `TODO.md` × diário (abaixo) continua
+> aberta — é decisão de processo, não de código.
+>
+> O que entrou:
+>
+> | Guarda | Onde | O que reprova |
+> |---|---|---|
+> | `docs-reality-drift-guard` (ampliada) | `server/tests/integration/docs-reality-drift-guard.test.ts` | Migration citada como pendente em **qualquer** doc vivo (`docs/**/*.md` + `CLAUDE.md` + `AGENTS.md`) que já conste em `SequelizeMeta`; e divergência do total de migrations nos **dois pontos de medição canônica** (`CLAUDE.md` §1 e `docs/database/00-INDICE.md`) |
+> | `docs-path-reference-guard` (nova, unitária) | `server/tests/unit/docs-path-reference-guard.test.ts` | Caminho de arquivo citado em crase num doc vivo que **não existe no disco** — a classe de drift que a auditoria de 2026-08-11 achou em 12+ arquivos (D3: `scripts/comparar-bancos.cjs` sem o prefixo `server/`) |
+>
+> A convenção de isenção (banner de arquivo histórico, citação `>`, caixa
+> `- [x]`, marcador `(a criar)`) está documentada em
+> `server/tests/helpers/docsGuardConventions.ts`. Nenhuma das duas guardas
+> carrega lista de arquivos isentos: um documento se declara histórico
+> escrevendo o banner no próprio topo, à vista do leitor.
 
 Separar os dois papéis em dois arquivos:
 
@@ -110,6 +127,34 @@ Controladoria começar a preencher os custos (etapa 4 do guia de carga).
 **Correção sugerida:** chamar `logAction` em `create`, `update` e `inactivate`
 de `itemController`, no mesmo padrão já usado por `productController`. É
 trabalho pequeno e localizado. **Não implementado** — fora do escopo pedido.
+
+### 3.2b 🟡 `purchase_receipts` não tem nenhuma foreign key (P1-07, promovido em 2026-08-12)
+
+Estava enterrado como caixa `- [ ]` no `TODO.md` desde a auditoria de
+2026-08-09 e nunca subiu para esta lista. **Continua aberto** — a auditoria
+documental de 2026-08-12 remediu e confirmou.
+
+**Medido em `pg_constraint` (2026-08-12), banco `erp_evok_audio`:**
+
+| Tabela | FKs esperadas | FKs existentes |
+|---|---|---|
+| `purchase_receipts` | `purchase_id` → `purchase_orders`, `received_by` → `users` | **nenhuma** |
+| `product_cost_ledgers` | `product_id` → `products`, `created_by` → `users` | só `created_by` |
+
+**Por que importa:** contradiz frontalmente a decisão arquitetural registrada
+em `CLAUDE.md` §7 ("Foreign Keys Obrigatórias — integridade referencial
+obrigatória, 467 FKs"). São as **duas únicas exceções conhecidas**, e uma delas
+está no caminho do recebimento de compra — o evento que dispara entrada de
+estoque **e** nascimento de conta a pagar (G13). Sem FK, um recebimento pode
+apontar para um pedido que não existe e nada reclama.
+
+**Mitigação atual (por que não é 🔴):** as duas tabelas têm **0 linhas** hoje,
+então não há órfão para limpar. A correção é uma migration aditiva simples,
+sem backfill — e o custo de fazê-la só cresce depois da carga inicial.
+
+**Correção:** migration adicionando as 3 FKs faltantes (`ON DELETE RESTRICT`,
+padrão do projeto), aplicada nos dois bancos na mesma rodada. **Fazer antes de
+o recebimento começar a gravar dado real.**
 
 ### 3.3 🔴 Pré-requisitos de configuração da produção
 

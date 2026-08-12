@@ -8,7 +8,8 @@ docs/tributario/
 ├── 01-REGIMES.md                 <- Regimes tributarios (SN, LP, LR)
 ├── 02-ICMS_ESTADOS.md            <- ICMS por estado, NCM, CFOP, importacao
 ├── 03-RECEITA_FEDERAL.md         <- SPED, NFe, DCTF, eSocial, Reinf
-└── 04-BLOCO_K.md                 <- Bloco K da EFD (producao/estoque por OP) — NOVO 2026-08-10
+├── 04-BLOCO_K.md                 <- Bloco K da EFD (producao/estoque por OP) — NOVO 2026-08-10
+└── SETUP_FISCAL_NFE_2026-07-31.md <- Setup fiscal/NF-e do ambiente (2026-07-31, registro historico)
 ```
 
 > **Bloco K (`04-BLOCO_K.md`)** — a Evok Audio e CNAE 2640-0/00 (divisao 26) e

@@ -1,5 +1,18 @@
 ﻿# Cronograma e Checklist - Frontend Web do ERP EVOK ÁUDIO
 
+> ## ⚠️ REGISTRO DATADO — cronograma de 2026-07-31, executado
+>
+> Cronograma de frontend **de 2026-07-31**, já executado. Cita documentos de
+> apoio daquela época que não existem mais no repositório (foram consolidados
+> em `docs/governance/` e `docs/governance/go-live/`).
+>
+> Estado atual do frontend: `CLAUDE.md` §1 e §9.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Versão:** 1.0
 **Data-base:** 2026-07-31
 **Status:** ⚠️ HISTÓRICO — o frontend FOI implementado em `client/` (React 19 + Vite, React Router v7.18.2, porta 5173). FE0 está concluído; FE1–FE7 parcialmente. Cobertura real de telas: ver docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md

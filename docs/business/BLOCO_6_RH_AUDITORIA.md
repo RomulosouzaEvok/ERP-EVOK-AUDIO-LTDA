@@ -1,5 +1,21 @@
 # BLOCO 6 — Modulo RH — Auditoria Cruzada Requisito x Banco x API
 
+> ## ⚠️ REGISTRO DATADO — auditoria de 2026-08-08, superada
+>
+> Este relatório descreve o estado dos artefatos do Bloco 6 (RH) **na data em
+> que foi escrito**, antes da implementação. Onde ele diz que as migrations
+> `20260808-000010`..`000025` estão "não aplicadas", a informação **está
+> superada**: todas as migrations do repositório estão aplicadas desde
+> 2026-08-10 (ver `docs/database/00-INDICE.md`).
+>
+> Mantido sem reescrita do corpo. Estado atual: `CLAUDE.md` e
+> `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Departamento:** 02 - RH.
 **Auditor:** AuditorIntegrador.
 **Data:** 2026-08-09.

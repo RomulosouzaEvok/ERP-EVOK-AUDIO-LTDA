@@ -64,7 +64,8 @@ erp-evok-audio/
 │   ├── manual/                     # Manual do usuário
 │   ├── DATABASE.md                 # Modelo de dados
 │   ├── API.md                      # Contrato de endpoints
-│   ├── governance/TODO.md          # SSOT de pendências
+│   ├── governance/RESIDUAIS_ABERTOS_2026-08-10.md  # Fonte de pendências (medida)
+│   ├── governance/TODO.md          # Diário/rastreamento histórico dia a dia
 │   └── DIARIO_BORDO_GO_LIVE_G6.md  # Diário de bordo do Go-Live
 └── CLAUDE.md                      # SSOT geral do projeto
 ```

@@ -1,5 +1,22 @@
 # Relatório de Auditoria Cruzada — Módulo TI (Bloco 2, Departamento 13)
 
+> ## ⚠️ REGISTRO DATADO — auditoria de 2026-08-07, superada
+>
+> Este relatório descreve o estado dos artefatos do Bloco 2 (TI) **em
+> 2026-08-07**, antes da implementação. Onde ele diz que as migrations do
+> módulo estão "ainda não aplicadas ao banco", a informação **está superada**:
+> todas as migrations do repositório estão aplicadas desde 2026-08-10
+> (ver `docs/database/00-INDICE.md`, banner de correção global).
+>
+> Mantido **sem reescrita do corpo** — corrigir um relatório de auditoria é
+> falsificá-lo. Para o estado atual: `CLAUDE.md` e
+> `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Auditor:** AuditorIntegrador
 **Data:** 2026-08-07
 **Artefatos auditados:**

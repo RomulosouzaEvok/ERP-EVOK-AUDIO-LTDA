@@ -49,7 +49,7 @@ cadastrados manualmente pela tela `/legal`).
 ## Modelo de dados real (PostgreSQL)
 
 Implementado em `server/migrations/20260807-000220-create-legal-module.cjs`
-e no model `server/src/models/LegalIntellectualProperty.ts`. **Este é o
+e no model `server/src/models/JurIntellectualProperty.ts`. **Este é o
 modelo que efetivamente roda em produção — a tabela abaixo NÃO é MySQL, é o
 schema real do PostgreSQL do projeto.**
 

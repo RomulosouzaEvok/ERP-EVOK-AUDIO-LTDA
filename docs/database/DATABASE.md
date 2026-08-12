@@ -3831,3 +3831,133 @@ Continua valendo, e não é escopo desta entrega: aquisição do servidor,
 reverse proxy/TLS, `docker-compose.prod.yml` exercitado de fato, cron de backup
 e a troca da credencial de runtime para `evok_app` (ver
 `docs/database/05-ACESSOS_E_ISOLAMENTO.md`).
+
+---
+
+## 2026-08-11 — MRP: o `status` da ordem planejada deixa de ser dado recalculado
+
+**Sem migration.** Nada mudou no schema — mudou quem tem o direito de escrever
+numa coluna que já existia, e é por isso que a entrada está neste changelog.
+
+### O que estava acontecendo
+
+`mrp_ordens_planejadas` tem chave natural
+(`uq_mrp_sem_duplicidade`: `item_id` + `origem` + `origem_id` +
+`data_necessidade`), e o MRP grava por upsert: `findOrCreate` e, se a linha já
+existir, `update(payload)`. O payload de plano é montado **sempre** com
+`status: 'RASCUNHO'` — então cada rodada do MRP reescrevia o status de toda
+ordem existente.
+
+`status` não é número recalculável como `necessidade_bruta` ou
+`quantidade_planejada`: é **máquina de estados**
+(`RASCUNHO → APROVADA → EM_EXECUCAO → CONCLUIDA/CANCELADA`), movida por
+conversão em requisição de compra ou em OP. Rebaixar para `RASCUNHO` uma ordem
+já convertida fazia ela voltar a satisfazer o filtro de conversão automática —
+e o item com `items.conversao_automatica = true` ganhava **uma requisição de
+compra nova a cada rodada do plano**, para o mesmo material. O planejador roda
+o MRP várias vezes por dia; a duplicidade só apareceria no recebimento.
+
+### O que mudou
+
+`SequelizeMrpRepository.upsertPlannedOrders` passou a **excluir `status` do
+UPDATE** (linha nova continua nascendo com o status do payload, via
+`defaults`), e o helper `createRequisitionFromPlannedOrders` passou a ignorar
+ordem que não esteja em `RASCUNHO`/`APROVADA`.
+
+Regra geral que fica registrada: **coluna de máquina de estados não entra em
+payload de recálculo.** O mesmo raciocínio já vale em outros pontos do ERP
+(status de OP, de requisição, de lote) e é o que impede um job de planejamento
+de desfazer, sem querer, um ato humano de aprovação.
+
+### `purchase_requisitions.requisition_number` entra na série anual
+
+No mesmo passo, a numeração da requisição saiu de `RQ-<timestamp>` para a série
+anual `RQ-YYYY-NNNN` já usada por OP (`OP-YYYY-NNNN`), MPS, RFQ, contrato,
+termo de TI e importação. A geração é
+`SequelizePurchaseRequisitionRepository.nextRequisitionNumberForYear`, com as
+duas garantias já adotadas na numeração de OP (gap G16):
+
+- `pg_advisory_xact_lock(41003, ano)` — serializa a emissão dentro do ano
+  (41001 = OP, 41002 = MPS), é liberado no commit/rollback e é reentrante;
+- `MAX(...)` em vez de `COUNT(...)` — o sufixo sai do maior número já emitido,
+  então remoção de linha não reemite número já usado numa coluna `UNIQUE`.
+
+Números legados (`RQ-1723123456789`) permanecem no histórico e são ignorados
+pela geração: não casam com o `LIKE 'RQ-2026-%'`.
+
+---
+
+## 2026-08-11 — `lot_controls.blocked_at`: o bloqueio de lote passa a ter data
+
+**Migration:** `server/migrations/20260811-000044-lot-blocked-at-quality-gate.cjs`
+(aplicada em `erp_evok_audio` **e** `erp_evok_audio_test`; guarda
+`cross-database-drift-guard` verde). Uma coluna, nullable, sem backfill.
+
+### O que estava acontecendo
+
+O gate de liberação de lote (G7, 2026-08-10) decide olhando a inspeção **mais
+recente**. Isso resolve "reinspecionou e reprovou → não libera mais", mas não
+resolve o **bloqueio sem inspeção nova**:
+
+```
+inspeção APROVADA → lote liberado → defeito aparece em processo
+  → RNC (ou POST /lots/:id/block) → lote 'blocked'
+  → POST /lots/:id/release  ← CONCEDIDO, com a MESMA inspeção antiga
+```
+
+A inspeção mais recente continuava sendo a aprovada de antes do bloqueio.
+Resultado: material contido voltava para consumo sem que ninguém o tivesse
+examinado de novo, e o bloqueio virava decorativo — desfazê-lo não custava
+nada. É o oposto da ISO 9001:2015 §8.7.
+
+### Por que uma coluna, e não uma inferência
+
+Para exigir "inspeção posterior ao bloqueio" é preciso saber **quando o
+bloqueio aconteceu**, e esse instante não existia em lugar consultável:
+`notes` recebe texto livre (`"Bloqueado: <motivo>"`) e `updated_at` muda a cada
+escrita de qualquer natureza (baixa de saldo, reserva, expedição). Derivar de
+qualquer um dos dois seria adivinhar — e adivinhar errado, aqui, é liberar
+material contido.
+
+### Semântica
+
+`blocked_at` descreve o bloqueio **VIGENTE**, não o histórico:
+
+| Evento | Efeito |
+|---|---|
+| `POST /api/inventory/lots/:id/block` | grava `blocked_at = now()` |
+| `POST /api/quality/non-conformities` que bloqueia lote | grava `blocked_at = now()` (mesmo dado, caminho diferente — é o caminho mais comum do cenário acima) |
+| `POST /api/inventory/lots/:id/release` | **zera** `blocked_at` |
+
+A regra de liberação passou a exigir `quality_inspections.inspected_at >
+blocked_at`, comparação **estrita**: empate de instante fica do lado seguro
+(o custo é registrar uma inspeção nova, não liberar material contido).
+
+O histórico da liberação anterior (`release_inspection_id`, `released_by`,
+`released_at`) **não** é apagado no bloqueio, de propósito: ele é evidência de
+auditoria, e o gate não depende dele — quem manda é `blocked_at` × `inspected_at`.
+
+### Efeito nas linhas existentes
+
+Nullable, sem backfill:
+
+- lote em `quarantine` (nunca bloqueado) → `NULL` → gate idêntico ao anterior;
+- lote **já** `blocked` antes da migration → `NULL` → continua liberável pela
+  regra antiga. **Grandfathering deliberado:** inventar um `blocked_at`
+  retroativo (ex.: `updated_at`) exigiria inspeção nova para material que a
+  Qualidade pode já ter tratado, travando lote em produção por causa de um dado
+  que o ERP nunca registrou. Do próximo bloqueio em diante, todos entram na
+  regra nova.
+
+### Efeito colateral corrigido no mesmo passo
+
+`ReleaseLotUseCase` rodava **sem transação e sem lock**: lia o lote, consultava
+a inspeção e gravava — três operações soltas. Um bloqueio concorrente entre a
+leitura e a escrita era simplesmente sobrescrito por `status = 'available'`.
+Agora a liberação abre transação e trava a linha (`FOR UPDATE`, via
+`InventoryRepository.findLotByIdForUpdate`), no mesmo padrão de
+`saleLotService.shipLotsForInvoice`.
+
+Provado contra PostgreSQL real em
+`server/tests/integration/quality-release-after-block.test.ts` (inclusive o
+caminho da RNC).

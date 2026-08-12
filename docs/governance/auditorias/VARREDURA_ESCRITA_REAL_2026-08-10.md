@@ -1,5 +1,21 @@
 # Varredura de escrita real — um `POST` de verdade por endpoint de criação
 
+> ## ⚠️ REGISTRO DATADO — varredura de 2026-08-10
+>
+> O valor permanente deste documento é o **método** (um `POST` real por
+> endpoint de criação) e a **classe de defeito** que ele revelou — é por isso
+> que o `CLAUDE.md` manda lê-lo. As **afirmações de estado** são de
+> 2026-08-10 e envelheceram: as migrations aqui citadas como pendentes
+> (`20260810-000033` e as demais) **estão todas aplicadas** desde aquele dia.
+>
+> Mantido sem reescrita do corpo. Pendências vivas:
+> `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Data:** 2026-08-10 · **Escopo:** 237 endpoints `POST` reais + varredura estática de schema
 **Bancos:** `erp_evok_audio` (dev, dado real do dono — **somente leitura**) e `erp_evok_audio_test` (escrita, descartável)
 **Origem:** item 3 do plano em [`CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md`](CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md)

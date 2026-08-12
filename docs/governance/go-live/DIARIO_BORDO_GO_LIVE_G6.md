@@ -1,5 +1,19 @@
 # 📔 Diário de Bordo — Go-Live G6 ERP Evok Áudio
 
+> ## ⚠️ REGISTRO APPEND-ONLY — cada entrada é datada
+>
+> Diário de bordo do Go-Live G6: cada entrada descreve o estado **daquele
+> dia** e nunca é reescrita. Entradas antigas citam documentos e arquivos que
+> depois foram consolidados ou removidos — é o diário funcionando.
+>
+> Para o estado atual: `CLAUDE.md`. Para pendências vivas:
+> `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Início:** 2 de agosto de 2026, 18:30  
 **Objetivo:** Resolver 4 bloqueadores críticos em 30h (P0) antes de Go-Live  
 **SSOT:** Este arquivo registra CADA tarefa, bloqueador encontrado, decisão tomada
@@ -2132,3 +2146,76 @@ do lock pessimista).
 
 **Documentos atualizados:** `docs/governance/TODO.md` (item marcado
 `[x]` com detalhamento completo), este diário (entrada nova).
+
+---
+
+## 2026-08-07 a 2026-08-12 — Consolidação retroativa (o diário ficou 5 dias sem entrada)
+
+**Por que esta entrada existe:** a última entrada acima é de 2026-08-06. Entre
+07/08 e 12/08 aconteceram cinco rodadas grandes que foram registradas em
+`TODO.md`, `HANDOFF_CODEX.md` e documentos de plano, mas **nunca chegaram aqui**
+— e este é o diário da execução do Go-Live. Fica **uma** entrada de
+consolidação, escrita em 2026-08-12, sem tocar em nada acima (append-only).
+
+**2026-08-07 — os 6 blocos de módulos novos.** Fecharam o pipeline
+SST → TI → Jurídico → Facilities → Marketing → RH, mais Contabilidade,
+Tesouraria e Controladoria. Com eles, os 17 departamentos passaram a ter módulo
+funcional real. As migrations desses blocos estavam documentadas como "criadas,
+não aplicadas" — **estavam aplicadas**; a nota foi corrigida em 12/08.
+
+**2026-08-09 — o plano da cadeia do produto.** O dono formulou o critério de
+aceite em uma frase: *"um insumo é cadastrado e segue seu curso até virar
+produto finalizado, passando pelos departamentos, sem gap"*. A varredura achou
+**17 gaps** e virou `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md`,
+com as decisões D-A a D-M tomadas pelo dono.
+
+**2026-08-10 — o dia mais denso.** Os **17 gaps fecharam** (o G6 por último,
+destravado pelo par G5+G4 sem precisar de coluna nova). O baseline do schema
+virou **DDL estático congelado**, então banco novo nasce igual ao atual —
+provado com banco descartável. Descobriu-se que **34 arquivos de teste de
+integração pulavam em silêncio e reportavam verde**; corrigido, e três guardas
+novas foram armadas (`schema-model-drift`, `column-name-drift`, `enum-literal`,
+mais `cross-database-drift`). À tarde, o banco de dev foi limpo e recebeu a
+**carga inicial real: 327 insumos da fábrica** via API — crus (custo 0,
+estoque 0), com 59 marcados para conferência e 5 bobinas críticas.
+
+**2026-08-11 — organograma sai do documento e entra no banco.** Gaps F-6/F-7
+(commit `ec54e41`): a hierarquia passou a existir em `departments`, a navegação
+do cliente passou a espelhá-la, e uma guarda reprova se `seeds.ts`,
+`client/src/lib/departments.ts` e o organograma divergirem. A 4ª diretoria
+(Suprimentos & Logística) foi criada — cargo previsto, ainda vago.
+
+**2026-08-11 — auditoria adversarial tripla: REPROVADO.** Três frentes (ampla,
+varredura dupla e escrita real) foram rodadas contra o sistema e o veredito foi
+negativo. Achados que importam: **2 defeitos críticos no MRP** (o plano
+misturava demandas de origens diferentes num balde só, e rodar o MRP duas vezes
+duplicava requisição), **5 brechas nos gates** recém-entregues, e **11 alegações
+falsas na documentação** — telas descritas como pendentes que existiam,
+migrations descritas como não aplicadas que estavam aplicadas, requisitos
+marcados `[IMPLEMENTADO]` sem implementação (curva ABC, valuação de estoque).
+
+**2026-08-12 — remediação.** Os 2 críticos de MRP corrigidos
+(`allocatePlanByOrigin.ts` novo; criação de requisição idempotente). As 5
+brechas fechadas: fornecedor estrangeiro agora **força** `origin='import'` na
+criação do pedido, declarar `import` para fornecedor nacional é 422
+(`G11-ORIGIN-SUPPLIER-MISMATCH`), a partida de OP não aceita desvio por
+apontamento manual, liberar lote depois de bloqueio da Qualidade ganhou trava
+(migration `20260811-000044`), e ciclo de BOM passou a ser detectado em
+multinível. **G13 e quarentena provados contra PostgreSQL real**, não por
+dublê. Suíte de integração: **211/211 testes, 53 suítes, zero skip**.
+Documentação consolidada na mesma rodada: `AGENTS.md` aposentado (duplicava e
+contradizia o SSOT), as 11 alegações falsas corrigidas, e a fonte de pendências
+unificada em `RESIDUAIS_ABERTOS_2026-08-10.md` (o `TODO.md` volta a ser o que
+sempre foi na prática: diário histórico).
+
+**Fica aberto, e é decisão de processo — não de código:** o plano de MRP **não
+encolhe** quando a necessidade desaparece (material chegou, OP cancelada). As
+ordens planejadas obsoletas permanecem e cabe ao PCP ignorá-las. Escolher entre
+expiração automática e baixa manual é pergunta para o dono.
+
+**Efeito no gate de Go-Live:** nasceu um bloqueador que não existia quando o
+checklist foi escrito — **carga inicial de dados**. Medido em 12/08: 0
+fornecedores, 0 clientes, 0 funcionários, 0 produtos acabados, 0 BOMs, 0
+roteiros ativos. Como os gates de processo são reais, **nenhuma OP consegue
+iniciar** e o UAT não tem como ser executado antes da carga. Registrado como
+item (g) na seção de reconciliação de `GO_LIVE_G6_CHECKLIST.md`.

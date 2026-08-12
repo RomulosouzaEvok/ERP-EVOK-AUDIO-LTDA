@@ -72,13 +72,37 @@ Três coisas que costumam gerar dúvida:
 2. **Só vale para aprovar.** Quem pediu continua submetendo a requisição,
    cancelando, convertendo em pedido e enviando o pedido ao fornecedor
    (`approved → sent`).
-3. 🔴 **Exige um segundo aprovador cadastrado.** Verificado no banco em
-   2026-08-10: existe **1 único usuário capaz de aprovar compra** e ele é o
-   autor de 100% dos documentos (18/18 pedidos, 13/13 requisições, 4/4
-   importações — com **7 de 7 requisições auto-aprovadas**). Antes de a regra
-   valer em produção, cadastrar em **Administração → Perfis de Acesso** um
-   segundo usuário com `requisicoes: aprovar` + `compras: operar`, e o módulo
-   `diretor` se ele também for assinar alçada/importação.
+3. 🟡 **Exige um segundo aprovador cadastrado — destravado, mas ainda não
+   é gente de verdade.**
+
+   **Estado original (2026-08-10, antes do seed):** existia **1 único usuário
+   capaz de aprovar compra**, autor de 100% dos documentos (18/18 pedidos,
+   13/13 requisições, 4/4 importações — com **7 de 7 requisições
+   auto-aprovadas**). Com um só aprovador, a regra D-K travaria toda a
+   operação em vez de protegê-la.
+
+   **Estado medido em 2026-08-12** (`users` × `access_profile_permissions`):
+   o impasse foi desfeito. Existem **3 identidades com `diretor: approve`**
+   e **4 com `compras/requisicoes: approve`**:
+
+   | Usuário | Perfil | Aprova | Natureza |
+   |---|---|---|---|
+   | `IMPLANTACAO@evokaudio.com.br` | Diretoria Executiva | `diretor`, `compras`, `requisicoes` | domínio real |
+   | `admin@evokaudio.com.br` | Administrador Geral | `diretor`, `compras`, `requisicoes` | conta técnica |
+   | `diretoria@teste.evokaudio` | Diretoria | `diretor`, `compras`, `requisicoes` | **de teste** |
+   | `compras.gerente@teste.evokaudio` | Compras (gerente) | `compras`, `requisicoes` | **de teste** |
+
+   Os 20 usuários departamentais vieram de
+   `server/scripts/seed-usuarios-departamentos.cjs` (2026-08-10) e são
+   **deliberadamente de teste**: domínio `@teste.evokaudio`, senha aleatória
+   em `CREDENCIAIS_TESTE.local.txt`, e o próprio script **recusa rodar com
+   `NODE_ENV=production`**.
+
+   **O que falta para produção (decisão de pessoa, não de código):** designar
+   o(s) aprovador(es) reais no domínio `@evokaudio.com.br` — quem de fato
+   assina alçada e importação na empresa. `IMPLANTACAO@` é conta de
+   implantação, não substitui a diretoria no papel de aprovador. Ver
+   `docs/governance/PLANO_ACAO_CADEIA_PRODUTO_2026-08-09.md` §4, D-K item 2.
 
 Não travados por esta regra (avaliados e **não** autorizados nesta rodada):
 adjudicação de cotação (`POST /api/rfqs/:id/award`) e recebimento

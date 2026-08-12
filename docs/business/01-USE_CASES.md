@@ -1,5 +1,22 @@
 # Casos de Uso — Requisitos de Negócio (Draft para Implementação)
 
+> ## ⚠️ CONSOLIDADO em `docs/projeto/04-USE_CASES.md` — NÃO EDITAR AQUI
+>
+> Este arquivo era o **draft** dos casos de uso de RBAC/perfis de acesso
+> (UC-30 a UC-43). Todos eles **foram implementados e consolidados** no SSOT
+> dos casos de uso: [`../projeto/04-USE_CASES.md`](../projeto/04-USE_CASES.md).
+>
+> O status abaixo ("NÃO implementado ainda") ficou obsoleto — os perfis de
+> acesso configuráveis existem desde a Fase 2/P1 (`/api/access-profiles`,
+> 29 módulos atribuíveis, ver `docs/administrativo/04-PERFIS_ACESSO.md`).
+>
+> **Mantido como registro histórico** das decisões de negócio que o dono
+> confirmou em 2026-08-03. Qualquer alteração de regra vai para
+> `docs/projeto/04-USE_CASES.md`; editar este arquivo recria a duplicação que
+> a governança do projeto proíbe.
+>
+> *Banner adicionado em 2026-08-12 pela auditoria documental.*
+
 **Módulo:** Controle de Acesso por Área/Departamento (Perfis de Acesso Configuráveis)
 **Numeração:** continuação de `docs/projeto/04-USE_CASES.md` (último UC formal: UC-29).
 **Status:** 🟢 Requisito especificado, com todas as decisões de negócio

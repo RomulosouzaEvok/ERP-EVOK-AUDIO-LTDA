@@ -6,11 +6,16 @@ UC-66) e `docs/business/BLOCO_5_MKT_VERIFICACAO.md` (auditoria que motivou
 a correção — veredito GAPS CRÍTICOS).
 **Autor:** `AdmDBA`.
 **Data:** 2026-08-07.
-**Status:** 🟡 Migrations criadas, **não aplicadas** (aguardando aprovação
-do dono do produto após revisão do `AuditorIntegrador`, mesma convenção dos
-Blocos 1/2/3/4). Nenhum model Sequelize/use-case/controller/RBAC foi
-alterado neste passo — isso é responsabilidade do
-`ArquitetoSoftwareAPI`/`programador`, depois da validação.
+**Status:** 🟢 `[IMPLEMENTADO]` — **migrations APLICADAS e no baseline
+congelado** (`server/database/postgresql/00_baseline_frozen.sql`). Medido em
+2026-08-12: **6 tabelas `marketing_*`** no banco `erp_evok_audio`, idênticas
+em `erp_evok_audio_test`.
+
+> **Status original deste documento (2026-08-07), mantido como histórico:**
+> "🟡 Migrations criadas, **não aplicadas** (aguardando aprovação do dono do
+> produto após revisão do `AuditorIntegrador`, mesma convenção dos Blocos
+> 1/2/3/4)". Nota obsoleta, corrigida pela auditoria documental de
+> 2026-08-11/12. O restante do documento continua válido.
 
 ---
 

@@ -1,5 +1,22 @@
 # BLOCO 4 (CORREÇÃO) — Módulo Facilities (FAC) — Auditoria Cruzada Requisitos × Banco × API
 
+> ## ⚠️ REGISTRO DATADO — auditoria de 2026-08-07, superada
+>
+> Este relatório descreve o estado dos artefatos do Bloco 4 (Facilities) **em
+> 2026-08-07**, antes da implementação. Onde ele diz que as 11 migrations
+> `20260807-000290`..`000300` estão "**não aplicadas**", a informação **está
+> superada**: todas as migrations do repositório estão aplicadas desde
+> 2026-08-10 (ver `docs/database/00-INDICE.md`, banner de correção global).
+>
+> Mantido **sem reescrita do corpo** — corrigir um relatório de auditoria é
+> falsificá-lo. Para o estado atual: `CLAUDE.md` e
+> `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Departamento:** 17 — Facilities.
 **Autor:** `AuditorIntegrador`.
 **Data:** 2026-08-07.

@@ -1,5 +1,21 @@
 # Auditoria Ampla — 11 de agosto de 2026
 
+> ## ⚠️ REGISTRO DATADO — auditoria de 2026-08-11
+>
+> Lista de achados **medidos em 2026-08-11**, incluindo caminhos e contagens
+> citados propositalmente **errados** (é a evidência do achado, não uma
+> instrução). Parte já foi remediada — inclusive D3 (`scripts/` sem o
+> prefixo `server/`), que virou a guarda automática
+> `server/tests/unit/docs-path-reference-guard.test.ts` em 2026-08-12.
+>
+> Mantido sem reescrita do corpo. Pendências vivas:
+> `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Escopo pedido pelo dono:** três frentes (estado real × documentado, prontidão
 para Go-Live, segurança e código), com **peso extra na frente de frontend**,
 motivado pela queixa: *"muita coisa errada na parte de visão, departamento

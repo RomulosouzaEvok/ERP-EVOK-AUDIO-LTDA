@@ -870,6 +870,17 @@ Rastreabilidade de lotes (matéria-prima e produto acabado) — inclui quarenten
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `warehouse_id` | INTEGER | sim | - | FK → `warehouses.id` |
+| `release_inspection_id` | INTEGER | sim | - | FK → `quality_inspections.id` (G7 — evidência que autorizou a liberação) |
+| `released_by` | INTEGER | sim | - | FK → `users.id` (G7 — quem autorizou; sempre do JWT) |
+| `released_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
+| `blocked_at` | TIMESTAMP WITH TIME ZONE | sim | - | - |
+
+> **`blocked_at` (G7, 2026-08-11):** início do bloqueio **vigente** (gravado
+> tanto por `POST /api/inventory/lots/:id/block` quanto pelo bloqueio via
+> RNC). Re-liberar o lote exige `quality_inspections.inspected_at >
+> blocked_at`; a liberação zera o campo. `NULL` = lote nunca bloqueado **ou**
+> bloqueado antes da coluna existir (grandfathering deliberado, sem backfill
+> — ver `migrations/20260811-000044-lot-blocked-at-quality-gate.cjs`).
 
 ## `lotes` `[DEPRECATED]`
 
@@ -1191,7 +1202,9 @@ Consumo de lotes específicos por uma OP (FEFO).
 
 ## `production_order_reservations`
 
-Reserva de estoque **vinculada a um documento dono** (gap G3, migration `20260809-000026`, aplicada; generalizada pelo gap G9, migration `20260810-000030`, **ainda não aplicada**). Fonte da verdade da reserva: cada linha amarra um documento a um produto e à quantidade que só ele pode liberar/consumir. `products.reserved_quantity` passou a ser **cache derivado** desta tabela (`SUM(quantity - quantity_released)` das reservas `active`, somando OP e venda).
+Reserva de estoque **vinculada a um documento dono** (gap G3, migration `20260809-000026`, aplicada; generalizada pelo gap G9, migration `20260810-000030`, **aplicada** — conferido
+em `SequelizeMeta` nos dois bancos em 2026-08-12; a nota de "ainda não aplicada"
+era de quando a migration acabara de ser escrita). Fonte da verdade da reserva: cada linha amarra um documento a um produto e à quantidade que só ele pode liberar/consumir. `products.reserved_quantity` passou a ser **cache derivado** desta tabela (`SUM(quantity - quantity_released)` das reservas `active`, somando OP e venda).
 
 ⚠️ **Nome histórico.** Desde o G9 o dono pode ser uma **ordem de produção OU uma venda** (a confirmação de pedido reserva; a baixa só ocorre na autorização da NF-e). A tabela não foi renomeada para `stock_reservations` de propósito — renomear tabela num banco com drift é risco desnecessário. Leia "reserva de estoque", não "reserva de OP".
 
@@ -1440,7 +1453,7 @@ Requisição de Compra — origem obrigatória de toda cadeia de suprimentos (ra
 | Coluna | Tipo | Nulo? | Default | Chave |
 |---|---|---|---|---|
 | `id` | INTEGER | NÃO | auto-increment | **PK** |
-| `requisition_number` | VARCHAR(60) | NÃO | - | UQ |
+| `requisition_number` | VARCHAR(60) | NÃO | - | UQ — série anual `RQ-YYYY-NNNN` desde 2026-08-11 (antes `RQ-<timestamp>`; os antigos seguem no histórico) |
 | `requester_id` | INTEGER | NÃO | - | FK → `users.id` |
 | `department_id` | INTEGER | sim | - | FK → `departments.id` |
 | `production_order_id` | INTEGER | sim | - | FK → `production_orders.id` |

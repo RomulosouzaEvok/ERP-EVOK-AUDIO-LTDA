@@ -1,8 +1,23 @@
 # Estado da Sessão — 2026-08-07 (fim de tarde) + Guia de Subida em Outra Máquina
 
+> ## ⚠️ DOCUMENTO HISTÓRICO DE SESSÃO — SUPERADO
+>
+> Este é o retrato de **uma sessão específica (2026-08-07)**, não o estado atual
+> do projeto. Muita coisa mudou desde então (os 17 gaps da cadeia do produto,
+> baseline de schema congelado, carga inicial de 327 insumos, organograma no
+> banco, remediações de 2026-08-12). **Não use para decidir o que fazer.**
+>
+> Para o estado atual: [`CLAUDE.md`](../../CLAUDE.md) (status/stack/runbook) e
+> [`RESIDUAIS_ABERTOS_2026-08-10.md`](RESIDUAIS_ABERTOS_2026-08-10.md)
+> (pendências medidas). O que continua útil aqui é o **guia de subida em outra
+> máquina** (§ final) — mas confira os comandos contra o `README.md` atual.
+>
+> *Banner adicionado em 2026-08-12 pela auditoria documental.*
+
 **Objetivo deste documento:** snapshot exato de onde o trabalho parou nesta máquina
 e o passo a passo para continuar/subir o sistema em outra máquina. Complementa
-`docs/governance/TODO.md` (SSOT de pendências) e `docs/governance/HANDOFF_CODEX.md`.
+`docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md` (fonte de pendências medida),
+`docs/governance/TODO.md` (diário histórico) e `docs/governance/HANDOFF_CODEX.md`.
 
 ---
 

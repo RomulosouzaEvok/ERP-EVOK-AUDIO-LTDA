@@ -1,5 +1,19 @@
 # Varredura dupla — 11 de agosto de 2026 (tarde)
 
+> ## ⚠️ REGISTRO DATADO — varredura de 2026-08-11
+>
+> Achados **medidos em 2026-08-11**. Cita caminhos de arquivos justamente por
+> estarem fora do lugar ou mortos (L-3, L-5) — são a evidência do achado. Parte
+> já foi remediada.
+>
+> Mantido sem reescrita do corpo. Pendências vivas:
+> `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Pedido do dono:** varredura no ERP inteiro ("todo o código, toda a arquitetura")
 usando dois agentes — `iterative-review` (defeitos) e `cleanliness-review`
 (cruft) — em modo relatório, sem editar.

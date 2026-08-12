@@ -137,8 +137,10 @@ export interface NonConformityUpdateInput {
 /**
  * `PUT /api/quality/non-conformities/:id` — atualiza a tratativa da RNC
  * (causa raiz, ação corretiva, avanço de status). Ao enviar
- * `status: 'closed'`, o backend grava `closed_by`/`closed_at`
- * automaticamente a partir do usuário autenticado.
+ * `status: 'closed'`, o backend grava `closed_by`/`closed_date`
+ * automaticamente a partir do usuário autenticado. (A coluna é
+ * `closed_date`, não `closed_at` — este JSDoc citava o nome inexistente,
+ * que foi exatamente o defeito P1-13; corrigido em 2026-08-12.)
  */
 export async function updateNonConformity(id: number, input: NonConformityUpdateInput) {
   const { data } = await httpClient.put<ItemResponse<NonConformity>>(`/api/quality/non-conformities/${id}`, input);

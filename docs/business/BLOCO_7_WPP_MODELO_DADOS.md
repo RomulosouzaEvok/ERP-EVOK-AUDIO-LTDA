@@ -181,7 +181,7 @@ ILIKE simples na fase 1 e índice fica anotado como melhoria.
   (próximo número livre após `000041`), criando os 5 objetos + enums + índices,
   com `down` completo.
 - Aplicar em `erp_evok_audio` **e** `erp_evok_audio_test` na mesma rodada;
-  rodar `scripts/comparar-bancos.cjs` antes de declarar pronto (lição G18).
+  rodar `server/scripts/comparar-bancos.cjs` antes de declarar pronto (lição G18).
 - Nenhuma alteração em tabela existente — bloco é aditivo puro.
 
 ## 5. O que este modelo NÃO cobre (deliberado)

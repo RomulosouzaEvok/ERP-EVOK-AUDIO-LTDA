@@ -2087,6 +2087,24 @@ no lote, junto com a inspeção que autorizou:
 | `release_inspection_id` | id da inspeção aprovada mais recente |
 | `released_by` | `req.user.id` (nunca do body) |
 | `released_at` | data/hora do servidor |
+| `blocked_at` | **zerado** — o bloqueio vigente deixou de existir |
+
+> ⚠️ **Auditoria de 2026-08-11 — re-liberar lote BLOQUEADO exige inspeção
+> POSTERIOR ao bloqueio.** A regra "a inspeção mais recente aprovou" não
+> cobria o bloqueio sem inspeção nova: a sequência `aprovada → liberada →
+> RNC/bloqueio → release` era **concedida com a inspeção antiga**, e o
+> bloqueio virava decorativo (ISO 9001:2015 §8.7). O bloqueio passou a gravar
+> `lot_controls.blocked_at`, e a liberação exige
+> `quality_inspections.inspected_at > blocked_at` (comparação estrita:
+> empate de instante fica do lado seguro).
+>
+> Lote em `quarantine` (nunca bloqueado) e lote bloqueado **antes** desta
+> mudança têm `blocked_at = NULL` e mantêm o comportamento anterior.
+>
+> A chamada roda dentro de **transação com lock de linha** (`FOR UPDATE`):
+> antes, a leitura do lote, a consulta da inspeção e a escrita eram três
+> operações soltas, e um bloqueio concorrente entre elas era sobrescrito por
+> `status = 'available'`.
 
 **Erros (422 `BUSINESS_RULE_VIOLATION`)** — todos com `details.rule = "G7"` e
 **sem gravar nada** no lote:
@@ -2095,6 +2113,7 @@ no lote, junto com a inspeção que autorizou:
 |---|---|
 | `no_inspection` | o lote não tem nenhuma inspeção registrada |
 | `last_inspection_rejected` | a inspeção mais recente reprovou o material (trate a RNC e registre uma NOVA inspeção aprovada) |
+| `inspection_before_block` | há inspeção aprovada, mas ela é **anterior** ao bloqueio vigente (`details.blocked_at`) — reinspecione o material depois do bloqueio |
 
 ```json
 {
@@ -2130,6 +2149,11 @@ recebimento e, internamente, por `CreateNonConformityUseCase` ao registrar
 uma RNC vinculada a um lote (ver seção "Qualidade — Não Conformidades").
 
 **Request:** `{ "reason": "Dimensional fora de especificação" }` (`reason` obrigatório, mínimo 3 caracteres.)
+
+Além de `status` e `notes`, grava **`blocked_at`** (data/hora do servidor) —
+é esse instante que a re-liberação passa a ter de superar com uma inspeção
+nova (ver o aviso em `POST /api/inventory/lots/:id/release`). O bloqueio por
+**RNC** (`POST /api/quality/non-conformities`) grava o mesmo campo.
 
 ---
 
@@ -2177,6 +2201,19 @@ Cria uma nova BOM para um produto acabado (`product_type = 'finished'`). Marca a
   ]
 }
 ```
+
+**Erros de estrutura circular (422 `BUSINESS_RULE_VIOLATION`):**
+
+| `details.rule` | Quando |
+|---|---|
+| `G1-BOM-AUTO-REF` | o próprio produto aparece como componente dele mesmo (ciclo de profundidade 1). Formato legado: `error` é string, com `rule` no topo do erro |
+| `G1-BOM-CICLO` | **(2026-08-11)** o componente já contém o produto na estrutura dele, direta ou indiretamente — ex.: `A → B` gravado e agora `B → A`. `details: { rule, product_id, component_product_id }` |
+
+> A detecção multinível nasceu da auditoria de 2026-08-11: só a
+> auto-referência era barrada, então um ciclo de dois níveis entrava no banco
+> e só estourava depois, na explosão (`GET /:id/explode` → 422) — o que,
+> depois do G2 (BOM ativa obrigatória), significa **produto que não conclui
+> OP**. A verificação roda antes da transação; nada é gravado.
 
 ### PUT /api/engineering/bom/:id
 Atualiza campos gerais (`revision`, `revision_notes`, `notes`, `status`). Quando `status` muda para `active`, o log de auditoria registra a ação como `approve`.
@@ -2256,7 +2293,32 @@ materializadas automaticamente em `production_order_tracking` com
 `status = 'pending'`, cada linha já apontando para o `production_route_step_id`
 da revisão vigente naquele instante. Idempotente — nada é criado se a OP já
 tiver apontamento. Sem roteiro ativo a liberação **passa** (não se trava a
-fábrica por cadastro faltante); o bloqueio mora na conclusão.
+fábrica por cadastro faltante); o bloqueio mora na partida e na conclusão.
+
+#### Gate de PARTIDA — `* → in_progress` (gap G6)
+
+A OP só entra em produção quando existe **algo contra o que apontar**. Todas
+as reprovações são **HTTP 422** com o código em `error.details.rule`:
+
+| `details.rule` | Quando |
+|---|---|
+| `G6-START-NO-ROUTE` | a OP não tem **nenhuma** linha de apontamento |
+| `G6-START-NO-ROUTE-STEP` | **(2026-08-11)** existem linhas, mas nenhuma aponta para uma etapa de roteiro (`production_route_step_id = null`), e o produto **não** tem roteiro ativo |
+| `G6-START-WC-INACTIVE` | alguma etapa aponta para centro de trabalho **inativo** (a hora trabalhada sairia sem taxa) |
+
+> ⚠️ **`G6-START-NO-ROUTE-STEP` nasceu da auditoria de 2026-08-11.** O gate
+> contava linhas, e `POST /api/production-orders/:id/tracking` aceita
+> `production_route_step_id: null` (apontamento manual, fluxo legítimo). Uma
+> **linha manual vazia destravava a partida** de uma OP sem roteiro nenhum.
+>
+> A saída indicada pela mensagem — cadastrar o roteiro do produto e deixá-lo
+> ativo — **destrava a mesma OP**, sem precisar apagar a linha manual.
+> Apontamento manual **depois** da partida continua livre: o gate é de
+> partida.
+
+A partida também grava o responsável: quando `responsible_id` está vazio, o
+usuário do JWT é traduzido para `employees.id`. Usuário sem funcionário
+vinculado **não** trava a partida (seria travar produção por cadastro de RH).
 
 #### Apontamento obrigatório na conclusão (gap G4)
 
@@ -2382,6 +2444,23 @@ Cria um pedido de compra com itens (transacional).
 Aceita também `origin` (`"national"` — padrão — ou `"import"`, G11). Declarar
 `"national"` não escapa da alçada quando o fornecedor é estrangeiro
 (`suppliers.is_foreign`), ver seção **Alçada de aprovação (G11)** abaixo.
+
+> ⚠️ **Coerência origem × cadastro do fornecedor (auditoria de 2026-08-11).**
+> A origem passou a ser conferida contra `suppliers.is_foreign` **na
+> criação**, e o pedido é gravado já com a origem efetiva:
+>
+> | Declarado | Fornecedor | Resultado |
+> |---|---|---|
+> | `import` | `is_foreign = true` | criado como `import` |
+> | `import` | `is_foreign = false` | **422 `G11-ORIGIN-SUPPLIER-MISMATCH`** — um dos dois cadastros está errado |
+> | `national` (ou omitido) | `is_foreign = true` | criado como **`import`** (o cadastro prevalece; o comprador não é punido por dado que não controla) |
+> | `national` (ou omitido) | `is_foreign = false` | criado como `national` |
+>
+> `details: { rule, supplier_id, supplier_is_foreign, declared_origin }`.
+> A mesma checagem roda de novo em `PUT /api/purchases/:id/status →
+> approved`, como segunda linha de defesa para pedidos gravados antes desta
+> regra. Antes, a resolução só acontecia na aprovação e o pedido ficava
+> **gravado** com uma origem que contradizia o cadastro.
 
 ### PUT /api/purchases/:id
 Atualiza campos permitidos (`expected_date`, `freight_type`, `freight_value`, `notes`, `supplier_id`, `origin`). Só permitido enquanto o pedido está `pending` ou `approved`.
@@ -2852,12 +2931,24 @@ Cria um fornecedor.
   "is_foreign": false
 }
 ```
-`company_name` e `cnpj` são obrigatórios. O CNPJ é validado (dígito verificador) e salvo sem formatação (apenas dígitos). `rating` é sempre `3` e `status` sempre `"active"` na criação. CNPJ duplicado retorna `409`.
+`company_name`, `cnpj` e **`is_foreign`** são obrigatórios. O CNPJ é validado (dígito verificador) e salvo sem formatação (apenas dígitos). `rating` é sempre `3` e `status` sempre `"active"` na criação. CNPJ duplicado retorna `409`.
 
-`is_foreign` (booleano, padrão `false`, G11): marca fornecedor estrangeiro.
-**Todo pedido de compra de fornecedor marcado assim exige aprovação da
-diretoria, em qualquer valor** — é a fonte de origem que não está sob
-controle de quem monta o pedido.
+`is_foreign` (booleano, G11): marca fornecedor estrangeiro. **Todo pedido de
+compra de fornecedor marcado assim exige aprovação da diretoria, em qualquer
+valor** — é a fonte de origem que não está sob controle de quem monta o
+pedido.
+
+> ⚠️ **Passou a ser OBRIGATÓRIO em 2026-08-11 (auditoria).** Era opcional, com
+> `DEFAULT false` na coluna: cadastrar um fornecedor estrangeiro sem marcar o
+> campo — o caminho de menor esforço, e o único para quem integra pela API —
+> gravava importação como **nacional**. A partir daí, todo pedido dele
+> resolvia `origin = 'national'` e passava por baixo do teto de R$ 500 mil,
+> sem erro em lugar nenhum. Omitir o campo agora responde **400**
+> (`VALIDATION_ERROR`) apontando `is_foreign`.
+>
+> Na **edição** (`PUT /api/suppliers/:id`) o campo segue opcional: não se
+> exige redeclarar a origem para trocar um telefone, e o desmarcar já é
+> proibido (escalation-only, abaixo).
 
 ### PUT /api/suppliers/:id
 Atualiza campos cadastrais (`company_name`, `trade_name`, `ie`, `phone`, `email`, `cep`, `street`, `number`, `complement`, `neighborhood`, `city`, `state`, `contact_name`, `contact_phone`, `payment_terms`, `delivery_time`, `rating`, `notes`, `is_foreign`). Não permite alterar `cnpj` nem `status` por este endpoint.
@@ -2924,6 +3015,42 @@ Roda o MRP contra o estoque real (não congelado) e cria ordens planejadas a par
 ```
 `origem` aceita `MANUAL`, `PEDIDO_VENDA`, `PREVISAO`, `ORDEM_PRODUCAO`. Retorna `201` com a lista de ordens planejadas geradas (`necessidade_bruta`, `estoque_disponivel`, `necessidade_liquida`, `quantidade_planejada`, `status` inicial `RASCUNHO`, ou `EM_EXECUCAO` para as convertidas automaticamente — ver abaixo).
 
+> 🩹 **Correção de 2026-08-11 (defeito crítico 1 da auditoria) — netagem
+> conjunta.** Até aqui o endpoint rodava o motor **uma vez por demanda**,
+> sempre com a posição de estoque íntegra: cada demanda abatia o saldo
+> inteiro, como se fosse a única da fábrica. Duas demandas de 100 do mesmo
+> item contra 100 em estoque davam necessidade líquida **zero** nas duas
+> (o motor descarta linha com quantidade planejada 0) e o plano voltava
+> vazio — **a fábrica comprava a menos** e só descobria na linha de
+> produção.
+>
+> Agora a netagem é **conjunta**: todas as demandas do payload disputam a
+> mesma posição de estoque numa única passagem pelo motor, e a necessidade
+> líquida agregada é **rateada por origem**, proporcionalmente à necessidade
+> bruta de cada uma, para preservar `origem`/`origem_id`. Consequências
+> visíveis no payload de resposta:
+> - a soma de `necessidade_liquida` das linhas de um item/data é a
+>   necessidade real (no exemplo acima: 100, não 0);
+> - `estoque_disponivel` agora é a **parcela** do saldo alocada àquela
+>   origem (antes o saldo inteiro era repetido em toda linha, e a linha não
+>   fechava: `bruta − disponível ≠ líquida`). A soma das parcelas é o saldo;
+> - `quantidade_planejada` respeita o **lote mínimo no agregado**, não na
+>   linha — arredondar linha a linha compraria a mais a cada rodada.
+>
+> Provado contra PostgreSQL real em
+> `server/tests/integration/mrp-multi-demand-netting.test.ts`; aritmética do
+> rateio em `server/tests/unit/mrp-multi-demand-allocation.test.ts`.
+
+> 🩹 **Correção de 2026-08-11 (defeito crítico 2) — reexecutar o plano é
+> idempotente.** Rodar o MRP de novo (rotina diária do planejador) sobre a
+> mesma demanda **ressuscitava ordens já convertidas**: o upsert reaplicava o
+> payload inteiro — inclusive `status: 'RASCUNHO'` — sobre a linha existente,
+> e a ordem em `EM_EXECUCAO` voltava a ser elegível para conversão
+> automática, gerando **uma requisição de compra nova por rodada**. Agora
+> `status` fica fora do UPDATE do upsert (é máquina de estados, não dado
+> recalculado) e a criação da requisição ignora ordem que já foi convertida.
+> Provado em `server/tests/integration/mrp-rerun-idempotency.test.ts`.
+
 **Fechamento automático do ciclo (roadmap pós-Go-Live item 3):** na mesma
 transação em que o plano é persistido, ordens planejadas cujo item tem
 `items.conversao_automatica = true` são convertidas automaticamente em
@@ -2958,7 +3085,7 @@ Resposta (`201`):
   "data": {
     "requisition": {
       "id": 99,
-      "requisition_number": "RQ-1723123456789",
+      "requisition_number": "RQ-2026-0004",
       "status": "pending",
       "origin": "mrp",
       "items": [
@@ -3114,7 +3241,18 @@ automaticamente pelo MRP) e `engenharia_amostra` (UC-39; quando usado,
 `BusinessRuleError` 422, não no schema Zod). `items` exige ao menos 1 item;
 `item_id` é UUID (`items.id`, não `products.id`).
 
-**Response (201):** requisição criada com `requisition_number` (`RQ-<timestamp>`).
+**Response (201):** requisição criada com `requisition_number` no padrão anual
+do ERP, `RQ-YYYY-NNNN` (ex.: `RQ-2026-0004`) — mesma convenção de OP, MPS,
+RFQ, contrato e importação. A numeração é serializada por advisory lock de
+transação e derivada do **maior** número já emitido no ano
+(`SequelizePurchaseRequisitionRepository.nextRequisitionNumberForYear`).
+
+> Até 2026-08-11 o número era `RQ-<timestamp>` (`RQ-1723123456789`) — achado
+> BAIXO 15 da auditoria: não ordenava, não comunicava nada ao usuário, ficava
+> fora da série anual e podia colidir numa coluna `UNIQUE` entre duas
+> requisições criadas no mesmo milissegundo. Os números antigos permanecem no
+> histórico e são simplesmente ignorados pela geração (não casam com o
+> prefixo do ano).
 
 ### PATCH /api/purchase-requisitions/:id/status
 Transiciona o status: `draft → pending/canceled`, `pending → approved/canceled`.
@@ -3325,9 +3463,11 @@ disponíveis para as respostas deste módulo evoluírem sem nova migration:
 | `NonConformity` | `quality_inspections` | `QualityInspection` | `non_conformity_id` |
 
 ⚠️ O **payload das respostas não mudou** nesta rodada — o registro habilita o
-`include`, não o utiliza ainda. E a migration `20260810-000032`, que cria
-`quality_inspections` e as 3 colunas de liberação em `lot_controls`, **continua
-pendente de aplicação**; nenhuma rota deste módulo funciona antes dela.
+`include`, não o utiliza ainda. A migration `20260810-000032`, que cria
+`quality_inspections` e as 3 colunas de liberação em `lot_controls`, **está
+aplicada** nos dois bancos (`erp_evok_audio` e `erp_evok_audio_test`) —
+verificado em `SequelizeMeta` em 2026-08-12. O aviso de "pendente de aplicação"
+que existia aqui era de quando a migration acabara de ser escrita.
 
 ### POST /api/quality/inspections
 Registra uma inspeção sobre um lote. `authorizeModule('qualidade','operate')`.
@@ -3396,6 +3536,7 @@ release aplica.
     "lot_id": 77,
     "lot_number": "LOT-2026-077",
     "lot_status": "quarantine",
+    "blocked_at": null,
     "status_allows_release": true,
     "quality_gate_passed": false,
     "can_release": false,
@@ -3406,8 +3547,10 @@ release aplica.
 }
 ```
 
-`reason` é `null` quando o gate passa; caso contrário `no_inspection` ou
-`last_inspection_rejected`.
+`reason` é `null` quando o gate passa; caso contrário `no_inspection`,
+`last_inspection_rejected` ou **`inspection_before_block`** (2026-08-11 — a
+inspeção aprovada é anterior ao bloqueio vigente, cujo instante vem em
+`blocked_at`).
 
 > **A regra é "a inspeção MAIS RECENTE", não "existe alguma aprovada".** É a
 > única leitura que sobrevive ao retrabalho e à reprovação posterior: com
@@ -4005,7 +4148,8 @@ de consistência de dados de todo o sistema, não escopado a um módulo/área.
 
 Todas retornam `{ success: true, data: { ... } }`, sem paginação — cada
 `AuditXUseCase` agrega achados num objeto único (formato específico por
-domínio; ver `server/src/modules/intelligentAuditor/README.md`).
+domínio; ver os quatro use cases em
+`server/src/modules/intelligentAuditor/application/use-cases/`).
 
 ---
 

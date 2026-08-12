@@ -5,14 +5,19 @@
 05, UC-67 a UC-71, §6 "Decisões e Pendências para Arquitetos").
 **Autor:** `AdmDBA`.
 **Data:** 2026-08-08.
-**Status:** 🟡 Migrations criadas, **não aplicadas** (aguardando aprovação
-do dono do produto após revisão do `AuditorIntegrador`, mesma convenção dos
-Blocos 1/2/3/4/5). Nenhum model Sequelize/use-case/controller/RBAC foi
-alterado neste passo — isso é responsabilidade do
-`ArquitetoSoftwareAPI`/`programador`, depois da validação.
+**Status:** 🟢 `[IMPLEMENTADO]` — **migrations APLICADAS e no baseline
+congelado** (`server/database/postgresql/00_baseline_frozen.sql`). Medido em
+2026-08-12: **20 tabelas `hr_*`** no banco `erp_evok_audio`, idênticas em
+`erp_evok_audio_test`.
+
+> **Status original deste documento (2026-08-08), mantido como histórico:**
+> "🟡 Migrations criadas, **não aplicadas** (aguardando aprovação do dono do
+> produto após revisão do `AuditorIntegrador`, mesma convenção dos Blocos
+> 1/2/3/4/5)". Nota obsoleta, corrigida pela auditoria documental de
+> 2026-08-11/12. O restante do documento continua válido.
 
 Este é o **sexto e último bloco** do pipeline de módulos novos
-(`docs/business/pipeline-modulos-novos.md`). Trabalho coordenado com
+(checkpoint em memória do agente, sem arquivo no repositório). Trabalho coordenado com
 `ArquitetoSoftwareAPI`, que desenha o contrato REST em paralelo a partir do
 mesmo documento de requisitos. Ver §11 "Contratos que a API deve
 respeitar" ao final.

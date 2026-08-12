@@ -5,8 +5,8 @@
 existe parcialmente. `employees`/`departments` (cadastro, CRUD, RBAC básico)
 já estão em produção; este bloco formaliza **apenas o que falta**, conforme
 `docs/business/briefs/BRIEF_RH_2026-08-06.md`. Este é o **sexto e último
-bloco** do pipeline de módulos novos (`docs/business/pipeline-modulos-novos.md`
-— checkpoint em memória do agente): Bloco 0 (LGPD em employees) → Bloco 1
+bloco** do pipeline de módulos novos (checkpoint em memória do agente, sem
+arquivo no repositório): Bloco 0 (LGPD em employees) → Bloco 1
 (SST) → Bloco 2 (TI) → Bloco 3 (Jurídico) → Bloco 4 (Facilities) → **Bloco 5
 (Marketing) → Bloco 6 (RH, este documento)**.
 **Insumo:** `docs/business/briefs/BRIEF_RH_2026-08-06.md` (seções (a)-(g):

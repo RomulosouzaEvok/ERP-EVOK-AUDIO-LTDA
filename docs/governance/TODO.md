@@ -3882,10 +3882,12 @@ tabela ainda nao modelada); atos societarios (RF-JUR-030, sem tabela);
 mapper DTO PT-BR↔ingles NAO criado (decisao consciente — o Modelo de
 Dados §0 confirma que os nomes de coluna do Bloco 3 ja sao os nomes de
 campo esperados de API, sem traducao a fazer, diferente do precedente
-SST citado no enunciado do pipeline); `client/src/api/legal.ts` e
-`client/src/pages/legal/**` intocados (telas antigas vao quebrar em
-runtime contra `/api/legal`, que nao existe mais — reconstrucao e
-responsabilidade do passo 5/frontend).
+SST citado no enunciado do pipeline); o front antigo do Juridico
+(`client/src/api/legal.ts` e `client/src/pages/legal/`, que **nao existem
+mais**) ficou intocado nesta passada — telas antigas quebrariam em runtime
+contra `/api/legal`, reconstrucao e responsabilidade do passo 5/frontend.
+*(✔ superado — o front foi reconstruido em `client/src/api/juridico.ts` e
+`client/src/pages/juridico/`; conferido em 2026-08-12.)*
 
 **Testes:** 3 suites novas (`server/tests/unit/juridico-contract-use-cases.test.ts`,
 `juridico-legal-case-use-cases.test.ts`, `juridico-deadline-use-cases.test.ts`),
@@ -5080,9 +5082,21 @@ Auditoria feita em paralelo à validação E2E acima e **convergiu com ela de fo
 
 ### P0 — bloqueiam a cadeia do produto
 
-- [ ] **[AUDITORIA-FALHOU] S-1 — "bomba de schema" do `allowNull` implícito, segunda rodada.**
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] S-1 — "bomba de schema" do `allowNull` implícito, segunda rodada.**
+  **Resolvido pela migration `20260810-000028`.** Medição em
+  `information_schema.columns` (banco `erp_evok_audio`, 2026-08-12): as 14
+  colunas citadas em `bill_of_material_items`, `inventory_counts` e
+  `inventory_count_items` estão todas `is_nullable = YES`, e
+  `inventory_movements.reference_id` também. As duas exceções são
+  **deliberadas e documentadas no model**: `inventory_movements.description`
+  e `reference_type` foram **mantidas `NOT NULL`** porque todos os pontos de
+  INSERT vivos preenchem (o `createMovement` usa `data.description ?? ''`, e
+  ajuste manual grava `reference_type='adjustment'`) — o defeito era o model
+  TS declarar nullable o que o banco exigia, não o contrário. `src/models/InventoryMovement.ts`
+  hoje declara os três com a nulabilidade real e explica cada decisão no
+  `comment`. A guarda `schema-model-drift-guard` impede a reincidência.
   A migration `20260804-000012-fix-production-orders-nullable-columns.cjs` corrigiu
-  isso **só para `production_orders`**. Continua vivo em: `bill_of_material_items`
+  isso **só para `production_orders`**. Continuava vivo em: `bill_of_material_items`
   (`parent_item_id`, `alternative_product_id`, `notes`), `inventory_counts`
   (`location`, `started_at`, `completed_at`, `approved_at`, `approved_by`, `notes`),
   `inventory_count_items` (`counted_quantity`, `variance_quantity`, `counted_by`,
@@ -5092,15 +5106,24 @@ Auditoria feita em paralelo à validação E2E acima e **convergiu com ela de fo
   no §P0-05 do relatório. **Alinhar os models na mesma entrega**, senão o bootstrap
   canônico (`20260731-000001-baseline-schema.cjs:148`) recria o problema num banco
   novo. Responsável: `AdmDBA` + `programador`.
-- [ ] **[AUDITORIA-FALHOU] P0-01 — `InventoryService.adjust()` grava `reference_id = NULL`
-  em coluna `NOT NULL`.** Derruba com 500: `POST /api/inventory/movements`,
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] P0-01 — `InventoryService.adjust()` gravava `reference_id = NULL`
+  em coluna `NOT NULL`.** **Resolvido pela migration `20260810-000028`**, que
+  removeu o `NOT NULL` indevido: medido em 2026-08-12,
+  `inventory_movements.reference_id` é `is_nullable = YES`. Ajuste manual,
+  aprovação de contagem e scan mobile não têm documento de origem — exigir
+  `reference_id` deles era o erro. Derrubava com 500: `POST /api/inventory/movements`,
   `POST /api/products/movements`, aprovação de contagem de inventário
   (`ApproveInventoryCountUseCase.ts:89`) e **todo o app mobile**
   (`ScanItemUseCase.ts:67`, `BatchScanUseCase.ts:72`). Evidência: 35 movimentações
   no banco, **nenhuma** com `reference_type='adjustment'`. Resolvido por S-1.
-- [ ] **[AUDITORIA-FALHOU] P0-02 — model `InventoryMovement` declara `description`,
-  `reference_id` e `reference_type` como opcionais; o banco exige os três.**
-  Por isso o P0-01 vira 500 de driver em vez de 422 didático.
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] P0-02 — model `InventoryMovement` declarava `description`,
+  `reference_id` e `reference_type` como opcionais; o banco exigia os três.**
+  Por isso o P0-01 virava 500 de driver em vez de 422 didático.
+  **Resolvido:** o model foi alinhado ao banco na mesma entrega da migration
+  `20260810-000028` — `description` e `reference_type` `allowNull: false`
+  (o banco continua exigindo, por decisão), `reference_id` `allowNull: true`
+  (o `NOT NULL` foi removido do banco). Verificado em 2026-08-12 lendo
+  `server/src/models/InventoryMovement.ts` contra `information_schema`.
 - [ ] **[PENDENTE] Limpar o dado sujo do contorno BUG-01:** as 7 linhas de
   `bill_of_material_items` com `notes = 'Contorno BUG-01'` têm `parent_item_id`
   apontando para si mesmas e `alternative_product_id` igual ao próprio componente.
@@ -5117,18 +5140,31 @@ Auditoria feita em paralelo à validação E2E acima e **convergiu com ela de fo
   tenta gravar (`facility_maintenance_ticket`, `facility_cleaning_execution`) não
   existem no ENUM.** JSDoc do adapter **já corrigido** nesta auditoria; falta a
   decisão de negócio (S-3).
-- [ ] **[PENDENTE] P1-06 — 4 FKs `ON DELETE SET NULL` sobre colunas `NOT NULL`**
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] P1-06 — 4 FKs `ON DELETE SET NULL` sobre colunas `NOT NULL`**
   (`bill_of_material_items.parent_item_id`/`alternative_product_id`,
   `inventory_counts.approved_by`, `inventory_count_items.counted_by`): o `DELETE` do
-  pai falha com erro de banco em vez de anular a referência. Resolvido por S-1.
+  pai falhava com erro de banco em vez de anular a referência.
+  **Resolvido por S-1 / migration `20260810-000028`.** Medido em `pg_constraint`
+  × `pg_attribute` em 2026-08-12: as 4 FKs seguem `ON DELETE SET NULL`
+  (`confdeltype='n'`) e as 4 colunas agora são nulláveis (`attnotnull = f`) —
+  a contradição sumiu. A guarda `schema-model-drift-guard` reprova se voltar.
 - [ ] **[PENDENTE] P1-07 — FKs ausentes:** `purchase_receipts` **não tem nenhuma FK**
   (nem `purchase_id`, nem `received_by`) e `product_cost_ledgers.product_id` também
   não tem. Contradiz `CLAUDE.md` §7. Ver S-4.
-- [ ] **[PENDENTE] P1-13 — fechar RNC grava `closed_at`, coluna que não existe**
-  (`UpdateNonConformityUseCase.ts:70`); a real é `closed_date`. O Sequelize descarta
-  em silêncio ⇒ **toda RNC fechada fica com `closed_date` nulo**.
-  `CloseNonConformityUseCase.ts:26` não grava nem `closed_by` nem `closed_date`.
-  `client/src/api/nonConformities.ts:140` repete o nome errado.
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] P1-13 — fechar RNC gravava `closed_at`, coluna que não existe**
+  (`UpdateNonConformityUseCase.ts:70`); a real é `closed_date`. O Sequelize descartava
+  em silêncio ⇒ **toda RNC fechada ficava com `closed_date` nulo**.
+  `CloseNonConformityUseCase.ts:26` não gravava nem `closed_by` nem `closed_date`.
+  **Resolvido** (ver entrada "Tarefa 2 — `closed_at` × `closed_date` na RNC",
+  mais abaixo neste arquivo): os dois caminhos passaram a derivar o
+  encerramento da mesma função `nonConformities/domain/closure.ts`, que grava
+  `closed_by` + `closed_date`; `closed_by` saiu de `ALLOWED_FIELDS` do `PUT`
+  (vinha do body, permitia atribuir o encerramento a outra pessoa) e passa a
+  vir só do JWT. Conferido em 2026-08-12: `non_conformities` tem
+  `closed_date`/`closed_by` e **não** tem `closed_at`; o código grava os nomes
+  certos; a guarda `column-name-drift-guard` cobre a reincidência. O JSDoc
+  desatualizado em `client/src/api/nonConformities.ts` (que ainda dizia
+  `closed_at`) foi corrigido nesta passagem — o tipo TS já estava certo.
 - [ ] **[PENDENTE] P1-14 — duas BOMs paralelas sem sincronização:** produção/OP/custo
   leem `bill_of_material_items`; **MRP e a API de item leem `item_estruturas`**. Já
   divergem no banco. Como o G2 exige BOM ativa em `bill_of_material_items` para
@@ -5667,12 +5703,16 @@ interface → use cases sem Sequelize → controller fino), base URL
   create → steps → activate → revise → activate, verificando que o índice
   parcial e o `superseded` automático concordam sob concorrência (2 ativações
   simultâneas do mesmo produto).
-- [ ] **Tela web** do roteiro em `client/` (backend pronto, sem UI) — sem ela o
-  PCP continua dependendo de chamada HTTP direta, e o G4 continua inexequível
-  na prática. **Escopo de `PromadorFonteEnd`.**
-- [ ] **G4 (apontamento obrigatório) segue não iniciado** — desbloqueado por
-  esta entrega, mas exige a tela acima e decisão sobre o modo de transição
-  (`warn` → `block`) descrita na Decisão 4 da pesquisa normativa.
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] Tela web** do roteiro
+  em `client/`. **Existe:** `client/src/pages/production/ProductionRoutesPage.tsx`
+  (+ `RouteStepsEditor.tsx`, `productionRouteShared.ts` e teste
+  `ProductionRoutesPage.test.tsx`), entregue no commit `b52470d`. O PCP não
+  depende mais de chamada HTTP direta.
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] G4 (apontamento obrigatório)**
+  — **entregue em `b954fa5`**. Concluir OP sem apontamento passou a falhar
+  (obrigação do SPED Bloco K, Ajuste SINIEF 2/09 cl. 3ª §7º III — ver
+  `docs/tributario/04-BLOCO_K.md`). O par G5 (roteiro com API + tela) + G4
+  destravou o G6, fechado em 2026-08-10.
 
 ---
 
@@ -6317,15 +6357,17 @@ Com a regra ativa e sem novo cadastro, **nenhuma compra é aprovável**.
 
 ### Achados desta entrega (reportados, não implementados)
 
-- [ ] **`purchase_orders.requester_id` é `NULL`-able** — é a única das três
-  colunas de solicitante que não é `NOT NULL` (`purchase_requisitions.requester_id`
-  e `import_processes.created_by` são). Quando nula, a comparação é impossível
-  e a regra **não bloqueia**, por desenho (bloquear tornaria pedidos legados
-  inaprováveis para sempre, sem caminho de remediação). Hoje há **0 linhas
-  nulas**, então o risco é teórico — mas *segregação sem solicitante confiável
-  é decorativa*. Recomendado, em migration futura (não escrita para não
-  engrossar a fila de 8 pendentes):
-  `ALTER TABLE purchase_orders ALTER COLUMN requester_id SET NOT NULL;`
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] `purchase_orders.requester_id` era `NULL`-able** — era a única das três
+  colunas de solicitante que não era `NOT NULL` (`purchase_requisitions.requester_id`
+  e `import_processes.created_by` já eram). Quando nula, a comparação era impossível
+  e a regra **não bloqueava**, por desenho (bloquear tornaria pedidos legados
+  inaprováveis para sempre, sem caminho de remediação). Havia **0 linhas
+  nulas**, então o risco era teórico — mas *segregação sem solicitante confiável
+  é decorativa*.
+  **Resolvido: `purchase_orders.requester_id` é `NOT NULL`** desde a migration
+  `20260810-000040` — confirmado em `information_schema.columns`
+  (`is_nullable = NO`) no banco `erp_evok_audio` em 2026-08-12. A segregação
+  D-K passa a ter solicitante confiável em todos os 4 pontos de aprovação.
 - [ ] **Adjudicação de RFQ (`POST /api/rfqs/:id/award`) não está coberta.**
   É um ato de nível `compras:approve` que escolhe o fornecedor vencedor e
   gera pedido(s), e `rfqs.created_by` é `NOT NULL` — dá para cobrir em ~5
@@ -6448,7 +6490,16 @@ nenhuma é recusado (422).
   de a migration ser aplicada (ver
   `docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md` §6,
   item 5).
-- [ ] **Tela web pendente** (`client/`) — backend completo, sem UI.
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] Tela web do Plano
+  Mestre de Produção (MPS)** — **existe**:
+  `client/src/pages/production/MasterProductionPlanPage.tsx` (+ teste
+  `MasterProductionPlanPage.test.tsx`), rota `/production/master-plans`,
+  entregue em 2026-08-10. Mostra sugerido × planejado lado a lado (a
+  divergência é o que a auditoria de PCP procura) e avisa na própria interface
+  que a demanda é consolidada **sem baldes de tempo** (limitação conhecida:
+  `sales` não tem data de entrega prometida). Com ela, **nenhum módulo de
+  backend ficou sem tela** — as exceções restantes são por desenho (inventário
+  mobile via QR e endpoints de webhook).
 
 ---
 
@@ -6684,8 +6735,12 @@ ninguém tem.
 
 ### Fora do escopo, encontrado no caminho
 
-- [ ] **`non_conformities.asset_id` é `NOT NULL` no banco de TESTE e `assets`
-  tem 0 linhas** — ou seja, **criar RNC no banco de teste é impossível hoje**.
+- [x] **[IMPLEMENTADO — fechado em 2026-08-12 após medição] `non_conformities.asset_id` era `NOT NULL` no banco de TESTE e `assets`
+  tinha 0 linhas** — ou seja, **criar RNC no banco de teste era impossível**.
+  **Resolvido:** medido em 2026-08-12, `asset_id` é `is_nullable = YES` nos
+  **dois** bancos (`erp_evok_audio` e `erp_evok_audio_test`). Era exatamente o
+  drift dev × teste previsto abaixo; a guarda `cross-database-drift-guard`
+  (que executa `server/scripts/comparar-bancos.cjs`) hoje reprova se voltar.
   É a divergência dev × teste já descrita em
   `VARREDURA_ESCRITA_REAL_2026-08-10.md` §10 (resíduo da `000028`, aplicada em
   dev e não em teste). Some quando os dois bancos forem reprovisionados a
@@ -6796,7 +6851,7 @@ troca da credencial de runtime para `evok_app`.
 
 **Ponto de partida medido:** `npm run test:integration` → **97 passavam, 31
 falhavam** em 36 arquivos, contra a API + PostgreSQL reais
-(`scripts/run-api-suite.cjs`, banco `erp_evok_audio_test`).
+(`server/scripts/run-api-suite.cjs`, banco `erp_evok_audio_test`).
 
 **Resultado:** `npm run test:integration` → **36 suítes / 124 testes, todos
 passando**, duas execuções seguidas contra o mesmo banco (idempotente).
@@ -6940,3 +6995,253 @@ diretoria e o 422 de estrutura paralela, além do caminho feliz).
   `undefined` na URL. Outros endpoints (rastreabilidade) já validam o
   parâmetro e respondem 400 — este não. Baixo impacto, mas é inconsistência de
   contrato.
+
+---
+
+## 2026-08-11 — Auditoria do MRP: os 2 defeitos CRÍTICOS fechados
+
+Escopo: **só** os dois críticos apontados pela auditoria de 2026-08-11 (mais o
+achado BAIXO 15, que estava no mesmo caminho de código). Nada de schema mudou —
+não há migration nesta entrega.
+
+### Crítico 1 — netagem multi-demanda (a fábrica comprava a menos)
+
+- [x] `GenerateMrpPlanUseCase` deixou de chamar `calculateMrpPlan([demand])`
+  **por demanda** com o estoque íntegro. Agora neta **uma vez** sobre a demanda
+  agregada e rateia a necessidade líquida por origem, proporcional à bruta de
+  cada origem (`origem`/`origem_id` preservados).
+  Evidência: `server/tests/integration/mrp-multi-demand-netting.test.ts` —
+  **reprovava antes** da correção (o plano voltava com ZERO linhas para o
+  cenário 100+100 contra 100 disponíveis) e passa depois, com a soma da
+  necessidade líquida em exatamente 100. Aritmética do rateio (resto de
+  arredondamento, participações desiguais, origem repetida, demanda única):
+  `server/tests/unit/mrp-multi-demand-allocation.test.ts`, 5 casos.
+- [x] Rateio isolado em módulo próprio, com o racional das decisões:
+  `server/src/modules/mrp/application/use-cases/support/allocatePlanByOrigin.ts`.
+
+### Crítico 2 — reexecução do plano duplicava requisição
+
+- [x] `SequelizeMrpRepository.upsertPlannedOrders` não reescreve mais `status`
+  no UPDATE (linha nova segue nascendo `RASCUNHO` via `defaults`).
+- [x] `createRequisitionFromPlannedOrders` virou idempotente: ignora ordem fora
+  de `RASCUNHO`/`APROVADA`, deduplica a mesma ordem repetida no lote e devolve
+  `null` — sem criar cabeçalho vazio — quando não há nada a converter.
+- [x] Efeito colateral corrigido: as ordens devolvidas por `POST /api/mrp/plan`
+  diziam `RASCUNHO` mesmo depois de promovidas a `EM_EXECUCAO` (o UPDATE era
+  por `where id in`). Como o controller decide gravar o audit log
+  `mrp_auto_convert_to_requisition` olhando esse status, **o log da conversão
+  automática nunca era escrito**. Passou a ser.
+  Evidência: `server/tests/integration/mrp-rerun-idempotency.test.ts` — três
+  rodadas do mesmo plano, uma ordem e **uma** requisição
+  (antes da correção: 3 requisições e a ordem rebaixada a cada rodada).
+  Unitário do helper: `server/tests/unit/mrp-requisition-helper-idempotency.test.ts`.
+
+### Achado BAIXO 15 — numeração da requisição
+
+- [x] `RQ-<timestamp>` → série anual `RQ-YYYY-NNNN`, emitida por
+  `SequelizePurchaseRequisitionRepository.nextRequisitionNumberForYear`
+  (advisory lock `41003` + `MAX`, mesmo padrão da numeração de OP do G16).
+  Aplicado nos **dois** caminhos de criação (MRP e requisição manual).
+  Verificado no banco de teste: `RQ-2026-0001` … `RQ-2026-0004`; os números
+  legados continuam no histórico e são ignorados pela geração.
+
+### Ferramental
+
+- [x] `scripts/run-api-suite.cjs`: o filtro de depuração passava
+  `--testPathPattern`, removido no Jest 30 — o Jest abortava com código 1
+  **antes** de rodar qualquer teste, e a falha parecia "suíte reprovou".
+  Corrigido para `--testPathPatterns`.
+
+### Suítes (execução real, 2026-08-11)
+
+- [x] `npm run typecheck` (server) → verde
+- [x] `npm run test:unit` → **1826/1826** (170 suítes)
+- [x] `npm run test:integration` → **179/179** (47 suítes), incluindo as
+  guardas de drift (schema×model, nome de coluna, literal de enum,
+  cross-database, docs×realidade, cobertura de auditoria)
+
+### Pendências que esta entrega deixa
+
+- [ ] **`origem_id NULL` não é protegido pelo índice único**
+  `uq_mrp_sem_duplicidade`: no PostgreSQL, `NULL` é distinto de `NULL`, então
+  duas rodadas concorrentes do MRP com demanda `MANUAL` (sem documento de
+  origem) podem inserir duas linhas iguais — o `findOrCreate` resolve o caso
+  sequencial, não o concorrente. Correção seria índice único parcial com
+  `COALESCE(origem_id, '00000000-...')` ou `NULLS NOT DISTINCT` (PG 15+).
+  Nenhum caso observado; a rodada do MRP hoje é síncrona e humana.
+- [ ] **Rateio não reabre requisição já emitida.** Se uma rodada posterior
+  aumentar a necessidade de uma ordem já convertida (`EM_EXECUCAO`), a
+  quantidade da ordem é recalculada mas a requisição correspondente **não** é
+  ajustada nem uma complementar é criada. É o comportamento conservador
+  (melhor não comprar sozinho do que comprar duas vezes), mas precisa virar
+  sinal na tela do planejador — hoje é silencioso.
+- [ ] **Base do rateio é a necessidade bruta, não a data.** Quando duas origens
+  disputam o mesmo saldo, cada uma leva a parcela proporcional ao que pediu.
+  A alternativa — quem precisa antes leva o estoque — é alocação por
+  prioridade e muda a decisão de compra; é assunto do dono do processo, não de
+  uma correção de defeito.
+
+---
+
+## 2026-08-11 — 5 brechas de severidade ALTA da auditoria (working tree)
+
+Entrega separada da correção do MRP acima. As cinco brechas tinham a mesma
+assinatura: **a regra existia, mas era satisfeita por um caminho lateral.**
+
+- [x] **G6 — linha de apontamento VAZIA destravava a partida da OP.**
+  `assertOrderCanStart` contava linhas, e `POST /production-orders/:id/tracking`
+  aceita `production_route_step_id: null`. Agora exige lastro de roteiro
+  (linha ligada a etapa **ou** roteiro ativo do produto), novo código
+  `G6-START-NO-ROUTE-STEP`. Apontar à mão **depois** da partida continua
+  livre. Provado em `tests/integration/production-start-manual-tracking-bypass.test.ts`
+  (reprovava antes da correção) e em `tests/unit/production-start-gate-route-step-g6.test.ts`.
+- [x] **G7 — lote bloqueado era re-liberado com a inspeção de ANTES do
+  bloqueio.** Migration `20260811-000044-lot-blocked-at-quality-gate.cjs`
+  (`lot_controls.blocked_at`) **aplicada nos dois bancos**; a liberação exige
+  `inspected_at > blocked_at` e passou a rodar em transação com `FOR UPDATE`.
+  Os dois caminhos de bloqueio (endpoint e RNC) gravam a data. Provado em
+  `tests/integration/quality-release-after-block.test.ts`.
+- [x] **`PRODUCTION_TRACKING_REQUIRED=warn` desligava G4+G6 sem nenhuma
+  declaração no repositório.** Passou a ser validada no boot
+  (`src/config/runtimeEnv.ts`): com `NODE_ENV=production`, `warn` **derruba o
+  boot**. Documentada em `.env.example` (raiz e `server/`) e em
+  `docs/tributario/04-BLOCO_K.md`. Unitário: `tests/unit/runtime-env-production-tracking.test.ts`.
+- [x] **G11 — alçada de importação dependia de default permissivo.**
+  `is_foreign` virou **obrigatório** na criação de fornecedor (era opcional,
+  com `DEFAULT false`); `POST /api/purchases` grava a origem **efetiva**
+  (fornecedor estrangeiro nunca fica registrado como compra nacional) e recusa
+  `origin='import'` com fornecedor nacional (`G11-ORIGIN-SUPPLIER-MISMATCH`),
+  na criação e na aprovação. Provado em
+  `tests/integration/purchase-origin-foreign-supplier.test.ts`.
+- [x] **G1 — BOM aceitava ciclo multinível.** Só a auto-referência era barrada;
+  `A→B` seguido de `B→A` entrava no banco e só estourava na explosão (produto
+  que não conclui OP). Detecção de caminho no espaço de `products.id`
+  (`bomStructureProjection.hasProductPathBetween`), 422 `G1-BOM-CICLO`.
+  Provado em `tests/integration/bom-cycle-multilevel.test.ts`.
+
+### Suítes (execução real, 2026-08-11)
+
+- [x] `npm run typecheck` (server) → verde | `client`: `npx tsc -b` → verde
+- [x] `npm run test:unit` → **1848/1848** (172 suítes)
+- [x] `npm run test:integration` → **196/196** (51 suítes), incluindo as
+  guardas de drift (schema×model, nome de coluna, literal de enum,
+  cross-database, docs×realidade, cobertura de auditoria)
+- [x] `npm run test:edge:strict` → 3/3
+
+### Pendências que esta entrega deixa
+
+- [ ] **Fornecedores cadastrados ANTES de 2026-08-11 podem estar com
+  `is_foreign = false` por omissão, não por decisão.** A obrigatoriedade vale
+  só para cadastros novos; nenhum backfill é possível por código (é informação
+  de negócio). Compras precisa revisar a lista de fornecedores e marcar os
+  estrangeiros — enquanto não fizer, uma importação daquele fornecedor
+  continua passando por baixo da alçada se o pedido não declarar `import`.
+- [ ] **Lotes já `blocked` antes da migration ficam com `blocked_at = NULL`** e
+  seguem liberáveis pela regra antiga (grandfathering deliberado, sem
+  backfill — inventar data retroativa travaria material que a Qualidade pode
+  já ter tratado). Do próximo bloqueio em diante, todos entram na regra nova.
+- [ ] **A tela de fornecedores (`client/`) ganhou o campo "Origem"**, mas o
+  restante do `client/` que cria fornecedor por outros caminhos (se houver)
+  precisa da mesma declaração — varredura não encontrou outro ponto.
+
+---
+
+## 2026-08-12 — As 2 provas de integração que faltavam (working tree)
+
+Terceira entrega do mesmo working tree (convive com a correção do MRP e com
+as 5 brechas ALTAS acima; nenhuma delas foi tocada). A auditoria de
+2026-08-11 apontou dois comportamentos **afirmados na documentação e nunca
+executados contra o PostgreSQL** — os dois estavam cobertos apenas por
+suítes unitárias com repositório dublê, que não tem coluna `NOT NULL`, nem
+`ENUM`, nem `DEFAULT`. É exatamente a classe de defeito descrita em
+`docs/governance/auditorias/CLASSE_DE_DEFEITO_VERIFICACAO_2026-08-10.md`.
+
+### G13 — `tests/integration/g13-payable-receivable.test.ts` (novo, 8 testes)
+
+- [x] Pedido de compra **aprovado** e depois **enviado** não gera nenhuma
+  linha em `accounts_payable` (CPC 00 R2 4.56 — contrato executório).
+- [x] O **recebimento** cria a conta a pagar na mesma transação, com
+  `status='pending'`, `payment_date IS NULL`, `amount_paid = 0`,
+  `approved_by IS NULL` e `approval_date IS NULL` (quem recebe não aprova
+  pagamento), `category='Fornecedores'` e o rastro `purchase_id`/
+  `supplier_id`/`invoice_number`.
+- [x] **Recebeu metade, deve a metade:** entrega de 60 de 100 gera AP de
+  R$ 450,00 (não os R$ 750,00 do pedido); a segunda entrega gera a segunda
+  AP de R$ 300,00 e a soma fecha o pedido.
+- [x] Vencimento: sem `due_date`, `invoice_date + 30`; com `due_date`
+  informado, o negociado prevalece.
+- [x] Venda **confirmada** não gera nenhuma linha em `accounts_receivable`
+  (CPC 47 item 108 — direito ainda condicional).
+- [x] A **NF-e autorizada** cria as 3 parcelas, todas `pending`,
+  `payment_date IS NULL`, `collection_status='normal'`, com o número da nota
+  em `invoice_number`, e a soma **exatamente** igual ao valor da nota
+  (R$ 1.250,00 divididos em 416,66 + 416,66 + 416,68).
+- [x] Cada asserto financeiro é feito duas vezes: pela API e por **SQL cru**
+  nomeando coluna a coluna — é assim que drift de coluna/enum/default
+  aparece em vez de passar batido.
+- [x] O cenário da venda respeita o gate **D-L**: o lote nasce em quarentena
+  no recebimento (G14), é inspecionado e liberado pela Qualidade (G7) e
+  transferido INSUMOS→ACABADOS antes do faturamento.
+
+### G7/MRP — `tests/integration/mrp-quarantine-discount.test.ts` (novo, 7 testes)
+
+- [x] Cenário com 45 livres (entrada avulsa, sem lote) + 60 em **quarentena**
+  (recebimento de compra) + estoque de segurança 5: o MRP enxerga **40**, não
+  100. Demanda de 100 — que caberia no saldo físico — gera necessidade
+  líquida de 60. Sem o desconto, a linha simplesmente não existiria e o plano
+  voltaria vazio.
+- [x] O desconto é de **leitura**: `products.quantity` continua 105 e
+  `lot_controls` continua com 60 retidos (conferido por SQL cru), como manda
+  a decisão de projeto de `services/quarantineBalanceService.ts`.
+- [x] Liberado o lote pela Qualidade (inspeção aprovada + release), a mesma
+  demanda de 160 cai de 120 para 60 de necessidade líquida — queda de
+  **exatamente** os 60 que estavam retidos.
+- [x] A suíte usa **uma demanda por rodada** de propósito: com origem única o
+  rateio de `allocatePlanByOrigin` devolve a linha integral, então
+  `estoque_disponivel` é o número agregado, sem parcela no meio.
+
+### Suítes (execução real, 2026-08-12)
+
+- [x] `npm run typecheck` (server) → verde
+- [x] `npm run test:unit` → **1848/1848** (172 suítes) — nenhuma regressão
+- [x] `npm run test:integration` → **211/211** (53 suítes), rodada limpa
+- [x] Rodada anterior à limpa: 210/211, com falha de *timeout de 5s* em
+  `quality-releases-receiving-lot`; a rodada de baseline (antes destes dois
+  arquivos) já falhava do mesmo jeito, em arquivos diferentes a cada
+  execução — ver "Achados" abaixo.
+
+### Achados desta entrega
+
+- [ ] **O plano de MRP cresce mas nunca encolhe.** Provado por consulta ao
+  banco depois da suíte nova: a ordem planejada criada quando o material
+  estava em quarentena (comprar 60) **permanece em `mrp_ordens_planejadas`
+  como `RASCUNHO`** depois de o lote ser liberado, quando a necessidade real
+  passou a ser zero — e continua conversível em requisição de compra
+  (`POST /api/mrp/planned-orders/convert`). Causa: o upsert de
+  `SequelizeMrpRepository.upsertPlannedOrders` só toca as linhas que o motor
+  devolveu, e `calculateMrpPlan` filtra `plannedQuantity > 0`; linha que
+  deixou de ser necessária não é revisitada. É o **espelho** do CRÍTICO 1 da
+  auditoria de 2026-08-11 (aquele comprava a menos; este compra a mais).
+  Não corrigido nesta entrega de propósito: a correção exige decidir o que
+  fazer com a linha órfã (zerar? novo status? apagar?) e o ENUM de
+  `mrp_ordens_planejadas.status` não tem valor para "não é mais necessária" —
+  é decisão de processo, não de teste. Registrado no JSDoc da etapa 7 de
+  `tests/integration/mrp-quarantine-discount.test.ts`.
+- [ ] **A suíte de integração é intermitente por timeout de 5 s.** Nenhum
+  arquivo de `tests/integration/` define `jest.setTimeout`, e o default do
+  Jest é dimensionado para teste unitário. Em 4 execuções houve 3 falhas, em
+  3 arquivos **diferentes** (`rbac-maintenance-service-orders-access-denied`,
+  `traceability-and-audit-log-regression`,
+  `quality-releases-receiving-lot`), sempre por estouro de 5 s sob carga —
+  duas delas em rodadas **anteriores** aos arquivos novos. Os dois arquivos
+  desta entrega já nascem com `jest.setTimeout(60_000)`; os outros 51
+  continuam expostos. Uma suíte que reprova por sorte treina o time a
+  reexecutar até passar, que é o oposto do que uma rede de segurança faz.
+- [ ] **`estoque_retido_qualidade` não chega a nenhum payload.**
+  `SequelizeItemRepository.listMrpInventoryPositions` calcula o campo (e
+  `estoque_fisico`), mas nada é propagado para `mrp_ordens_planejadas` nem
+  para a resposta de `POST /api/mrp/plan`. Na prática, o planejador vê o
+  estoque disponível cair e **não tem como saber que a causa é a Qualidade**.
+  Não é defeito de regra — a conta está certa —, é falta de explicação na
+  tela. A verificação direta hoje só é possível por SQL, que é como a suíte
+  nova faz.

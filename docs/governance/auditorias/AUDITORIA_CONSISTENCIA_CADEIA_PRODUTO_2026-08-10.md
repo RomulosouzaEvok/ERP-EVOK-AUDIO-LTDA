@@ -1,6 +1,16 @@
 # Auditoria de Consistência Tripla — Documentação ↔ Banco ↔ Código
 ## Cadeia do Produto (Item → BOM → OP → Estoque → Compra → Venda)
 
+> ## ⚠️ SUPERADO em 2026-08-10 pelos commits `92cf555` / `e2a8d7e`
+>
+> Os achados desta auditoria foram remediados por esses dois commits.
+> **Mantido como registro histórico** (a metodologia de auditoria cruzada e o
+> raciocínio de cada achado continuam servindo de referência), mas **não é
+> retrato do estado atual**. Para pendências abertas, veja
+> [`../RESIDUAIS_ABERTOS_2026-08-10.md`](../RESIDUAIS_ABERTOS_2026-08-10.md).
+>
+> *Banner adicionado em 2026-08-12 pela auditoria documental.*
+
 **Data:** 2026-08-10
 **Auditor:** agente `AuditorIntegrador` (auditoria cruzada documento ↔ schema ↔ código)
 **Commit base:** `9df39c7` (HEAD em `main` no início da auditoria)

@@ -1,5 +1,20 @@
 # Auditoria de Espelhamento — Departamentos e Estrutura Organizacional
 
+> ## ⚠️ REGISTRO DATADO — auditoria de 2026-08-06, superada
+>
+> Retrato do espelhamento de departamentos **em 2026-08-06**. A migration
+> `20260806-000120`, aqui descrita como preparada e não aplicada, **já foi
+> aplicada**; e a hierarquia saiu do documento e passou a existir no banco em
+> 2026-08-11 (commit `ec54e41`), com guarda automática de divergência.
+>
+> Mantido sem reescrita do corpo. SSOT da hierarquia hoje:
+> `docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md`.
+>
+> *Banner adicionado em 2026-08-12, junto com a ampliação das guardas
+> documentais (`server/tests/helpers/docsGuardConventions.ts`). O documento
+> declara-se registro datado: as guardas param de auditar suas afirmações de
+> estado, e o leitor é avisado antes de agir sobre elas.*
+
 **Data:** 2026-08-06
 **Autor:** AdmDBA (auditoria de schema real vs. seed vs. docs)
 **Escopo:** tabela `departments`, `employees.department_id`, `access_profiles`/`access_profile_permissions`, comparação de 3 fontes (banco real, `server/src/config/seeds.ts`, `docs/00-ESTRUTURA_ORGANIZACIONAL.md` + `docs/{área}/00-README.md`).

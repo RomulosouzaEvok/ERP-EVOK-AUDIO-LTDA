@@ -6,10 +6,19 @@ entidades, 36 BR-SST) e `docs/business/BLOCO_1_SST_REQUISITOS.md` (55
 RF-SST, UC-44 a UC-48, §5 "Decisões e pendências para arquitetos").
 **Autor:** `AdmDBA`.
 **Data:** 2026-08-06.
-**Status:** 🟡 Migrations criadas, **não aplicadas** (aguardando aprovação
-do dono do produto após revisão do `AuditorIntegrador`, convenção do
-projeto). Nenhum model Sequelize/use-case/controller foi criado neste
-passo — isso é responsabilidade do `programador`, depois da validação.
+**Status:** 🟢 `[IMPLEMENTADO]` — **migrations APLICADAS e no baseline
+congelado** (`server/database/postgresql/00_baseline_frozen.sql`). Medido em
+2026-08-12: **35 tabelas `sst_*`** no banco `erp_evok_audio` (e idênticas em
+`erp_evok_audio_test`, guarda `cross-database-drift-guard`). Os models
+Sequelize (`server/src/models/Sst*.ts`) e o módulo
+`server/src/modules/sst/` existem desde 2026-08-07.
+
+> **Status original deste documento (2026-08-06), mantido como histórico:**
+> "🟡 Migrations criadas, **não aplicadas** (aguardando aprovação do dono do
+> produto após revisão do `AuditorIntegrador`, convenção do projeto)". Essa
+> nota ficou obsoleta e induzia a erro — corrigida pela auditoria documental
+> de 2026-08-11/12. O restante do documento (modelagem, decisões, matriz
+> RF→tabela) continua válido.
 
 Trabalho coordenado com `ArquitetoSoftwareAPI`, que desenha o contrato REST
 em paralelo (`docs/business/BLOCO_1_SST_API.md`). Ver §6 "Pendências para

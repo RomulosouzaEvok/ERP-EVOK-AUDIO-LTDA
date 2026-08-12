@@ -6,10 +6,19 @@ entidades novas, 18 BR-TI) e `docs/business/BLOCO_2_TI_REQUISITOS.md` (46
 RF-TI, UC-49 a UC-51, §5 "Decisões e pendências para arquitetos").
 **Autor:** `AdmDBA`.
 **Data:** 2026-08-07.
-**Status:** 🟡 Migrations criadas, **não aplicadas** (aguardando aprovação
-do dono do produto após revisão do `AuditorIntegrador`, mesma convenção do
-Bloco 1 SST). Nenhum model Sequelize/use-case/controller foi criado neste
-passo — isso é responsabilidade do `programador`, depois da validação.
+**Status:** 🟢 `[IMPLEMENTADO]` — **migrations APLICADAS e no baseline
+congelado** (`server/database/postgresql/00_baseline_frozen.sql`). Medido em
+2026-08-12: as tabelas `it_*`/`ti_*` existem no banco (`it_tickets`,
+`it_ticket_categories`, `it_ticket_comments`, `it_ticket_priority_history`,
+`it_access_requests`, `it_backup_logs`, `it_license_seats`,
+`it_software_license_details`, `it_responsibility_terms`, `ti_settings`),
+idênticas em `erp_evok_audio_test`.
+
+> **Status original deste documento (2026-08-07), mantido como histórico:**
+> "🟡 Migrations criadas, **não aplicadas** (aguardando aprovação do dono do
+> produto após revisão do `AuditorIntegrador`, mesma convenção do Bloco 1
+> SST)". Nota obsoleta, corrigida pela auditoria documental de 2026-08-11/12.
+> O restante do documento continua válido.
 
 Trabalho coordenado com `ArquitetoSoftwareAPI`, que desenha o contrato REST
 em paralelo. Ver §7 "Pendências para o ArquitetoSoftwareAPI" ao final.

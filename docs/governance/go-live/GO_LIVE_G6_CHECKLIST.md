@@ -776,7 +776,7 @@ Action → Rollback or Fix Forward
 **Responsável:** On-Call Engineer + Tech Lead  
 **📝 Forma:** Markdown file no repositório  
 
-**Arquivo:** `docs/GO_LIVE_G6_INCIDENTS.md`
+**Arquivo:** `docs/GO_LIVE_G6_INCIDENTS.md` **[A CRIAR NO GO-LIVE DAY — não existe hoje]**
 
 Para cada incidente detectado:
 
@@ -878,7 +878,7 @@ Garantir estabilidade do sistema nos primeiros 2 dias, escalalar incidentes rapi
   - 👤 Responsável: Tech Lead
 
 - [ ] **Known Issues Tracker**
-  - [ ] Arquivo: `docs/GO_LIVE_G6_KNOWN_ISSUES.md`
+  - [ ] Arquivo: `docs/GO_LIVE_G6_KNOWN_ISSUES.md` **[A CRIAR NO GO-LIVE DAY — não existe hoje]**
   - [ ] Cada issue inclui:
     - [ ] Descrição do problema
     - [ ] Workaround (se houver)
@@ -963,7 +963,7 @@ Garantir estabilidade do sistema nos primeiros 2 dias, escalalar incidentes rapi
 **Responsável:** Tech Lead + Product Manager  
 **⏱️ Estimado:** 2h (segunda-feira 05/08)  
 
-**Arquivo:** `docs/GO_LIVE_G6_LESSONS_LEARNED.md`
+**Arquivo:** `docs/GO_LIVE_G6_LESSONS_LEARNED.md` **[A CRIAR NO GO-LIVE DAY — não existe hoje]**
 
 - [ ] **Reunião Restrospectiva (2h)**
   - [ ] Quem: CTO, Tech Lead, DevOps, QA Lead, Gerente Produção, CFO
@@ -1055,7 +1055,7 @@ Garantir estabilidade do sistema nos primeiros 2 dias, escalalar incidentes rapi
 
 - [ ] **Documentation Handoff**
   - [ ] Consolidar todas docs em `docs/GO_LIVE_G6_*/`
-  - [ ] Criar índice: `docs/GO_LIVE_G6_INDEX.md`
+  - [ ] Criar índice: `docs/GO_LIVE_G6_INDEX.md` **[A CRIAR NO GO-LIVE DAY — não existe hoje]**
   - [ ] Arquivar: versões antigas de cronograma (mover → archive/)
   - [ ] SSOT update: CLAUDE.md incluir referência a Go-Live completo
   - 👤 Responsável: Tech Lead
@@ -1254,4 +1254,110 @@ PÓS-GO-LIVE (48h)
 
 ~~Decisão formal do gate G6 sobre o risco residual `react-router@7.18.2` / `GHSA-qwww-vcr4-c8h2`~~ — **resolvido em 2026-08-04** (upgrade para `react-router@8.3.0`, ver `docs/governance/TODO.md` e `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md`); removido da lista de próximos passos.
 6. Coletar sign-offs formais (CTO, CFO, Gerente Produção, Compliance) — seção 1.6.
+
+---
+
+# 🔄 RECONCILIAÇÃO 2026-08-12 — auditoria documental
+
+> **Não reescreve nada acima.** As seções anteriores continuam sendo o registro
+> de como o gate foi montado. Esta seção registra o que **mudou desde
+> 2026-08-06** e o que a auditoria de 2026-08-11 mediu, para que o leitor não
+> tome decisão com base em item já resolvido — ou pior, deixe de ver um
+> bloqueador que nasceu depois.
+
+## (g) [PENDENTE] — GATE NOVO: carga inicial de dados reais é bloqueador de Go-Live
+
+Este gate **não existia** quando o checklist foi escrito, porque o sistema
+ainda rodava sobre dados de demonstração. Depois que o banco de dev foi limpo
+(2026-08-10) e recebeu a carga real de insumos, ficou visível que **o ERP não
+consegue produzir nada** no estado atual do cadastro.
+
+**Medido no banco `erp_evok_audio` em 2026-08-12:**
+
+| Cadastro | Registros | Consequência |
+|---|---|---|
+| `items` (insumos) | **327** | carregados via API a partir de `docs/carga-inicial/insumos-materia-prima.csv` |
+| `suppliers` | **0** | nenhuma requisição vira pedido de compra — não há a quem comprar |
+| `clients` | **0** | nenhuma venda pode ser registrada |
+| `employees` | **0** | sem apontamento nominal de produção |
+| `products` (acabados) | **0** | não há o que fabricar |
+| `bill_of_materials` | **0** | sem BOM, o MRP não explode necessidade |
+| `production_routes` | **0** | sem roteiro ativo, **nenhuma OP inicia** (gate G6, erro `G6-START-NO-ROUTE`) |
+| `work_centers` | **1** | só o mínimo; capacidade real não cadastrada |
+| `users` | 21 | admin + 20 usuários **de teste** (`@teste.evokaudio`) |
+| `departments` | 17 | ok — seed oficial |
+
+**Por que isso é bloqueador e não "tarefa de implantação":** os gates de
+processo entregues nos 17 gaps são reais e recusam operação incompleta. Sem
+roteiro de fabricação, a OP não sai de `planned` (G6). Sem apontamento, ela não
+conclui (G4, obrigação do SPED Bloco K). Sem BOM, o MRP não gera requisição.
+Ou seja, **o UAT não tem como ser executado** antes desta carga — não é
+possível encenar o fluxo ponta a ponta sem dado real.
+
+**Além do volume, o dado carregado está cru:** os 327 itens vieram com custo 0,
+estoque 0 e unidade `UN`; **59 estão marcados `revisar=SIM`** no CSV, dos quais
+**5 bobinas são CRÍTICAS** (`MP-057`, `MP-060`, `MP-061`, `MP-064`, `MP-090`).
+
+**Responsável:** fábrica (dado de negócio, não código).
+**Roteiro de execução:** [`docs/carga-inicial/GUIA_CARGA_INICIAL.md`](../../carga-inicial/GUIA_CARGA_INICIAL.md).
+**Fontes:** [`RESIDUAIS_ABERTOS_2026-08-10.md`](../RESIDUAIS_ABERTOS_2026-08-10.md)
+e [`auditorias/AUDITORIA_AMPLA_2026-08-11.md`](../auditorias/AUDITORIA_AMPLA_2026-08-11.md).
+
+**Ordem correta:** carga inicial (g) → teste ponta a ponta com escrita real →
+UAT (b) → sign-off G6 → servidor de produção (a) → deploy.
+
+## (d) [x] RESOLVIDO — a suíte de integração roda de fato
+
+A pendência (d) descrevia testes de integração que existiam mas rodavam via
+`describe.skip`, por falta de `RUN_INTEGRATION=true`. **Corrigido em
+2026-08-10:** `npm run test:integration` passou a apontar para o runner que
+sobe a API e usa o banco de teste isolado
+(`node server/scripts/run-api-suite.cjs integration`).
+
+O problema era pior do que "um arquivo pulado": **34 arquivos de teste de
+integração pulavam em silêncio e o comando reportava verde** — a suíte parecia
+uma rede de segurança e não era.
+
+**Medido em 2026-08-12: 211 testes / 53 suítes de integração contra PostgreSQL
+real, 100% passando, sem nenhum skip.** Inclui a cobertura de RBAC de
+`legacy-routes-rbac-regression.test.ts` que motivou a pendência original.
+
+Consequência para os itens acima: a linha "(d) [PENDENTE]" do resumo executivo,
+a caixa de RBAC de Depósito na seção 1.2 e o item 3 da lista de "Próximo passo
+real (2026-08-06)" estão **fechados** — mantidos no texto original por serem
+registro histórico.
+
+## Links quebrados removidos — artefatos de Go-Live Day
+
+Quatro arquivos citados nas seções de Fase 2/Fase 3 **não existem no
+repositório** (conferido em 2026-08-12):
+
+| Citado como | Onde é citado | Situação |
+|---|---|---|
+| `docs/GO_LIVE_G6_INCIDENTS.md` | §2 (registro de incidentes do dia) | não existe |
+| `docs/GO_LIVE_G6_KNOWN_ISSUES.md` | §2 (issues conhecidas pós-deploy) | não existe |
+| `docs/GO_LIVE_G6_LESSONS_LEARNED.md` | §3 (retrospectiva 48h) | não existe |
+| `docs/GO_LIVE_G6_INDEX.md` | §3 (índice do pacote de Go-Live) | não existe |
+
+**Decisão:** são **templates de processo do Go-Live Day**, não documentos
+faltantes. Serão criados **no dia do Go-Live**, se e quando houver o evento a
+registrar — criar arquivos vazios agora só produziria mais ruído documental.
+As 4 citações no corpo do checklist foram anotadas com
+`[A CRIAR NO GO-LIVE DAY — não existe hoje]`, para que ninguém saia procurando
+um arquivo que não está lá (nenhuma delas era link Markdown clicável, apenas
+caminho em `código`, então não havia link quebrado a remover — só a promessa
+implícita). Incidentes de operação que aconteçam **antes** do Go-Live vão para
+`docs/incidentes/`, que já existe.
+
+## Estado do gate em 2026-08-12
+
+| Pendência | Estado |
+|---|---|
+| (a) Servidor de produção | `[PENDENTE]` — compra **adiada 3–4 meses** por decisão do dono (2026-08-10). Bloqueia o deploy, não o UAT |
+| (b) UAT completo | `[PENDENTE]` — **agora depende de (g)**; sem dado real não há o que testar |
+| (c) `react-router` | `[x]` resolvido em 2026-08-04 |
+| (d) Integração contra infra real | `[x]` **resolvido em 2026-08-10** — 211/211, sem skips |
+| (e) `mobile/`/`tv/` em hardware real | `[PENDENTE]` |
+| (f) Sessão do app `tv/` (JWT 7 dias × painel sempre ligado) | `[PENDENTE]` — decisão de produto |
+| **(g) Carga inicial de dados reais** | `[PENDENTE]` — **novo bloqueador, precede (b)** |
 

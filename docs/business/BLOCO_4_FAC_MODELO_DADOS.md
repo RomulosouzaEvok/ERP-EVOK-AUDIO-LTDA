@@ -7,11 +7,17 @@ RNF-FAC, UC-58 a UC-62, §6 "Decisões e Pendências para Arquitetos") e
 correção — GAPS CRÍTICOS).
 **Autor:** `AdmDBA`.
 **Data:** 2026-08-07.
-**Status:** 🟡 Migrations criadas, **não aplicadas** (aguardando aprovação
-do dono do produto após revisão do `AuditorIntegrador`, mesma convenção dos
-Blocos 1/2/3). Nenhum model Sequelize/use-case/controller/RBAC foi alterado
-neste passo — isso é responsabilidade do `ArquitetoSoftwareAPI`/
-`programador`, depois da validação.
+**Status:** 🟢 `[IMPLEMENTADO]` — **migrations APLICADAS e no baseline
+congelado** (`server/database/postgresql/00_baseline_frozen.sql`). Medido em
+2026-08-12: **13 tabelas `facility_*`** no banco `erp_evok_audio`, mais as
+migrations `20260807-000290..300` (11 arquivos, todas em `SequelizeMeta`),
+idênticas em `erp_evok_audio_test`.
+
+> **Status original deste documento (2026-08-07), mantido como histórico:**
+> "🟡 Migrations criadas, **não aplicadas** (aguardando aprovação do dono do
+> produto após revisão do `AuditorIntegrador`, mesma convenção dos Blocos
+> 1/2/3)". Nota obsoleta, corrigida pela auditoria documental de 2026-08-11/12.
+> O restante do documento continua válido.
 
 ---
 

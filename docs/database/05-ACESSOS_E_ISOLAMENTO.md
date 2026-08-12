@@ -113,7 +113,7 @@ provisionado do baseline + migrations, nasceria com `evok_app` sem poder ler
 nem escrever nada, e a troca de credencial falharia no primeiro request. O
 sintoma (*permission denied* em tudo) não aponta para a causa.
 
-**Ponto cego que isso expôs:** `scripts/comparar-bancos.cjs` compara coluna,
+**Ponto cego que isso expôs:** `server/scripts/comparar-bancos.cjs` compara coluna,
 tipo, default, índice e constraint — **não compara ACL**. O "os dois bancos são
 idênticos" nunca incluiu privilégios.
 

@@ -6,10 +6,16 @@ domínio) e `docs/business/BLOCO_3_JUR_REQUISITOS.md` (46 RF-JUR, 5 RNF-JUR,
 UC-52 a UC-56, §6 "Decisões e Pendências para Arquitetos").
 **Autor:** `AdmDBA`.
 **Data:** 2026-08-07.
-**Status:** 🟡 Migrations criadas, **não aplicadas** (aguardando aprovação
-do dono do produto após revisão do `AuditorIntegrador`, mesma convenção dos
-Blocos 1/2). Nenhum model Sequelize/use-case/controller foi criado neste
-passo — isso é responsabilidade do `programador`, depois da validação.
+**Status:** 🟢 `[IMPLEMENTADO]` — **migrations APLICADAS e no baseline
+congelado** (`server/database/postgresql/00_baseline_frozen.sql`). Medido em
+2026-08-12: **18 tabelas `jur_*`** no banco `erp_evok_audio`, idênticas em
+`erp_evok_audio_test`.
+
+> **Status original deste documento (2026-08-07), mantido como histórico:**
+> "🟡 Migrations criadas, **não aplicadas** (aguardando aprovação do dono do
+> produto após revisão do `AuditorIntegrador`, mesma convenção dos Blocos
+> 1/2)". Nota obsoleta, corrigida pela auditoria documental de 2026-08-11/12.
+> O restante do documento continua válido.
 
 ---
 
