@@ -30,6 +30,9 @@ import InventoryCountItem = require('./InventoryCountItem');
 import ProductCostLedger = require('./ProductCostLedger');
 import Department = require('./Department');
 import Directorate = require('./Directorate');
+import StrategicPlanning = require('./StrategicPlanning');
+import MeetingMinute = require('./MeetingMinute');
+import BusinessRisk = require('./BusinessRisk');
 import Employee = require('./Employee');
 import ProductionOrder = require('./ProductionOrder');
 import ProductionRoute = require('./ProductionRoute');
@@ -219,6 +222,24 @@ Department.belongsTo(Directorate, { foreignKey: 'directorate_id', as: 'directora
 // Directorate ↔ Employee (diretor responsável; NULL = cargo vago)
 Directorate.belongsTo(Employee, { foreignKey: 'manager_id', as: 'manager' });
 Employee.hasMany(Directorate, { foreignKey: 'manager_id', as: 'managed_directorates' });
+
+// ---- Módulo Diretoria — Governança (Planejamento Estratégico, Atas, Riscos) ----
+Directorate.hasMany(StrategicPlanning, { foreignKey: 'directorate_id', as: 'strategic_plannings' });
+StrategicPlanning.belongsTo(Directorate, { foreignKey: 'directorate_id', as: 'directorate' });
+Department.hasMany(StrategicPlanning, { foreignKey: 'department_id', as: 'strategic_plannings' });
+StrategicPlanning.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+Employee.hasMany(StrategicPlanning, { foreignKey: 'responsible_id', as: 'strategic_plannings_responsible' });
+StrategicPlanning.belongsTo(Employee, { foreignKey: 'responsible_id', as: 'responsible' });
+User.hasMany(StrategicPlanning, { foreignKey: 'created_by', as: 'strategic_plannings_created' });
+StrategicPlanning.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+
+User.hasMany(MeetingMinute, { foreignKey: 'created_by', as: 'meeting_minutes_created' });
+MeetingMinute.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+
+Employee.hasMany(BusinessRisk, { foreignKey: 'responsible_id', as: 'business_risks_responsible' });
+BusinessRisk.belongsTo(Employee, { foreignKey: 'responsible_id', as: 'responsible' });
+User.hasMany(BusinessRisk, { foreignKey: 'created_by', as: 'business_risks_created' });
+BusinessRisk.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 
 // AccessProfile ↔ Department (n:1 — Compras tem perfil de analista E de
 // gerente). Substitui o casamento por NOME digitado à mão, que já havia
@@ -1553,5 +1574,6 @@ export {
   HrEmployeeDocument, HrVacationAccrualPeriod, HrVacationSchedule, HrEmployeeJobHistory,
   HrAbsence, HrBenefitType, HrEmployeeBenefit,
   HrTrainingCourse, HrJobPositionTraining, HrEmployeeTraining,
-  HrTimeImportBatch, HrTimeImportItem
+  HrTimeImportBatch, HrTimeImportItem,
+  StrategicPlanning, MeetingMinute, BusinessRisk
 };

@@ -4950,6 +4950,159 @@ Não desfaz OPs já geradas — plano `released` é terminal e não cancela.
 
 ---
 
+## 35. Diretoria — Organograma, Planejamento Estratégico, Atas e Riscos
+
+**NOVO em 2026-08-12.** Módulo `server/src/modules/directorate/`, base URL
+`/api/directorate`. Cobre `docs/administrativo/01-DIRETORIA.md`: a
+hierarquia CEO→diretorias→departamentos (já existia desde 2026-08-11 na
+tabela `directorates`, sem API até aqui), e a governança que o documento
+descrevia em SQL aspiracional (Planejamento Estratégico, Atas de Reunião,
+Riscos Corporativos) — agora implementada em `strategic_plannings`,
+`meeting_minutes`, `business_risks`.
+
+**RBAC** (`server/src/shared/domain/accessModules.ts`, módulo `diretoria`):
+
+| Ação | Middleware |
+|---|---|
+| `GET /org-chart` | apenas `authenticate` — organograma não é segredo interno |
+| Demais leituras (`GET`) | `authorizeModule('diretoria')` (nível `operate` implícito) |
+| Todas as escritas | `authorizeModule('diretoria', 'approve')` — governança sensível, não operação de rotina |
+
+`created_by`/`createdBy` e o autor do provimento de cargo vêm **sempre** de
+`req.user.id` (JWT), nunca do body — regra anti-spoofing P0.
+
+### 35.1 Organograma Executivo
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/api/directorate/org-chart` | Árvore CEO→diretorias→departamentos, com `manager` e `vacant` por diretoria |
+| PATCH | `/api/directorate/directorates/:id/manager` | Prove (`manager_id: number`) ou vaga (`manager_id: null`) o cargo de diretor |
+
+`GET /org-chart` resposta:
+
+```json
+{
+  "success": true,
+  "data": {
+    "directorates": [
+      {
+        "id": 2, "code": "SUP", "name": "Suprimentos & Logística",
+        "position_title": "Diretor de Suprimentos & Logística",
+        "manager": null, "vacant": true,
+        "departments": [
+          { "id": 7, "code": "07", "name": "Compras", "sigla": "COMP" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`PATCH /directorates/:id/manager` — `{ "manager_id": 42 }` ou
+`{ "manager_id": null }`. Recusa (422, `DIRETORIA-CARGO-VAGO`) prover
+funcionário com `status !== 'active'`; recusa (404) diretoria ou funcionário
+inexistente.
+
+### 35.2 Planejamento Estratégico
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/api/directorate/strategic-plannings` | Lista paginada. Filtros: `year`, `directorate_id`, `department_id`, `status` |
+| GET | `/api/directorate/strategic-plannings/:id` | Busca por id |
+| POST | `/api/directorate/strategic-plannings` | Cria objetivo estratégico anual |
+| PUT | `/api/directorate/strategic-plannings/:id` | Atualiza campos do plano (exceto `actual_value`) |
+| PATCH | `/api/directorate/strategic-plannings/:id/actual` | Registra o valor REALIZADO |
+
+`POST` payload:
+
+```json
+{
+  "year": 2026,
+  "objective": "Reduzir CPV em 8%",
+  "directorate_id": 3,
+  "kpi": "CPV / faturamento",
+  "target_value": 8,
+  "weight": 30,
+  "status": "in_progress",
+  "responsible_id": 12
+}
+```
+
+- `directorate_id` e `department_id` são **mutuamente exclusivos** (422 se os
+  dois vierem preenchidos) — `NULL` nos dois é objetivo da empresa inteira.
+- `PATCH .../actual` (`{ "actual_value": 1200 }`) deriva `status`
+  automaticamente quando `target_value` está preenchido: `achieved` se
+  realizado ≥ meta, senão `in_progress`. Sem `target_value`, `status` não é
+  alterado automaticamente — use `PUT` para forçar `not_achieved`.
+
+### 35.3 Atas de Reunião
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/api/directorate/meeting-minutes` | Lista paginada. Filtros: `meeting_type`, `from`, `to` (`YYYY-MM-DD`) |
+| GET | `/api/directorate/meeting-minutes/:id` | Busca por id |
+| POST | `/api/directorate/meeting-minutes` | Registra uma ata |
+
+> ⚠️ **Não existe `PUT`/`DELETE` de conteúdo, por desenho.** Ata é registro
+> de governança imutável após criação — se está errada, registra-se uma ata
+> retificadora nova via `POST`. `PUT`/`DELETE` em `/meeting-minutes/:id`
+> retornam 404 (rota inexistente).
+
+`POST` payload:
+
+```json
+{
+  "meeting_date": "2026-08-01",
+  "meeting_type": "directors",
+  "title": "Reunião de Diretoria — agosto/2026",
+  "participants": "CEO, Diretor Industrial, Diretor Comercial",
+  "summary": "Revisão de indicadores do mês.",
+  "decisions": ["Aprovar orçamento 2027"],
+  "action_items": ["Diretor Financeiro: enviar planilha até 15/08"]
+}
+```
+
+`meeting_type`: `directors | commercial | industrial | financial | board | general`.
+`meeting_date` não pode estar no futuro (422) — a ata registra uma reunião
+que já ocorreu.
+
+### 35.4 Riscos Corporativos
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| GET | `/api/directorate/business-risks` | Lista paginada. Filtros: `status`, `risk_category` |
+| GET | `/api/directorate/business-risks/:id` | Busca por id |
+| POST | `/api/directorate/business-risks` | Registra um risco |
+| PUT | `/api/directorate/business-risks/:id` | Atualiza um risco |
+
+`POST` payload:
+
+```json
+{
+  "risk_category": "supply",
+  "description": "Fornecedor único de bobina de voz (MP-057)",
+  "probability": "high",
+  "impact": "critical",
+  "mitigation_actions": "Qualificar segundo fornecedor",
+  "contingency_plan": "Estoque de segurança de 60 dias",
+  "responsible_id": 12,
+  "review_date": "2026-12-01"
+}
+```
+
+> ⚠️ **`risk_score` nunca é aceito do payload.** Os schemas Zod de
+> criação/atualização (`.strict()`) nem declaram o campo — enviá-lo é
+> REJEITADO com 400, não silenciosamente ignorado. `risk_score` é sempre
+> `probability × impact` calculado no servidor (`low=1, medium=2, high=3,
+> critical=4`, escala 1–16). Em `PUT`, mudar `probability` e/ou `impact`
+> recalcula automaticamente.
+
+`risk_category`: `operational | financial | market | regulatory | reputation | supply`.
+`probability`/`impact`: `low | medium | high | critical`.
+`status`: `active | mitigated | accepted | closed` (default `active`).
+
+---
+
 ## Códigos de Erro
 
 | Código | Significado |

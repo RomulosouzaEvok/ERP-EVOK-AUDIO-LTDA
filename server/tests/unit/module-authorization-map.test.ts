@@ -102,6 +102,13 @@ const MODULES_REQUIRING_AUTHORIZE_MODULE = [
   // abriria um caminho para criar BOM sem passar pelo módulo que a protege
   // (ver cabeçalho de `presentation/routes/catalogImport.ts`).
   'spreadsheetImport',
+  // Módulo NOVO Diretoria (2026-08-12): Organograma Executivo, Planejamento
+  // Estratégico, Atas de Reunião e Riscos Corporativos
+  // (`/api/directorate/*`), atrás de `authorizeModule('diretoria', ...)`.
+  // Única exceção do módulo é `GET /org-chart`, que usa apenas
+  // `authenticate` — deliberado (organograma não é segredo interno) e
+  // coberto por teste de integração dedicado, não por esta guarda.
+  'directorate',
 ];
 
 /**

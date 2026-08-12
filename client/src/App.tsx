@@ -10,6 +10,9 @@ import ResetPasswordPage from '@/pages/ResetPasswordPage';
 // (auditoria de 2026-08-11). O antigo `DashboardPage` de 4 KPIs foi
 // substituído por esta visão de cadeia completa.
 const CommandCenterPage = lazy(() => import('@/pages/executive/CommandCenterPage'));
+// Módulo Diretoria (organograma, planejamento estratégico, atas, riscos
+// corporativos) — entregue em 2026-08-12, `/api/directorate/*`.
+const DirectoratePage = lazy(() => import('@/pages/executive/DirectoratePage'));
 import HomePage from '@/pages/home/HomePage';
 
 // Paginas internas carregadas sob demanda (code-splitting): reduz o bundle
@@ -95,6 +98,20 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <CommandCenterPage />
+                </Suspense>
+              }
+            />
+          </Route>
+          {/* Diretoria: organograma/planejamento/atas/riscos. `GET /org-chart`
+              é liberado no backend a qualquer autenticado, mas a rota inteira
+              usa o mesmo padrão de guarda das demais (ModuleRoute), pois as
+              outras 3 abas exigem o módulo `diretoria`. */}
+          <Route element={<ModuleRoute module="diretoria" />}>
+            <Route
+              path="/directorate"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <DirectoratePage />
                 </Suspense>
               }
             />

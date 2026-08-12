@@ -212,6 +212,9 @@ app.use('/api/budget', require('./src/modules/budget/presentation/routes/budget'
 // BLOCO 6 RH — modulo NOVO, montado AO LADO de '/api/employees' (que
 // permanece inalterado, RF-RH-006); nao ha conflito de prefixo.
 app.use('/api/rh', require('./src/modules/rh/presentation/routes/rh'));
+// Modulo Diretoria (2026-08-12) — Organograma Executivo, Planejamento
+// Estrategico, Atas de Reuniao e Riscos Corporativos.
+app.use('/api/directorate', require('./src/modules/directorate/presentation/routes/directorate'));
 
 app.use('/uploads', express.static('uploads'));
 

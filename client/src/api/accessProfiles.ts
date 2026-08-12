@@ -18,6 +18,11 @@ import type { ItemResponse } from './types';
  * adicionado em 2026-08-08 (correção RF-JUR-003 do módulo Jurídico) — papel
  * de aprovador de alçada de contrato por valor, sem tela/rota própria, só
  * concede o direito de aprovar via `POST /api/jur/contracts/:id/approve`.
+ * `diretoria` adicionado em 2026-08-12 para o módulo Diretoria
+ * (organograma executivo, planejamento estratégico, atas de reunião e
+ * riscos corporativos, `/api/directorate/*`) — não confundir com `diretor`
+ * (papel transversal de aprovador de alçada acima): `diretoria` é o
+ * domínio de dados do módulo em si.
  */
 export type AccessModuleKey =
   | 'dashboard'
@@ -50,6 +55,7 @@ export type AccessModuleKey =
   | 'marketing'
   | 'juridico'
   | 'diretor'
+  | 'diretoria'
   | 'contabilidade'
   | 'tesouraria'
   | 'controladoria'

@@ -45,7 +45,7 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 
 ---
 
-## Índice de tabelas (81 catalogadas de 195 existentes no banco)
+## Índice de tabelas (85 catalogadas de 207 existentes no banco)
 
 > As tabelas dos módulos SST (`sst_*`), RH (`hr_*`), TI (`it_*`), Jurídico
 > (`jur_*`), Facilities (`facility_*`), Marketing (`marketing_*`),
@@ -64,11 +64,13 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 - [`bank_statements`](#bankstatements)
 - [`bill_of_material_items`](#billofmaterialitems)
 - [`bill_of_materials`](#billofmaterials)
+- [`business_risks`](#businessrisks)
 - [`clients`](#clients)
 - [`company_fiscal_config`](#companyfiscalconfig)
 - [`cost_centers`](#costcenters)
 - [`customer_price_lists`](#customerpricelists)
 - [`departments`](#departments)
+- [`directorates`](#directorates)
 - [`employees`](#employees)
 - [`engineering_projects`](#engineeringprojects)
 - [`entradas_nf`](#entradasnf) `[DEPRECATED]`
@@ -88,6 +90,7 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 - [`lot_controls`](#lotcontrols)
 - [`lotes`](#lotes) `[DEPRECATED]`
 - [`maintenance_orders`](#maintenanceorders)
+- [`meeting_minutes`](#meetingminutes)
 - [`migracao_bom_log`](#migracaobomlog) `[DEPRECATED]`
 - [`migracao_categoria_map`](#migracaocategoriamap) `[NÃO EXISTE NO BANCO]`
 - [`migracao_product_item_map`](#migracaoproductitemmap) `[DEPRECATED]`
@@ -125,6 +128,7 @@ Tabelas marcadas **[ÓRFÃ/DEPRECATED]** fazem parte do schema-fantasma em portu
 - [`sales`](#sales)
 - [`serial_numbers`](#serialnumbers)
 - [`service_orders`](#serviceorders)
+- [`strategic_plannings`](#strategicplannings)
 - [`suppliers`](#suppliers)
 - [`users`](#users)
 - [`usuarios`](#usuarios) `[DEPRECATED]`
@@ -405,6 +409,32 @@ BOM do schema `products` legado (cabeçalho).
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 
+## `business_risks`
+
+Risco corporativo (módulo Diretoria — `server/src/modules/directorate/`).
+`risk_score` é sempre calculado no servidor (`probability × impact`,
+`low=1..critical=4`), nunca aceito do payload. Migration
+`20260812-000046-create-directorate-governance.cjs`.
+
+| Coluna | Tipo | Nulo? | Default | Chave |
+|---|---|---|---|---|
+| `id` | INTEGER | NÃO | auto-increment | **PK** |
+| `risk_category` | enum_business_risks_risk_category (operational\|financial\|market\|regulatory\|reputation\|supply) | NÃO | - | - |
+| `description` | TEXT | NÃO | - | - |
+| `probability` | enum_business_risks_probability (low\|medium\|high\|critical) | NÃO | - | - |
+| `impact` | enum_business_risks_impact (low\|medium\|high\|critical) | NÃO | - | - |
+| `risk_score` | INTEGER | NÃO | - | calculado no servidor (probability × impact) |
+| `mitigation_actions` | TEXT | sim | - | - |
+| `contingency_plan` | TEXT | sim | - | - |
+| `responsible_id` | INTEGER | sim | - | FK → `employees.id` (RESTRICT) |
+| `review_date` | DATE | sim | - | - |
+| `status` | enum_business_risks_status (active\|mitigated\|accepted\|closed) | NÃO | 'active' | - |
+| `created_by` | INTEGER | NÃO | - | FK → `users.id` (RESTRICT) |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+
+Índices: `business_risks_status_idx`, `business_risks_risk_category_idx`.
+
 ## `clients`
 
 Clientes (schema mais novo) — usado por `customer_price_lists`, `service_orders`.
@@ -511,6 +541,32 @@ Departamentos organizacionais (21 no organograma).
 | `active` | BOOLEAN | sim | true | - |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+
+> `departments.directorate_id` (FK → `directorates.id`, RESTRICT, nullable —
+> `NULL` = transversal, hoje só SST) foi adicionada pela migration
+> `20260811-000043-create-directorates-hierarchy.cjs` e ainda não está
+> refletida na tabela de colunas acima (débito herdado da regeneração
+> parcial deste dicionário, ver aviso no topo do arquivo).
+
+## `directorates`
+
+Diretorias do organograma (nível acima de `departments`). Migration
+`20260811-000043-create-directorates-hierarchy.cjs`, model
+`server/src/models/Directorate.ts`. Ver
+[docs/administrativo/05-ORGANOGRAMA_EXECUTIVO.md](../administrativo/05-ORGANOGRAMA_EXECUTIVO.md).
+
+| Coluna | Tipo | Nulo? | Default | Chave |
+|---|---|---|---|---|
+| `id` | INTEGER | NÃO | auto-increment | **PK** |
+| `code` | VARCHAR(10) | NÃO | - | UQ (CEO\|IND\|SUP\|COM\|ADM) |
+| `name` | VARCHAR(100) | NÃO | - | - |
+| `position_title` | VARCHAR(120) | NÃO | - | - |
+| `manager_id` | INTEGER | sim | - | FK → `employees.id` (RESTRICT). `NULL` = cargo vago |
+| `active` | BOOLEAN | NÃO | true | - |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+
+Índice único: `code`.
 
 ## `employees`
 
@@ -930,6 +986,29 @@ Ordens de manutenção de ativos.
 | `created_by` | INTEGER | sim | - | FK → `users.id` |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+
+## `meeting_minutes`
+
+Ata de reunião (módulo Diretoria). Registro de governança **imutável após
+criação** — o módulo não expõe rota de update/delete de conteúdo. Migration
+`20260812-000046-create-directorate-governance.cjs`.
+
+| Coluna | Tipo | Nulo? | Default | Chave |
+|---|---|---|---|---|
+| `id` | INTEGER | NÃO | auto-increment | **PK** |
+| `meeting_date` | DATE | NÃO | - | - |
+| `meeting_type` | enum_meeting_minutes_meeting_type (directors\|commercial\|industrial\|financial\|board\|general) | NÃO | - | - |
+| `title` | VARCHAR(200) | NÃO | - | - |
+| `participants` | TEXT | sim | - | - |
+| `summary` | TEXT | sim | - | - |
+| `decisions` | JSONB | NÃO | `[]` | array de texto livre |
+| `action_items` | JSONB | NÃO | `[]` | array de texto livre, sem dono/prazo estruturado nesta versão |
+| `file_path` | VARCHAR(500) | sim | - | - |
+| `created_by` | INTEGER | NÃO | - | FK → `users.id` (RESTRICT) |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+
+Índices: `meeting_minutes_meeting_date_idx`, `meeting_minutes_meeting_type_idx`.
 
 ## `migracao_bom_log` `[DEPRECATED]`
 
@@ -1695,6 +1774,32 @@ Ordens de serviço (assistência técnica pós-venda).
 | `created_by` | INTEGER | sim | - | FK → `users.id` |
 | `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
 | `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | - | - |
+
+## `strategic_plannings`
+
+Objetivo estratégico anual (módulo Diretoria). Dono é `directorate_id` OU
+`department_id`, nunca os dois (CHECK `strategic_plannings_owner_xor_ck`).
+Migration `20260812-000046-create-directorate-governance.cjs`.
+
+| Coluna | Tipo | Nulo? | Default | Chave |
+|---|---|---|---|---|
+| `id` | INTEGER | NÃO | auto-increment | **PK** |
+| `year` | INTEGER | NÃO | - | - |
+| `objective` | TEXT | NÃO | - | - |
+| `directorate_id` | INTEGER | sim | - | FK → `directorates.id` (RESTRICT). XOR com `department_id` |
+| `department_id` | INTEGER | sim | - | FK → `departments.id` (RESTRICT). XOR com `directorate_id` |
+| `kpi` | VARCHAR(200) | sim | - | - |
+| `target_value` | NUMERIC(15,2) | sim | - | - |
+| `actual_value` | NUMERIC(15,2) | sim | - | - |
+| `weight` | NUMERIC(5,2) | sim | - | - |
+| `status` | enum_strategic_plannings_status (not_started\|in_progress\|achieved\|not_achieved) | NÃO | 'not_started' | - |
+| `responsible_id` | INTEGER | sim | - | FK → `employees.id` (RESTRICT) |
+| `created_by` | INTEGER | NÃO | - | FK → `users.id` (RESTRICT) |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NÃO | CURRENT_TIMESTAMP | - |
+
+Constraint: `strategic_plannings_owner_xor_ck` (CHECK). Índices: `year`,
+`directorate_id`, `department_id`, `status`.
 
 ## `suppliers`
 

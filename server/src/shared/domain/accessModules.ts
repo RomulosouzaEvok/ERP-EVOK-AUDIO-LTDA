@@ -170,6 +170,21 @@
  * também como o segundo papel de aprovador nas faixas de maior valor
  * (RF-JUR-003, `server/src/modules/juridico/domain/constants.ts`).
  *
+ * `diretoria` foi adicionado em 2026-08-12 para o módulo Diretoria
+ * (Planejamento Estratégico, Atas de Reunião e Riscos Corporativos,
+ * `server/src/modules/directorate/`, `docs/administrativo/01-DIRETORIA.md`).
+ * Não confundir com `diretor` (papel transversal de APROVADOR de alçada,
+ * ver acima) — `diretoria` é o DOMÍNIO de dados do módulo em si. Padrão de
+ * `contabilidade`/`tesouraria`: TEM nível `approve`, usado em
+ * `authorizeModule('diretoria', 'approve')` para toda escrita de
+ * planejamento estratégico, ata e risco corporativo — decisão do dono do
+ * produto de que este é conteúdo sensível de governança, não operação de
+ * rotina. Exceção deliberada: o **organograma executivo**
+ * (`GET /api/directorate/org-chart`) é liberado a qualquer usuário
+ * autenticado (apenas `authenticate`, sem `authorizeModule`) — a hierarquia
+ * CEO→diretorias→departamentos não é segredo interno, é a mesma informação
+ * que já aparece na navegação do frontend.
+ *
  * `controladoria` foi adicionado em 2026-08-07 para o módulo Controladoria
  * (subárea CTR do departamento Financeiro, sem linha própria em
  * `departments` — `docs/financeiro/00-README.md`, escopo "Custos
@@ -212,6 +227,7 @@ export type AccessModuleKey =
   | 'manutencao'
   | 'garantia'
   | 'diretor'
+  | 'diretoria'
   | 'rh'
   | 'sst'
   | 'ti'
@@ -324,6 +340,7 @@ export const ACCESS_MODULES: readonly AccessModuleDescriptor[] = [
   // da Qualidade" (GQ), que é a função de QA dentro de Qualidade.
   { key: 'garantia', label: 'Garantia/Assistência Técnica', owner: 'VEND' },
   { key: 'diretor', label: 'Diretoria (aprovador de alçada, RF-JUR-003)', owner: 'DIR' },
+  { key: 'diretoria', label: 'Diretoria (planejamento estratégico, atas, riscos corporativos)', owner: 'DIR' },
   { key: 'rh', label: 'Recursos Humanos (dados sensíveis)', owner: 'RH' },
   { key: 'sst', label: 'Segurança e Saúde do Trabalho (dados sensíveis)', owner: 'SST' },
   { key: 'ti', label: 'Tecnologia da Informação (helpdesk, patrimônio de TI, acessos)', owner: 'TI' },

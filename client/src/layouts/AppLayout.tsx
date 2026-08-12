@@ -46,6 +46,7 @@ import {
   ClipboardCheck,
   ScrollText,
   Crown,
+  Workflow,
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -133,6 +134,10 @@ const NAV_ITEMS: NavItem[] = [
   // (D-K/RF-JUR-003). Quem aprova é quem enxerga a sala de comando; o
   // `admin` entra pelo fallback de papel, como em todo o menu.
   { department: 'diretoria', label: 'Sala de Comando', to: '/dashboard', icon: Crown, module: 'diretor' },
+  // Diretoria (2026-08-12): organograma executivo, planejamento estratégico,
+  // atas de reunião e riscos corporativos, `/api/directorate/*`. Módulo
+  // `diretoria` — não confundir com `diretor` (alçada de aprovação, acima).
+  { department: 'diretoria', label: 'Diretoria', to: '/directorate', icon: Workflow, module: 'diretoria' },
 
   // ── Vendas ───────────────────────────────────────────────────────────
   { department: 'vendas', label: 'Pedidos de Venda', to: '/sales', icon: ShoppingCart, module: 'vendas' },

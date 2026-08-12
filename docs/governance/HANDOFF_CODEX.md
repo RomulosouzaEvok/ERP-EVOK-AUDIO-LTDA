@@ -16098,3 +16098,261 @@ no relatório de não-casados e **não** entra no resumo mensal.
   (backend). Ajuste futuro se o próximo agente quiser fechar essa lacuna.
 - **Nada foi commitado** — tudo fica no working tree, no mesmo padrão das
   entradas anteriores de hoje.
+
+---
+
+## 2026-08-12 — Módulo Diretoria: backend completo (Organograma, Planejamento Estratégico, Atas, Riscos)
+
+**Contexto:** a tabela `directorates` (hierarquia CEO→diretorias→
+departamentos) existia desde 2026-08-11 sem nenhuma rota/controller/use-case
+— só era lida por seed e associação. `docs/administrativo/01-DIRETORIA.md`
+descrevia 3 tabelas de governança (`strategic_planning`, `meeting_minutes`,
+`business_risks`) em SQL MySQL aspiracional, nunca aplicadas ao banco. Esta
+entrega fecha os dois gaps: dá API ao organograma existente e implementa de
+verdade as três tabelas de governança, no padrão PostgreSQL/Sequelize do
+projeto (não a sintaxe MySQL do documento original).
+
+### Resumo da feature
+
+- **Migration `20260812-000046-create-directorate-governance.cjs`** — 3
+  tabelas novas: `strategic_plannings` (objetivo estratégico anual, dono
+  `directorate_id` XOR `department_id` via CHECK
+  `strategic_plannings_owner_xor_ck`), `meeting_minutes` (ata de reunião,
+  `decisions`/`action_items` em JSONB), `business_risks` (risco corporativo,
+  `risk_score` calculado). Aplicada nos DOIS bancos
+  (`erp_evok_audio`/`erp_evok_audio_test`) — `node scripts/comparar-bancos.cjs`
+  confirma 0 divergências.
+- **3 models novos** — `StrategicPlanning`, `MeetingMinute`, `BusinessRisk`
+  (`server/src/models/`), registrados e associados em `models/index.ts`
+  (`Directorate`/`Department`/`Employee`/`User` como donos das FKs).
+- **Módulo `server/src/modules/directorate/`** (Clean Architecture, mesmo
+  padrão de `modules/budget`/`modules/quality`):
+  - `domain/services/riskScore.ts` — `calculateRiskScore(probability, impact)`,
+    função pura (`low=1..critical=4`, score 1–16). É a ÚNICA fonte da
+    fórmula; nunca aceita do payload HTTP (schemas Zod `.strict()` nem
+    declaram o campo).
+  - `domain/repositories/DirectorateRepository.ts` +
+    `infrastructure/sequelize/SequelizeDirectorateRepository.ts`.
+  - 12 use cases: organograma (`GetExecutiveOrgChartUseCase`,
+    `AssignDirectorateManagerUseCase` — recusa prover funcionário
+    `status !== 'active'` no cargo de diretor), planejamento estratégico
+    (Create/Update/List/GetById + `UpdateStrategicPlanningActualUseCase`,
+    que deriva `status` automaticamente quando há `target_value`), atas
+    (Create/List/GetById — **sem** Update/Delete, de propósito), riscos
+    (Create/Update/List/GetById, `risk_score` sempre recalculado quando
+    `probability`/`impact` mudam).
+  - 4 controllers + 1 router agregador (`presentation/routes/directorate.ts`),
+    montado em `/api/directorate` (`server/app.ts`).
+- **RBAC** — módulo `diretoria` adicionado ao catálogo
+  (`server/src/shared/domain/accessModules.ts`), owner `DIR`. `GET
+  /org-chart` é a única rota do módulo liberada a qualquer autenticado (sem
+  `authorizeModule`) — organograma não é segredo interno. Todo o resto:
+  leitura em nível padrão, **toda escrita exige `diretoria:approve`**
+  (governança sensível, não operação de rotina — mesmo padrão de
+  `contabilidade`/`tesouraria`).
+- **Auditoria** — `logAction` em toda escrita (provimento de cargo, criação/
+  edição de planejamento, criação de ata, criação/edição de risco); módulo
+  nasce fora da lista de débito de `audit-coverage-guard.test.ts` (a lista só
+  encolhe, e `directorate` nunca esteve nela).
+
+### Decisões tomadas além do especificado
+
+- Nome do módulo de acesso: `diretoria` (novo), **distinto** de `diretor`
+  (papel transversal de aprovador de alçada já existente, RF-JUR-003/G11).
+  `diretoria` é o DOMÍNIO de dados do módulo Diretoria em si.
+- `UpdateStrategicPlanningActualUseCase` separado de
+  `UpdateStrategicPlanningUseCase`: registrar o realizado é ato distinto de
+  editar o plano (mesmo espírito de "inspecionar" × "liberar" em Qualidade).
+  Deriva `status` (`achieved` se realizado ≥ meta, senão `in_progress`)
+  apenas quando há `target_value`; nunca sobrescreve `not_achieved`
+  automaticamente (decisão humana, via `PUT`).
+- Atas: nenhuma trigger de banco impede `UPDATE` SQL direto — a garantia de
+  imutabilidade vive só na ausência da rota HTTP (mesmo desenho de
+  `AuditLog` no projeto). Documentado explicitamente nos 3 lugares (model,
+  migration, doc de negócio) para não ser "redescoberto" como bug depois.
+- Conselho de Administração / Assembleia de Sócios (linhas da tabela antiga
+  em `01-DIRETORIA.md`) **não** viraram schema — usam `meeting_minutes` com
+  `meeting_type = 'board'/'general'`, sem campos dedicados de
+  conselheiro/sócio. Aprovação de CAPEX também ficou de fora (regra de
+  processo, ainda sem contrapartida em código) — ambos registrados como
+  pendência consciente no próprio `01-DIRETORIA.md`.
+
+### Documentações atualizadas
+
+- `docs/administrativo/01-DIRETORIA.md` — banner `[PENDENTE]` removido, SQL
+  MySQL aspiracional substituído pelo estado real (tabelas, endpoints,
+  regras implementadas, o que ficou de fora e por quê).
+- `docs/database/04-DICIONARIO_DADOS.md` — 4 entradas novas: `directorates`
+  (débito antigo, existia desde 2026-08-11 sem entrada no dicionário),
+  `business_risks`, `meeting_minutes`, `strategic_plannings`. Índice
+  atualizado (81→85 catalogadas, 195→207 no banco).
+- `docs/arquitetura/API.md` — seção 35 nova ("Diretoria — Organograma,
+  Planejamento Estratégico, Atas e Riscos"), com os 4 grupos de endpoint,
+  payloads de exemplo e as regras de negócio (XOR de dono, imutabilidade de
+  ata, `risk_score` no servidor).
+- `CLAUDE.md` §1 — medição canônica atualizada (167→168 migrations,
+  204→207 tabelas, 471→478 FKs).
+- `docs/database/00-INDICE.md` — medição canônica atualizada (mesmos
+  números) + nota da 168ª migration.
+- JSDoc em 100% dos arquivos novos (models, repositórios, use cases,
+  controllers, rotas, validators, serviço de domínio).
+
+### Instruções de teste
+
+1. `cd server && npm run typecheck` — limpo.
+2. `cd server && npm run test:unit` — **1946/1946**, 177 suítes (28 testes
+   novos em `tests/unit/directorate-use-cases.test.ts`, cobrindo
+   `calculateRiskScore`, XOR de dono do planejamento, imutabilidade de ata
+   — via ausência de update/delete use case —, e provimento de cargo com
+   funcionário inativo/ativo/inexistente).
+3. `cd server && npm run test:integration` (via `scripts/run-api-suite.cjs`)
+   — **56/56 suítes, 231/231 testes**, incluindo
+   `tests/integration/directorate-governance-cycle.test.ts` (4 testes: prover
+   gerente reflete no organograma + audita, criar objetivo→atualizar
+   realizado, criar ata→confirmar ausência de PUT/DELETE, criar
+   risco→conferir `risk_score` calculado e payload `.strict()` rejeitando
+   `risk_score` externo), `audit-coverage-guard`, `cross-database-drift-guard`
+   e `docs-reality-drift-guard` — todas verdes.
+4. `node server/scripts/comparar-bancos.cjs` — **0 divergências** entre
+   `erp_evok_audio` e `erp_evok_audio_test`.
+5. Manual (quando a tela existir, fora deste escopo): `GET
+   /api/directorate/org-chart` sem token de aprovador deve funcionar (só
+   `authenticate`); `PATCH .../directorates/:id/manager` com usuário sem
+   `diretoria:approve` deve responder 403 `APPROVAL_LEVEL_REQUIRED`.
+
+### Riscos residuais / decisões registradas
+
+- **Sem tela.** Este escopo era só backend — `client/` fica para o agente de
+  frontend (`PromadorFonteEnd`), consumindo o mapa de rotas acima.
+- **`action_items` sem dono/prazo estruturado** — array JSON de texto livre;
+  virar entidade própria é evolução futura se o volume de reuniões pedir
+  cobrança automática de pendência.
+- **Aprovação de CAPEX sem endpoint** — regra de processo descrita em
+  `01-DIRETORIA.md`, ainda sem contrapartida em código.
+- **Nada foi commitado** — tudo fica no working tree, no mesmo padrão das
+  entradas anteriores.
+
+## 2026-08-12 (2ª entrada) — Módulo Diretoria: tela nova (`/directorate`)
+
+Fecha a pendência "sem tela" registrada na entrada anterior (backend
+completo do módulo Diretoria). Escopo: `client/` apenas, nada em `server/`.
+
+### Arquivos criados
+
+- `client/src/api/directorate.ts` — client tipado das 14 rotas de
+  `/api/directorate/*` (org-chart + provimento de cargo, planejamento
+  estratégico, atas de reunião, riscos corporativos). `target_value`/
+  `actual_value`/`weight` documentados como `DECIMAL` que trafegam como
+  `string` na leitura (não truncar); os payloads de escrita mandam `number`
+  puro (o backend usa `DECIMAL(15,2)`/`(5,2)`, sem risco de perda de
+  precisão nesses ranges). `risk_score` nunca aparece nos tipos de input de
+  criação/edição de risco — só no tipo de leitura — porque o schema Zod do
+  backend é `.strict()` e rejeitaria o campo.
+- `client/src/pages/executive/DirectoratePage.tsx` — página com 4 abas
+  (padrão `useState`/`TabButton` de `HrPage.tsx`): Organograma, Planejamento
+  Estratégico, Atas de Reunião, Riscos.
+- `client/src/pages/executive/OrgChartTab.tsx` — árvore CEO → 4 diretorias →
+  departamentos. Card por diretoria com nome, cargo, gestor ou badge "CARGO
+  VAGO" (hoje é o caso real de Suprimentos & Logística). Dialog de
+  prover/vagar cargo lista só funcionários com `status: 'active'`
+  (`employeesApi.listEmployees({ status: 'active' })`, filtro que
+  `useEmployeeOptions` não fazia — por isso não foi reaproveitado aqui, para
+  não listar funcionário desligado/afastado como candidato a diretor, o
+  que o backend rejeitaria com 422 mesmo assim).
+- `client/src/pages/executive/StrategicPlanningTab.tsx` — lista com filtros
+  (ano, diretoria, departamento, status), criar/editar objetivo (dono =
+  empresa toda **ou** diretoria **ou** departamento, nunca dois — a UI
+  força isso com um seletor de "tipo de dono" que zera o campo não
+  escolhido antes de montar o payload), dialog dedicado para `PATCH
+  .../actual` (registrar realizado). Meta × realizado vira uma barra de
+  progresso simples (`<Progress>`, componente já existente) com percentual
+  — sem lib de gráfico nova, como pedido.
+- `client/src/pages/executive/MeetingMinutesTab.tsx` — lista com filtros
+  (tipo, período `from`/`to`), criar ata (data, tipo, título, participantes,
+  resumo, decisões e itens de ação como listas dinâmicas — adicionar/
+  remover item antes de enviar), detalhe em dialog. **Sem botão de
+  editar/excluir** — o formulário de criação mostra um aviso âmbar fixo
+  ("A ata não pode ser alterada depois de registrada..."), e não existe
+  nenhuma chamada de update/delete no client (`directorate.ts` não exporta
+  essas funções, de propósito, espelhando a ausência da rota no backend).
+  `action_items` vira `{ description, responsible, due_date }[]` (não texto
+  livre) — o backend aceita `unknown[]`, então a estrutura é só uma escolha
+  de UX para facilitar leitura posterior.
+- `client/src/pages/executive/BusinessRisksTab.tsx` — lista com badge de
+  score colorido (1–4 verde/`success`, 6–9 âmbar, 12–16 vermelho/
+  `destructive`, usando a mesma paleta de `Badge`), filtros (status,
+  categoria), criar/editar risco com `probability`/`impact` como selects
+  (`low`/`medium`/`high`/`critical` — a nomenclatura real do backend, não a
+  escala numérica 1–4 sugerida como atalho na tarefa; o `risk_score`
+  1..16 é o mesmo resultado). Um score "previsto" aparece no formulário só
+  como prévia visual (`LEVEL_WEIGHT` local, comentado como espelho do
+  `domain/services/riskScore.ts` do servidor) — **nunca** é enviado no
+  payload; o valor exibido na listagem é sempre `risk.risk_score` vindo da
+  resposta da API.
+
+### Arquivos editados
+
+- `client/src/api/accessProfiles.ts` — `AccessModuleKey` ganhou `'diretoria'`
+  (o backend já tinha o módulo no catálogo desde a entrega anterior; o tipo
+  do client estava desatualizado e bloquearia o typecheck ao usar
+  `hasModuleAccess('diretoria')`/`permissions?.diretoria`).
+- `client/src/App.tsx` — rota `/directorate` nova, atrás de `<ModuleRoute
+  module="diretoria" />` (mesmo padrão de `/dashboard`↔`diretor`), lazy-loaded.
+- `client/src/layouts/AppLayout.tsx` — item de menu "Diretoria" novo dentro
+  do grupo `department: 'diretoria'` (já existia, continha só "Sala de
+  Comando"), ícone `Workflow` (lucide-react não tem `Sitemap`). Nenhuma
+  mudança na lista/estrutura de `DEPARTMENTS`/`DIRECTORATES`
+  (`@/lib/departments.ts`) — só um `NavItem` a mais, o que
+  `departments.seeds.test.ts` não guarda (ele guarda a estrutura de
+  departamentos/diretorias, não os itens de menu).
+
+### Decisões tomadas além do especificado
+
+- **Rota inteira atrás de `ModuleRoute module="diretoria"`**, mesmo `GET
+  /org-chart` sendo liberado no backend a qualquer autenticado. Consistente
+  com o precedente de `/dashboard` (que já gate por `diretor` mesmo tendo
+  chamadas que talvez não precisassem) — evita uma tela que renderiza só
+  1 de 4 abas para quem não tem o módulo, o que seria mais confuso que
+  negar a rota inteira com a tela de "Acesso negado" já existente.
+- **Nível de escrita (`diretoria:approve`)** resolvido em cada aba com
+  `hasRole('admin') || permissions?.diretoria === 'approve'` — mesmo padrão
+  já usado em `RfqPage.tsx` (`permissions?.compras === 'approve'`). Não há
+  guard de rota por nível (só por módulo); cada aba esconde os botões de
+  escrita quando o nível não é suficiente, e `translateApiError` cobre o
+  403 caso o usuário tente mesmo assim (ex.: duas abas abertas, permissão
+  mudou no meio da sessão).
+
+### Instruções de teste
+
+1. `cd client && npx tsc -b` — limpo.
+2. `cd client && npm run lint` (`oxlint`) — sem avisos novos (confirmado
+   filtrando a saída por `executive`/`directorate`; os avisos pré-existentes
+   de `only-export-components` em outros arquivos não mudaram).
+3. `cd client && npx vitest run` — **83/83** (14 arquivos), nenhuma
+   quebra na suíte existente (inclui a guarda de navegação do
+   `AppLayout.navigation.test.tsx`, que reprovaria em caso de `to` duplicado).
+4. `cd client && npm run build` — ok (`DirectoratePage` vira chunk lazy
+   próprio, `40.70 kB`/`8.77 kB` gzip).
+5. Manual (não executado nesta sessão — sem servidor rodando): logar como
+   usuário sem módulo `diretoria` e confirmar que `/directorate` mostra
+   "Acesso negado"; logar como perfil com `diretoria` nível `operate` e
+   confirmar que os botões de escrita (novo objetivo, nova ata, prover
+   cargo, novo risco) não aparecem, mas a leitura funciona nas 4 abas.
+
+### Riscos residuais / divergências encontradas no mapa de rotas da tarefa
+
+- A tarefa sugeria `probability`/`impact` como escala numérica 1–4; o
+  backend real usa os literais `low`/`medium`/`high`/`critical` (mapeados
+  para 1–4 só internamente, em `riskScore.ts`). A tela usa os literais reais
+  — é o que o Zod `.strict()` aceita.
+- Nenhuma outra divergência entre o mapa de rotas fornecido e o código real
+  do backend (controllers/validators/router lidos diretamente antes de
+  tipar) — os 14 endpoints, o RBAC (`GET /org-chart` sem `authorizeModule`,
+  demais leituras em nível padrão, toda escrita `diretoria:approve`) e a
+  ausência proposital de `PUT`/`DELETE` em atas bateram exatamente com o
+  código.
+- **Sem teste de integração real (Postgres) da tela** — só typecheck/
+  lint/vitest/build, mesmo critério que já se aplicava ao backend puro
+  antes de existir tela (ver ressalva de "escrita real" no topo deste
+  arquivo/`CLAUDE.md`).
+- **Nada foi commitado** — tudo fica no working tree.
