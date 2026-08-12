@@ -15575,3 +15575,526 @@ Para provar que as guardas **realmente reprovam** (não confie no verde):
   usar só quando o documento for genuinamente um registro de data.
 - **Nada foi commitado** — tudo fica no working tree, junto com as quatro
   entregas anteriores.
+
+---
+
+## 2026-08-12 — Frontend RH Fase A: Admissão, Contratos, Demissão, Férias (Bloco 6, UC-67/68/69/70)
+
+**Agente:** `PromadorFonteEnd`. **Escopo:** só `client/` (backend do Bloco 6,
+`server/src/modules/rh/`, já existia e não foi tocado). Fecha a lacuna de UI
+que separava `/api/rh/*` de qualquer tela — os 4 fluxos P0 do módulo RH
+(`docs/business/BLOCO_6_RH_API.md` §4/§5/§6/§8, rotas confirmadas por leitura
+direta de `server/src/modules/rh/presentation/routes/rh.ts`, controllers e
+validators, não só do contrato de API) agora têm interface.
+
+### Arquivos novos
+
+- `client/src/api/hr.ts` — client de `/api/rh/*` (Admissão, Contrato de
+  Experiência, Demissão, Documentos do Funcionário, Férias — Grupos 2 a 6 do
+  contrato). Tipos batem com os models Sequelize reais (`HrAdmissionProcess`,
+  `HrEmployeeContract`, `HrTerminationProcess`, `HrVacationAccrualPeriod`,
+  `HrVacationSchedule`), não só com o exemplo de payload do documento (ver
+  divergência abaixo).
+- `client/src/components/hr/FileUploadDialog.tsx` — dialog multipart
+  reutilizável (mesmo padrão `rhFileUpload.single('file')` do backend), usado
+  por Demissão para o ASO demissional (`POST /employee-documents`) e o TRCT
+  (`POST /termination-processes/:id/trct`).
+- `client/src/components/hr/useEmployeeOptions.ts` — hook de seletor/lookup
+  de funcionário (`GET /api/employees?limit=200`), compartilhado por
+  Contratos, Demissão e Férias.
+- `client/src/pages/hr/AdmissionTab.tsx`, `EmployeeContractsTab.tsx`,
+  `TerminationTab.tsx`, `VacationTab.tsx` — as 4 abas novas.
+
+### Arquivo editado
+
+- `client/src/pages/hr/HrPage.tsx` — de 2 para 6 abas (Funcionários,
+  Departamentos + as 4 novas), mesmo padrão de abas locais já usado.
+
+### RBAC replicado da API
+
+Toda leitura/escrita das 4 abas exige o módulo `rh` no perfil de acesso do
+usuário (`hasModuleAccess('rh')`, já existente em `AuthContext`) — igual ao
+`authorizeModule('rh', ...)` do backend. As 2 ações de nível `rh:approve`
+(concluir demissão, decidir rescisão de contrato de experiência) ficam com o
+botão desabilitado + tooltip explicativo para quem só tem `operate`; a
+tentativa ainda é recusada pelo backend com 403 se contornada (a UI não é a
+única barreira).
+
+### Divergência real encontrada entre o contrato de API e o código do backend
+
+O exemplo de payload de `POST /admission-processes/:id/conclude` no
+`BLOCO_6_RH_API.md` §4.3 usa `"work_regime": "experiencia"` — **esse valor
+não existe** no ENUM `employees.work_regime` (`clt|pj|estagiario|aprendiz`,
+`rhEnums.ts`, com comentário explícito do backend confirmando o erro do
+documento). "Experiência" é `EmployeeContract.type`, não regime de trabalho.
+`client/src/api/hr.ts` e `AdmissionTab.tsx` seguem o **código real**
+(`employeeWorkRegimeEnum`), não o exemplo do documento — o formulário de
+conclusão de admissão nunca envia `work_regime='experiencia'`.
+
+Também confirmado por leitura de código (não estava explícito no contrato):
+o gate de ASO que libera a conclusão é **diferente** entre Admissão e
+Demissão. Na Admissão, o funcionário ainda não existe no momento do gate, e a
+validação usa o snapshot gravado no próprio `AdmissionProcess`
+(`aso_result`/`aso_valid_until`, via `PATCH .../aso-confirmation`) — por isso
+`ConfirmAsoDialog` na Admissão **não** faz upload de arquivo. Na Demissão, o
+funcionário já existe, e o gate real é `HrEmployeeDocument` tipo
+`aso_demissional` (`hasValidAso`, `domain/services/asoGate.ts`) — por isso
+`ConfirmTerminationAsoDialog` usa o `FileUploadDialog` para criar o
+`EmployeeDocument` via `POST /api/rh/employee-documents` **antes** de
+sincronizar o snapshot informativo no processo (`PATCH
+.../aso-confirmation`). Sem essa distinção, uma implementação ingênua do
+contrato (só o PATCH, sem o upload) deixaria a demissão **impossível de
+concluir** mesmo com o "ASO confirmado" aparecendo na tela.
+
+### Validação
+
+- `cd client && npx tsc -b` — limpo.
+- `npm run lint` (oxlint) — sem novos warnings/erros (os existentes são de
+  arquivos não tocados nesta entrega).
+- `npx vitest run` — 14 arquivos / 83 testes, todos verdes (suíte existente;
+  esta entrega não adicionou testes novos — ver pendência abaixo).
+- `npm run build` — build de produção conclui sem erro.
+
+### O que o QA/próximo agente deve testar (sem suíte automatizada ainda)
+
+1. **Admissão:** abrir processo → marcar checklist → solicitar ASO →
+   confirmar resultado (apto) → concluir (deve criar `Employee` +
+   `EmployeeContract` + `EmployeeJobHistory` e abrir o período aquisitivo de
+   férias automaticamente, visível na aba Férias) → confirmar eSocial S-2200.
+   Tentar concluir **sem** confirmar o ASO deve mostrar o alerta didático
+   com a razão de negócio (RF-RH-008), não um erro genérico.
+2. **Contratos:** prorrogar (deve bloquear 2ª prorrogação), decidir
+   `efetivar`/`rescindir` — testar `rescindir` com um usuário só `rh:operate`
+   (botão deve estar desabilitado) e com um usuário `rh:approve`/`admin`
+   (deve criar um `TerminationProcess` novo).
+3. **Demissão:** criar → solicitar ASO → confirmar ASO com upload de arquivo
+   → checklist de ativos (deve reportar pendência se o funcionário tiver
+   `Asset.responsible_id` aberto no Patrimônio) → anexar TRCT → confirmar
+   eSocial S-2299 → concluir (só com `rh:approve`) — verificar que o login do
+   funcionário é desativado no mesmo ato (RF-RH-022).
+4. **Férias:** após concluir uma admissão, período aquisitivo deve aparecer
+   automaticamente na aba (nunca criado manualmente). Programar uma fração,
+   testar os limites (3 frações, abono > 1/3, fracionamento < 5 dias) e
+   confirmar que os 422 do backend viram alertas didáticos legíveis, não
+   códigos crus. Testar o calendário por departamento e o alerta de "dobra"
+   (`vencido_dobra`) num período vencido.
+
+### Pendência conhecida (não resolvida nesta entrega)
+
+- Sem testes automatizados de componente para as 4 abas novas (o projeto não
+  tinha um padrão de teste de componente RTL para telas RH antes desta
+  entrega; `npx vitest run` cobre apenas a suíte já existente). Fica como
+  próximo passo se o time quiser cobertura de regressão nessas telas.
+- Grupos P1/P2 do contrato de API (Cargos, Documentos avulsos além do gate
+  de ASO, Afastamentos, Benefícios, Treinamentos, Ponto, Histórico
+  Contratual, Folha importada, Painel/KPIs, Recrutamento) continuam sem
+  tela — fora do escopo desta Fase A.
+- **Nada foi commitado** — tudo fica no working tree.
+
+---
+
+## 2026-08-12 — Backend de Afastamentos, Benefícios e Treinamentos (Bloco 6 RH, Grupos 7/8/9)
+
+**Escopo:** `server/` apenas (a tarefa explicitamente não tocou `client/`).
+Contrato: `docs/business/BLOCO_6_RH_API.md` §9/§10/§11. Tabelas já existiam
+(migrations `20260808-000020/021/022`) — nenhuma migration nova.
+
+**Resumo da feature:** os 16 endpoints de Afastamentos (`/api/rh/absences`),
+Benefícios (`/api/rh/benefit-types`, `/api/rh/employee-benefits`) e
+Treinamentos (`/api/rh/training-courses`, `/api/rh/employee-trainings`),
+Clean Architecture completa (6 models Sequelize novos, 5 repositórios +
+implementações, 3 arquivos de regra de domínio pura, 16 use cases, 3
+controllers, 3 arquivos de validators Zod). Destaque: `CreateAbsenceUseCase`
+é transacional — cria o afastamento, move `employees.status='license'`,
+suspende `suspended_days` de benefícios VT/VR ativos e, quando o acumulado
+previdenciário (`auxilio_doenca_inss`/`acidente_trabalho`) passa de 6 meses
+no período aquisitivo em curso, zera-o na mesma transação reaproveitando
+`ResetVacationAccrualPeriodUseCase`/`OpenVacationAccrualPeriodUseCase` já
+existentes — fechando o gatilho que a entrega de 2026-08-09 tinha deixado
+registrado como pendente ("o use case já existe... mas hoje não tem quem o
+chame").
+
+**Documentações atualizadas:**
+- `docs/governance/TODO.md` — entrada nova datada 2026-08-12 (detalhe
+  completo) + a linha "Pendente para a passada 2" do Bloco 6 marcada `[x]`
+  para os 3 grupos entregues.
+- JSDoc em 100% dos arquivos novos (models, repositórios, use cases,
+  controllers, validators, regras de domínio).
+- `server/tests/integration/enum-literal-guard.test.ts` — 1 entrada nova em
+  `KNOWN_NON_DB_LITERALS` (o `reason: 'ausente'|'vencido'` do relatório
+  "quem não pode operar" é DTO em memória, não coluna).
+
+**Instruções de teste para o próximo agente/humano:**
+1. `cd server && npm run typecheck` — limpo.
+2. `npm run test:unit` — **1902/1902** (175 suítes), inclui
+   `audit-coverage-guard` (rh não entrou em débito) e os 2 arquivos novos
+   (`rh-block6-extension-rules.test.ts`, `rh-block6-extension-use-cases.test.ts`).
+3. `npm run test:integration` — **221/221** (54 suítes), inclui
+   `tests/integration/rh-block6-extension.test.ts` (3 fluxos ponta a ponta
+   contra Postgres real: afastar→retornar, aderir→cancelar benefício,
+   criar curso→registrar conclusão; cada um confere `audit_logs` via
+   `GET /api/audit-logs?entity_type=...&entity_id=...`).
+4. Teste manual sugerido: `POST /api/rh/absences` com
+   `type=auxilio_doenca_inss` repetido para o mesmo funcionário até
+   acumular > 182 dias corridos no mesmo período aquisitivo — a resposta
+   deve trazer `accrual_period_zeroed: true` e um novo
+   `HrVacationAccrualPeriod` deve existir para o funcionário.
+
+**Riscos residuais / decisões registradas:**
+- Integração síncrona `rh`↔`sst` para `validity_months` de curso normativo
+  (RF-RH-059) segue **não implementada** — decisão já tomada no próprio
+  contrato de API (processo manual, não integração síncrona nesta rodada).
+- `hr_job_position_trainings` (matriz cargo × treinamento) não tem CRUD de
+  rota nesta entrega — é escopo do Grupo 1 (Cargos), fora deste bloco.
+- Suspensão de benefício (RF-RH-047) não é revertida automaticamente no
+  retorno do afastamento — decisão de negócio pendente (quando descontar
+  de volta: na folha, no retorno, nunca).
+- Nenhuma tela em `client/` para estas 3 sub-áreas — fora do escopo desta
+  entrega (agentes de frontend).
+- Achado incidental corrigido por bloquear a suíte completa, não relacionado
+  a este bloco: banco de desenvolvimento (`erp_evok_audio`) estava 1
+  migration atrás do de teste (`20260811-000044-lot-blocked-at-quality-gate`)
+  — aplicada via `npm run migration:up`.
+- **Nada foi commitado** — tudo fica no working tree.
+
+---
+
+## 2026-08-12 (2ª entrada) — Reativação automática de VT/VR no retorno de afastamento + integração RH↔SST na validade de curso normativo
+
+**Escopo:** `server/` (regra de negócio, RBAC, testes) + 2 arquivos pontuais
+em `client/` (tipos e as 2 telas que já expunham os fluxos tocados —
+`AbsencesTab.tsx`, `TrainingsTab.tsx`). Fecha os 2 riscos residuais
+registrados na entrada anterior deste mesmo dia ("suspensão de benefício não
+é revertida automaticamente no retorno" e "integração síncrona rh↔sst para
+validity_months segue não implementada") — decisão do dono, 2026-08-12.
+
+### Tarefa 1 — Reativação automática de VT/VR (RF-RH-047-A)
+
+**Resumo:** `ReturnFromAbsenceUseCase` passou a rodar dentro de uma
+transação (antes não tinha nenhuma) e, depois de reverter
+`employees.status='active'`, reativa os benefícios VT/VR suspensos por
+ESTE afastamento. `suspended_days` é um contador acumulado, não um link
+explícito afastamento→benefício — a reativação é segura porque
+`hr_absences` já garante NO MÁXIMO 1 afastamento aberto por funcionário
+(`findOpenByEmployeeId`, checado em `CreateAbsenceUseCase`), logo qualquer
+`suspended_days > 0` sobre um benefício ainda `ativo` só pode ter vindo
+DESTE afastamento, e o número exato de dias somado na suspensão já estava
+gravado em `hr_absences.accrual_impact_days` (mesma variável usada nas duas
+contas em `CreateAbsenceUseCase` — nenhuma coluna nova foi necessária).
+Benefícios cancelados durante o afastamento não voltam (já saem de
+`listActiveByEmployee`, que só traz `enrollment_status='ativo'`). A resposta
+do `PATCH /absences/:id/return` ganhou o campo aditivo
+`reactivated_benefits` (lista de `{ id, benefit_type_id, category,
+suspended_days }`, vazia quando nada havia suspenso).
+
+**Arquivos alterados:**
+- `server/src/modules/rh/domain/services/absenceRules.ts` — nova constante
+  `SUSPENDABLE_BENEFIT_CATEGORIES` (movida de dentro de
+  `CreateAbsenceUseCase` para ser compartilhada com `ReturnFromAbsenceUseCase`
+  sem duplicar a lista `['vt', 'vr']`).
+- `server/src/modules/rh/application/use-cases/absence/CreateAbsenceUseCase.ts`
+  — só o import da constante movida (comportamento inalterado).
+- `server/src/modules/rh/application/use-cases/absence/ReturnFromAbsenceUseCase.ts`
+  — reescrito: construtor ganhou `employeeBenefitRepository?` e
+  `runInTransaction?` (opcionais, mesmo padrão de `CreateAbsenceUseCase`,
+  compatível com quem ainda instanciar com 3 argumentos — sem os 2 novos,
+  simplesmente não reativa nada); método privado
+  `reactivateSuspendedBenefits`.
+- `server/src/modules/rh/presentation/controllers/absenceController.ts` —
+  injeta `employeeBenefitRepository` no `ReturnFromAbsenceUseCase`;
+  `logAction` do retorno passou a incluir `reactivated_benefits` em
+  `newValues`.
+- `server/tests/unit/rh-block6-extension-use-cases.test.ts` — `buildReturnDeps`
+  ganhou `employeeBenefitRepository`/`runInTransaction`; 2 casos novos
+  (reativa VT/VR suspensos por este afastamento; benefício cancelado durante
+  o afastamento não volta) + os 4 testes existentes atualizados para a nova
+  assinatura (`updateStatus` agora recebe a transação como 3º argumento).
+- `server/tests/integration/rh-block6-extension.test.ts` — 1 fluxo novo
+  ponta a ponta contra Postgres real: adere a VT → afasta (suspende 10 dias)
+  → confere `suspended_days=10` via `GET /employee-benefits` → retorna →
+  confere `reactivated_benefits` na resposta E `suspended_days=0` de volta
+  via `GET /employee-benefits`.
+- `client/src/api/hr.ts` — `Absence.reactivated_benefits?` (aditivo) +
+  interface nova `ReactivatedBenefit`.
+- `client/src/pages/hr/AbsencesTab.tsx` — `ReturnAbsenceDialog` ganhou
+  `successNotice` (mesmo padrão visual já usado no diálogo de criação de
+  afastamento para o aviso de período aquisitivo zerado): quando o retorno
+  religou algum benefício, mostra aviso listando as categorias religadas em
+  vez de fechar o diálogo direto.
+
+### Tarefa 2 — Validade de curso normativo vem da matriz SST (RF-INT-RH-SST-01)
+
+**Resumo:** `CreateTrainingCourseUseCase`/`UpdateTrainingCourseUseCase` (RH)
+passaram a consultar, via novo adapter, a matriz oficial de treinamentos do
+SST (`sst_matriz_treinamento`, já existente, sem migration nova). Quando o
+curso é `is_normative=true` e o `nr_code` está cadastrado, ATIVO, na matriz
+(em qualquer função/`position` vinculada a essa norma), a validade GRAVADA é
+a da matriz — o `validity_months` do payload é ignorado nesse caso — e a
+resposta traz `validity_source: 'sst_matrix'`, sem o `warning` de
+RF-RH-059. Quando o `nr_code` não está na matriz (ou não foi informado),
+comportamento de sempre: `validity_months` manual + `warning` +
+`validity_source: 'manual'`. A matriz é modelada por função×norma
+(`position` + `norma`); como `HrTrainingCourse` não tem conceito de função,
+a busca agrega todas as funções vinculadas à norma e usa a MENOR
+periodicidade não nula entre elas (política mais conservadora — nunca deixa
+ninguém operar com treinamento vencido); `periodicidade_meses: null` só
+ocorre quando NENHUMA função vinculada exige reciclagem periódica
+(RF-SST-045).
+
+Ponte entre módulos seguiu o padrão já estabelecido por
+`SstAsoServiceAdapter` (RH→SST via ASO): novo `TrainingMatrixService`
+(interface) + `TrainingMatrixServiceAdapter` (implementação) que chama
+`ListTrainingMatrixUseCase` de `modules/sst/` diretamente — nunca lê o model
+`SstMatrizTreinamento`. `nr_code` do RH é texto livre; `norma` do SST é ENUM
+fechado — um `nr_code` fora do enum faria o Postgres rejeitar o filtro
+(`invalid input value for enum`, SQLSTATE `22P02`); o adapter captura
+especificamente esse SQLSTATE e trata como "não cadastrado na matriz"
+(qualquer outro erro sobe normalmente, não é confundido com "sem
+correspondência").
+
+RBAC: `GET /api/sst/training-matrix` passou a aceitar `sst`|`rh` — o módulo
+SST já tinha o middleware exato para este padrão (`requireSstOrRh`, usado em
+`GET /aso/status/:employeeId` e `GET /cipa/stability/:employeeId`), então
+não foi necessário criar nada novo; a escrita da matriz (`POST`/`PUT`)
+continua só `sst`.
+
+**Arquivos alterados:**
+- `server/src/modules/sst/presentation/routes/sst.ts` — `GET
+  /training-matrix` trocou `authorizeModule('sst')` por `requireSstOrRh`;
+  comentário de cabeçalho do router atualizado.
+- `server/src/modules/rh/application/services/TrainingMatrixService.ts`
+  (NOVO) — interface.
+- `server/src/modules/rh/infrastructure/adapters/TrainingMatrixServiceAdapter.ts`
+  (NOVO) — implementação.
+- `server/src/modules/rh/application/use-cases/training/CreateTrainingCourseUseCase.ts`
+  e `UpdateTrainingCourseUseCase.ts` — construtor ganhou
+  `trainingMatrixService?` opcional; `validity_source` na resposta;
+  `UpdateTrainingCourseUseCase` agora busca o registro existente primeiro
+  (`findById`) para combinar `is_normative`/`nr_code` efetivos quando o PUT
+  só manda um subconjunto de campos (reaplica a validade da matriz mesmo
+  quando só `workload_hours`, por exemplo, muda no payload).
+- `server/src/modules/rh/presentation/controllers/trainingController.ts` —
+  injeta `TrainingMatrixServiceAdapter` nos 2 use cases;
+  `logAction` de criação/atualização passou a incluir `validity_source`.
+- `server/tests/unit/rh-block6-extension-use-cases.test.ts` — describe novo
+  `CreateTrainingCourseUseCase / UpdateTrainingCourseUseCase —
+  RF-INT-RH-SST-01` (4 casos: normativo com NR na matriz, normativo com NR
+  fora da matriz, não-normativo nunca consulta a matriz, UPDATE reaplica a
+  matriz mesmo sem `nr_code` no payload do PUT).
+- `server/tests/integration/rh-block6-extension.test.ts` — 2 fluxos novos
+  ponta a ponta: `POST /sst/training-matrix` + `POST`/`PUT`
+  `/rh/training-courses` provando a sobrescrita (create E update); curso
+  normativo com NR fora da matriz mantém manual+warning.
+- `client/src/api/hr.ts` — `TrainingCourse.validity_source?`/`warning?`
+  (aditivos).
+- `client/src/pages/hr/TrainingsTab.tsx` — `TrainingCourseFormDialog` ganhou
+  `resultInfo` pós-gravação: quando `validity_source === 'sst_matrix'`,
+  mostra aviso informativo (verde) explicando que a validade veio da matriz
+  SST e qual foi o valor efetivo, substituindo o aviso amarelo antigo
+  (que só existe agora para o caso `manual` de fato); campo "Código da NR"
+  ganhou texto auxiliar explicando a sobrescrita.
+
+**Instruções de teste para o próximo agente/humano:**
+1. `cd server && npm run typecheck` — limpo.
+2. `npm run test:unit` — **1908/1908** (175 suítes, +6 desde a entrada
+   anterior deste dia).
+3. `npm run test:integration` — **224/224** (54 suítes, +3), inclui os 3
+   fluxos novos deste bloco em `tests/integration/rh-block6-extension.test.ts`.
+4. `cd client && npx tsc -b` — limpo. `npx vitest run` — **83/83** (14
+   arquivos).
+5. `npx jest --runInBand tests/unit/audit-coverage-guard.test.ts` — verde
+   (nenhum módulo tocado hoje entrou em débito de auditoria).
+6. Teste manual sugerido (Tarefa 1): abrir um afastamento com
+   `expected_end_date` definida para um funcionário com VT ativo, conferir
+   `suspended_days` em `GET /api/rh/employee-benefits?employee_id=...`,
+   depois `PATCH /absences/:id/return` e conferir que `suspended_days`
+   voltou a 0 e a resposta trouxe `reactivated_benefits`.
+7. Teste manual sugerido (Tarefa 2): cadastrar uma norma na matriz SST
+   (`POST /api/sst/training-matrix`, ex. `{ position, norma: 'NR-12',
+   periodicidade_meses: 12 }`), depois criar um curso RH normativo com o
+   mesmo `nr_code` e QUALQUER `validity_months` — a resposta deve trazer
+   `validity_months: 12` e `validity_source: 'sst_matrix'`, não o valor
+   digitado.
+
+**Semânticas descobertas durante a implementação (diferentes do que o
+pedido presumia):**
+- `suspended_days` NÃO é um link explícito afastamento→benefício — é um
+  contador acumulado em `hr_employee_benefits`. A reativação por
+  "subtração exata do que este afastamento somou" só é segura porque o
+  sistema já impede 2 afastamentos abertos simultâneos para o mesmo
+  funcionário (`ConflictError` 409 em `CreateAbsenceUseCase`); não foi
+  necessário desenhar um mecanismo de rastreio novo nem migration.
+- A matriz SST (`sst_matriz_treinamento`) é modelada por PAR
+  função×norma (`position` + `norma`), não por norma isolada — o pedido
+  falava em "buscar por NR"; como `HrTrainingCourse` não tem função, a
+  consulta precisou agregar todas as funções vinculadas à mesma norma e
+  aplicar uma política de desempate (menor periodicidade não nula) que não
+  estava especificada no pedido original. Documentado no JSDoc de
+  `TrainingMatrixService.findValidityByNrCode`.
+- `norma` em `sst_matriz_treinamento` é ENUM fechado (10 valores fixos,
+  incluindo `'outro'`); `nr_code` em `hr_training_courses` é texto livre.
+  Um valor fora do enum faz o Postgres rejeitar a query com SQLSTATE
+  `22P02` em vez de simplesmente devolver 0 linhas — o adapter trata esse
+  erro especificamente como "não cadastrado na matriz" (não confundir com
+  falha de banco).
+
+**Riscos residuais / decisões registradas:**
+- `CreateEmployeeTrainingUseCase` (conclusão de treinamento, distinto dos 2
+  use cases tocados aqui) continua emitindo o aviso "confirme com a SST"
+  sempre que o curso é normativo, mesmo quando `validity_source` já é
+  `'sst_matrix'` — esse aviso é sobre a CONCLUSÃO, não sobre o CADASTRO do
+  curso, e ficou fora do escopo desta tarefa (não foi pedido); pode soar
+  redundante agora que o cadastro já veio confirmado pela SST. Fica como
+  possível ajuste futuro.
+- A reativação de VT/VR não tem teste de integração de concorrência (2
+  afastamentos simultâneos não é possível hoje por `findOpenByEmployeeId`,
+  mas isso depende de uma leitura-antes-de-escrever fora de lock explícito —
+  mesma classe de risco teórico já aceita no resto do módulo RH, não
+  introduzida por esta mudança).
+- **Nada foi commitado** — tudo fica no working tree.
+
+## 2026-08-12 (3ª entrada) — Importador de ponto eletrônico AEJ (Bloco 6 RH, Grupo 10)
+
+### Resumo da feature
+
+Implementado o importador de ponto eletrônico do módulo RH, full-stack,
+conforme a especificação aprovada pelo dono em `docs/rh/04-FREQUENCIA.md`
+(decisão INTEGRAR: o ERP importa o AEJ — Arquivo Eletrônico de Jornada,
+Portaria MTP 671/2021, Anexo IX — exportado pelo software da administradora
+dos REPs RWTech/Pointline; **não** trata AFD bruto, **não** administra
+relógio).
+
+Fluxo: `POST /api/rh/time-imports` (upload multipart do AEJ + competência) →
+parse tolerante → grava lote (`hr_time_import_batches`) + itens
+(`hr_time_import_items`) → casa cada linha por CPF contra `employees.cpf` →
+devolve relatório de não-casados → RH revisa em `GET .../:id` →
+`POST .../:id/confirm` (só a partir de `status='validated'`) →
+`GET /api/rh/attendance/monthly-summary` cruza os lotes CONFIRMADOS com
+`hr_absences`.
+
+**Migration:** `server/migrations/20260812-000045-create-hr-time-imports.cjs`
+(167ª migration do projeto) — aplicada em `erp_evok_audio` via
+`npm run migration:up` e em `erp_evok_audio_test` automaticamente pelo
+`scripts/run-api-suite.cjs` (que roda `migration:up` contra o banco de teste
+antes de subir a API). `node scripts/comparar-bancos.cjs` → **0
+divergências** após a aplicação nos dois bancos.
+
+### O que o parser AEJ cobre de fato
+
+`server/src/modules/rh/domain/services/aejParser.ts` — **decisão
+documentada e assumida**: a Portaria 671/2021 não publica um layout
+binário/fixed-width único para o AEJ (cada software homologado exporta um
+formato próprio, desde que contenha os dados do Anexo IX). **Sem uma
+amostra real do arquivo da administradora da Evok Áudio**, o parser adota um
+layout textual pragmático — um registro por linha, campos separados por
+`;`, tipo de registro no primeiro campo:
+
+- Tipo `1` (cabeçalho) e `9` (rodapé): reconhecidos, ignorados (informativo).
+- Tipo `2` (jornada diária): `2;CPF;MATRICULA;DATA;HORAS_TRABALHADAS;HE_50;HE_100;HORAS_NOTURNAS;FALTA;ABONO`
+  — único tipo que vira `hr_time_import_items`. Horas aceitam `HH:MM` ou
+  decimal. Linha malformada (campos faltando, data/hora inválida) vira
+  entrada em `rejected_lines` (JSONB no lote), **sem** abortar o restante do
+  arquivo.
+- Qualquer outro tipo: contado em `unknown_record_types` (JSONB no lote),
+  **sem** abortar o arquivo nem virar erro.
+- Lote sem **nenhum** registro tipo `2` reconhecido nasce com
+  `status='rejected'` (visível na lista, auditável) em vez de `422` — o
+  upload em si nunca falha por conteúdo do arquivo.
+
+**Limitação assumida e registrada** (`docs/rh/04-FREQUENCIA.md`): este
+layout precisa ser validado/ajustado contra um arquivo AEJ real da
+administradora assim que ele estiver disponível — a troca é localizada em
+`parseWorkdayFields`.
+
+### Casamento com `employees`
+
+`employees` não tem coluna `matricula` no modelo atual — o casamento é feito
+por **CPF** (campo padrão do Anexo IX), normalizado (só dígitos). A
+matrícula do arquivo (`original_registration`) é sempre preservada na linha,
+casada ou não, para auditoria. Linha não-casada (`employee_id=NULL`) entra
+no relatório de não-casados e **não** entra no resumo mensal.
+
+### Arquivos criados
+
+**Backend:**
+- `server/migrations/20260812-000045-create-hr-time-imports.cjs`
+- `server/src/models/HrTimeImportBatch.ts`, `HrTimeImportItem.ts` (+ registro
+  e relacionamentos em `server/src/models/index.ts`)
+- `server/src/modules/rh/domain/services/aejParser.ts` (parser),
+  `attendanceSummaryRules.ts` (competência/overlap de afastamento)
+- `server/src/modules/rh/domain/repositories/TimeImportRepository.ts`
+- `server/src/modules/rh/infrastructure/sequelize/SequelizeTimeImportRepository.ts`
+- `server/src/modules/rh/application/use-cases/timeImport/`:
+  `CreateTimeImportBatchUseCase.ts`, `ConfirmTimeImportBatchUseCase.ts`,
+  `ListTimeImportBatchesUseCase.ts`, `GetTimeImportBatchUseCase.ts`,
+  `GetMonthlyAttendanceSummaryUseCase.ts`
+- `server/src/modules/rh/presentation/controllers/timeImportController.ts`
+- `server/src/modules/rh/presentation/validators/timeImportValidators.ts`
+  (+ `timeImportBatchStatusEnum` em `rhEnums.ts`)
+- `server/src/modules/rh/presentation/routes/rh.ts` — bloco `// ---- Grupo
+  10 — Frequência/Ponto ----` (5 rotas)
+- `server/tests/unit/rh-aej-parser.test.ts` (9 casos)
+- `server/tests/integration/rh-time-import-attendance.test.ts` (3 casos —
+  fluxo completo com asserção de `audit_logs`, lote estrutural rejeitado,
+  listagem filtrada)
+
+**Frontend:**
+- `client/src/api/hr.ts` — seção "Grupo 10", funções
+  `listTimeImportBatches`, `getTimeImportBatch`, `createTimeImportBatch`,
+  `confirmTimeImportBatch`, `getMonthlyAttendanceSummary`
+- `client/src/pages/hr/AttendanceTab.tsx` (nova aba "Frequência")
+- `client/src/pages/hr/HrPage.tsx` — 10ª aba adicionada
+
+### Documentações atualizadas
+
+- `docs/rh/04-FREQUENCIA.md` — banner de especificação trocado pelo estado
+  implementado (tabelas/rotas reais, cobertura do parser, limitação do
+  layout).
+- `docs/rh/00-README.md` — "9 abas" → "10 abas"; ponto eletrônico deixou de
+  aparecer na lista do que falta.
+- `docs/business/BLOCO_6_RH_API.md` — §12 (Grupo 10) reescrito: o desenho
+  antigo (`TimeSheetSummary`, nunca implementado) foi substituído pelos
+  endpoints reais do importador AEJ; §21 item 2 marcado resolvido.
+- `CLAUDE.md` §1 — medição canônica atualizada (166→167 migrations,
+  202→204 tabelas, 467→471 FKs) e bullet de RH atualizado.
+- `docs/database/00-INDICE.md` — medição canônica atualizada (mesmos
+  números) + nota da 167ª migration.
+
+### Instruções de teste
+
+1. `cd server && npm run typecheck` — limpo.
+2. `cd server && npm run test:unit` — **1917/1917** (1908 base + 9 novos do
+   parser AEJ), 176 suítes.
+3. `cd server && node scripts/run-api-suite.cjs integration` (ou filtrado
+   por `rh-time-import`) — suíte completa verde, incluindo
+   `audit-coverage-guard`, `cross-database-drift-guard` e
+   `docs-reality-drift-guard` (os três exigiram a atualização dos dois
+   pontos canônicos acima).
+4. `cd client && npx tsc -b` — limpo. `npx vitest run` — 83/83 (sem
+   regressão; nenhum teste novo de componente React foi escrito nesta
+   rodada — risco residual abaixo). `npm run build` — ok. `npm run lint` —
+   sem novos warnings/erros nos arquivos tocados.
+5. `node server/scripts/comparar-bancos.cjs` — **0 divergências** entre
+   `erp_evok_audio` e `erp_evok_audio_test`.
+6. Manual (`/hr`, aba "Frequência"): subir um `.txt` no formato descrito em
+   `docs/rh/04-FREQUENCIA.md` §"O que existe hoje", conferir o relatório de
+   não-casados no detalhe do lote, confirmar, e ver o resumo mensal
+   preenchido.
+
+### Riscos residuais / decisões registradas
+
+- **Layout do AEJ não validado contra um arquivo real** — é a maior
+  incerteza da entrega. O parser foi desenhado para a correção ficar
+  localizada em `aejParser.ts#parseWorkdayFields`; nenhum outro arquivo
+  precisa mudar quando a amostra real chegar.
+- **Casamento por CPF, não por matrícula** — `employees` não tem coluna de
+  matrícula; decisão documentada em vez de inventar um campo novo no model
+  central (`Employee`) só para este importador.
+- **Sem `UNIQUE(employee_id, work_date)`** — reimportação da mesma
+  competência com dois lotes confirmados soma dupla no resumo mensal (mesma
+  decisão já tomada para `hr_payroll_import_batches`).
+- **Sem teste de componente React novo** (Vitest) para `AttendanceTab.tsx` —
+  cobertura ficou em typecheck + build + teste de integração de API
+  (backend). Ajuste futuro se o próximo agente quiser fechar essa lacuna.
+- **Nada foi commitado** — tudo fica no working tree, no mesmo padrão das
+  entradas anteriores de hoje.

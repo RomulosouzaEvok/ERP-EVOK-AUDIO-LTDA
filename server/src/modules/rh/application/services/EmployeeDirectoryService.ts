@@ -19,7 +19,7 @@
  * @module modules/rh/application/services/EmployeeDirectoryService
  */
 
-import { CreateEmployeeFromAdmissionData } from './EmployeeDirectoryTypes';
+import { CreateEmployeeFromAdmissionData, ActiveEmployeeWithJobPosition } from './EmployeeDirectoryTypes';
 
 abstract class EmployeeDirectoryService {
   /** Funcionário por id (ou `null`). `transaction` opcional para leitura dentro da transação do chamador. */
@@ -36,6 +36,18 @@ abstract class EmployeeDirectoryService {
 
   /** Marca o funcionário como desligado (`status='fired'` + `dismissal_date`) na conclusão da demissão (RF-RH-022). */
   abstract markAsTerminated(employeeId: number | string, dismissalDate: string, transaction?: unknown): Promise<void>;
+
+  /**
+   * Atualiza `employees.status` (RF-RH-045/048 — `Absence` move o funcionário
+   * para `'license'` na abertura e reverte para `'active'` no retorno).
+   */
+  abstract updateStatus(employeeId: number | string, status: string, transaction?: unknown): Promise<void>;
+
+  /**
+   * Funcionários ativos com cargo atribuído, opcionalmente filtrados por
+   * departamento — insumo do relatório "quem não pode operar" (RF-RH-058).
+   */
+  abstract listActiveWithJobPosition(departmentId?: number | string | null): Promise<ActiveEmployeeWithJobPosition[]>;
 }
 
 export = EmployeeDirectoryService;

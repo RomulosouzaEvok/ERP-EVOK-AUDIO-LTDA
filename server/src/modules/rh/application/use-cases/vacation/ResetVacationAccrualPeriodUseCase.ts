@@ -31,6 +31,8 @@ interface ResetVacationAccrualPeriodInput {
   accumulatedInssAbsenceDays: number;
   returnDate: string;
   reason: string;
+  /** Transação do chamador (ex.: `CreateAbsenceUseCase`) — quando informada, zeramento + abertura do novo período ficam atômicos com o restante da operação. */
+  transaction?: unknown;
 }
 
 class ResetVacationAccrualPeriodUseCase extends UseCase<ResetVacationAccrualPeriodInput, any> {
@@ -54,12 +56,13 @@ class ResetVacationAccrualPeriodUseCase extends UseCase<ResetVacationAccrualPeri
     const period = await this.repository.findById(input.periodId);
     if (!period) throw new NotFoundError('Período aquisitivo não encontrado.');
 
-    const zeroedPeriod = await this.repository.update(input.periodId, { status: 'zerado', zeroed_reason: input.reason });
+    const zeroedPeriod = await this.repository.update(input.periodId, { status: 'zerado', zeroed_reason: input.reason }, input.transaction);
     const newPeriod = await this.openVacationAccrualPeriodUseCase.execute({
       employeeId: period.employee_id,
       periodStart: input.returnDate,
       zeroedFromPeriodId: Number(input.periodId),
       zeroedReason: input.reason,
+      transaction: input.transaction,
     });
 
     return { zeroedPeriod, newPeriod };

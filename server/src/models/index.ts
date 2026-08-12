@@ -184,6 +184,14 @@ import HrEmployeeDocument = require('./HrEmployeeDocument');
 import HrVacationAccrualPeriod = require('./HrVacationAccrualPeriod');
 import HrVacationSchedule = require('./HrVacationSchedule');
 import HrEmployeeJobHistory = require('./HrEmployeeJobHistory');
+import HrAbsence = require('./HrAbsence');
+import HrBenefitType = require('./HrBenefitType');
+import HrEmployeeBenefit = require('./HrEmployeeBenefit');
+import HrTrainingCourse = require('./HrTrainingCourse');
+import HrJobPositionTraining = require('./HrJobPositionTraining');
+import HrEmployeeTraining = require('./HrEmployeeTraining');
+import HrTimeImportBatch = require('./HrTimeImportBatch');
+import HrTimeImportItem = require('./HrTimeImportItem');
 
 // ============================================
 // RELACIONAMENTOS
@@ -1456,6 +1464,38 @@ HrEmployeeJobHistory.belongsTo(Employee, { foreignKey: 'employee_id', as: 'emplo
 HrEmployeeJobHistory.belongsTo(HrJobPosition, { foreignKey: 'job_position_id', as: 'jobPosition' });
 HrEmployeeJobHistory.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
 
+// ---- BLOCO 6 RH — Afastamentos, Benefícios, Treinamentos (Grupos 7/8/9) ----
+Employee.hasMany(HrAbsence, { foreignKey: 'employee_id', as: 'hrAbsences' });
+HrAbsence.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+HrAbsence.belongsTo(HrEmployeeDocument, { foreignKey: 'document_id', as: 'document' });
+HrAbsence.belongsTo(HrVacationAccrualPeriod, { foreignKey: 'accrual_period_impact_id', as: 'accrualPeriodImpact' });
+
+HrBenefitType.hasMany(HrEmployeeBenefit, { foreignKey: 'benefit_type_id', as: 'employeeBenefits' });
+HrEmployeeBenefit.belongsTo(HrBenefitType, { foreignKey: 'benefit_type_id', as: 'benefitType' });
+Employee.hasMany(HrEmployeeBenefit, { foreignKey: 'employee_id', as: 'hrBenefits' });
+HrEmployeeBenefit.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
+HrJobPosition.hasMany(HrJobPositionTraining, { foreignKey: 'job_position_id', as: 'requiredTrainings' });
+HrJobPositionTraining.belongsTo(HrJobPosition, { foreignKey: 'job_position_id', as: 'jobPosition' });
+HrTrainingCourse.hasMany(HrJobPositionTraining, { foreignKey: 'training_course_id', as: 'jobPositionRequirements' });
+HrJobPositionTraining.belongsTo(HrTrainingCourse, { foreignKey: 'training_course_id', as: 'trainingCourse' });
+
+Employee.hasMany(HrEmployeeTraining, { foreignKey: 'employee_id', as: 'hrTrainings' });
+HrEmployeeTraining.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+HrTrainingCourse.hasMany(HrEmployeeTraining, { foreignKey: 'training_course_id', as: 'employeeTrainings' });
+HrEmployeeTraining.belongsTo(HrTrainingCourse, { foreignKey: 'training_course_id', as: 'trainingCourse' });
+
+// ---- BLOCO 6 RH — Frequência/Ponto (Grupo 10, importação AEJ) ----
+User.hasMany(HrTimeImportBatch, { foreignKey: 'imported_by', as: 'hrTimeImportBatchesImported' });
+HrTimeImportBatch.belongsTo(User, { foreignKey: 'imported_by', as: 'importedBy' });
+User.hasMany(HrTimeImportBatch, { foreignKey: 'confirmed_by', as: 'hrTimeImportBatchesConfirmed' });
+HrTimeImportBatch.belongsTo(User, { foreignKey: 'confirmed_by', as: 'confirmedBy' });
+
+HrTimeImportBatch.hasMany(HrTimeImportItem, { foreignKey: 'batch_id', as: 'items' });
+HrTimeImportItem.belongsTo(HrTimeImportBatch, { foreignKey: 'batch_id', as: 'batch' });
+Employee.hasMany(HrTimeImportItem, { foreignKey: 'employee_id', as: 'hrTimeImportItems' });
+HrTimeImportItem.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+
 export {
   sequelize,
   User, Client, Category, Product, Supplier,
@@ -1510,5 +1550,8 @@ export {
   TreasuryBankAccount, TreasuryFinancialOperation,
   BudgetLine,
   HrJobPosition, HrEmployeeContract, HrAdmissionProcess, HrTerminationProcess,
-  HrEmployeeDocument, HrVacationAccrualPeriod, HrVacationSchedule, HrEmployeeJobHistory
+  HrEmployeeDocument, HrVacationAccrualPeriod, HrVacationSchedule, HrEmployeeJobHistory,
+  HrAbsence, HrBenefitType, HrEmployeeBenefit,
+  HrTrainingCourse, HrJobPositionTraining, HrEmployeeTraining,
+  HrTimeImportBatch, HrTimeImportItem
 };

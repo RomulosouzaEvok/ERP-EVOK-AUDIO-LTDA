@@ -4728,12 +4728,14 @@ de apresentação**). Artefatos: `docs/business/BLOCO_6_RH_REQUISITOS.md`,
 
 ### Pendente para a passada 2 (P1/P2)
 
-- [ ] Grupos 1, 7 a 15 do contrato de API (~43 endpoints): Cargos,
-  Afastamentos (`Absence` — inclui ligar o gatilho de zeramento de férias,
-  RF-RH-041, cujo use case já existe e está testado, mas hoje **não tem
-  quem o chame**), Benefícios, Treinamentos, Espelho de Ponto, Histórico
-  Contratual, Quotas PCD/aprendiz, Folha importada, Painel/KPIs
-  (RF-RH-074/075), Avaliação de Desempenho e Recrutamento.
+- [x] **Afastamentos, Benefícios e Treinamentos (Grupos 7/8/9) entregues em
+  2026-08-12** — ver entrada própria abaixo. `Absence` liga de fato o
+  gatilho de zeramento de férias (RF-RH-041/049): `CreateAbsenceUseCase`
+  chama `ResetVacationAccrualPeriodUseCase` na mesma transação quando o
+  acumulado previdenciário ultrapassa 6 meses.
+- [ ] Grupos 1, 10 a 15 do contrato de API (restantes): Cargos, Espelho de
+  Ponto, Histórico Contratual, Quotas PCD/aprendiz, Folha importada,
+  Painel/KPIs (RF-RH-074/075), Avaliação de Desempenho e Recrutamento.
 - [ ] **`RecalculateVacationAccrualPeriodUseCase` sempre assume 0 faltas** e
   devolve `data_gap_detected: true` — o cálculo real de RF-RH-032 depende
   de `HrTimeSheetSummary` (Grupo 10, P1). Enquanto isso, `dias_direito`
@@ -7245,3 +7247,139 @@ suítes unitárias com repositório dublê, que não tem coluna `NOT NULL`, nem
   Não é defeito de regra — a conta está certa —, é falta de explicação na
   tela. A verificação direta hoje só é possível por SQL, que é como a suíte
   nova faz.
+
+---
+
+## 2026-08-12 — BLOCO 6 RH: Afastamentos, Benefícios e Treinamentos (Grupos 7/8/9) — `programador`
+
+Backend completo das 3 sub-áreas do RF-RH-044 a 059 (Afastamentos,
+Benefícios, Treinamentos), sobre as tabelas já existentes (migrations
+`20260808-000020/021/022`). Contrato de API: `docs/business/BLOCO_6_RH_API.md`
+§9/§10/§11. Trabalho restrito a `server/` (frontend é escopo de outro agente).
+
+### Entregue
+
+- [x] **6 models Sequelize novos** (`HrAbsence`, `HrBenefitType`,
+  `HrEmployeeBenefit`, `HrTrainingCourse`, `HrJobPositionTraining`,
+  `HrEmployeeTraining`), registrados em `src/models/index.ts` com
+  associações (`as:`).
+- [x] **16 endpoints novos** em `/api/rh` (5 Afastamentos, 7 Benefícios, 6
+  Treinamentos — na prática 16 rotas HTTP, `POST /training-courses` e
+  `PUT .../:id` contam junto no grupo 9), Clean Architecture completa
+  (domain/repositories + domain/services + application/use-cases +
+  infrastructure/sequelize + presentation/controllers), seguindo o padrão
+  de `admissionController`/`vacationController` já existentes no módulo.
+- [x] **`CreateAbsenceUseCase` transacional**: cria o afastamento, move
+  `employees.status='license'`, suspende `suspended_days` de benefícios
+  VT/VR ativos (RF-RH-047) e — quando o tipo é `auxilio_doenca_inss`/
+  `acidente_trabalho` e o acumulado no período aquisitivo em curso passa de
+  6 meses (Art. 133, IV, CLT) — zera o período **na mesma transação**,
+  reaproveitando `ResetVacationAccrualPeriodUseCase`/
+  `OpenVacationAccrualPeriodUseCase` já existentes do Grupo 6 (Férias),
+  agora estendidos para aceitar `transaction` (mudança aditiva, retrocompatível).
+  É o gatilho que a entrega de 2026-08-09 deixou registrado como pendente
+  ("RF-RH-041, cujo use case já existe... mas hoje não tem quem o chame").
+- [x] **`ReturnFromAbsenceUseCase`** reaproveita o gate de ASO já existente
+  (`domain/services/asoGate.ts#hasValidAso`) — afastamento > 30 dias exige
+  `HrEmployeeDocument` tipo `aso_retorno` válido antes de reverter
+  `employees.status` para `active`.
+- [x] **`cid` (dado de saúde, LGPD art. 5º II)** segue exatamente o desenho
+  já decidido pelo dono do produto em 2026-08-09
+  (`domain/services/rhSensitiveFields.ts`, interseção `rh`+`sst`/admin) —
+  as funções `canViewAbsenceCid`/`sanitizeAbsence` já existiam, prontas e
+  testadas, sem consumidor; agora `absenceController` é o primeiro
+  consumidor real.
+- [x] **`CreateEmployeeBenefitUseCase`**: limite de 6% de VT sobre o
+  salário (lido sempre do repositório, nunca do payload — evita spoofing),
+  `dependents` restrito a `saude`/`odonto`, bloqueio de adesão duplicada
+  ativa. **Cancelamento nunca é `DELETE`** — o banco já tem trigger
+  bloqueando a exclusão física (`trg_hr_block_delete_employee_benefit`);
+  `CancelEmployeeBenefitUseCase` sempre grava `enrollment_status='cancelado'`.
+- [x] **`GetMonthlyBenefitReportUseCase`** — `hr_employee_benefits` não tem
+  coluna de competência; "vigente na competência" é derivado por
+  `enrolled_at <= fim do mês` e (`canceled_at` nulo OU `>= início do mês`)
+  (decisão desta implementação, documentada no JSDoc do use case).
+- [x] **`CreateEmployeeTrainingUseCase`**: `valid_until` sempre calculado no
+  servidor (`completed_at + TrainingCourse.validity_months`, com saturação
+  de fim de mês igual à de `vacationRules.calculateConcessiveEnd`); warning
+  quando o curso é normativo (RF-RH-059, sem integração síncrona com SST
+  nesta rodada — decisão já registrada no contrato de API, mantida).
+- [x] **`GetCannotOperateReportUseCase`** (RF-RH-058): funcionários ativos
+  com cargo cuja matriz (`HrJobPosition × HrTrainingCourse`,
+  `hr_job_position_trainings`) exige treinamento ausente/vencido. Exigiu
+  estender `EmployeeDirectoryService` com `listActiveWithJobPosition` e
+  `updateStatus` (usado também pelo fluxo de afastamento).
+- [x] **+107 testes unitários novos** em 2 arquivos
+  (`rh-block6-extension-rules.test.ts` — regras puras; `rh-block6-extension-use-cases.test.ts`
+  — use cases com repositório dublê), suíte unitária completa
+  **1902/1902** (175 suítes), `npm run typecheck` limpo,
+  `audit-coverage-guard` verde sem precisar entrar em `DEBITO_CONHECIDO`
+  (todo controller de escrita novo chama `logAction`).
+- [x] **1 arquivo de integração novo** (`tests/integration/rh-block6-extension.test.ts`),
+  3 fluxos ponta a ponta contra Postgres real (afastar→retornar,
+  aderir→cancelar benefício, criar curso→registrar conclusão), com
+  asserção de `audit_logs` via `GET /api/audit-logs?entity_type=...&entity_id=...`
+  em cada um. `npm run test:integration` → **221/221** (54 suítes), rodada
+  limpa (o banco de teste local não existia — criado via
+  `CREATE DATABASE erp_evok_audio_test` — e o banco de dev estava 1
+  migration atrás do de teste — `npm run migration:up` resolveu; nenhuma
+  das duas causas é deste bloco).
+
+### Decisões tomadas além das listadas no enunciado
+
+- [x] **`ResetVacationAccrualPeriodUseCase`/`OpenVacationAccrualPeriodUseCase`
+  ganharam `transaction` opcional** (antes não aceitavam) para o zeramento
+  de período por afastamento acontecer na MESMA transação da criação do
+  afastamento — mudança aditiva, sem quebrar os chamadores existentes.
+- [x] **`EmployeeDirectoryService` ganhou 2 métodos novos**
+  (`updateStatus`, `listActiveWithJobPosition`) — a interface original só
+  cobria admissão/demissão/férias; afastamento e o relatório de
+  treinamentos precisavam de leitura/escrita adicionais de `employees` sem
+  reintroduzir `require('models/index')` dentro de use case.
+- [x] **`GET /api/rh/employee-benefits/monthly-report` e
+  `GET /api/rh/employee-trainings/cannot-operate-report` entram ANTES das
+  rotas com parâmetro** no router (mesmo padrão já usado para
+  `/vacation-schedules/calendar`), para não colidir com uma futura rota
+  `GET /employee-benefits/:id`/`GET /employee-trainings/:id` que o
+  contrato de API não previu nesta rodada.
+- [x] **`enum-literal-guard`**: `GetCannotOperateReportUseCase` usa
+  `reason: 'ausente' | 'vencido'` como discriminador de retorno em memória
+  (não é coluna) — adicionada 1 entrada em `KNOWN_NON_DB_LITERALS`, mesmo
+  padrão já usado para os outros DTOs em memória do projeto.
+- [x] **Migration `20260811-000044-lot-blocked-at-quality-gate` aplicada no
+  banco de desenvolvimento** (`npm run migration:up`) — estava só no banco
+  de teste, o que fazia `cross-database-drift-guard` reprovar; achado
+  incidental, não relacionado a este bloco, corrigido porque bloqueava
+  `npm run test:integration` completo.
+
+### Pendências que ficam registradas (não resolvidas nesta rodada, por decisão já tomada em documento anterior)
+
+- [x] **Integração síncrona `rh`↔`sst` para `validity_months` de curso
+  normativo (RF-RH-059)** — **RESOLVIDO em 2026-08-12** (decisão do dono,
+  RF-INT-RH-SST-01): `CreateTrainingCourseUseCase`/`UpdateTrainingCourseUseCase`
+  agora consultam `TrainingMatrixServiceAdapter` (novo, chama
+  `ListTrainingMatrixUseCase` de `modules/sst/`) e gravam a validade da
+  matriz quando o `nr_code` está cadastrado/ativo (`validity_source:
+  'sst_matrix'`); fora desse caso, mantém o `warning` textual de sempre.
+  `GET /api/sst/training-matrix` passou a aceitar `sst`|`rh`
+  (`requireSstOrRh`, middleware já existente reaproveitado). Provado por
+  `server/tests/unit/rh-block6-extension-use-cases.test.ts` (describe
+  `RF-INT-RH-SST-01`) e `server/tests/integration/rh-block6-extension.test.ts`
+  (2 fluxos novos, Postgres real). `CreateEmployeeTrainingUseCase`
+  (conclusão) continua emitindo o aviso de sempre — fora do escopo desta
+  correção, registrado como risco residual em `docs/governance/HANDOFF_CODEX.md`
+  (entrada 2026-08-12, 2ª).
+- [ ] **`hr_job_position_trainings` (matriz cargo × treinamento) não tem
+  CRUD de rota** nesta entrega — é escopo do Grupo 1 (Cargos), fora deste
+  bloco; `GetCannotOperateReportUseCase` já lê a tabela, mas populá-la
+  hoje só é possível via SQL direto/seed.
+- [x] **Suspensão de benefício (RF-RH-047) não é revertida automaticamente
+  no retorno do afastamento** — **RESOLVIDO em 2026-08-12** (decisão do
+  dono, RF-RH-047-A): `ReturnFromAbsenceUseCase` agora roda em transação e
+  reativa (`suspended_days` decrementado pelo mesmo total somado por
+  `CreateAbsenceUseCase`) os benefícios VT/VR ainda ativos suspensos por
+  este afastamento; resposta ganhou `reactivated_benefits`. Provado por
+  `server/tests/unit/rh-block6-extension-use-cases.test.ts` (2 casos novos
+  em `ReturnFromAbsenceUseCase`) e
+  `server/tests/integration/rh-block6-extension.test.ts` (fluxo
+  suspende→confere→retorna→confere, Postgres real).

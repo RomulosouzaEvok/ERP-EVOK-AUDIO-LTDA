@@ -1,5 +1,21 @@
 # Modulo RH - ERP EVOK AUDIO
 
+> **Estado em 2026-08-12 — o modulo saiu do papel.** Os 10 grupos do BLOCO 6
+> tem backend real (`server/src/modules/rh/`, rotas `/api/rh/*`) e **tela
+> web** (`client/src/pages/hr/HrPage.tsx`, 10 abas): Funcionarios,
+> Departamentos, Admissao, Contratos de experiencia, Demissao, Ferias,
+> Afastamentos, Beneficios, Treinamentos e (NOVO, mesmo dia) Frequencia —
+> importador de ponto via AEJ (decisao tomada em 2026-08-12: INTEGRAR com o
+> software da administradora dos REPs RWTech/Pointline, nao administrar o
+> ponto — ver `04-FREQUENCIA.md`, implementado). Todos os endpoints de
+> escrita gravam trilha em `audit_logs` (guarda
+> `server/tests/unit/audit-coverage-guard.test.ts`). O que segue **sem**
+> implementacao: folha de pagamento propria (existe so importacao de folha
+> externa — `hr_payroll_import_batches`) e envio real ao eSocial (hoje o
+> sistema registra confirmacoes manuais dos eventos). Detalhes de contrato de
+> API em `docs/business/BLOCO_6_RH_API.md`; execucao registrada em
+> `docs/governance/HANDOFF_CODEX.md` (entradas 2026-08-12).
+
 ## Estrutura dos Documentos
 
 ```
@@ -7,15 +23,16 @@ docs/rh/
 ├── 00-README.md           <- Visao geral do modulo RH
 ├── 01-FUNCIONARIOS.md     <- Cadastro, admissao, demissao
 ├── 02-FOLHA_PAGAMENTO.md  <- Calculo salarial, INSS, IRRF, FGTS
-└── 03-BENEFICIOS.md       <- VT, VR, plano de saude
+├── 03-BENEFICIOS.md       <- VT, VR, plano de saude
+└── 04-FREQUENCIA.md       <- Ponto eletronico: especificacao do importador (decisao INTEGRAR, 2026-08-12)
 ```
 
 **Documentos previstos que ainda NAO existem** (a auditoria de 2026-08-11
-encontrou os 4 listados no indice como se existissem — nao existem no disco):
+encontrou 4 listados no indice como se existissem; `04-FREQUENCIA.md` foi
+criado em 2026-08-12 como especificacao aprovada):
 
 | Documento previsto | Estado | Onde o assunto vive hoje |
 |---|---|---|
-| `04-FREQUENCIA.md` (ponto, horas extras, atrasos) | `[PENDENTE]` | `hr_time_sheet_summaries` + `hr_absences` (BLOCO 6); ponto eletronico e decisao BUY/INTEGRAR, ver `docs/business/BLOCO_6_RH_MODELO_DADOS.md` |
 | `05-FERIAS.md` (ferias, afastamentos) | `[PENDENTE]` | `hr_vacation_accrual_periods` / `hr_vacation_schedules` / `hr_absences` (BLOCO 6) |
 | `06-TREINAMENTOS.md` (cursos, certificacoes, habilidades) | `[PENDENTE]` | `hr_training_courses` / `hr_job_position_trainings` / `hr_employee_trainings` (BLOCO 6) |
 | `07-ESOCIAL.md` (integracao eSocial) | `[PENDENTE]` | fila eSocial do modulo SST (`server/src/modules/sst/`) e `docs/tributario/03-RECEITA_FEDERAL.md` |
@@ -44,24 +61,28 @@ encontrou os 4 listados no indice como se existissem — nao existem no disco):
 8. **eSocial** - Envio de eventos ao governo
 9. **Relatorios** - Folha, encargos, custos por departamento
 
-## Tabelas Principais
+## Tabelas Principais (nomes reais do schema PostgreSQL)
 
-```sql
--- JA EXISTE (revisado)
-departments     - Departamentos da empresa
-employees       - Funcionarios
-
--- NOVAS
-payroll_items        - Itens da folha (proventos/descontos)
-payroll_headers      - Cabecalho da folha mensal
-benefits             - Beneficios concedidos
-time_records         - Registros de ponto
-vacations            - Ferias concedidas
-absences             - Afastamentos
-trainings            - Treinamentos realizados  
-training_courses     - Cursos disponiveis
-employee_documents   - Documentos do funcionario (exames, fotos)
 ```
+departments                  - Departamentos da empresa
+employees                    - Funcionarios
+hr_admission_processes       - Processos de admissao (ASO, checklist, eSocial)
+hr_termination_processes     - Processos de demissao (ASO, TRCT, ativos)
+hr_employee_documents        - Documentos do funcionario (ASO, atestados, TRCT)
+hr_vacation_accrual_periods  - Periodos aquisitivos de ferias
+hr_vacation_schedules        - Agendamentos de ferias
+hr_absences                  - Afastamentos (com CID de acesso restrito rh+sst)
+hr_benefit_types             - Catalogo de tipos de beneficio
+hr_employee_benefits         - Adesoes de beneficio por funcionario
+hr_training_courses          - Catalogo de cursos (normativos e livres)
+hr_job_position_trainings    - Treinamento exigido por cargo
+hr_employee_trainings        - Conclusoes de treinamento (valid_until)
+hr_payroll_import_batches    - Importacao de folha externa (nao ha motor de calculo proprio)
+```
+
+> Versoes antigas deste doc citavam tabelas de planejamento (`payroll_headers`,
+> `time_records`, `vacations`...) que nunca foram criadas com esses nomes — o
+> schema real usa o prefixo `hr_*` acima (migrations `20260808-0000xx`).
 
 ## Fluxo de Admissao
 
@@ -94,4 +115,4 @@ Integracao com o departamento
 
 ---
 
-**Última atualização:** 2026-08-06
+**Última atualização:** 2026-08-12 (backend + 10 abas web entregues, incluindo o importador de ponto AEJ; tabela de nomes reais `hr_*`)

@@ -29,15 +29,20 @@ nota no topo desse arquivo).
 >
 > | Métrica | Valor |
 > |---|---|
-> | Migrations aplicadas | **166** |
-> | Tabelas (`information_schema.tables`, schema `public`) | **202** |
-> | Foreign keys (`pg_constraint`, `contype='f'`) | **467** |
+> | Migrations aplicadas | **167** |
+> | Tabelas (`information_schema.tables`, schema `public`) | **204** |
+> | Foreign keys (`pg_constraint`, `contype='f'`) | **471** |
 > | Tabelas `sst_*` | 35 |
 > | Tabelas `jur_*` | 18 |
 > | Tabelas `marketing_*` | 6 |
-> | Tabelas `hr_*` | 20 |
+> | Tabelas `hr_*` | 22 |
 > | Tabelas `facility_*` | 13 |
 > | Registros em `departments` | 17 |
+>
+> A 167ª é `20260812-000045-create-hr-time-imports.cjs` (Grupo 10 RH —
+> importação AEJ, `hr_time_import_batches`/`hr_time_import_items`), que
+> acrescentou as 2 tabelas `hr_*` e as 4 foreign keys novas (2 para `users`
+> no lote, `batch_id`→lote e `employee_id`→`employees` nos itens).
 >
 > Os números de "auditoria de origem" abaixo (80 tabelas, 175 FKs, 66
 > migrations) são de 2026-08-06 e ficam **apenas como registro histórico** —

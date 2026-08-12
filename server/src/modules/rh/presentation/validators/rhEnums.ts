@@ -28,6 +28,11 @@
  * | `scheduleStatusEnum` | `20260808-000019` | `hr_vacation_schedules.status` |
  * | `employeeWorkRegimeEnum` | `src/models/Employee.ts` (já em produção) | `employees.work_regime` |
  * | `employeeShiftEnum` | `src/models/Employee.ts` (já em produção) | `employees.shift` |
+ * | `absenceTypeEnum` | `20260808-000020` | `hr_absences.type` |
+ * | `benefitCategoryEnum` | `20260808-000021` | `hr_benefit_types.category` |
+ * | `benefitFundingRuleEnum` | `20260808-000021` | `hr_benefit_types.funding_rule` |
+ * | `benefitEnrollmentStatusEnum` | `20260808-000021` | `hr_employee_benefits.enrollment_status` |
+ * | `timeImportBatchStatusEnum` | `20260812-000045` | `hr_time_import_batches.status` |
  *
  * @module modules/rh/presentation/validators/rhEnums
  */
@@ -62,3 +67,17 @@ export const employeeShiftEnum = z.enum(['morning', 'afternoon', 'night', 'comme
 
 /** Data no formato `YYYY-MM-DD` (`DATEONLY` em todas as tabelas `hr_*`). */
 export const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar no formato YYYY-MM-DD.');
+
+/** Competência no formato `YYYY-MM` (relatório mensal de benefícios, §10.2). */
+export const competenceMonth = z.string().regex(/^\d{4}-\d{2}$/, 'Competência deve estar no formato YYYY-MM.');
+
+// ---- Grupo 7 — Afastamentos ----
+export const absenceTypeEnum = z.enum(['doenca_ate_15d', 'auxilio_doenca_inss', 'acidente_trabalho', 'maternidade', 'paternidade', 'licenca_outras']);
+
+// ---- Grupo 8 — Benefícios ----
+export const benefitCategoryEnum = z.enum(['vt', 'vr', 'va', 'saude', 'odonto', 'vida', 'outros']);
+export const benefitFundingRuleEnum = z.enum(['percentual', 'fixo']);
+export const benefitEnrollmentStatusEnum = z.enum(['ativo', 'cancelado']);
+
+// ---- Grupo 10 — Frequência/Ponto (importação AEJ) ----
+export const timeImportBatchStatusEnum = z.enum(['uploaded', 'validated', 'confirmed', 'rejected']);

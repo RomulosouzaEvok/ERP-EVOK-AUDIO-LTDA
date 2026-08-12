@@ -9,9 +9,12 @@
  * `docs/governance/HANDOFF_CODEX.md`.
  *
  * RBAC: `authorizeModule('sst', ...)` em todas as rotas, exceto
- * `GET /aso/status/:employeeId` e `GET /cipa/stability/:employeeId`
- * (exceção `sst`|`rh`, checagem inline no controller — mesmo padrão
- * documentado para Requisição de Compra em `docs/arquitetura/API.md` §15).
+ * `GET /aso/status/:employeeId`, `GET /cipa/stability/:employeeId` e (desde
+ * 2026-08-12) `GET /training-matrix` (exceção `sst`|`rh`, `requireSstOrRh` —
+ * mesmo padrão documentado para Requisição de Compra em
+ * `docs/arquitetura/API.md` §15; a leitura da matriz pelo RH é o que
+ * viabiliza `CreateTrainingCourseUseCase`/`UpdateTrainingCourseUseCase`
+ * resolverem a validade oficial de curso normativo, RF-INT-RH-SST-01).
  *
  * @module modules/sst/presentation/routes/sst
  */
@@ -103,7 +106,13 @@ router.post('/ges', authorizeModule('sst', 'operate'), pgrController.createGes);
 router.post('/ges/:id/members', authorizeModule('sst', 'operate'), pgrController.addGesMember);
 
 // ---- Treinamentos de Segurança (NRs) ----
-router.get('/training-matrix', authorizeModule('sst'), trainingController.listMatrix);
+// Leitura em `sst`|`rh` (RF-INT-RH-SST-01, 2026-08-12): o módulo RH consome a
+// matriz para resolver a validade oficial de curso normativo
+// (`CreateTrainingCourseUseCase`/`UpdateTrainingCourseUseCase`, via
+// `TrainingMatrixServiceAdapter`) — mesma exceção `requireSstOrRh` já usada
+// para status ASO/estabilidade CIPA, sem enfraquecer a escrita (que continua
+// só `sst`).
+router.get('/training-matrix', requireSstOrRh, trainingController.listMatrix);
 router.post('/training-matrix', authorizeModule('sst', 'operate'), trainingController.createMatrix);
 router.put('/training-matrix/:id', authorizeModule('sst', 'operate'), trainingController.updateMatrix);
 router.get('/trainings/blocklist', authorizeModule('sst'), trainingController.blocklist);

@@ -858,6 +858,24 @@ Se aprovado: grava `actual_end_date`, reverte `employees.status` para
 de implementação simples: sempre `active`, já que `Absence` é sempre a
 causa de `status='license'` nesta modelagem).
 
+**RF-RH-047-A — reativação automática de VT/VR (decisão do dono,
+2026-08-12):** na mesma transação, reativa os benefícios VT/VR que este
+afastamento suspendeu — reverte exatamente os dias somados por
+`CreateAbsenceUseCase` (`accrual_impact_days`) sobre `suspended_days` de
+cada benefício ainda `ativo` (nunca sobre um cancelado durante o
+afastamento). Seguro sem link explícito afastamento→benefício porque só
+existe 1 afastamento aberto por funcionário por vez (RF-RH-044, 409
+abaixo). A resposta ganha o campo aditivo:
+```json
+{
+  "reactivated_benefits": [
+    { "id": 10, "benefit_type_id": 3, "category": "vt", "suspended_days": 0 }
+  ]
+}
+```
+Lista vazia quando nenhum benefício havia sido suspenso por este
+afastamento (curso sem VT/VR ativo, ou `expected_end_date` nunca calculada).
+
 **Erros:**
 | Código | `code` | Quando |
 |---|---|---|
@@ -942,20 +960,28 @@ cálculo de validade, confirmado por leitura de código nesta modelagem
 cluster — são um catálogo **mais amplo** (inclui treinamento não-normativo:
 onboarding, técnico, comportamental), consumido pelo RH para a matriz
 `JobPosition × TrainingCourse` (RF-RH-026/056) e para o relatório "quem não
-pode operar" (RF-RH-058). Para `is_normative=true` (treinamento de NR),
-`validity_months` **não é editável livremente pelo RH** (RF-RH-059) — a
-leitura do valor correto vem do `training-matrix` da SST via o mesmo
-padrão de serviço injetado desta seção (`SstTrainingMatrixService`, nova
-interface, análoga a `SstAsoService` de §2). Isso exige uma pequena
-extensão na rota SST (`GET /api/sst/training-matrix` hoje só aceita
-`authorizeModule('sst')` — precisa aceitar `sst`|`rh`, mesmo padrão de
-`requireSstOrRh`) — **fora do escopo deste contrato de RH** (é alteração
-em `modules/sst/`), registrada como pendência explícita em §15.2 para o
-`ArquitetoSoftwareAPI` do próximo ciclo ou para o `programador` decidir com
-o dono do produto se justifica a extensão nesta rodada ou se o valor de
-`validity_months` normativo é, por ora, apenas **copiado manualmente**
-pelo RH a partir do que a SST informa fora do sistema (processo, não
-integração síncrona) — decisão de implementação, não deste contrato.
+pode operar" (RF-RH-058).
+
+**RF-INT-RH-SST-01 — integração síncrona implementada (decisão do dono,
+2026-08-12, substitui o texto original desta seção que descrevia a lacuna
+como pendência):** para `is_normative=true` (treinamento de NR),
+`validity_months` deixou de ser sempre um palpite manual do RH. No
+`POST`/`PUT` de `training-courses`, se `nr_code` estiver cadastrado, ATIVO,
+no `training-matrix` da SST (em qualquer `position` vinculada a essa
+`norma`), a validade GRAVADA é a da matriz — o `validity_months` do
+payload é **ignorado** nesse caso. Implementação: `TrainingMatrixService`
+(interface em `modules/rh/application/services/`) +
+`TrainingMatrixServiceAdapter` (chama `ListTrainingMatrixUseCase` de
+`modules/sst/` diretamente, mesmo padrão de `SstAsoService`/
+`SstAsoServiceAdapter` de §2). A extensão de RBAC prevista abaixo foi
+feita: `GET /api/sst/training-matrix` passou a aceitar `sst`|`rh` via
+`requireSstOrRh` (middleware que já existia para `GET /aso/status/:id` e
+`GET /cipa/stability/:id` — não foi necessário criar nada novo); a escrita
+da matriz (`POST`/`PUT`) continua só `sst`. Como a matriz é modelada por
+função×norma e `TrainingCourse` não tem função, a busca agrega todas as
+`position` vinculadas à mesma `norma` e usa a MENOR periodicidade não nula
+entre elas (política conservadora); `periodicidade_meses: null` só ocorre
+quando nenhuma função vinculada exige reciclagem periódica.
 
 ### 11.1 Endpoints
 
@@ -981,11 +1007,21 @@ integração síncrona) — decisão de implementação, não deste contrato.
   "workload_hours": 8
 }
 ```
-`validity_months` nullable (sem vencimento). Quando `is_normative=true` e
-`nr_code` presente, o campo `validity_months` enviado pelo RH gera
-`warning: "Confirme este valor com a SST — treinamentos normativos têm
-validade definida pela SST (RF-RH-059)."` no corpo da resposta, mas **não
-bloqueia** a gravação nesta rodada (dado o processo manual descrito acima).
+`validity_months` nullable (sem vencimento). A resposta sempre traz
+`validity_source: 'sst_matrix' | 'manual'` (RF-INT-RH-SST-01):
+- `'sst_matrix'` — `is_normative=true` e `nr_code` reconhecido, ATIVO, na
+  matriz SST; `validity_months` na resposta é o efetivo GRAVADO (da
+  matriz, não o do payload); sem `warning`.
+- `'manual'` — qualquer outro caso (não normativo, sem `nr_code`, ou
+  `nr_code` não cadastrado na matriz); `validity_months` é o do payload;
+  se `is_normative=true` e `nr_code` presente, mantém
+  `warning: "Confirme este valor com a SST — treinamentos normativos têm
+  validade definida pela SST (RF-RH-059)."` — não bloqueia a gravação.
+
+`PUT /training-courses/:id` aplica a mesma regra sobre o estado EFETIVO do
+curso após o merge do payload parcial com o registro existente (ex.: um PUT
+que só muda `workload_hours` reaplica `validity_source: 'sst_matrix'` se o
+curso já era normativo com NR na matriz).
 
 ### 11.3 `POST /employee-trainings` — Request (RF-RH-057)
 
@@ -1025,63 +1061,79 @@ deste contrato).
 
 ---
 
-## 12. Grupo 10 — Espelho de Ponto (Importação, `TimeSheetSummary`) — P1
+## 12. Grupo 10 — Frequência/Ponto (Importação AEJ, `HrTimeImportBatch`/`HrTimeImportItem`) — IMPLEMENTADO 2026-08-12
 
-Base: `/api/rh/timesheet-summaries`.
+> Substitui o desenho anterior deste grupo (`TimeSheetSummary`,
+> `/timesheet-summaries`, RF-RH-060/061/062 — nunca implementado). Decisão do
+> dono em 2026-08-12: **integrar por importação do AEJ** (Arquivo Eletrônico
+> de Jornada, Portaria MTP 671/2021, Anexo IX) exportado pelo software da
+> administradora dos REPs (RWTech/Pointline) — ver `docs/rh/04-FREQUENCIA.md`
+> para o desenho completo, incluindo a limitação conhecida do layout
+> (ausência de amostra real do arquivo).
 
-**Fronteira de escopo (RNF-RH-03, reforçada aqui por instrução explícita
-do prompt — NENHUM endpoint de marcação/apuração de ponto é especificado
-neste grupo):**
+Base: `/api/rh/time-imports` + `/api/rh/attendance/monthly-summary`.
 
-| Método | Rota | Nível | RF |
+**Fronteira de escopo (RNF-RH-03):** nenhum endpoint de marcação/apuração
+bruta de ponto — o ERP só importa a jornada já tratada.
+
+| Método | Rota | Nível | Descrição |
 |---|---|---|---|
-| `GET` | `/timesheet-summaries` | rh (leitura) | Filtros: `employee_id`, `competencia` |
-| `POST` | `/timesheet-summaries/import` | rh:operate | RF-RH-060/061 (upload em lote) |
-| `GET` | `/timesheet-summaries/bank-hours-alerts` | rh (leitura) | RF-RH-062 (`data_limite_compensacao_banco < 60 dias`) |
+| `POST` | `/time-imports` | rh:operate | Upload multipart (`file`) do AEJ + `competencia_inicio`/`competencia_fim`; parseia, grava lote+itens, casa por CPF |
+| `GET` | `/time-imports` | rh (leitura) | Lista lotes, filtros `status`/`competencia` (`YYYY-MM`) |
+| `GET` | `/time-imports/:id` | rh (leitura) | Detalhe com itens e não-casados destacados |
+| `POST` | `/time-imports/:id/confirm` | rh:operate | Confirma o lote (só a partir de `status='validated'`) |
+| `GET` | `/attendance/monthly-summary` | rh (leitura) | Resumo por funcionário (`competencia` obrigatória, `employee_id` opcional) — só lotes `confirmed`, cruzado com `hr_absences` |
 
-**3 endpoints.**
+**5 endpoints.**
 
-### 12.1 `POST /timesheet-summaries/import` — Request (multipart, RF-RH-061)
+### 12.1 `POST /time-imports` — Request (multipart)
 
 ```
-competencia=2026-08
-file=<arquivo do sistema de ponto do fornecedor>
+competencia_inicio=2026-08-01
+competencia_fim=2026-08-31
+file=<arquivo .txt/.aej/.rem exportado pela administradora>
 ```
-Formato do arquivo `[VERIFICAR COM RH DA EMPRESA]` (depende do fornecedor
-de ponto contratado — RF-RH-061, §6.5 item 6 dos requisitos); este
-contrato modela apenas o **envelope** HTTP (multipart + `competencia`), não
-o parser interno (decisão de implementação do `programador`, condicionada
-à contratação).
 
-Resposta (`200`, processamento parcial esperado — mesmo padrão de
-captação em lote do Bloco 5 MKT):
+Resposta (`201`):
 ```json
 {
   "success": true,
   "data": {
-    "competencia": "2026-08",
-    "accepted": [ { "employee_id": 501, "linha": 1 } ],
-    "rejected": [ { "linha": 7, "error": "employee_id não encontrado" } ]
+    "batch": { "id": 12, "status": "validated", "total_lines": 62, "matched_count": 58, "unmatched_count": 3, "rejected_count": 1 },
+    "matched_count": 58,
+    "unmatched_count": 3,
+    "rejected_count": 1,
+    "unmatched": [ { "id": 501, "cpf": "11144477735", "original_registration": "MAT042", "work_date": "2026-08-03" } ],
+    "rejected_lines": [ { "line": 17, "raw": "2;...", "reason": "Data inválida: ..." } ],
+    "unknown_record_types": { "5": 2 }
   }
 }
 ```
-Cada linha aceita cria/atualiza (upsert por `employee_id`+`competencia`)
-um `TimeSheetSummary` com `fonte='arquivo'`, `importado_por=req.user.id`
-(nunca do arquivo — anti-spoofing), `importado_em=now()`.
+
+`unmatched` = linhas cujo CPF não bate com `employees.cpf` (`employee_id`
+fica `NULL`, `original_registration` preserva a matrícula do arquivo).
+`rejected_lines` = linhas tipo `2` malformadas (não abortam o lote).
+`unknown_record_types` = contagem por tipo de registro não reconhecido
+(também não aborta o lote). Lote sem **nenhum** registro tipo `2`
+reconhecido nasce `status='rejected'` (em vez de `422`) — fica visível na
+lista para auditoria, mas `POST .../confirm` recusa (`422`).
 
 **Erros:**
-| Código | `code` | Quando |
-|---|---|---|
-| 400 | `VALIDATION_ERROR` | `competencia`/`file` ausentes; formato de arquivo não reconhecido (falha total de parse, distinto de linha rejeitada) |
+| Código | Quando |
+|---|---|
+| 400 | Arquivo ausente/vazio; extensão não permitida; `competencia_inicio`/`competencia_fim` ausentes ou invertidas |
+| 422 | `POST .../confirm` em lote `rejected` ou já `confirmed` |
+| 404 | `GET`/`POST .../confirm` em lote inexistente |
 
-### 12.2 `GET /timesheet-summaries/bank-hours-alerts` — RF-RH-062
+### 12.2 `GET /attendance/monthly-summary`
 
-Sem filtro obrigatório. Lista `TimeSheetSummary` com
-`data_limite_compensacao_banco < hoje + 60 dias` — alimenta o dashboard
-(§13). Divergência entre `TimeSheetSummary` e `PayrollImportItem`
-(RF-RH-063) é exposta como campo derivado `has_payroll_divergence: boolean`
-neste mesmo endpoint (comparação de HE declarada vs. custo de HE recebido),
-sem endpoint dedicado adicional.
+Soma `hours_worked`/`overtime_50`/`overtime_100`/`night_hours`/faltas dos
+itens de lotes **CONFIRMADOS** cujo `work_date` cai na competência, por
+funcionário, e cruza com `hr_absences` (dias de afastamento sobrepostos ao
+mês, campo `absence_days_from_hr_absences`). **Limitação conhecida:** sem
+`UNIQUE(employee_id, work_date)`, reimportação da mesma competência com
+dois lotes confirmados soma os dois (mesma decisão já tomada para
+`hr_payroll_import_batches`).
 
 ---
 
@@ -1359,14 +1411,20 @@ documento de requisitos):
 
 ## 21. Pendências e decisões que ficam para o `AdmDBA`/`programador`/dono do produto
 
-1. **Extensão da rota SST `training-matrix` para aceitar `rh`** (§11) —
-   fora do escopo deste contrato de RH, mas necessária se a integração
-   síncrona de validade normativa for implementada nesta rodada (a
-   alternativa — processo manual — não exige mudança em `sst`).
-2. **Formato do arquivo de importação de ponto (RF-RH-061) e de folha
-   (RF-RH-070)** — `[VERIFICAR COM RH DA EMPRESA]`, dependem de contratos
-   ainda não assinados (§6.1/6.2 dos requisitos); este contrato modela
-   apenas o envelope HTTP.
+1. ~~**Extensão da rota SST `training-matrix` para aceitar `rh`**~~ —
+   **RESOLVIDO em 2026-08-12** (decisão do dono, RF-INT-RH-SST-01): `GET
+   /api/sst/training-matrix` aceita `sst`|`rh` via `requireSstOrRh`
+   (middleware já existente, reaproveitado sem alteração); a integração
+   síncrona de validade normativa foi implementada (ver §11).
+2. ~~**Formato do arquivo de importação de ponto (RF-RH-061)**~~ —
+   **RESOLVIDO em 2026-08-12**: decisão do dono, importador AEJ implementado
+   (§12, `docs/rh/04-FREQUENCIA.md`). O layout exato aceito pelo parser é
+   uma escolha pragmática (delimitado por `;`), **ainda não confirmada
+   contra um arquivo real** da administradora — ajustar
+   `aejParser.ts`/`parseWorkdayFields` quando a amostra chegar. **Formato do
+   arquivo de importação de folha (RF-RH-070)** continua
+   `[VERIFICAR COM RH DA EMPRESA]`, depende de contrato ainda não assinado
+   (§6.2 dos requisitos).
 3. **Percentual máximo de equipe simultaneamente em férias por
    departamento (RF-RH-039)** — `[VERIFICAR COM RH DA EMPRESA]` o valor
    padrão; modelado como coluna `Department.vacation_team_limit_percent`

@@ -50,6 +50,10 @@ const employeeContractController = require('../controllers/employeeContractContr
 const terminationController = require('../controllers/terminationController');
 const employeeDocumentController = require('../controllers/employeeDocumentController');
 const vacationController = require('../controllers/vacationController');
+const absenceController = require('../controllers/absenceController');
+const benefitController = require('../controllers/benefitController');
+const trainingController = require('../controllers/trainingController');
+const timeImportController = require('../controllers/timeImportController');
 
 router.use(authenticate);
 
@@ -113,5 +117,43 @@ router.get('/vacation-schedules', authorizeModule('rh'), vacationController.list
 router.post('/vacation-schedules', authorizeModule('rh', 'operate'), vacationController.createSchedule);
 router.post('/vacation-schedules/:id/revise', authorizeModule('rh', 'operate'), vacationController.reviseSchedule);
 router.post('/vacation-schedules/:id/confirm-taken', authorizeModule('rh', 'operate'), vacationController.confirmTaken);
+
+// ---- Grupo 7 — Afastamentos (UC-71, RF-RH-044 a 049) ----
+// `cid` é dado de saúde (RNF-RH-01): a rota fica atrás de `authorizeModule('rh')`
+// como as demais, mas o campo em si só aparece na resposta com interseção
+// `rh`+`sst`/admin (`rhSensitiveFields.sanitizeAbsence`, aplicado no controller).
+router.get('/absences', authorizeModule('rh'), absenceController.list);
+router.get('/absences/:id', authorizeModule('rh'), absenceController.getById);
+router.post('/absences', authorizeModule('rh', 'operate'), absenceController.create);
+router.patch('/absences/:id/return', authorizeModule('rh', 'operate'), absenceController.returnFromAbsence);
+router.patch('/absences/:id/esocial-confirmation', authorizeModule('rh', 'operate'), absenceController.confirmEsocial);
+
+// ---- Grupo 8 — Benefícios (RF-RH-050 a 054) ----
+router.get('/benefit-types', authorizeModule('rh'), benefitController.listTypes);
+router.post('/benefit-types', authorizeModule('rh', 'operate'), benefitController.createType);
+router.put('/benefit-types/:id', authorizeModule('rh', 'operate'), benefitController.updateType);
+// Ordem importa: `/monthly-report` antes de qualquer rota com parâmetro no mesmo prefixo.
+router.get('/employee-benefits/monthly-report', authorizeModule('rh'), benefitController.monthlyReport);
+router.get('/employee-benefits', authorizeModule('rh'), benefitController.list);
+router.post('/employee-benefits', authorizeModule('rh', 'operate'), benefitController.create);
+router.post('/employee-benefits/:id/cancel', authorizeModule('rh', 'operate'), benefitController.cancel);
+
+// ---- Grupo 9 — Treinamentos (RF-RH-055 a 059, P1) ----
+router.get('/training-courses', authorizeModule('rh'), trainingController.listCourses);
+router.post('/training-courses', authorizeModule('rh', 'operate'), trainingController.createCourse);
+router.put('/training-courses/:id', authorizeModule('rh', 'operate'), trainingController.updateCourse);
+// Ordem importa: `/cannot-operate-report` antes de qualquer rota com parâmetro no mesmo prefixo.
+router.get('/employee-trainings/cannot-operate-report', authorizeModule('rh'), trainingController.cannotOperateReport);
+router.get('/employee-trainings', authorizeModule('rh'), trainingController.list);
+router.post('/employee-trainings', authorizeModule('rh', 'operate'), trainingController.create);
+
+// ---- Grupo 10 — Frequência/Ponto (importação AEJ, docs/rh/04-FREQUENCIA.md) ----
+// Ordem importa: `/attendance/monthly-summary` não colide com `/time-imports/:id`
+// (prefixos distintos), mas mantém o padrão do resto do arquivo de rotas fixas antes de rotas com parâmetro.
+router.get('/attendance/monthly-summary', authorizeModule('rh'), timeImportController.monthlySummary);
+router.get('/time-imports', authorizeModule('rh'), timeImportController.list);
+router.get('/time-imports/:id', authorizeModule('rh'), timeImportController.getById);
+router.post('/time-imports', authorizeModule('rh', 'operate'), rhFileUpload.single('file'), timeImportController.create);
+router.post('/time-imports/:id/confirm', authorizeModule('rh', 'operate'), timeImportController.confirm);
 
 module.exports = router;

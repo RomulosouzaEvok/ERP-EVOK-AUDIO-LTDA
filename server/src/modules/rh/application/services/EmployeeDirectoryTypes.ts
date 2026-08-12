@@ -21,3 +21,11 @@ export interface CreateEmployeeFromAdmissionData {
   work_regime: string;
   shift: string;
 }
+
+/** Funcionário ativo com cargo — insumo do relatório "quem não pode operar" (RF-RH-058). */
+export interface ActiveEmployeeWithJobPosition {
+  id: number;
+  name: string;
+  department_id: number | null;
+  job_position_id: number | null;
+}

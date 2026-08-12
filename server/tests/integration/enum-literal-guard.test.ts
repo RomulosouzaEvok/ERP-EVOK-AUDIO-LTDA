@@ -104,6 +104,7 @@ const KNOWN_NON_DB_LITERALS: Array<{ file: RegExp; key: string; reason: string }
   { file: /^src\/services\/saleReceivableService\.ts$/, key: 'reason', reason: 'discriminador do retorno de criação de contas a receber (DTO em memória), não é coluna' },
   { file: /modules\/purchases\/application\/use-cases\/ReceivePurchaseItemsUseCase\.ts$/, key: 'reason', reason: 'discriminador do retorno de criação de conta a pagar (DTO em memória), não é coluna' },
   { file: /modules\/masterProduction\//, key: 'reason', reason: 'motivo de bloqueio de liberação do plano mestre (DTO em memória); o model tem cancel_reason, não reason' },
+  { file: /modules\/rh\/application\/use-cases\/training\/GetCannotOperateReportUseCase\.ts$/, key: 'reason', reason: 'discriminador ausente/vencido do item do relatório "quem não pode operar" (RF-RH-058), DTO em memória — não é coluna de hr_employee_trainings' },
   { file: /modules\/(mrp|ti)\//, key: 'origin', reason: 'purchase_requisitions.origin é VARCHAR livre, não enum' },
   { file: /modules\/rh\/application\/use-cases\/admission\//, key: 'contract_type', reason: 'employees.contract_type é VARCHAR livre; o enum homônimo é de jur_contracts' },
   // ⚠️ TEMPORÁRIO — remover quando a migration 20260810-000029 for aplicada.

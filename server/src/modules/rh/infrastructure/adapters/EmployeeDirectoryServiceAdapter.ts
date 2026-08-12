@@ -15,7 +15,7 @@
  * @module modules/rh/infrastructure/adapters/EmployeeDirectoryServiceAdapter
  */
 import EmployeeDirectoryService from '../../application/services/EmployeeDirectoryService';
-import { CreateEmployeeFromAdmissionData } from '../../application/services/EmployeeDirectoryTypes';
+import { CreateEmployeeFromAdmissionData, ActiveEmployeeWithJobPosition } from '../../application/services/EmployeeDirectoryTypes';
 
 const { Employee }: any = require('../../../../models/index');
 
@@ -38,6 +38,26 @@ class EmployeeDirectoryServiceAdapter extends EmployeeDirectoryService {
       { status: 'fired', dismissal_date: dismissalDate },
       { where: { id: employeeId }, transaction: transaction as any },
     );
+  }
+
+  public async updateStatus(employeeId: number | string, status: string, transaction?: unknown): Promise<void> {
+    await Employee.update(
+      { status },
+      { where: { id: employeeId }, transaction: transaction as any },
+    );
+  }
+
+  public async listActiveWithJobPosition(departmentId?: number | string | null): Promise<ActiveEmployeeWithJobPosition[]> {
+    const { Op } = require('sequelize');
+    const where: Record<string, unknown> = { status: 'active', job_position_id: { [Op.ne]: null } };
+    if (departmentId !== undefined && departmentId !== null) where.department_id = departmentId;
+    const rows = await Employee.findAll({ where, attributes: ['id', 'name', 'department_id', 'job_position_id'] });
+    return rows.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      department_id: row.department_id,
+      job_position_id: row.job_position_id,
+    }));
   }
 }
 
