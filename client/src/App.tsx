@@ -15,6 +15,11 @@ const CommandCenterPage = lazy(() => import('@/pages/executive/CommandCenterPage
 const DirectoratePage = lazy(() => import('@/pages/executive/DirectoratePage'));
 import HomePage from '@/pages/home/HomePage';
 
+// Landing institucional pública (`/`), exibida ANTES do login — chunk
+// próprio, sem AuthProvider/guard: não deve depender de sessão para
+// renderizar (docs/governance/HANDOFF_CODEX.md, entrada 2026-08-12).
+const LandingPage = lazy(() => import('@/pages/landing/LandingPage'));
+
 // Paginas internas carregadas sob demanda (code-splitting): reduz o bundle
 // inicial, que so precisa do essencial para renderizar o login/dashboard.
 const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
@@ -82,13 +87,24 @@ function PageFallback() {
 export default function App() {
   return (
     <Routes>
+      {/* Landing institucional pública — rota raiz, fora do ProtectedRoute
+          de propósito (visitante sem sessão não pode ser redirecionado
+          para /login antes de ver a página institucional). */}
+      <Route
+        path="/"
+        element={
+          <Suspense fallback={<PageFallback />}>
+            <LandingPage />
+          </Suspense>
+        }
+      />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/home" element={<HomePage />} />
           {/* Sala de Comando: mesmo módulo da alçada de aprovação da diretoria.
               Sem esta guarda, qualquer autenticado abria a rota e as 4 queries
               devolviam 403 (V-2, VARREDURA_DUPLA_2026-08-11.md). */}

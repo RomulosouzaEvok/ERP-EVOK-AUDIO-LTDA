@@ -16356,3 +16356,236 @@ completo do módulo Diretoria). Escopo: `client/` apenas, nada em `server/`.
   antes de existir tela (ver ressalva de "escrita real" no topo deste
   arquivo/`CLAUDE.md`).
 - **Nada foi commitado** — tudo fica no working tree.
+
+---
+
+## 2026-08-12 — Landing institucional pública (`/`), antes do login
+
+**Pedido:** a raiz do app (hoje efetivamente redirecionava para o login,
+via `ProtectedRoute`) passa a mostrar uma página institucional pública
+estilo site corporativo — referência estrutural apenas (totvs.com), com a
+identidade visual real da EVOK ÁUDIO (extraída de evokaudiopro.com):
+fundo branco dominante, `#16202F` (preto/tinta) em navbar/rodapé/cards
+escuros, `#27A93A` (hover `#1B7A29`) como verde de ação.
+
+### O que mudou na fiação de rotas (`client/src/App.tsx`)
+
+A rota `/` deixou de apontar para `HomePage` (o workspace por perfil,
+pós-login) e passou a apontar para `LandingPage`, **fora** de
+`ProtectedRoute` — pública, sem exigir sessão, chunk `lazy()` próprio.
+`HomePage` (o workspace autenticado) **mudou de path para `/home`**, para
+não colidir com a landing.
+
+Isso exigiu atualizar todo lugar do código que assumia `/` como a home
+autenticada (uma varredura completa, não um chute):
+
+- `client/src/routes/ProtectedRoute.tsx` — `RoleRoute` redireciona para
+  `/home` (antes `/`) quando o role não bate.
+- `client/src/pages/LoginPage.tsx` — pós-login navega para `/home` (antes
+  `/`); o redirect padrão quando não há `location.state.from` também virou
+  `/home`. Continua preservando o deep-link original: quem foi barrado em
+  `/maintenance` por `ProtectedRoute` e loga, volta para `/maintenance`,
+  não para `/home` — isso não mudou, só o **default**.
+- `client/src/layouts/AppLayout.tsx` — 7 pontos que comparavam/apontavam
+  para `/` (o item de menu "Painel", a trilha de breadcrumb, o link da
+  logo no header, o fallback de aba de departamento sem item, e os dois
+  `end={...}` de `NavLink`) passaram a usar `/home`.
+- `client/src/pages/AccessDeniedPage.tsx` e `NotFoundPage.tsx` — o botão
+  "Voltar ao início" aponta para `/home` (ambas as telas só renderizam
+  dentro da árvore autenticada, então sempre foi a home autenticada que
+  faz sentido, nunca a landing pública).
+
+**Por que não um "gate" dentro do próprio `ProtectedRoute` na rota `/`
+(mostrar `LandingPage` só quando `!isAuthenticated`, sem mexer em mais
+nada):** foi cogitado e descartado — `ProtectedRoute` mostra
+"Carregando..." enquanto resolve a sessão (`isLoading`), e isso teria
+piscado um spinner na frente de qualquer visitante anônimo antes da
+página institucional aparecer. Uma landing pública tem que renderizar
+instantaneamente, sem esperar checagem de auth nenhuma.
+
+**Sessão existente + clique em "Acessar o sistema":** o botão sempre leva
+a `/login`; `LoginPage` já tinha (e manteve) a checagem
+`if (isAuthenticated) return <Navigate to={redirectTo} />` — como o
+default de `redirectTo` virou `/home`, quem já está logado nunca vê o
+formulário, cai direto no workspace.
+
+### Arquivos novos
+
+- `client/src/pages/landing/LandingPage.tsx` — a página (Navbar fixa,
+  Hero full-width com overlay, Quem Somos, 4 cards "Nossa Estrutura",
+  faixa de destaque verde com 3 fatos neutros, CTA de fechamento, rodapé).
+  Copy pt-BR sóbrio, sem números de mercado inventados — fabricação
+  própria, testes acústicos por lote, rastreabilidade, gestão integrada.
+  Ajustado para o posicionamento real do site oficial: alto-falantes e
+  subwoofers para áudio automotivo e profissional (não "drivers de
+  compressão" genérico do briefing original). Cores via classes Tailwind
+  arbitrárias (`bg-[#27A93A]` etc.) — **intencionalmente não** tocou nos
+  tokens globais `--brand`/`--brand-dark` de `client/src/index.css`
+  (usados em todo o app autenticado, calibrados para outro contraste);
+  a paleta oficial do site fica local a este componente.
+- `client/src/pages/landing/LandingImage.tsx` — componente de imagem
+  trocável por arquivo: tenta `/landing/<slot>`, se `onError` cai num
+  placeholder SVG inline (gradiente + ícone de onda sonora), nunca um
+  `<img>` quebrado.
+- `client/src/pages/landing/LandingPage.test.tsx` — 2 testes: a headline
+  renderiza, e todo link "Acessar o sistema" (navbar + hero + CTA) aponta
+  para `/login`.
+- `client/public/landing/` — pasta de fotos servida estática pelo Vite
+  (fora do grafo de módulos: `img src="/landing/..."`, nunca `import`).
+  Já veio com fotos reais da empresa (extraídas do site oficial,
+  fornecidas pelo solicitante durante a tarefa): `logo-evok.png` (wordmark
+  oficial, usado na navbar e no rodapé em vez de texto estilizado),
+  `hero.jpg`, `quem-somos.jpg`, `estrutura-1.jpg`, `estrutura-2.jpg`.
+  `estrutura-3.jpg`/`estrutura-4.jpg` ainda não existem — mostram o
+  placeholder. `README.txt` na pasta documenta os 6 slots e as dimensões
+  recomendadas; trocar uma foto é só salvar o arquivo com o nome do slot.
+
+### Testes ajustados (quebravam por assumir `/` como home autenticada)
+
+- `client/src/pages/LoginPage.test.tsx` — a rota de destino no teste
+  isolado virou `/home` (antes `/`); comentário do teste atualizado.
+- `client/src/routes/ProtectedRoute.test.tsx` — a rota protegida de
+  exemplo no teste isolado virou `/home`; o teste "redireciona para
+  /login quando não autenticado" passou a montar em `/home` (antes `/`,
+  que já não existe dentro da árvore protegida do teste).
+
+### Validação
+
+1. `cd client && npx tsc -b` — limpo.
+2. `cd client && npm run lint` (oxlint) — mesmos avisos pré-existentes de
+   `only-export-components`/`exhaustive-deps` em arquivos não tocados,
+   **nenhum aviso novo** vindo de `landing/`.
+3. `cd client && npx vitest run` — **85/85** (15 arquivos), incluindo os
+   2 testes novos da landing e os 2 ajustes acima.
+4. `cd client && npm run build` — ok; `LandingPage` vira chunk lazy
+   próprio (`LandingPage-*.js`, ~10.7 kB / 3.5 kB gzip).
+5. **Sem teste de integração real** — landing é 100% estática/client-side,
+   não chama API nenhuma; não se aplica.
+6. **Nada foi commitado** — tudo fica no working tree, conforme pedido.
+
+### Slots de foto para o dono fotografar/cortar (recomendação de dimensão)
+
+| Slot | Uso | Dimensão recomendada |
+|---|---|---|
+| `logo-evok.png` | Navbar + rodapé (já existe, real) | fundo transparente, ~6271×1660px (já correto) |
+| `hero.jpg` | Fundo do hero (já existe, real) | 1920×1080px (16:9) |
+| `quem-somos.jpg` | Seção "Quem somos" (já existe, real) | 1200×900px (4:3) ou maior |
+| `estrutura-1.jpg` | Card "Engenharia & Acústica" (já existe, real) | 800×600px (4:3) |
+| `estrutura-2.jpg` | Card "Produção & Qualidade" (já existe, real) | 800×600px (4:3) |
+| `estrutura-3.jpg` | Card "Logística & Distribuição" — **ainda placeholder** | 800×600px (4:3) |
+| `estrutura-4.jpg` | Card "Gestão Integrada" — **ainda placeholder** | 800×600px (4:3) |
+
+### O que o QA/humano deve testar na interface
+
+- Abrir `/` sem sessão (aba anônima) → landing carrega instantaneamente,
+  sem flash de "Carregando..." nem redirect para `/login`.
+- Clicar "Acessar o sistema" (navbar, hero ou CTA de fechamento) → vai
+  para `/login`.
+- Logar → cai em `/home` (workspace por perfil), não mais em `/`.
+- Com sessão válida já aberta, visitar `/login` diretamente (ou clicar de
+  novo em "Acessar o sistema") → pula o formulário, cai direto em
+  `/home`.
+- Navegar para uma rota protegida sem sessão (ex.: `/maintenance`) →
+  ainda redireciona para `/login` preservando o deep-link (login e volta
+  cai em `/maintenance`, não em `/home`).
+- Menu lateral, breadcrumb, link da logo no header e o item "Painel" —
+  todos devem apontar/marcar ativo em `/home`, não mais em `/`.
+- `estrutura-3.jpg`/`estrutura-4.jpg` devem mostrar o placeholder verde/
+  preto com ícone de onda sonora (arquivo ainda não existe) — confirmar
+  que não aparece `<img>` quebrado.
+
+---
+
+## 2026-08-12 (mesmo dia, ajuste) — Navbar transparente + hero em carrossel + onda/seta
+
+**Pedido do dono:** feedback visual em cima de uma captura circulada do
+modelo totvs.com (3 elementos específicos, só estrutura — nenhum
+conteúdo/marca/logo copiado): (1) navbar flutuante transparente sobre o
+hero, ganhando fundo sólido ao rolar; (2) hero vira carrossel de 3 slides,
+texto à esquerda em CAIXA ALTA, CTA em pílula verde; (3) onda curva branca
++ seta (chevron) na base do hero, rolando até `#quem-somos`.
+
+### O que mudou em `client/src/pages/landing/LandingPage.tsx`
+
+- **`Navbar`**: trocou de `sticky` com fundo `#16202F` sólido sempre-ligado
+  para `fixed inset-x-0 top-0 z-40`, transparente por padrão
+  (`bg-transparent`, sem borda). Um `useEffect` com listener de
+  `scroll` (`passive: true`) liga `scrolled = window.scrollY > 40`, que
+  troca a classe para `bg-[#16202F]/95 backdrop-blur-sm` + sombra +
+  borda — transição via `transition-all duration-300`. Como a navbar saiu
+  do fluxo do documento (`fixed`), ela agora sobrepõe visualmente o topo
+  de qualquer seção que estiver por baixo ao rolar; por isso `#quem-somos`
+  e `#estrutura` ganharam `scroll-mt-20` (evita que o título da seção
+  fique escondido atrás da navbar ao chegar por âncora).
+- **`Hero` virou carrossel** (`HERO_SLIDES`, 3 entradas — `hero.jpg`/
+  `estrutura-1.jpg`/`quem-somos.jpg`, cada uma com eyebrow, headline,
+  subtítulo e CTA próprios). Estado local (`useState` para `index` e
+  `paused`, `useEffect` com `window.setInterval` a cada
+  `HERO_AUTOPLAY_MS = 7000`, limpo no cleanup) — **sem biblioteca nova**,
+  conforme pedido. `onMouseEnter`/`onMouseLeave` na seção inteira pausam o
+  auto-avanço. O headline usa a classe `uppercase` (o texto-fonte continua
+  em case normal no JSX/DOM — os testes que buscam pelo texto continuam
+  funcionando com `/i`, só a apresentação visual é caixa alta). O CTA virou
+  pílula (`rounded-full`, padding generoso, `uppercase tracking-wide`);
+  como o slide 1 aponta para `/login` (rota) e os slides 2/3 apontam para
+  âncoras da própria página (`#quem-somos`/`#estrutura`), o componente
+  `HeroCta` decide entre `<Link>` (react-router) e `<a href="#...">`
+  (âncora nativa) conforme o prefixo de `ctaTo`.
+- **Indicadores**: fileira de botões (`aria-label="Ir para o slide N"`,
+  `aria-current`) centralizada na base do hero, acima da onda — ativo
+  vira uma pílula preenchida branca, inativos são círculos vazados com
+  borda branca; clicar troca `index` direto (também reseta o timer de
+  auto-avanço, porque o `useEffect` do intervalo depende só de `paused`,
+  não seria necessário resetar explicitamente).
+- **Onda + seta**: `<svg>` inline com um `<path>` de curva preenchido em
+  `currentColor` (branco), `preserveAspectRatio="none"`, absoluto na base
+  do hero — mesma técnica do modelo de referência. Por cima da onda, um
+  botão circular com `ChevronDown` (lucide-react) e leve `animate-bounce`;
+  o clique chama `document.getElementById('quem-somos')?.scrollIntoView({behavior:'smooth', block:'start'})`.
+- **Scroll suave para as âncoras de texto** (navbar + CTAs de slide 2/3,
+  que são `<a href="#...">` nativos, não JS): adicionado
+  `html { scroll-behavior: smooth; }` em `client/src/index.css` — é uma
+  regra global (afeta qualquer âncora interna do app), decisão consciente
+  porque é comportamento estritamente aditivo/inofensivo em qualquer outra
+  tela (nenhuma outra tela do app usa navegação por âncora hoje).
+
+### Testes ajustados/adicionados (`LandingPage.test.tsx`)
+
+- O teste da headline foi renomeado ("renderiza a headline do primeiro
+  slide do hero", já que agora há 3 headlines possíveis, uma por slide) —
+  a asserção em si não mudou (mesmo texto do slide 1, ainda o `<h1>`
+  visível ao montar o componente).
+- O teste do CTA "Acessar o sistema" → `/login` não mudou (slide 1 é o
+  ativo por padrão ao montar).
+- **Novo teste**: os 3 indicadores existem (`getAllByRole('button', {name:
+  /ir para o slide/i})`) e clicar no terceiro troca o `<h1>` visível para
+  a headline do slide 3 (`userEvent.click` + `findByRole` assíncrono).
+
+### Validação
+
+1. `cd client && npx tsc -b` — limpo.
+2. `cd client && npm run lint` (oxlint) — nenhum aviso novo em
+   `landing/` (grep dedicado confirmou: zero linhas).
+3. `cd client && npx vitest run` — **86/86** (15 arquivos: os 2 testes
+   anteriores da landing + 1 novo do carrossel, mais os 83 já existentes).
+4. `cd client && npm run build` — ok.
+5. **Nada foi commitado** — tudo fica no working tree, conforme pedido.
+
+### O que o QA/humano deve testar na interface (adicional a este ajuste)
+
+- Ao carregar `/`, a navbar deve estar transparente sobre a foto do hero
+  (logo e âncoras legíveis graças ao gradiente escuro do hero, não a um
+  fundo próprio da navbar).
+- Rolar a página além de ~40px de scroll → a navbar ganha fundo escuro
+  sólido com leve blur, transição suave (sem "pulo").
+- O hero deve trocar de slide sozinho a cada ~7s; passar o mouse sobre o
+  hero deve pausar a troca; tirar o mouse retoma.
+- Clicar em cada uma das 3 bolinhas de indicador deve trocar o slide
+  imediatamente (headline, subtítulo, foto de fundo e CTA mudam juntos).
+- O CTA do slide 1 ("Acessar o sistema") vai para `/login`; os CTAs dos
+  slides 2 e 3 ("Conheça a EVOK"/"Nossa estrutura") rolam suavemente até
+  as seções `#quem-somos`/`#estrutura` sem deixar o título dessas seções
+  escondido atrás da navbar fixa.
+- A onda branca curva deve aparecer na base do hero fazendo a transição
+  para a seção branca seguinte; a seta (chevron) sobre a onda, ao
+  clicar, rola suavemente até `#quem-somos`.

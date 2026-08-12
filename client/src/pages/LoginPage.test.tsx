@@ -18,7 +18,7 @@ function renderLoginPage() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<p>pagina inicial</p>} />
+          <Route path="/home" element={<p>pagina inicial</p>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -71,7 +71,7 @@ describe('LoginPage', () => {
   });
 
   /**
-   * Login bem-sucedido navega para a rota inicial ("/").
+   * Login bem-sucedido navega para a rota inicial autenticada ("/home").
    *
    * @returns Promise resolvida apos a navegacao pos-login.
    */

@@ -35,7 +35,7 @@ export function RoleRoute({ roles }: { roles: UserRole[] }) {
   const { hasRole } = useAuth();
 
   if (!hasRole(...roles)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/home" replace />;
   }
 
   return <Outlet />;

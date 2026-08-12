@@ -121,7 +121,7 @@ interface NavSection {
  */
 const NAV_ITEMS: NavItem[] = [
   // ── Início: espaço pessoal, não é departamento ──────────────────────
-  { department: 'inicio', label: 'Painel', to: '/', icon: LayoutDashboard, module: 'dashboard' },
+  { department: 'inicio', label: 'Painel', to: '/home', icon: LayoutDashboard, module: 'dashboard' },
   // Meus Chamados: auto-serviço de Helpdesk de TI (BR-TI-001/RNF-TI-02),
   // sem `module` — visível a QUALQUER usuário autenticado, igual /hr.
   { department: 'inicio', label: 'Meus Chamados', to: '/meus-chamados', icon: LifeBuoy },
@@ -319,7 +319,7 @@ function breadcrumbTrail(pathname: string, search: string): string[] {
   // Rota de detalhe (ex.: /products/items/MP-057): herda a trilha do item de
   // menu mais específico que seja prefixo dela, e acrescenta o segmento
   // final como folha.
-  const parent = NAV_ITEMS.filter((item) => item.to !== '/' && pathname.startsWith(`${item.to}/`)).sort(
+  const parent = NAV_ITEMS.filter((item) => item.to !== '/home' && pathname.startsWith(`${item.to}/`)).sort(
     (a, b) => b.to.length - a.to.length,
   )[0];
   if (parent) {
@@ -447,7 +447,7 @@ export default function AppLayout() {
   const showDirectorateLabels = visibleGroups.length > 1;
 
   const renderDepartmentTab = (section: NavSection) => {
-    const target = section.items[0]?.to ?? '/';
+    const target = section.items[0]?.to ?? '/home';
     const { key, icon: DeptIcon } = section.department;
     const isActiveSection = activeSection?.department.key === key;
     // Pendências somadas do departamento: o usuário vê onde há trabalho
@@ -498,7 +498,7 @@ export default function AppLayout() {
     .sort((a, b) => b.to.length - a.to.length)
     .find((item) => {
       if (item.to.includes('?')) return `${pathname}${search}` === item.to;
-      if (item.to === '/') return pathname === '/';
+      if (item.to === '/home') return pathname === '/home';
       return pathname === item.to || pathname.startsWith(`${item.to}/`);
     });
 
@@ -523,7 +523,7 @@ export default function AppLayout() {
     <div className="flex min-h-svh flex-col">
       <header className="flex flex-col border-b bg-brand-dark shadow-md">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <Link to="/" className="group flex items-center gap-2.5">
+          <Link to="/home" className="group flex items-center gap-2.5">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-[0_0_16px_color-mix(in_oklch,var(--brand)_55%,transparent)] transition-transform duration-200 group-hover:scale-105">
               <Zap className="size-5" fill="currentColor" />
             </div>
@@ -635,7 +635,7 @@ export default function AppLayout() {
                   <NavLink
                     key={to}
                     to={to}
-                    end={to === '/'}
+                    end={to === '/home'}
                     className={({ isActive }) =>
                       cn(
                         'flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-foreground/80 transition-all duration-150 hover:border-brand/30 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
@@ -693,7 +693,7 @@ export default function AppLayout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === '/'}
+                  end={item.to === '/home'}
                   className={({ isActive }) =>
                     cn(
                       'shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',

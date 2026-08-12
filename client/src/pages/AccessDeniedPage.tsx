@@ -26,7 +26,7 @@ export function AccessDeniedPage({ variant = 'accessDenied' }: { variant?: 'acce
       <p className="max-w-md text-sm text-muted-foreground">{message}</p>
       {variant === 'accessDenied' && (
         <Button asChild>
-          <Link to="/">Voltar ao início</Link>
+          <Link to="/home">Voltar ao início</Link>
         </Button>
       )}
     </div>

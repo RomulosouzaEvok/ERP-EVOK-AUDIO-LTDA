@@ -136,6 +136,12 @@
   border-color: var(--border);
 }
 
+html {
+  /* Âncoras internas (ex.: landing pública, `#quem-somos`) rolam suavemente
+     em vez de saltar — usado hoje só pela LandingPage. */
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background: var(--background);

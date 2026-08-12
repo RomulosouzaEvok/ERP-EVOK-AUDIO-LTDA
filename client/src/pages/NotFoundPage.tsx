@@ -14,7 +14,7 @@ export default function NotFoundPage() {
         O endereço acessado não existe ou foi movido. Volte ao início para continuar navegando.
       </p>
       <Button asChild>
-        <Link to="/">Voltar ao início</Link>
+        <Link to="/home">Voltar ao início</Link>
       </Button>
     </div>
   );

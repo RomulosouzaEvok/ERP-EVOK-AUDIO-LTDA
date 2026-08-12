@@ -13,5 +13,14 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Acesso via tunel Cloudflare (teste remoto): o host *.trycloudflare.com
+    // precisa estar na lista, e o proxy torna a API mesma-origem — o browser
+    // remoto nunca precisa alcançar localhost:5000 diretamente.
+    allowedHosts: ['.trycloudflare.com'],
+    proxy: {
+      '/api': 'http://localhost:5000',
+      '/uploads': 'http://localhost:5000',
+      '/health': 'http://localhost:5000',
+    },
   },
 })

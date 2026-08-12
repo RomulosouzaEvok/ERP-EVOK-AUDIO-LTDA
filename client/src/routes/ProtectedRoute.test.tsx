@@ -21,7 +21,7 @@ function renderWithRoute(initialPath: string) {
         <Routes>
           <Route path="/login" element={<p>tela de login</p>} />
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<p>area protegida</p>} />
+            <Route path="/home" element={<p>area protegida</p>} />
             <Route element={<RoleRoute roles={['admin']} />}>
               <Route path="/admin-only" element={<p>somente admin</p>} />
             </Route>
@@ -50,7 +50,7 @@ describe('ProtectedRoute / RoleRoute', () => {
    * @returns Promise resolvida apos o redirecionamento.
    */
   it('redireciona para /login quando nao autenticado', async () => {
-    renderWithRoute('/');
+    renderWithRoute('/home');
     await waitFor(() => expect(screen.getByText('tela de login')).toBeInTheDocument());
   });
 

@@ -43,7 +43,7 @@ export default function LoginPage() {
   } = useForm<LoginFormData>({ resolver: zodResolver(loginSchema) });
 
   if (isAuthenticated) {
-    const redirectTo = (location.state as { from?: string } | null)?.from ?? '/';
+    const redirectTo = (location.state as { from?: string } | null)?.from ?? '/home';
     return <Navigate to={redirectTo} replace />;
   }
 
@@ -51,7 +51,7 @@ export default function LoginPage() {
     setApiError(null);
     try {
       await login(values.email, values.password);
-      navigate('/', { replace: true });
+      navigate('/home', { replace: true });
     } catch (error) {
       setApiError(
         translateApiError(error, 'Não foi possível entrar', undefined, 'Verifique suas credenciais e tente novamente.'),
