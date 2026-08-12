@@ -20,7 +20,20 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
 
-const ITEM_TYPES: itemsApi.ItemType[] = ['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO', 'USO_E_CONSUMO', 'ATIVO_IMOBILIZADO'];
+/**
+ * Os 5 tipos do item mestre, separados pelo papel que cumprem:
+ *
+ * - **Engenharia** — entram em BOM, MRP e ordem de produção.
+ * - **Suprimentos/Patrimônio** — existem no catálogo só para o ciclo de
+ *   compra/estoque (requisição → pedido → recebimento → AP). NUNCA entram em
+ *   estrutura de produto — o backend recusa com 422 `G1-BOM-TIPO-NAO-PRODUTIVO`
+ *   (`server/src/services/bomService.ts`) — e, no caso do ativo imobilizado,
+ *   o bem físico (manutenção, depreciação, QR) é cadastrado em
+ *   Patrimônio → Ativos, não aqui.
+ */
+const ENGINEERING_ITEM_TYPES: itemsApi.ItemType[] = ['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO'];
+const SUPPLY_ITEM_TYPES: itemsApi.ItemType[] = ['USO_E_CONSUMO', 'ATIVO_IMOBILIZADO'];
+const ITEM_TYPES: itemsApi.ItemType[] = [...ENGINEERING_ITEM_TYPES, ...SUPPLY_ITEM_TYPES];
 
 export const ITEM_TYPE_LABEL: Record<itemsApi.ItemType, string> = {
   MATERIA_PRIMA: 'Matéria-prima',
@@ -28,6 +41,15 @@ export const ITEM_TYPE_LABEL: Record<itemsApi.ItemType, string> = {
   PRODUTO_ACABADO: 'Produto acabado',
   USO_E_CONSUMO: 'Uso e consumo (MRO)',
   ATIVO_IMOBILIZADO: 'Ativo imobilizado',
+};
+
+const SUPPLY_TYPE_NOTICE: Partial<Record<itemsApi.ItemType, string>> = {
+  USO_E_CONSUMO:
+    'Item de uso e consumo (MRO): serve ao ciclo de compras e estoque (graxa, EPI, peça de reposição). '
+    + 'Não entra em BOM nem em MRP de produção — reposição é feita por requisição de compra.',
+  ATIVO_IMOBILIZADO:
+    'Atenção: isto cria apenas o item de compra/estoque do bem. O ativo em si — para manutenção, '
+    + 'depreciação e QR Code — deve ser cadastrado em Patrimônio → Ativos. Este item não entra em BOM.',
 };
 
 const ITEM_STATUSES = ['ATIVO', 'INATIVO', 'BLOQUEADO'] as const;
@@ -85,11 +107,14 @@ export default function ItemMasterPage() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CreateItemFormData>({
     resolver: zodResolver(createItemSchema),
     defaultValues: { tipo: 'MATERIA_PRIMA' },
   });
+  const tipoSelecionado = watch('tipo');
+  const supplyNotice = SUPPLY_TYPE_NOTICE[tipoSelecionado];
 
   const createMutation = useMutation({
     mutationFn: (values: CreateItemFormData) => itemsApi.createItem(values),
@@ -141,14 +166,31 @@ export default function ItemMasterPage() {
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="tipo">Tipo</Label>
                     <SelectNative id="tipo" {...register('tipo')}>
-                      {ITEM_TYPES.map((value) => (
-                        <option key={value} value={value}>
-                          {ITEM_TYPE_LABEL[value]}
-                        </option>
-                      ))}
+                      <optgroup label="Engenharia — entra em BOM e MRP">
+                        {ENGINEERING_ITEM_TYPES.map((value) => (
+                          <option key={value} value={value}>
+                            {ITEM_TYPE_LABEL[value]}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Suprimentos / Patrimônio — não entra em BOM">
+                        {SUPPLY_ITEM_TYPES.map((value) => (
+                          <option key={value} value={value}>
+                            {ITEM_TYPE_LABEL[value]}
+                          </option>
+                        ))}
+                      </optgroup>
                     </SelectNative>
                   </div>
                 </div>
+                {supplyNotice && (
+                  <p
+                    role="alert"
+                    className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400"
+                  >
+                    {supplyNotice}
+                  </p>
+                )}
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="descricao">Descrição</Label>
                   <Input id="descricao" {...register('descricao')} />

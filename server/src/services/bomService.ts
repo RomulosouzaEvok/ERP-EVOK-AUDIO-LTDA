@@ -24,7 +24,7 @@ import type { Transaction } from 'sequelize';
 
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
-const { BillOfMaterial, BillOfMaterialItem, Product } = require('../models/index');
+const { BillOfMaterial, BillOfMaterialItem, Product, Item } = require('../models/index');
 const { roundQuantity } = require('../shared/utils/decimal');
 // G7 (achado colateral): desconta do saldo de PLANEJAMENTO o material retido
 // em quarentena/bloqueio — ver o cabeçalho de `quarantineBalanceService`.
@@ -34,6 +34,62 @@ const BomStructureProjection = require('./bomStructureProjection');
 const { BusinessRuleError } = require('../errors');
 
 const VALID_COMPONENT_TYPES = new Set(['raw_material', 'component', 'semi_finished', 'packaging', 'consumable', 'other']);
+
+/**
+ * Tipos do item mestre (`items.tipo`) que NUNCA entram em estrutura de
+ * produto: `USO_E_CONSUMO` (MRO — graxa, EPI, peça de reposição de máquina)
+ * e `ATIVO_IMOBILIZADO` (bem patrimonial — o registro para manutenção e
+ * depreciação vive em Patrimônio → Ativos, tabela `assets`). Um item desses
+ * dentro de uma BOM faria o MRP planejar compra de imobilizado por demanda
+ * de produção e a OP tentar consumir/custear um bem que não é insumo.
+ *
+ * `products.product_type` não tem tipo "ativo/MRO", então a BOM em si já
+ * era quase segura — MAS o crosswalk `products.code = items.codigo` (ver
+ * `bomStructureProjection.ts`) permite existir um produto cujo item mestre
+ * é de suprimento/patrimônio. Esta guarda fecha exatamente essa brecha.
+ */
+const NON_ENGINEERING_ITEM_TYPES = new Set(['USO_E_CONSUMO', 'ATIVO_IMOBILIZADO']);
+const NON_ENGINEERING_ITEM_TYPE_LABEL: Record<string, string> = {
+  USO_E_CONSUMO: 'uso e consumo (MRO)',
+  ATIVO_IMOBILIZADO: 'ativo imobilizado',
+};
+
+/**
+ * Recusa com 422 (`G1-BOM-TIPO-NAO-PRODUTIVO`) o uso, em estrutura de
+ * produto, de um produto cujo item mestre correspondente (crosswalk
+ * `products.code = items.codigo`) é de suprimento/patrimônio.
+ *
+ * O detalhe do erro usa a chave `papel_na_estrutura` (e não `papel`) de
+ * propósito: existe coluna ENUM `papel` no banco, e a `enum-literal-guard`
+ * acusaria o literal em memória como valor de enum desconhecido.
+ *
+ * @param {Object} product - Produto (pai ou componente) candidato à BOM.
+ * @param {'pai' | 'componente'} papelNaEstrutura - Papel do produto na estrutura.
+ * @throws {import('../errors').BusinessRuleError} 422 se o item mestre for
+ *   `USO_E_CONSUMO` ou `ATIVO_IMOBILIZADO`.
+ */
+async function assertProductIsEngineeringType(product: any, papelNaEstrutura: 'pai' | 'componente'): Promise<void> {
+  if (!product?.code) return;
+  const crosswalkItem = await Item.findOne({ where: { codigo: product.code } });
+  if (!crosswalkItem || !NON_ENGINEERING_ITEM_TYPES.has(crosswalkItem.tipo)) return;
+
+  const tipoLabel = NON_ENGINEERING_ITEM_TYPE_LABEL[crosswalkItem.tipo] ?? crosswalkItem.tipo;
+  throw new BusinessRuleError(
+    `"${product.name}" (código ${product.code}) não pode ser ${papelNaEstrutura} de uma estrutura de produto: o item `
+    + `mestre dele é do tipo ${tipoLabel}, que não é insumo de fabricação. `
+    + (crosswalkItem.tipo === 'ATIVO_IMOBILIZADO'
+      ? 'Ativo imobilizado é bem patrimonial — para manutenção, depreciação e QR Code, cadastre-o em '
+        + 'Patrimônio → Ativos. '
+      : 'Material de uso e consumo (MRO) é reposto por requisição de compra, não por estrutura de produto. ')
+    + 'Na BOM entram apenas matéria-prima, subconjunto e produto acabado.',
+    {
+      rule: 'G1-BOM-TIPO-NAO-PRODUTIVO',
+      papel_na_estrutura: papelNaEstrutura,
+      product_id: Number(product.id),
+      item_tipo: crosswalkItem.tipo,
+    },
+  );
+}
 
 /**
  * `Product.product_type` (`finished`, `raw_material`, `component`, ...) e
@@ -154,6 +210,11 @@ class BomService {
       throw Object.assign(new Error('BOM deve ter pelo menos um item componente'), { statusCode: 400 });
     }
 
+    // Um `finished` cujo item mestre é ativo/MRO é cadastro contraditório
+    // (crosswalk `products.code = items.codigo`) — recusar aqui evita que a
+    // contradição vire uma estrutura que o MRP e a OP levariam a sério.
+    await assertProductIsEngineeringType(product, 'pai');
+
     // Valida se todos os componentes existem
     for (const item of items) {
       // G1: auto-referência direta (produto componente de si mesmo) é ciclo
@@ -176,6 +237,10 @@ class BomService {
       if (!component) {
         throw Object.assign(new Error(`Componente ID ${item.component_product_id} não encontrado`), { statusCode: 404 });
       }
+
+      // BOM não mistura com suprimento/patrimônio: componente cujo item
+      // mestre é USO_E_CONSUMO ou ATIVO_IMOBILIZADO é recusado com 422.
+      await assertProductIsEngineeringType(component, 'componente');
 
       // G1 (auditoria 2026-08-11): CICLO MULTINÍVEL.
       //

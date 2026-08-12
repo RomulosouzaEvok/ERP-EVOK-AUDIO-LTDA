@@ -21,6 +21,7 @@ jest.mock('../../src/models/index', () => ({
   BillOfMaterial: { findOne: jest.fn(), update: jest.fn(), create: jest.fn() },
   BillOfMaterialItem: { create: jest.fn() },
   Product: { findByPk: jest.fn() },
+  Item: { findOne: jest.fn() },
 }));
 
 jest.mock('../../src/services/quarantineBalanceService', () => ({
@@ -40,10 +41,10 @@ jest.mock('../../src/services/bomStructureProjection', () => ({
 const BomService = require('../../src/services/bomService');
 const BomStructureProjection = require('../../src/services/bomStructureProjection');
 const { sequelize } = require('../../src/config/database');
-const { BillOfMaterial, BillOfMaterialItem, Product } = require('../../src/models/index');
+const { BillOfMaterial, BillOfMaterialItem, Product, Item } = require('../../src/models/index');
 
-const FINISHED = { id: 17, name: 'Alto-falante 12pol', product_type: 'finished', cost_price: '0' };
-const COMPONENT = { id: 16, name: 'Bobina de voz', product_type: 'raw_material', cost_price: '17.59' };
+const FINISHED = { id: 17, name: 'Alto-falante 12pol', code: 'PA-012', product_type: 'finished', cost_price: '0' };
+const COMPONENT = { id: 16, name: 'Bobina de voz', code: 'MP-057', product_type: 'raw_material', cost_price: '17.59' };
 
 describe('G1 - criacao de revisao de BOM', () => {
   beforeEach(() => {
@@ -58,6 +59,9 @@ describe('G1 - criacao de revisao de BOM', () => {
     BillOfMaterial.create.mockResolvedValue({ id: 18, update: jest.fn() });
     BillOfMaterialItem.create.mockImplementation(async (data: any) => ({ ...data, total_cost: data.total_cost }));
     BomStructureProjection.hasProductPathBetween.mockResolvedValue(false);
+    // Crosswalk `products.code = items.codigo`: por padrao nao ha item mestre
+    // correspondente — os testes de tipo nao-produtivo abaixo invertem isso.
+    Item.findOne.mockResolvedValue(null);
   });
 
   it('rebaixa a revisao anterior DENTRO da transacao', async () => {
@@ -143,6 +147,73 @@ describe('G1 - criacao de revisao de BOM', () => {
     expect(where.product_id).toBe(17);
     // Sem `revision` no payload o rotulo default e '00'.
     expect(where.revision).toBe('00');
+  });
+
+  it('recusa componente cujo item mestre e ATIVO_IMOBILIZADO (BOM nao mistura com patrimonio)', async () => {
+    // O seletor da tela de BOM so lista `products`, mas o crosswalk
+    // `products.code = items.codigo` permite existir um produto cujo item
+    // mestre e um bem patrimonial (ex.: "Mesa" cadastrada como item). Sem a
+    // guarda, o MRP planejaria COMPRA DE IMOBILIZADO por demanda de producao.
+    Item.findOne.mockImplementation(async ({ where }: any) =>
+      where.codigo === 'MP-057' ? { codigo: 'MP-057', tipo: 'ATIVO_IMOBILIZADO' } : null);
+
+    await expect(BomService.createBOM({
+      product_id: 17,
+      created_by: 1,
+      revision: 'S1',
+      items: [{ component_product_id: 16, quantity: 1 }],
+    })).rejects.toMatchObject({
+      statusCode: 422,
+      details: { rule: 'G1-BOM-TIPO-NAO-PRODUTIVO', papel_na_estrutura: 'componente', item_tipo: 'ATIVO_IMOBILIZADO' },
+    });
+
+    expect(sequelize.transaction).not.toHaveBeenCalled();
+    expect(BillOfMaterial.update).not.toHaveBeenCalled();
+  });
+
+  it('recusa componente cujo item mestre e USO_E_CONSUMO (MRO nao entra em estrutura)', async () => {
+    Item.findOne.mockImplementation(async ({ where }: any) =>
+      where.codigo === 'MP-057' ? { codigo: 'MP-057', tipo: 'USO_E_CONSUMO' } : null);
+
+    await expect(BomService.createBOM({
+      product_id: 17,
+      created_by: 1,
+      revision: 'S1',
+      items: [{ component_product_id: 16, quantity: 1 }],
+    })).rejects.toMatchObject({
+      statusCode: 422,
+      details: { rule: 'G1-BOM-TIPO-NAO-PRODUTIVO', item_tipo: 'USO_E_CONSUMO' },
+    });
+
+    expect(sequelize.transaction).not.toHaveBeenCalled();
+  });
+
+  it('recusa BOM cujo PAI tem item mestre de patrimonio (cadastro contraditorio)', async () => {
+    Item.findOne.mockImplementation(async ({ where }: any) =>
+      where.codigo === 'PA-012' ? { codigo: 'PA-012', tipo: 'ATIVO_IMOBILIZADO' } : null);
+
+    await expect(BomService.createBOM({
+      product_id: 17,
+      created_by: 1,
+      revision: 'S1',
+      items: [{ component_product_id: 16, quantity: 1 }],
+    })).rejects.toMatchObject({
+      statusCode: 422,
+      details: { rule: 'G1-BOM-TIPO-NAO-PRODUTIVO', papel_na_estrutura: 'pai' },
+    });
+
+    expect(sequelize.transaction).not.toHaveBeenCalled();
+  });
+
+  it('aceita componente sem item mestre correspondente (crosswalk vazio nao bloqueia)', async () => {
+    await BomService.createBOM({
+      product_id: 17,
+      created_by: 1,
+      revision: 'S1',
+      items: [{ component_product_id: 16, quantity: 2 }],
+    });
+
+    expect(sequelize.transaction).toHaveBeenCalledTimes(1);
   });
 
   it('recusa BOM de produto que nao e acabado, antes de qualquer escrita', async () => {

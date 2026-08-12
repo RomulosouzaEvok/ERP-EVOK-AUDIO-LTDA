@@ -2202,12 +2202,13 @@ Cria uma nova BOM para um produto acabado (`product_type = 'finished'`). Marca a
 }
 ```
 
-**Erros de estrutura circular (422 `BUSINESS_RULE_VIOLATION`):**
+**Erros de regra de negócio na criação (422 `BUSINESS_RULE_VIOLATION`):**
 
 | `details.rule` | Quando |
 |---|---|
 | `G1-BOM-AUTO-REF` | o próprio produto aparece como componente dele mesmo (ciclo de profundidade 1). Formato legado: `error` é string, com `rule` no topo do erro |
 | `G1-BOM-CICLO` | **(2026-08-11)** o componente já contém o produto na estrutura dele, direta ou indiretamente — ex.: `A → B` gravado e agora `B → A`. `details: { rule, product_id, component_product_id }` |
+| `G1-BOM-TIPO-NAO-PRODUTIVO` | **(2026-08-12)** o pai ou um componente tem item mestre (crosswalk `products.code = items.codigo`) do tipo `USO_E_CONSUMO` ou `ATIVO_IMOBILIZADO` — suprimento/patrimônio não entra em estrutura de produto. `details: { rule, papel_na_estrutura, product_id, item_tipo }` |
 
 > A detecção multinível nasceu da auditoria de 2026-08-11: só a
 > auto-referência era barrada, então um ciclo de dois níveis entrava no banco

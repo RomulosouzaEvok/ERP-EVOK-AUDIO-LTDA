@@ -554,6 +554,7 @@ Vale agora o mesmo ciclo do G5 (roteiro de manufatura):
 | Uma vigente por produto | — | Ativar rebaixa a anterior para `superseded` **na mesma transação** (`SequelizeBOMRepository.activateExclusively`), com os componentes intactos. Rede de baixo no banco: índice único parcial `uq_bill_of_materials_active_per_product` |
 | Rótulo de revisão único | `G1-BOM-REV-DUP` | Duas revisões com o mesmo rótulo tornam impossível dizer contra qual delas uma OP rodou |
 | Produto não é componente de si mesmo | `G1-BOM-AUTO-REF` | Ciclo de profundidade 1. Antes só estourava na explosão, com a BOM já gravada |
+| BOM não mistura com suprimento/patrimônio | `G1-BOM-TIPO-NAO-PRODUTIVO` | **(2026-08-12)** Pai ou componente cujo item mestre correspondente (crosswalk `products.code = items.codigo`) é `USO_E_CONSUMO` (MRO) ou `ATIVO_IMOBILIZADO` → 422. `products.product_type` não tem esses tipos, mas o crosswalk permitia um produto gêmeo de um item de suprimento/patrimônio entrar na estrutura — e o MRP planejaria compra de imobilizado por demanda de produção. Ativo imobilizado, para manutenção/depreciação, é cadastro de Patrimônio → Ativos (`assets`), não de BOM. Provado contra PostgreSQL real em `server/tests/integration/bom-tipo-nao-produtivo.test.ts` |
 
 **Bug corrigido de quebra:** o `superseded` da revisão anterior rodava **fora
 da transação**, antes dela. Se a criação falhasse depois (componente
