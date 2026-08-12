@@ -23,6 +23,7 @@ import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import type { NonConformityPrefill } from './NonConformitiesTab';
+import { formatDate } from '@/lib/format';
 
 const STATUS_LABEL: Record<lotsApi.LotStatus, string> = {
   quarantine: 'Em quarentena',
@@ -51,10 +52,6 @@ const STATUS_BADGE_CLASS: Partial<Record<lotsApi.LotStatus, string>> = {
   expired: 'border-destructive text-destructive',
 };
 
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  return new Date(value).toLocaleDateString('pt-BR');
-}
 
 /** Aba A: inspeção de recebimento — lotes em quarentena aguardando liberação/bloqueio da qualidade. */
 export function InspectionTab({

@@ -25,9 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { DidacticAlert } from '@/components/DidacticAlert';
 
-function formatBRL(value: number): string {
-  return `R$ ${Number(value ?? 0).toFixed(2)}`;
-}
+import { formatCurrency as formatBRL } from '@/lib/format';
 
 function firstDayOfMonth(): string {
   const now = new Date();

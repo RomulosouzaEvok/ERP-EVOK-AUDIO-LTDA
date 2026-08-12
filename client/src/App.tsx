@@ -86,14 +86,19 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
-          <Route
-            path="/dashboard"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <CommandCenterPage />
-              </Suspense>
-            }
-          />
+          {/* Sala de Comando: mesmo módulo da alçada de aprovação da diretoria.
+              Sem esta guarda, qualquer autenticado abria a rota e as 4 queries
+              devolviam 403 (V-2, VARREDURA_DUPLA_2026-08-11.md). */}
+          <Route element={<ModuleRoute module="diretor" />}>
+            <Route
+              path="/dashboard"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <CommandCenterPage />
+                </Suspense>
+              }
+            />
+          </Route>
           <Route
             path="/change-password"
             element={

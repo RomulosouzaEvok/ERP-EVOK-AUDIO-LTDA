@@ -25,5 +25,10 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Testes ficam fora do build de app: os de guarda (departments.seeds,
+  // AppLayout.navigation) usam `node:fs`/`node:path`, que não existem no
+  // ambiente do bundle — com eles incluídos, `npm run build` quebrava
+  // (TS2591) desde fdb544c. O Vitest compila os testes pelo próprio pipeline.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
 }

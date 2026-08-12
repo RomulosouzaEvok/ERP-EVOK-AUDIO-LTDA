@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { formatCurrency as formatMoney } from '@/lib/format';
 
 const TYPE_LABELS: Record<accountingApi.EntryType, string> = {
   receipt: 'Recebimento',
@@ -41,9 +42,6 @@ const STATUS_VARIANT: Record<accountingApi.EntryStatus, 'success' | 'warning' | 
   reversed: 'destructive',
 };
 
-function formatMoney(value: string | number) {
-  return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 /** Aba "Lançamentos" de `/accounting` — lista + criação/edição de rascunho com múltiplas linhas débito/crédito, postar e estornar. */
 export function EntriesTab() {

@@ -39,6 +39,11 @@ import { cn } from '@/lib/utils';
  * o backend devolve `null` e a tela mostra `—` em vez de `0%` — um zero
  * enganoso numa tela de diretoria é pior que um traço honesto (mesma regra
  * já adotada no OEE, ver `GetOeeReportUseCase`).
+ *
+ * A mesma regra vale para **falha de leitura**: query com erro mostra `—` e
+ * um aviso explícito, nunca `R$ 0` nem o check verde de "nada em circulação".
+ * Antes, API fora do ar renderizava "fábrica parada" — um fato de negócio
+ * falso (V-2, VARREDURA_DUPLA_2026-08-11.md).
  */
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
@@ -145,11 +150,14 @@ export default function CommandCenterPage() {
     },
   ];
 
-  const chainLoaded = !purchasing.isLoading && !production.isLoading && !handoffs.isLoading;
+  const chainErrored = purchasing.isError || production.isError || handoffs.isError;
+  const chainLoaded =
+    !chainErrored && !purchasing.isLoading && !production.isLoading && !handoffs.isLoading;
   const chainTotal = chain.reduce((total, stage) => total + stage.count, 0);
-  // Gargalo = elo com o maior acúmulo. Só faz sentido quando há movimento;
-  // com a cadeia inteira zerada a mensagem é outra (nada em circulação).
-  const bottleneck = chainTotal > 0 ? chain.reduce((worst, s) => (s.count > worst.count ? s : worst)) : null;
+  // Gargalo = elo com o maior acúmulo. Só faz sentido quando há movimento
+  // E quando a leitura funcionou; com erro, nenhum diagnóstico é honesto.
+  const bottleneck =
+    chainLoaded && chainTotal > 0 ? chain.reduce((worst, s) => (s.count > worst.count ? s : worst)) : null;
 
   const adherence = production.data?.adherence.adherence_rate ?? null;
   const scrapRate = production.data?.adherence.scrap_rate ?? null;
@@ -193,27 +201,30 @@ export default function CommandCenterPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Vendas no período"
-          value={cashFlow.isLoading ? '…' : BRL.format(sales)}
+          value={cashFlow.isLoading ? '…' : cashFlow.isError ? '—' : BRL.format(sales)}
           icon={TrendingUp}
-          tone="good"
+          tone={cashFlow.isError ? undefined : 'good'}
+          hint={cashFlow.isError ? 'Falha ao ler o relatório' : undefined}
         />
         <KpiCard
           label="Compras no período"
-          value={cashFlow.isLoading ? '…' : BRL.format(purchases)}
+          value={cashFlow.isLoading ? '…' : cashFlow.isError ? '—' : BRL.format(purchases)}
           icon={TrendingDown}
+          hint={cashFlow.isError ? 'Falha ao ler o relatório' : undefined}
         />
         <KpiCard
           label="Saldo (vendas − compras)"
-          value={cashFlow.isLoading ? '…' : BRL.format(balance)}
+          value={cashFlow.isLoading ? '…' : cashFlow.isError ? '—' : BRL.format(balance)}
           icon={balance >= 0 ? TrendingUp : TrendingDown}
-          tone={balance >= 0 ? 'good' : 'bad'}
+          tone={cashFlow.isError ? undefined : balance >= 0 ? 'good' : 'bad'}
+          hint={cashFlow.isError ? 'Falha ao ler o relatório' : undefined}
         />
         <KpiCard
           label="OEE geral"
-          value={oee.isLoading ? '…' : formatRate(oeeValue)}
+          value={oee.isLoading ? '…' : oee.isError ? '—' : formatRate(oeeValue)}
           icon={Gauge}
-          hint={oee.data?.aggregate.no_data_reason ?? undefined}
-          tone={oeeValue === null ? undefined : toNumber(oeeValue) >= 0.6 ? 'good' : 'warn'}
+          hint={oee.isError ? 'Falha ao ler o relatório' : (oee.data?.aggregate.no_data_reason ?? undefined)}
+          tone={oee.isError || oeeValue === null ? undefined : toNumber(oeeValue) >= 0.6 ? 'good' : 'warn'}
         />
       </div>
 
@@ -253,7 +264,7 @@ export default function CommandCenterPage() {
                         isBottleneck ? 'text-amber-600' : 'text-foreground',
                       )}
                     >
-                      {chainLoaded ? stage.count : '…'}
+                      {chainErrored ? '—' : chainLoaded ? stage.count : '…'}
                     </p>
                     <p className="text-[11px] leading-snug text-muted-foreground">{stage.unit}</p>
                   </Link>
@@ -271,10 +282,24 @@ export default function CommandCenterPage() {
           <div
             className={cn(
               'mt-4 flex items-start gap-2.5 rounded-lg border p-3 text-sm',
-              chainTotal === 0 ? 'border-muted bg-muted/40' : 'border-amber-500/40 bg-amber-500/5',
+              chainErrored
+                ? 'border-destructive/40 bg-destructive/5'
+                : chainTotal === 0
+                  ? 'border-muted bg-muted/40'
+                  : 'border-amber-500/40 bg-amber-500/5',
             )}
           >
-            {chainTotal === 0 ? (
+            {chainErrored ? (
+              <>
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                <span className="text-destructive">
+                  Não foi possível ler um ou mais relatórios — os números acima estão incompletos. Nenhum
+                  diagnóstico da cadeia é confiável até a leitura voltar.
+                </span>
+              </>
+            ) : !chainLoaded ? (
+              <span className="text-muted-foreground">Carregando a cadeia do produto…</span>
+            ) : chainTotal === 0 ? (
               <>
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <span className="text-muted-foreground">
@@ -317,7 +342,7 @@ export default function CommandCenterPage() {
               <MiniStat label="Refugo" value={formatRate(scrapRate)} />
               <MiniStat
                 label="Horas paradas"
-                value={`${toNumber(oee.data?.aggregate.downtime_hours).toFixed(1)} h`}
+                value={oee.data ? `${toNumber(oee.data.aggregate.downtime_hours).toFixed(1)} h` : '—'}
               />
             </div>
           </CardContent>
@@ -332,7 +357,11 @@ export default function CommandCenterPage() {
           <CardContent>
             {topSuppliers.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                {purchasing.isLoading ? 'Carregando…' : 'Nenhuma compra no período.'}
+                {purchasing.isLoading
+                  ? 'Carregando…'
+                  : purchasing.isError
+                    ? 'Falha ao ler o relatório de compras.'
+                    : 'Nenhuma compra no período.'}
               </p>
             ) : (
               <ul className="flex flex-col gap-3">

@@ -19,9 +19,8 @@ const { createProductSchema, updateProductSchema, productMovementSchema, handleZ
  * regra de negócio aos use cases da camada de aplicação e devolve sempre o
  * envelope padrão `{ success: true, data, ... }` — mantendo exatamente o
  * mesmo formato JSON do controller anterior
- * (`server/src/controllers/productController.ts`), que permanece no
- * repositório apenas como referência histórica e não está mais registrado
- * em nenhuma rota ativa (ver `server/src/modules/products/README.md`).
+ * (`productController.ts`, hoje removido do
+ * repositório — histórico no git).
  */
 const productRepository = new SequelizeProductRepository();
 

@@ -26,9 +26,8 @@ const {
  * regra de negócio aos use cases da camada de aplicação e devolve sempre o
  * envelope padrão `{ success: true, data, ... }` — mantendo exatamente o
  * mesmo formato JSON e os mesmos 6 endpoints do controller anterior
- * (`server/src/controllers/purchaseController.ts`), que permanece no
- * repositório apenas como referência histórica e não está mais registrado
- * em nenhuma rota ativa (ver `server/src/modules/purchases/README.md`).
+ * (`purchaseController.ts`, hoje removido do
+ * repositório — histórico no git).
  */
 const purchaseRepository = new SequelizePurchaseRepository();
 

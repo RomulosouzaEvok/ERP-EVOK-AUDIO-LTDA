@@ -8,6 +8,7 @@ import { Plus } from 'lucide-react';
 import * as treasuryApi from '@/api/treasury';
 import { useAuth } from '@/context/AuthContext';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { formatCurrency } from '@/lib/format';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Button } from '@/components/ui/button';
@@ -39,9 +40,6 @@ const STATUS_LABELS: Record<treasuryApi.OperationStatus, { label: string; varian
   canceled: { label: 'Cancelada', variant: 'destructive' },
 };
 
-function formatCurrency(value: string | number) {
-  return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 /** Aba "Operações Financeiras" de `/treasury` — empréstimos, aplicações, financiamentos e leasing. */
 export function FinancialOperationsTab() {

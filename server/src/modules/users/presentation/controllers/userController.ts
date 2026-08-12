@@ -14,9 +14,8 @@ const AssignAccessProfileUseCase = require('../../application/use-cases/AssignAc
  * regra de negócio aos use cases da camada de aplicação e devolve sempre o
  * envelope padrão `{ success: true, data }`, mantendo exatamente o mesmo
  * formato JSON e os mesmos 5 endpoints do controller anterior
- * (`server/src/controllers/userController.ts`), que permanece no
- * repositório apenas como referência histórica e não está mais registrado
- * em nenhuma rota ativa (ver `server/src/modules/users/README.md`).
+ * (`userController.ts`, hoje removido do
+ * repositório — histórico no git).
  */
 const usersRepository = new SequelizeUsersRepository();
 

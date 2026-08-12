@@ -106,15 +106,8 @@ interface NavSection {
  * (`@/lib/departments`). O usuário vê exatamente os departamentos onde o
  * perfil dele tem alguma página, e nada além.
  *
- * **Por que mudou (2026-08-11).** A versão anterior declarava 9 seções
- * fixas — Logística, Qualidade & Engenharia, Gestão, Administração… — que
- * não existiam na tabela `departments`. A auditoria
- * (`docs/governance/auditorias/AUDITORIA_AMPLA_2026-08-11.md`, F1–F3)
- * mediu o estrago: SST dentro de "Qualidade & Engenharia", Marketing
- * dentro de Vendas, PCP sem lugar nenhum, RH/TI/Facilities/Jurídico
- * empilhados em "Administração", e dois itens de relatório apontando para
- * o **mesmo** link — o que fazia a barra superior acusar o departamento
- * errado, porque `activeSection` resolve pelo primeiro match de URL.
+ * Seções fixas escritas à mão já divergiram do organograma real uma vez
+ * (F1–F3, `AUDITORIA_AMPLA_2026-08-11.md`) — por isso a derivação.
  *
  * Regras ao mexer nesta lista:
  * 1. `to` é único. Dois itens com o mesmo destino quebram a resolução do
@@ -135,7 +128,7 @@ const NAV_ITEMS: NavItem[] = [
   // mesmo motivo/padrão de "Meus Chamados" acima — sem `module`.
   { department: 'inicio', label: 'Chamado Predial', to: '/chamado-predial', icon: Wrench },
 
-  // ── Diretoria (departamento 2) ───────────────────────────────────────
+  // ── Diretoria ────────────────────────────────────────────────────────
   // Módulo `diretor`: o mesmo que já governa a alçada de aprovação
   // (D-K/RF-JUR-003). Quem aprova é quem enxerga a sala de comando; o
   // `admin` entra pelo fallback de papel, como em todo o menu.
@@ -146,13 +139,12 @@ const NAV_ITEMS: NavItem[] = [
   { department: 'vendas', label: 'Clientes', to: '/sales/clients', icon: Contact, module: 'clientes' },
   // Garantia/Assistência Técnica = produto vendido que volta com defeito.
   // É **pós-venda**, e pós-venda é de Vendas: `docs/comercial/00-README.md`
-  // lista "Assistente Comercial | VEND | Propostas, pedidos, pós-venda" e
-  // `01-VENDAS.md` cobre "Vendas, CRM, pós-venda". Estava em Qualidade por
-  // engano meu — confundi com a subárea "Garantia da Qualidade" (GQ), que é
-  // a função de QA, não RMA de produto vendido.
+  // lista "Assistente Comercial | VEND | Propostas, pedidos, pós-venda".
+  // Não confundir com a subárea "Garantia da Qualidade" (GQ), que é função
+  // de QA, não RMA de produto vendido.
   { department: 'vendas', label: 'Garantia / Assist. Técnica', to: '/service-orders', icon: LifeBuoy, module: 'garantia' },
 
-  // ── Marketing (departamento 15, antes escondido dentro de Vendas) ────
+  // ── Marketing ────────────────────────────────────────────────────────
   { department: 'marketing', label: 'Campanhas e Leads', to: '/marketing', icon: Megaphone, module: 'marketing' },
 
   // ── Compras ──────────────────────────────────────────────────────────
@@ -163,17 +155,14 @@ const NAV_ITEMS: NavItem[] = [
   { department: 'compras', label: 'Fornecedores', to: '/purchases/suppliers', icon: Truck, module: 'compras' },
   { department: 'compras', label: 'Relatórios de Compras', to: '/reports?tab=purchasing', icon: BarChart3, module: 'relatorios.compras' },
 
-  // ── Almoxarifado (departamento 7) ────────────────────────────────────
+  // ── Almoxarifado ─────────────────────────────────────────────────────
   { department: 'almoxarifado', label: 'Estoque', to: '/logistics/estoque', icon: Warehouse, module: 'estoque' },
   { department: 'almoxarifado', label: 'Recebimento', to: '/logistics/recebimento', icon: PackageCheck, module: 'recebimento', badgeKey: 'recebimento' },
   { department: 'almoxarifado', label: 'Depósitos', to: '/logistics/warehouses', icon: Settings2, module: 'estoque' },
-  // Contagens de inventário: a página existia em `/products/inventory-counts`
-  // e o módulo `contagens` existia no catálogo, mas nenhum item de menu
-  // levava até ela (achado da auditoria de 2026-08-11).
   { department: 'almoxarifado', label: 'Contagens de Inventário', to: '/products/inventory-counts', icon: ClipboardCheck, module: 'contagens' },
   { department: 'almoxarifado', label: 'Requisições do Almoxarifado', to: '/logistics/requisitions', icon: ClipboardList, module: 'estoque' },
 
-  // ── Engenharia do Produto (departamento 4) ───────────────────────────
+  // ── Engenharia do Produto ────────────────────────────────────────────
   // O cadastro mestre de item e a estrutura de produto são da Engenharia:
   // quem CRIA o código é ela. Quem só consulta (almoxarife, comprador)
   // chega aqui pelo módulo `produtos`, que continua sendo a regra de
@@ -183,11 +172,11 @@ const NAV_ITEMS: NavItem[] = [
   { department: 'engenharia', label: 'Item Mestre', to: '/products/items', icon: Layers, module: 'produtos' },
   { department: 'engenharia', label: 'Estrutura de Produto (BOM)', to: '/production/bom', icon: ListTree, module: 'bom' },
 
-  // ── PCP (departamento 5, antes sem lugar no menu) ────────────────────
+  // ── PCP ──────────────────────────────────────────────────────────────
   { department: 'pcp', label: 'Plano Mestre (MPS)', to: '/production/master-plans', icon: CalendarRange, module: 'mrp' },
   { department: 'pcp', label: 'MRP', to: '/production/mrp', icon: ListTree, module: 'mrp' },
 
-  // ── Produção (departamento 6) ────────────────────────────────────────
+  // ── Produção ─────────────────────────────────────────────────────────
   { department: 'producao', label: 'Ordens de Produção', to: '/production', icon: Factory, module: 'producao' },
   { department: 'producao', label: 'Chão de Fábrica', to: '/production/shop-floor', icon: ClipboardList, module: 'chao_de_fabrica' },
   { department: 'producao', label: 'Roteiros de Fabricação', to: '/production/routes', icon: ListOrdered, module: 'producao' },
@@ -195,24 +184,24 @@ const NAV_ITEMS: NavItem[] = [
   { department: 'producao', label: 'Requisições de Produção', to: '/production/requisitions', icon: ClipboardList, module: 'producao' },
   { department: 'producao', label: 'Relatórios de Produção', to: '/reports?tab=production', icon: BarChart3, module: 'relatorios.producao' },
 
-  // ── Qualidade (departamento 11) ──────────────────────────────────────
+  // ── Qualidade ────────────────────────────────────────────────────────
   { department: 'qualidade', label: 'Inspeção e NC', to: '/quality', icon: ShieldAlert, module: 'qualidade', badgeKey: 'qualidade' },
   { department: 'qualidade', label: 'Requisições de Qualidade', to: '/quality/requisitions', icon: ClipboardList, module: 'qualidade' },
   { department: 'qualidade', label: 'Laboratório', to: '/laboratory', icon: FlaskConical, module: 'laboratorio' },
   { department: 'qualidade', label: 'Rastreabilidade', to: '/traceability', icon: Search, module: 'rastreabilidade' },
 
-  // ── Expedição (departamento 12, antes fundida em "Logística") ────────
+  // ── Expedição ────────────────────────────────────────────────────────
   { department: 'expedicao', label: 'Expedição', to: '/logistics/expedicao', icon: Send, module: 'expedicao', badgeKey: 'expedicao' },
 
-  // ── Manutenção (departamento 13) ─────────────────────────────────────
+  // ── Manutenção ───────────────────────────────────────────────────────
   { department: 'manutencao', label: 'Ordens de Manutenção', to: '/maintenance', icon: Wrench, module: 'manutencao' },
   { department: 'manutencao', label: 'Requisições de Manutenção', to: '/maintenance/requisitions', icon: ClipboardList, module: 'manutencao' },
   { department: 'manutencao', label: 'Patrimônio', to: '/patrimonio', icon: Boxes, module: 'patrimonio' },
 
-  // ── Segurança do Trabalho (departamento 16) ──────────────────────────
+  // ── Segurança do Trabalho ────────────────────────────────────────────
   { department: 'sst', label: 'EPI, ASO, CIPA e PGR', to: '/sst', icon: HardHat, module: 'sst' },
 
-  // ── Financeiro (departamento 10) + subáreas Contabilidade/Tesouraria/
+  // ── Financeiro + subáreas Contabilidade/Tesouraria/
   //    Controladoria, que são subáreas funcionais e não departamentos
   //    próprios (`docs/00-ESTRUTURA_ORGANIZACIONAL.md`) ────────────────
   { department: 'financeiro', label: 'Contas e Fluxo de Caixa', to: '/financial', icon: Wallet, roles: ['admin', 'financial'], module: 'financeiro' },
@@ -220,11 +209,9 @@ const NAV_ITEMS: NavItem[] = [
   { department: 'financeiro', label: 'Tesouraria', to: '/treasury', icon: Landmark, roles: ['admin', 'financial'], module: 'tesouraria' },
   { department: 'financeiro', label: 'Controladoria', to: '/budget', icon: PiggyBank, roles: ['admin', 'financial'], module: 'controladoria' },
   { department: 'financeiro', label: 'Relatórios Financeiros', to: '/reports?tab=financial', icon: BarChart3, roles: ['admin', 'financial'], module: 'relatorios.financeiro' },
-  // Aba de custos do ReportsPage: existia e nenhum item de menu apontava
-  // para ela (achado da auditoria de 2026-08-11).
   { department: 'financeiro', label: 'Relatórios de Custos', to: '/reports?tab=costs', icon: BarChart3, module: 'relatorios.custos' },
 
-  // ── Recursos Humanos (departamento 3) ────────────────────────────────
+  // ── Recursos Humanos ─────────────────────────────────────────────────
   // Sem `module`: `GET /api/employees` e `/api/departments` exigem só
   // sessão autenticada (o seletor de operador do chão de fábrica depende
   // disso). Os campos sensíveis — CPF, salário, banco, endereço — já são
@@ -232,13 +219,13 @@ const NAV_ITEMS: NavItem[] = [
   // (`employeeSensitiveFields.ts`, BR-RH-020/LGPD).
   { department: 'rh', label: 'Funcionários e Departamentos', to: '/hr', icon: Contact },
 
-  // ── TI (departamento 14) ─────────────────────────────────────────────
+  // ── TI ───────────────────────────────────────────────────────────────
   { department: 'ti', label: 'Helpdesk e Ativos de TI', to: '/ti', icon: Server, module: 'ti' },
 
-  // ── Facilities (departamento 18) ─────────────────────────────────────
+  // ── Facilities ───────────────────────────────────────────────────────
   { department: 'facilities', label: 'Frota e Predial', to: '/facilities', icon: Building2, module: 'facilities' },
 
-  // ── Jurídico (departamento 17) ───────────────────────────────────────
+  // ── Jurídico ─────────────────────────────────────────────────────────
   { department: 'juridico', label: 'Contratos e Contencioso', to: '/juridico', icon: Scale, module: 'juridico' },
 
   // ── Sistema: administração do ERP, não é departamento ────────────────
@@ -294,11 +281,8 @@ const SECTION_SHORTCUTS: Partial<Record<DepartmentKey, QuickAction[]>> = {
 /**
  * Trilha de navegação **derivada** de `NAV_ITEMS` (2026-08-11).
  *
- * Antes era um mapa de ~50 linhas escrito à mão, e ele já tinha
- * envelhecido: dizia "Logística", "Gestão" e "Administração" — seções que
- * nunca existiram como departamento. Toda página que ganhava rota nova
- * também precisava lembrar de vir aqui, e quando não vinha o breadcrumb
- * calava. Derivando do menu, os dois nunca mais divergem.
+ * Derivar do menu impede a trilha de divergir dele (a versão manual
+ * anterior envelheceu citando seções que não existiam).
  *
  * `EXTRA_BREADCRUMBS` cobre só as rotas que **não** são item de menu
  * (páginas de detalhe e utilitários), onde não há de onde derivar.
@@ -579,9 +563,9 @@ export default function AppLayout() {
           </div>
         </div>
 
-        {/* Nível 1: departamentos (Bloco de reformulação de navegação — cada
-            aba linka para a primeira página já cadastrada em `NAV_SECTIONS`
-            para o departamento, sem rota nova). */}
+        {/* Nível 1: departamentos — cada aba linka para a primeira página
+            visível do departamento em `visibleSections` (derivado de
+            `NAV_ITEMS`), sem rota nova. */}
         <nav className="overflow-x-auto border-t border-white/10 px-2" aria-label="Departamentos">
           {/*
             `w-max` + `mx-auto` (em vez de `justify-center` no container com

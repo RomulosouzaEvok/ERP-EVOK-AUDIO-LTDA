@@ -9,6 +9,7 @@ import * as budgetApi from '@/api/budget';
 import { listCostCenters } from '@/api/financial';
 import { useAuth } from '@/context/AuthContext';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { formatCurrency } from '@/lib/format';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Button } from '@/components/ui/button';
@@ -31,9 +32,6 @@ const MONTH_LABELS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-function formatCurrency(value: string | number) {
-  return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 const CURRENT_YEAR = new Date().getFullYear();
 

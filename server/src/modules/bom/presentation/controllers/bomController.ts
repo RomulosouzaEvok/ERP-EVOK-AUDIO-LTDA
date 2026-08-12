@@ -23,9 +23,8 @@ const { createBomSchema, updateBomSchema, handleZodError } = require('../validat
  * disponibilidade e versionamento ao já existente `BomService`) e devolve
  * sempre o envelope padrão `{ success: true, data, ... }` — mantendo
  * exatamente o mesmo formato JSON do controller anterior
- * (`server/src/controllers/bomController.ts`), que permanece no
- * repositório apenas como referência histórica e não está mais registrado
- * em nenhuma rota ativa (ver `server/src/modules/bom/README.md`).
+ * (`bomController.ts`, hoje removido do
+ * repositório — histórico no git).
  */
 const bomRepository = new SequelizeBOMRepository();
 

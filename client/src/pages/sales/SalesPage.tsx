@@ -11,6 +11,7 @@ import * as clientsApi from '@/api/clients';
 import * as productsApi from '@/api/products';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { formatCurrency } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -412,7 +413,7 @@ function SaleDetailSheet({ sale, onClose }: { sale: salesApi.Sale | null; onClos
               <DetailField label="Data" value={new Date(current.createdAt).toLocaleDateString('pt-BR')} />
               <DetailField label="Forma de pagamento" value={PAYMENT_LABEL[current.payment_method ?? ''] ?? 'Não informada'} />
               {current.installments > 1 && <DetailField label="Parcelas" value={`${current.installments}x`} />}
-              {Number(current.discount) > 0 && <DetailField label="Desconto" value={`R$ ${Number(current.discount).toFixed(2)}`} />}
+              {Number(current.discount) > 0 && <DetailField label="Desconto" value={formatCurrency(current.discount)} />}
             </div>
 
             <div className="flex flex-col gap-2">

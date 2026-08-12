@@ -151,7 +151,19 @@ async function seedDatabase(): Promise<void> {
     // referencia esta tabela. Um banco novo precisa nascer já com a
     // hierarquia do organograma, não só com a lista plana de departamentos
     // (F-6 da auditoria de 2026-08-11).
-    const directorates = await Directorate.bulkCreate(DIRECTORATES);
+    //
+    // `ignoreDuplicates` é obrigatório nos três bulkCreate: as migrations
+    // 20260811-000043 (directorates) e 20260806-000120 (departments) já
+    // inserem essas linhas, e `code`/`name` são UNIQUE. Sem ele, um banco
+    // recém-provisionado por migrations (users vazia → seed roda) explodia em
+    // UniqueConstraintError: em produção o boot abortava; em dev o erro era
+    // engolido antes de `Category.bulkCreate`, deixando o banco sem categorias
+    // para sempre (V-1, VARREDURA_DUPLA_2026-08-11.md).
+    await Directorate.bulkCreate(DIRECTORATES, { ignoreDuplicates: true });
+    // Reler do banco: com ignoreDuplicates, instâncias retornadas de linhas
+    // pré-existentes não trazem `id` — o Map sairia com undefined e os
+    // departamentos nasceriam sem diretoria.
+    const directorates = await Directorate.findAll({ attributes: ['id', 'code'] });
     const directorateIdByCode = new Map<string, number>(
       directorates.map((d: { code: string; id: number }) => [d.code, d.id]),
     );
@@ -162,10 +174,11 @@ async function seedDatabase(): Promise<void> {
         ...department,
         directorate_id: directorateIdByCode.get(DEPARTMENT_DIRECTORATE[department.sigla]) ?? null,
       })),
+      { ignoreDuplicates: true },
     );
 
     // Criar categorias de produto iniciais
-    await Category.bulkCreate(CATEGORIES);
+    await Category.bulkCreate(CATEGORIES, { ignoreDuplicates: true });
 
     console.log('🌱 Seeds concluídos com sucesso!');
     console.log('   - Usuário admin: admin@evokaudio.com.br');

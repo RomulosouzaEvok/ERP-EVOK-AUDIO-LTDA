@@ -8,6 +8,7 @@ import { Plus } from 'lucide-react';
 import * as treasuryApi from '@/api/treasury';
 import { useAuth } from '@/context/AuthContext';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { formatCurrency } from '@/lib/format';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Button } from '@/components/ui/button';
@@ -24,9 +25,6 @@ const TYPE_LABELS: Record<treasuryApi.BankAccountType, string> = {
   aplicacao: 'Aplicação',
 };
 
-function formatCurrency(value: string | number) {
-  return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 /** Aba "Contas Bancárias" de `/treasury` — cadastro + saldo atual mantido manualmente pela Tesouraria. */
 export function BankAccountsTab() {

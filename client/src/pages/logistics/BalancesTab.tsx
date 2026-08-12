@@ -10,6 +10,7 @@ import * as inventoryApi from '@/api/inventory';
 import * as lotsApi from '@/api/lots';
 import * as warehousesApi from '@/api/warehouses';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { formatCurrency } from '@/lib/format';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
@@ -116,7 +117,7 @@ export function BalancesTab() {
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <p className="text-2xl font-semibold tabular-nums">
-              {stockReport ? `R$ ${stockReport.summary.total_value.toFixed(2)}` : '-'}
+              {stockReport ? formatCurrency(stockReport.summary.total_value) : '-'}
             </p>
             <CardDescription>Custo total dos produtos ativos</CardDescription>
           </CardContent>

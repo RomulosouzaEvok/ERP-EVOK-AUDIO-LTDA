@@ -1,33 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import type { AccessRequestStatus, AccessRequestType, TermStatus, TicketPriority, TicketStatus } from '@/api/ti';
 
-/** Formata uma data ISO (`YYYY-MM-DD` ou timestamp) para `dd/mm/aaaa` (pt-BR). Retorna "-" se ausente/vazia. */
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString('pt-BR');
-}
-
-/** Formata um timestamp ISO completo (data + hora) para `dd/mm/aaaa hh:mm` (pt-BR). */
-export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-/** Converte um valor `Date`/string em `YYYY-MM-DD` para uso em `<input type="date">`/payload da API. */
-export function toDateInputValue(value: string | Date = new Date()): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  return date.toISOString().slice(0, 10);
-}
-
-/** Converte um `Date` para `YYYY-MM-DDTHH:mm` (uso em `<input type="datetime-local">`). */
-export function toDateTimeInputValue(value: string | Date = new Date()): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  return date.toISOString().slice(0, 16);
-}
+// Formatação canônica em `@/lib/format` (re-export preserva os consumidores).
+export { formatDate, formatDateTime, toDateInputValue, toDateTimeInputValue } from '@/lib/format';
 
 export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   open: 'Aberto',

@@ -10,6 +10,7 @@ import * as rfqApi from '@/api/rfq';
 import * as requisitionsApi from '@/api/purchaseRequisitions';
 import * as suppliersApi from '@/api/suppliers';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { formatCurrency } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -428,7 +429,7 @@ function ItemsTab({ rfq }: { rfq: rfqApi.Rfq }) {
             <TableCell>{item.unit ?? '-'}</TableCell>
             <TableCell>
               {item.awarded_supplier_id
-                ? `Fornecedor #${item.awarded_supplier_id} — R$ ${Number(item.awarded_unit_price).toFixed(2)}`
+                ? `Fornecedor #${item.awarded_supplier_id} — ${formatCurrency(item.awarded_unit_price)}`
                 : '-'}
             </TableCell>
           </TableRow>

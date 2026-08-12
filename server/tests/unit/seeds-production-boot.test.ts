@@ -6,13 +6,18 @@ jest.mock('../../src/models/index', () => ({
   Department: {
     bulkCreate: jest.fn(),
   },
-  // Diretorias são criadas ANTES dos departamentos (o seed usa os ids
-  // retornados para preencher `directorate_id`), então o dublê precisa
-  // devolver as linhas com `code`/`id` — um array vazio faria o `Map` de
+  // Diretorias são criadas ANTES dos departamentos. Desde a correção V-1
+  // (VARREDURA_DUPLA_2026-08-11.md) o seed usa `ignoreDuplicates` e depois
+  // RELÊ as diretorias via `findAll` (instância retornada de linha
+  // pré-existente não traz `id`), então o dublê precisa responder a ambos
+  // com as linhas contendo `code`/`id` — um array vazio faria o `Map` de
   // resolução ficar vazio e todo departamento nasceria transversal.
   Directorate: {
     bulkCreate: jest.fn(async (rows: Array<{ code: string }>) =>
       rows.map((row, index) => ({ ...row, id: index + 1 })),
+    ),
+    findAll: jest.fn(async () =>
+      ['CEO', 'IND', 'SUP', 'COM', 'ADM'].map((code, index) => ({ code, id: index + 1 })),
     ),
   },
   Category: {

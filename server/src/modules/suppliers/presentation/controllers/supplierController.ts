@@ -15,9 +15,8 @@ const { createSupplierSchema, updateSupplierSchema, handleZodError } = require('
  * regra de negócio aos use cases da camada de aplicação e devolve sempre o
  * envelope padrão `{ success: true, data }`, mantendo exatamente o mesmo
  * formato JSON e os mesmos 5 endpoints do controller anterior
- * (`server/src/controllers/supplierController.ts`), que permanece no
- * repositório apenas como referência histórica e não está mais registrado
- * em nenhuma rota ativa (ver `server/src/modules/suppliers/README.md`).
+ * (`supplierController.ts`, hoje removido do
+ * repositório — histórico no git).
  */
 const suppliersRepository = new SequelizeSuppliersRepository();
 const itemSupplierRepository = new SequelizeItemSupplierRepository();

@@ -13,34 +13,8 @@ import type {
   MaterialType,
 } from '@/api/marketing';
 
-/** Formata uma data ISO (`YYYY-MM-DD` ou timestamp) para `dd/mm/aaaa` (pt-BR). Retorna "-" se ausente/vazia. */
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString('pt-BR');
-}
-
-/** Formata um timestamp ISO completo (data + hora) para `dd/mm/aaaa hh:mm` (pt-BR). */
-export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-/**
- * Formata um DECIMAL string (`"150000.00"`) como moeda BR para EXIBIÇÃO
- * apenas — nunca usar o `number` resultante para reenviar ao backend
- * (payloads de escrita mandam o valor original do input, sem passar por
- * aqui, preservando precisão).
- */
-export function formatCurrency(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '-';
-  const numeric = typeof value === 'string' ? Number(value) : value;
-  if (Number.isNaN(numeric)) return '-';
-  return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+// Formatação canônica em `@/lib/format` (re-export preserva os consumidores).
+export { formatDate, formatDateTime, formatCurrency } from '@/lib/format';
 
 /** Formata uma proporção decimal (`"0.62"`) como percentual (`"62%"`) para exibição. */
 export function formatPercent(value: string | number | null | undefined): string {

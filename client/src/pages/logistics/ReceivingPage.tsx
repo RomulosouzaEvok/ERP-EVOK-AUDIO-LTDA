@@ -9,11 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { ReceivingConferenceDialog } from './ReceivingConferenceDialog';
+import { formatDate } from '@/lib/format';
 
-function formatDate(value?: string | null): string {
-  if (!value) return '-';
-  return new Date(value).toLocaleDateString('pt-BR');
-}
 
 function isOverdue(expectedDate?: string | null): boolean {
   if (!expectedDate) return false;

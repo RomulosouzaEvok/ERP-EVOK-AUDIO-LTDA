@@ -10,41 +10,8 @@ import type {
   VisitStatus,
 } from '@/api/facilities';
 
-/** Formata uma data ISO (`YYYY-MM-DD` ou timestamp) para `dd/mm/aaaa` (pt-BR). Retorna "-" se ausente/vazia. */
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString('pt-BR');
-}
-
-/** Formata um timestamp ISO completo (data + hora) para `dd/mm/aaaa hh:mm` (pt-BR). */
-export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-/** Converte um `Date`/string em `YYYY-MM-DD` para uso em `<input type="date">`/payload da API. */
-export function toDateInputValue(value: string | Date = new Date()): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  return date.toISOString().slice(0, 10);
-}
-
-/** Converte um `Date`/string em `YYYY-MM-DDTHH:mm` (uso em `<input type="datetime-local">`). */
-export function toDateTimeInputValue(value: string | Date = new Date()): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  return date.toISOString().slice(0, 16);
-}
-
-/** Formata um DECIMAL string como moeda BR para exibição apenas. */
-export function formatCurrency(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '-';
-  const numeric = typeof value === 'string' ? Number(value) : value;
-  if (Number.isNaN(numeric)) return '-';
-  return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+// Formatação canônica em `@/lib/format` (re-export preserva os consumidores).
+export { formatDate, formatDateTime, toDateInputValue, toDateTimeInputValue, formatCurrency } from '@/lib/format';
 
 /** Dias restantes até uma data (negativo = vencido). */
 export function daysUntil(dueDate: string): number {

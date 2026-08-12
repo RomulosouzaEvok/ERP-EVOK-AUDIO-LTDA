@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as treasuryApi from '@/api/treasury';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import { translateApiError } from '@/lib/translateApiError';
+import { formatCurrency } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -12,9 +13,6 @@ const TYPE_LABELS: Record<string, string> = {
   aplicacao: 'Aplicação',
 };
 
-function formatCurrency(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: 'positive' | 'negative' }) {
   return (

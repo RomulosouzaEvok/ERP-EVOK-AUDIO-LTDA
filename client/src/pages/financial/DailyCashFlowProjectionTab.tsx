@@ -8,13 +8,10 @@ import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatCurrency as formatBRL } from '@/lib/format';
 
 const HORIZON_OPTIONS = [30, 60, 90] as const;
 type HorizonDays = (typeof HORIZON_OPTIONS)[number];
-
-function formatBRL(value: number): string {
-  return `R$ ${Number(value ?? 0).toFixed(2)}`;
-}
 
 function formatDate(value: string): string {
   const [year, month, day] = value.split('-');

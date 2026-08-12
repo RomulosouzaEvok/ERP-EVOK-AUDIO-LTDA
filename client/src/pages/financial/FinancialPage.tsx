@@ -9,6 +9,7 @@ import * as financialApi from '@/api/financial';
 import { extractApiErrorMessage } from '@/api/httpClient';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
+import { formatCurrency as formatBRL } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,7 +43,7 @@ const STATUS_LABEL: Record<string, string> = {
 /** Pede o valor a pagar/receber (branco = quita o restante). Retorna `undefined` se cancelado. */
 function promptPaymentAmount(remaining: number): number | undefined {
   const input = window.prompt(
-    `Valor a registrar (restante: R$ ${remaining.toFixed(2)}). Deixe em branco para quitar o valor total restante.`,
+    `Valor a registrar (restante: ${formatBRL(remaining)}). Deixe em branco para quitar o valor total restante.`,
   );
   if (input === null) return undefined;
   if (input.trim() === '') return remaining;
@@ -508,10 +509,6 @@ function AccountsTab({ canWrite }: { canWrite: boolean }) {
 
 const HORIZON_OPTIONS = [30, 60, 90] as const;
 type HorizonDays = (typeof HORIZON_OPTIONS)[number];
-
-function formatBRL(value: number): string {
-  return `R$ ${Number(value).toFixed(2)}`;
-}
 
 function formatWeekRange(start: string, end: string): string {
   const toDdMm = (value: string) => {

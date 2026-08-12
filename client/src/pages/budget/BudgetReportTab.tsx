@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as budgetApi from '@/api/budget';
 import { DidacticAlert } from '@/components/DidacticAlert';
 import { translateApiError } from '@/lib/translateApiError';
+import { formatCurrency } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,9 +18,6 @@ const MONTH_LABELS = [
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-function formatCurrency(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 function formatPercent(value: number | null) {
   if (value === null) return '—';

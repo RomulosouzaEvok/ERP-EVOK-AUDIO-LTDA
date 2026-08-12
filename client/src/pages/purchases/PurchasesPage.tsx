@@ -10,6 +10,7 @@ import * as purchasesApi from '@/api/purchases';
 import * as suppliersApi from '@/api/suppliers';
 import * as productsApi from '@/api/products';
 import { translateApiError, type DidacticError } from '@/lib/translateApiError';
+import { formatCurrency } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
 import { HandoffDot } from '@/components/HandoffDot';
 import { Button } from '@/components/ui/button';
@@ -524,7 +525,7 @@ function PurchaseCockpitTiles({
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pedidos em aberto</p>
             <p className="text-2xl font-semibold">
-              {isLoading ? '—' : `${cockpit?.open_orders.count ?? 0} · R$ ${Number(cockpit?.open_orders.total_amount ?? 0).toFixed(2)}`}
+              {isLoading ? '—' : `${cockpit?.open_orders.count ?? 0} · ${formatCurrency(cockpit?.open_orders.total_amount ?? 0)}`}
             </p>
           </div>
         </CardContent>

@@ -6,6 +6,7 @@ import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatCurrency as formatMoney } from '@/lib/format';
 
 const TYPE_LABELS: Record<accountingApi.AccountType, string> = {
   asset: 'Ativo',
@@ -16,9 +17,6 @@ const TYPE_LABELS: Record<accountingApi.AccountType, string> = {
   cost: 'Custo',
 };
 
-function formatMoney(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 /** Aba "Balancete" de `/accounting` — relatório derivado por mês/ano (`GET /api/accounting/trial-balance`). */
 export function TrialBalanceTab() {

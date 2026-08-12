@@ -42,10 +42,8 @@ const {
  * delegam a alteração real de `Product.quantity` ao já existente
  * `InventoryService`) e devolve sempre o envelope padrão
  * `{ success: true, data, ... }` — mantendo exatamente o mesmo formato JSON
- * do controller anterior (`server/src/controllers/inventoryController.ts`),
- * que permanece no repositório apenas como referência histórica e não está
- * mais registrado em nenhuma rota ativa (ver
- * `server/src/modules/inventory/README.md`).
+ * do controller anterior (`inventoryController.ts`, hoje removido do
+ * repositório — histórico no git).
  */
 const inventoryRepository = new SequelizeInventoryRepository();
 const qualityRepository = new SequelizeQualityRepository();

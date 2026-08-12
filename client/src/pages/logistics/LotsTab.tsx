@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { Pagination } from '@/components/Pagination';
 import { QrCodeDialog } from '@/components/QrCodeDialog';
+import { formatDate } from '@/lib/format';
 
 const STATUS_LABEL: Record<lotsApi.LotStatus, string> = {
   available: 'Liberado',
@@ -39,10 +40,6 @@ const STATUS_BADGE_CLASS: Partial<Record<lotsApi.LotStatus, string>> = {
   expired: 'border-destructive text-destructive',
 };
 
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  return new Date(value).toLocaleDateString('pt-BR');
-}
 
 /**
  * Aba "Lotes" — somente leitura, com filtro por situação. Ações de

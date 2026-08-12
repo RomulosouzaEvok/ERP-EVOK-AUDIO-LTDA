@@ -1,6 +1,18 @@
+/**
+ * Guarda: as FKs críticas de 2026-08-02 (bloqueador P0 2.1) continuam no banco.
+ *
+ * Movido de `server/__tests__/database/05_add_critical_foreign_keys.test.ts`
+ * em 2026-08-11 (L-3, VARREDURA_DUPLA_2026-08-11.md): o `jest.config.cjs` tem
+ * `roots: ['<rootDir>/tests']`, então o arquivo original **nunca rodava** —
+ * cobertura aparente, execução zero, a mesma classe das 34 suítes que
+ * pulavam em silêncio. Aqui ele roda contra Postgres real na suíte de
+ * integração.
+ */
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { QueryTypes } from 'sequelize';
 import { sequelize } from '../../src/models';
+
+const describeIntegration = process.env.RUN_INTEGRATION ? describe : describe.skip;
 
 type ForeignKeyRow = {
   constraint_name: string;
@@ -54,7 +66,7 @@ async function expectIndex(tableName: string, pattern: string) {
   expect(indexes.some((row) => row.indexname.includes(pattern))).toBe(true);
 }
 
-describe('P0.3: Critical Foreign Keys', () => {
+describeIntegration('P0.3: Critical Foreign Keys', () => {
   beforeAll(async () => {
     await sequelize.authenticate();
   });

@@ -12,9 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { DidacticAlert } from '@/components/DidacticAlert';
 
-function formatBRL(value: number | string): string {
-  return `R$ ${Number(value).toFixed(2)}`;
-}
+import { formatCurrency as formatBRL } from '@/lib/format';
 
 function formatDate(value: string): string {
   return new Date(`${value}T00:00:00`).toLocaleDateString('pt-BR');

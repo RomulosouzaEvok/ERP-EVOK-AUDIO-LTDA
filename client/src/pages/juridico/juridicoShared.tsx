@@ -17,40 +17,8 @@ import type {
   CorporateActStatus,
 } from '@/api/juridico';
 
-/** Formata uma data ISO (`YYYY-MM-DD` ou timestamp) para `dd/mm/aaaa` (pt-BR). Retorna "-" se ausente/vazia. */
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString('pt-BR');
-}
-
-/** Formata um timestamp ISO completo (data + hora) para `dd/mm/aaaa hh:mm` (pt-BR). */
-export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-/** Converte um valor `Date`/string em `YYYY-MM-DD` para uso em `<input type="date">`/payload da API. */
-export function toDateInputValue(value: string | Date = new Date()): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  return date.toISOString().slice(0, 10);
-}
-
-/**
- * Formata um DECIMAL string (`"150000.000000"`) como moeda BR para EXIBIÇÃO
- * apenas — nunca usar o `number` resultante para reenviar ao backend
- * (payloads de escrita mandam o `string` original do input, sem passar por
- * aqui, preservando a precisão DECIMAL(18,6) do banco).
- */
-export function formatCurrency(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '-';
-  const numeric = typeof value === 'string' ? Number(value) : value;
-  if (Number.isNaN(numeric)) return '-';
-  return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+// Formatação canônica em `@/lib/format` (re-export preserva os consumidores).
+export { formatDate, formatDateTime, toDateInputValue, formatCurrency } from '@/lib/format';
 
 // ---------------------------------------------------------------------------
 // Contratos
