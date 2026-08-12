@@ -12,6 +12,20 @@ import type { ItemResponse, ListResponse } from './types';
 export type ItemType = 'MATERIA_PRIMA' | 'SUBCONJUNTO' | 'PRODUTO_ACABADO' | 'USO_E_CONSUMO' | 'ATIVO_IMOBILIZADO';
 
 /**
+ * Rótulo humano de cada tipo — mora aqui (e não numa página) porque é usado
+ * pelo Item Mestre, pelo detalhe do item e pelo `ItemSearchSelect` de
+ * requisição/MRP: quem requisita precisa VER que está pedindo um imobilizado
+ * ou MRO, que seguem alçada diferente de insumo produtivo.
+ */
+export const ITEM_TYPE_LABEL: Record<ItemType, string> = {
+  MATERIA_PRIMA: 'Matéria-prima',
+  SUBCONJUNTO: 'Subconjunto',
+  PRODUTO_ACABADO: 'Produto acabado',
+  USO_E_CONSUMO: 'Uso e consumo (MRO)',
+  ATIVO_IMOBILIZADO: 'Ativo imobilizado',
+};
+
+/**
  * Item mestre (núcleo `Item` do backend) — matéria-prima, subconjunto ou
  * produto acabado. Campos mínimos usados nas telas de compras/produção
  * (busca, seleção em formulários, exibição de estoque atual).

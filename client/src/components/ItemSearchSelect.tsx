@@ -84,6 +84,19 @@ export function ItemSearchSelect({
                   {item.codigo} — {item.descricao}
                 </span>
                 <span className="text-xs text-muted-foreground">
+                  {/* O tipo fica visível (e em destaque quando não é insumo
+                      produtivo): quem requisita um ATIVO_IMOBILIZADO ou MRO
+                      precisa saber — a alçada de aprovação é outra. */}
+                  <span
+                    className={
+                      item.tipo === 'ATIVO_IMOBILIZADO' || item.tipo === 'USO_E_CONSUMO'
+                        ? 'font-medium text-amber-600 dark:text-amber-400'
+                        : undefined
+                    }
+                  >
+                    {itemsApi.ITEM_TYPE_LABEL[item.tipo] ?? item.tipo}
+                  </span>
+                  {' · '}
                   {item.unidade} · Estoque atual: {Number(item.estoque_atual)}
                 </span>
               </button>

@@ -35,13 +35,9 @@ const ENGINEERING_ITEM_TYPES: itemsApi.ItemType[] = ['MATERIA_PRIMA', 'SUBCONJUN
 const SUPPLY_ITEM_TYPES: itemsApi.ItemType[] = ['USO_E_CONSUMO', 'ATIVO_IMOBILIZADO'];
 const ITEM_TYPES: itemsApi.ItemType[] = [...ENGINEERING_ITEM_TYPES, ...SUPPLY_ITEM_TYPES];
 
-export const ITEM_TYPE_LABEL: Record<itemsApi.ItemType, string> = {
-  MATERIA_PRIMA: 'Matéria-prima',
-  SUBCONJUNTO: 'Subconjunto',
-  PRODUTO_ACABADO: 'Produto acabado',
-  USO_E_CONSUMO: 'Uso e consumo (MRO)',
-  ATIVO_IMOBILIZADO: 'Ativo imobilizado',
-};
+// Movido para `@/api/items` em 2026-08-12 (o `ItemSearchSelect` também
+// precisa dele); re-exportado aqui para os importadores existentes.
+export const ITEM_TYPE_LABEL = itemsApi.ITEM_TYPE_LABEL;
 
 const SUPPLY_TYPE_NOTICE: Partial<Record<itemsApi.ItemType, string>> = {
   USO_E_CONSUMO:
