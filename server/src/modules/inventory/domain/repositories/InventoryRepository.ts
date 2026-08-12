@@ -202,6 +202,29 @@ class InventoryRepository {
   }
 
   /**
+   * Busca um lote (`LotControl`) pelo id **travando a linha** (`FOR UPDATE`)
+   * dentro da transação recebida.
+   *
+   * Existe para a liberação de lote (G7): a decisão do gate lê `status`,
+   * `blocked_at` e a inspeção do lote e, em seguida, escreve nesse mesmo
+   * registro. Sem o lock, um bloqueio concorrente (endpoint `/block` ou
+   * abertura de RNC) pode acontecer **entre** a leitura e a escrita, e a
+   * liberação gravaria `available` por cima de um bloqueio que o gate nunca
+   * viu. Mesmo padrão de `saleLotService.shipLotsForInvoice`.
+   *
+   * @abstract
+   * @param {number|string} id - Id do lote.
+   * @param {import('sequelize').Transaction} transaction - Transação ativa.
+   * @returns {Promise<Object|null>}
+   */
+  async findLotByIdForUpdate(
+    id: number | string, // eslint-disable-line no-unused-vars
+    transaction: Transaction // eslint-disable-line no-unused-vars
+  ): Promise<any | null> {
+    throw new Error('InventoryRepository.findLotByIdForUpdate não implementado.');
+  }
+
+  /**
    * Busca um único lote pelo `lot_number` (+ filtro opcional já embutido em
    * `where`, ex.: `product_id`), com `product`, `supplier` e `warehouse`
    * incluídos, ordenado por `createdAt ASC`. Usado quando `product_id` é

@@ -35,12 +35,27 @@
  * `services/materialReceiptService.ts`: o gate fica testável com mock e o
  * módulo de estoque não abre uma segunda porta de acesso ao ORM de outro
  * domínio.
+ *
+ * ## Dois furos fechados em 2026-08-11 (auditoria)
+ *
+ * 1. **Inspeção antiga re-liberava lote bloqueado.** `aprovada → liberada →
+ *    RNC/bloqueio → release` era concedido com a MESMA inspeção de antes do
+ *    bloqueio: ninguém tinha examinado o material depois do defeito, e o
+ *    bloqueio virava decorativo (ISO 9001 §8.7). O gate passou a exigir
+ *    inspeção **posterior** a `lot_controls.blocked_at`.
+ * 2. **Leitura e escrita sem transação nem lock.** O caso de uso lia o lote,
+ *    consultava a inspeção e só então gravava — três operações soltas. Um
+ *    bloqueio concorrente entre a leitura e a escrita era simplesmente
+ *    sobrescrito por `status = 'available'`. Agora tudo acontece dentro de
+ *    uma transação, com a linha do lote travada em `FOR UPDATE` (mesmo
+ *    padrão de `saleLotService.shipLotsForInvoice`).
  */
 
 import UseCase from '../../../../shared/application/UseCase';
 import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { NotFoundError, BusinessRuleError } from '../../../../errors';
 import { decideLotRelease, QUALITY_INSPECTION_RULE } from '../../../quality/domain/constants';
+import { sequelize } from '../../../../config/database';
 
 const RELEASABLE_STATUSES = ['quarantine', 'blocked'];
 
@@ -49,7 +64,12 @@ const RELEASABLE_STATUSES = ['quarantine', 'blocked'];
  * `SequelizeQualityRepository` satisfaz esta forma estruturalmente.
  */
 interface QualityInspectionGateway {
-  findLatestInspectionForLot(lotId: number | string): Promise<any | null>;
+  /**
+   * @param lotId - Lote inspecionado.
+   * @param transaction - Transação da liberação: a leitura da inspeção
+   *   precisa enxergar o mesmo instantâneo em que o lote foi travado.
+   */
+  findLatestInspectionForLot(lotId: number | string, transaction?: any): Promise<any | null>;
 }
 
 interface ReleaseLotInput {
@@ -83,67 +103,102 @@ class ReleaseLotUseCase extends UseCase<ReleaseLotInput, any> {
   /**
    * @param input - Id do lote, observação opcional e id de quem autoriza (JWT).
    * @returns Lote atualizado (`status = 'available'`), já com
-   *   `release_inspection_id`, `released_by` e `released_at` preenchidos.
+   *   `release_inspection_id`, `released_by` e `released_at` preenchidos e
+   *   `blocked_at` zerado.
    * @throws {NotFoundError} Se o lote não existir.
    * @throws {BusinessRuleError} Se o lote não estiver em `quarantine` nem `blocked`.
    *   `details: { rule: 'G7', lot_id, current_status, allowed_statuses }`.
    * @throws {BusinessRuleError} Se o gate de qualidade recusar (G7).
    *   `details: { rule: 'G7', lot_id, reason, inspection_id, inspection_verdict }`,
-   *   com `reason` em `no_inspection | last_inspection_rejected`.
+   *   com `reason` em
+   *   `no_inspection | last_inspection_rejected | inspection_before_block`.
    *   **Nada é gravado neste caminho** — a checagem acontece integralmente
-   *   antes do único `update` do método.
+   *   antes do único `update`, e um rollback desfaz até o lock.
    */
   public async execute({ id, notes, releasedBy }: ReleaseLotInput): Promise<any> {
-    const lot = await this.inventoryRepository.findLotById(id);
-    if (!lot) {
-      throw new NotFoundError('Lote não encontrado.');
-    }
-    if (!RELEASABLE_STATUSES.includes(lot.status)) {
-      throw new BusinessRuleError(
-        `Apenas lotes em 'quarantine' ou 'blocked' podem ser liberados. Status atual: '${lot.status}'.`,
-        {
+    const transaction = await sequelize.transaction();
+
+    try {
+      // Lock pessimista: a partir daqui nenhum bloqueio concorrente (endpoint
+      // `/block` ou abertura de RNC) consegue alterar este lote antes do
+      // commit. Sem isso, o gate decidiria sobre um estado que já mudou.
+      const lot = await this.inventoryRepository.findLotByIdForUpdate(id, transaction);
+      if (!lot) {
+        throw new NotFoundError('Lote não encontrado.');
+      }
+      if (!RELEASABLE_STATUSES.includes(lot.status)) {
+        throw new BusinessRuleError(
+          `Apenas lotes em 'quarantine' ou 'blocked' podem ser liberados. Status atual: '${lot.status}'.`,
+          {
+            rule: QUALITY_INSPECTION_RULE,
+            lot_id: lot.id,
+            current_status: lot.status,
+            allowed_statuses: RELEASABLE_STATUSES
+          }
+        );
+      }
+
+      // Gate de qualidade (G7). Roda ANTES de qualquer escrita: se recusar, o
+      // lote permanece byte a byte como estava — nem status, nem notes, nem os
+      // campos de liberação são tocados.
+      const latestInspection = await this.qualityGateway.findLatestInspectionForLot(lot.id, transaction);
+      const decision = decideLotRelease(latestInspection, lot.blocked_at);
+
+      if (!decision.allowed) {
+        throw new BusinessRuleError(this.buildDenialMessage(lot, decision), {
           rule: QUALITY_INSPECTION_RULE,
           lot_id: lot.id,
+          lot_number: lot.lot_number,
           current_status: lot.status,
-          allowed_statuses: RELEASABLE_STATUSES
-        }
-      );
+          reason: decision.reason,
+          inspection_id: decision.inspectionId,
+          inspection_verdict: decision.verdict,
+          blocked_at: lot.blocked_at ?? null,
+        });
+      }
+
+      const releaseNote = notes ? String(notes).trim() : '';
+      await lot.update({
+        status: 'available',
+        release_inspection_id: decision.inspectionId,
+        released_by: releasedBy,
+        released_at: new Date(),
+        // O bloqueio deixou de existir: `blocked_at` descreve o bloqueio
+        // VIGENTE. Mantê-lo faria a próxima inspeção ter de superar uma data
+        // de um bloqueio já resolvido.
+        blocked_at: null,
+        notes: releaseNote
+          ? `${lot.notes ? `${lot.notes} | ` : ''}Liberado: ${releaseNote}`
+          : lot.notes
+      }, { transaction });
+
+      await transaction.commit();
+      return lot;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Monta a mensagem de recusa do gate, dizendo o que fazer em cada caso.
+   *
+   * @param lot - Lote travado.
+   * @param decision - Decisão recusada por `decideLotRelease`.
+   * @returns Mensagem destinada a quem opera a Qualidade.
+   */
+  private buildDenialMessage(lot: any, decision: any): string {
+    if (decision.reason === 'no_inspection') {
+      return `Lote ${lot.lot_number} não tem inspeção de qualidade registrada. Registre a inspeção em POST /api/quality/inspections antes de liberar (ISO 9001 8.6).`;
     }
 
-    // Gate de qualidade (G7). Roda ANTES de qualquer escrita: se recusar, o
-    // lote permanece byte a byte como estava — nem status, nem notes, nem os
-    // campos de liberação são tocados.
-    const latestInspection = await this.qualityGateway.findLatestInspectionForLot(lot.id);
-    const decision = decideLotRelease(latestInspection);
-
-    if (!decision.allowed) {
-      const message = decision.reason === 'no_inspection'
-        ? `Lote ${lot.lot_number} não tem inspeção de qualidade registrada. Registre a inspeção em POST /api/quality/inspections antes de liberar (ISO 9001 8.6).`
-        : `A inspeção mais recente do lote ${lot.lot_number} reprovou o material (inspeção #${decision.inspectionId}). Trate a não conformidade e registre uma NOVA inspeção aprovada antes de liberar (ISO 9001 8.7).`;
-
-      throw new BusinessRuleError(message, {
-        rule: QUALITY_INSPECTION_RULE,
-        lot_id: lot.id,
-        lot_number: lot.lot_number,
-        current_status: lot.status,
-        reason: decision.reason,
-        inspection_id: decision.inspectionId,
-        inspection_verdict: decision.verdict,
-      });
+    if (decision.reason === 'inspection_before_block') {
+      return `O lote ${lot.lot_number} foi BLOQUEADO depois da última inspeção aprovada (inspeção #${decision.inspectionId}). `
+        + 'Uma aprovação anterior ao bloqueio não vale como evidência: o defeito que motivou o bloqueio apareceu DEPOIS dela. '
+        + 'Trate a não conformidade e registre uma NOVA inspeção em POST /api/quality/inspections antes de liberar (ISO 9001 8.7).';
     }
 
-    const releaseNote = notes ? String(notes).trim() : '';
-    await lot.update({
-      status: 'available',
-      release_inspection_id: decision.inspectionId,
-      released_by: releasedBy,
-      released_at: new Date(),
-      notes: releaseNote
-        ? `${lot.notes ? `${lot.notes} | ` : ''}Liberado: ${releaseNote}`
-        : lot.notes
-    });
-
-    return lot;
+    return `A inspeção mais recente do lote ${lot.lot_number} reprovou o material (inspeção #${decision.inspectionId}). Trate a não conformidade e registre uma NOVA inspeção aprovada antes de liberar (ISO 9001 8.7).`;
   }
 }
 

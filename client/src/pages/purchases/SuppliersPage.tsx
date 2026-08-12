@@ -23,6 +23,12 @@ const supplierSchema = z.object({
   cnpj: z.string().min(1, 'Informe o CNPJ.'),
   phone: z.string().optional(),
   email: z.string().email('E-mail inválido.').optional().or(z.literal('')),
+  // G11 — a API passou a EXIGIR esta declaração na criação (2026-08-11):
+  // `is_foreign` comanda a alçada de aprovação de compra (importação exige a
+  // diretoria em qualquer valor), e um default silencioso gravava fornecedor
+  // estrangeiro como nacional. Sem preseleção de propósito: quem cadastra
+  // tem de escolher.
+  origem: z.enum(['nacional', 'estrangeiro'], { message: 'Informe se o fornecedor é nacional ou estrangeiro.' }),
 });
 
 type SupplierFormData = z.infer<typeof supplierSchema>;
@@ -83,7 +89,12 @@ export default function SuppliersPage() {
               <DialogHeader>
                 <DialogTitle>Novo fornecedor</DialogTitle>
               </DialogHeader>
-              <form className="flex flex-col gap-3" onSubmit={handleSubmit((values) => createMutation.mutate(values))} noValidate>
+              <form
+                className="flex flex-col gap-3"
+                onSubmit={handleSubmit(({ origem, ...values }) =>
+                  createMutation.mutate({ ...values, is_foreign: origem === 'estrangeiro' }))}
+                noValidate
+              >
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="company_name">Razão social</Label>
                   <Input id="company_name" {...register('company_name')} />
@@ -108,6 +119,25 @@ export default function SuppliersPage() {
                     <Input id="email" type="email" {...register('email')} />
                     {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
                   </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="origem">Origem do fornecedor</Label>
+                  <select
+                    id="origem"
+                    defaultValue=""
+                    className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    {...register('origem')}
+                  >
+                    <option value="" disabled>
+                      Selecione...
+                    </option>
+                    <option value="nacional">Nacional</option>
+                    <option value="estrangeiro">Estrangeiro (importação)</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Fornecedor estrangeiro faz toda compra dele exigir aprovação da diretoria, em qualquer valor.
+                  </p>
+                  {errors.origem && <p className="text-sm text-destructive">{errors.origem.message}</p>}
                 </div>
                 {formError && <DidacticAlert error={formError} />}
                 <DialogFooter>

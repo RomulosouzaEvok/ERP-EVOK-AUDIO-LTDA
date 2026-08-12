@@ -183,6 +183,12 @@ class CreateNonConformityUseCase extends UseCase<CreateNonConformityInput, any> 
       if (lotBlockOutcome === 'blocked') {
         await lot.update({
           status: 'blocked',
+          // G7 (2026-08-11): mesmo dado que `BlockLotUseCase` grava. Este
+          // caminho e o MAIS comum do cenario que a auditoria encontrou (o
+          // defeito aparece em processo e a Qualidade abre RNC); sem o
+          // instante do bloqueio aqui, o lote continuaria re-liberavel com a
+          // inspecao aprovada de antes da RNC.
+          blocked_at: new Date(),
           notes: `${lot.notes ? `${lot.notes} | ` : ''}Bloqueado pela RNC #${nonConformity.id}`
         }, { transaction: t });
       }

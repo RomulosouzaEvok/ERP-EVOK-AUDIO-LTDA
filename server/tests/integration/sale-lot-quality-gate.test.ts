@@ -317,6 +317,9 @@ describeIntegration('D-L/D-M — gate de qualidade na SAIDA e devolucao ao mesmo
         phone: '(11) 4000-0000',
         email: `dl-fornecedor-${SUFFIX}@evok.local`,
         payment_terms: '30 dias',
+        // G11 — declaracao obrigatoria desde 2026-08-11: e ela que decide a
+        // alcada (importacao exige a diretoria em qualquer valor).
+        is_foreign: false,
       });
     expectStatus(supplier, 201, 'supplier');
     ctx.supplierId = supplier.body.data.id;

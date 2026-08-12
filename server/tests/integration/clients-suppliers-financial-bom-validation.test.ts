@@ -82,10 +82,13 @@ describeIntegration('Regressao: validacao Zod estrita em clients/suppliers/finan
       .send({ name: `Cliente Valido ${Date.now()}`, cpf_cnpj: '11144477735' });
     expect([201, 409]).toContain(client.status);
 
+    // `is_foreign` faz parte do payload MINIMO valido desde 2026-08-11 (G11):
+    // a origem do fornecedor comanda a alcada de compra e nao pode ser
+    // assumida por default silencioso.
     const supplier = await api()
       .post('/api/suppliers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ company_name: `Fornecedor Valido ${Date.now()}`, cnpj: '11444777000161' });
+      .send({ company_name: `Fornecedor Valido ${Date.now()}`, cnpj: '11444777000161', is_foreign: false });
     expect([201, 409]).toContain(supplier.status);
   });
 });

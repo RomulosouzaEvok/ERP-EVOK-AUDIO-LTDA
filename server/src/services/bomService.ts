@@ -29,6 +29,9 @@ const { roundQuantity } = require('../shared/utils/decimal');
 // G7 (achado colateral): desconta do saldo de PLANEJAMENTO o material retido
 // em quarentena/bloqueio — ver o cabeçalho de `quarantineBalanceService`.
 const QuarantineBalanceService = require('./quarantineBalanceService');
+// G1 (auditoria 2026-08-11): detecção de ciclo multinível na escrita da BOM.
+const BomStructureProjection = require('./bomStructureProjection');
+const { BusinessRuleError } = require('../errors');
 
 const VALID_COMPONENT_TYPES = new Set(['raw_material', 'component', 'semi_finished', 'packaging', 'consumable', 'other']);
 
@@ -117,6 +120,9 @@ class BomService {
    * @throws {Error} Se items está vazio
    * @throws {Error} Se produto não é do tipo 'finished'
    * @throws {Error} Se componente não existe
+   * @throws {Error} 422 `rule: 'G1-BOM-AUTO-REF'` — produto componente de si mesmo
+   * @throws {import('../errors').BusinessRuleError} 422 `details.rule = 'G1-BOM-CICLO'` —
+   *   o componente já contém o produto na estrutura dele (ciclo multinível)
    * 
    * @example
    * await BomService.createBOM({
@@ -169,6 +175,41 @@ class BomService {
       const component = await Product.findByPk(item.component_product_id);
       if (!component) {
         throw Object.assign(new Error(`Componente ID ${item.component_product_id} não encontrado`), { statusCode: 404 });
+      }
+
+      // G1 (auditoria 2026-08-11): CICLO MULTINÍVEL.
+      //
+      // A auto-referência acima só cobre profundidade 1. `A` recebendo `B` e,
+      // depois, `B` recebendo `A` entrava no banco sem nenhum aviso — e o
+      // preço aparecia longe daqui: `explodeBOM` recusa a árvore com 422, e
+      // depois do G2 (BOM ativa obrigatória) produto com estrutura
+      // inexplodível é produto que **não conclui OP**. A fábrica descobriria
+      // na liberação/conclusão da ordem, com material já reservado.
+      //
+      // A pergunta certa antes de gravar a aresta `pai → componente` é: já
+      // existe caminho `componente → pai`? Se existe, a aresta nova fecha o
+      // ciclo. A detecção roda no espaço de `products.id` de propósito — a
+      // projeção em UUID (`hasPathBetween`) depende do crosswalk
+      // `products.code = items.codigo`, e produto sem item correspondente
+      // sumiria do grafo, deixando o ciclo passar exatamente onde o cadastro
+      // está mais incompleto.
+      const fechaCiclo = await BomStructureProjection.hasProductPathBetween(
+        item.component_product_id,
+        product_id,
+      );
+      if (fechaCiclo) {
+        throw new BusinessRuleError(
+          `A estrutura ficaria circular: "${component.name}" (ID ${item.component_product_id}) já contém `
+          + `"${product.name}" (ID ${product_id}) na propria estrutura dele, direta ou indiretamente. `
+          + 'Um produto não pode fazer parte de si mesmo: a explosão da BOM entraria em recursão, e o produto '
+          + 'ficaria com uma estrutura vigente inexplodível — o que impede concluir ordem de produção. '
+          + 'Revise qual dos dois é o componente do outro.',
+          {
+            rule: 'G1-BOM-CICLO',
+            product_id: Number(product_id),
+            component_product_id: Number(item.component_product_id),
+          },
+        );
       }
     }
 

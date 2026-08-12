@@ -12,7 +12,9 @@
  * ## A regra, em uma frase
  *
  * Um lote só sai de `quarantine`/`blocked` se a inspeção **mais recente**
- * daquele lote tiver veredito `approved` ou `approved_under_concession`.
+ * daquele lote tiver veredito `approved` ou `approved_under_concession` —
+ * e, quando o lote está sob bloqueio, se essa inspeção for **posterior ao
+ * bloqueio** (auditoria de 2026-08-11, ver {@link decideLotRelease}).
  *
  * ## Por que "a mais recente", e não "existe alguma aprovada"
  *
@@ -72,9 +74,12 @@ export type InspectionVerdict = (typeof INSPECTION_VERDICTS)[number];
  *
  * - `no_inspection`: nenhuma inspeção registrada para o lote — é o caso do
  *   "clique com observação livre" que existia antes de 2026-08-10;
- * - `last_inspection_rejected`: a inspeção mais recente reprovou o lote.
+ * - `last_inspection_rejected`: a inspeção mais recente reprovou o lote;
+ * - `inspection_before_block`: existe inspeção aprovada, mas ela é **anterior
+ *   ao bloqueio vigente** do lote (auditoria de 2026-08-11 — ver
+ *   {@link decideLotRelease}).
  */
-export type LotReleaseDenialReason = 'no_inspection' | 'last_inspection_rejected';
+export type LotReleaseDenialReason = 'no_inspection' | 'last_inspection_rejected' | 'inspection_before_block';
 
 /** Resultado da avaliação do gate de liberação. */
 export type LotReleaseDecision =
@@ -85,33 +90,92 @@ export type LotReleaseDecision =
 interface InspectionLike {
   id: number;
   verdict: string;
+  /** `quality_inspections.inspected_at` — comparado com `lot_controls.blocked_at`. */
+  inspected_at?: Date | string | null;
 }
 
 /**
- * Decide se um lote pode ser liberado, dada a inspeção mais recente dele
- * (G7 / ISO 9001 §8.6).
+ * Decide se um lote pode ser liberado (G7 / ISO 9001 §8.6 e §8.7).
  *
  * Função pura: não toca banco, não lança — devolve a decisão para que o caso
  * de uso monte o erro com `details` completo. É o ponto único onde a regra
- * mora; `ReleaseLotUseCase` apenas a consulta.
+ * mora; `ReleaseLotUseCase` e `GetLotReleaseEligibilityUseCase` apenas a
+ * consultam (e **precisam** consultar a mesma, senão a tela promete uma
+ * liberação que o POST recusa).
+ *
+ * ## As duas perguntas
+ *
+ * 1. **A inspeção mais recente aprovou?** (regra original do G7 — ver o
+ *    cabeçalho deste módulo para o porquê de "a mais recente" e não "existe
+ *    alguma aprovada").
+ * 2. **Essa inspeção é posterior ao bloqueio vigente?** Pergunta nova, da
+ *    auditoria de 2026-08-11. Sem ela, a sequência
+ *    `aprovada → liberada → RNC/bloqueio → release` era concedida **com a
+ *    inspeção antiga**: ninguém tinha olhado o material depois que o defeito
+ *    apareceu, e o bloqueio virava decorativo. A comparação é estrita
+ *    (`inspected_at > blockedAt`): empate de instante fica do lado seguro —
+ *    o custo é registrar uma inspeção nova, não liberar material contido.
+ *
+ * Lote sem `blockedAt` (quarentena de recebimento, ou bloqueio anterior à
+ * coluna `lot_controls.blocked_at`) mantém o comportamento antigo, item 1
+ * apenas.
  *
  * @param latestInspection - Inspeção mais recente do lote (`inspected_at DESC`, desempate por `id DESC`), ou `null` se não houver nenhuma.
+ * @param blockedAt - `lot_controls.blocked_at`: início do bloqueio vigente, ou `null`/ausente quando o lote não está sob bloqueio datado.
  * @returns Decisão do gate: liberada (com a inspeção que a autoriza) ou recusada (com o motivo).
  */
-export function decideLotRelease(latestInspection: InspectionLike | null | undefined): LotReleaseDecision {
+export function decideLotRelease(
+  latestInspection: InspectionLike | null | undefined,
+  blockedAt?: Date | string | null,
+): LotReleaseDecision {
   if (!latestInspection) {
     return { allowed: false, reason: 'no_inspection', inspectionId: null, verdict: null };
   }
 
   const verdict = latestInspection.verdict as InspectionVerdict;
-  if ((RELEASING_VERDICTS as readonly string[]).includes(verdict)) {
-    return { allowed: true, inspectionId: latestInspection.id, verdict };
+  if (!(RELEASING_VERDICTS as readonly string[]).includes(verdict)) {
+    return {
+      allowed: false,
+      reason: 'last_inspection_rejected',
+      inspectionId: latestInspection.id,
+      verdict,
+    };
   }
 
-  return {
-    allowed: false,
-    reason: 'last_inspection_rejected',
-    inspectionId: latestInspection.id,
-    verdict,
-  };
+  if (!isInspectionAfterBlock(latestInspection.inspected_at, blockedAt)) {
+    return {
+      allowed: false,
+      reason: 'inspection_before_block',
+      inspectionId: latestInspection.id,
+      verdict,
+    };
+  }
+
+  return { allowed: true, inspectionId: latestInspection.id, verdict };
+}
+
+/**
+ * Compara a data da inspeção com o início do bloqueio vigente.
+ *
+ * Data ilegível de qualquer um dos lados é tratada como **não posterior** —
+ * lado seguro: dado corrompido não pode virar autorização de liberação.
+ *
+ * @param inspectedAt - `quality_inspections.inspected_at`.
+ * @param blockedAt - `lot_controls.blocked_at` (ausente = lote sem bloqueio datado).
+ * @returns `true` quando não há bloqueio vigente, ou quando a inspeção é estritamente posterior a ele.
+ */
+function isInspectionAfterBlock(
+  inspectedAt: Date | string | null | undefined,
+  blockedAt: Date | string | null | undefined,
+): boolean {
+  if (blockedAt === null || blockedAt === undefined || blockedAt === '') return true;
+
+  const blockedTime = new Date(blockedAt).getTime();
+  if (!Number.isFinite(blockedTime)) return true;
+
+  if (inspectedAt === null || inspectedAt === undefined || inspectedAt === '') return false;
+  const inspectedTime = new Date(inspectedAt).getTime();
+  if (!Number.isFinite(inspectedTime)) return false;
+
+  return inspectedTime > blockedTime;
 }

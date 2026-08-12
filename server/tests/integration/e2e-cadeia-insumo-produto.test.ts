@@ -346,6 +346,9 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
         phone: '(11) 4000-0000',
         email: `e2e-fornecedor-${SUFFIX}@evok.local`,
         payment_terms: '30 dias',
+        // G11 — declaracao obrigatoria desde 2026-08-11: e ela que decide a
+        // alcada (importacao exige a diretoria em qualquer valor).
+        is_foreign: false,
       });
     expectStatus(supplier, 201, 'supplier');
     ctx.supplierId = supplier.body.data.id;

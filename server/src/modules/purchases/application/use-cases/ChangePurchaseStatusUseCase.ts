@@ -7,6 +7,8 @@ const {
   resolvePurchaseOrigin,
   requiredApproverRoles,
   purchaseApprovalValue,
+  checkPurchaseOriginAgainstSupplier,
+  PURCHASE_ORIGIN_MISMATCH_RULE,
 } = require('../../domain/constants');
 const {
   assertApproverIsNotRequester,
@@ -171,6 +173,28 @@ class ChangePurchaseStatusUseCase extends UseCase {
     const supplier = purchase.supplier_id
       ? await this.purchaseRepository.findSupplierByIdRaw(purchase.supplier_id, transaction)
       : null;
+
+    // G11 (auditoria 2026-08-11) — segunda linha de defesa da coerencia
+    // origem x cadastro. A criacao ja recusa a combinacao incoerente, mas
+    // pedidos gravados ANTES desta regra (ou por qualquer caminho que nao
+    // passe por `CreatePurchaseUseCase`) ainda podem chegar aqui declarados
+    // como importacao com fornecedor nacional. Aprovar assim consolidaria o
+    // dado errado no documento que vira compromisso financeiro; recusar e
+    // acionavel (marcar o fornecedor como estrangeiro, ou corrigir a origem).
+    const originCheck = checkPurchaseOriginAgainstSupplier(purchase.origin, supplier ? supplier.is_foreign : false);
+    if (!originCheck.coherent) {
+      throw new BusinessRuleError(
+        `O pedido ${purchase.order_number ?? purchase.id} esta declarado como IMPORTACAO, mas o fornecedor `
+        + `"${supplier?.company_name ?? purchase.supplier_id}" esta cadastrado como NACIONAL. Corrija o cadastro do `
+        + 'fornecedor (Compras > Fornecedores) ou a origem do pedido antes de aprovar — a origem comanda a alcada.',
+        {
+          rule: PURCHASE_ORIGIN_MISMATCH_RULE,
+          supplier_id: supplier?.id ?? purchase.supplier_id ?? null,
+          supplier_is_foreign: supplier?.is_foreign === true,
+          declared_origin: purchase.origin ?? null,
+        },
+      );
+    }
 
     const origin = resolvePurchaseOrigin(purchase.origin, supplier ? supplier.is_foreign : false);
     const approvalValue = purchaseApprovalValue(purchase);

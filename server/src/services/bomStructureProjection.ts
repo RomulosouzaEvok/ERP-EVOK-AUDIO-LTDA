@@ -277,15 +277,96 @@ async function listActiveEdgesByParent(itemPaiId: string): Promise<StructureEdge
   return edges.filter((edge) => edge.item_pai_id === target);
 }
 
+/**
+ * Arestas da estrutura vigente **no espaço de `products.id`**, sem passar
+ * pelo crosswalk para `items`.
+ *
+ * Por que uma consulta separada: {@link ACTIVE_STRUCTURE_SQL} faz `LEFT JOIN
+ * items` e {@link listActiveStructure} **descarta** as arestas cujos dois
+ * lados não têm item correspondente (elas viram `unmapped`). Isso é correto
+ * para o MRP, que só sabe falar UUID, mas seria um buraco para a detecção de
+ * ciclo na BOM: um produto sem `items.codigo` sumiria do grafo e o ciclo
+ * passaria — justamente no caso em que o cadastro está mais incompleto.
+ */
+const ACTIVE_PRODUCT_STRUCTURE_SQL = `
+  SELECT
+    bom.product_id                AS parent_product_id,
+    bom_item.component_product_id AS component_product_id
+  FROM bill_of_materials bom
+  JOIN bill_of_material_items bom_item
+    ON bom_item.bom_id = bom.id
+  WHERE bom.status = :activeStatus
+`;
+
+/**
+ * Indica se existe caminho de `fromProductId` até `toProductId` na estrutura
+ * vigente, no espaço de `products.id`.
+ *
+ * ## Para que serve
+ *
+ * Barrar **ciclo multinível** antes de gravar uma BOM (`G1-BOM-CICLO`).
+ * `BomService.createBOM` só barrava auto-referência direta: `A` recebendo `B`
+ * e, depois, `B` recebendo `A` entrava no banco sem aviso. O preço aparecia
+ * longe daqui — `explodeBOM` recusa a árvore com 422, e depois do G2 produto
+ * com estrutura inexplodível é **produto que não conclui OP**. A fábrica
+ * descobriria na liberação/conclusão da ordem, com material já reservado.
+ *
+ * Uso: antes de gravar a aresta `pai → componente`, pergunte se já existe
+ * caminho `componente → pai`. Se existir, a aresta nova fecharia o ciclo.
+ * (Mesma ordem de argumentos de `CreateItemStructureUseCase`.)
+ *
+ * @param fromProductId - Produto de partida (`products.id`).
+ * @param toProductId - Produto de destino (`products.id`).
+ * @param transaction - Transação Sequelize ativa (opcional).
+ * @returns `true` se `toProductId` é alcançável a partir de `fromProductId`.
+ */
+async function hasProductPathBetween(
+  fromProductId: number | string,
+  toProductId: number | string,
+  transaction?: unknown,
+): Promise<boolean> {
+  const rows = await sequelize.query(ACTIVE_PRODUCT_STRUCTURE_SQL, {
+    replacements: { activeStatus: ACTIVE_BOM_STATUS },
+    type: QueryTypes.SELECT,
+    ...(transaction ? { transaction } : {}),
+  });
+
+  const childrenByParent = new Map<string, string[]>();
+  for (const row of (rows ?? []) as Record<string, any>[]) {
+    const parent = String(row.parent_product_id);
+    const children = childrenByParent.get(parent) ?? [];
+    children.push(String(row.component_product_id));
+    childrenByParent.set(parent, children);
+  }
+
+  const target = String(toProductId);
+  const visited = new Set<string>();
+  const stack = [String(fromProductId)];
+
+  while (stack.length > 0) {
+    const current = stack.pop() as string;
+    if (current === target) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    for (const child of childrenByParent.get(current) ?? []) {
+      if (!visited.has(child)) stack.push(child);
+    }
+  }
+
+  return false;
+}
+
 // ATENÇÃO (armadilha conhecida do projeto): este objeto SUBSTITUI qualquer
 // named export em tempo de execução (`require`). Toda função nova precisa
 // aparecer aqui também — mesma regra de `quarantineBalanceService.ts`.
 module.exports = {
   ACTIVE_BOM_STATUS,
   ACTIVE_STRUCTURE_SQL,
+  ACTIVE_PRODUCT_STRUCTURE_SQL,
   listActiveStructure,
   listActiveEdges,
   listActiveEdgesByParent,
   hasPathBetween,
+  hasProductPathBetween,
   hasActiveParentOrComponent,
 };

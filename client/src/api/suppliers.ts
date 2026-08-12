@@ -9,12 +9,20 @@ export interface Supplier {
   phone?: string | null;
   email?: string | null;
   status: string;
+  /** G11: fornecedor estrangeiro — toda compra dele exige aprovação da diretoria. */
+  is_foreign?: boolean;
 }
 
 export interface SupplierInput {
   company_name: string;
   trade_name?: string;
   cnpj: string;
+  /**
+   * G11 — **obrigatório na criação** (`POST /api/suppliers` responde 400 sem
+   * ele desde 2026-08-11). Comanda a alçada de compra: fornecedor
+   * estrangeiro exige aprovação da diretoria em qualquer valor.
+   */
+  is_foreign?: boolean;
   ie?: string;
   phone?: string;
   email?: string;

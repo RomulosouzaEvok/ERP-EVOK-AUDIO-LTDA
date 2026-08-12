@@ -191,6 +191,14 @@ class SequelizeInventoryRepository extends InventoryRepository {
   }
 
   /** @inheritdoc */
+  async findLotByIdForUpdate(id: number | string, transaction: Transaction) {
+    return LotControl.findByPk(id, {
+      transaction,
+      lock: (transaction as any).LOCK.UPDATE,
+    });
+  }
+
+  /** @inheritdoc */
   async findLotByCodeForProduct(where: Record<string, unknown>) {
     return LotControl.findOne({
       where,

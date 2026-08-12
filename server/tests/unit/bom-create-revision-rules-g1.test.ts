@@ -28,7 +28,17 @@ jest.mock('../../src/services/quarantineBalanceService', () => ({
   planningQuantity: (physical: number) => physical,
 }));
 
+// Deteccao de ciclo multinivel (auditoria 2026-08-11): a implementacao real
+// consulta o banco (`bill_of_materials` em products.id). Aqui ela e um dubl.
+// que responde "nao ha caminho" por padrao — o teste de ciclo abaixo inverte
+// a resposta. O comportamento contra Postgres real esta em
+// `tests/integration/bom-cycle-multilevel.test.ts`.
+jest.mock('../../src/services/bomStructureProjection', () => ({
+  hasProductPathBetween: jest.fn(async () => false),
+}));
+
 const BomService = require('../../src/services/bomService');
+const BomStructureProjection = require('../../src/services/bomStructureProjection');
 const { sequelize } = require('../../src/config/database');
 const { BillOfMaterial, BillOfMaterialItem, Product } = require('../../src/models/index');
 
@@ -47,6 +57,7 @@ describe('G1 - criacao de revisao de BOM', () => {
     BillOfMaterial.update.mockResolvedValue([1]);
     BillOfMaterial.create.mockResolvedValue({ id: 18, update: jest.fn() });
     BillOfMaterialItem.create.mockImplementation(async (data: any) => ({ ...data, total_cost: data.total_cost }));
+    BomStructureProjection.hasProductPathBetween.mockResolvedValue(false);
   });
 
   it('rebaixa a revisao anterior DENTRO da transacao', async () => {
@@ -85,6 +96,27 @@ describe('G1 - criacao de revisao de BOM', () => {
     })).rejects.toMatchObject({ statusCode: 422, rule: 'G1-BOM-AUTO-REF' });
 
     expect(sequelize.transaction).not.toHaveBeenCalled();
+  });
+
+  it('recusa CICLO MULTINIVEL: o componente ja contem o produto na estrutura dele', async () => {
+    // A auto-referencia acima so cobre profundidade 1. Aqui o dubl. responde
+    // que existe caminho 16 -> ... -> 17, entao gravar 17 -> 16 fecharia o
+    // ciclo — o que antes entrava no banco e so estourava na explosao, com a
+    // BOM ja gravada (e, depois do G2, produto que nao conclui OP).
+    BomStructureProjection.hasProductPathBetween.mockResolvedValue(true);
+
+    await expect(BomService.createBOM({
+      product_id: 17,
+      created_by: 1,
+      revision: 'S1',
+      items: [{ component_product_id: 16, quantity: 1 }],
+    })).rejects.toMatchObject({ statusCode: 422, details: { rule: 'G1-BOM-CICLO' } });
+
+    // A pergunta certa: existe caminho do COMPONENTE ate o PAI?
+    expect(BomStructureProjection.hasProductPathBetween).toHaveBeenCalledWith(16, 17);
+    // E, como toda validacao de forma do G1, ela roda ANTES da transacao.
+    expect(sequelize.transaction).not.toHaveBeenCalled();
+    expect(BillOfMaterial.update).not.toHaveBeenCalled();
   });
 
   it('recusa repetir o rotulo de revisao do mesmo produto', async () => {

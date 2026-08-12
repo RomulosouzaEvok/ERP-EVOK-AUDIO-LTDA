@@ -90,8 +90,11 @@ describe('Quality Lot Lifecycle (item 8)', () => {
       const useCase = new ReleaseLotUseCase(inventoryRepository, buildQualityGateway());
       await useCase.execute({ id: 1, notes: 'Inspecao aprovada', releasedBy: 42 });
 
+      // 2o argumento: a liberacao passou a rodar DENTRO de transacao com lock
+      // de linha (2026-08-11) — `update` recebe `{ transaction }`.
       expect(update).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'available' })
+        expect.objectContaining({ status: 'available' }),
+        expect.anything()
       );
     });
 
@@ -109,7 +112,8 @@ describe('Quality Lot Lifecycle (item 8)', () => {
       await useCase.execute({ id: 2, releasedBy: 42 });
 
       expect(update).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'available' })
+        expect.objectContaining({ status: 'available' }),
+        expect.anything()
       );
     });
 
@@ -157,7 +161,7 @@ describe('Quality Lot Lifecycle (item 8)', () => {
       // ('blocked' e permitido) para confirmar que o dado reflete o status
       // atual a cada chamada (sem cache stale).
       await useCase.execute({ id: 6, notes: 'Tratativa concluida', releasedBy: 42 });
-      expect(update).toHaveBeenCalledWith(expect.objectContaining({ status: 'available' }));
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ status: 'available' }), expect.anything());
 
       // Corrige o pre-requisito: o mock agora reflete o novo status
       // (o lote foi de fato liberado no "banco").

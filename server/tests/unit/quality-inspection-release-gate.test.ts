@@ -29,6 +29,21 @@
 
 const createNonConformityExecute = jest.fn(async () => ({ id: 909 }));
 
+/**
+ * Transacao dubl. `ReleaseLotUseCase` passou a abrir transacao propria e a
+ * travar a linha do lote (2026-08-11) — sem este mock o teste unitario
+ * tentaria conectar no Postgres de verdade.
+ */
+const mockTransaction = {
+  LOCK: { UPDATE: 'UPDATE' },
+  commit: jest.fn(async () => {}),
+  rollback: jest.fn(async () => {}),
+};
+
+jest.mock('../../src/config/database', () => ({
+  sequelize: { transaction: jest.fn(async () => mockTransaction) },
+}));
+
 jest.mock('../../src/modules/nonConformities/application/use-cases/CreateNonConformityUseCase', () =>
   jest.fn().mockImplementation(() => ({ execute: createNonConformityExecute })));
 
@@ -70,10 +85,17 @@ function buildLot(overrides: Record<string, any> = {}) {
  * Repositorio de estoque mockado — PROPOSITALMENTE completo para o caminho
  * exercitado, para que uma falha nunca venha de metodo ausente.
  *
- * @param lot - Lote devolvido por `findLotById`.
+ * `findLotByIdForUpdate` e o metodo que a liberacao usa desde 2026-08-11 (a
+ * leitura passou a travar a linha, `FOR UPDATE`, dentro da transacao);
+ * `findLotById` continua no dubl. porque outros caminhos ainda o usam.
+ *
+ * @param lot - Lote devolvido pelas duas leituras.
  */
 function buildInventoryRepository(lot: any) {
-  return { findLotById: jest.fn(async () => lot) };
+  return {
+    findLotById: jest.fn(async () => lot),
+    findLotByIdForUpdate: jest.fn(async () => lot),
+  };
 }
 
 /**
@@ -205,10 +227,88 @@ describe('G7 — ReleaseLotUseCase: liberar sem inspecao aprovada e bloqueado e 
 
   it('lote inexistente devolve NotFoundError sem consultar a qualidade', async () => {
     const qualityGateway = buildQualityGateway({ id: 1, verdict: 'approved' });
-    const useCase = new ReleaseLotUseCase({ findLotById: jest.fn(async () => null) } as any, qualityGateway);
+    const useCase = new ReleaseLotUseCase(
+      { findLotByIdForUpdate: jest.fn(async () => null) } as any,
+      qualityGateway,
+    );
 
     await expect(useCase.execute({ id: 999, releasedBy: 42 })).rejects.toBeInstanceOf(NotFoundError);
     expect(qualityGateway.findLatestInspectionForLot).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Auditoria de 2026-08-11 — a brecha do "bloqueio decorativo".
+ *
+ * `aprovada -> liberada -> RNC/bloqueio -> release` era CONCEDIDO com a
+ * inspecao antiga: ela continuava sendo "a mais recente", e ninguem tinha
+ * examinado o material depois do defeito aparecer (ISO 9001 8.7).
+ */
+describe('G7 — re-liberacao de lote bloqueado exige inspecao POSTERIOR ao bloqueio', () => {
+  const BLOQUEIO = new Date('2026-08-11T10:00:00Z');
+
+  it('inspecao aprovada ANTERIOR ao bloqueio nao libera, e nada e gravado', async () => {
+    const lot = buildLot({ status: 'blocked', blocked_at: BLOQUEIO });
+    const useCase = new ReleaseLotUseCase(
+      buildInventoryRepository(lot),
+      buildQualityGateway({ id: 88, verdict: 'approved', inspected_at: new Date('2026-08-11T09:00:00Z') }),
+    );
+
+    await expect(useCase.execute({ id: 77, releasedBy: 42 })).rejects.toMatchObject({
+      constructor: BusinessRuleError,
+      details: {
+        rule: QUALITY_INSPECTION_RULE,
+        reason: 'inspection_before_block',
+        inspection_id: 88,
+        inspection_verdict: 'approved',
+      },
+    });
+
+    expect(lot.update).not.toHaveBeenCalled();
+    expect(lot.status).toBe('blocked');
+  });
+
+  it('inspecao aprovada POSTERIOR ao bloqueio libera e limpa o marcador de bloqueio', async () => {
+    const lot = buildLot({ status: 'blocked', blocked_at: BLOQUEIO });
+    const useCase = new ReleaseLotUseCase(
+      buildInventoryRepository(lot),
+      buildQualityGateway({ id: 91, verdict: 'approved', inspected_at: new Date('2026-08-11T11:00:00Z') }),
+    );
+
+    await useCase.execute({ id: 77, releasedBy: 42 });
+
+    const written = lot.update.mock.calls[0][0];
+    expect(written.status).toBe('available');
+    expect(written.release_inspection_id).toBe(91);
+    // `blocked_at` descreve o bloqueio VIGENTE: liberado, ele deixa de existir.
+    expect(written.blocked_at).toBeNull();
+  });
+
+  it('lote em quarentena (sem bloqueio datado) mantem o comportamento antigo', async () => {
+    const lot = buildLot({ status: 'quarantine', blocked_at: null });
+    const useCase = new ReleaseLotUseCase(
+      buildInventoryRepository(lot),
+      buildQualityGateway({ id: 5, verdict: 'approved', inspected_at: new Date('2020-01-01T00:00:00Z') }),
+    );
+
+    await useCase.execute({ id: 77, releasedBy: 42 });
+
+    expect(lot.update.mock.calls[0][0].status).toBe('available');
+  });
+
+  it('regra pura: empate de instante fica do lado seguro (nao libera)', () => {
+    const instante = new Date('2026-08-11T10:00:00Z');
+    expect(decideLotRelease({ id: 1, verdict: 'approved', inspected_at: instante }, instante)).toMatchObject({
+      allowed: false,
+      reason: 'inspection_before_block',
+    });
+  });
+
+  it('regra pura: inspecao SEM data nao supera um bloqueio datado', () => {
+    expect(decideLotRelease({ id: 2, verdict: 'approved' }, BLOQUEIO)).toMatchObject({
+      allowed: false,
+      reason: 'inspection_before_block',
+    });
   });
 });
 

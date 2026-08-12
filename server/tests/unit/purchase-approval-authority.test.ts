@@ -24,6 +24,7 @@ import UpdateSupplierUseCase = require('../../src/modules/suppliers/application/
 import { BusinessRuleError, NotFoundError } from '../../src/errors';
 import {
   PURCHASE_APPROVAL_THRESHOLD_DIRECTOR,
+  checkPurchaseOriginAgainstSupplier,
   purchaseApprovalValue,
   requiredApproverRoles,
   resolvePurchaseOrigin,
@@ -95,6 +96,22 @@ describe('G11 — constantes de alcada de compra', () => {
     expect(resolvePurchaseOrigin(undefined, true)).toBe('import');
   });
 
+  it('coerencia origem x cadastro do fornecedor (auditoria 2026-08-11)', () => {
+    // Unica combinacao incoerente: declarar importacao para fornecedor
+    // cadastrado como nacional.
+    expect(checkPurchaseOriginAgainstSupplier('import', false)).toEqual({ coherent: false, effectiveOrigin: 'import' });
+    expect(checkPurchaseOriginAgainstSupplier('import', undefined)).toMatchObject({ coherent: false });
+    expect(checkPurchaseOriginAgainstSupplier('import', true)).toEqual({ coherent: true, effectiveOrigin: 'import' });
+    // Fornecedor estrangeiro declarado como nacional NAO e erro: a origem e
+    // reescrita para importacao (o cadastro prevalece), e o comprador nao e
+    // punido por um dado que ele nao controla.
+    expect(checkPurchaseOriginAgainstSupplier('national', true)).toEqual({ coherent: true, effectiveOrigin: 'import' });
+    expect(checkPurchaseOriginAgainstSupplier('national', false)).toEqual({ coherent: true, effectiveOrigin: 'national' });
+    // Pedido legado, sem origem declarada.
+    expect(checkPurchaseOriginAgainstSupplier(null, false)).toEqual({ coherent: true, effectiveOrigin: 'national' });
+    expect(checkPurchaseOriginAgainstSupplier(undefined, true)).toEqual({ coherent: true, effectiveOrigin: 'import' });
+  });
+
   it('valor comparado com o teto e mercadoria + frete', () => {
     expect(purchaseApprovalValue({ total_amount: '499000.00', freight_value: '21000.00' })).toBe(520000);
     expect(purchaseApprovalValue({ total_amount: null, freight_value: null })).toBe(0);
@@ -161,7 +178,14 @@ describe('G11 — aprovacao do pedido (ChangePurchaseStatusUseCase)', () => {
   });
 
   it('importacao declarada exige diretoria mesmo com valor baixo', async () => {
-    const repository = buildPurchaseRepository({ purchase: { origin: 'import', total_amount: 1200 } });
+    const repository = buildPurchaseRepository({
+      purchase: { origin: 'import', total_amount: 1200 },
+      // Fornecedor estrangeiro no cadastro: desde 2026-08-11, `origin='import'`
+      // com fornecedor NACIONAL e recusado antes da alcada (incoerencia de
+      // cadastro, `G11-ORIGIN-SUPPLIER-MISMATCH`) — ver o teste dedicado
+      // abaixo. Aqui o alvo e a alcada, entao o cadastro tem de ser coerente.
+      supplier: { id: 3, company_name: 'Fornecedor Estrangeiro', is_foreign: true },
+    });
     const useCase = new ChangePurchaseStatusUseCase(repository);
 
     const error: any = await useCase
@@ -191,6 +215,7 @@ describe('G11 — aprovacao do pedido (ChangePurchaseStatusUseCase)', () => {
   it('importacao de R$ 1 milhao passa depois da aprovacao da diretoria', async () => {
     const repository = buildPurchaseRepository({
       purchase: { origin: 'import', total_amount: 1000000 },
+      supplier: { id: 3, company_name: 'Fornecedor Estrangeiro', is_foreign: true },
       approvals: [{ id: 2, approver_role: 'diretor', approver_user_id: 4 }],
     });
     const useCase = new ChangePurchaseStatusUseCase(repository);
@@ -198,6 +223,35 @@ describe('G11 — aprovacao do pedido (ChangePurchaseStatusUseCase)', () => {
     const { purchase } = await useCase.execute({ id: 7, status: 'approved', userId: 9, transaction });
 
     expect(purchase.status).toBe('approved');
+  });
+
+  /**
+   * Auditoria de 2026-08-11: `origin='import'` com fornecedor cadastrado
+   * como NACIONAL e contradicao — ou o cadastro esta errado (e entao TODA
+   * compra dele deveria subir para a diretoria), ou a origem esta errada.
+   * Antes o pedido passava com a alcada escalada e o cadastro seguia
+   * mentindo, sem ninguem ser avisado.
+   */
+  it('pedido declarado importacao com fornecedor NACIONAL e recusado antes da alcada', async () => {
+    const repository = buildPurchaseRepository({
+      purchase: { origin: 'import', total_amount: 1200 },
+      supplier: { id: 3, company_name: 'Fornecedor Nacional', is_foreign: false },
+    });
+    const useCase = new ChangePurchaseStatusUseCase(repository);
+
+    const error: any = await useCase
+      .execute({ id: 7, status: 'approved', userId: 9, transaction })
+      .catch((caught: any) => caught);
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details).toMatchObject({
+      rule: 'G11-ORIGIN-SUPPLIER-MISMATCH',
+      supplier_id: 3,
+      supplier_is_foreign: false,
+      declared_origin: 'import',
+    });
+    // A recusa acontece ANTES de qualquer escrita de status.
+    expect(repository.save).not.toHaveBeenCalled();
   });
 
   it('a alcada nao interfere nas demais transicoes de status', async () => {

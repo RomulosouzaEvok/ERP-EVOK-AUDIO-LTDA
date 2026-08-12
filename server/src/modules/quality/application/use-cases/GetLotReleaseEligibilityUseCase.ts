@@ -47,7 +47,11 @@ class GetLotReleaseEligibilityUseCase extends UseCase<GetLotReleaseEligibilityIn
     }
 
     const latestInspection = await this.qualityRepository.findLatestInspectionForLot(lot.id);
-    const decision = decideLotRelease(latestInspection);
+    // `blocked_at` entra aqui pelo mesmo motivo que entrou no POST: a partir
+    // de 2026-08-11 a inspeção precisa ser POSTERIOR ao bloqueio vigente.
+    // Omiti-lo faria a tela mostrar "pode liberar" para um lote que o POST
+    // recusaria — o descasamento que este endpoint existe para evitar.
+    const decision = decideLotRelease(latestInspection, lot.blocked_at);
     const statusAllowsRelease = RELEASABLE_STATUSES.includes(lot.status);
 
     return {
@@ -55,6 +59,8 @@ class GetLotReleaseEligibilityUseCase extends UseCase<GetLotReleaseEligibilityIn
       lot_id: lot.id,
       lot_number: lot.lot_number,
       lot_status: lot.status,
+      /** G7 (2026-08-11): início do bloqueio vigente — a tela precisa dele para explicar a recusa `inspection_before_block`. */
+      blocked_at: lot.blocked_at ?? null,
       status_allows_release: statusAllowsRelease,
       quality_gate_passed: decision.allowed,
       can_release: statusAllowsRelease && decision.allowed,

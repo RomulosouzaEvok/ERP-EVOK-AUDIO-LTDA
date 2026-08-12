@@ -104,6 +104,17 @@ export const PRODUCTION_TRACKING_RULES = {
    */
   START_WITHOUT_ROUTE: 'G6-START-NO-ROUTE',
   /**
+   * **G6** — existem linhas de apontamento, mas **nenhuma delas aponta para
+   * uma etapa de roteiro**, e o produto também não tem roteiro ativo.
+   *
+   * Fecha a brecha encontrada na auditoria de 2026-08-11: o gate contava
+   * linhas, e `POST /api/production-orders/:id/tracking` aceita
+   * `production_route_step_id: null`. Uma linha manual vazia bastava para a
+   * OP entrar em produção sem roteiro nenhum — o mesmo defeito de processo
+   * que o G6 existe para impedir, com um passo a mais de digitação.
+   */
+  START_WITHOUT_ROUTE_STEP: 'G6-START-NO-ROUTE-STEP',
+  /**
    * **G6** — alguma etapa aponta para um centro de trabalho **inativo**. O
    * centro foi desativado depois que o roteiro foi liberado, e a hora
    * trabalhada ali sairia sem taxa — custo de mão-de-obra zero, em silêncio.
@@ -158,6 +169,13 @@ export interface TrackingStepSnapshot {
   started_at?: Date | string | null;
   finished_at?: Date | string | null;
   quantity_good?: number | string | null;
+  /**
+   * G6 — FK para `production_route_steps.id`. `null` identifica o
+   * **apontamento manual** (linha criada à mão pelo chão de fábrica, sem
+   * etapa de roteiro por trás), que é justamente o que não pode, sozinho,
+   * autorizar a partida da ordem.
+   */
+  production_route_step_id?: number | string | null;
   routeStep?: {
     id?: number;
     step_code?: string | null;
@@ -337,11 +355,23 @@ export function assertTrackingExists(orderNumber: string, steps: TrackingStepSna
  * Recusar no início é estritamente melhor para o chão de fábrica: o problema
  * é de cadastro e, na partida, ainda dá tempo de resolver sem perder produção.
  *
- * ## As duas condições
+ * ## As três condições
  *
  * 1. **Existe apontamento.** Materializado do roteiro ativo na liberação
  *    (G4) ou criado à mão. Nenhuma linha = nada contra o que apontar.
- * 2. **Nenhum centro de trabalho inativo.** Um centro desativado entre a
+ * 2. **O apontamento tem lastro em roteiro.** Ao menos uma linha aponta para
+ *    uma etapa (`production_route_step_id`), **ou** o produto tem roteiro
+ *    ativo com etapas — caso em que a partida é liberada porque existe contra
+ *    o que apontar, mesmo que as linhas atuais sejam manuais.
+ *
+ *    Esta condição nasceu da auditoria de 2026-08-11. Sem ela o gate contava
+ *    linhas, e `POST /api/production-orders/:id/tracking` aceita
+ *    `production_route_step_id: null`: **uma linha manual vazia destravava a
+ *    partida de uma OP sem roteiro nenhum**. O apontamento manual continua
+ *    existindo e é legítimo — ele registra o que o roteiro não previu —, mas
+ *    ele não é *substituto* de roteiro, e por isso não autoriza a partida
+ *    sozinho.
+ * 3. **Nenhum centro de trabalho inativo.** Um centro desativado entre a
  *    liberação e a partida faria a hora trabalhada ali sair **sem taxa** — o
  *    mesmo custo-zero silencioso que o G5 já barra na ativação do roteiro.
  *    Etapa sem centro (`work_center_id` nulo) continua válida: centro é
@@ -355,9 +385,17 @@ export function assertTrackingExists(orderNumber: string, steps: TrackingStepSna
  *
  * @param orderNumber - Número da OP.
  * @param steps - Etapas de apontamento da OP, com `routeStep.workCenter`.
- * @throws {BusinessRuleError} 422 `G6-START-NO-ROUTE` ou `G6-START-WC-INACTIVE`.
+ * @param context - Contexto do produto: `activeRouteStepCount` é o número de
+ *   etapas ATIVAS do roteiro ativo dele (0 quando não há roteiro). Chega por
+ *   parâmetro para o módulo continuar puro — sem Sequelize, sem consulta.
+ * @throws {BusinessRuleError} 422 `G6-START-NO-ROUTE`, `G6-START-NO-ROUTE-STEP`
+ *   ou `G6-START-WC-INACTIVE`.
  */
-export function assertOrderCanStart(orderNumber: string, steps: TrackingStepSnapshot[]): void {
+export function assertOrderCanStart(
+  orderNumber: string,
+  steps: TrackingStepSnapshot[],
+  context: { activeRouteStepCount?: number } = {},
+): void {
   const lista = steps || [];
 
   if (lista.length === 0) {
@@ -368,6 +406,34 @@ export function assertOrderCanStart(orderNumber: string, steps: TrackingStepSnap
       + 'Este bloqueio existe no INICIO de proposito: sem apontamento a OP nao conclui (Bloco K / Livro modelo 3), '
       + 'e descobrir isso depois do lote montado significaria perder a producao inteira.',
       { rule: PRODUCTION_TRACKING_RULES.START_WITHOUT_ROUTE, orderNumber },
+    );
+  }
+
+  // Uma etapa "com lastro" e a que aponta para o roteiro. Os dois campos sao
+  // a MESMA FK vista de dois jeitos (`production_route_step_id` na coluna,
+  // `routeStep.id` no include): aceitar os dois evita que a regra dependa de
+  // qual consulta trouxe a linha.
+  const comEtapaDeRoteiro = lista.filter(
+    (step) => (step.production_route_step_id ?? null) !== null || (step.routeStep?.id ?? null) !== null,
+  );
+  const etapasDeRoteiroAtivo = Number(context.activeRouteStepCount ?? 0);
+
+  if (comEtapaDeRoteiro.length === 0 && etapasDeRoteiroAtivo <= 0) {
+    throw new BusinessRuleError(
+      `Nao e possivel iniciar a producao da OP ${orderNumber}: existem ${lista.length} linha(s) de apontamento, `
+      + 'mas nenhuma delas esta ligada a uma etapa de roteiro, e o produto nao tem roteiro ATIVO. '
+      + 'Apontamento manual serve para registrar o que o roteiro nao previu — ele nao substitui o roteiro. '
+      + 'Cadastre o roteiro do produto em Producao > Roteiros de Fabricacao e deixe-o ATIVO. '
+      + 'Este bloqueio existe no INICIO de proposito: sem etapa de roteiro nao ha tempo padrao nem centro de '
+      + 'trabalho para custear a hora trabalhada, e a OP nao concluiria (Bloco K / Livro modelo 3) depois do '
+      + 'lote ja montado.',
+      {
+        rule: PRODUCTION_TRACKING_RULES.START_WITHOUT_ROUTE_STEP,
+        orderNumber,
+        tracking_count: lista.length,
+        tracking_with_route_step: 0,
+        active_route_step_count: etapasDeRoteiroAtivo,
+      },
     );
   }
 

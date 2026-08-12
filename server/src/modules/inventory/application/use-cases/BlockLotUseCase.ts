@@ -8,6 +8,15 @@
  * (rastreabilidade de qualidade). Usado tanto pela inspeção de recebimento
  * quanto internamente por `CreateNonConformityUseCase` quando uma RNC
  * referencia um lote existente.
+ *
+ * ## `blocked_at` — o bloqueio passou a ter data (2026-08-11)
+ *
+ * O bloqueio só deixava um texto em `notes`. Sem o instante gravado, o gate
+ * de liberação (`decideLotRelease`) não tinha como exigir uma inspeção
+ * **posterior** ao bloqueio — e a sequência `aprovada → liberada → bloqueada
+ * → liberada de novo` era concedida com a inspeção antiga, tornando o
+ * bloqueio decorativo (ISO 9001:2015 §8.7). Gravar `blocked_at` aqui é o que
+ * dá dente à recusa do lado da liberação.
  */
 
 import UseCase from '../../../../shared/application/UseCase';
@@ -32,7 +41,7 @@ class BlockLotUseCase extends UseCase<BlockLotInput, any> {
 
   /**
    * @param input - Id do lote e motivo do bloqueio (mínimo 3 caracteres).
-   * @returns Lote atualizado (`status = 'blocked'`).
+   * @returns Lote atualizado (`status = 'blocked'`, `blocked_at` preenchido).
    * @throws {ValidationError} Se `reason` estiver ausente ou muito curto.
    * @throws {NotFoundError} Se o lote não existir.
    * @throws {BusinessRuleError} Se o lote não estiver em `quarantine` nem `available`.
@@ -61,6 +70,9 @@ class BlockLotUseCase extends UseCase<BlockLotInput, any> {
 
     await lot.update({
       status: 'blocked',
+      // G7 (2026-08-11): o instante do bloqueio é o que a re-liberação passa
+      // a ter de superar com uma inspeção nova.
+      blocked_at: new Date(),
       notes: `${lot.notes ? `${lot.notes} | ` : ''}Bloqueado: ${trimmedReason}`
     });
 

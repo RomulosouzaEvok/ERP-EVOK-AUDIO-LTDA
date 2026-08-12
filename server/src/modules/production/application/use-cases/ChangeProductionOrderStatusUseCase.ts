@@ -283,10 +283,21 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * o que apontar) e um segundo botão criaria a chance de desligar metade da
    * obrigação sem perceber.
    *
+   * ## O furo fechado em 2026-08-11
+   *
+   * O gate contava linhas de apontamento. Como
+   * `POST /api/production-orders/:id/tracking` aceita
+   * `production_route_step_id: null` (apontamento manual, que é fluxo
+   * legítimo), **uma linha manual vazia destravava a partida de uma OP sem
+   * roteiro nenhum**. Agora a pré-condição é ter lastro de roteiro: alguma
+   * linha ligada a uma etapa, **ou** roteiro ativo cadastrado para o produto
+   * — que é exatamente a saída que a mensagem de erro indica. Apontar à mão
+   * DEPOIS da partida continua livre: o gate é de partida.
+   *
    * @param order - OP travada.
    * @param transaction - Transação ativa.
    * @returns void
-   * @throws {BusinessRuleError} 422 `G6-START-NO-ROUTE` / `G6-START-WC-INACTIVE`.
+   * @throws {BusinessRuleError} 422 `G6-START-NO-ROUTE` / `G6-START-NO-ROUTE-STEP` / `G6-START-WC-INACTIVE`.
    */
   private async assertOrderIsReadyToStart(order: any, transaction: any): Promise<void> {
     const detailedTrackings = await this.productionOrderRepository.listTrackingWithRouteStepByOrder(order.id, transaction);
@@ -303,7 +314,17 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       return;
     }
 
-    assertOrderCanStart(order.order_number, detailedTrackings || []);
+    // Auditoria 2026-08-11: a contagem de linhas nao basta — linha manual
+    // aceita `production_route_step_id: null`. A saida honesta para quem
+    // esbarrar no bloqueio e cadastrar o roteiro, entao a existencia dele
+    // tambem destrava a partida (e o que a mensagem de erro manda fazer). A
+    // consulta roda so quando o modo e `block`, e devolve a MESMA revisao
+    // ativa que a liberacao materializaria.
+    const activeRoute = await this.productionOrderRepository.findActiveRouteWithStepsByProduct(order.product_id, transaction);
+
+    assertOrderCanStart(order.order_number, detailedTrackings || [], {
+      activeRouteStepCount: activeRoute?.steps?.length ?? 0,
+    });
   }
 
   private async assertTrackingIsSufficientForCompletion(order: any, producedQty: number, transaction: any): Promise<void> {

@@ -2,6 +2,11 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
+import {
+  resolveTrackingEnforcementMode,
+  type TrackingEnforcementMode,
+} from '../modules/production/domain/productionTrackingRules';
+
 dotenv.config();
 
 const ENV_PLACEHOLDER_PATTERN = /^(CHANGE_ME|dev-only-change-me)/i;
@@ -57,9 +62,42 @@ const runtimeEnvSchema = z.object({
   // console — comportamento historico do projeto, sem quebrar ambientes sem
   // volume de disco persistente para logs (ex.: containers efemeros).
   LOG_FILE: z.string().optional(),
+  // Modo de vigência do apontamento de produção obrigatório (G4) e do gate
+  // de partida da OP (G6): `block` (padrão, a lei aplicada) ou `warn`
+  // (janela de transição, para UAT com roteiros ainda não cadastrados).
+  // Lido cru — a normalização e o default moram em
+  // `modules/production/domain/productionTrackingRules`, que é a fonte da
+  // regra. Ver a validação de produção no `superRefine` abaixo.
+  PRODUCTION_TRACKING_REQUIRED: z.string().optional(),
 }).superRefine((env, ctx) => {
   if (env.NODE_ENV !== 'production') {
     return;
+  }
+
+  // G4/G6 — `warn` desliga, de uma vez, o apontamento obrigatório na
+  // conclusão da OP e o gate de partida: as duas regras que sustentam o
+  // Bloco K / Livro modelo 3 e o custo de mão-de-obra real. A janela de
+  // transição é legítima em desenvolvimento/homologação; em produção ela é
+  // uma obrigação fiscal desligada.
+  //
+  // A auditoria de 2026-08-11 encontrou a variável sem nenhuma declaração no
+  // repositório (nem `.env.example`, nem docker-compose, nem script de
+  // boot): só o código a lia. Uma linha esquecida num `.env` de produção
+  // depois do UAT desligaria as duas regras **em silêncio**. Falhar o boot é
+  // ruidoso e imediato — o oposto de uma regra fiscal que simplesmente para
+  // de valer.
+  //
+  // Valor INVÁLIDO (typo) não reprova aqui de propósito: ele resolve para
+  // `block` na leitura do modo (com log `G4-TRACKING-MODE-INVALID`), ou
+  // seja, não desliga nada. Derrubar produção por causa dele seria punir o
+  // lado seguro.
+  if (resolveTrackingEnforcementMode(env.PRODUCTION_TRACKING_REQUIRED).mode === 'warn') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['PRODUCTION_TRACKING_REQUIRED'],
+      message: 'PRODUCTION_TRACKING_REQUIRED=warn e proibido em producao: desliga o apontamento obrigatorio (G4) '
+        + 'e o gate de partida da OP (G6), exigidos pelo Bloco K / Livro modelo 3. Use "block" (ou remova a variavel).',
+    });
   }
 
   if (!env.JWT_SECRET || env.JWT_SECRET.length < 32 || ENV_PLACEHOLDER_PATTERN.test(env.JWT_SECRET)) {
@@ -149,6 +187,12 @@ export type RuntimeEnv = {
   adminSeedPassword?: string;
   trustProxy: number;
   logFile?: string;
+  /**
+   * Modo de vigência do apontamento obrigatório (G4) e do gate de partida
+   * (G6), já normalizado. Em produção só pode ser `block` — ver o
+   * `superRefine` do schema.
+   */
+  productionTrackingRequired: TrackingEnforcementMode;
 };
 
 let cachedRuntimeEnv: RuntimeEnv | null = null;
@@ -176,6 +220,7 @@ function normalizeRuntimeEnv(parsedEnv: z.infer<typeof runtimeEnvSchema>): Runti
     adminSeedPassword: parsedEnv.ADMIN_SEED_PASSWORD,
     trustProxy: parsedEnv.TRUST_PROXY,
     logFile: parsedEnv.LOG_FILE,
+    productionTrackingRequired: resolveTrackingEnforcementMode(parsedEnv.PRODUCTION_TRACKING_REQUIRED).mode,
   };
 }
 

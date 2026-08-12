@@ -32,6 +32,7 @@ interface LotControlAttributes {
   release_inspection_id: number | null;
   released_by: number | null;
   released_at: Date | null;
+  blocked_at: Date | null;
   notes: string | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
@@ -77,6 +78,13 @@ const LotControl = sequelize.define('LotControl', {
   release_inspection_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> quality_inspections.id que autorizou a liberacao (G7)' },
   released_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id de quem autorizou a liberacao (do JWT) — pode diferir do inspetor' },
   released_at: { type: DataTypes.DATE, allowNull: true, comment: 'Data/hora da liberacao do lote' },
+  // G7 (2026-08-11) — quando o bloqueio VIGENTE comecou. Sem esta data nao
+  // existe "inspecao posterior ao bloqueio" que se possa exigir, e um lote
+  // bloqueado voltava a ser liberado com a inspecao aprovada de ANTES do
+  // bloqueio (ISO 9001 8.7). Preenchida pelos dois caminhos de bloqueio
+  // (endpoint /block e RNC) e zerada na liberacao: descreve o bloqueio
+  // vigente, nao o historico.
+  blocked_at: { type: DataTypes.DATE, allowNull: true, comment: 'Inicio do bloqueio vigente (G7). Re-liberar exige inspecao aprovada posterior a esta data.' },
   notes: { type: DataTypes.TEXT, allowNull: true }
 }, {
   tableName: 'lot_controls',
