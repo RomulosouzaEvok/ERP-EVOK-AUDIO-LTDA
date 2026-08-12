@@ -40,6 +40,10 @@ describe('ConvertPlannedOrdersToRequisitionUseCase', () => {
     };
 
     const requisitionRepository = {
+      // Numeracao serializada `RQ-YYYY-NNNN` (achado BAIXO 15 da auditoria
+      // de 2026-08-11): quem emite o numero e o repositorio, com advisory
+      // lock, e nao mais um `Date.now()` dentro do use case.
+      nextRequisitionNumberForYear: jest.fn(async (yearPrefix: string) => `${yearPrefix}-0001`),
       createRequisition: jest.fn(async (data: any) => ({ id: 99, ...data })),
       createRequisitionItem: jest.fn(async (data: any) => ({ id: Math.random(), ...data })),
       findRequisitionById: jest.fn(async (id: number) => ({
@@ -121,6 +125,7 @@ describe('ConvertPlannedOrdersToRequisitionUseCase', () => {
       updatePlannedOrdersStatus: jest.fn(async () => undefined),
     };
     const requisitionRepository = {
+      nextRequisitionNumberForYear: jest.fn(async (yearPrefix: string) => `${yearPrefix}-0001`),
       createRequisition: jest.fn(async (data: any) => ({ id: 1, ...data })),
       createRequisitionItem: jest.fn(async () => ({})),
       findRequisitionById: jest.fn(async (id: number) => ({ id })),

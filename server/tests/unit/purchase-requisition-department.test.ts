@@ -30,6 +30,7 @@ describe('CreatePurchaseRequisitionUseCase — department_id derivado do usuario
 
   function makeUseCase() {
     const requisitionRepository = {
+      nextRequisitionNumberForYear: jest.fn(async (yearPrefix: string) => `${yearPrefix}-0001`),
       createRequisition: jest.fn(async (data: any) => ({ id: 10, requisition_number: data.requisition_number, status: data.status, origin: data.origin, department_id: data.department_id })),
       createRequisitionItem: jest.fn(async (data: any) => data),
       findRequisitionById: jest.fn(async (id: number) => ({ id, requisition_number: 'RQ-DEPTO' })),

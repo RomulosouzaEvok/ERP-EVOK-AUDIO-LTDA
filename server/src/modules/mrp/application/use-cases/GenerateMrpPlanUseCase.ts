@@ -1,5 +1,11 @@
 import UseCase from '../../../../shared/application/UseCase';
 import { calculateMrpPlan } from '../mrpEngine';
+import {
+  allocateOrderToOrigins,
+  buildOriginSharesByRequirement,
+  keyOfPlannedOrder,
+  NormalizedDemand,
+} from './support/allocatePlanByOrigin';
 import MrpRepository from '../../domain/repositories/MrpRepository';
 import ItemRepository from '../../../items/domain/repositories/ItemRepository';
 import PurchaseRequisitionRepository from '../../../purchaseRequisitions/domain/repositories/PurchaseRequisitionRepository';
@@ -56,6 +62,10 @@ class GenerateMrpPlanUseCase extends UseCase<Record<string, any>, any[]> {
    * opt-in de conversao automatica, ja fecha o ciclo criando a Requisicao
    * de Compra correspondente na mesma transacao.
    *
+   * A netagem e CONJUNTA: todas as demandas disputam a mesma posicao de
+   * estoque (uma unica passagem pelo motor), e a necessidade liquida
+   * resultante e rateada por origem para preservar `origem`/`origem_id`.
+   *
    * @param input.demands - Lista de demandas (item, quantidade, data, origem).
    * @param input.requester_id - Id do usuario que disparou a geracao do plano
    *   (JWT do endpoint `POST /api/mrp/plan`); usado como `requester_id` da
@@ -64,7 +74,7 @@ class GenerateMrpPlanUseCase extends UseCase<Record<string, any>, any[]> {
    *   ja com `status` refletido no banco).
    */
   public async execute(input: Record<string, any>): Promise<any[]> {
-    const demands = (input.demands ?? []).map((demand: any) => ({
+    const demands: NormalizedDemand[] = (input.demands ?? []).map((demand: any) => ({
       itemId: String(demand.item_id),
       quantity: Number(demand.quantidade),
       dueDate: new Date(String(demand.data_necessidade)),
@@ -90,24 +100,43 @@ class GenerateMrpPlanUseCase extends UseCase<Record<string, any>, any[]> {
       leadTimeDays: Number(item.lead_time_dias ?? 0),
     }));
 
+    // ATENCAO — netagem CONJUNTA (correcao do defeito CRITICO 1 da auditoria
+    // de 2026-08-11). Ate aqui este trecho chamava `calculateMrpPlan` uma vez
+    // POR demanda, sempre com a posicao de estoque integra: cada demanda
+    // abatia o estoque inteiro, como se fosse a unica da fabrica. Duas
+    // demandas de 100 contra 100 em estoque davam necessidade liquida ZERO
+    // nas duas (o motor filtra `plannedQuantity > 0`) e o plano voltava
+    // vazio — **a fabrica comprava a menos e so descobria na linha**.
+    //
+    // O motor sempre soube agregar varias demandas (mrpEngine.ts). Agora ele
+    // neta UMA vez sobre a demanda inteira, e o rateio por origem
+    // (`allocatePlanByOrigin`) devolve a rastreabilidade `origem`/`origem_id`
+    // que motivou o laco antigo — sem tocar na conta de compra.
+    const aggregatedPlan = calculateMrpPlan(demands, normalizedEdges, normalizedInventory);
+    const originShares = buildOriginSharesByRequirement(demands, normalizedEdges);
+
     const planByOrigin = new Map<string, Record<string, any>>();
-    for (const demand of demands) {
-      const demandPlan = calculateMrpPlan([demand], normalizedEdges, normalizedInventory);
-      for (const order of demandPlan) {
-        const origem = normalizeOrigem(demand.sourceType);
-        const origemId = demand.sourceId ?? null;
-        const key = `${order.itemId}|${order.dueDate.toISOString().slice(0, 10)}|${origem}|${origemId ?? ''}`;
+    for (const order of aggregatedPlan) {
+      const allocations = allocateOrderToOrigins(order, originShares.get(keyOfPlannedOrder(order)) ?? []);
+
+      for (const allocation of allocations) {
+        // A chave de persistencia usa a data SEM hora, espelhando o indice
+        // unico `uq_mrp_sem_duplicidade` (item, origem, origem_id, data).
+        const key = `${order.itemId}|${order.dueDate.toISOString().slice(0, 10)}|${allocation.origem}|${allocation.origemId ?? ''}`;
         const previous = planByOrigin.get(key);
         planByOrigin.set(key, {
           item_id: order.itemId,
-          origem,
-          origem_id: origemId,
-          necessidade_bruta: Number((previous?.necessidade_bruta ?? 0) + order.grossRequirement),
-          estoque_disponivel: order.availableStock,
-          necessidade_liquida: Number((previous?.necessidade_liquida ?? 0) + order.netRequirement),
-          quantidade_planejada: Number((previous?.quantidade_planejada ?? 0) + order.plannedQuantity),
+          origem: allocation.origem,
+          origem_id: allocation.origemId,
+          necessidade_bruta: Number((previous?.necessidade_bruta ?? 0) + allocation.grossRequirement),
+          estoque_disponivel: Number((previous?.estoque_disponivel ?? 0) + allocation.availableStock),
+          necessidade_liquida: Number((previous?.necessidade_liquida ?? 0) + allocation.netRequirement),
+          quantidade_planejada: Number((previous?.quantidade_planejada ?? 0) + allocation.plannedQuantity),
           data_necessidade: order.dueDate.toISOString().slice(0, 10),
           data_liberacao: order.releaseDate.toISOString().slice(0, 10),
+          // `status` so vale para linha NOVA: o upsert do repositorio nao
+          // reescreve o status de uma ordem que ja existe (ver
+          // `SequelizeMrpRepository.upsertPlannedOrders`).
           status: 'RASCUNHO',
         });
       }
@@ -167,7 +196,7 @@ class GenerateMrpPlanUseCase extends UseCase<Record<string, any>, any[]> {
       return;
     }
 
-    await createRequisitionFromPlannedOrders({
+    const requisition = await createRequisitionFromPlannedOrders({
       plannedOrders: eligibleOrders,
       requesterId: requesterId as number,
       origin: 'mrp_auto',
@@ -177,31 +206,28 @@ class GenerateMrpPlanUseCase extends UseCase<Record<string, any>, any[]> {
       transaction,
     });
 
+    // `null` = nenhuma ordem elegivel restou depois do filtro de idempotencia
+    // do helper (todas ja tinham virado requisicao). Nada a promover.
+    if (!requisition) {
+      return;
+    }
+
     const eligibleIds = eligibleOrders.map((order: any) => order.id);
     await this.mrpRepository.updatePlannedOrdersStatus(eligibleIds, 'EM_EXECUCAO', transaction);
-  }
-}
 
-/**
- * Normaliza o tipo de origem para o enum do banco.
- * Aceita tanto o enum do Zod quanto o formato legado em ingles.
- *
- * @param sourceType - Tipo de origem da demanda.
- * @returns Valor normalizado para o enum `mrp_ordens_planejadas.origem`.
- */
-function normalizeOrigem(sourceType: string): string {
-  switch (sourceType) {
-    case 'PEDIDO_VENDA':
-    case 'sales_order':
-      return 'PEDIDO_VENDA';
-    case 'PREVISAO':
-    case 'forecast':
-      return 'PREVISAO';
-    case 'ORDEM_PRODUCAO':
-    case 'production_order':
-      return 'ORDEM_PRODUCAO';
-    default:
-      return 'MANUAL';
+    // O UPDATE acima e por `where id in (...)`: as instancias ja carregadas
+    // continuariam dizendo `RASCUNHO`. Isso nao era so cosmetica — o
+    // controller decide gravar o audit log de conversao automatica olhando
+    // `order.status === 'EM_EXECUCAO'` NESTE retorno, entao o registro de
+    // auditoria da conversao automatica simplesmente nunca era escrito, e a
+    // API devolvia um status que nao era o do banco.
+    for (const order of eligibleOrders) {
+      if (typeof order.set === 'function') {
+        order.set('status', 'EM_EXECUCAO');
+      } else {
+        order.status = 'EM_EXECUCAO';
+      }
+    }
   }
 }
 

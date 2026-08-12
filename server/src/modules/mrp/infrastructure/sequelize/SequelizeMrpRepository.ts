@@ -39,6 +39,27 @@ class SequelizeMrpRepository extends MrpRepository {
     return unmapped;
   }
 
+  /**
+   * Grava as ordens planejadas de uma rodada do MRP, criando as novas e
+   * recalculando as que ja existiam (mesma chave `uq_mrp_sem_duplicidade`:
+   * item + origem + origem_id + data de necessidade).
+   *
+   * **`status` fica de fora do UPDATE** (correcao do defeito CRITICO 2 da
+   * auditoria de 2026-08-11). O plano e sempre montado com
+   * `status: 'RASCUNHO'` — e ele nao e um dado recalculado, e uma **maquina
+   * de estados**: quem move a ordem para `EM_EXECUCAO` e a conversao em
+   * requisicao/OP. Enquanto o payload inteiro era aplicado, cada rodada do
+   * MRP (rotina diaria do planejador) rebaixava ordens ja convertidas de
+   * volta para `RASCUNHO`, elas voltavam a satisfazer
+   * `AUTO_CONVERTIBLE_STATUSES` e **eram convertidas de novo**: uma
+   * requisicao de compra nova por rodada, para o mesmo material.
+   *
+   * O status de linha NOVA continua vindo do payload, via `defaults`.
+   *
+   * @param orders - Linhas do plano (uma por item x origem x data).
+   * @param transaction - Transacao Sequelize ativa (opcional).
+   * @returns Ordens planejadas persistidas, na ordem de entrada.
+   */
   public async upsertPlannedOrders(orders: Record<string, unknown>[], transaction?: any): Promise<any[]> {
     const persisted: any[] = [];
 
@@ -55,7 +76,8 @@ class SequelizeMrpRepository extends MrpRepository {
       });
 
       if (!record.isNewRecord) {
-        await record.update(order, transaction ? { transaction } : undefined);
+        const { status: _recalculatedStatus, ...recalculatedFields } = order;
+        await record.update(recalculatedFields, transaction ? { transaction } : undefined);
       }
 
       persisted.push(record);

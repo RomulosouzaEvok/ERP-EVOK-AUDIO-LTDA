@@ -41,6 +41,9 @@ function buildDeps(overrides: Partial<{
   };
 
   const requisitionRepository = {
+    // Numeracao `RQ-YYYY-NNNN` emitida pelo repositorio (advisory lock),
+    // no lugar do antigo `RQ-${Date.now()}`.
+    nextRequisitionNumberForYear: jest.fn(async (yearPrefix: string) => `${yearPrefix}-0001`),
     createRequisition: jest.fn(async (data: any) => ({ id: 501, ...data })),
     createRequisitionItem: jest.fn(async (data: any) => ({ id: Math.random(), ...data })),
     findRequisitionById: jest.fn(),
@@ -128,6 +131,33 @@ describe('GenerateMrpPlanUseCase — fechamento automatico do ciclo MRP', () => 
     expect(deps.itemRepository.listAutoConvertItemIds).not.toHaveBeenCalled();
     expect(deps.requisitionRepository.createRequisition).not.toHaveBeenCalled();
     expect(deps.mrpRepository.updatePlannedOrdersStatus).not.toHaveBeenCalled();
+  });
+
+  it('nao converte de novo uma ordem que ja virou requisicao (idempotencia da reexecucao do plano)', async () => {
+    const deps = buildDeps({ autoConvertItemIds: new Set(['MP-1']) });
+    // Reexecucao do MRP: a linha ja existe no banco e ja foi convertida.
+    // Antes da correcao de 2026-08-11 o upsert a rebaixava para RASCUNHO e
+    // ela era convertida outra vez — uma requisicao de compra nova por
+    // rodada do plano, para o mesmo material.
+    deps.mrpRepository.upsertPlannedOrders = jest.fn(async (orders: any[]) => orders.map((order, index) => ({
+      id: `order-${index + 1}`,
+      ...order,
+      status: 'EM_EXECUCAO',
+    })));
+
+    const useCase = new GenerateMrpPlanUseCase(
+      deps.mrpRepository as any,
+      deps.itemRepository as any,
+      deps.requisitionRepository as any,
+      deps.itemSupplierRepository as any,
+    );
+
+    const result = await useCase.execute({ demands: [demand], requester_id: 42 });
+
+    expect(deps.requisitionRepository.createRequisition).not.toHaveBeenCalled();
+    expect(deps.requisitionRepository.createRequisitionItem).not.toHaveBeenCalled();
+    expect(deps.mrpRepository.updatePlannedOrdersStatus).not.toHaveBeenCalled();
+    expect(result[0]).toMatchObject({ status: 'EM_EXECUCAO' });
   });
 
   it('nao converte automaticamente sem requester_id (evita violar NOT NULL de purchase_requisitions.requester_id)', async () => {

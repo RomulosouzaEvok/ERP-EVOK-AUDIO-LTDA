@@ -87,6 +87,17 @@ class ConvertPlannedOrdersToRequisitionUseCase extends UseCase<ConvertPlannedOrd
         transaction,
       });
 
+      // Inalcancavel na pratica: a validacao de status acima ja garante que
+      // toda ordem do lote e convertivel, e o helper so devolve `null` quando
+      // NENHUMA e. Explicito mesmo assim para que uma futura mudanca na
+      // regra de idempotencia falhe alto, em vez de gravar requisicao nula.
+      if (!requisition) {
+        throw new BusinessRuleError(
+          'Nenhuma das ordens planejadas informadas esta pendente de conversao em requisicao de compra.',
+          { planned_order_ids: uniqueIds },
+        );
+      }
+
       await this.mrpRepository.updatePlannedOrdersStatus(uniqueIds, 'EM_EXECUCAO', transaction);
 
       const fullRequisition = await this.requisitionRepository.findRequisitionById(requisition.id, transaction);

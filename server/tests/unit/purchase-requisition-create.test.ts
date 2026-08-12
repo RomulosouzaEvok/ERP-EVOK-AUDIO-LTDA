@@ -3,6 +3,11 @@ import CreatePurchaseRequisitionUseCase = require('../../src/modules/purchaseReq
 describe('CreatePurchaseRequisitionUseCase', () => {
   it('cria requisicao e itens validando a existencia do item', async () => {
     const requisitionRepository = {
+      // A numeracao saiu do use case e virou responsabilidade do
+      // repositorio (`RQ-YYYY-NNNN` serializado por advisory lock), no lugar
+      // do antigo `RQ-${Date.now()}` — achado BAIXO 15 da auditoria de
+      // 2026-08-11.
+      nextRequisitionNumberForYear: jest.fn(async (yearPrefix: string) => `${yearPrefix}-0001`),
       createRequisition: jest.fn(async (data: any) => ({ id: 7, requisition_number: data.requisition_number, status: data.status, origin: data.origin })),
       createRequisitionItem: jest.fn(async (data: any) => data),
       findRequisitionById: jest.fn(async (id: number) => ({ id, requisition_number: 'RQ-123', items: [{ item_id: 'item-1' }] })),

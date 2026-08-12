@@ -61,6 +61,21 @@ export interface MrpInventoryPosition {
 }
 
 /**
+ * Origem operacional de uma demanda de MRP.
+ *
+ * Aceita as DUAS grafias que circulam no ERP: o enum do banco
+ * (`mrp_ordens_planejadas.origem`, em portugues — e o que o endpoint
+ * `POST /api/mrp/plan` realmente recebe) e o formato legado em ingles desta
+ * camada. O motor nao usa este campo em nenhuma conta; quem traduz para o
+ * enum do banco e `normalizeOrigem`, no rateio por origem. A uniao antiga
+ * (so o formato em ingles) descrevia um contrato que o unico chamador real
+ * nunca cumpriu.
+ */
+export type MrpDemandSourceType =
+  | 'sales_order' | 'forecast' | 'production_order' | 'manual'
+  | 'PEDIDO_VENDA' | 'PREVISAO' | 'ORDEM_PRODUCAO' | 'MANUAL';
+
+/**
  * Demanda independente ou dependente que inicia o MRP.
  */
 export interface MrpDemand {
@@ -71,7 +86,7 @@ export interface MrpDemand {
   /** Data em que o item precisa estar disponivel. */
   dueDate: Date;
   /** Origem operacional da demanda. */
-  sourceType: 'sales_order' | 'forecast' | 'production_order' | 'manual';
+  sourceType: MrpDemandSourceType;
   /** Identificador da origem, quando existir. */
   sourceId?: string;
 }

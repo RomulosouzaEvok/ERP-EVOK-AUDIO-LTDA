@@ -42,6 +42,7 @@ describe('CreatePurchaseRequisitionUseCase — amostra de engenharia', () => {
     engineeringProjectFindByPkMock.mockImplementation(engineeringProjectFindByPk);
 
     const requisitionRepository = {
+      nextRequisitionNumberForYear: jest.fn(async (yearPrefix: string) => `${yearPrefix}-0001`),
       createRequisition: jest.fn(async (data: any) => ({ id: 42, requisition_number: data.requisition_number, status: data.status, origin: data.origin })),
       createRequisitionItem: jest.fn(async (data: any) => data),
       findRequisitionById: jest.fn(async (id: number) => ({ id, requisition_number: 'RQ-AMOSTRA', items: [{ item_id: 'item-1' }] })),

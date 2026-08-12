@@ -109,6 +109,7 @@ async function ensureFixtures() {
   const {
     sequelize, User, Supplier, Product, BillOfMaterial, CompanyFiscalConfig,
     Warehouse, ProductWarehouseStock, Item, ProductionCostSettings, LotControl,
+    WorkCenter, ProductionRoute, ProductionRouteStep,
   } = models;
 
   try {
@@ -335,6 +336,70 @@ async function ensureFixtures() {
       approval_date: new Date().toISOString().slice(0, 10),
     });
 
+    // Roteiro de fabricacao do produto de BOM — fixture do gap G6, endurecido
+    // em 2026-08-11.
+    //
+    // O gate de partida passou a exigir LASTRO DE ROTEIRO: alguma linha de
+    // apontamento ligada a uma etapa, ou roteiro ativo cadastrado para o
+    // produto. Antes bastava existir qualquer linha, e uma linha manual
+    // (`production_route_step_id: null`) destravava a partida de uma OP sem
+    // roteiro nenhum — era assim que `production-order-scrap.test.ts`
+    // conseguia iniciar suas OPs, exercitando exatamente a brecha.
+    //
+    // Com o roteiro aqui, a liberacao da OP materializa a etapa (G4) e o
+    // teste volta a percorrer o caminho REAL da fabrica. Criado direto pelos
+    // models (mesmo padrao dos demais fixtures deste arquivo) e idempotente.
+    const [ciWorkCenter] = await WorkCenter.findOrCreate({
+      where: { code: 'CI-WC-001' },
+      defaults: {
+        code: 'CI-WC-001',
+        name: 'Centro de Trabalho CI',
+        description: 'Fixture automatizada de testes API (roteiro do produto de BOM)',
+        machines_count: 1,
+        capacity_hours_per_day: 8,
+        efficiency_factor: 1,
+        cost_per_hour: 50,
+        active: true,
+      },
+    });
+    // Reforca o estado esperado mesmo em banco reaproveitado: centro inativo
+    // ou sem taxa faria a OP falhar por `G6-START-WC-INACTIVE`/
+    // `G4-LABOR-RATE-MISSING`, e a falha pareceria regressao de codigo.
+    if (!ciWorkCenter.active || Number(ciWorkCenter.cost_per_hour) <= 0) {
+      await ciWorkCenter.update({ active: true, cost_per_hour: 50 });
+    }
+
+    const [ciRoute] = await ProductionRoute.findOrCreate({
+      where: { product_id: bomFinishedProduct.id, revision: 'CI' },
+      defaults: {
+        product_id: bomFinishedProduct.id,
+        route_code: `CI-ROUTE-${bomFinishedProduct.id}`,
+        revision: 'CI',
+        status: 'active',
+        description: 'Fixture automatizada de testes API',
+        created_by: admin.id,
+        approved_by: admin.id,
+        approved_at: new Date(),
+      },
+    });
+    if (ciRoute.status !== 'active') {
+      await ciRoute.update({ status: 'active' });
+    }
+
+    await ProductionRouteStep.findOrCreate({
+      where: { production_route_id: ciRoute.id, sequence: 1 },
+      defaults: {
+        production_route_id: ciRoute.id,
+        sequence: 1,
+        step_code: 'CI010',
+        name: 'Montagem (fixture CI)',
+        work_center_id: ciWorkCenter.id,
+        standard_time_minutes: 10,
+        setup_time_minutes: 5,
+        is_active: true,
+      },
+    });
+
     // Taxa horaria de mao-de-obra — fixture do gap G4 (2026-08-10).
     // Concluir uma OP passou a exigir apontamento por etapa E custeio real
     // dessa etapa: sem `work_centers.cost_per_hour` na etapa nem
@@ -433,7 +498,11 @@ async function runJestSuite(suiteName, env, filter) {
     jestBin,
     '--runInBand',
     `tests/${suiteName}`,
-    ...(filter ? ['--testPathPattern', filter] : []),
+    // Jest 30 removeu `--testPathPattern` (singular) em favor de
+    // `--testPathPatterns`. Com o nome antigo o Jest aborta com codigo 1
+    // ANTES de rodar qualquer teste — o filtro de depuracao estava
+    // simplesmente quebrado, e a falha se parecia com "suite reprovou".
+    ...(filter ? ['--testPathPatterns', filter] : []),
     '--ci',
     '--forceExit',
     '--json',

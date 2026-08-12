@@ -21,6 +21,26 @@ class PurchaseRequisitionRepository {
     throw new Error('PurchaseRequisitionRepository.findRequisitionByIdForUpdate nao implementado.');
   }
 
+  /**
+   * Gera o proximo numero de requisicao do ano (`RQ-YYYY-NNNN`) de forma
+   * serializada, no mesmo padrao ja usado por OP (`OP-YYYY-NNNN`), MPS,
+   * RFQ, contrato e importacao.
+   *
+   * Substitui o antigo `RQ-${Date.now()}`, que nao era numeracao: era
+   * carimbo de tempo (achado BAIXO 15 da auditoria de 2026-08-11). Nao
+   * ordenava, nao dizia nada ao usuario, nao respeitava a serie anual usada
+   * pelo resto do ERP e ainda colidia entre duas requisicoes criadas no
+   * mesmo milissegundo (a coluna e `UNIQUE`).
+   *
+   * @abstract
+   * @param _yearPrefix - Prefixo anual (ex.: `RQ-2026`).
+   * @param _transaction - Transacao Sequelize ativa (obrigatoria para a serializacao).
+   * @returns Proximo numero completo (ex.: `RQ-2026-0004`).
+   */
+  async nextRequisitionNumberForYear(_yearPrefix: string, _transaction: any): Promise<string> {
+    throw new Error('PurchaseRequisitionRepository.nextRequisitionNumberForYear nao implementado.');
+  }
+
   async createRequisition(_data: Record<string, any>, _transaction?: any): Promise<any> {
     throw new Error('PurchaseRequisitionRepository.createRequisition nao implementado.');
   }

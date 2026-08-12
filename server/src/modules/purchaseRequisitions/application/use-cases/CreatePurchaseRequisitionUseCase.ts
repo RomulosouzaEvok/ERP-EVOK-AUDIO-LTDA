@@ -71,8 +71,18 @@ class CreatePurchaseRequisitionUseCase extends UseCase<Record<string, any>, any>
       ? await this.requisitionRepository.findEmployeeByUserId(input.requester_id, input.transaction)
       : null;
 
+    // Numeracao no padrao do ERP (`RQ-YYYY-NNNN`, serializada por advisory
+    // lock no repositorio), no lugar do antigo `RQ-${Date.now()}` — achado
+    // BAIXO 15 da auditoria de 2026-08-11. O carimbo de tempo nao ordenava,
+    // nao dizia nada ao usuario e colidia entre duas requisicoes criadas no
+    // mesmo milissegundo, numa coluna `UNIQUE`.
+    const requisitionNumber = await this.requisitionRepository.nextRequisitionNumberForYear(
+      `RQ-${new Date().getFullYear()}`,
+      input.transaction,
+    );
+
     const requisition = await this.requisitionRepository.createRequisition({
-      requisition_number: `RQ-${Date.now()}`,
+      requisition_number: requisitionNumber,
       requester_id: input.requester_id,
       department_id: requesterEmployee?.department_id ?? null,
       production_order_id: input.production_order_id ?? null,
