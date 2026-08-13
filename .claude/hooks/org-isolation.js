@@ -15,6 +15,19 @@
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
+// No worktree principal, `.git` é um DIRETÓRIO; em worktrees git, é um ARQUIVO.
+// É assim que distinguimos "SanaCore no repo principal" de "SanaCore em sana/".
+function isMainWorktree(cwd) {
+  try {
+    return fs.statSync(path.join(cwd, '.git')).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 const ORG_RULES = [
   {
     org: 'vericore',
@@ -35,8 +48,12 @@ const ORG_RULES = [
     org: 'sanacore',
     match: (a) => a.includes('sanacore') || a.includes('remediation'),
     deniedPaths: [/^audit\/.*finding/i, /^audit\/runs\//, /^coretriad\/(states|locks)\//],
+    // Código de produto só em worktree `sana/<PROJECT>/<FINDING>` — no worktree
+    // principal, escrita de código pela SanaCore é bloqueada.
+    deniedInMainWorktree: [/^(src|server|client|product|tests|mobile)\//],
     allowedException: () => false,
     reason: 'SanaCore não pode alterar findings originais, evidência de auditoria nem estado do control plane.',
+    mainWorktreeReason: 'SanaCore só escreve código em worktree sana/<PROJECT>/<FINDING> — nunca no worktree principal.',
   },
   {
     org: 'coretriad',
@@ -80,7 +97,18 @@ process.stdin.on('end', () => {
   if (filePath.startsWith(cwd)) filePath = filePath.slice(cwd.length);
   filePath = filePath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
 
-  if (!agent || !filePath) return respond('approve', 'sem agente/caminho identificável (sessão principal)');
+  if (!filePath) return respond('approve', 'sem caminho de arquivo — nada a julgar');
+
+  const hasAgentField =
+    'agent_type' in payload || 'agent_name' in payload || 'subagent_type' in payload;
+
+  if (!agent) {
+    if (hasAgentField) {
+      // fail-closed: contexto de subagente sem identidade nunca vira permissão
+      return respond('block', 'org-isolation: subagente sem identificação (fail-closed).');
+    }
+    return respond('approve', 'sessão principal (sem contexto de subagente)');
+  }
 
   for (const rule of ORG_RULES) {
     if (!rule.match(agent)) continue;
@@ -90,6 +118,13 @@ process.stdin.on('end', () => {
           return respond('approve', `exceção autorizada para ${agent}`);
         }
         return respond('block', `[${rule.org.toUpperCase()}] ${rule.reason} (bloqueado: ${filePath})`);
+      }
+    }
+    if (rule.deniedInMainWorktree && isMainWorktree(cwd)) {
+      for (const denied of rule.deniedInMainWorktree) {
+        if (denied.test(filePath)) {
+          return respond('block', `[${rule.org.toUpperCase()}] ${rule.mainWorktreeReason} (bloqueado: ${filePath})`);
+        }
       }
     }
     return respond('approve', `dentro do namespace de ${rule.org}`);
