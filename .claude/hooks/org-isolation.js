@@ -107,11 +107,18 @@ process.stdin.on('end', () => {
 
   if (!rawPath) return respond('approve', 'sem caminho de arquivo — nada a julgar');
 
-  const hasAgentField =
-    'agent_type' in payload || 'agent_name' in payload || 'subagent_type' in payload;
+  // Discriminador verificado empiricamente neste harness: o payload da sessão
+  // principal não traz NENHUMA chave de agente; subagentes trazem agent_id e
+  // agent_type. Qualquer sinal de contexto de subagente — inclusive só o
+  // agent_id — exige identidade resolvível, senão bloqueia.
+  const hasAgentContext =
+    'agent_type' in payload ||
+    'agent_name' in payload ||
+    'subagent_type' in payload ||
+    'agent_id' in payload;
 
   if (!agent) {
-    if (hasAgentField) {
+    if (hasAgentContext) {
       // fail-closed: contexto de subagente sem identidade nunca vira permissão
       return respond('block', 'org-isolation: subagente sem identificação (fail-closed).');
     }
