@@ -77,14 +77,22 @@ const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 // pelo TEST-SEAL-001 (vericore-qa-auditor), que os reportou sem explorá-los.
 const SEALED = /coretriad\/locks|answer[-_]key/i;
 
-// Inspeciona recursivamente qualquer string do tool_input (file_path, path,
-// pattern, command, arrays de comandos...), não apenas os campos de caminho.
+// Campos que carregam CONTEÚDO, não alvo de acesso. Citar o caminho selado
+// dentro de um documento é legítimo (um pacote de evidência pode precisar
+// referenciá-lo); o que o selo impede é ler/listar o artefato.
+const CONTENT_FIELDS = new Set(['content', 'new_string', 'old_string', 'prompt', 'description']);
+
+// Inspeciona recursivamente as strings de acesso do tool_input (file_path,
+// path, pattern, command, arrays de comandos...), ignorando os campos de
+// conteúdo acima.
 function touchesSealed(value, depth = 0) {
   if (depth > 4) return false;
   if (typeof value === 'string') return SEALED.test(value.replace(/\\/g, '/'));
   if (Array.isArray(value)) return value.some((v) => touchesSealed(v, depth + 1));
   if (value && typeof value === 'object') {
-    return Object.values(value).some((v) => touchesSealed(v, depth + 1));
+    return Object.entries(value).some(
+      ([k, v]) => !CONTENT_FIELDS.has(k) && touchesSealed(v, depth + 1)
+    );
   }
   return false;
 }
