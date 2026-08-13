@@ -9,7 +9,7 @@ DOMAIN: security / business-rules
 SUBDOMAIN: authorization (broken access control / IDOR)
 SEVERITY: CRITICAL
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: business-rule auditor; authorization auditor; traceability auditor (deduplicado pelo evidence-controller)
 
 DESCRIPTION:
@@ -86,3 +86,47 @@ REPRODUÇÃO TÉCNICA CONFIRMADA POR LEITURA: dado o código em L78-105, a chama
 
 VEREDITO: **CONFIRMED**
 JUSTIFICATIVA: Ausência de verificação de autorização comprovada por leitura direta da função inteira (não há `if` algum comparando `userId` ou `userRole`). Ausência de teste negativo comprovada por leitura direta da suíte completa. Busca exaustiva por controle compensatório em qualquer camada do repositório (grep por `cancelBooking`, `bookingService`, termos de autorização/middleware) não encontrou nada que refute o finding — ao contrário, a documentação `AUTHORIZATION_MATRIX` declara uma proteção que não existe no código, agravando o achado (falsa garantia). Finding é reproduzível por leitura estática determinística, sem necessidade de execução. Segue para consolidação como CONFIRMED, elegível para remediação pela SanaCore (Regra 22 do CLAUDE.md).
+
+## Fechamento (software-audit-director)
+
+DATA: 2026-08-13
+AUDIT_COMMIT (imutável, inalterado): b736a1e733f802735b1b79348e3c6cc084bd466e
+REMEDIATION_COMMIT ACEITO: `08b4323`
+REMEDIATION_COMMIT REJEITADO (rodada anterior): `3ca9dd9`
+RETEST_REPORT: `audit/runs/SIM-001-AUD-001/30-retest/RETEST_REPORT.md` (Bloco 1)
+RETESTE EXECUTADO POR: vericore-audit-verification-runner (execução dinâmica real, independente da suíte do projeto)
+
+RESULTADO DO RETESTE — RODADA v1 (`3ca9dd9`): **RETEST_FAILED**.
+O item (c) do RETEST_SPECIFICATION (admin cancela reserva de terceiro → sucesso) retornou
+`ERROR "User user-99 is not authorized"`. A implementação v1 restringia o cancelamento
+exclusivamente ao dono, negando o papel `admin` que BR-SIM-001 autoriza expressamente. O
+item (d) também falhou: a suíte de 8 testes, embora verde, não continha nenhum caso
+exercitando o papel `admin`. Retornado à SanaCore.
+
+RESULTADO DO RETESTE — RODADA v2 (`08b4323`): **RETEST_PASSED**.
+(a) `mallory` (não-dono, não-admin) → ERROR e a reserva permanece `active`;
+(b) `alice` (dona) → SUCCESS;
+(c) `root` com `userRole: 'admin'` → SUCCESS, reserva `cancelled`, `cancelledByRole` = `"admin"`;
+(d) suíte cobre os 3 cenários, incluindo TC-SIM-007 (cenário admin);
+(e) suíte 9/9 verde no REMEDIATION_COMMIT.
+Regressão: 10 vetores adversariais de papel não-admin sobre reserva alheia (`undefined`,
+`'user'`, `''`, `'ADMIN'`, `'Admin'`, `null`, `' admin '`, `true`, `['admin']`, `userId`
+`undefined`) — todos rejeitados, reserva permanecendo `active`; comportamento consistente
+com comparação estrita `=== 'admin'` e postura fail-closed. Sem efeito colateral sobre a
+taxa (dono e admin cancelando tardiamente → fee 20). Integridade verificada:
+`product/SIM-001` byte-idêntico entre `08b4323` e o worktree de reteste.
+
+RESSALVA NÃO ABSORVIDA NESTE FECHAMENTO: a procedência de `userRole` (autodeclarado, sem
+camada de autenticação) NÃO faz parte do RETEST_SPECIFICATION (a)-(e) deste finding e
+permanece aberta como OBS-SIM-001-A em
+`audit/runs/SIM-001-AUD-001/31-new-findings/NEW_OBSERVATIONS.md`. O fechamento abaixo não
+a abrange e não a considera mitigada.
+
+DECLARAÇÃO DE AUTORIDADE:
+Na condição de **vericore-software-audit-director**, e como única autoridade competente
+para declarar reteste e fechamento de finding (Regra 4 do CLAUDE.md), declaro
+**RETEST_FAILED** para o commit `3ca9dd9`, **RETEST_PASSED** para o commit `08b4323` e
+**FINDING CLOSED** para FIND-SIM-001-001. O fechamento vale exclusivamente para o
+REMEDIATION_COMMIT `08b4323`; mudanças posteriores exigem delta audit ou nova auditoria
+(Regra 14). Esta declaração não constitui `REMEDIATION COMPLETE` (autoridade da SanaCore)
+nem `AUDIT_PASSED` para SIM-001-AUD-001.

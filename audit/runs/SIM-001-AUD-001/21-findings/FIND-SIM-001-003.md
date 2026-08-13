@@ -9,7 +9,7 @@ DOMAIN: quality / traceability
 SUBDOMAIN: test coverage gap
 SEVERITY: HIGH
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: traceability auditor; business-rule auditor (dedup pelo evidence-controller)
 
 DESCRIPTION:
@@ -75,3 +75,37 @@ RESULTADO DA BUSCA: nenhum teste equivalente a TC-SIM-003 encontrado em qualquer
 
 VEREDITO: **CONFIRMED**
 JUSTIFICATIVA: Ausência de TC-SIM-003 confirmada por leitura completa e por grep exaustivo em todo o repositório — inclusive nenhuma cobertura indireta nos testes existentes, já que estes usam salas distintas e não exercitam o branch de sobreposição. A própria declaração de release da OpusCore (`SOFTWARE_RELEASE_PACKAGE.md`) corrobora a lacuna ao listar apenas 6 testes, sem TC-SIM-003. Gap de rastreabilidade REQ→TC reproduzível e demonstrável sem necessidade de execução. Segue para consolidação como CONFIRMED.
+
+## Fechamento (software-audit-director)
+
+DATA: 2026-08-13
+AUDIT_COMMIT (imutável, inalterado): b736a1e733f802735b1b79348e3c6cc084bd466e
+REMEDIATION_COMMIT ACEITO: `8297779`
+RETEST_REPORT: `audit/runs/SIM-001-AUD-001/30-retest/RETEST_REPORT.md` (Bloco 3)
+RETESTE EXECUTADO POR: vericore-audit-verification-runner
+RODADAS: 1
+
+RESULTADO DO RETESTE: **RETEST_PASSED**.
+Por se tratar de lacuna de cobertura (e não de defeito funcional), o reteste não se apoiou
+na verde da suíte — a verde era exatamente o sintoma original. Foram aplicados dois
+métodos independentes: (i) reprodução manual de 3 cenários FORA da suíte — sobreposta
+rejeitada, adjacente aceita, sala diferente aceita — todos batendo com o comportamento
+esperado por BR-SIM-003; e (ii) leitura linha a linha dos testes adicionados, confirmando
+os casos **TC-SIM-003a..g** cobrindo os 7 itens (a)-(g) do RETEST_SPECIFICATION, com
+asserções que efetivamente distinguem rejeição de aceitação (não tautológicas, não
+vazias). Item (h): suíte completa **13/13 verde** no REMEDIATION_COMMIT.
+A cadeia de rastreabilidade REQ-SIM-003 → AC-SIM-003 → TC-SIM-003 está restabelecida. Sem
+lacuna remanescente identificada. Nenhum efeito colateral: a implementação do serviço não
+foi alterada; a semântica `[start, end)` permanece a mesma validada no AUDIT_COMMIT.
+
+NOTA DE ESCOPO: a lacuna registrada na `TRACEABILITY_MATRIX.md` desta auditoria refere-se
+ao AUDIT_COMMIT `b736a1e` e permanece verdadeira para aquele commit — evidência histórica
+não é reescrita (Regra 15). A lacuna está sanada no REMEDIATION_COMMIT `8297779`.
+
+DECLARAÇÃO DE AUTORIDADE:
+Na condição de **vericore-software-audit-director**, e como única autoridade competente
+para declarar reteste e fechamento de finding (Regra 4 do CLAUDE.md), declaro
+**RETEST_PASSED** para o REMEDIATION_COMMIT `8297779` e **FINDING CLOSED** para
+FIND-SIM-001-003. O fechamento vale exclusivamente para esse commit; mudanças posteriores
+exigem delta audit ou nova auditoria (Regra 14). Esta declaração não constitui
+`REMEDIATION COMPLETE` (autoridade da SanaCore) nem `AUDIT_PASSED` para SIM-001-AUD-001.
