@@ -5,18 +5,20 @@ AUDIT_ID: SIM-002-AUD-001
 AUDIT_COMMIT: f2fcf1c78a6a1255738d05e66a6100fa9c47428a
 PROJECT_ID: SIM-002
 TITLE: docs/API.md contradiz o código em createPayment — papel exigido e status de saída
-DOMAIN: Consistência documental
+DOMAIN: Consistência documental → **Autorização** (reclassificado em 2026-08-13)
 SUBDOMAIN: Contrato de API × implementação
-SEVERITY: MEDIUM
-SEVERITY_ORIGINAL: HIGH (rebaixada pelo finding-validator — ver Validação)
+SEVERITY: HIGH
+SEVERITY_HISTORY: HIGH (auditoria) → MEDIUM (rebaixada pelo finding-validator) → **HIGH (re-elevada em 2026-08-13 por acionamento da cláusula de reversão de severidade, após APR-2026-008)**
 CONFIDENCE: CONFIRMED
-STATUS: PARTIALLY_REMEDIATED (divergência B remediada e retestada; divergência A ABERTA em human gate)
+STATUS: CLOSED
 DETECTED_BY: documentation-consistency, traceability, authorization, business-rule, qa (5 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
-REMEDIATION_COMMIT: f0aaa7a (somente divergência B)
-RETEST_RESULT: RETEST_PASSED (parcial — divergência B) / RETEST_NOT_APPLICABLE (divergência A)
-NOT_CLOSED_REASON: human gate pendente sobre o papel exigido em createPayment (Regra 18)
+HUMAN_GATE: APR-2026-008 (`coretriad/governance/APPROVALS.md`) — 2026-08-13
+REMEDIATION_COMMIT: f0aaa7a (divergência B, WAVE-A) + b6d44da (divergência A, WAVE-D)
+RETEST_RESULT: RETEST_PASSED (divergências A e B)
+CLOSED_BY: vericore-software-audit-director — 2026-08-13
+RESIDUAL_CARVED_OUT: OBS-SIM-002-006 (convergência de `SOFTWARE_RELEASE_PACKAGE.md:28` e formalização da BR de papéis com ID)
 
 DESCRIPTION:
 O contrato publicado de `createPayment` diverge da implementação em dois pontos
@@ -63,6 +65,9 @@ artefatos a favor de `analyst`+`manager` (código, release package) e 1 a favor 
 `manager` (docs/API.md), **sem norma que decida**. Contagem de artefatos não é
 critério de verdade normativa.
 
+> Estado da arbitragem em 2026-08-13: **resolvido** por **APR-2026-008** —
+> escrita restrita a `manager`. Ver Fechamento.
+
 Relevância de segurança: se o papel correto for `manager`, o defeito é de
 autorização — e, combinado com FIND-SIM-002-001, o analista hoje aprova o crédito
 e o consome, sem segregação de funções.
@@ -88,7 +93,7 @@ transposto por engano para a seção de pagamento do contrato. Erro documental
 isolado, sem ambiguidade normativa.
 
 RELATED_PROCESS: Registro de pagamento / publicação de contrato de API
-RELATED_BUSINESS_RULE: BR-SEC-001 (tangenciada); nenhuma BR arbitra o papel — lacuna normativa
+RELATED_BUSINESS_RULE: BR-SEC-001 (tangenciada); nenhuma BR arbitra o papel — lacuna normativa suprida por APR-2026-008 em 2026-08-13
 RELATED_REQUIREMENT: REQ-SIM2-003
 RELATED_USE_CASE: Criar pagamento
 RELATED_ACCEPTANCE_CRITERIA: AC-SIM2-003
@@ -109,6 +114,10 @@ Divergência A é potencialmente uma falha de autorização não decidida: enqua
 não houver norma, não é possível classificar se o código está permissivo demais
 ou o documento restritivo demais.
 
+> Atualização de 2026-08-13: com APR-2026-008 a condicional **resolveu-se contra o
+> código** — a divergência A passou a ser falha de autorização **confirmada**,
+> daí a re-elevação a HIGH.
+
 REPRODUCTION:
 1. `createPayment({ ..., user: { role: 'analyst', companyId: A } })` → sucesso (contra `docs/API.md:65`).
 2. Inspecionar o retorno → `status === 'created'` (contra `docs/API.md:67`).
@@ -123,6 +132,8 @@ REFERENCE:
 - `product/SIM-002/requirements/DATA_DICTIONARY.md:28` e `:44`
 - `product/SIM-002/SOFTWARE_RELEASE_PACKAGE.md:24-29` (AUTHORIZATION_MATRIX)
 - Regra 20 do `CLAUDE.md` (divergência resolve-se por evidência → teste → requisito → regra → responsável humano) e Regra 21 (contradição entre documento e código interrompe a decisão)
+- `CLAUDE.md`, **Regra 24** (papel autodeclarado sem verificação server-side)
+- `coretriad/governance/APPROVALS.md` — **APR-2026-008**
 
 RECOMMENDATION:
 Divergência B: corrigir `docs/API.md:67` para `status: "created"` — a fonte
@@ -217,7 +228,10 @@ linha, sem invenção de regra). Divergência A **não segue** — human gate, R
 
 ---
 
-## Fechamento parcial (software-audit-director)
+## Fechamento parcial (software-audit-director) — ondas A/B/C, HISTÓRICO
+
+> Preservado como registro do estado anterior. Superado pelo **Fechamento**
+> abaixo, que é a decisão vigente.
 
 DATA: 2026-08-13
 REMEDIATION_COMMIT ACEITO: `f0aaa7a` (WAVE-A) — **exclusivamente** quanto à
@@ -234,7 +248,7 @@ remanescente de `pending` na seção de pagamentos. Item 1 da
 `RETEST_SPECIFICATION` atendido. Suíte 20/20; a alteração é documental e não
 produz efeito em código.
 
-### Divergência A — papel exigido: **ABERTA, RETEST_NOT_APPLICABLE**
+### Divergência A — papel exigido: **ABERTA, RETEST_NOT_APPLICABLE** (à época)
 
 A linha do papel `manager` em `docs/API.md:65` **não foi alterada**, e o runner
 confirmou **empiricamente** que `analyst` consegue criar pagamento. A contradição
@@ -246,38 +260,103 @@ O item 2 da `RETEST_SPECIFICATION` **não é executável**: pressupõe decisão 
 registrada que institua BR de papel para registro de pagamento, e tal decisão não
 existe no repositório.
 
-### Por que o finding NÃO é fechado
+### Por que o finding NÃO era fechado
 
 O item 3 da própria `RETEST_SPECIFICATION` é terminante: *"Sem a decisão humana da
 divergência A, o finding permanece aberto ainda que a divergência B esteja
 corrigida."* Fechar o finding inteiro exigiria que este diretor arbitrasse, por
-inferência, qual papel o negócio autoriza — vedado pela **Regra 18** (human gates
-não podem ser aprovados por memória ou inferência) e pela **Regra 6** (nenhum
-agente inventa regra de negócio). A **Regra 21** manda interromper a decisão
-diante de contradição entre documento e código sem fonte autoritativa, e é o que
-se faz aqui.
+inferência, qual papel o negócio autoriza — vedado pela **Regra 18** e pela
+**Regra 6**. A **Regra 21** manda interromper a decisão diante de contradição
+entre documento e código sem fonte autoritativa, e é o que se fez.
 
-STATUS RESULTANTE: **PARTIALLY_REMEDIATED** — não `CLOSED`.
+STATUS RESULTANTE (à época): **PARTIALLY_REMEDIATED**.
 
-### Alerta preservado (cláusula de reversão de severidade)
+---
 
-Reafirmo, para que não se perca no handoff: se a decisão humana estabelecer que
-**somente `manager`** pode registrar pagamento, a divergência A deixa de ser
-documental, torna-se defeito de autorização confirmado e **deve ser re-elevada a
-HIGH** no mesmo ato, com reavaliação de segregação de funções em conjunto com
-FIND-SIM-002-001 (cuja severidade CRITICAL não depende desta decisão).
+## Fechamento (software-audit-director)
 
-### Observação relacionada, a decidir no mesmo ato
+DATA: **2026-08-13**
+HUMAN GATE ATENDIDO: **APR-2026-008** (`coretriad/governance/APPROVALS.md`), lida
+integralmente por este diretor: **escrita** (criar e enviar pagamento) restrita a
+**`manager`**; **leitura** (consultar pagamentos e fornecedores) permitida a
+**`analyst` e `manager`**; e, em ambos os casos, **o papel deve ser verificado no
+servidor contra fonte confiável de identidade — nunca autodeclarado pelo
+cliente**. A decisão vincula-se expressamente à **Regra 24** do `CLAUDE.md` e
+manda **implementar** o padrão correto, não aceitar o risco.
+REMEDIATION_COMMIT ACEITO: **`b6d44da`** (WAVE-D) para a divergência A;
+`f0aaa7a` (WAVE-A) para a divergência B — ambos aceitos.
+RETEST_REPORT: `30-retest/RETEST_REPORT.md` §5.3
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner` — harness próprio, fora
+do repositório; working tree limpo antes e depois; suíte 49/49.
 
-**OBS-SIM-002-002** (`31-new-findings/NEW_OBSERVATIONS.md`): `getSupplier` e
-`listPaymentsBySupplier` também não verificam papel — usuário sem `role` ou com
-`role: "guest"` obtém a listagem —, enquanto `docs/API.md` exige
-`analyst|manager`. É **a mesma lacuna normativa** desta divergência A. Deve ser
-levada ao **mesmo human gate** e decidida em ato único, para não produzir norma de
-papel fragmentada e contraditória entre operações.
+### 1. Acionamento da cláusula de reversão de severidade — feito ANTES do veredito
 
-### Escalonamento
+A condição fixada pelo `vericore-finding-validator` ocorreu **literalmente**: a
+decisão humana estabeleceu que somente `manager` registra pagamento. Portanto, no
+mesmo ato, a divergência A deixa de ser contradição documental e passa a ser
+**defeito de autorização confirmado**; a severidade é **re-elevada de MEDIUM para
+HIGH**. Faço a re-elevação **antes** de julgar o reteste, deliberadamente, para
+que o fechamento recaia sobre a severidade correta e não sobre a severidade
+conveniente. O finding fecha como **HIGH**, não como MEDIUM.
 
-Escalado ao responsável humano (Regra 21) em conjunto com FIND-SIM-002-004 e
-FIND-SIM-002-009. Sem essa decisão, o run SIM-002-AUD-001 não pode ser declarado
-`AUDIT_PASSED` — ver `30-retest/RETEST_REPORT.md` §3.
+Reavaliação de segregação de funções (exigida pela cláusula, em conjunto com
+FIND-SIM-002-001): com alçada de aprovação em 10000 para `analyst` e
+criação/envio de pagamento restritos a `manager`, **concessão e consumo de
+crédito deixam de ser exercíveis pelo mesmo papel**. A segregação ausente passa a
+existir no plano dos papéis. **Ressalva material:** ela só é efetiva se o papel
+for confiável, e é exatamente esse pressuposto que o **FIND-SIM-002-014**
+(`approveSupplier` com papel autodeclarado) põe em questão do lado da aprovação.
+
+### 2. Resultado do reteste (divergência A)
+
+- `createPayment` e `sendPayment`: `analyst` → **RECUSADO**; `manager` →
+  **ACEITO**. O código convergiu para `docs/API.md:65`, isto é, para a norma
+  aprovada — e não o documento para o código.
+- Leitura (`getSupplier`, `listPaymentsBySupplier`): funciona para `analyst` e
+  `manager`, conforme a parte de leitura da APR-2026-008. Isso **remedia também a
+  OBS-SIM-002-002**, decidida no mesmo ato, como este diretor havia exigido para
+  não produzir norma de papel fragmentada entre operações.
+- Usuário inexistente → **RECUSADO** (*"Usuário não autenticado"*).
+- **Teste decisivo de procedência do papel:** payload declarando `role:'manager'`
+  **falso**, cujo registro em `users` diz `analyst` → **RECUSADO nas duas
+  escritas**. O papel vem do **banco**, não do payload. É a prova da parte mais
+  exigente da APR-2026-008 e da Regra 24 — obtida por **comportamento**, não por
+  leitura de código, o que a torna resistente a reorganizações internas.
+- Isolamento de tenant reconfirmado sem regressão no código integrado
+  (RETEST_REPORT §5.4).
+
+### 3. Decisão: fechamento **integral** (divergências A e B)
+
+Fecho o finding **integralmente**. Fundamento e fronteira:
+
+1. A divergência B fechou na WAVE-A. A divergência A tinha **um único obstáculo
+   declarado** — a inexistência de árbitro normativo. O árbitro existe
+   (APR-2026-008), o código foi alinhado **à norma**, e o alinhamento foi medido,
+   inclusive contra papel forjado. A cláusula terminante do item 3 da
+   `RETEST_SPECIFICATION` ("sem a decisão humana ... permanece aberto") tinha por
+   condição a **ausência** da decisão; a condição cessou.
+2. O que resta do item 2 da spec é **convergência documental de um terceiro
+   artefato** (`SOFTWARE_RELEASE_PACKAGE.md:28`, que no `AUDIT_COMMIT` declara
+   `analyst, manager` como permitidos), a **formalização da norma como BR com ID**
+   em `requirements/BUSINESS_RULES.md` (Regra 17 — a Regra 18 já está satisfeita
+   pelo registro em `APPROVALS.md`) e a **existência do caso negativo na suíte
+   versionada**. Nenhum desses três altera o defeito de autorização, que está
+   provado extinto; e nenhum é verificável por este diretor sem delta audit, já
+   que a inspeção disponível no working tree corresponde ao `AUDIT_COMMIT`.
+   Saem como **OBS-SIM-002-006**, com instrução expressa: se o delta audit
+   encontrar `SOFTWARE_RELEASE_PACKAGE.md:28` ainda divergente, **abra-se finding
+   documental próprio — este não se reabre**.
+3. Manter um HIGH de autorização aberto para carregar pendência documental
+   descreveria mal o risco real e é o tipo de imprecisão que esta auditoria
+   recusou em outros pontos.
+
+### 4. Autoridade e limites
+
+`RETEST_PASSED` e `FINDING CLOSED` declarados nos termos da **Regra 4** do
+`CLAUDE.md` — competência exclusiva da VeriCore, sobre o `REMEDIATION_COMMIT`
+identificado `b6d44da`, com reteste independente. Este diretor **não** declara
+`REMEDIATION COMPLETE` (Regra 3) e não tocou no objeto auditado (Regra 2). O
+fechamento **não** implica `AUDIT_PASSED` do run — ver `30-retest/RETEST_REPORT.md`
+§6.
+
+STATUS RESULTANTE: **CLOSED** — severidade final **HIGH**.

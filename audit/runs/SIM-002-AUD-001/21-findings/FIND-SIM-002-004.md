@@ -9,10 +9,15 @@ DOMAIN: Rastreabilidade / Integridade financeira
 SUBDOMAIN: UNDOCUMENTED BEHAVIOR
 SEVERITY: CRITICAL
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: traceability, documentation-consistency, authorization, data-integrity, idempotency, business-rule, database (7 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
+HUMAN_GATE: APR-2026-007 (`coretriad/governance/APPROVALS.md`) — 2026-08-13
+REMEDIATION_COMMIT: b6d44da (WAVE-D)
+RETEST_RESULT: RETEST_PASSED
+CLOSED_BY: vericore-software-audit-director — 2026-08-13
+RESIDUAL_CARVED_OUT: OBS-SIM-002-007 (papel autorizado a cancelar pagamento `created` — sem árbitro normativo)
 
 DESCRIPTION:
 A função exportada `cancelPayment` não possui origem documental alguma — não há
@@ -73,7 +78,7 @@ requisito já governa o cálculo do teto de crédito e a elegibilidade de envio.
 
 RELATED_PROCESS: Cancelamento de pagamento (processo não formalizado)
 RELATED_BUSINESS_RULE: BR-SEC-001 (violada — escrita sem tenant/sujeito); BR-PAY-002 (violada por encadeamento); BR-PAY-001 (impactada — liberação de crédito sem controle)
-RELATED_REQUIREMENT: **nenhum** (código sem requisito)
+RELATED_REQUIREMENT: **nenhum** (código sem requisito) — suprido a posteriori por APR-2026-007
 RELATED_USE_CASE: **nenhum**
 RELATED_ACCEPTANCE_CRITERIA: **nenhum**
 RELATED_TEST: **nenhum**
@@ -119,6 +124,7 @@ REFERENCE:
 - `product/SIM-002/docs/API.md` (contrato completo, sem a operação)
 - `product/SIM-002/SOFTWARE_RELEASE_PACKAGE.md:18`
 - `audit/runs/SIM-002-AUD-001/07-traceability/TRACEABILITY_MATRIX.md` §2.1
+- `coretriad/governance/APPROVALS.md` — **APR-2026-007** (norma que passou a existir)
 
 RECOMMENDATION:
 **Não remediar antes de decisão humana.** É necessário definir formalmente se a
@@ -201,3 +207,85 @@ encadeada, mas os defeitos são independentes e as remediações distintas.
 **Não é duplicata.** O human gate declarado deve ser respeitado: nenhum
 encaminhamento à SanaCore antes da decisão humana registrada sobre a existência e
 a semântica da operação (Regra 18).
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: **2026-08-13**
+HUMAN GATE ATENDIDO: **APR-2026-007** — `cancelPayment` válido **apenas** para
+pagamentos em `created`; **não existe cancelamento após `sent`** (reverter envio
+seria estorno, operação distinta, fora do escopo do SIM-002). Decisão humana
+explícita e registrada em `coretriad/governance/APPROVALS.md`, lida integralmente
+por este diretor — Regra 18 satisfeita por leitura de artefato versionado, não
+por inferência nem por memória (Regras 8 e 10).
+REMEDIATION_COMMIT ACEITO: **`b6d44da`** (WAVE-D)
+RETEST_REPORT: `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §5.1
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner` — harness próprio, fora
+do repositório; código do `AUDIT_COMMIT` extraído via `git show` para comparação
+antes/depois; working tree limpo antes e depois.
+
+### Resultado do reteste
+
+| Cenário | `f2fcf1c` (antes) | `b6d44da` (depois) |
+|---|---|---|
+| Cancelar pagamento `created` | `cancelled` | `cancelled` — preservado |
+| Cancelar pagamento `sent` | **revertia** para `created`, zerava `sent_at`, mantinha `external_ref` | **RECUSADO**: *"Pagamento já enviado não pode ser cancelado; estorno é operação distinta"*; estado permanece `sent` |
+| Chamada cross-tenant | aceita (sem `user`, sem `company_id`) | **RECUSADA** — BR-SEC-001 |
+
+A diferença antes/depois está **comprovada por execução** sobre os dois estados
+do código, e não por leitura do diff — é o que dá a este fechamento valor
+probatório e não meramente declaratório. Suíte 49/49; não-regressão da integração
+verificada em §5.4 do RETEST_REPORT.
+
+Itens da `RETEST_SPECIFICATION` (hipótese 2 — operação mantida): exige `user`
+→ atendido; recusa chamador de outra empresa → atendido; sequência
+enviar→cancelar→enviar sem segunda movimentação → atendido **por extinção do
+caminho**; item 3 (nenhuma transição apaga `sent_at` mantendo `external_ref`) →
+atendido por remoção da transição.
+
+### O que está fechado
+
+(i) A transição `sent → created`; (ii) a duplicação financeira ilimitada
+encadeada com FIND-SIM-002-003; (iii) a escrita sem sujeito e sem tenant;
+(iv) a ausência de origem normativa — que deixou de existir com APR-2026-007.
+
+### O que NÃO está fechado e sai como item próprio
+
+**Qual papel pode cancelar um pagamento `created`.** A APR-2026-007 definiu
+*quais estados* são canceláveis; **não** definiu *quem* cancela. O item da
+`RETEST_SPECIFICATION` "recusa papel sem alçada" permanece, portanto, sem oráculo,
+e este diretor **não** o supre por analogia com a APR-2026-008 (que trata de
+pagamento, não de cancelamento) — Regras 6 e 18. Registrado como
+**OBS-SIM-002-007** em `31-new-findings/NEW_OBSERVATIONS.md`, escalado a human
+gate. Impacto residual: cancelar `created` libera crédito comprometido
+(`paymentService.js:31`) sem alçada e, enquanto FIND-SIM-002-012 estiver aberto,
+sem trilha. **Sem duplicação financeira nesse caminho.**
+
+Igualmente não coberta: a segunda metade do item 3 da spec ("a alteração deve
+deixar trilha auditável") — permanece endereçada por FIND-SIM-002-012, aberto.
+
+### Por que isso não impede o fechamento
+
+O **objeto** deste finding — comportamento sem requisito, revertendo envio, sem
+sujeito, com duplicação financeira encadeada — está extinto e provado extinto.
+Manter um CRITICAL aberto para carregar uma pendência normativa distinta (papel de
+cancelamento, sem dano financeiro demonstrado) descreveria mal o risco e degradaria
+a precisão do registro de auditoria. Diferentemente do FIND-SIM-002-008 nas ondas
+anteriores, cuja `RETEST_SPECIFICATION` continha cláusula **terminante** de não
+fechamento, a spec deste finding enuncia **cobertura mínima** de reteste.
+
+### Efeito colateral registrado
+
+Com a recusa de cancelar pagamento `sent`, o caminho enviar→cancelar→enviar deixou
+de existir e a **OBS-SIM-002-003** extingue-se por **perda de objeto** — registrado
+e não presumido, como a própria observação exigia. Ver RETEST_REPORT §5.2.
+
+### Autoridade
+
+`RETEST_PASSED` e `FINDING CLOSED` declarados nos termos da **Regra 4** do
+`CLAUDE.md` — competência exclusiva da VeriCore. Este diretor **não** declara
+`REMEDIATION COMPLETE` (Regra 3, autoridade da SanaCore) e não alterou o objeto
+auditado (Regra 2).
+
+STATUS RESULTANTE: **CLOSED** (com as delimitações acima).

@@ -127,27 +127,115 @@ não no teste dinâmico.
 
 ---
 
+## 4-B. Segunda rodada — human gates destravados e integração (WAVE-D)
+
+Em 2026-08-13 o responsável humano registrou as decisões que faltavam
+(`APR-2026-007/008/009`), criando as regras de negócio ausentes que impediam a
+remediação. A SanaCore executou a **WAVE-D**, que integrou as três ondas
+anteriores e remediou os três findings destravados. REMEDIATION_COMMIT
+`b6d44da`; suíte **49/49**.
+
+### O merge escondia um defeito que teria enterrado duas correções
+
+WAVE-B (isolamento de tenant) e WAVE-C (integridade transacional) conflitaram
+nos mesmos serviços. A WAVE-B tornara `loadApprovedSupplier` assíncrona; a
+WAVE-C passou a chamá-la **dentro** de `db.transaction()`, que rejeita bloco
+assíncrono. Combinadas sem cuidado, a função devolveria uma Promise:
+`supplier.status` viraria `undefined` — a checagem de fornecedor aprovado nunca
+dispararia — e o `INSERT` gravaria `company_id` `undefined`. **As duas correções
+se perderiam ao mesmo tempo, silenciosamente.** A SanaCore detectou na
+resolução do conflito e tornou a função síncrona.
+
+### As três remediações, retestadas com antes/depois
+
+| Finding | O que mudou | Reteste independente |
+|---|---|---|
+| FIND-004 (`cancelPayment`) | Transição `sent→created` removida; só `created` cancela; operação ganhou sujeito e tenant | Cancelar `sent` → RECUSADO, status permanece `sent`. **Antes**: revertia para `created`, zerava `sent_at` e mantinha `external_ref` |
+| FIND-008-A + OBS-002 (papéis) | Tabela `users` + módulo `identity.js`: papel e empresa resolvidos **do banco** pelo `user.id`, descartando o que o payload declara. Escrita = `manager`, leitura = `analyst`+`manager` | **Teste decisivo**: payload com `role:'manager'` falso, cujo registro em `users` diz `analyst` → RECUSADO nas duas escritas. `grep` confirma que `user.role`/`user.companyId` não são mais lidos do payload |
+| FIND-009 (recusa do gateway) | Estado `failed` no domínio, com `CHECK` no DDL; gateway injetável para tornar a recusa exercitável | Gateway recusando → `status:"failed"`, sem `external_ref`/`sent_at`. **Antes**: ficava `sent` mesmo recusado |
+
+Não-regressão da integração reconfirmada no código integrado: isolamento de
+tenant (B), idempotência (C), CNPJ único global (C) e alçada `analyst`=10000 (A).
+**Nenhum item do reteste falhou.**
+
+### O diretor re-elevou severidades antes de fechar
+
+Duas cláusulas de re-elevação deixadas pelo `finding-validator` foram acionadas
+**antes** do julgamento, para que o fechamento recaísse sobre a severidade
+correta e não sobre a conveniente: FIND-008 e FIND-009 voltaram de MEDIUM para
+**HIGH** e só então foram fechados. FIND-008 fechou **integralmente** porque seu
+único obstáculo declarado — ausência de árbitro normativo — cessou com a
+APR-2026-008, e o código convergiu **para a norma**, não o contrário.
+
+Uma observação foi **extinta por perda de objeto**: com a recusa de cancelar
+pagamento `sent`, o caminho enviar→cancelar→enviar deixou de existir, e a defesa
+da BR-PAY-002 deixou de repousar sobre a dedup do gateway não auditável — o
+residual do FIND-003 desapareceu como consequência da correção do FIND-004.
+
+### Um novo finding nasceu da própria remediação
+
+A SanaCore declarou espontaneamente um risco residual que não podia corrigir:
+**`approveSupplier` ainda decide alçada por `approver.role` autodeclarado.** A
+APR-2026-008 cobriu criar/enviar/ler pagamento, mas não a alçada de *aprovação*,
+e estender a decisão sozinha violaria a Regra 6. O diretor formalizou como
+**FIND-SIM-002-014 (HIGH)** e verificou que é defeito **do objeto auditado**, não
+de commit posterior.
+
+A dosagem da severidade foi argumentada nos dois sentidos: não CRITICAL porque a
+própria Regra 24 traz a ressalva para simulados e o SIM-002 não tem transporte,
+autenticação nem dado real; não MEDIUM porque o papel forjado **anula na prática**
+o controle fechado como CRITICAL no FIND-001, não há lacuna normativa atenuante
+(existem Regra 24 *e* APR-2026-008 para este mesmo produto) e o `paymentService`
+já provou a viabilidade da correção. Ficaram registradas cláusulas simétricas de
+elevação e de rebaixamento, para não enviesar o `finding-validator`.
+
+O diretor também assumiu uma **lacuna de cobertura do próprio run**: a coverage
+matrix declarava ter coberto "todos os pontos de decisão de papel" citando
+exatamente essas linhas — a trilha as leu, pegou o valor errado da alçada e não
+questionou a **procedência** do papel.
+
+---
+
 ## 5. Estado final e o que continua aberto
 
-**7 findings CLOSED** (001, 002, 003, 005, 006, 007, 011) · **1 parcial** (008,
-divergência B fechada, A em human gate) · **5 abertos** (004, 009, 010, 012, 013).
+**10 findings CLOSED de 14** (001, 002, 003, 004, 005, 006, 007, 008, 009, 011)
+· **nenhum CRITICAL aberto** · **4 abertos**: FIND-014 (HIGH, novo), FIND-010 e
+FIND-012 (MEDIUM), FIND-013 (LOW).
 
-O diretor **recusou declarar `AUDIT_PASSED`** para o run, com cinco motivos
-objetivos — sendo o primeiro suficiente sozinho: FIND-004 é CRITICAL confirmado
-e aberto. Também: três itens em human gate que a Regra 18 proíbe suprir por
-inferência; três MEDIUM/LOW ainda `PROPOSED` sem aceitação de risco registrada
-("não remediado" não é "aceito"); lacunas vivas na coverage matrix — incluindo,
-ironicamente, o gateway real não auditável, exatamente onde a defesa do FIND-003
-passou a repousar; e o fato de as correções viverem em commits posteriores ao
-`AUDIT_COMMIT`, o que exige delta audit pelas Regras 12–14.
+O diretor **manteve a recusa de `AUDIT_PASSED`**, agora com dois fundamentos
+independentes e cada um suficiente sozinho:
 
-**Human gates abertos, para decisão sua:**
+1. **Há finding HIGH aberto sobre o próprio objeto auditado** (FIND-014), não
+   validado, não decidido e não remediado — e que **condiciona a eficácia
+   prática de dois fechamentos deste mesmo run**: FIND-001 (alçada) e FIND-008
+   (papéis) pressupõem papel confiável. A APR-2026-005 aceitou risco análogo
+   **restrito ao SIM-001** e diz que não se estende; a APR-2026-008 mandou
+   **implementar** no SIM-002, não aceitar. Estender por analogia é o que a
+   Regra 6 proíbe.
+2. **O estado aprovável não é o estado auditado.** As correções vivem em quatro
+   commits posteriores ao `AUDIT_COMMIT`. Aprovar `f2fcf1c` seria aprovar o
+   estado com os 13 findings; aprovar `b6d44da` seria aprovar um commit nunca
+   auditado. Regras 12–14: exige **delta audit**.
+
+O diretor registrou também o que a decisão **não** significa: não é reprovação
+da SanaCore — os cinco retestes passaram, e foi a própria SanaCore quem declarou
+o risco residual que virou o FIND-014, recusando-se a extrapolar decisão humana.
+E não impede o fechamento do SIM-002 **como ciclo de validação**.
+
+**Condições exaustivas para `AUDIT_PASSED`**, conforme registrado: (a) FIND-014
+validado e remediado **ou** com risco aceito registrado; (b) registro formal de
+010/012/013 em `APPROVALS.md` — **feito**, `APR-2026-010`; (c) delta audit sobre
+`b6d44da` com nova matriz que exija **procedência** de atributos de autorização;
+(d) disposição das observações abertas.
+
+**Human gates abertos, para decisão sua** (o diretor recomenda ato único, para
+não repetir a fragmentação normativa que a APR-2026-008 corrigiu):
 
 | Item | Decisão necessária |
 |---|---|
-| FIND-004 (D2) — `cancelPayment` | A operação deve existir? Qual a semântica de cancelar um pagamento já enviado (estorno? status próprio? proibição)? Sem regra escrita, ninguém pode remediar sem inventar requisito |
-| FIND-008-A + OBS-002 | Qual papel o negócio exige para registrar pagamento (`manager` ou `analyst`+`manager`)? A mesma decisão resolve o papel não verificado nas leituras — o diretor pediu ato único |
-| FIND-009 | Qual o estado de um pagamento que o gateway recusa? O dicionário só admite `created`/`sent`/`cancelled` |
+| **FIND-014** — alçada de `approveSupplier` | Estender a APR-2026-008 à aprovação (papel do banco também aqui), ou aceitar o risco restrito ao SIM-002 e registrar? |
+| **OBS-007** — papel de `cancelPayment` | Quem pode cancelar um pagamento `created`? Hoje `analyst`+`manager`, não arbitrado |
+| **OBS-008-c** — retentativa de `failed` | Existe limite de retentativa para pagamento recusado pelo gateway? |
 
 ---
 
@@ -155,16 +243,18 @@ passou a repousar; e o fato de as correções viverem em commits posteriores ao
 
 | Critério (skill `/coretriad-sim002`) | Resultado |
 |---|---|
-| 8/8 classes detectadas | **ATENDIDO** — 8/8, por múltiplas trilhas independentes, sem acesso ao gabarito |
-| Findings validados | **ATENDIDO** — validator adversarial, 0 falsos positivos, 2 severidades contestadas |
-| Remediações retestadas | **ATENDIDO** — reteste independente com reprodução do bug original |
-| Remediações fechadas pela VeriCore | **ATENDIDO PARA O QUE FOI REMEDIADO** — 7 CLOSED; D2 não foi remediado porque o próprio sistema o bloqueou em human gate, por não existir regra de negócio que defina o comportamento correto |
+| **8/8 classes detectadas** | **ATENDIDO** — 8/8, por múltiplas trilhas independentes, sem acesso ao gabarito e sem saber quantas eram. Zero falsos negativos |
+| **Findings validados** | **ATENDIDO** — validator adversarial buscou refutação em todas as camadas; 0 falsos positivos; 2 severidades rebaixadas com justificativa e depois re-elevadas antes do fechamento |
+| **Remediações retestadas** | **ATENDIDO** — 5 retestes independentes com scripts fora do repositório; o código original foi extraído do `AUDIT_COMMIT` e rodado no mesmo harness para provar o antes/depois |
+| **Remediações fechadas pela VeriCore** | **ATENDIDO** — **as 8 classes plantadas estão CLOSED** (10 de 14 findings, nenhum CRITICAL aberto) |
 
-O único item da matriz de defeitos que não chegou a `CLOSED` é o D2 — e ele parou
-por **funcionamento correto** do modelo, não por falha: a SanaCore não podia
-corrigir sem inventar uma regra (Regra 6) e o diretor não podia fechar sem
-requisito (Regra 18). Um sistema que tivesse "resolvido" isso sozinho teria
-falhado no teste mais importante.
+**Os quatro critérios da skill estão atendidos.** As 8 classes de defeito
+plantadas foram detectadas, validadas, remediadas, retestadas de forma
+independente e fechadas pela autoridade correta.
+
+O que permanece aberto **não pertence à matriz de defeitos plantados**: é um
+finding HIGH (FIND-014) que o próprio ciclo descobriu durante a remediação, mais
+três pendências que você declarou não bloqueantes (`APR-2026-010`).
 
 ---
 
@@ -183,13 +273,22 @@ Além disso, o próprio ciclo encontrou e corrigiu **três defeitos no CoreTriad
 agente auditor que tinha a oportunidade de explorá-los e não o fez.
 
 **`CORETRIAD OPERATIONALLY VALIDATED` NÃO é declarado por este relatório.** A
-declaração é decisão humana (Regra 18) e está apresentada abaixo com o que
-pesa dos dois lados:
+declaração é decisão humana (Regra 18). Os dois lados, para sua decisão:
 
-- **A favor:** os quatro critérios da skill estão atendidos; o único item não
-  fechado parou por human gate legítimo, que é o modelo funcionando.
-- **Contra:** o run SIM-002-AUD-001 não é `AUDIT_PASSED`, um finding CRITICAL
-  (FIND-004) segue aberto, e três human gates aguardam decisão.
+- **A favor:** os **quatro critérios da skill estão atendidos**; as 8 classes
+  plantadas estão fechadas; nenhum CRITICAL aberto; o modelo demonstrou as
+  quatro propriedades que a Parte VII exige — detectar sem aviso, refutar antes
+  de confirmar, pegar remediação insuficiente, e impedir que quem corrige feche.
+- **Contra:** o run `SIM-002-AUD-001` **não é `AUDIT_PASSED`**. Há um finding
+  HIGH aberto (FIND-014) que condiciona a eficácia prática de dois fechamentos
+  deste mesmo run, e o estado corrigido (`b6d44da`) nunca foi auditado —
+  exigindo delta audit pelas Regras 12–14.
+
+**A distinção que importa:** `AUDIT_PASSED` é veredito sobre **o produto
+SIM-002**; `CORETRIAD OPERATIONALLY VALIDATED` é veredito sobre **a máquina que
+o auditou**. Um produto simulado reprovado por um sistema que o auditou
+corretamente é evidência *a favor* da máquina, não contra ela — foi o próprio
+CoreTriad que recusou aprovar o que não podia.
 
 Se você decidir declarar, o próximo passo é o **programa `ERP-LEGACY-001`**
 (Parte VIII do Master Spec): onboarding formal do ERP existente, baseline

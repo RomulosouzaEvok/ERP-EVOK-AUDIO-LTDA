@@ -16,6 +16,7 @@ responsável humano na sessão indicada.
 | APR-2026-007 | 2026-08-13 | Gilwagno | **FIND-SIM-002-004 — semântica de `cancelPayment` definida** | Ver detalhamento abaixo. |
 | APR-2026-008 | 2026-08-13 | Gilwagno | **FIND-SIM-002-008-A + OBS-002 — matriz de papéis de pagamento definida** | Ver detalhamento abaixo. |
 | APR-2026-009 | 2026-08-13 | Gilwagno | **FIND-SIM-002-009 — estado `failed` criado para recusa do gateway** | Ver detalhamento abaixo. |
+| APR-2026-010 | 2026-08-13 | Gilwagno | **FIND-SIM-002-010/012/013 — mantidos `PROPOSED`, não bloqueantes** | Ver detalhamento abaixo. |
 
 ---
 
@@ -86,6 +87,34 @@ verificavam. O diretor pediu decisão em ato único para os dois itens.
 **Vínculo normativo:** é a aplicação direta da **Regra 24 do `CLAUDE.md`**
 (origem APR-2026-005/OBS-SIM-001-A). O SIM-002 é ambiente de validação, mas a
 decisão manda implementar o padrão correto, não aceitar o risco.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-010 — FIND-SIM-002-010/012/013 (pendências não bloqueantes)
+
+**Contexto:** três findings do SIM-002 permaneceram `PROPOSED` sem relação com
+os human gates das aprovações 007/008/009: FIND-010 (*lost update* em
+`approveSupplier` por check-then-act sem CAS), FIND-012 (schema sem `CHECK` de
+domínio, sem `updated_at`, `payments.company_id` sem FK composta) e FIND-013
+(lacunas de fronteira e testes negativos, mensagens de erro divergentes, status
+`rejected` órfão, índices ausentes).
+
+**Decisão:** mesmo tratamento dado aos FIND-SIM-001-004/005/006 no APR-2026-006
+— **não bloqueiam o fechamento do ciclo**, mas permanecem **explicitamente
+rastreados como pendentes, não descartados**.
+
+**Ação pendente:** rodar o `vericore-finding-validator` neles antes do
+arquivamento definitivo do SIM-002, ou descartá-los junto com o ambiente do
+simulado caso se conclua que não têm valor de aprendizado. Enquanto isso não
+ocorrer, SIM-002 pode ser fechado como ciclo, porém **não arquivado**.
+
+**Nota de rastreabilidade:** esta entrada formaliza em `APPROVALS.md` a decisão
+que já constava em `coretriad/states/SIM-002/PROJECT_STATE.md`. A ausência foi
+apontada pelo `vericore-software-audit-director` no veredito final, que se
+recusou a tratar como decisão humana algo que não conseguia ler neste arquivo
+(Regras 8 e 18) — comportamento correto, e o registro é a correção.
 
 **Aprovado por:** Gilwagno — 13/08/2026.
 

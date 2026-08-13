@@ -7,13 +7,18 @@ PROJECT_ID: SIM-002
 TITLE: sendPayment marca status "sent" mesmo com recusa do gateway, e persiste tentativa e pagamento sem transação
 DOMAIN: Integridade de dados
 SUBDOMAIN: Máquina de estados / atomicidade de integração
-SEVERITY: MEDIUM
-SEVERITY_ORIGINAL: HIGH (rebaixada pelo finding-validator — ver Validação; re-elevação obrigatória antes de integração com gateway real)
+SEVERITY: HIGH
+SEVERITY_HISTORY: HIGH (auditoria) → MEDIUM (rebaixada pelo finding-validator) → **HIGH (re-elevada em 2026-08-13 por acionamento da cláusula de re-elevação, condição (b): APR-2026-009 normatizou o estado sob recusa)**
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: data-integrity, idempotency, database, business-rule (4 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
+HUMAN_GATE: APR-2026-009 (`coretriad/governance/APPROVALS.md`) — 2026-08-13
+REMEDIATION_COMMIT: b6d44da (WAVE-D)
+RETEST_RESULT: RETEST_PASSED
+CLOSED_BY: vericore-software-audit-director — 2026-08-13
+RESIDUAL_CARVED_OUT: OBS-SIM-002-008 (atomicidade não evidenciada; `CHECK` de status sem migração para bases preexistentes; ausência de política de retentativa para pagamento `failed`)
 
 DESCRIPTION:
 `sendPayment` calcula corretamente o resultado da tentativa (`accepted`/`failed`)
@@ -31,6 +36,9 @@ gateway.** REQ-SIM2-004 e AC-SIM2-004 (`requirements/REQUIREMENTS.md:47-58`)
 descrevem apenas o caminho de aceite; `docs/API.md:74-86` idem; `DATA_DICTIONARY.md:44`
 enumera somente `created`, `sent`, `cancelled` — não há status de falha. Trata-se,
 portanto, também de uma **lacuna normativa**.
+
+> Lacuna suprida em 2026-08-13 por **APR-2026-009**: criado o estado **`failed`**
+> no domínio de `payments.status`. Ver Fechamento.
 
 ACTUAL_BEHAVIOR:
 Com `response.accepted === false`, a trilha grava `result = 'failed'` e o
@@ -75,7 +83,7 @@ demonstrado dinamicamente sem substituir o gateway por um duplo de teste, e o
 comportamento do gateway real não é auditável neste escopo.
 
 RELATED_PROCESS: Envio de pagamento ao gateway externo
-RELATED_BUSINESS_RULE: BR-PAY-002 (integridade do envio); lacuna normativa — nenhuma BR define o estado sob recusa
+RELATED_BUSINESS_RULE: BR-PAY-002 (integridade do envio); lacuna normativa — nenhuma BR define o estado sob recusa (suprida por APR-2026-009)
 RELATED_REQUIREMENT: REQ-SIM2-004
 RELATED_USE_CASE: Enviar pagamento ao gateway
 RELATED_ACCEPTANCE_CRITERIA: AC-SIM2-004 (cobre apenas o caminho de aceite)
@@ -117,6 +125,7 @@ REFERENCE:
 - `product/SIM-002/requirements/DATA_DICTIONARY.md:44` e `:59`
 - `product/SIM-002/docs/API.md:74-86`
 - `product/SIM-002/SOFTWARE_RELEASE_PACKAGE.md:36` (KNOWN_LIMITATIONS: gateway simulado, sem integração real)
+- `coretriad/governance/APPROVALS.md` — **APR-2026-009**
 
 RECOMMENDATION:
 Duas ações distintas: (a) **normativa** — registrar requisito/BR definindo o
@@ -219,3 +228,79 @@ Registro a condição para o consolidador e para o diretor de auditoria.
 
 Ação (a) normativa: human gate (Regra 18) — **não** segue à SanaCore.
 Ação (b) técnica: só após (a), sob pena de o remediador inventar regra (Regra 6).
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: **2026-08-13**
+HUMAN GATE ATENDIDO: **APR-2026-009** (`coretriad/governance/APPROVALS.md`), lida
+integralmente: adiciona o estado **`failed`** ao domínio de `payments.status`
+(antes `created`/`sent`/`cancelled`), porque **recusa do gateway é causa distinta
+de cancelamento e deve ser rastreável separadamente**.
+REMEDIATION_COMMIT ACEITO: **`b6d44da`** (WAVE-D)
+RETEST_REPORT: `30-retest/RETEST_REPORT.md` §5.5
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner` — harness próprio, fora
+do repositório; código do `AUDIT_COMMIT` extraído via `git show`; working tree
+limpo antes e depois; suíte 49/49.
+
+### 1. Acionamento da cláusula de re-elevação — feito ANTES do veredito
+
+A condição (b) da cláusula ocorreu literalmente: a APR-2026-009 **é** o registro
+normativo do estado sob recusa. A condição (a) também se realizou no plano de
+teste — foi o duplo de gateway capaz de devolver `accepted:false` que tornou o
+defeito, enfim, **alcançável**. Severidade **re-elevada de MEDIUM para HIGH**
+antes do julgamento do reteste, para que o fechamento recaia sobre a severidade
+correta. O finding fecha como **HIGH**.
+
+### 2. Resultado do reteste — evidência antes/depois
+
+| Cenário: gateway **recusa** | `f2fcf1c` (antes) | `b6d44da` (depois) |
+|---|---|---|
+| `payments.status` | **`sent`** (contradizendo a trilha) | **`failed`** |
+| `payments.external_ref` | preenchido | **`null`** |
+| `payments.sent_at` | preenchido | **`null`** |
+| `payment_attempts.result` | `failed` | `failed` |
+
+A diferença está **comprovada por execução** nos dois estados do código. Registro
+um ganho probatório específico: a auditoria original só pôde provar este defeito
+**estaticamente**, porque o stub tornava o ramo de recusa inalcançável — a
+limitação declarada na própria EVIDENCE. O reteste o provou **dinamicamente**,
+encerrando essa limitação para este ponto.
+
+Itens da `RETEST_SPECIFICATION`: item 1 → atendido (com o reforço de
+`external_ref` nulo, o que evita contaminar conciliação futura com referência de
+gateway inexistente); item 2 (coerência cruzada trilha × estado) → atendido;
+item 4 (não-regressão com gateway aceitando) → atendido (49/49 e RETEST_REPORT
+§5.4); item 5 (pré-condição normativa) → atendido por APR-2026-009 — sem ela o
+reteste seria inválido, com ela é válido.
+
+### 3. O que NÃO está coberto por este fechamento
+
+- **Item 3 — atomicidade** (falha simulada entre as duas escritas): **não
+  evidenciada**. Não a converto em bloqueio porque o próprio finding-validator já
+  a havia **rebaixado a observação residual LOW**, demonstrando que `db.run` é
+  síncrono e as chamadas consecutivas, com janela desprezível em processo único.
+  Transformar agora em condição de fechamento uma subalegação refutada por
+  evidência seria incoerente com a validação deste mesmo finding.
+- **Migração do `CHECK` de `payments.status`**: a constraint **não retroage a
+  bases preexistentes** — não há script de migração. Em base já povoada, o novo
+  domínio não é imposto.
+- **Política de retentativa/expiração para pagamento `failed`**: inexistente. O
+  estado `failed` cria uma pergunta que antes não existia — o que fazer com o
+  pagamento recusado — e a norma aprovada não a responde. **Não é defeito do que
+  foi remediado**; é lacuna normativa nova, e por isso segue a human gate como
+  observação, não como finding.
+
+Os três itens vão para **OBS-SIM-002-008** em
+`31-new-findings/NEW_OBSERVATIONS.md`.
+
+### 4. Autoridade e limites
+
+`RETEST_PASSED` e `FINDING CLOSED` declarados nos termos da **Regra 4** do
+`CLAUDE.md`, sobre o `REMEDIATION_COMMIT` identificado `b6d44da`, com reteste
+independente. Este diretor **não** declara `REMEDIATION COMPLETE` (Regra 3) e não
+alterou o objeto auditado (Regra 2). O fechamento **não** implica `AUDIT_PASSED`
+do run — ver `30-retest/RETEST_REPORT.md` §6.
+
+STATUS RESULTANTE: **CLOSED** — severidade final **HIGH**.
