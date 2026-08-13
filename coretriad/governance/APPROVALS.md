@@ -13,6 +13,9 @@ responsável humano na sessão indicada.
 | APR-2026-004 | 2026-08-13 | Gilwagno (IMPLANTACAO@evokaudio.com) | **Versionamento do runtime CoreTriad** | `.gitignore` passa a versionar `.claude/agents/`, `.claude/hooks/`, `.claude/skills/` e `.claude/settings.json` (estado local `settings.local.json` permanece ignorado). Resolve o finding F1 de `docs/coretriad/planning/BOOTSTRAP_REVALIDATION_2026-08-13.md`. |
 | APR-2026-005 | 2026-08-13 | Gilwagno | **OBS-SIM-001-A — `RISK_ACCEPTED` restrito ao SIM-001 + diretriz permanente para projetos reais** | Ver detalhamento abaixo. |
 | APR-2026-006 | 2026-08-13 | Gilwagno | **FIND-SIM-001-004/005/006 — mantidos `PROPOSED`, não bloqueantes** | Ver detalhamento abaixo. |
+| APR-2026-007 | 2026-08-13 | Gilwagno | **FIND-SIM-002-004 — semântica de `cancelPayment` definida** | Ver detalhamento abaixo. |
+| APR-2026-008 | 2026-08-13 | Gilwagno | **FIND-SIM-002-008-A + OBS-002 — matriz de papéis de pagamento definida** | Ver detalhamento abaixo. |
+| APR-2026-009 | 2026-08-13 | Gilwagno | **FIND-SIM-002-009 — estado `failed` criado para recusa do gateway** | Ver detalhamento abaixo. |
 
 ---
 
@@ -41,6 +44,63 @@ deste arquivo para lembrar do padrão:
 
 **Escopo do risco aceito:** SIM-001 apenas. Esta aprovação **não** se estende a
 nenhum outro projeto, presente ou futuro.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-007 — FIND-SIM-002-004 (`cancelPayment`)
+
+**Contexto:** o `finding-validator` e o `software-audit-director` bloquearam o
+FIND-SIM-002-004 em human gate porque nenhum artefato versionado definia o
+comportamento correto de cancelar um pagamento — a SanaCore não podia corrigir
+sem inventar regra de negócio (Regra 6).
+
+**Decisão (regra de negócio nova, para o SIM-002):** `cancelPayment` é operação
+válida **apenas** para pagamentos em estado `created` — isto é, antes do envio
+ao gateway. **Não existe cancelamento após `sent`.** Reverter um pagamento já
+enviado seria **estorno**, operação distinta, fora do escopo deste simulado.
+
+**Ação de remediação:** remover a transição `sent → created` de `cancelPayment`;
+tentativa de cancelar pagamento já enviado deve ser recusada.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-008 — FIND-SIM-002-008-A e OBS-002 (papéis de pagamento)
+
+**Contexto:** `docs/API.md` exigia `manager` para criar pagamento enquanto o
+código aceitava `analyst`+`manager`, e nenhuma BR arbitrava. As leituras
+(`getSupplier`, `listPaymentsBySupplier`) declaravam papel exigido e não o
+verificavam. O diretor pediu decisão em ato único para os dois itens.
+
+**Decisão (regra de negócio nova, para o SIM-002):**
+- **Escrita** (criar e enviar pagamento): restrita ao papel **`manager`**.
+- **Leitura** (consultar pagamentos e fornecedores): permitida a **`analyst` e
+  `manager`**.
+- Em ambos os casos, **o papel deve ser verificado no servidor contra uma fonte
+  confiável de identidade — nunca autodeclarado pelo cliente**, incluindo nas
+  leituras que hoje não verificam papel algum.
+
+**Vínculo normativo:** é a aplicação direta da **Regra 24 do `CLAUDE.md`**
+(origem APR-2026-005/OBS-SIM-001-A). O SIM-002 é ambiente de validação, mas a
+decisão manda implementar o padrão correto, não aceitar o risco.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-009 — FIND-SIM-002-009 (recusa do gateway)
+
+**Contexto:** `sendPayment` marcava `status='sent'` mesmo quando o gateway
+recusava, e o dicionário de dados não previa nenhum estado para essa situação —
+lacuna normativa que impedia a remediação.
+
+**Decisão (regra de negócio nova, para o SIM-002):** adicionar o estado
+**`failed`** ao domínio de `payments.status` (hoje `created`/`sent`/`cancelled`).
+Recusa do gateway é **causa diferente** de cancelamento e deve ser rastreável
+separadamente.
 
 **Aprovado por:** Gilwagno — 13/08/2026.
 
