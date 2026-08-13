@@ -55,7 +55,49 @@ decisão explícita sobre se a fronteira de confiança é responsabilidade do m�
 futuro chamador. **Não infiro essa decisão** (Regras 6 e 18) — requer requisito versionado
 ou decisão humana registrada. Enquanto isso, a severidade acima é proposta, não declarada.
 
-STATUS: **OPEN — aguardando decisão de escopo do CoreTriad Director / responsável humano.**
+STATUS: **RISK_ACCEPTED (escopo SIM-001 apenas)** — decisão humana APR-2026-005; ver
+seção de decisão logo abaixo.
+
+STATUS ANTERIOR (preservado para rastreabilidade, Regra 15): *OPEN — aguardando decisão de
+escopo do CoreTriad Director / responsável humano.*
+
+### Decisão humana registrada — APR-2026-005
+
+REGISTRADO_POR: vericore-software-audit-director. Este é um **registro de decisão humana
+já tomada**, não uma decisão de auditoria: `RISK_ACCEPTED` é estado exclusivo do
+responsável humano na state machine, e nenhum agente VeriCore pode declará-lo por
+inferência (Regra 18).
+
+| Campo | Valor |
+|---|---|
+| APROVAÇÃO | APR-2026-005 (`coretriad/governance/APPROVALS.md`) |
+| APROVADOR | Gilwagno |
+| DATA | 2026-08-13 |
+| DECISÃO | `RISK_ACCEPTED` — **restrito ao escopo do simulado SIM-001** |
+
+**Justificativa registrada pelo aprovador:** SIM-001 é ambiente fictício de validação do
+CoreTriad — não é produto real, não possui dados reais, não possui usuário final e não
+possui exposição (sem persistência, sem transporte HTTP, sem superfície de ataque). O
+risco aceito não sai do ambiente do simulado.
+
+#### ⚠ LIMITE DA ACEITAÇÃO — NÃO SE ESTENDE A NENHUM PROJETO REAL
+
+Esta aceitação de risco vale **exclusivamente para SIM-001**. Ela **não** se estende a
+nenhum outro projeto, presente ou futuro, **incluindo `ERP-LEGACY-001`**.
+
+Em qualquer projeto real, o padrão **"papel/role declarado pelo cliente sem verificação
+server-side"** é finding **CRITICAL bloqueante para release** — e **nunca** pode ser
+tratado como `RISK_ACCEPTED` em produção.
+
+Para que nenhum auditor futuro dependa deste arquivo para lembrar do padrão, a diretriz
+foi normatizada em dois pontos de leitura obrigatória:
+- **`CLAUDE.md` — Regra 24** (documento sempre carregado em contexto).
+- **`docs/coretriad/CORETRIAD_MASTER_SPEC.md` — Parte IV §20**, trilha de
+  Segurança/Autorização (padrão de finding obrigatório).
+
+**Efeito no run:** OBS-SIM-001-A deixa de estar pendente de decisão de escopo e **não**
+será promovida a finding formal dentro de SIM-001-AUD-001. Nenhum `AUDIT_PASSED` decorre
+desta aceitação.
 
 ---
 
@@ -121,15 +163,19 @@ STATUS: **OPEN — hardening/backlog; sem finding aberto.**
 
 ## Consolidação e declaração
 
-| OBS | Fato | Classificação | Destino |
-|---|---|---|---|
-| OBS-SIM-001-A | `userRole` autodeclarado, sem autenticação | Novo finding a abrir (HIGH proposto) | Escopo + finding-validator (Regra 22) |
-| OBS-SIM-001-B | Cancelamento pós-início aceito e taxado | Lacuna de requisito | Backlog de produto — definir BR |
-| OBS-SIM-001-C | Status checado antes de autorização | INFO — vazamento de metadados | Hardening/backlog |
+| OBS | Fato | Classificação | Status | Destino |
+|---|---|---|---|---|
+| OBS-SIM-001-A | `userRole` autodeclarado, sem autenticação | Risco aceito por decisão humana (severidade HIGH proposta, nunca declarada) | **RISK_ACCEPTED (escopo SIM-001 apenas)** — APR-2026-005 | Encerrada no SIM-001; padrão normatizado como CRITICAL bloqueante em projeto real (CLAUDE.md Regra 24; Master Spec Parte IV §20) |
+| OBS-SIM-001-B | Cancelamento pós-início aceito e taxado | Lacuna de requisito | OPEN | Backlog de produto — definir BR |
+| OBS-SIM-001-C | Status checado antes de autorização | INFO — vazamento de metadados | OPEN | Hardening/backlog |
 
 Declaro, como **vericore-software-audit-director**, que nenhuma destas três observações
 foi considerada satisfeita, mitigada ou encerrada pelos `RETEST_PASSED` declarados em
 `30-retest/RETEST_REPORT.md`, e que o `FINDING CLOSED` de FIND-SIM-001-001, -002 e -003
-**não** as abrange. Nenhuma delas está declarada CLOSED. OBS-SIM-001-A é escalada ao
-CoreTriad Director e ao responsável humano para decisão de escopo antes de qualquer
-veredito global de auditoria (Regras 20 e 21).
+**não** as abrange. Nenhuma delas está declarada CLOSED.
+
+OBS-SIM-001-A foi escalada ao responsável humano (Regras 20 e 21) e teve o risco aceito
+por decisão humana explícita — **APR-2026-005, Gilwagno, 2026-08-13 — válida apenas dentro
+do escopo SIM-001**. `RISK_ACCEPTED` não é `CLOSED`, não é remediação e não é veredito de
+auditoria: registra que o responsável humano assumiu o risco no ambiente do simulado.
+OBS-SIM-001-B e OBS-SIM-001-C permanecem **abertas e inalteradas** por esta decisão.

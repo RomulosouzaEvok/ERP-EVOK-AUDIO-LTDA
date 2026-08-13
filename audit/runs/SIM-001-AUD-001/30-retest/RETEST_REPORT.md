@@ -287,3 +287,54 @@ do run (FIND-SIM-001-004, -005, -006) e da cobertura demonstrada na
 Observações levantadas durante os retestes e **não** absorvidas nestes fechamentos estão
 registradas separadamente em
 `audit/runs/SIM-001-AUD-001/31-new-findings/NEW_OBSERVATIONS.md`.
+
+---
+
+## Nota de encerramento do run (adendo — 2026-08-13)
+
+REGISTRADO_POR: vericore-software-audit-director
+NATUREZA: adendo de encerramento. Nada acima foi alterado — nenhum resultado de reteste,
+nenhum `RETEST_PASSED`/`RETEST_FAILED` e nenhum `FINDING CLOSED` foi revisto (Regra 15).
+
+**Estado final do run SIM-001-AUD-001:**
+
+| Item | Estado | Fonte |
+|---|---|---|
+| FIND-SIM-001-001 (CRITICAL) | **CLOSED** — commit `08b4323` | Bloco 1 |
+| FIND-SIM-001-002 (HIGH) | **CLOSED** — commit `0e76a1c` | Bloco 2 |
+| FIND-SIM-001-003 (HIGH) | **CLOSED** — commit `8297779` | Bloco 3 |
+| OBS-SIM-001-A | **RISK_ACCEPTED (escopo SIM-001 apenas)** — decisão humana | APR-2026-005, Gilwagno, 2026-08-13 |
+| OBS-SIM-001-B / OBS-SIM-001-C | OPEN (backlog / hardening) | `31-new-findings/NEW_OBSERVATIONS.md` |
+| FIND-SIM-001-004 / -005 / -006 | **PROPOSED** — mantidos por decisão humana | APR-2026-006, Gilwagno, 2026-08-13 |
+
+O `RISK_ACCEPTED` de OBS-SIM-001-A é **restrito ao SIM-001** e não se estende a nenhum
+projeto real: em projeto real, "papel/role declarado pelo cliente sem verificação
+server-side" é CRITICAL bloqueante para release (CLAUDE.md Regra 24; Master Spec Parte
+IV §20).
+
+### Este run continua SEM `AUDIT_PASSED`
+
+Reafirmo a ausência de veredito global. `AUDIT_PASSED` **não** é declarado, por duas
+razões objetivas e verificáveis:
+
+1. **Cobertura não demonstrada.** Não existe `AUDIT_COVERAGE_MATRIX` completa para este
+   run. O critério de conclusão da VeriCore proíbe afirmar "auditamos tudo" sem matriz de
+   cobertura; sem ela, não há base para veredito global.
+2. **Findings pendentes de validação.** FIND-SIM-001-004, -005 e -006 permanecem
+   `PROPOSED` e ainda não passaram pelo `vericore-finding-validator` — ação pendente
+   registrada em APR-2026-006.
+
+Adicionalmente, `RISK_ACCEPTED` (OBS-SIM-001-A) é aceitação humana de risco, não
+conformidade demonstrada — não produz nem substitui `AUDIT_PASSED`.
+
+### Compatibilidade com o encerramento do ciclo de validação
+
+A ausência de `AUDIT_PASSED` é **compatível** com o encerramento do SIM-001: o objetivo do
+SIM-001 era validar o funcionamento do ciclo CoreTriad (auditoria → finding → remediação →
+reteste → fechamento), e não emitir veredito de release sobre um produto fictício. O ciclo
+foi exercitado ponta a ponta, incluindo uma rodada de `RETEST_FAILED` com devolução à
+SanaCore — o que é, em si, evidência de que o controle funciona.
+
+Portanto, e conforme APR-2026-006: **SIM-001 está fechado como ciclo de validação e NÃO
+arquivado.** O arquivamento definitivo depende de rodar o `vericore-finding-validator`
+sobre FIND-SIM-001-004/-005/-006, ou de descartá-los junto com o ambiente do simulado.

@@ -19,6 +19,8 @@ State machine: `coretriad/states/STATE_MACHINE.md`
 | 2026-08-13 12:50 | IN_REMEDIATION | READY_FOR_RETEST | sanacore-remediation-engineer | SANACORE | Transição #13 — v2 com caminho admin implementado | REMEDIATION_COMMIT `08b4323`, suíte 9/9 |
 | 2026-08-13 13:00 | READY_FOR_RETEST | IN_RETEST | vericore-software-audit-director | VERICORE | Transição #14 — reteste da v2 | `audit/runs/SIM-001-AUD-001/30-retest/` |
 | 2026-08-13 13:30 | IN_RETEST | RETEST_PASSED | vericore-software-audit-director | VERICORE | Transição #15 — FIND-SIM-001-001 v2, FIND-SIM-001-002 e FIND-SIM-001-003 aprovados; 3 findings CLOSED | `audit/runs/SIM-001-AUD-001/30-retest/RETEST_REPORT.md` + os 3 finding files com STATUS `CLOSED` |
+| 2026-08-13 13:50 | — (human gate) | — (human gate) | Gilwagno (humano) | HUMAN | `RISK_ACCEPTED` para OBS-SIM-001-A — risco aceito restrito ao escopo do simulado SIM-001; diretriz permanente criada para projetos reais (Regra 24 do CLAUDE.md). Não é transição da state machine: estado do projeto permanece `RETEST_PASSED` | `coretriad/governance/APPROVALS.md` APR-2026-005 + `audit/runs/SIM-001-AUD-001/31-new-findings/NEW_OBSERVATIONS.md` |
+| 2026-08-13 13:55 | — (human gate) | — (human gate) | Gilwagno (humano) | HUMAN | FIND-SIM-001-004, FIND-SIM-001-005 e FIND-SIM-001-006 mantidos `PROPOSED` e declarados NÃO bloqueantes — fora do escopo de fechamento do SIM-001; não bloqueiam o relatório de validação nem o início do SIM-002. Não é transição da state machine: estado do projeto permanece `RETEST_PASSED` | `coretriad/governance/APPROVALS.md` APR-2026-006 |
 
 NOTA (coretriad-director): as transições intermediárias
 `IN_DEVELOPMENT → INTERNAL_VERIFICATION → READY_FOR_AUDIT → IN_AUDIT →
@@ -40,3 +42,12 @@ transições válidas da tabela de autoridade (#12, #13, #14, #16, #17, #13,
 anterior foi alterada (Regra 15). A transição #18
 (`RETEST_PASSED → READY_FOR_RELEASE`) NÃO foi executada — ver bloqueios
 registrados em `coretriad/states/SIM-001/PROJECT_STATE.md`.
+
+NOTA (coretriad-director, 2026-08-13 13:55): as 2 linhas de 13:50 e 13:55
+NÃO são transições da state machine — são decisões humanas explícitas
+(Regra 18) registradas em `coretriad/governance/APPROVALS.md` (APR-2026-005
+e APR-2026-006), por isso as colunas `from`/`to` trazem `— (human gate)`.
+Nenhum estado do projeto foi alterado por elas: SIM-001 permanece em
+`RETEST_PASSED`. O Director apenas registra a decisão humana e sua
+consequência de estado — não decide nem reclassifica finding/observação
+(Regras 5 e 6). Nenhuma entrada anterior foi alterada (Regra 15).

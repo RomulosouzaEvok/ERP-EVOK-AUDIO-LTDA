@@ -7,7 +7,8 @@
 | Tipo | SIMULATION |
 | Data de registro | 2026-08-13 |
 | Estado atual | `RETEST_PASSED` |
-| Última atualização | 2026-08-13 13:35 |
+| Situação do ciclo | FECHADO como ciclo de validação — **NÃO ARQUIVADO** |
+| Última atualização | 2026-08-13 13:55 |
 | State machine | `coretriad/states/STATE_MACHINE.md` |
 | Event log | `coretriad/states/SIM-001/PROJECT_EVENT_LOG.md` |
 | Skill em execução | `/coretriad-sim-close` |
@@ -48,25 +49,57 @@ RETEST (com 1 `RETEST_FAILED` proposital) → CLOSED.
   FIND-SIM-001-003 aprovados e `CLOSED`. Evidência:
   `audit/runs/SIM-001-AUD-001/30-retest/RETEST_REPORT.md`.
 
-## Bloqueios para `READY_FOR_RELEASE` (transição #18 NÃO executada)
+### Bloqueios anteriores — RESOLVIDOS por decisão humana (2026-08-13)
 
-O CoreTriad Director tem autoridade sobre a transição
-`RETEST_PASSED → READY_FOR_RELEASE` (#18), mas ela permanece **NÃO
-executada** pelos seguintes motivos registrados:
+Os dois itens que este Control Plane havia registrado como bloqueios do
+encerramento do SIM-001 foram resolvidos por decisão humana explícita
+(Regra 18) e **não bloqueiam mais** nem o fechamento do ciclo nem o início
+do SIM-002:
 
-1. **Auditoria do run ainda não encerrada.** O
-   `vericore-software-audit-director` não declarou `AUDIT_PASSED` para
-   SIM-001-AUD-001: FIND-SIM-001-004, -005 e -006 seguem em status
-   `PROPOSED` e a `AUDIT_COVERAGE_MATRIX` do run não foi emitida.
-   `RETEST_PASSED` cobre apenas os 3 findings remediados — não substitui o
-   encerramento do run de auditoria.
-2. **Observações novas abertas.** Há 3 observações registradas em
-   `audit/runs/SIM-001-AUD-001/31-new-findings/NEW_OBSERVATIONS.md`, das
-   quais **OBS-SIM-001-A** (`userRole` autodeclarado pelo cliente) foi
-   escalada para **decisão humana** — human gate aberto (Regra 18: só
-   decisão humana explícita registrada em
-   `coretriad/governance/APPROVALS.md` resolve).
+1. **OBS-SIM-001-A (`userRole` autodeclarado) — human gate FECHADO.**
+   `RISK_ACCEPTED` decidido por Gilwagno em `APR-2026-005`, com escopo
+   **restrito ao simulado SIM-001** (ambiente fictício, sem dados reais e
+   sem exposição). A aprovação não se estende a nenhum outro projeto. Para
+   projetos reais a mesma condição é finding **CRITICAL bloqueante de
+   release** — norma permanente registrada na **Regra 24 do `CLAUDE.md`** e
+   em `docs/coretriad/CORETRIAD_MASTER_SPEC.md` Parte IV §20.
+   Evidência: `coretriad/governance/APPROVALS.md` APR-2026-005 +
+   `audit/runs/SIM-001-AUD-001/31-new-findings/NEW_OBSERVATIONS.md`.
+2. **FIND-SIM-001-004, -005 e -006 — deixam de ser impeditivos.**
+   Permanecem em status `PROPOSED`, declarados **fora do escopo de
+   fechamento do SIM-001** e **não bloqueantes** por decisão de Gilwagno em
+   `APR-2026-006`: não bloqueiam o `SIM-001_VALIDATION_REPORT.md` nem o
+   início do SIM-002. O Director não reclassifica findings — apenas
+   registra a decisão humana (Regras 5 e 6).
 
-**Nota de escopo:** SIM-001 é projeto de validação do modelo operacional
-CoreTriad. **Não haverá release real** — as transições #19 (`RELEASED`),
-#20 e #21 não se aplicam a este projeto e não devem ser executadas.
+### Situação de encerramento: FECHADO como ciclo de validação, NÃO ARQUIVADO
+
+- **FECHADO como ciclo de validação.** O ciclo completo IDEA → BUILD →
+  AUDIT → FINDINGS → REMEDIATION → RETEST (incluindo o `RETEST_FAILED`
+  proposital e o loop de retorno) foi executado ponta a ponta, o relatório
+  de validação foi emitido e todos os findings CRITICAL/HIGH do escopo
+  estão `CLOSED` pela VeriCore.
+- **NÃO ARQUIVADO.** O arquivamento definitivo do SIM-001 depende da ação
+  pendente do `APR-2026-006`: rodar o `vericore-finding-validator` sobre
+  FIND-SIM-001-004, -005 e -006 — ou descartá-los junto com o ambiente do
+  SIM-001, caso se conclua que não têm valor de aprendizado para o
+  processo. Enquanto essa ação não ocorrer, o projeto permanece fechado
+  como ciclo, porém não arquivado.
+
+### Estado da state machine (sem alteração)
+
+- **Estado atual permanece `RETEST_PASSED`.** As duas decisões humanas de
+  13:50 e 13:55 são human gates registrados, **não** transições da tabela
+  de autoridade — estão no event log com `— (human gate)` nas colunas
+  `from`/`to`.
+- **O run de auditoria segue sem `AUDIT_PASSED`.** O
+  `vericore-software-audit-director` não declarou `AUDIT_PASSED` para
+  SIM-001-AUD-001 (FIND-SIM-001-004, -005 e -006 seguem `PROPOSED` e a
+  `AUDIT_COVERAGE_MATRIX` do run não foi emitida). `RETEST_PASSED` cobre
+  apenas os 3 findings remediados e não substitui o encerramento do run.
+  Somente a VeriCore pode declarar `AUDIT_PASSED` (Regras 2 e 4).
+- **SIM-001 não vai para `READY_FOR_RELEASE`.** A transição #18 NÃO foi e
+  não será executada: SIM-001 é projeto de validação do modelo operacional
+  CoreTriad e **não haverá release real**. As transições #19 (`RELEASED`),
+  #20 (`MONITORING`) e #21 (`CLOSED`) **não se aplicam** a este projeto e
+  não devem ser executadas.

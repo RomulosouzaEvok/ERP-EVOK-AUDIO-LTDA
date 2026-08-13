@@ -64,3 +64,28 @@ RETEST_SPECIFICATION:
 (b) TC-SIM-002c referenciando o REQ formalizado.
 (c) Teste para "Booking not found" se o comportamento for mantido.
 (d) Matriz de rastreabilidade sem itens órfãos para estes três comportamentos.
+
+---
+
+## Decisão de escopo (APR-2026-006)
+
+REGISTRADO_POR: vericore-software-audit-director (registro de decisão humana; nenhuma
+decisão de auditoria foi tomada neste ato)
+FONTE AUTORITATIVA: `coretriad/governance/APPROVALS.md` — APR-2026-006
+DECISOR HUMANO: Gilwagno
+DATA DA DECISÃO: 2026-08-13
+
+**STATUS INALTERADO:** este finding permanece `PROPOSED`. A decisão humana registrada
+aqui **não** altera severidade, confiança nem status — apenas delimita escopo e
+sequenciamento.
+
+**Decisão:** FIND-SIM-001-005 **não bloqueia** o `SIM-001_VALIDATION_REPORT.md` nem o
+início do SIM-002.
+
+**Ação pendente (não vence prazo, mas não pode ser esquecida):** rodar o
+`vericore-finding-validator` sobre este finding **antes** do arquivamento definitivo do
+SIM-001; alternativamente, descartá-lo junto com o ambiente do simulado caso se conclua
+que não tem valor de aprendizado para o processo.
+
+**Efeito sobre o run:** enquanto essa ação não ocorrer, SIM-001 está **fechado como ciclo
+de validação, porém não arquivado**. Nenhum `AUDIT_PASSED` é declarado por este registro.

@@ -46,6 +46,13 @@ Organizações:
     seguirem para remediação.
 23. Permissões são impostas por hooks e settings do Claude Code — o prompt
     é reforço, nunca o único mecanismo.
+24. **Papel/role declarado pelo cliente sem verificação server-side é finding
+    CRITICAL bloqueante para release em qualquer projeto real** — inclui
+    `role`/`userRole`/`isAdmin`/`perfil` vindos de body, query, header ou
+    payload de token não verificado. Nunca `RISK_ACCEPTED` em produção.
+    Origem: APR-2026-005 (OBS-SIM-001-A). Simulados de validação podem
+    aceitar o risco no próprio escopo; projetos reais, incluindo
+    `ERP-LEGACY-001`, não.
 
 ## Ownership de diretórios
 

@@ -298,6 +298,16 @@ ASVS quando aplicável. Autorização auditada separadamente
 (USER→ROLE→PERMISSION→RESOURCE→ACTION→DATA SCOPE → `AUTHORIZATION_MATRIX`),
 com atenção a acesso horizontal e cross-tenant.
 
+> **Padrão de finding obrigatório — identidade autodeclarada.** Todo auditor de
+> autorização deve verificar a ORIGEM do papel/permissão, não apenas se ele é
+> checado. Papel vindo do cliente sem verificação server-side (`role`,
+> `userRole`, `isAdmin`, `perfil` em body/query/header ou token não verificado)
+> é finding **CRITICAL bloqueante para release** em projeto real — um `if
+> (role === 'admin')` sobre valor autodeclarado é ausência de autorização, não
+> autorização. Não confundir com o caso "verificação ausente": são defeitos
+> distintos, com IDs próprios, e fechar um não fecha o outro. Ver Regra 24 do
+> `CLAUDE.md` e a aprovação APR-2026-005 (origem: OBS-SIM-001-A, SIM-001).
+
 **Testes:** unit, integration, contract, API, E2E, security, performance,
 regression, negative, boundary, state transition, authorization,
 concurrency, idempotency. Auditar **cobertura de comportamento e risco**,
