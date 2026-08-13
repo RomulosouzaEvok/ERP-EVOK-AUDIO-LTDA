@@ -66,6 +66,19 @@ const ORG_RULES = [
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
+// Artefatos selados: nenhum subagente lê, sob nenhuma ferramenta. Usado pelos
+// gabaritos de simulado (SIM-00N-answer-key) — um simulado cujo gabarito é
+// legível pelo auditor não mede capacidade de detecção nenhuma. Só a sessão
+// principal (sem contexto de subagente) tem acesso.
+const SEALED = /(^|[/\\])coretriad[/\\]locks[/\\].*answer-key|answer-key.*\.md$/i;
+
+function touchesSealed(input) {
+  for (const v of Object.values(input || {})) {
+    if (typeof v === 'string' && SEALED.test(v.replace(/\\/g, '/'))) return true;
+  }
+  return false;
+}
+
 function respond(decision, reason) {
   process.stdout.write(JSON.stringify({ decision, reason }));
   process.exit(0);
@@ -83,11 +96,24 @@ process.stdin.on('end', () => {
   }
 
   const tool = payload.tool_name || payload.tool || '';
-  if (!WRITE_TOOLS.has(tool)) return respond('approve', 'tool não é de escrita');
 
   const agent = String(
     payload.agent_type || payload.agent_name || payload.subagent_type || ''
   ).toLowerCase();
+
+  const isSubagent =
+    'agent_type' in payload ||
+    'agent_name' in payload ||
+    'subagent_type' in payload ||
+    'agent_id' in payload;
+
+  // Gabarito selado: bloqueio vale para QUALQUER ferramenta (Read, Grep, Glob,
+  // Bash, Write...) vinda de subagente, não só escrita.
+  if (isSubagent && touchesSealed(payload.tool_input || payload.input || {})) {
+    return respond('block', 'org-isolation: artefato SELADO (gabarito de simulado) — inacessível a subagentes.');
+  }
+
+  if (!WRITE_TOOLS.has(tool)) return respond('approve', 'tool não é de escrita');
 
   const input = payload.tool_input || payload.input || {};
   const rawPath = String(input.file_path || input.path || input.notebook_path || '');
