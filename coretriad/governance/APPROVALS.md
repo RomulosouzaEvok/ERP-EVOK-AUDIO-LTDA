@@ -20,6 +20,7 @@ responsável humano na sessão indicada.
 | APR-2026-011 | 2026-08-13 | Gilwagno | **FIND-SIM-002-014 — APR-008 estendida à aprovação de fornecedor** | Ver detalhamento abaixo. |
 | APR-2026-012 | 2026-08-13 | Gilwagno | **OBS-007 — cancelamento de pagamento restrito a `manager`** | Ver detalhamento abaixo. |
 | APR-2026-013 | 2026-08-13 | Gilwagno | **OBS-008-c — limite de 3 retentativas para pagamento `failed`** | Ver detalhamento abaixo. |
+| **APR-2026-014** | 2026-08-13 | Gilwagno | **`CORETRIAD OPERATIONALLY VALIDATED` — DECLARADO** | Ver detalhamento abaixo. |
 
 ---
 
@@ -90,6 +91,77 @@ verificavam. O diretor pediu decisão em ato único para os dois itens.
 **Vínculo normativo:** é a aplicação direta da **Regra 24 do `CLAUDE.md`**
 (origem APR-2026-005/OBS-SIM-001-A). O SIM-002 é ambiente de validação, mas a
 decisão manda implementar o padrão correto, não aceitar o risco.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-014 — CORETRIAD OPERATIONALLY VALIDATED
+
+**Declaração:** o modelo organizacional CoreTriad é declarado
+**`CORETRIAD OPERATIONALLY VALIDATED`** em 2026-08-13, conforme a Parte VII §10
+do `docs/coretriad/CORETRIAD_MASTER_SPEC.md`.
+
+**Autoridade:** decisão humana (Regra 18). Nenhum agente declarou nem poderia
+declarar isto.
+
+### Evidência — SIM-001 "Sala Livre"
+
+`docs/coretriad/planning/SIM-001_VALIDATION_REPORT.md` — **14/14 itens PASS**.
+Ciclo completo IDEA → BUILD → AUDIT → FINDINGS → REMEDIATION → **RETEST_FAILED**
+→ REMEDIATION v2 → RETEST_PASSED → CLOSED. 3/3 defeitos plantados detectados. A
+prova central: a remediação v1 tinha **suíte 100% verde** e mesmo assim foi
+reprovada, porque o reteste independente executou o `RETEST_SPECIFICATION` do
+finding em vez de confiar nos testes de quem corrigiu. Autoridade provada por
+enforcement: a SanaCore foi **tecnicamente impedida** de gravar o fechamento de
+um finding em `audit/`.
+
+### Evidência — SIM-002 "PagaFácil"
+
+`docs/coretriad/planning/SIM-002_VALIDATION_REPORT.md` — **8/8 classes de defeito
+detectadas** sobre produto realista com banco real, sem acesso ao gabarito e sem
+saber quantas eram. Zero falsos negativos, zero falsos positivos, mais 6 achados
+legítimos não plantados. O gabarito
+(`coretriad/locks/SIM-002-answer-key.md`) foi selado por **enforcement**, não por
+honra, e o selo resistiu a Read, Grep, Glob, Bash e `ls` — provado em
+TEST-SEAL-001/002. **11 findings fechados**, incluindo as 8 classes plantadas.
+
+### Os quatro critérios da skill `/coretriad-sim002`
+
+| Critério | Resultado |
+|---|---|
+| 8/8 classes detectadas | ATENDIDO |
+| Findings validados | ATENDIDO — validator adversarial, 0 falsos positivos, severidades contestadas e re-elevadas antes do fechamento |
+| Remediações retestadas | ATENDIDO — 6 retestes independentes, com o código original extraído do `AUDIT_COMMIT` e rodado no mesmo harness |
+| Fechadas pela VeriCore | ATENDIDO — as 8 classes plantadas CLOSED |
+
+### O que esta declaração NÃO significa
+
+1. **Não é `AUDIT_PASSED` do SIM-002.** O `vericore-software-audit-director`
+   manteve `AUDIT_PASSED = NÃO` para o run `SIM-002-AUD-001`, com **delta audit
+   como obstáculo único substantivo**: as correções vivem em commits posteriores
+   ao `AUDIT_COMMIT`, e aprovar `f2fcf1c` seria aprovar o estado com os 13
+   findings, enquanto aprovar `ac3e277` seria aprovar commit nunca auditado
+   (Regras 12–14). A recomendação registrada é congelar `ac3e277` e abrir
+   `SIM-002-AUD-002` como delta.
+   **Um produto simulado reprovado por um sistema que o auditou corretamente é
+   evidência a favor da máquina, não contra ela.**
+2. **Não arquiva SIM-001 nem SIM-002.** APR-2026-006 e APR-2026-010 exigem o
+   `finding-validator` nos findings `PROPOSED` antes do arquivamento definitivo,
+   ou descarte junto com o ambiente dos simulados.
+3. **Não dispensa os human gates abertos:** OBS-SIM-002-009 (quais papéis podem
+   aprovar fornecedor) e OBS-SIM-002-006(b) (tornar o texto do limite de
+   retentativa inequívoco em números).
+4. **Não revoga nenhuma norma permanente** — em especial a **Regra 24** do
+   `CLAUDE.md`, que vale integralmente para o `ERP-LEGACY-001`.
+
+### Efeito
+
+Libera a abertura do programa **`ERP-LEGACY-001`** (Parte VIII do master spec).
+O comando de abertura está preparado e **não executado** em
+`docs/coretriad/planning/ERP-LEGACY-001_OPENING_COMMAND.md`, aguardando gate
+humano próprio — a validação operacional do CoreTriad não é autorização para
+abrir o programa.
 
 **Aprovado por:** Gilwagno — 13/08/2026.
 

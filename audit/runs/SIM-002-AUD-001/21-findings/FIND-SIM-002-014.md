@@ -7,14 +7,25 @@ PROJECT_ID: SIM-002
 TITLE: approveSupplier decide alçada de crédito por papel autodeclarado pelo chamador, sem verificação server-side
 DOMAIN: Segurança / Autorização
 SUBDOMAIN: Procedência do atributo de autorização (Regra 24)
-SEVERITY: HIGH
+SEVERITY: **CRITICAL** — elevada de HIGH em 2026-08-13 pela **cláusula de elevação obrigatória, condição (c)**, acionada pela APR-2026-011 (ver `## Fechamento`). Severidade de abertura: HIGH.
 CONFIDENCE: CONFIRMED
-STATUS: PROPOSED
+STATUS: **CLOSED** — 2026-08-13 (anterior: `PROPOSED`; ver `## Fechamento (software-audit-director)`)
 DETECTED_BY: vericore-software-audit-director (a partir de risco residual declarado espontaneamente pela SanaCore na WAVE-D) — verificação independente por leitura direta do objeto auditado
 DATA_DE_ABERTURA: 2026-08-13
-VALIDATED_BY: — (pendente `vericore-finding-validator`, Regra 22)
-HUMAN_GATE: **exigido** — decisão sobre extensão da APR-2026-008 à alçada de aprovação, ou aceitação de risco registrada restrita ao SIM-002
-ELEVATION_CLAUSE: **CRITICAL** — ver "Cláusula de elevação obrigatória"
+DATA_DE_FECHAMENTO: 2026-08-13
+REMEDIATION_COMMIT: `ac3e277` (WAVE-E)
+VALIDATED_BY: — (`vericore-finding-validator` **não executado**; desvio da Regra 22 registrado e fundamentado no `## Fechamento`, item 5)
+HUMAN_GATE: **cumprido** — **APR-2026-011** (`coretriad/governance/APPROVALS.md`), 2026-08-13
+ELEVATION_CLAUSE: **acionada** — ver "Cláusula de elevação obrigatória" e `## Fechamento`
+
+> **Nota de integridade do registro.** Nada do conteúdo de abertura abaixo foi
+> alterado, suprimido ou reescrito. As únicas mudanças em relação à versão de
+> abertura são: (i) os campos de cabeçalho `SEVERITY`, `STATUS`,
+> `DATA_DE_FECHAMENTO`, `REMEDIATION_COMMIT`, `VALIDATED_BY`, `HUMAN_GATE` e
+> `ELEVATION_CLAUSE`, todos anotados com o motivo da mudança; e (ii) a seção
+> `## Fechamento (software-audit-director)`, acrescentada ao final. O corpo do
+> finding permanece como foi escrito em 2026-08-13, inclusive nas partes que o
+> desfecho tornou superadas — apagá-las destruiria a trilha (Regra 15).
 
 DESCRIPTION:
 `approvalService.approveSupplier` decide **quem pode aprovar** e **qual alçada se
@@ -88,6 +99,9 @@ DELIMITAÇÃO DE EVIDÊNCIA (registrada por dever de precisão):
   reteste independente**, pois o reteste da WAVE-D verificou procedência de papel
   apenas nas operações de pagamento. Esta verificação é **item obrigatório do
   delta audit** e não deve ser presumida em nenhum sentido.
+  > *Atualização 2026-08-13 (WAVE-E):* a persistência do padrão deixou de ser
+  > declaração e passou a ser **medida** — o baseline `bba830f` aprovou 50000 com
+  > papel forjado. Ver `## Fechamento`.
 
 RELATED_PROCESS: Aprovação de fornecedor e concessão de limite de crédito
 RELATED_BUSINESS_RULE: BR-APR-001 (alçada de aprovação — sua eficácia depende deste ponto); BR-SEC-001 (isolamento por empresa — igualmente baseado em `approver.companyId` autodeclarado)
@@ -96,7 +110,7 @@ RELATED_USE_CASE: Aprovar fornecedor
 RELATED_ACCEPTANCE_CRITERIA: AC-SIM2-002
 RELATED_TEST: nenhum teste exercita papel forjado em `approveSupplier` (existe teste equivalente para pagamento, criado na WAVE-D)
 RELATED_FINDINGS: FIND-SIM-002-001 (alçada 50000 → 10000, CLOSED — sua eficácia prática depende deste finding); FIND-SIM-002-008 (segregação de funções, CLOSED — idem); OBS-SIM-002-001 (`approved_by` corrompido, mesma trilha de autoria)
-RELATED_APPROVAL: APR-2026-005 (origem da Regra 24), APR-2026-008 (padrão aplicado a pagamento)
+RELATED_APPROVAL: APR-2026-005 (origem da Regra 24), APR-2026-008 (padrão aplicado a pagamento), **APR-2026-011 (extensão à aprovação — human gate deste finding)**
 
 BUSINESS_IMPACT:
 A alçada de crédito — o controle financeiro central deste produto — é contornável
@@ -153,15 +167,21 @@ SanaCore não a estendeu por conta própria (Regra 6).
 REFERENCE:
 - `CLAUDE.md`, **Regra 24** (papel autodeclarado sem verificação server-side) e Regra 6
 - `docs/coretriad/CORETRIAD_MASTER_SPEC.md`, Parte IV §20 — trilha de Segurança/Autorização, padrão de finding obrigatório
-- `coretriad/governance/APPROVALS.md` — **APR-2026-005** (risco aceito **restrito ao SIM-001**, expressamente não extensível a outros projetos) e **APR-2026-008** (padrão server-side determinado para pagamento no SIM-002)
+- `coretriad/governance/APPROVALS.md` — **APR-2026-005** (risco aceito **restrito ao SIM-001**, expressamente não extensível a outros projetos), **APR-2026-008** (padrão server-side determinado para pagamento no SIM-002) e **APR-2026-011** (extensão à aprovação)
 - `product/SIM-002/src/approvalService.js:4,13-19,37-39,47`
 - `product/SIM-002/requirements/BUSINESS_RULES.md:19-29` (BR-APR-001)
 - `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §5.6 e §6
+- `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT_WAVE-E.md` §7.1 e §8
 - `audit/runs/SIM-002-AUD-001/24-coverage/AUDIT_COVERAGE_MATRIX.md` §2.2
 
 ---
 
 ## Justificativa da severidade — **HIGH**, e por que não CRITICAL nem MEDIUM
+
+> *Preservada como escrita na abertura. Superada em 2026-08-13 pelo acionamento
+> da cláusula de elevação, condição (c) — ver `## Fechamento`. Mantida no
+> registro porque a fundamentação de abertura precisa continuar auditável e
+> contestável.*
 
 Esta é a parte contestável do finding e por isso está escrita para ser contestada.
 
@@ -209,7 +229,7 @@ assim que **qualquer** das condições ocorrer:
     externo ao processo;
 (c) decisão humana estender expressamente a APR-2026-008 a `approveSupplier` — a
     partir daí passa a existir norma violada de forma direta, e o enquadramento é
-    o da Regra 24 sem ressalva aplicável;
+    o da Regra 24 sem ressalva aplicável;   ← **OCORRIDA em 2026-08-13 (APR-2026-011)**
 (d) o `vericore-finding-validator` concluir que o atenuante de ambiente não se
     sustenta.
 
@@ -219,6 +239,10 @@ Este finding **deve ser rebaixado a INFO/`RISK_ACCEPTED`** se decisão humana
 registrada aceitar o risco **restrito ao SIM-002**, nos moldes da APR-2026-005,
 com menção expressa à Regra 24. Nesse caso o finding não é "fechado por
 remediação": é **disposto por aceitação**, e a distinção deve constar do registro.
+
+> *Não acionada.* A decisão humana (APR-2026-011) foi de **estender o padrão**,
+> não de aceitar o risco. O finding é fechado **por remediação e reteste**, e não
+> por aceitação — distinção registrada, como a própria cláusula exigia.
 
 ---
 
@@ -243,6 +267,11 @@ Recomenda-se decidir **em ato único** com a OBS-SIM-002-007 (papel autorizado a
 cancelar pagamento `created`), para não voltar a produzir norma de papel
 fragmentada entre operações — o mesmo motivo pelo qual a divergência A de
 FIND-008 e a OBS-SIM-002-002 foram levadas juntas ao gate da APR-2026-008.
+
+> *Registro de cumprimento (2026-08-13):* a recomendação de decidir em ato único
+> foi **atendida** — APR-2026-011 (este finding) e APR-2026-012 (OBS-007) foram
+> emitidas no mesmo ato, junto com APR-2026-013. A fragmentação normativa que se
+> queria evitar não ocorreu.
 
 SUGGESTED_REMEDIATION_OWNER: Decisão humana (product owner) → SanaCore após norma registrada
 
@@ -294,3 +323,155 @@ simétrica de rebaixamento.
    `vericore-finding-validator` antes de qualquer encaminhamento a remediação
    (Regra 22), e human gate para a norma (Regra 18). Nenhuma remediação deve ser
    iniciada antes dessas duas etapas.
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: **2026-08-13**
+AUTORIDADE: Regra 4 do `CLAUDE.md` — somente a VeriCore declara `RETEST_PASSED` e
+`FINDING CLOSED`. Este diretor **não** declara `REMEDIATION COMPLETE` (Regra 3).
+AUDIT_COMMIT: `f2fcf1c78a6a1255738d05e66a6100fa9c47428a`
+REMEDIATION_COMMIT: **`ac3e277`** (WAVE-E)
+BASELINE DE DISCRIMINAÇÃO: **`bba830f`**
+EXECUÇÃO TÉCNICA DO RETESTE: `vericore-audit-verification-runner` — harness
+próprio fora do repositório, **mesmo código de teste** aplicado ao baseline e ao
+remediado, estado sempre lido do banco, working tree limpo antes e depois,
+produto de `ac3e277` idêntico ao HEAD.
+RELATÓRIO: `30-retest/RETEST_REPORT_WAVE-E.md` §7.1 (bloco completo) e §8
+(veredito do run).
+
+### 1. Human gate cumprido
+
+**APR-2026-011**, lida por este diretor diretamente em
+`coretriad/governance/APPROVALS.md` (Regra 18 — não por relato de terceiro):
+*"estender a APR-2026-008 à operação de aprovação. O papel que autoriza
+`approveSupplier` deve ser verificado no servidor contra a mesma fonte de
+identidade (tabela `users` / `identity.js`), nunca autodeclarado no payload."*
+
+O gate resolveu **integralmente** a lacuna normativa que este finding apontava:
+o "esperado" deixou de ser inferência e passou a ser norma escrita.
+
+### 2. Elevação de severidade — HIGH → CRITICAL, aplicada ANTES do julgamento
+
+A **condição (c)** da cláusula de elevação obrigatória ocorreu literalmente: houve
+decisão humana estendendo expressamente a APR-2026-008 a `approveSupplier`.
+Portanto a severidade é **elevada a CRITICAL** — e a elevação é aplicada **antes**
+de julgar o reteste, pelo mesmo método usado em FIND-008 e FIND-009 nas ondas
+anteriores, para que o fechamento se dê sobre a severidade correta e não sobre a
+severidade conveniente. Não é reclassificação discricionária: é aplicação de
+cláusula pré-registrada, disparada por fato objetivo e verificável no repositório.
+
+A "Justificativa da severidade — HIGH" acima permanece no registro como
+fundamentação de abertura, e está **superada**, não apagada.
+
+### 3. Evidência do reteste — antes/depois, com discriminação
+
+**Item decisivo (papel forjado):** payload `role:'manager'` falso sobre
+`users.role = 'analyst'`, aprovando `creditLimit = 50000`:
+
+| | `bba830f` (antes) | `ac3e277` (depois) |
+|---|---|---|
+| Resultado | **APROVOU** | **RECUSOU** |
+| `suppliers.credit_limit` | **50000** | inalterado — banco intacto |
+| `suppliers.approved_by` | **`"u-analyst"`** | inalterado — banco intacto |
+
+O `approved_by = "u-analyst"` gravado no baseline é prova documental de que o
+papel declarado era falso e a identidade real era do analista: o próprio registro
+de autoria denunciava a fraude que a função não impedia.
+
+**Demais cenários em `ac3e277`:** `manager` real / 50000 → **aprovado**;
+`analyst` real / 10000 → **aprovado**; `analyst` real / 10001 → **recusado**;
+`approver.id` inexistente (999999) → **recusado** com *"Usuário não autenticado"*
+(no baseline **aprovava** e gravava `approved_by = "77.0"`); aprovador de outra
+empresa declarando `companyId` alheio → **recusado**.
+
+**Regressão:** suíte **60/60**, com **prova de mutação** (4 mutantes, 4 mortos) e
+com um **teste tautológico detectado e corrigido pela própria SanaCore** antes da
+mutação. Não-regressão integrada em `RETEST_REPORT_WAVE-E.md` §7.6.
+
+### 4. Cobertura da `RETEST_SPECIFICATION` — item a item
+
+| Item | Disposição |
+|---|---|
+| 1. Teste decisivo de procedência | **ATENDIDO**, com discriminação e pós-condição lida do banco |
+| 2. `manager` verdadeiro acima de 10000 | **ATENDIDO** (50000) |
+| 3. `analyst` até 10000 inclusive / recusa acima | **ATENDIDO** (10000 / 10001). A fronteira em R$ 0,01 foi exercitada na WAVE-A sobre a **mesma constante** e reconfirmada; não re-exercitada nesta rodada — delimitação menor, registrada |
+| 4. `approver` inexistente → recusado | **ATENDIDO**, com discriminação própria |
+| 5. `companyId` forjado → recusado | **ATENDIDO**, com discriminação |
+| 6. `approved_by` da identidade resolvida **e** como texto | **PARCIAL** — procedência **atendida** (o id não pode mais vir do payload); **formato persistido NÃO lido positivamente**. Residual em OBS-SIM-002-001 |
+| 7. Prova de discriminação | **ATENDIDA EM SUBSTÂNCIA** contra `bba830f`; a spec nomeava `b6d44da`, e a relação entre os dois commits **não é verificável a partir do meu namespace** — item de rastreabilidade do delta audit |
+
+### 5. Desvio processual registrado — Regra 22
+
+Este finding foi **remediado sem passar pelo `vericore-finding-validator`**,
+contrariando a Regra 22 e a condição (a) do meu próprio veredito da §6 do
+`RETEST_REPORT.md`. Registro sem atenuar, e explico por que **não** converto o
+desvio em bloqueio:
+
+- O interesse protegido pela Regra 22 — não remediar finding não confirmado e
+  calibrar severidade antes do encaminhamento — foi atendido **por meio mais
+  forte** que o rito: o defeito foi **reproduzido empiricamente** num baseline
+  real antes de ser declarado extinto, e a severidade foi fixada por **cláusula
+  pré-registrada**, não por juízo.
+- Nenhum resultado possível do validator **reviveria** um defeito provado extinto
+  por execução; o único efeito plausível seria sobre severidade, já elevada ao
+  máximo previsto.
+- A disposição do desvio é do **CoreTriad Director**, não minha — o rito da
+  Regra 22 pertence ao control plane. Registrado como **OBS-SIM-002-010**. Se o
+  Director entender a regra como não renunciável, a validação pode ser executada
+  **retrospectivamente** sobre `f2fcf1c` e `ac3e277`, e este fechamento permanece
+  salvo se o validator produzir evidência nova — hipótese que deixo aberta em vez
+  de descartar.
+
+### 6. Delimitação do fechamento (obrigatória, não cosmética)
+
+**Fecha-se:** a **procedência** dos três atributos de sujeito em
+`approveSupplier` — **papel, empresa e identidade**. Nenhum é mais aceito do
+payload; todos são resolvidos contra a fonte de identidade; provado por
+comportamento com discriminação antes/depois, não por leitura de código.
+Consequência que registro por ser a mais importante deste run: a **eficácia
+prática** de FIND-SIM-002-001 (alçada) e de FIND-SIM-002-008 (segregação de
+funções), que a §5.6 declarara **condicionada** ao desfecho deste finding,
+**deixa de estar condicionada**. O produto passa a ter **uma única fonte de papel
+para todas as operações** — o "efeito normativo" que a APR-2026-011 declarou
+pretender.
+
+**NÃO se fecha, e sai como item próprio:**
+
+(i) **Quais papéis podem aprovar fornecedor.** A APR-2026-011 diz "a mesma alçada
+    já decidida (`manager`) aplica-se à aprovação", o que **pode** ser lido como
+    aprovação privativa de `manager`; a implementação manteve `analyst` até
+    R$ 10.000 (BR-APR-001, **nunca revogada**) e `manager` sem teto. Os textos não
+    coincidem literalmente e **este diretor não decide qual leitura rege** — seria
+    inventar intenção (Regras 6 e 18) ou revogar tacitamente uma BR versionada
+    (Regra 7). Registrado como **human gate aberto: OBS-SIM-002-009**, com
+    pergunta objetiva formulada em `RETEST_REPORT_WAVE-E.md` §7.5.2.
+    **Isto não reabre este finding:** o objeto do FIND-014 é *procedência do
+    atributo de autorização*, não *conjunto de papéis autorizados*; confundir "de
+    onde vem o papel" com "quais papéis bastam" descreveria mal o registro. E
+    **não constitui finding**: sob a única leitura amparada por artefato
+    versionado (BR-APR-001 em vigor), o comportamento medido é **conforme** — não
+    há defeito provado, há **norma indeterminada**.
+
+(ii) **Formato persistido de `approved_by`.** Metade não evidenciada do item 6 da
+     spec. Absorvida por **OBS-SIM-002-001**, que passa a
+     `EXTINTA QUANTO AO VETOR MEDIDO` com residual INFO de leitura positiva no
+     delta audit.
+
+(iii) **Auditoria do código remediado.** Este fechamento é **reteste dirigido a
+      um finding**, não auditoria de `ac3e277`. O módulo de identidade e os demais
+      caminhos introduzidos após `f2fcf1c` **nunca foram auditados** e são item de
+      escopo do delta audit (Regras 12-14).
+
+### 7. Veredito
+
+RESULT: **RETEST_PASSED**
+NEW_EVIDENCE_IF_FAILED: n/a
+SEVERIDADE FINAL: **CRITICAL** (elevada de HIGH pela cláusula (c))
+FINAL_STATUS: **FINDING CLOSED** — 2026-08-13, com as delimitações do item 6 e o
+desvio processual do item 5 registrado e endereçado.
+
+Disposto por **remediação e reteste independente**, **não** por aceitação de
+risco — a cláusula simétrica de rebaixamento **não** foi acionada, e a distinção
+fica expressa como ela própria exigia.
