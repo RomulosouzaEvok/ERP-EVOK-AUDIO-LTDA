@@ -32,7 +32,7 @@ const ORG_RULES = [
   {
     org: 'vericore',
     match: (a) => a.includes('vericore'),
-    deniedPaths: [/^(product|src|tests|database|infrastructure|requirements|architecture)\//],
+    deniedPaths: [/^(product|src|server|client|mobile|tests|database|infrastructure|requirements|architecture)\//],
     allowedException: (agent, p) =>
       agent.includes('evidence-controller') && /^audit\//.test(p),
     reason: 'VeriCore é read-only sobre o objeto auditado. Evidências só via audit-evidence-controller em audit/.',
@@ -58,7 +58,7 @@ const ORG_RULES = [
   {
     org: 'coretriad',
     match: (a) => a.includes('coretriad') || a.includes('director'),
-    deniedPaths: [/^src\//, /^product\//, /^tests\//, /^audit\/runs\//, /^remediation\/cases\//],
+    deniedPaths: [/^src\//, /^server\//, /^client\//, /^mobile\//, /^product\//, /^tests\//, /^audit\/runs\//, /^remediation\/cases\//],
     allowedException: (_a, p) => /^coretriad\//.test(p) || /^docs\//.test(p),
     reason: 'CoreTriad Director orquestra; não implementa, não audita e não corrige.',
   },
@@ -90,14 +90,22 @@ process.stdin.on('end', () => {
   ).toLowerCase();
 
   const input = payload.tool_input || payload.input || {};
-  let filePath = String(input.file_path || input.path || input.notebook_path || '');
+  const rawPath = String(input.file_path || input.path || input.notebook_path || '');
 
-  // normalizar para caminho relativo à raiz do repo
+  // Canonicalizar contra a raiz do repositório principal (cwd do processo do
+  // hook). path.resolve neutraliza traversal (../) e absolutos fora do repo.
   const cwd = String(payload.cwd || process.cwd());
-  if (filePath.startsWith(cwd)) filePath = filePath.slice(cwd.length);
-  filePath = filePath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+  const projectRoot = process.cwd();
+  let filePath = '';
+  let insideRepo = false;
+  if (rawPath) {
+    const resolved = path.resolve(cwd, rawPath);
+    const rel = path.relative(projectRoot, resolved).replace(/\\/g, '/');
+    insideRepo = rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+    filePath = insideRepo ? rel : resolved.replace(/\\/g, '/');
+  }
 
-  if (!filePath) return respond('approve', 'sem caminho de arquivo — nada a julgar');
+  if (!rawPath) return respond('approve', 'sem caminho de arquivo — nada a julgar');
 
   const hasAgentField =
     'agent_type' in payload || 'agent_name' in payload || 'subagent_type' in payload;
@@ -108,6 +116,10 @@ process.stdin.on('end', () => {
       return respond('block', 'org-isolation: subagente sem identificação (fail-closed).');
     }
     return respond('approve', 'sessão principal (sem contexto de subagente)');
+  }
+
+  if (!insideRepo) {
+    return respond('approve', 'alvo fora do repositório principal (worktree/scratchpad)');
   }
 
   for (const rule of ORG_RULES) {
