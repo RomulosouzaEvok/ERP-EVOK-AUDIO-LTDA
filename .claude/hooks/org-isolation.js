@@ -67,14 +67,24 @@ const ORG_RULES = [
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
 // Artefatos selados: nenhum subagente lê, sob nenhuma ferramenta. Usado pelos
-// gabaritos de simulado (SIM-00N-answer-key) — um simulado cujo gabarito é
-// legível pelo auditor não mede capacidade de detecção nenhuma. Só a sessão
-// principal (sem contexto de subagente) tem acesso.
-const SEALED = /(^|[/\\])coretriad[/\\]locks[/\\].*answer-key|answer-key.*\.md$/i;
+// gabaritos de simulado — um simulado cujo gabarito é legível pelo auditor não
+// mede capacidade de detecção nenhuma. Só a sessão principal (sem contexto de
+// subagente) tem acesso.
+//
+// O selo cobre o DIRETÓRIO inteiro, não só o nome do arquivo: um Grep apontado
+// para `coretriad/locks/` com padrão genérico, ou um `cat coretriad/locks/*.md`,
+// devolveriam o conteúdo sem nunca citar "answer-key". Vetores identificados
+// pelo TEST-SEAL-001 (vericore-qa-auditor), que os reportou sem explorá-los.
+const SEALED = /coretriad\/locks|answer[-_]key/i;
 
-function touchesSealed(input) {
-  for (const v of Object.values(input || {})) {
-    if (typeof v === 'string' && SEALED.test(v.replace(/\\/g, '/'))) return true;
+// Inspeciona recursivamente qualquer string do tool_input (file_path, path,
+// pattern, command, arrays de comandos...), não apenas os campos de caminho.
+function touchesSealed(value, depth = 0) {
+  if (depth > 4) return false;
+  if (typeof value === 'string') return SEALED.test(value.replace(/\\/g, '/'));
+  if (Array.isArray(value)) return value.some((v) => touchesSealed(v, depth + 1));
+  if (value && typeof value === 'object') {
+    return Object.values(value).some((v) => touchesSealed(v, depth + 1));
   }
   return false;
 }
