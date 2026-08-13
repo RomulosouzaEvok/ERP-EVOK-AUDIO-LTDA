@@ -7,6 +7,9 @@ const MaterialReceiptService = require('../../../../services/materialReceiptServ
 const { resolveRequisitionStatusAfterReceipt } = require('../services/syncRequisitionReceiptStatus');
 const { calculateReceiptAmount, resolvePayableDueDate } = require('../../domain/services/purchasePayableRules');
 const { NotFoundError, ValidationError, BusinessRuleError, ConflictError } = require('../../../../errors');
+// F3 do diagnóstico do catálogo duplo (2026-08-12): recebimento de item
+// ATIVO_IMOBILIZADO cria o registro patrimonial automaticamente.
+const FixedAssetReceiptService = require('../../../../services/fixedAssetReceiptService');
 
 const UNIQUE_VIOLATION = 'SequelizeUniqueConstraintError';
 
@@ -114,6 +117,8 @@ class ReceivePurchaseItemsUseCase extends UseCase {
     // a pagar do G13 (recebeu metade, deve a metade). Nunca
     // `purchase.total_amount`, que e o pedido inteiro.
     const receivedLines: Array<{ quantity: number; unitPrice: number }> = [];
+    // F3: linhas desta entrega candidatas a virar ativo patrimonial.
+    const receivedLineDetails: Array<{ purchaseItemId: number; productId: number; quantity: number; unitPrice: number }> = [];
 
     // Roteamento de deposito (Bloco 4, BUSINESS_RULES.md §12 item 7; Bloco 2,
     // UC-39/§9): quando o Recebimento informa `warehouseCode` explicitamente,
@@ -158,6 +163,7 @@ class ReceivePurchaseItemsUseCase extends UseCase {
 
       const unitCost = parseFloat(item.unit_price || 0);
       receivedLines.push({ quantity: qty, unitPrice: unitCost });
+      receivedLineDetails.push({ purchaseItemId: item.id, productId: item.product_id, quantity: qty, unitPrice: unitCost });
 
       const providedLotNumber = received.lot_number ? String(received.lot_number).trim() : '';
       generatedLotSequence += 1;
@@ -217,6 +223,16 @@ class ReceivePurchaseItemsUseCase extends UseCase {
 
     const requisitionStatus = await this.syncRequisitionStatus(purchase, transaction);
 
+    // F3 (2026-08-12): imobilizado recebido nasce no Patrimônio na mesma
+    // transacao — fecha o buraco em que o usuario tinha que adivinhar que,
+    // alem de receber a compra, precisava cadastrar o bem em /api/assets.
+    const createdAssets = await FixedAssetReceiptService.createAssetsForReceivedLines({
+      purchase,
+      receivedLineDetails,
+      receivedAt,
+      transaction,
+    });
+
     // Gap G13: o passivo nasce AQUI, na mesma transacao do recebimento.
     const payableResult = await this.createReceiptPayable({
       purchase,
@@ -235,8 +251,10 @@ class ReceivePurchaseItemsUseCase extends UseCase {
       requisitionStatus,
       payable: payableResult.payable,
       payableSkipReason: payableResult.reason === 'created' ? null : payableResult.reason,
+      assetsCreated: createdAssets,
     };
   }
+
 
   /**
    * Cria a conta a pagar DESTE recebimento (gap G13, decisao D-A do dono).

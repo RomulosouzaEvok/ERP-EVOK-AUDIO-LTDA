@@ -1,3 +1,10 @@
+// F3 (2026-08-12): o recebimento cria ativo patrimonial via servico proprio;
+// aqui vira duble para o teste nao tocar PostgreSQL. Comportamento real em
+// tests/integration/item-product-mirror.test.ts.
+jest.mock('../../src/services/fixedAssetReceiptService', () => ({
+  createAssetsForReceivedLines: jest.fn(async () => []),
+}));
+
 /**
  * Gap G15 — estados mortos do ENUM `purchase_requisitions.status`.
  *

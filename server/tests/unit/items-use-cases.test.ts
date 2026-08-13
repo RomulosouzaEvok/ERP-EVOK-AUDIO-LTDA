@@ -4,6 +4,19 @@ jest.mock('../../src/models/index', () => ({
   },
 }));
 
+// O espelhamento item↔product (2026-08-12) abre transacao real e toca o
+// model Product — aqui ambos viram dublê; o comportamento real esta em
+// tests/integration/item-product-mirror.test.ts.
+const mockTransaction = { commit: jest.fn(), rollback: jest.fn() };
+jest.mock('../../src/config/database', () => ({
+  sequelize: { transaction: jest.fn(async () => mockTransaction) },
+}));
+jest.mock('../../src/services/itemProductMirrorService', () => ({
+  ensureProductMirrorForItem: jest.fn(async () => null),
+  ensureItemMirrorForProduct: jest.fn(async () => null),
+  syncProductMirrorFromItem: jest.fn(async () => null),
+}));
+
 import CreateItemStructureUseCase = require('../../src/modules/items/application/use-cases/CreateItemStructureUseCase');
 import ExplodeItemStructureUseCase = require('../../src/modules/items/application/use-cases/ExplodeItemStructureUseCase');
 import UpdateItemUseCase = require('../../src/modules/items/application/use-cases/UpdateItemUseCase');
@@ -63,7 +76,7 @@ describe('UpdateItemUseCase — toggle de conversao_automatica via API', () => {
     const useCase = new UpdateItemUseCase(itemRepository as any);
     const result = await useCase.execute({ itemId: 'item-1', data: { conversao_automatica: true } });
 
-    expect(itemRepository.update).toHaveBeenCalledWith('item-1', { conversao_automatica: true });
+    expect(itemRepository.update).toHaveBeenCalledWith('item-1', { conversao_automatica: true }, mockTransaction);
     expect(result.conversao_automatica).toBe(true);
   });
 
@@ -76,7 +89,7 @@ describe('UpdateItemUseCase — toggle de conversao_automatica via API', () => {
     const useCase = new UpdateItemUseCase(itemRepository as any);
     const result = await useCase.execute({ itemId: 'item-2', data: { descricao: 'Woofer 12" atualizado' } });
 
-    expect(itemRepository.update).toHaveBeenCalledWith('item-2', { descricao: 'Woofer 12" atualizado' });
+    expect(itemRepository.update).toHaveBeenCalledWith('item-2', { descricao: 'Woofer 12" atualizado' }, mockTransaction);
     expect(result.conversao_automatica).toBe(true);
   });
 

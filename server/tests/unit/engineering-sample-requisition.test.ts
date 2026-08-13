@@ -1,3 +1,10 @@
+// F3 (2026-08-12): o recebimento cria ativo patrimonial via servico proprio;
+// aqui vira duble para o teste nao tocar PostgreSQL. Comportamento real em
+// tests/integration/item-product-mirror.test.ts.
+jest.mock('../../src/services/fixedAssetReceiptService', () => ({
+  createAssetsForReceivedLines: jest.fn(async () => []),
+}));
+
 /**
  * Test: Requisicao de amostra da Engenharia (Bloco 2, UC-39, BUSINESS_RULES.md
  * §9) — `origin='engenharia_amostra'`.

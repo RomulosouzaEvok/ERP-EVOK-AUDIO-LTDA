@@ -28,6 +28,15 @@ interface CreateProductInput {
 /**
  * Cria um novo produto, validando as regras de domínio via `ProductEntity`
  * e garantindo unicidade de código a nível de repositório.
+ *
+ * Nota do diagnóstico do catálogo duplo (2026-08-12): o espelhamento
+ * automático é UNIDIRECIONAL (item→produto, ver
+ * `services/itemProductMirrorService.ts`) — esta porta NÃO cria item gêmeo.
+ * Produto criado aqui sem item correspondente fica invisível na projeção de
+ * estrutura do MRP (`bomStructureProjection.ts`, aresta `unmapped`); o
+ * caminho canônico de cadastro é o Item Mestre (`POST /api/items`), que
+ * adota um produto pré-existente de mesmo código como gêmeo. Órfãos legados
+ * são fechados pelo backfill (`ensureItemMirrorForProduct`).
  */
 class CreateProductUseCase extends UseCase {
   private productRepository: IProductRepository;

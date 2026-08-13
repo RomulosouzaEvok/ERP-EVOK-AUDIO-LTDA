@@ -1,3 +1,10 @@
+// F3 (2026-08-12): o recebimento cria ativo patrimonial via servico proprio;
+// aqui vira duble para o teste nao tocar PostgreSQL. Comportamento real em
+// tests/integration/item-product-mirror.test.ts.
+jest.mock('../../src/services/fixedAssetReceiptService', () => ({
+  createAssetsForReceivedLines: jest.fn(async () => []),
+}));
+
 /**
  * G11 — alcada de aprovacao de pedido de compra por ORIGEM (decisao D-C do
  * dono do produto em 2026-08-10,

@@ -36,7 +36,7 @@ export interface IProductRepository {
   list(filters: ProductListFilters, pagination: ProductListPagination): Promise<{ rows: any[]; count: number }>;
   findById(id: number | string, options?: Record<string, unknown>): Promise<any | null>;
   findByCode(code: string): Promise<any | null>;
-  create(data: Record<string, unknown>): Promise<any>;
+  create(data: Record<string, unknown>, transaction?: unknown): Promise<any>;
   update(id: number | string, data: Record<string, unknown>): Promise<any | null>;
   countActiveSales(productId: number | string): Promise<number>;
   countActiveBomLinks(productId: number | string): Promise<number>;
@@ -56,7 +56,7 @@ class ProductRepository {
     throw new Error('ProductRepository.findByCode não implementado.');
   }
 
-  async create(data: Record<string, unknown>): Promise<any> { // eslint-disable-line no-unused-vars
+  async create(data: Record<string, unknown>, transaction?: unknown): Promise<any> { // eslint-disable-line no-unused-vars
     throw new Error('ProductRepository.create não implementado.');
   }
 

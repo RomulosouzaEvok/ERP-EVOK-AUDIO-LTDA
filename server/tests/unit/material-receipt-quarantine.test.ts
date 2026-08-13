@@ -18,6 +18,13 @@
 
 const MaterialReceiptService = require('../../src/services/materialReceiptService');
 
+// F3 (2026-08-12): o recebimento cria ativo patrimonial via servico proprio;
+// aqui vira duble para o teste nao tocar PostgreSQL. Comportamento real em
+// tests/integration/item-product-mirror.test.ts.
+jest.mock('../../src/services/fixedAssetReceiptService', () => ({
+  createAssetsForReceivedLines: jest.fn(async () => []),
+}));
+
 jest.mock('../../src/services/inventoryService', () => ({ receive: jest.fn() }));
 jest.mock('../../src/services/warehouseStockService', () => ({
   getWarehouseByCode: jest.fn(),

@@ -49,8 +49,8 @@ class SequelizeProductRepository extends ProductRepository {
     return Product.findOne({ where: { code } });
   }
 
-  async create(data: Record<string, unknown>) {
-    return Product.create(data);
+  async create(data: Record<string, unknown>, transaction?: any) {
+    return Product.create(data, transaction ? { transaction } : undefined);
   }
 
   async update(id: number | string, data: Record<string, unknown>) {

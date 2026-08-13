@@ -25,6 +25,13 @@
  * @ticket G13-Onda3
  */
 
+// F3 (2026-08-12): o recebimento cria ativo patrimonial via servico proprio;
+// aqui vira duble para o teste nao tocar PostgreSQL. Comportamento real em
+// tests/integration/item-product-mirror.test.ts.
+jest.mock('../../src/services/fixedAssetReceiptService', () => ({
+  createAssetsForReceivedLines: jest.fn(async () => []),
+}));
+
 jest.mock('../../src/services/warehouseStockService', () => ({
   getWarehouseByCode: jest.fn(async (code: string) => ({ id: code === 'LABORATORIO' ? 2 : 1, code })),
   addToWarehouse: jest.fn(async () => ({})),

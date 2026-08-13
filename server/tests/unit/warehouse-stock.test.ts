@@ -11,6 +11,13 @@
  * @ticket Bloco-4-UC-42
  */
 
+// F3 (2026-08-12): o recebimento cria ativo patrimonial via servico proprio;
+// aqui vira duble para o teste nao tocar PostgreSQL. Comportamento real em
+// tests/integration/item-product-mirror.test.ts.
+jest.mock('../../src/services/fixedAssetReceiptService', () => ({
+  createAssetsForReceivedLines: jest.fn(async () => []),
+}));
+
 jest.mock('../../src/config/database', () => ({
   sequelize: {
     transaction: jest.fn(async (callback?: any) => {

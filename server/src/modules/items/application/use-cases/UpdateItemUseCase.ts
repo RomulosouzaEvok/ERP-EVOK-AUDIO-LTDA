@@ -13,6 +13,8 @@
 import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError } from '../../../../errors';
 import ItemRepository from '../../domain/repositories/ItemRepository';
+import { sequelize } from '../../../../config/database';
+const ItemProductMirrorService = require('../../../../services/itemProductMirrorService');
 
 interface UpdateItemInput {
   itemId: string;
@@ -21,6 +23,11 @@ interface UpdateItemInput {
 
 /**
  * Atualiza um item existente com os campos informados (partial update).
+ *
+ * Desde 2026-08-12: a atualização cadastral propaga para o produto gêmeo
+ * (`products`) na mesma transação, sentido único item→produto — o Item
+ * Mestre é o dono do CADASTRO; saldos continuam sendo dos fluxos de
+ * estoque. Ver `services/itemProductMirrorService.ts`.
  */
 class UpdateItemUseCase extends UseCase<UpdateItemInput, any> {
   private readonly itemRepository: ItemRepository;
@@ -44,7 +51,16 @@ class UpdateItemUseCase extends UseCase<UpdateItemInput, any> {
       throw new NotFoundError('Item nao encontrado.');
     }
 
-    return this.itemRepository.update(input.itemId, input.data);
+    const t = await sequelize.transaction();
+    try {
+      const updated = await this.itemRepository.update(input.itemId, input.data, t);
+      await ItemProductMirrorService.syncProductMirrorFromItem(updated ?? item, t);
+      await t.commit();
+      return updated;
+    } catch (error) {
+      await t.rollback();
+      throw error;
+    }
   }
 }
 
