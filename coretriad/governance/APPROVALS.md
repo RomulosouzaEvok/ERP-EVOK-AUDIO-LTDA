@@ -17,6 +17,9 @@ responsável humano na sessão indicada.
 | APR-2026-008 | 2026-08-13 | Gilwagno | **FIND-SIM-002-008-A + OBS-002 — matriz de papéis de pagamento definida** | Ver detalhamento abaixo. |
 | APR-2026-009 | 2026-08-13 | Gilwagno | **FIND-SIM-002-009 — estado `failed` criado para recusa do gateway** | Ver detalhamento abaixo. |
 | APR-2026-010 | 2026-08-13 | Gilwagno | **FIND-SIM-002-010/012/013 — mantidos `PROPOSED`, não bloqueantes** | Ver detalhamento abaixo. |
+| APR-2026-011 | 2026-08-13 | Gilwagno | **FIND-SIM-002-014 — APR-008 estendida à aprovação de fornecedor** | Ver detalhamento abaixo. |
+| APR-2026-012 | 2026-08-13 | Gilwagno | **OBS-007 — cancelamento de pagamento restrito a `manager`** | Ver detalhamento abaixo. |
+| APR-2026-013 | 2026-08-13 | Gilwagno | **OBS-008-c — limite de 3 retentativas para pagamento `failed`** | Ver detalhamento abaixo. |
 
 ---
 
@@ -87,6 +90,55 @@ verificavam. O diretor pediu decisão em ato único para os dois itens.
 **Vínculo normativo:** é a aplicação direta da **Regra 24 do `CLAUDE.md`**
 (origem APR-2026-005/OBS-SIM-001-A). O SIM-002 é ambiente de validação, mas a
 decisão manda implementar o padrão correto, não aceitar o risco.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-011 — FIND-SIM-002-014 (alçada de `approveSupplier`)
+
+**Contexto:** a própria SanaCore declarou, ao final da WAVE-D, que
+`approvalService.approveSupplier` continuava decidindo alçada por
+`approver.role` **autodeclarado no payload** — a APR-2026-008 cobrira
+criar/enviar/ler pagamento, mas não a aprovação. O `software-audit-director`
+formalizou como FIND-SIM-002-014 (HIGH) e registrou que o defeito condiciona a
+eficácia prática dos fechamentos de FIND-001 (alçada) e FIND-008 (papéis).
+
+**Decisão:** **estender a APR-2026-008 à operação de aprovação.** O papel que
+autoriza `approveSupplier` deve ser verificado no servidor contra a **mesma
+fonte de identidade** (tabela `users` / `identity.js`), nunca autodeclarado no
+payload. A mesma alçada já decidida (`manager`) aplica-se à aprovação.
+
+**Efeito normativo:** encerra a fragmentação apontada pelo diretor — o produto
+passa a ter uma única fonte de papel para todas as operações.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-012 — OBS-007 (papel para cancelar pagamento)
+
+**Contexto:** a APR-2026-007 definiu *quando* um pagamento pode ser cancelado
+(apenas em `created`), mas não *quem* pode cancelá-lo; a operação permanecia
+aberta a `analyst` e `manager` sem arbitragem.
+
+**Decisão:** **apenas o papel `manager`** pode cancelar pagamento em estado
+`created`, verificado no servidor contra a fonte confiável de identidade.
+**Não estender a `analyst`.**
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-013 — OBS-008-c (retentativa de pagamento `failed`)
+
+**Contexto:** a APR-2026-009 criou o estado `failed` para recusa do gateway, mas
+não definiu política de retentativa — a SanaCore registrou a ausência como risco
+residual.
+
+**Decisão:** **limite de 3 tentativas** de reenvio ao gateway para um pagamento
+em `failed`. Esgotado o limite, o pagamento permanece **`failed` definitivo** e
+exige **ação manual** — sem retentativa automática ilimitada.
 
 **Aprovado por:** Gilwagno — 13/08/2026.
 
