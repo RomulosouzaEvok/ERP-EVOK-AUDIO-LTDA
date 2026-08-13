@@ -24,6 +24,42 @@ const ALLOWED_EXTENSIONS: Record<string, string[]> = {
 };
 
 /**
+ * Mime(s) esperado(s) por extensão, usado para derivar `allowedMimes` da
+ * validação de magic bytes quando o chamador não informa a lista
+ * explicitamente. Sem isso, `Validators.validateFileMagic` libera qualquer
+ * conteúdo quando `allowedMimes` vem vazio (achado de auditoria de
+ * segurança, 2026-08-12) — nenhum dos chamadores reais de `uploadFile`
+ * neste repositório passava `allowedMimes`, então a checagem de assinatura
+ * real do arquivo nunca era exercitada.
+ */
+const EXTENSION_TO_MIME: Record<string, string[]> = {
+  '.jpg': ['image/jpeg'],
+  '.jpeg': ['image/jpeg'],
+  '.png': ['image/png'],
+  '.gif': ['image/gif'],
+  '.webp': ['image/webp'],
+  '.pdf': ['application/pdf'],
+  '.xml': ['application/xml'],
+  '.json': ['application/json'],
+  '.JSON': ['application/json']
+};
+
+/**
+ * Deriva a lista de mimes esperados a partir das extensões permitidas.
+ * Extensão sem mapeamento conhecido não contribui restrição (mantém o
+ * comportamento de "sem magic bytes conhecido" apenas para esse caso).
+ */
+function deriveAllowedMimes(allowedExtensions: string[]): string[] {
+  const mimes = new Set<string>();
+  for (const ext of allowedExtensions) {
+    for (const mime of EXTENSION_TO_MIME[ext] ?? EXTENSION_TO_MIME[ext.toLowerCase()] ?? []) {
+      mimes.add(mime);
+    }
+  }
+  return Array.from(mimes);
+}
+
+/**
  * Tamanho máximo padrão: 10MB.
  */
 const DEFAULT_MAX_SIZE: number = 10 * 1024 * 1024;
@@ -125,9 +161,15 @@ async function uploadFile(
     );
   }
 
-  // Valida magic bytes (assinatura real do arquivo)
+  // Valida magic bytes (assinatura real do arquivo). Se o chamador não
+  // informou `allowedMimes` explicitamente, deriva da whitelist de
+  // extensões — sem isso a validação de assinatura era um no-op de fato
+  // (achado de auditoria de segurança, 2026-08-12).
+  const effectiveAllowedMimes: string[] =
+    allowedMimes.length > 0 ? allowedMimes : deriveAllowedMimes(allowedExtensions);
+
   if (file.buffer) {
-    const magicResult = Validators.validateFileMagic(file.buffer, allowedMimes);
+    const magicResult = Validators.validateFileMagic(file.buffer, effectiveAllowedMimes);
     if (!magicResult.valid) {
       throw Object.assign(
         new Error(`Tipo de arquivo não permitido. Detectado: ${magicResult.mime || 'desconhecido'}`),

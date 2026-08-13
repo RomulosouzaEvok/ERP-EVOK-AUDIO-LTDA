@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 
+const { logAction } = require('../../../../services/auditLogService');
 const SequelizeMaintenanceRepository = require('../../infrastructure/sequelize/SequelizeMaintenanceRepository');
 const ListMaintenanceOrdersUseCase = require('../../application/use-cases/ListMaintenanceOrdersUseCase');
 const GetMaintenanceOrderByIdUseCase = require('../../application/use-cases/GetMaintenanceOrderByIdUseCase');
@@ -42,6 +43,16 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CreateMaintenanceOrderUseCase(maintenanceRepository);
     const order = await useCase.execute({ ...req.body, reportedBy: (req as any).user.id });
+
+    logAction(req, {
+      action: 'create',
+      entityType: 'MaintenanceOrder',
+      entityId: order?.id,
+      entityDescription: order?.order_number ?? order?.description,
+      newValues: order,
+      description: `Ordem de manutenção ${order?.order_number ?? order?.id} criada`,
+    });
+
     res.status(201).json({ success: true, data: order });
   } catch (error) {
     next(error);
@@ -53,6 +64,15 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new UpdateMaintenanceOrderUseCase(maintenanceRepository);
     const order = await useCase.execute({ id: req.params.id, body: req.body });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'MaintenanceOrder',
+      entityId: order?.id,
+      newValues: req.body,
+      description: `Ordem de manutenção ${order?.order_number ?? order?.id} atualizada`,
+    });
+
     res.json({ success: true, data: order });
   } catch (error) {
     next(error);
@@ -64,6 +84,14 @@ exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CancelMaintenanceOrderUseCase(maintenanceRepository);
     const result = await useCase.execute({ id: req.params.id });
+
+    logAction(req, {
+      action: 'cancel',
+      entityType: 'MaintenanceOrder',
+      entityId: Number(req.params.id),
+      description: `Ordem de manutenção ${req.params.id} cancelada`,
+    });
+
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);

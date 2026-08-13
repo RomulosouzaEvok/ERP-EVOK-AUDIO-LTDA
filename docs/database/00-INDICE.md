@@ -29,7 +29,7 @@ nota no topo desse arquivo).
 >
 > | Métrica | Valor |
 > |---|---|
-> | Migrations aplicadas | **168** |
+> | Migrations aplicadas | **169** |
 > | Tabelas (`information_schema.tables`, schema `public`) | **207** |
 > | Foreign keys (`pg_constraint`, `contype='f'`) | **478** |
 > | Tabelas `sst_*` | 35 |
@@ -42,7 +42,9 @@ nota no topo desse arquivo).
 > A 168ª é `20260812-000046-create-directorate-governance.cjs` (módulo
 > Diretoria — Planejamento Estratégico, Atas de Reunião e Riscos
 > Corporativos), que acrescentou 3 tabelas (`strategic_plannings`,
-> `meeting_minutes`, `business_risks`) e 7 foreign keys novas.
+> `meeting_minutes`, `business_risks`) e 7 foreign keys novas. A 169ª é
+> `20260812-000047-hr-absences-open-unique.cjs` (achado de auditoria de
+> arquitetura — índice único parcial em `hr_absences`, sem tabela/FK nova).
 >
 > Os números de "auditoria de origem" abaixo (80 tabelas, 175 FKs, 66
 > migrations) são de 2026-08-06 e ficam **apenas como registro histórico** —

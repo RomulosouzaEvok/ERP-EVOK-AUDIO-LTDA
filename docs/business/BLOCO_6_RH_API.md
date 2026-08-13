@@ -11,10 +11,19 @@ TI → Jurídico → Facilities → Marketing → **RH (este documento)**.
 UC-71, RNF-RH-01..05).
 **Autor:** `ArquitetoSoftwareAPI`.
 **Data:** 2026-08-09.
-**Status:** 🟡 Contrato pronto para modelagem de banco em paralelo
-(`AdmDBA`, trabalhando a partir do mesmo documento de requisitos) e
-implementação futura (`programador`). **Nenhum código foi alterado neste
-passo.**
+**Status (registro histórico, 2026-08-09):** 🟡 Contrato pronto para
+modelagem de banco em paralelo (`AdmDBA`, trabalhando a partir do mesmo
+documento de requisitos) e implementação futura (`programador`). **Nenhum
+código foi alterado neste passo.**
+
+> ⚠️ **Atualização 2026-08-12 (auditoria de documentação):** os Grupos 2 a
+> 10 deste contrato já foram implementados (ver marcador "IMPLEMENTADO
+> 2026-08-12" no Grupo 10, §11-13, e as rotas reais em
+> `server/src/modules/rh/presentation/routes/rh.ts`). O parágrafo de status
+> acima é o registro do momento em que o documento foi escrito, não o
+> estado atual — mantido para histórico. O Grupo 11 (Transferência/
+> Histórico Contratual) **continua não implementado** — ver marcador
+> explícito na seção correspondente.
 
 Base URL do módulo novo: `/api/rh/*` (novo módulo
 `server/src/modules/rh/`), montado ao lado do módulo já existente
@@ -1138,6 +1147,14 @@ dois lotes confirmados soma os dois (mesma decisão já tomada para
 ---
 
 ## 13. Grupo 11 — Transferência/Histórico (`EmployeeJobHistory`) — P1
+
+> ⚠️ **NÃO IMPLEMENTADO (verificado 2026-08-12) — passada 2.** Só existem a
+> camada de domínio/infra (`EmployeeJobHistoryRepository.ts`,
+> `SequelizeEmployeeJobHistoryRepository.ts`); não há controller nem rota
+> registrada em `server/src/modules/rh/presentation/routes/rh.ts` (o
+> comentário no topo desse arquivo confirma: grupos P1/P2, incluindo este,
+> "ficam para a passada 2"). O contrato abaixo continua válido como
+> especificação a implementar, não como descrição do que já existe.
 
 Base: `/api/rh/employee-job-history`.
 

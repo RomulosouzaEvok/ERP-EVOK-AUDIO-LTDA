@@ -108,7 +108,7 @@ tomada: sincronização **automática** (não manual).
      em aberto.
 - Toda a sincronização roda na **mesma transação Sequelize** da mudança de
   status da OM (`SELECT ... FOR UPDATE` na OM antes de decidir), coberta
-  por `server/tests/unit/maintenance-use-cases.test.ts` (13 casos,
+  por `server/tests/unit/maintenance-use-cases.test.ts` (15 casos,
   incluindo os cenários de ativo baixado durante a manutenção e de
   múltiplas OMs abertas simultâneas).
 - **Risco residual:** sem teste de integração real contra Postgres para os

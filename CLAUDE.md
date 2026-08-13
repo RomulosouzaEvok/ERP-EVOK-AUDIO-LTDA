@@ -66,7 +66,7 @@
 
 ### Status Atual
 - ✅ Backend: Node.js + Express + Sequelize (30+ módulos, Clean Architecture — use-cases desacoplados do Sequelize direto em 22+ módulos desde 2026-08-05)
-- ✅ Database: PostgreSQL 16 — **📏 MEDIÇÃO CANÔNICA (2026-08-12, contada no PostgreSQL): 168 migrations aplicadas · 207 tabelas · 478 foreign keys.** Esta é a **única** linha do projeto que carrega esses números; qualquer outro documento deve apontar para cá em vez de repeti-los (a repetição foi a causa de 3 contagens divergentes convivendo até 2026-08-11). A 168ª é `20260812-000046-create-directorate-governance.cjs` (módulo Diretoria — `strategic_plannings`/`meeting_minutes`/`business_risks`, 3 tabelas e 7 foreign keys novas). Os dois bancos (`erp_evok_audio` e `erp_evok_audio_test`) são **idênticos**, e o baseline passou a ser **DDL estático congelado** (`server/database/postgresql/00_baseline_frozen.sql`) em vez de gerado a partir dos models — banco novo nasce igual ao atual. Ver `docs/database/DATABASE.md`, seção *"Baseline congelado"*
+- ✅ Database: PostgreSQL 16 — **📏 MEDIÇÃO CANÔNICA (2026-08-12, contada no PostgreSQL): 169 migrations aplicadas · 207 tabelas · 478 foreign keys.** Esta é a **única** linha do projeto que carrega esses números; qualquer outro documento deve apontar para cá em vez de repeti-los (a repetição foi a causa de 3 contagens divergentes convivendo até 2026-08-11). A 168ª é `20260812-000046-create-directorate-governance.cjs` (módulo Diretoria — `strategic_plannings`/`meeting_minutes`/`business_risks`, 3 tabelas e 7 foreign keys novas); a 169ª é `20260812-000047-hr-absences-open-unique.cjs` (índice único parcial contra corrida de afastamento duplicado, achado de auditoria — sem tabela/FK nova). Os dois bancos (`erp_evok_audio` e `erp_evok_audio_test`) são **idênticos** — auditoria de QA de 2026-08-12 encontrou os dois divergindo por 2 migrations (aplicadas só no banco de teste) logo após o pull destes commits; corrigido no mesmo dia rodando `migration:up` contra `erp_evok_audio`. O baseline passou a ser **DDL estático congelado** (`server/database/postgresql/00_baseline_frozen.sql`) em vez de gerado a partir dos models — banco novo nasce igual ao atual. Ver `docs/database/DATABASE.md`, seção *"Baseline congelado"*
 - ✅ Frontend web: React 19 + Vite em `client/` (porta 5173) — praticamente todos os módulos de backend hoje têm tela. **A tela de Importação/COMEX existe** (`/purchases/comex`, `client/src/pages/purchases/ComexPage.tsx`, commit `612e116`) e já conhece o gate de aprovação da diretoria; a **tela de roteiro de fabricação** entrou em `b52470d`. A **tela do Plano Mestre de Produção (MPS)** entrou em 2026-08-10 (`/production/master-plans`), fechando o último módulo de backend sem interface. As exceções restantes são por desenho, não por atraso: inventário mobile (QR, propositalmente mobile-only) e endpoints de webhook (integração backend-to-backend, sem UI)
 - ✅ **App mobile novo** (`mobile/`, Expo/React Native): login JWT, scan de estoque QR, histórico de movimentações, execução de contagens cíclicas (pool/atribuídas) — entregue em 2026-08-06, validado só por typecheck/bundle, **sem teste em dispositivo real ainda**
 - ✅ **App Android TV novo** (`tv/`, react-native-tvos): painel de demandas por departamento (recebimento, requisições, expedição, qualidade), auto-refresh 60s — entregue em 2026-08-06, mesma ressalva de validação (sem hardware real testado)
@@ -173,7 +173,12 @@ erp-evok-audio/
 │   ├── producao/, administrativo/, comercial/, financeiro/, juridico/,
 │   │   logistica/, patrimonio/, qualidade/, rh/, seguranca_trabalho/,
 │   │   suprimentos/, tributario/    # docs departamentais (00-README.md + NN-TEMA.md cada)
+│   ├── project-memory/              # NOVO 2026-08-12 — fonte de verdade dos 22 agentes (PRD, ADRs, security) — ver §10
+│   ├── control-plane/tasks/         # NOVO 2026-08-12 — rastreamento leve de tarefas/handoffs entre agentes — ver §10
 │   └── ...
+├── .claude/
+│   ├── agents/                      # 22 subagentes do Centro Autônomo de Engenharia de Software (trocado 2026-08-12) — ver §10
+│   └── commands/                    # NOVO 2026-08-12 — /new-feature, /architecture-review, /implement, /qa-gate, /security-gate, /release
 ├── package.json
 └── CLAUDE.md                        # Este arquivo
 ```
@@ -292,7 +297,10 @@ npm run server
 #    (a raiz só tem start/server/client/dev/install-all — auditoria 2026-08-11)
 cd server
 npm run test:unit          # 1952 testes / 177 suítes (repositório dublê) — medido 2026-08-12
-npm run test:integration   # 240 testes / 58 suítes contra PostgreSQL real, sem skips — medido 2026-08-12
+npm run test:integration   # 247 testes / 59 suítes contra PostgreSQL real, sem skips — medido 2026-08-12
+                            # (2 falhas conhecidas e pré-existentes por timeout em
+                            # traceability-and-audit-log-regression.test.ts — regressão de
+                            # performance a investigar, não ligada aos módulos novos)
 npm run test               # unit + integration + edge
 npm run typecheck
 
@@ -421,7 +429,7 @@ recebimento real.** Rastreado em `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.m
 - **[docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md](docs/arquitetura/DIAGRAMA_CASOS_DE_USO_BPMN.md)** — diagrama de casos de uso (atores × módulos) e BPMN simplificado (Order-to-Cash, Purchase-to-Pay)
 - **[docs/arquitetura/DIAGRAMA_CLASSES.md](docs/arquitetura/DIAGRAMA_CLASSES.md)** / **[docs/arquitetura/DIAGRAMA_CLASSES_CAMADAS.md](docs/arquitetura/DIAGRAMA_CLASSES_CAMADAS.md)** — diagrama de classes do backend e das camadas Clean Architecture
 - **[docs/manual/00-MANUAL_DO_USUARIO.md](docs/manual/00-MANUAL_DO_USUARIO.md)** — manual do usuário por módulo (esqueleto inicial, caminhos de menu reais)
-- Modelo conceitual/lógico/físico, matriz de privilégios, procedures/triggers e plano de disaster recovery ficam em `docs/database/DATABASE.md` (escopo do agente `AdmDBA`, tratado separadamente para não duplicar/conflitar)
+- Modelo conceitual/lógico/físico, matriz de privilégios, procedures/triggers e plano de disaster recovery ficam em `docs/database/DATABASE.md` (escopo do agente `data-engineer`/`software-architect`, ver §10, tratado separadamente para não duplicar/conflitar)
 
 ---
 
@@ -444,18 +452,114 @@ R: Não. Apenas PostgreSQL 16 é suportado (veja README.md seção "Diretriz de 
 
 ---
 
-## 10. Contato & Escalação
+## 10. Centro Autônomo de Engenharia de Software — Orquestração de Agentes
+
+**Substituiu, em 2026-08-12, o roster anterior de 21 agentes especializados em PT-BR**
+(backup preservado em `docs/governance/agentes-legado-backup-2026-08-12/`, sem histórico
+git porque `.claude/` é ignorado — ver `.gitignore:13`). A organização multiagente agora
+segue o modelo "Centro de Desenvolvimento de Software e IA": 22 subagentes em
+`.claude/agents/` cobrindo Produto, Arquitetura, Engenharia, Qualidade, Segurança,
+Plataforma, Operação e funções transversais — cada um com cargo, responsabilidades,
+ferramentas, permissões, entradas/saídas e limites de decisão definidos no próprio
+arquivo. Os papéis puramente humanos (CTO, aprovação final) **não são agentes** — são
+gates no fluxo abaixo.
+
+### Princípios não negociáveis
+
+1. **Responsabilidade humana explícita.** Todo gate marcado como "gate humano" exige
+   aprovação explícita do usuário nesta conversa antes de prosseguir. Nunca simule ou
+   assuma essa aprovação.
+2. **Produção nunca é acessada por padrão.** Nenhum agente de codificação, dados ou
+   plataforma deve agir em produção, ler segredos/credenciais reais, ou fazer deploy em
+   produção sem aprovação humana explícita e registrada.
+3. **Segregação de função.** Quem implementa não é quem revisa, e quem revisa não é quem
+   testa. Nunca usar o mesmo subagente (ou a sessão principal fazendo esse papel) para
+   implementar e depois "aprovar" a própria implementação — mesmo princípio que já rege
+   os 4 pontos de aprovação de compras (D-K, §1).
+4. **Toda alteração passa por branch/PR e checks automáticos.** Nenhum agente commita
+   direto em branch protegida ou pula CI.
+5. **Least privilege.** Cada subagente tem `tools` deliberadamente restrito e uma seção
+   "Não pode" no seu arquivo — respeitar mesmo que a ferramenta esteja tecnicamente
+   disponível na sessão principal. Isso é documentação de intenção; reforço real depende
+   de `.claude/settings.local.json` (guardrails de `deny`/`allow`, mesclados em 2026-08-12
+   com os já existentes deste projeto).
+6. **Métricas de fluxo/qualidade, não de atividade individual.** Não medir progresso por
+   linhas de código, número de commits ou volume gerado por IA.
+
+### Fluxo padrão (gates em **negrito** exigem aprovação humana explícita)
+
+```
+Ideia/pedido
+   → /new-feature   (product-manager → business-analyst → ux-researcher → product-designer)
+   → **GATE HUMANO: PRD e escopo**
+   → /architecture-review   (software-architect → security-architect → finops-agent)
+   → **GATE HUMANO: arquitetura e riscos residuais**
+   → /implement   (tech-lead → backend/frontend/data/ai-llm-engineer)
+   → /qa-gate   (code-reviewer → qa-engineer → sdet-test-automation)
+   → /security-gate   (appsec-engineer → dependency-agent)
+   → **GATE HUMANO se houver achado crítico não mitigado**
+   → /release   (release-agent → devops-engineer → sre-engineer)
+   → **GATE HUMANO FINAL: deploy em produção**
+```
+
+Os 6 comandos vivem em `.claude/commands/*.md` e já aparecem como skills desta sessão
+(`new-feature`, `architecture-review`, `implement`, `qa-gate`, `security-gate`,
+`release`). Não pular etapas para "economizar tempo" — se uma etapa não se aplica a uma
+tarefa pequena (ex.: um typo fix), dizer isso explicitamente e propor fluxo reduzido, em
+vez de ignorar o processo silenciosamente.
+
+### Memória de projeto e rastreamento de tarefas (novo, 2026-08-12)
+
+- `docs/project-memory/` — fonte de verdade compartilhada entre agentes (PRD, ADRs,
+  segurança); **não substitui** `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md`, que
+  continua sendo a fonte de pendências medidas contra banco/código/suíte deste ERP.
+- `docs/control-plane/tasks/` — rastreamento leve de tarefas/handoffs entre agentes,
+  baseado em arquivo (ver `docs/control-plane/README.md`); complementar, não substitui,
+  `docs/governance/TODO.md` (diário histórico) nem o control-plane de departamentos já
+  existente.
+- Antes de iniciar trabalho, cada subagente deve ler o contexto relevante em
+  `docs/project-memory/` em vez de assumir premissas não documentadas.
+
+### Classes de autonomia
+
+- **Classe A — Executores** (alta autonomia dentro da tarefa recebida): `backend-engineer`,
+  `frontend-engineer`, `data-engineer`, `ai-llm-engineer`, `documentation-agent`,
+  `sdet-test-automation`.
+- **Classe B — Especialistas** (autonomia média, opinião forte mas não decide sozinho em
+  temas críticos): `software-architect`, `security-architect`, `qa-engineer`,
+  `code-reviewer`, `appsec-engineer`, `sre-engineer`, `platform-engineer`,
+  `devops-engineer`, `dependency-agent`, `finops-agent`, `release-agent`.
+- **Classe C — Decisão predominantemente humana**: aprovação de PRD final, aprovação de
+  arquitetura transversal, aceite de risco de segurança crítico, aprovação de release em
+  produção, prioridade de portfólio. Nenhum subagente toma essas decisões por conta
+  própria — no máximo recomenda.
+
+### Nota de verificação
+
+A sintaxe de frontmatter dos subagentes (`name`, `description`, `tools`, `model`) e dos
+slash commands reflete o formato do Claude Code no momento em que o pacote foi escrito
+(fora desta sessão, sem busca na web). Se algo não funcionar como esperado, confirmar
+contra `docs.claude.com/en/docs/claude-code`.
+
+## 11. Contato & Escalação
 
 - **CTO / Tech Lead:** Plano técnico 30h, aprovação P0
 - **CFO:** Risco contábil (custeio, payable), aprovação fiscal
 - **Gerente Produção:** Validação rastreabilidade, OP + apontamento
 - **Compliance:** LGPD conformidade, ateste ISO (se aplicável)
-- **Claude Code Agents:** `claude --agent evok-production-remediation` ou `@evok-production-remediation` em sessão; `claude --agent PromadorFonteEnd` ou `@PromadorFonteEnd` para tarefas de frontend; `claude --agent webdesiner` ou `@webdesiner` para estilização/UI-UX (propõe plano e para para aprovação antes de editar); `claude --agent AdmDBA` ou `@AdmDBA` para modelagem/schema/PostgreSQL (MER/DER, dicionário de dados, acessos/isolamento, disaster recovery); `claude --agent AnalistaNegocios` ou `@AnalistaNegocios` para engenharia de requisitos/BPMN/casos de uso; `claude --agent ArquitetoSoftwareAPI` ou `@ArquitetoSoftwareAPI` para diagramas de classe/sequência e contratos de API; `claude --agent AuditorIntegrador` ou `@AuditorIntegrador` para auditoria cruzada Requisito↔Banco↔API; `claude --agent iterative-review` ou `@iterative-review` para revisões multi-agente; `claude --agent cleanliness-review` ou `@cleanliness-review` para limpeza e polimento de código
+- **Claude Code Agents (roster novo, 2026-08-12 — ver §10):** `@tech-lead` para quebrar
+  trabalho em tarefas técnicas; `@backend-engineer`/`@frontend-engineer` para
+  implementação; `@software-architect`/`@security-architect` para decisões estruturais e
+  threat modeling; `@code-reviewer`/`@qa-engineer`/`@sdet-test-automation` para o gate de
+  qualidade; `@appsec-engineer`/`@dependency-agent` para o gate de segurança;
+  `@release-agent`/`@devops-engineer`/`@sre-engineer` para release/operação;
+  `@documentation-agent` para documentação. Para tarefas pequenas, usar só os agentes
+  relevantes em vez de forçar o fluxo completo de `/new-feature` a `/release`.
 
 ---
 
-**Versão:** 1.5 SSOT
-**Última atualização:** 12 de agosto de 2026 (cadeia do produto: **17/17** gaps fechados e endurecidos · 2 críticos de MRP corrigidos · 5 brechas de gate fechadas · baseline do schema congelado, banco reproduzível · suíte de integração real 211/211 · consolidação documental: `AGENTS.md` aposentado, 11 alegações falsas corrigidas, fonte de pendências unificada em `RESIDUAIS_ABERTOS_2026-08-10.md`)
+**Versão:** 1.6 SSOT
+**Última atualização:** 12 de agosto de 2026 (cadeia do produto: **17/17** gaps fechados e endurecidos · 2 críticos de MRP corrigidos · 5 brechas de gate fechadas · baseline do schema congelado, banco reproduzível · suíte de integração real 211/211 · consolidação documental: `AGENTS.md` aposentado, 11 alegações falsas corrigidas, fonte de pendências unificada em `RESIDUAIS_ABERTOS_2026-08-10.md`; **§10 nova — roster de agentes trocado de 21 especialistas PT-BR para os 22 do Centro Autônomo de Engenharia de Software, com fluxo de gates humanos formal**)
 **Próxima revisão:** Pós-Go-Live (semana 1 de setembro)
 
 Remova referências a análises antigas. Este documento é o guia único de verdade.

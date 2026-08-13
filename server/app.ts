@@ -14,6 +14,7 @@ import healthRouter from './src/routes/health';
 
 const errorHandler = require('./src/middlewares/errorHandler');
 const requestContext = require('./src/middlewares/requestContext');
+const { authenticate } = require('./src/middlewares/auth');
 
 const runtimeEnv = loadRuntimeEnv();
 const app = express();
@@ -216,7 +217,12 @@ app.use('/api/rh', require('./src/modules/rh/presentation/routes/rh'));
 // Estrategico, Atas de Reuniao e Riscos Corporativos.
 app.use('/api/directorate', require('./src/modules/directorate/presentation/routes/directorate'));
 
-app.use('/uploads', express.static('uploads'));
+// Achado de auditoria de seguranca (2026-08-12): este diretorio guarda ASO,
+// TRCT de rescisao, contratos e outros documentos sensiveis de RH/Juridico.
+// Servir sem autenticacao deixava qualquer pessoa com a URL acessar o
+// arquivo, sem sessao nem log. `authenticate` exige um JWT valido (mesma
+// checagem usada nas rotas /api/*) antes do express.static liberar o byte.
+app.use('/uploads', authenticate, express.static('uploads'));
 
 app.get('/api', (_req, res) => {
   res.json({
