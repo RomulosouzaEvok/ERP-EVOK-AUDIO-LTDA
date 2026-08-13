@@ -31,7 +31,7 @@
  * 1. Migration citada como NÃO aplicada/pendente numa linha VIVA de qualquer
  *    documento deve estar de fato ausente de `SequelizeMeta`.
  * 2. O número de migrations dos DOIS pontos de medição canônica
- *    (`CLAUDE.md` §1 e `docs/database/00-INDICE.md`) deve bater com
+ *    (`docs/project-memory/product/ERP_SSOT.md` §1 e `docs/database/00-INDICE.md`) deve bater com
  *    `SequelizeMeta`. Esses dois pontos são, por decisão de 2026-08-11, os
  *    únicos lugares do projeto autorizados a carregar o número — todos os
  *    outros apontam para eles. Guardar dois pontos é barato; era a
@@ -231,9 +231,9 @@ descreveIntegracao('drift entre documentação e banco', () => {
 
     const declarados = [
       {
-        documento: 'CLAUDE.md',
+        documento: 'docs/project-memory/product/ERP_SSOT.md',
         valor: numeroCanonicoDeMigrations(
-          'CLAUDE.md',
+          'docs/project-memory/product/ERP_SSOT.md',
           /MEDI[ÇC][ÃA]O CAN[ÔO]NICA[^:]*:\s*\*{0,2}(\d+)\*{0,2}\s*migrations/i,
         ),
       },
