@@ -120,14 +120,26 @@ O SIM-001 encontrou defeitos no CoreTriad, não só no produto simulado:
 
 ---
 
-## 7. Pendências abertas (não fechadas por este ciclo)
+## 7. Pendências — situação após as decisões humanas de 2026-08-13
 
 | ID | Item | Situação |
 |---|---|---|
-| OBS-SIM-001-A | `userRole` é autodeclarado pelo chamador (sem fonte confiável de identidade) | Candidato a **novo finding HIGH**; severidade final depende de decisão humana sobre a fronteira de confiança — **escalado** |
-| OBS-SIM-001-B | Cancelamento após o início da reserva cobra taxa, sem BR que governe | Lacuna de requisito → backlog de produto (não é finding: não há fonte autoritativa contra a qual medir desvio) |
-| OBS-SIM-001-C | Checagem de status antes da de autorização revela estado de reservas a não autorizados | INFO — vazamento de metadados, sem elevação de privilégio |
-| FIND-004/005/006 | `listBookings` sem política; comportamentos sem requisito; boundaries sem teste | `PROPOSED` — exigem decisão de produto antes de remediação |
+| OBS-SIM-001-A | `userRole` é autodeclarado pelo chamador (sem fonte confiável de identidade) | **RESOLVIDO por decisão humana** — `RISK_ACCEPTED` restrito ao SIM-001 (APR-2026-005). A aceitação **não se estende a projeto real**: virou norma permanente (Regra 24 do `CLAUDE.md` + Master Spec Parte IV §20) |
+| FIND-004/005/006 | `listBookings` sem política; comportamentos sem requisito; boundaries sem teste | **Não bloqueantes por decisão humana** (APR-2026-006). Seguem `PROPOSED`. Ação pendente rastreada: rodar o `finding-validator` neles antes do arquivamento definitivo, ou descartá-los com o ambiente do simulado |
+| OBS-SIM-001-B | Cancelamento após o início da reserva cobra taxa, sem BR que governe | Aberta — lacuna de requisito → backlog de produto (não é finding: não há fonte autoritativa contra a qual medir desvio) |
+| OBS-SIM-001-C | Checagem de status antes da de autorização revela estado de reservas a não autorizados | Aberta — INFO, vazamento de metadados sem elevação de privilégio |
+
+### A norma que sobreviveu ao simulado
+
+O achado mais duradouro do SIM-001 não foi um defeito do produto simulado, e sim
+uma regra que passa a valer para todo projeto real: **papel/role declarado pelo
+cliente sem verificação server-side é finding CRITICAL bloqueante para release,
+nunca `RISK_ACCEPTED` em produção** — incluindo `role`/`userRole`/`isAdmin`/
+`perfil` vindos de body, query, header ou token não verificado. Um
+`if (role === 'admin')` sobre valor autodeclarado é *ausência* de autorização,
+não autorização; é defeito distinto de "verificação ausente" e recebe ID
+próprio. Registrada em `CLAUDE.md` (sempre carregado) e no Master Spec, para
+que a auditoria do `ERP-LEGACY-001` não dependa da memória de ninguém.
 
 ---
 
@@ -143,11 +155,16 @@ detectou defeitos plantados sem ser avisado, refutou antes de confirmar, pegou
 uma remediação insuficiente que passava em todos os testes de quem a escreveu, e
 impediu tecnicamente que quem corrige feche o próprio finding.
 
-**Status:** SIM-001 em `RETEST_PASSED`. Não avança para `READY_FOR_RELEASE` —
-é projeto de validação e o run de auditoria não foi declarado `AUDIT_PASSED`.
+**Status:** SIM-001 em `RETEST_PASSED`, **FECHADO como ciclo de validação** —
+**não arquivado** (o arquivamento definitivo depende da ação pendente do
+APR-2026-006). Não avança para `READY_FOR_RELEASE`: é projeto de validação e o
+run de auditoria não foi declarado `AUDIT_PASSED` — `RISK_ACCEPTED` é aceitação
+humana de risco, não conformidade demonstrada, e não substitui `AUDIT_PASSED`.
+
+**Revisão humana concluída em 2026-08-13** (APR-2026-005 e APR-2026-006 em
+`coretriad/governance/APPROVALS.md`): os dois bloqueios registrados foram
+decididos e o SIM-002 está liberado para iniciar.
 
 Conforme a Parte VII §10 do Master Spec, `CORETRIAD OPERATIONALLY VALIDATED`
 **só pode ser declarado após o SIM-002** (8 classes de defeito), que ainda não
 foi executado. Este relatório NÃO faz essa declaração.
-
-**PARAR para revisão humana.**
