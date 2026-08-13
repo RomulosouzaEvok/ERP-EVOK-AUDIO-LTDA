@@ -1,81 +1,63 @@
-# CORETRIAD — OPERATING RULES
+# CORETRIAD — PROJECT OPERATING RULES
 
-Este repositório opera através do CoreTriad.
+Este repositório opera sob o modelo organizacional CoreTriad.
 
-## Organizações
+Organizações:
 
-OpusCore:
-Engenharia e produção de software.
+- **OpusCore** — engenharia e produção de software.
+- **VeriCore** — auditoria, verificação, assurance e reteste.
+- **SanaCore** — remediação de findings confirmados.
+- **CoreTriad Control Plane** — orquestração do ciclo de vida.
 
-VeriCore:
-Auditoria, verificação e assurance.
+## Regras fundamentais (invioláveis)
 
-SanaCore:
-Remediação e engenharia corretiva.
+1. OpusCore constrói, mas nunca aprova a própria auditoria.
+2. VeriCore audita e reatesta, mas NUNCA corrige o objeto auditado.
+3. SanaCore corrige findings confirmados, mas NUNCA fecha o próprio finding.
+4. Somente VeriCore pode declarar `RETEST_PASSED` e `FINDING CLOSED`.
+5. CoreTriad Director orquestra, mas não implementa, não audita e não corrige.
+6. Nenhum agente inventa regra de negócio, requisito ou aprovação.
+7. Artefatos versionados no repositório são a única fonte oficial de verdade.
+8. Auto memory é contexto auxiliar — nunca fonte normativa.
+9. Auto memory pode ser compartilhada entre worktrees do mesmo repositório;
+   worktree NÃO representa isolamento de memória.
+10. Informação material vinda de memória deve ser verificada contra artefatos
+    versionados antes de fundamentar decisão.
+11. OpusCore e SanaCore usam branches/worktrees separados quando houver
+    trabalho concorrente com possibilidade de colisão:
+    `opus/<PROJECT>/<TASK>` e `sana/<PROJECT>/<FINDING>`.
+12. VeriCore audita sempre um `AUDIT_COMMIT` imutável e identificado.
+13. Auditoria em andamento não segue HEAD automaticamente.
+14. Mudanças posteriores ao `AUDIT_COMMIT` exigem delta audit ou nova auditoria.
+15. Nenhuma organização altera evidência histórica pertencente a outra.
+16. Read access não significa write ownership.
+17. Requisitos, regras, casos de uso, findings, decisões, aprovações,
+    remediações e estados devem estar registrados no repositório com IDs
+    padronizados (PROC, BR, REQ, NFR, UC, AC, TC, ADR, API, PERM, FIND).
+18. Human gates não podem ser aprovados por memória ou inferência —
+    somente por decisão humana explícita registrada.
+19. Alterações R2/R3 exigem segregação entre implementação, revisão e
+    assurance.
+20. Divergência entre agentes nunca se resolve por votação: resolve-se por
+    evidência → teste → requisito → regra → responsável humano.
+21. Quando houver contradição entre memória, documento, código e evidência,
+    interrompa a decisão e determine a fonte autoritativa.
+22. Findings CRITICAL e HIGH passam pelo finding-validator antes de
+    seguirem para remediação.
+23. Permissões são impostas por hooks e settings do Claude Code — o prompt
+    é reforço, nunca o único mecanismo.
 
-CoreTriad:
-Orquestração e controle do ciclo de vida.
+## Ownership de diretórios
 
-## Regras fundamentais
+| Diretório | Autoridade de escrita |
+|---|---|
+| `product/`, `src/`, `tests/`, `requirements/`, `architecture/` | OpusCore (e SanaCore apenas em worktree de remediação) |
+| `audit/`, `audit/runs/`, findings e evidências de auditoria | VeriCore |
+| `remediation/`, `remediation/cases/` | SanaCore |
+| `coretriad/` (control plane, states, locks, contracts) | CoreTriad Director |
 
-1. OpusCore constrói, mas não aprova a própria auditoria.
+## Especificação completa
 
-2. VeriCore audita e reatesta, mas nunca corrige o objeto auditado.
+Arquitetura completa: `docs/coretriad/CORETRIAD_MASTER_SPEC.md`
 
-3. SanaCore corrige findings confirmados, mas nunca fecha o próprio finding.
-
-4. Somente VeriCore pode declarar RETEST_PASSED e CLOSED.
-
-5. CoreTriad coordena, mas não substitui especialistas.
-
-6. Nenhum agente pode inventar regra de negócio, requisito ou aprovação.
-
-7. Artefatos versionados no repositório são a fonte oficial da verdade.
-
-8. Auto memory é apenas contexto auxiliar.
-
-9. Worktree fornece isolamento de arquivos, não autoridade organizacional.
-
-10. OpusCore e SanaCore devem usar branches/worktrees separados quando houver risco de conflito.
-
-11. VeriCore sempre audita um AUDIT_COMMIT identificado e imutável.
-
-12. VeriCore não deve acompanhar HEAD automaticamente durante uma auditoria.
-
-13. Alterações posteriores ao AUDIT_COMMIT exigem delta audit ou nova auditoria.
-
-14. Nenhuma organização pode alterar evidências históricas pertencentes a outra.
-
-15. Read access não concede write ownership.
-
-16. Requisitos, regras, casos de uso, findings, decisões, aprovações e estados devem existir em artefatos versionados.
-
-17. Aprovações humanas precisam de registro explícito.
-
-18. Alterações R2/R3 exigem segregação entre implementação, revisão e assurance.
-
-19. Evidência tem precedência sobre consenso entre modelos.
-
-20. Quando memória, documentação, requisito, código ou evidência divergirem, interrompa a decisão e determine a fonte autoritativa.
-
-## Documentação mestre
-
-Leia a especificação completa em:
-
-docs/coretriad/CORETRIAD_MASTER_SPEC.md
-
-Para implantação ou reorganização use:
-
-/coretriad-bootstrap
-
-## Produto operado por este CoreTriad
-
-Este CoreTriad opera hoje um único produto real: o ERP Evok Áudio LTDA. A SSOT
-completa do produto (status, roadmap, gaps, runbook, decisões arquiteturais) não
-mora mais aqui — foi migrada em 2026-08-12 para manter este arquivo curto. Leia:
-
-docs/project-memory/product/ERP_SSOT.md
-
-Pronto.
-
-Essas são as regras permanentes.
+Para implantar ou reorganizar o CoreTriad: `/coretriad-bootstrap`

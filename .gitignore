@@ -10,7 +10,14 @@ Thumbs.db
 server/dist/
 server/tmp/
 server/=1
-.claude/
+# CoreTriad: runtime versionado (agentes, hooks, skills, settings compartilhados).
+# Apenas estado local de sessão permanece fora do repositório.
+.claude/*
+!.claude/agents/
+!.claude/hooks/
+!.claude/skills/
+!.claude/settings.json
+.claude/settings.local.json
 backups/
 # Credenciais de teste geradas por server/scripts/seed-usuarios-departamentos.cjs
 *.local.txt

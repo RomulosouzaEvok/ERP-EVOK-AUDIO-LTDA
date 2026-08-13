@@ -1,0 +1,14 @@
+# PRODUCT_DEFINITION_PACKAGE  (OpusCore Product → OpusCore Engineering)
+PROJECT_ID:
+PRODUCT_BRIEF:
+PRD:
+PROCESSES:            # PROC-*
+BUSINESS_RULES:       # BR-*
+REQUIREMENTS:         # REQ-*
+NFRS:                 # NFR-*
+USE_CASES:            # UC-*
+ACCEPTANCE_CRITERIA:  # AC-*
+UX_ARTIFACTS:
+KPIS:
+OPEN_QUESTIONS:
+HUMAN_APPROVALS:
