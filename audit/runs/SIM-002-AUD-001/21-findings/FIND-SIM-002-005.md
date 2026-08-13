@@ -9,10 +9,14 @@ DOMAIN: Regra de negócio / Banco de dados
 SUBDOMAIN: Integridade de cadastro
 SEVERITY: HIGH
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: business-rule, database, traceability, data-integrity, qa, documentation-consistency (6 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
+REMEDIATION_COMMIT: 9ce4754
+RETEST_RESULT: RETEST_PASSED
+CLOSED_BY: vericore-software-audit-director
+CLOSED_DATE: 2026-08-13
 
 DESCRIPTION:
 A regra de unicidade de CNPJ não está implementada nem na aplicação nem no banco.
@@ -190,3 +194,38 @@ de defesa em profundidade de FIND-SIM-002-012 (CHECKs, FK composta, `updated_at`
 Também distinta do índice ausente sobre `suppliers.cnpj` (FIND-SIM-002-013,
 Bloco D), que é consequência de performance da remediação deste finding. Sem
 duplicidade; recomendo remediação coordenada.
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: 2026-08-13
+REMEDIATION_COMMIT ACEITO: `9ce4754` (WAVE-C)
+RETEST_REPORT: `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §1.4
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner`, harness próprio fora
+do repositório
+
+RESULTADO DO RETESTE: **RETEST_PASSED**, com os quatro itens da
+`RETEST_SPECIFICATION` atendidos:
+1. Mesmo CNPJ, **mesma** empresa → recusado com erro de negócio legível.
+2. Mesmo CNPJ, **empresas diferentes** → também recusado. Este é o item
+   discriminante: comprova unicidade **global**, e não uma unicidade composta
+   `(company_id, cnpj)`, que seria insuficiente para a semântica
+   "independentemente da empresa" de BR-SUP-002.
+3. CNPJs distintos seguem aceitos — não-regressão de TC-SIM2-001; suíte 22/22.
+4. **Prova de camada de dados executada**: `INSERT` direto pelo handle de banco,
+   **contornando o serviço**, falhou com
+   `UNIQUE constraint failed: suppliers.cnpj`. A constraint está no banco, e não
+   apenas na aplicação — exatamente o ponto que o finding apontava como
+   indispensável e que a spec exigia provar.
+
+DIVERGÊNCIA DOC × DDL: resolvida **no sentido correto** — o DDL passou a honrar
+`DATA_DICTIONARY.md:26` (`UNIQUE`), em vez de o dicionário ser rebaixado ao DDL.
+O autoíndice de unicidade presente no schema também endereça, incidentalmente, o
+Bloco D de FIND-SIM-002-013 quanto a índice sobre `suppliers.cnpj`;
+FIND-SIM-002-013 **permanece aberto** pelos demais blocos.
+
+DECLARAÇÃO: **FINDING CLOSED**, nos termos da **Regra 4** do `CLAUDE.md`.
+Fechamento fundado em reteste independente sobre commit identificado, incluindo
+prova na camada de dados. Não constitui `REMEDIATION COMPLETE` (Regra 3) nem
+auditoria do commit remediado como um todo (Regras 12-14).

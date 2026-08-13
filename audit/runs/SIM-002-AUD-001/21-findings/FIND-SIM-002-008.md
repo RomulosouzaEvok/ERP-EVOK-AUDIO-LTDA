@@ -10,10 +10,13 @@ SUBDOMAIN: Contrato de API × implementação
 SEVERITY: MEDIUM
 SEVERITY_ORIGINAL: HIGH (rebaixada pelo finding-validator — ver Validação)
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: PARTIALLY_REMEDIATED (divergência B remediada e retestada; divergência A ABERTA em human gate)
 DETECTED_BY: documentation-consistency, traceability, authorization, business-rule, qa (5 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
+REMEDIATION_COMMIT: f0aaa7a (somente divergência B)
+RETEST_RESULT: RETEST_PASSED (parcial — divergência B) / RETEST_NOT_APPLICABLE (divergência A)
+NOT_CLOSED_REASON: human gate pendente sobre o papel exigido em createPayment (Regra 18)
 
 DESCRIPTION:
 O contrato publicado de `createPayment` diverge da implementação em dois pontos
@@ -211,3 +214,70 @@ esta condição para que o consolidador e o diretor de auditoria não a percam.
 
 Divergência B pode seguir isoladamente à SanaCore (correção documental de uma
 linha, sem invenção de regra). Divergência A **não segue** — human gate, Regra 18.
+
+---
+
+## Fechamento parcial (software-audit-director)
+
+DATA: 2026-08-13
+REMEDIATION_COMMIT ACEITO: `f0aaa7a` (WAVE-A) — **exclusivamente** quanto à
+divergência B
+RETEST_REPORT: `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §1.7
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner`
+
+### Divergência B — status de saída: **RETEST_PASSED**
+
+`docs/API.md` passa a declarar `status: "created"`, convergindo com as cinco
+fontes concordantes (`paymentService.js:58`, `schema.sql:27`,
+`DATA_DICTIONARY.md:44`, AC-SIM2-003 e `payments.test.js:36`). Nenhuma ocorrência
+remanescente de `pending` na seção de pagamentos. Item 1 da
+`RETEST_SPECIFICATION` atendido. Suíte 20/20; a alteração é documental e não
+produz efeito em código.
+
+### Divergência A — papel exigido: **ABERTA, RETEST_NOT_APPLICABLE**
+
+A linha do papel `manager` em `docs/API.md:65` **não foi alterada**, e o runner
+confirmou **empiricamente** que `analyst` consegue criar pagamento. A contradição
+documento × código persiste — o que está **correto**: a decisão normativa não foi
+tomada, e alterar qualquer um dos lados sem norma seria escolher arbitrariamente
+entre duas leituras igualmente sustentáveis pelos artefatos versionados.
+
+O item 2 da `RETEST_SPECIFICATION` **não é executável**: pressupõe decisão humana
+registrada que institua BR de papel para registro de pagamento, e tal decisão não
+existe no repositório.
+
+### Por que o finding NÃO é fechado
+
+O item 3 da própria `RETEST_SPECIFICATION` é terminante: *"Sem a decisão humana da
+divergência A, o finding permanece aberto ainda que a divergência B esteja
+corrigida."* Fechar o finding inteiro exigiria que este diretor arbitrasse, por
+inferência, qual papel o negócio autoriza — vedado pela **Regra 18** (human gates
+não podem ser aprovados por memória ou inferência) e pela **Regra 6** (nenhum
+agente inventa regra de negócio). A **Regra 21** manda interromper a decisão
+diante de contradição entre documento e código sem fonte autoritativa, e é o que
+se faz aqui.
+
+STATUS RESULTANTE: **PARTIALLY_REMEDIATED** — não `CLOSED`.
+
+### Alerta preservado (cláusula de reversão de severidade)
+
+Reafirmo, para que não se perca no handoff: se a decisão humana estabelecer que
+**somente `manager`** pode registrar pagamento, a divergência A deixa de ser
+documental, torna-se defeito de autorização confirmado e **deve ser re-elevada a
+HIGH** no mesmo ato, com reavaliação de segregação de funções em conjunto com
+FIND-SIM-002-001 (cuja severidade CRITICAL não depende desta decisão).
+
+### Observação relacionada, a decidir no mesmo ato
+
+**OBS-SIM-002-002** (`31-new-findings/NEW_OBSERVATIONS.md`): `getSupplier` e
+`listPaymentsBySupplier` também não verificam papel — usuário sem `role` ou com
+`role: "guest"` obtém a listagem —, enquanto `docs/API.md` exige
+`analyst|manager`. É **a mesma lacuna normativa** desta divergência A. Deve ser
+levada ao **mesmo human gate** e decidida em ato único, para não produzir norma de
+papel fragmentada e contraditória entre operações.
+
+### Escalonamento
+
+Escalado ao responsável humano (Regra 21) em conjunto com FIND-SIM-002-004 e
+FIND-SIM-002-009. Sem essa decisão, o run SIM-002-AUD-001 não pode ser declarado
+`AUDIT_PASSED` — ver `30-retest/RETEST_REPORT.md` §3.

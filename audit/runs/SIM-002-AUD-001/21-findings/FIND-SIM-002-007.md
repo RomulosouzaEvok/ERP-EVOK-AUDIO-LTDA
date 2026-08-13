@@ -9,10 +9,14 @@ DOMAIN: Qualidade / Assurance
 SUBDOMAIN: Validade da evidência de teste
 SEVERITY: HIGH
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: qa, traceability, business-rule, data-integrity, documentation-consistency, database (6 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
+REMEDIATION_COMMIT: f0aaa7a
+RETEST_RESULT: RETEST_PASSED
+CLOSED_BY: vericore-software-audit-director
+CLOSED_DATE: 2026-08-13
 
 DESCRIPTION:
 O teste TC-SIM2-003b envolve a chamada a `createPayment` em um `try/catch` cujo
@@ -201,3 +205,45 @@ FIND-SIM-002-013 (LOW) agrega lacunas de fronteira e testes negativos ausentes;
 este finding trata de um teste **existente e inválido** usado como evidência de
 release. Objetos distintos. Recomendo, porém, reteste conjunto dos dois na mesma
 rodada de suíte.
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: 2026-08-13
+REMEDIATION_COMMIT ACEITO: `f0aaa7a` (WAVE-A; produto byte-idêntico ao HEAD,
+equivalência verificada por hash de árvore)
+RETEST_REPORT: `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §1.6
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner`, harness próprio fora
+do repositório
+
+RESULTADO DO RETESTE: **RETEST_PASSED**. Itens 1 a 4 da `RETEST_SPECIFICATION`
+executados com asserção e verificação de estado:
+1. Limite 5000 + pagamento 9000 → **rejeitado**.
+2. Nada persistido: `COUNT(*)` de `payments` = **0** após a tentativa.
+3. Caso acumulado: 3000 aceito, 2500 rejeitado, `SUM = 3000` — o teto considera a
+   **soma**, e não o valor isolado.
+4. Fronteira exata: 3000 + 2000 aceitos (`SUM = 5000`, igual ao limite →
+   **aceito**); +0,01 → **recusado**.
+Regressão: suíte 20/20 (contra 12/12 no `AUDIT_COMMIT`; o crescimento da suíte é
+indício de acréscimo de casos, não de reescrita cosmética). Working tree limpo
+antes e depois.
+
+RESSALVA REGISTRADA: o item 5 (prova de discriminação por mutação — neutralizar a
+guarda e exigir falha do teste) **não consta** da evidência do runner. Não a trato
+como bloqueante, e a razão é lógica e não de conveniência: o objeto do finding é
+"o teste passa nos dois mundos possíveis" (zero asserções, `catch` vazio), e isso
+está diretamente refutado — um teste sem asserção não pode produzir a verificação
+`COUNT(*) payments = 0` nem discriminar fronteira em R$ 0,01. A mutação
+**elevaria** a confiança; não é condição necessária para demonstrar a extinção do
+defeito. Lacuna registrada em aberto como **OBS-SIM-002-005** (INFO, backlog de
+assurance) em `31-new-findings/NEW_OBSERVATIONS.md`, junto com a varredura do
+mesmo antipadrão (`try/catch` sem asserção) na suíte inteira, recomendada por
+este finding.
+
+EFEITO SOBRE A EVIDÊNCIA DE RELEASE: `SOFTWARE_RELEASE_PACKAGE.md:31-34` deixa de
+sustentar um `12/12 PASS` contaminado por evidência nula sobre BR-PAY-001.
+
+DECLARAÇÃO: **FINDING CLOSED**, nos termos da **Regra 4** do `CLAUDE.md`. Não
+constitui `REMEDIATION COMPLETE` (Regra 3) nem auditoria do commit remediado como
+um todo (Regras 12-14).

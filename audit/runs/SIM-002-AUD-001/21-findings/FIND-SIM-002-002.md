@@ -9,10 +9,14 @@ DOMAIN: Segurança
 SUBDOMAIN: Isolamento multi-tenant (IDOR)
 SEVERITY: CRITICAL
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: authorization, business-rule, database, traceability, qa, documentation-consistency (6 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
+REMEDIATION_COMMIT: 9f7b056
+RETEST_RESULT: RETEST_PASSED
+CLOSED_BY: vericore-software-audit-director
+CLOSED_DATE: 2026-08-13
 
 DESCRIPTION:
 `listPaymentsBySupplier` exige e valida `user.companyId`, mas a consulta SQL
@@ -209,3 +213,45 @@ estaticamente pela ausência do predicado. Aceito como prova.
 A defesa em profundidade sugerida (FK composta / amarração de tenant) é objeto de
 FIND-SIM-002-012 e **não** substitui a correção do predicado — não trato este
 finding como duplicado daquele: são camadas distintas.
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: 2026-08-13
+REMEDIATION_COMMIT ACEITO: `9f7b056` (WAVE-B)
+RETEST_REPORT: `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §1.2
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner`, harness próprio fora
+do repositório
+
+RESULTADO DO RETESTE: **RETEST_PASSED**, com a prova de discriminação mais forte
+das três ondas: o runner extraiu o código do `AUDIT_COMMIT` via `git show` e
+submeteu **original e remediado ao mesmo harness**. No original, o usuário da
+empresa B recebeu os **2 pagamentos completos** da empresa A (`leakedRows = 2`);
+no remediado, a chamada resulta em `Fornecedor não encontrado`, sem nenhum dado.
+O requisito "falhar contra o `AUDIT_COMMIT` e passar após a remediação" está
+satisfeito por medição direta, não por inferência.
+
+Itens da `RETEST_SPECIFICATION`: (1) cross-tenant recusado, zero registros da
+empresa A; (2) caminho positivo preservado — usuário legítimo recebe os 2
+pagamentos; (3) invariante universal `item.company_id === user.companyId` com
+`invariantViolations = 0`; (4) discriminação comprovada. Regressão de vizinhança
+executada sobre `getSupplier`, `approveSupplier` e `createPayment` — todas seguem
+recusando cross-tenant, sem afrouxamento colateral. Suíte 17/17.
+
+REFORÇO ACEITO ALÉM DA SPEC: o **oráculo de existência** foi eliminado —
+fornecedor alheio e fornecedor inexistente produzem resposta literalmente
+idêntica, o que antes era distinguível. A correção veda o dado e também a
+inferência sobre o dado.
+
+DELIMITAÇÃO: fecha-se o **isolamento de tenant**, objeto deste finding. O fato
+incidental de que `docs/API.md` exige papel `analyst|manager` em
+`listPaymentsBySupplier` enquanto o código valida apenas `companyId` **não é
+imputado a este finding** — é divergência doc × código de papel, da mesma classe
+da divergência A de FIND-SIM-002-008, sem árbitro normativo. Registrado em aberto
+como **OBS-SIM-002-002** e encaminhado ao mesmo human gate.
+
+DECLARAÇÃO: **FINDING CLOSED**, nos termos da **Regra 4** do `CLAUDE.md`.
+Fechamento fundado em reteste independente sobre commit identificado, com
+reprodução do bug original. Não constitui `REMEDIATION COMPLETE` (Regra 3) nem
+auditoria do commit remediado como um todo (Regras 12-14).

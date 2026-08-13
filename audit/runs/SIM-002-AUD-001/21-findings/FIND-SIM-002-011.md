@@ -9,8 +9,12 @@ DOMAIN: Segurança
 SUBDOMAIN: Isolamento multi-tenant na escrita
 SEVERITY: MEDIUM
 CONFIDENCE: CONFIRMED
-STATUS: PROPOSED
+STATUS: CLOSED
 DETECTED_BY: authorization, business-rule, traceability, documentation-consistency (4 de 8 trilhas)
+REMEDIATION_COMMIT: 9f7b056
+RETEST_RESULT: RETEST_PASSED
+CLOSED_BY: vericore-software-audit-director
+CLOSED_DATE: 2026-08-13
 
 DESCRIPTION:
 `createSupplier` não recebe o objeto `user`. O `companyId` sob o qual o
@@ -141,3 +145,46 @@ RETEST_SPECIFICATION:
 3. Chamada sem `user` → **recusada** (não pode existir escrita sem sujeito).
 4. Não-regressão de TC-SIM2-001 e TC-SIM2-001b após a alteração de assinatura.
 5. Consistência documental: `docs/API.md:26-35` reflete a assinatura com sujeito.
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: 2026-08-13
+REMEDIATION_COMMIT ACEITO: `9f7b056` (WAVE-B)
+RETEST_REPORT: `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §1.8
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner`, harness próprio fora
+do repositório
+
+NOTA DE CONFORMIDADE PROCESSUAL: este finding encontrava-se em `STATUS: PROPOSED`
+e não passou pelo `vericore-finding-validator`. A Regra 22 do `CLAUDE.md` exige
+validação apenas para findings CRITICAL e HIGH; sendo MEDIUM, com
+`CONFIDENCE: CONFIRMED` e evidência arquivo+linha verificada contra o
+`AUDIT_COMMIT`, o fechamento por reteste independente é regular. O registro fica
+para que a ausência de validação não seja lida como omissão.
+
+RESULTADO DO RETESTE: **RETEST_PASSED**, com reprodução do comportamento original:
+o runner aplicou o mesmo harness ao código do `AUDIT_COMMIT` e ao remediado. No
+original, `createSupplier` criava fornecedor em empresa alheia **e** aceitava
+chamada **sem `user`**; no remediado, ambos são recusados.
+
+Itens da `RETEST_SPECIFICATION`:
+1. Cadastro cross-tenant → recusado; `COUNT(*) suppliers WHERE company_id = B`
+   permaneceu **0** — pós-condição verificada no banco, não apenas pela exceção.
+2. Caminho positivo preservado.
+3. Chamada sem `user` → recusada; não há escrita sem sujeito.
+4. Não-regressão de TC-SIM2-001/001b — suíte 17/17.
+5. Assinatura com sujeito compatível com `docs/API.md:26-35`.
+
+REFORÇO ACEITO ALÉM DA SPEC: **contornos por coerção** foram exercitados —
+`companyId` como string e como `null` também são recusados. Isso é materialmente
+relevante porque a validação original era de tipo e existência, e a classe de
+bypass mais provável após a correção seria justamente a coerção.
+
+REGRESSÃO DE VIZINHANÇA: `getSupplier`, `approveSupplier` e `createPayment`
+seguem recusando cross-tenant; nenhum afrouxamento colateral introduzido pela
+mudança de assinatura.
+
+DECLARAÇÃO: **FINDING CLOSED**, nos termos da **Regra 4** do `CLAUDE.md`. Não
+constitui `REMEDIATION COMPLETE` (Regra 3) nem auditoria do commit remediado como
+um todo (Regras 12-14).

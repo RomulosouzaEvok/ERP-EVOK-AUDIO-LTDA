@@ -9,10 +9,14 @@ DOMAIN: Integridade financeira
 SUBDOMAIN: Idempotência de integração externa
 SEVERITY: CRITICAL
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: idempotency, business-rule, data-integrity, authorization, traceability, database, qa, documentation-consistency (8 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
+REMEDIATION_COMMIT: 9ce4754
+RETEST_RESULT: RETEST_PASSED (com observação residual OBS-SIM-002-003)
+CLOSED_BY: vericore-software-audit-director
+CLOSED_DATE: 2026-08-13
 
 DESCRIPTION:
 BR-PAY-002 exige que um pagamento nunca seja enviado duas vezes ao gateway e que
@@ -231,3 +235,65 @@ recomenda.
 
 Reprodução executável e determinística com o código do `AUDIT_COMMIT`, sem
 duplos de teste. Aceito como prova.
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: 2026-08-13
+REMEDIATION_COMMIT ACEITO: `9ce4754` (WAVE-C)
+RETEST_REPORT: `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §1.3
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner`, harness próprio fora
+do repositório
+
+RESULTADO DO RETESTE: **RETEST_PASSED**. No caminho principal, 6 envios sobre o
+mesmo pagamento produziram: mesma `external_ref`, mesmo `sent_at`, `callsFor = 1`
+e **1** linha em `payment_attempts`; espião de integração confirmou **1**
+invocação real de `submitPayment` — a contagem é de chamada efetiva, não artefato
+de inspeção. Itens 1, 2, 3 e 5 da `RETEST_SPECIFICATION` atendidos; item 4
+atendido no caminho enviar→enviar. Suíte 22/22.
+
+RESSALVA MATERIAL MEDIDA: no caminho **enviar → cancelar → enviar**, o
+curto-circuito **do serviço** não age — `cancelPayment` devolve o `status` a
+`created`, tornando falsa a condição `status === 'sent' && external_ref` — e
+`submitPayment` é **realmente invocado a cada reenvio** (1 → 4 invocações em 3
+ciclos). A não-duplicação decorre exclusivamente da deduplicação por
+`idempotencyKey` **dentro do gateway**. Resultado final permanece correto: 1
+movimentação, 1 attempt. Porém `sent_at` **não é estável** nesse caminho, e a
+defesa repousa no gateway, não no serviço.
+
+DECISÃO DO DIRETOR SOBRE A RESSALVA — **RETEST_PASSED com observação residual
+nova** (e não RETEST_FAILED, e não aceitação silenciosa):
+1. BR-PAY-002 é redigida em termos de **resultado** ("sem produzir nova
+   movimentação financeira") e o resultado foi cumprido em todos os caminhos
+   exercitados. Nenhum artefato versionado exige que a proteção resida na camada
+   de serviço; exigi-lo seria a VeriCore criar requisito de desenho — vedado pela
+   Regra 6.
+2. Reprovar seria reprovar por **mecanismo** tendo o **resultado** aprovado: o
+   item 5 da spec — justamente o cenário da ressalva — foi atendido por medição.
+3. Encerrar sem registro também seria impróprio: a §3.3 da
+   `AUDIT_COVERAGE_MATRIX` declara que **o gateway real não é auditável** (o
+   `gatewayClient` é stub), de modo que a defesa passou a repousar em componente
+   que esta auditoria classificou como não verificável; e `sent_at` instável é
+   desvio observável com impacto em conciliação.
+4. O caminho pós-cancelamento está **fora do escopo decidível desta onda**:
+   `cancelPayment` é objeto de FIND-SIM-002-004 (CRITICAL, aberto, human gate) —
+   sua legitimidade, autorização e a transição `sent → created` aguardam decisão
+   humana. Não se especifica o comportamento idempotente correto de um caminho
+   cuja semântica normativa ainda não existe (Regra 18).
+5. **Nota de integridade de evidência**: o pacote de evidência da SanaCore
+   descreve o curto-circuito do serviço como a proteção contra reenvio; a medição
+   independente mostra que, nesse caminho, ele não age. A narrativa do pacote é
+   **mais forte que o comportamento medido**. Registrado sem imputação de má-fé,
+   sem efeito sobre este veredito, e dirigido à SanaCore e ao CoreTriad Director.
+
+OBSERVAÇÃO RESIDUAL ABERTA: **OBS-SIM-002-003** em
+`31-new-findings/NEW_OBSERVATIONS.md`, dependente do desfecho de FIND-SIM-002-004.
+
+DELIMITAÇÃO DO FECHAMENTO: fecha-se a duplicação de movimentação no gateway e a
+sobrescrita de `external_ref` — o objeto deste finding. **Não** se fecha nem se
+absolve o comportamento de `sent_at` no caminho pós-cancelamento.
+
+DECLARAÇÃO: **FINDING CLOSED**, nos termos da **Regra 4** do `CLAUDE.md`. Não
+constitui `REMEDIATION COMPLETE` (Regra 3) nem auditoria do commit remediado como
+um todo (Regras 12-14).

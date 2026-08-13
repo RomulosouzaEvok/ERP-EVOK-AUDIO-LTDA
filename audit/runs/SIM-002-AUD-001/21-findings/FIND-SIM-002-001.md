@@ -9,10 +9,14 @@ DOMAIN: Regra de negócio
 SUBDOMAIN: Aprovação / alçada financeira
 SEVERITY: CRITICAL
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: business-rule, authorization, traceability, qa, documentation-consistency, data-integrity (6 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
+REMEDIATION_COMMIT: f0aaa7a
+RETEST_RESULT: RETEST_PASSED
+CLOSED_BY: vericore-software-audit-director
+CLOSED_DATE: 2026-08-13
 
 DESCRIPTION:
 A constante que rege a alçada do papel `analyst` está fixada em `50000`, enquanto
@@ -179,3 +183,37 @@ integralmente e o item (a) sozinho sustenta a severidade.
 Tecnicamente demonstrável por leitura direta e reproduzível pelo passo-a-passo do
 finding, sem dependência de ambiente: `creditLimit = 49999` com `role: 'analyst'`
 percorre `:37-39` sem lançar e alcança o `UPDATE` de `:42-50`. Aceito como prova.
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: 2026-08-13
+REMEDIATION_COMMIT ACEITO: `f0aaa7a` (WAVE-A; produto byte-idêntico ao HEAD,
+equivalência verificada por hash de árvore)
+RETEST_REPORT: `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §1.1
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner`, harness próprio fora
+do repositório
+
+RESULTADO DO RETESTE: **RETEST_PASSED**. Os quatro cenários da
+`RETEST_SPECIFICATION` foram executados com asserção explícita:
+1. `analyst` + 10000 → aceito, `credit_limit = 10000` confirmado por releitura.
+2. `analyst` + 10000.01 → recusado, com pós-condição verificada no banco
+   (`status = 'pending'`, `credit_limit = 0`, `approved_by = NULL`).
+3. `analyst` + 49999 → recusado (cenário que passava no `AUDIT_COMMIT`; é o item
+   discriminante da spec, e sua inversão comprova a extinção do defeito).
+4. `manager` + 25000 → aceito.
+Constante alinhada a 10000 e comparador `>` estrito — a fronteira **inclusiva** de
+BR-APR-001 é reproduzida com exatidão. Regressão: suíte 20/20; working tree limpo
+antes e depois.
+
+DELIMITAÇÃO: o fato incidental `approved_by = "77.0"` (coerção do `node:sqlite`)
+foi observado durante este reteste e **não é imputado a este finding** — não
+afeta o cumprimento de BR-APR-001. Registrado em aberto como **OBS-SIM-002-001**
+em `31-new-findings/NEW_OBSERVATIONS.md`.
+
+DECLARAÇÃO: **FINDING CLOSED**, nos termos da **Regra 4** do `CLAUDE.md` — somente
+a VeriCore declara `RETEST_PASSED` e `FINDING CLOSED`. O fechamento apoia-se em
+reteste independente sobre commit identificado, e não em declaração da SanaCore.
+Este ato **não** constitui `REMEDIATION COMPLETE` (autoridade da SanaCore, Regra 3)
+nem auditoria do commit remediado como um todo (Regras 12-14 — exige delta audit).

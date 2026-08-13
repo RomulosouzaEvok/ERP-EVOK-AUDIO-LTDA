@@ -9,10 +9,14 @@ DOMAIN: Integridade de dados
 SUBDOMAIN: Concorrência / atomicidade
 SEVERITY: HIGH
 CONFIDENCE: CONFIRMED
-STATUS: CONFIRMED
+STATUS: CLOSED
 DETECTED_BY: data-integrity, database, business-rule, idempotency (4 de 8 trilhas)
 VALIDATED_BY: vericore-finding-validator
 VALIDATION_DATE: 2026-08-13
+REMEDIATION_COMMIT: 9ce4754
+RETEST_RESULT: RETEST_PASSED (delimitado à corrida intraprocesso)
+CLOSED_BY: vericore-software-audit-director
+CLOSED_DATE: 2026-08-13
 
 DESCRIPTION:
 `createPayment` soma o valor comprometido, decide com base nessa soma e insere o
@@ -225,3 +229,45 @@ limitado ao grau de concorrência — diferentemente dos CRITICAL, que se realiz
 com uma única chamada trivial. Registro, porém, que este é o mais grave dos HIGH
 confirmados e que sua remediação depende de evolução do handle de `db.js`,
 compartilhada com FIND-SIM-002-009 e FIND-SIM-002-010.
+
+---
+
+## Fechamento (software-audit-director)
+
+DATA: 2026-08-13
+REMEDIATION_COMMIT ACEITO: `9ce4754` (WAVE-C)
+RETEST_REPORT: `audit/runs/SIM-002-AUD-001/30-retest/RETEST_REPORT.md` §1.5
+EXECUÇÃO DO RETESTE: `vericore-audit-verification-runner`, harness próprio fora
+do repositório
+
+RESULTADO DO RETESTE: **RETEST_PASSED**. 3 rodadas de
+`Promise.all([createPayment(8000), createPayment(8000)])` com `credit_limit =
+10000` → **1 sucesso por rodada**, `SUM(amount) = 8000`; rajada de 10 chamadas
+concorrentes → **1 sucesso**. Invariante `SUM ≤ credit_limit` preservada.
+Não-regressão sequencial coberta pelos cenários acumulados e de fronteira
+executados no reteste de FIND-SIM-002-007 (3000 aceito, 2500 recusado sobre
+limite 5000; fronteira exata 3000+2000 aceitos e +0,01 recusado). Suíte 22/22.
+
+RESSALVA METODOLÓGICA DO RUNNER, ACOLHIDA: removido o `await` que antecedia o
+bloco transacional síncrono, **a janela deixou de ser fisicamente alcançável
+neste modelo de execução**; logo o teste de concorrência **não distingue
+"corrigido" de "não observável"**. O veredito, por isso, **não repousa** no teste
+dinâmico: repousa no **item 4 da própria `RETEST_SPECIFICATION`** — verificação
+estrutural de demarcação transacional efetiva —, escrito pela auditoria
+justamente por antecipar esta limitação. Acrescento que a eliminação do ponto de
+suspensão entre leitura e escrita é precisamente o mecanismo que o
+finding-validator identificou como causa da corrida (o `await` diferindo a
+continuação para a fila de microtarefas): removê-lo **remove** a corrida, não a
+oculta. Limitação registrada como **OBS-SIM-002-004** (INFO) em
+`31-new-findings/NEW_OBSERVATIONS.md`, para que nenhuma auditoria futura
+interprete "0 estouros medidos" como prova de atomicidade multiprocesso.
+
+DELIMITAÇÃO DO FECHAMENTO: fecha-se a corrida **intraprocesso** sobre BR-PAY-001.
+A corrida **entre processos/conexões** não foi exercitada por nenhuma das partes
+e **não** está coberta por este fechamento; permanece registrada na §3.2 da
+`AUDIT_COVERAGE_MATRIX` e é objeto conceitual de FIND-SIM-002-010 (MEDIUM,
+`PROPOSED`, aberto).
+
+DECLARAÇÃO: **FINDING CLOSED**, nos termos da **Regra 4** do `CLAUDE.md`, com a
+delimitação acima. Não constitui `REMEDIATION COMPLETE` (Regra 3) nem auditoria
+do commit remediado como um todo (Regras 12-14).
