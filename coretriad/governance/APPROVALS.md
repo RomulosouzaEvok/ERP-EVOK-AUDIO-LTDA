@@ -568,5 +568,113 @@ inferir OWNER**.
 
 **Aprovado por:** Gilwagno (dono do CoreTriad), em sessão — 14/08/2026.
 
+---
+
+## APR-2026-021 — Gates G3/G8/G10 da AUD-001 + 5 decisões de negócio de remediação
+
+**Contexto:** resposta do dono ao gate humano do `AUDIT_PLAN.md` §12 (run
+`ERP-LEGACY-001-AUD-001`) e às perguntas formuladas pelas triagens SanaCore dos
+casos `CASE-001` e `CASE-002`. Registro detalhado dos gates:
+`coretriad/governance/HUMAN_GATE_RECORD-ERP-LEGACY-001-AUD-001.md`.
+
+### Parte A — Gates da auditoria
+
+| Gate | Veredito | Síntese |
+|---|---|---|
+| **G3** — amostragem | `APPROVED_WITH_CONDITIONS` | Amostragem autorizada **desde que baseada em risco e com risco residual registrado no relatório final**. **Vedada amostragem reduzida** em: autenticação, autorização, segregação de funções, operações financeiras, movimentação de estoque, integridade de dados, contratos/jurídico, permissões administrativas, operações destrutivas, segurança, multi-tenancy e regras de negócio críticas — nesses casos, **cobertura ampliada ou 100% quando tecnicamente aplicável**. |
+| **G8** — dimensionamento | `APPROVED` — `AUDIT_SESSIONS = 110` | Manter as 110 sessões; **não reduzir escopo agora**. Objetivo declarado: maximizar cobertura desta primeira auditoria integral e criar baseline confiável. Redução futura = nova decisão humana registrada como exclusão explícita. |
+| **G10** — `CAND-AUTHZ-01` (Compras/COMEX) | `CONDITIONAL_APPROVAL` | O candidato entra no fieldwork como **candidato/provisório**, para investigação e coleta de evidência. **NÃO** significa confirmação da regra, promoção a requisito confirmado, aprovação de comportamento, alteração de owner nem aceitação de divergência. Mudança de status só após evidência suficiente e validação correspondente. |
+
+**Gates NÃO respondidos nesta aprovação — permanecem ABERTOS:** `G4` (fila
+`DYN-01…DYN-08` contra o banco efêmero), `G5` (homologação da dispensa das
+trilhas de IA e do `agent-permission-auditor`), `G6` (emenda formal ao
+`AUDIT_SCOPE.md` §2.3 / RA-09), `G7` (confirmação de que as remediações SanaCore
+não entram nesta run e exigirão delta audit). O dono condicionou a liberação do
+fieldwork a que "os demais G1-G10 cumpram os critérios objetivos previstos no
+`AUDIT_PLAN.md`" — **G4-G7 não são critérios objetivos verificáveis, são
+decisões discricionárias humanas**, e o `coretriad-director` **não as supre por
+inferência** (Regra 18). Ver o `HUMAN_GATE_RECORD` para o efeito prático de cada
+uma sobre o fieldwork.
+
+**G1, G2 e G9 considerados SATISFEITOS**, com fundamento textual explícito e não
+por inferência: G1/G2 pela frase "o fieldwork está autorizado a prosseguir
+dentro do escopo aprovado" (aprova o plano e a matriz como base do fieldwork,
+já modificada pelas condições de G3); G9 pela seção 6 da mensagem do dono, que
+reafirma literalmente a vedação a atribuição automática de OWNER.
+
+**Consequência material de G3 registrada:** as condições de G3 **alteram a
+coverage matrix aprovada em G2** — várias células hoje declaradas amostrais ou
+rasas recaem nas categorias de cobertura obrigatória (authZ, segregação,
+financeiro, estoque, integridade, contratos, permissões administrativas,
+segurança, regras críticas). A matriz **deve ser revista para conformidade com
+G3 antes do fieldwork**, e a revisão pode exigir esforço acima das 110 sessões
+de `G8` — o que seria **nova decisão humana**, não absorção silenciosa.
+
+### Parte B — Decisões de negócio (remediação)
+
+1. **Parcelas de mesmo valor no mesmo título são LEGÍTIMAS.** Portanto
+   `valor da parcela + título` **não pode** ser usado isoladamente como
+   identificador único ou mecanismo de idempotência. A identificação deve usar
+   chave de negócio inequívoca (ID da parcela, sequência/número da parcela,
+   identificador imutável equivalente, ou outra chave formalmente definida).
+   **Registrar como regra de negócio** (candidata a BR-ID no `BR_CATALOG.md`,
+   com OWNER `PENDENTE` como todas as demais).
+2. **Consumidores externos das rotas de movimentação de estoque:
+   `EXTERNAL_CONSUMER_STATUS = UNKNOWN`.** Vedado inferir. Exigido inventário
+   estático no repositório (n8n, bots, webhooks, integrações, scripts, clients
+   HTTP, automações, documentação de API, chamadas externas). Enquanto não
+   houver evidência suficiente: **sem breaking change**, sem tornar a chave
+   obrigatória de forma incompatível, e estratégia **backward-compatible**
+   obrigatória. **`UNKNOWN` não pode ser interpretado como `NÃO`.** Se o
+   inventário não confirmar ausência de consumidores, a questão volta ao dono.
+3. **Alçada = TABELA CONFIGURÁVEL** (libera a Falha 1 do `FIND-ERP-005`).
+   Requisitos mínimos: configuração persistida; identificação da faixa/alçada;
+   perfil/papel autorizado; vigência quando aplicável; histórico/auditoria das
+   alterações; validação server-side; **nenhuma autorização baseada apenas no
+   frontend**. O código pode conter apenas as estruturas técnicas de
+   interpretação da política; os valores de negócio ficam configuráveis.
+4. **Aditivo que eleva valor EXIGE `approve`** (libera a Falha 3). `operate`
+   sozinho é insuficiente: elevação de valor é alteração material. Preparação
+   do aditivo pode ser feita por `operate`; **a efetivação do aumento de valor
+   exige `approve`**, respeitando alçada e segregação aplicáveis.
+5. **A segregação D-K VALE para aprovação de contrato jurídico** (completa a
+   Falha 4). O mesmo ator não pode ser o único responsável por preparar/executar
+   e aprovar a própria operação. **Exceção futura exige decisão humana explícita
+   e registro formal de exceção.**
+
+### Parte C — Autorização de execução SanaCore
+
+Autorizada a remediação dos findings **totalmente definidos** pelas decisões
+acima, com o ciclo obrigatório: criar/confirmar `REMEDIATION_CASE` → worktree
+SanaCore própria → reprodução estática quando possível → `ROOT_CAUSE` →
+`BLAST_RADIUS` → `CORRECTION_STRATEGY` → implementação → testes disponíveis →
+testes de regressão criados → documentação afetada atualizada →
+`REMEDIATION_EVIDENCE_PACKAGE` → devolução à VeriCore.
+
+**SanaCore NÃO está autorizada a:** fechar finding; marcar `RETEST_PASSED`;
+alterar evidência original da VeriCore; usar banco real; contornar
+`APR-2026-016`; **transformar ausência de Docker/psql em evidência de sucesso**.
+
+**Vedada implementação parcial apresentada como finding resolvido:**
+`REMEDIATION_COMPLETE` só pode ser declarado quando **todos** os elementos do
+respectivo `REMEDIATION_CASE` estiverem implementados e documentados.
+
+### Parte D — Reprodução dinâmica e banco
+
+`L-T1` permanece **lacuna declarada**. A indisponibilidade de `psql`/Docker
+**não aprova, não reprova, não comprova correção e não autoriza conexão com
+banco real**. Nenhuma conexão com banco real está autorizada; `APR-2026-016`
+permanece inalterado. A validação dinâmica correspondente será executada ou
+exigida pela VeriCore quando existir ambiente seguro e autorizado.
+
+### Parte E — OWNER de business rules
+
+As **164 linhas** do `BR_CATALOG.md` permanecem `PENDENTE`. **Vedado** atribuir
+owner automaticamente ou inferir por módulo, autor de código, departamento ou
+memória. Definição posterior, por decisão humana. Reafirma `APR-2026-019`
+parte 2 e satisfaz o gate G9.
+
+**Aprovado por:** Gilwagno (dono do CoreTriad), em sessão — 14/08/2026.
+
 Aprovações futuras: adicionar linha com próximo ID sequencial. Nunca editar
 entradas existentes — correções entram como nova linha referenciando a antiga.
