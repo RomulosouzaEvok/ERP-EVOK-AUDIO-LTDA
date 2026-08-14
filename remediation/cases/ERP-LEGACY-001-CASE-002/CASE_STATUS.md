@@ -4,6 +4,7 @@ CASE_ID: ERP-LEGACY-001-CASE-002
 FINDING_ID: FIND-ERP-005
 PROJECT_ID: ERP-LEGACY-001
 BRANCH: `sana/ERP-LEGACY-001/FIND-ERP-005` (sem `push`)
+REMEDIATION_COMMIT: `1046e16` — codigo de produto integralmente em `67b49fb`..`54572b7`; `48c93cd` e `1046e16` sao evidencia/teste/doc
 
 ## Linha do tempo do caso
 
