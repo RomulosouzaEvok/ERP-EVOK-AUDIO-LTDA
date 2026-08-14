@@ -776,3 +776,86 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
   constar da matriz executada de T-26.
 
 **Fieldwork: 19 de 27 trilhas.** Nenhum finding `CONFIRMED`.
+
+## 2026-08-14 — W3 leva 2 concluída (T-20, T-21, T-22, T-24); bloqueante G3 fechado; T-23 despachada
+
+- **T-24 (integrações/resiliência) — 1 CRITICAL.** `T24-F01`: falta de
+  credencial do provedor de NF-e (`FOCUS_NFE_TOKEN`/`ENOTAS_API_KEY`) não
+  falha fechado. A reserva de número de NF-e é **commitada em transação
+  curta antes** da chamada ao provedor; o construtor do provider lança de
+  forma síncrona **fora de qualquer `try/catch`**; a exceção propaga sem
+  tratamento. Resultado: venda presa em `nfe_status='processing'`
+  permanentemente, número de série queimado sem devolução, **só
+  intervenção manual no banco resolve**. `T24-F02` (HIGH): zero timeout
+  declarado em 6 chamadas de rede a Focus NFe/eNotas, zero lib de retry ou
+  circuit breaker no projeto; falha de rede é mapeada para `'denied'`,
+  indistinguível de rejeição fiscal real, e como `'denied'` não é estado
+  terminal, o operador pode reemitir — se a chamada original tiver sido
+  processada do lado do provedor apesar do timeout local, resultado é
+  **duas NF-e reais autorizadas para a mesma venda**. Ambos escalados ao
+  dono no momento em que surgiram (Regra do plano para CRITICAL).
+  **Achado positivo confirmado por leitura própria:** reenvio do webhook
+  Focus NFe **não duplica efeito patrimonial** — lock + estado protegem,
+  mesmo sem proteção de replay no protocolo (refina `T17-F02`/`T18-F06`
+  sem contradizer). n8n confirmado como transporte burro de fato, com
+  idempotência em **dois níveis**, incluindo constraint única de banco.
+- **T-21 (front-ends) confirmou por leitura independente** que a UI de CAT
+  tem botão único "emitir CAT inicial", sem seletor de tipo e sem alerta
+  para `gravidade=obito` — produz exatamente a combinação contraditória que
+  o backend registra de forma irreversível (`FIND-ERP-008`/`T12-H03`).
+  **Mitigação parcial confirmada** para o GET com efeito patrimonial
+  (`T-08`/`T-10`/`T-17`): a consulta de status de NF-e só dispara por
+  clique manual, sem polling nem retry automático no cliente — reduz o
+  vetor de amplificação client-side sem neutralizar o achado de backend.
+  **Achado novo:** `T21-F01` (MEDIUM, confiança média) — `cost_price`
+  aparece incondicionalmente no contrato de tipos de `GET /api/products`,
+  mesmo a lista nunca exibindo o campo; candidato a exposição de dado
+  comercial sensível a papéis operacionais (estoque, produção), pendente
+  de confirmação do lado servidor.
+- **T-22 (plataforma) — achado estrutural sobre o próprio pipeline.** CI
+  builda e testa a imagem (typecheck, testes, `npm audit`, migration
+  down+up — controles reais), mas **nunca a publica em registry**; o
+  deploy real usa build local com tag por data, **sem referência ao SHA
+  validado** — não há cadeia de custódia entre o que o CI aprova e o que
+  sobe em produção (`T22-F01`, HIGH). `T22-F05` (HIGH, promovido de
+  `OBS-INV-07`): zero pipeline de CI para `client/`/`mobile/`/`tv/` — a
+  suíte vitest do `client` existe e nunca roda automaticamente, o que é
+  pior que ausência de teste. Convergência com T-18 sobre
+  `docker-compose.yml`/`.prod.yml`, ângulo complementar: mesmo corrigidos os
+  defaults fracos, nada no CI roda `docker compose config` para pegar
+  regressão futura.
+- **T-20 (qualidade/testes)** encontrou a **causa raiz** de uma das duas
+  falhas de teste pré-existentes herdadas do passo 30:
+  `onda3-shipping-cockpit-cashflow.test.ts` falha por inconsistência real
+  de fuso horário em `GetCashFlowProjectionUseCase` (data gerada em
+  horário local, lida de volta como UTC) — **candidato a bug funcional
+  real na projeção de fluxo de caixa em produção**, não apenas teste
+  frágil. Escalado a T-07 para avaliação de impacto de negócio.
+  Generalizou o padrão de `T13-F06` (guarda que passa verde sem verificar):
+  as **59 suítes de integração inteiras** usam o mesmo `describe.skip`
+  condicional a variável de ambiente — só o caminho de CI seta essa
+  variável e roda o guard anti-skip; fora dele, roda 100% verde sem
+  executar uma única query, sem aviso algum ao desenvolvedor.
+- **BLOQUEANTE G3 FECHADO — `RES-T18-04`.** A trilha dirigida T-18-A
+  rastreou 100% dos 21 call sites (não 12, como o encargo original
+  contava — divergência de contagem registrada) do padrão de mass
+  assignment, ponta a ponta, sem amostragem. Produziu **11 findings
+  novos**: `T18A-F10` (HIGH) — bypass real de `authorizeSelfOrModule`: a
+  checagem de posse em `POST /tickets/:id/confirm` resolve só
+  `req.params.id`, mas a mutação ocorre sobre o `id` do corpo se presente,
+  sem recheque — um usuário sem módulo `ti`, dono de qualquer chamado
+  próprio `resolved`, fecha/avalia chamado de terceiro colocando o id
+  alheio no corpo, sem `logAction`. Mais 10 MEDIUM, majoritariamente
+  falsificação de log de auditoria por sobrescrita de id (contratos, LGPD,
+  contencioso, PI, produção), e dois campos sensíveis graváveis sem
+  whitelist (`supplier_id` de advogado externo; `created_by` de ato
+  societário). **Achado metodológico da própria trilha:** são dois
+  defeitos independentes no mesmo padrão — mass assignment de valor
+  (fechável por whitelist no use case) e sobrescrita de id de registro
+  (sobrevive mesmo com whitelist de valor). **A condição G3 permanece não
+  integralmente atendida**: `T18A-F10` é bypass de autorização confirmado
+  por leitura de código, pendente só de confirmação dinâmica.
+- **Fieldwork: 24 de 27 trilhas.** T-23 (documentação × código), a última,
+  despachada — resolve 5 pendências dirigidas por T-08, T-15, T-17, T-19 e
+  T-20 (`RES-T20-01`: qual citação de caminho quebrada explica a 2ª falha
+  de teste pré-existente).
