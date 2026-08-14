@@ -523,5 +523,50 @@ na sequência com o motivo.
 
 **Aprovado por:** Gilwagno (dono do CoreTriad), em sessão — 14/08/2026.
 
+---
+
+## APR-2026-020 — Gate do passo 31 (auditoria 360°) + encaminhamento dos 7 findings à SanaCore
+
+**Contexto:** fim do discovery (passos 21-30) do `ERP-LEGACY-001` com PARE
+incondicional; pendências (a) e (c) do fechamento do passo 30.
+
+### Decisão A — gate do passo 31 APROVADO
+
+Autorizado o **passo 31 (auditoria 360°)** da Parte VIII do master spec,
+executado pelo fluxo VeriCore padrão (`/audit-new`: escopo → inventário →
+plano), **terminando no gate humano do plano de auditoria antes de qualquer
+fieldwork**. Ordem de prioridade fixada pelo dono:
+
+1. **PRODUÇÃO REAL primeiro** — `items`, `categories`, `departments`, `users`
+   (conta admin), `auth`, `auditLogs` (classificação de `APR-2026-016`).
+2. **Alto risco em seguida** — módulos com impacto financeiro, fiscal, de
+   estoque e de autorização (inclui os módulos dos 7 findings abertos).
+3. **O restante depois.**
+
+### Decisão B — encaminhamento dos 7 findings à SanaCore AUTORIZADO
+
+Sequência mandatória:
+
+1. **2 CRITICAL primeiro:** `FIND-ERP-001` (idempotência — estoque +
+   pagamento parcial) e `FIND-ERP-005` (alçada de contrato jurídico).
+2. **Depois os 4 HIGH:** `FIND-ERP-002`, `FIND-ERP-006`, `FIND-ERP-008`,
+   `FIND-ERP-009`.
+3. **`FIND-ERP-007` (MEDIUM) NÃO segue** até o item 3 (409×422,
+   `NEEDS_MORE_EVIDENCE`) voltar ao autor de origem.
+
+Regras que esta autorização NÃO altera: SanaCore corrige em worktree
+`sana/ERP-LEGACY-001/<FINDING>` e **nunca fecha o próprio finding**; só a
+VeriCore declara `RETEST_PASSED`/`FINDING CLOSED` (Regras 3 e 4 do
+`CLAUDE.md`); mudanças posteriores ao `AUDIT_COMMIT` do passo 31 exigem
+delta audit (Regra 14).
+
+### Reafirmação — OWNER por área
+
+Permanece como registrado em `APR-2026-019` parte 2: atribuição incremental
+pelo dono na tabela §6 do `BR_CATALOG.md`; **vedado a agente decidir ou
+inferir OWNER**.
+
+**Aprovado por:** Gilwagno (dono do CoreTriad), em sessão — 14/08/2026.
+
 Aprovações futuras: adicionar linha com próximo ID sequencial. Nunca editar
 entradas existentes — correções entram como nova linha referenciando a antiga.
