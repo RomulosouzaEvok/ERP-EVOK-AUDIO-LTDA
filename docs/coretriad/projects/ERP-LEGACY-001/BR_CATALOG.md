@@ -3,11 +3,13 @@
 ```
 PROJECT_ID:  ERP-LEGACY-001
 AUTORIDADE:  APR-2026-019 (coretriad/governance/APPROVALS.md, aprovada por Gilwagno em 14/08/2026)
+             APR-2026-021 Parte B item 1 (idem, mesma data) — inclusão de BR-FIN-003
 DATA:        2026-08-14
 NATUREZA:    Registro/índice. A fonte descritiva (SSOT do texto de cada regra) permanece
              nos 6 arquivos BUSINESS_RULE_CANDIDATES_*.md do passo 26 — este catálogo
              NÃO duplica o texto das regras, apenas fixa o ID, o status registrado, a
-             fonte e a âncora principal.
+             fonte e a âncora principal. Exceção declarada: as regras da §3.7, cuja
+             fonte é decisão humana registrada em APPROVALS.md e não um arquivo BRC.
 ```
 
 **Distinção normativa (obrigatória de ler):** o BR-ID canônico fixa a **âncora de
@@ -16,10 +18,25 @@ rastreabilidade**, não a **aprovação** da regra. Todo status do passo 26
 inalterado até validação humana caso a caso (Regra 6 do `CLAUDE.md`; regra 3 do
 programa). Este catálogo não valida, não julga mérito e não resolve divergência.
 
+**Duas origens distintas de `CONFIRMED` (nota do esquema, não coluna nova):** o
+valor `CONFIRMED` aparece neste catálogo com **dois significados de origem
+diferentes**, e a diferença é material:
+
+1. **`CONFIRMED` por leitura de código (passo 26)** — significa apenas que o
+   comportamento foi observado e é consistente no código lido. **Não é aprovação
+   de negócio.** É o caso de todas as regras das §3.1–§3.6.
+2. **`CONFIRMED` por decisão humana** — significa que o dono decidiu
+   expressamente a regra de negócio, registrando-a em `APPROVALS.md`. É norma de
+   negócio, independente do que o código faz hoje (pode inclusive contradizê-lo).
+   É o caso das regras da §3.7, que trazem a coluna "Fonte" explicitando a
+   aprovação de origem.
+
+Onde não houver indicação em contrário, `CONFIRMED` é o sentido 1.
+
 **OWNER:** é **vedado a qualquer agente decidir ou inferir OWNER** (APR-2026-019,
-parte 2). A coluna OWNER nasce `PENDENTE — decisão humana` em 100% das linhas; a
-atribuição será feita aos poucos pelo dono, com os responsáveis reais de cada área
-(§6).
+parte 2; reafirmado na APR-2026-021 Parte E). A coluna OWNER nasce
+`PENDENTE — decisão humana` em 100% das linhas; a atribuição será feita aos poucos
+pelo dono, com os responsáveis reais de cada área (§6).
 
 **Por que este catálogo existe:** a consolidação do passo 29
 (`docs/coretriad/projects/ERP-LEGACY-001/discovery/LEGACY_TRACEABILITY_MATRIX.md` §1)
@@ -50,7 +67,7 @@ são canônicas **como estão** (ver §5) — nada é renumerado.
 | CTB | Contabilidade (accounting) | comercial-financeiro | 2 |
 | CTR | Controladoria (budget) | comercial-financeiro | 1 |
 | TES | Tesouraria (treasury) | comercial-financeiro | 1 |
-| FIN | Financeiro (contas a pagar/receber, conciliação) | comercial-financeiro | 2 |
+| FIN | Financeiro (contas a pagar/receber, conciliação) | comercial-financeiro (2) + decisão humana APR-2026-021 (1) | 3 |
 | RH | Recursos Humanos | pessoas-governanca | 6 |
 | JUR | Jurídico & LGPD | pessoas-governanca | 8 |
 | SST | Saúde e Segurança do Trabalho | pessoas-governanca | 3 |
@@ -60,7 +77,7 @@ são canônicas **como estão** (ver §5) — nada é renumerado.
 | FAC | Facilities | pessoas-governanca | 1 |
 | IMP | Importação de planilha | pessoas-governanca | 1 |
 | WHK | Webhooks | pessoas-governanca | 1 |
-| **Total** | 20 prefixos | 6 clusters | **164** |
+| **Total** | 20 prefixos | 6 clusters + 1 decisão humana | **165** |
 
 ### 2.2 Regras de unicidade e numeração
 
@@ -291,17 +308,57 @@ Fonte descritiva: `docs/coretriad/projects/ERP-LEGACY-001/discovery/BUSINESS_RUL
 | BR-IMP-D21 | Importação exige produtos:operate E bom:operate | DISCOVERED | :485 | `catalogImport.ts:27` | PENDENTE — decisão humana |
 | BR-WHK-D22 | Webhooks: HMAC no n8n, comparação simples no focus-nfe | DISCOVERED (+ CONFLICTING interno) | :486 | `webhooks.ts:6` | PENDENTE — decisão humana |
 
+### 3.7 Regras registradas por decisão humana — 1 regra
+
+**Origem distinta das §3.1–§3.6:** estas regras **não vêm de leitura de código**
+e não têm ficha em arquivo BRC. Vêm de **decisão de negócio do dono**, registrada
+em `coretriad/governance/APPROVALS.md`. Por isso a coluna `Def.` é substituída
+por `Fonte`, e o `CONFIRMED` aqui tem o **sentido 2** da nota do cabeçalho
+(norma de negócio decidida por humano), não o sentido 1 (comportamento observado
+no código). A âncora de código é **indicativa do ponto afetado**, não prova de
+conformidade — a conformidade do código a esta regra é objeto de verificação
+posterior, não deste catálogo.
+
+| BR-ID | Título curto | Status | Fonte | Âncora de código afetada (indicativa) | OWNER |
+|---|---|---|---|---|---|
+| BR-FIN-003 | Parcelas de mesmo valor no mesmo título são legítimas; identificação exige chave de negócio inequívoca | CONFIRMED (por decisão humana) | APR-2026-021 Parte B item 1 | `ReceivePaymentUseCase.ts:39` (indicativa) | PENDENTE — decisão humana |
+
+**Texto normativo de BR-FIN-003** (transcrição literal da decisão, conforme
+`APR-2026-021` Parte B item 1 — nenhuma palavra acrescentada pelo agente):
+
+> Duas parcelas de mesmo valor no mesmo título são LEGÍTIMAS. Portanto
+> `valor da parcela + título` não pode ser usado isoladamente como identificador
+> único ou mecanismo de idempotência. A identificação deve usar chave de negócio
+> inequívoca (ID da parcela, sequência/número da parcela, identificador imutável
+> equivalente, ou outra chave formalmente definida).
+
+**Notas de escopo (não ampliam a regra):**
+
+- A regra **proíbe** um uso (`valor + título` como identificador isolado) e
+  **exige** uma classe de solução (chave de negócio inequívoca). **Qual** chave
+  concreta será adotada **não está decidido** — a própria decisão do dono deixa a
+  escolha aberta ("ou outra chave formalmente definida"). Escolher a chave é
+  decisão posterior, não inferência deste catálogo.
+- Relação com `BR-FIN-001` (baixa parcial de título): são regras **distintas e
+  não conflitantes**. `BR-FIN-001` permanece `DISCOVERED`, com status
+  **inalterado** por este registro.
+- Relação com `FIND-ERP-001` e com `REMEDIATION_CASE ERP-LEGACY-001-CASE-001`:
+  BR-FIN-003 é **restrição de projeto** sobre qualquer solução de idempotência
+  das rotas de baixa de título. Não fecha, não valida e não altera nenhum finding.
+
 ---
 
 ## 4. Contagens
 
 **Critério de contagem:** 1 linha = 1 regra com ficha/entrada própria e BR-ID no
-arquivo BRC do cluster. Status contado pelo **status principal declarado na ficha**;
-estados compostos ficam anotados na linha, sem dupla contagem.
+arquivo BRC do cluster, **mais** as regras registradas por decisão humana (§3.7),
+cuja fonte é `APPROVALS.md`. Status contado pelo **status principal declarado na
+ficha** (ou na decisão, para §3.7); estados compostos ficam anotados na linha, sem
+dupla contagem.
 
-### 4.1 Total geral e por cluster
+### 4.1 Total geral e por origem
 
-| Cluster | Regras | CONFIRMED | DISCOVERED | CONFLICTING | UNKNOWN | OBSOLETE_CANDIDATE |
+| Origem | Regras | CONFIRMED | DISCOVERED | CONFLICTING | UNKNOWN | OBSOLETE_CANDIDATE |
 |---|---|---|---|---|---|---|
 | identidade-acesso | 39 | 20 | 8 | 8 | 2 | 1 |
 | cadastro-suprimentos | 33 | 15 | 12 | 4 | 2 | 0 |
@@ -309,7 +366,11 @@ estados compostos ficam anotados na linha, sem dupla contagem.
 | qualidade-estoque | 13 | 3 | 7 | 3 | 0 | 0 |
 | comercial-financeiro | 29 | 12 | 9 | 8 | 0 | 0 |
 | pessoas-governanca | 24 | 8 | 8 | 6 | 1 | 1 |
-| **Total** | **164** | **72** | **52** | **32** | **5** | **3** |
+| decisão humana (§3.7) | 1 | 1 (por decisão humana) | 0 | 0 | 0 | 0 |
+| **Total** | **165** | **73** | **52** | **32** | **5** | **3** |
+
+Dos 73 `CONFIRMED`, **72 são por leitura de código** (sentido 1) e **1 é por
+decisão humana** (sentido 2, BR-FIN-003).
 
 ### 4.2 Destaques
 
@@ -320,8 +381,15 @@ estados compostos ficam anotados na linha, sem dupla contagem.
   departments, employees, products), a observação CNAB de comercial-financeiro e a
   linha "não amostrados" de pessoas-governanca — além de contar pessoas-governanca
   como 22 (o placar do próprio BRC) em vez das 24 fichas com ID. Este catálogo
-  registra **exclusivamente as 164 regras com ID e ficha própria**; linhas sem ID
-  não recebem ID retroativo por agente (Regra 6) e aguardam o fluxo normal.
+  registra **exclusivamente as 164 regras com ID e ficha própria do passo 26,
+  mais 1 regra por decisão humana (§3.7) = 165**; linhas sem ID não recebem ID
+  retroativo por agente (Regra 6) e aguardam o fluxo normal.
+- **Histórico da contagem:** o catálogo nasceu com **164** regras (APR-2026-019).
+  A inclusão de BR-FIN-003 pela `APR-2026-021` Parte B item 1 leva o total a
+  **165**. A APR-2026-021 Parte E, ao falar em "164 linhas com OWNER PENDENTE",
+  refere-se ao estado do catálogo no momento daquela aprovação; BR-FIN-003 nasce
+  igualmente `PENDENTE — decisão humana`, de modo que **165/165 permanecem
+  pendentes de OWNER**.
 
 ---
 
@@ -332,7 +400,9 @@ estados compostos ficam anotados na linha, sem dupla contagem.
 **Nenhuma colisão encontrada:** nenhum BR-ID é definido em mais de um arquivo BRC
 com conteúdos distintos. Os prefixos de área são disjuntos entre clusters
 (convergências temáticas, como BR-IAM-021 × BR-SUP-008 ou BR-CAD-017 × BR-PP-016,
-usam IDs distintos e referência cruzada — não são colisão).
+usam IDs distintos e referência cruzada — não são colisão). `BR-FIN-003` foi
+atribuído como **próximo número livre do prefixo FIN** (001 e 002 em uso, §5.4),
+sem reciclagem e sem renumeração (§2.2 itens 1 e 2).
 
 ### 5.2 IDs fora do padrão `BR-<ÁREA>-<NNN>` (canônicos como estão — sem renumerar)
 
@@ -364,7 +434,7 @@ mas seus números ficam **reservados** no respectivo prefixo (nunca reciclados,
   012–013 não localizados — mesma regra.
 - Demais prefixos (IAM 001–039, SUP 001–016, CAD 001–017, PP 001–025+016b,
   QE 001–013, COM 001–013, FIS 001–010, CTB 001–002, CTR 001, TES 001,
-  FIN 001–002): sequências contíguas, sem lacuna.
+  FIN 001–003): sequências contíguas, sem lacuna. **Próximo livre em FIN: 004.**
 
 ### 5.5 Divergências internas dos sumários dos próprios BRC (registradas como estão)
 
@@ -386,7 +456,8 @@ catálogo conta por ficha (§4) e registra a divergência sem editar os arquivos
 Preencher esta tabela é **ato humano registrado** (Regra 18 do `CLAUDE.md`): o dono
 atribui os responsáveis reais um a um ou por área, registrando a data. Nenhum agente
 preenche, sugere ou infere valor para a coluna OWNER — a coluna sai deste catálogo
-inteira como `PENDENTE — decisão humana`, por mandato expresso da APR-2026-019.
+inteira como `PENDENTE — decisão humana`, por mandato expresso da APR-2026-019 e
+reafirmado pela APR-2026-021 Parte E.
 
 | Área | Prefixo | Qtde de regras | OWNER | Data de atribuição |
 |---|---|---|---|---|
@@ -400,7 +471,7 @@ inteira como `PENDENTE — decisão humana`, por mandato expresso da APR-2026-01
 | Contabilidade | CTB | 2 | PENDENTE — decisão humana | — |
 | Controladoria | CTR | 1 | PENDENTE — decisão humana | — |
 | Tesouraria | TES | 1 | PENDENTE — decisão humana | — |
-| Financeiro | FIN | 2 | PENDENTE — decisão humana | — |
+| Financeiro | FIN | 3 | PENDENTE — decisão humana | — |
 | Recursos Humanos | RH | 6 | PENDENTE — decisão humana | — |
 | Jurídico & LGPD | JUR | 8 | PENDENTE — decisão humana | — |
 | Saúde e Segurança do Trabalho | SST | 3 | PENDENTE — decisão humana | — |
@@ -411,9 +482,13 @@ inteira como `PENDENTE — decisão humana`, por mandato expresso da APR-2026-01
 | Importação de planilha | IMP | 1 | PENDENTE — decisão humana | — |
 | Webhooks | WHK | 1 | PENDENTE — decisão humana | — |
 
+Total: **165 regras, 165 com OWNER pendente.**
+
 ---
 
-*Catálogo produzido pelo `opuscore-business-analyst` sob mandato da APR-2026-019.
-Registra o que o passo 26 produziu — não valida regra, não altera status, não
-resolve divergência e não atribui OWNER. Os 6 BUSINESS_RULE_CANDIDATES_*.md
-permanecem intocados como fonte descritiva.*
+*Catálogo produzido pelo `opuscore-business-analyst` sob mandato da APR-2026-019 e
+atualizado sob mandato da APR-2026-021 Parte B item 1 (inclusão de BR-FIN-003).
+Registra o que o passo 26 produziu e as regras decididas pelo dono — não valida
+regra de código, não altera status existente, não resolve divergência e não atribui
+OWNER. Os 6 BUSINESS_RULE_CANDIDATES_*.md permanecem intocados como fonte
+descritiva.*
