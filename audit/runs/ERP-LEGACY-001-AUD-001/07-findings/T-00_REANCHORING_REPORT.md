@@ -14,8 +14,9 @@ NATUREZA:      relatório de re-ancoragem. **NÃO** é veredito de auditoria, **
                nenhum finding, **NÃO** altera o objeto auditado (Regra 2) e **NÃO**
                altera evidência de outra organização (Regra 15)
 ESTADO:        RE-ANCORAGEM CONCLUÍDA — 7/7 findings com veredito registrado
-VERSÃO:        v2 — retificada pelo **ADENDO-01** (§2.0), que registra a refutação
-               de um argumento probatório da v1. **A classificação 7/7 não mudou**
+VERSÃO:        v3 — **ADENDO-01** (§2.0) registra a refutação de um argumento
+               probatório da v1; **ADENDO-02** (§2.4) fecha o vão de alcance
+               declarado na v2. **A classificação 7/7 não mudou em nenhuma versão**
 ```
 
 Documentos vinculantes lidos em conjunto (cláusula de conjunto da EMENDA-02 §0):
@@ -38,11 +39,12 @@ Documentos vinculantes lidos em conjunto (cláusula de conjunto da EMENDA-02 §0
 
 **Zero `ÂNCORAS_DERIVADAS`. Zero `ÂNCORAS_INVÁLIDAS`.**
 
-**Fundamento do veredito (retificado — ver §2):** o veredito repousa, em primeiro
-lugar, na **releitura direta de cada âncora no `AUDIT_COMMIT`** (§3) — que é
-suficiente por si só — e, em segundo lugar, no fato verificado de que **nenhum dos
-8 arquivos alterados entre `c9359be` e `c1311a6f` é âncora de nenhum dos 7
-findings** (§2.2), o que **explica** por que as âncoras sobreviveram.
+**Fundamento do veredito (retificado em §2.0, completado em §2.4):** o veredito
+repousa, em primeiro lugar, na **releitura direta de cada âncora no
+`AUDIT_COMMIT`** (§3) — que é suficiente por si só — e, em segundo lugar, no fato
+verificado de que **nenhuma âncora de código, schema, migration, client ou teste
+dos 7 findings cai em caminho alterado entre `c9359be` e `c1311a6f`** (§2.2 +
+§2.4), o que **explica** por que as âncoras sobreviveram.
 
 **Nenhum finding foi reclassificado, rebaixado ou promovido por este relatório.**
 Re-ancoragem ≠ (re)validação de mérito: a validação de mérito dos CRITICAL/HIGH é
@@ -109,7 +111,7 @@ banco (regime `APR-2026-016` intacto: nenhuma execução, nenhuma conexão a
 
 ---
 
-## 2. Por que as âncoras sobreviveram — fundamento retificado
+## 2. Por que as âncoras sobreviveram — fundamento retificado e completado
 
 ### 2.0 ADENDO-01 — ARGUMENTO REFUTADO, registrado como refutado
 
@@ -143,15 +145,15 @@ espelhamento item↔produto — **sem verificar o histórico do arquivo**. Não 
 como verificá-lo sem Bash, e a inferência **não deveria ter sido apresentada como
 prova**. Registrado como erro de método deste agente, não como detalhe editorial:
 **sustentar conclusão correta com prova errada é exatamente o defeito que custou o
-`AUDIT_PASSED` do SIM-002** (`AUDIT_PLAN.md` §1, §2.2 do SIM-002).
+`AUDIT_PASSED` do SIM-002**.
 
 **O que NÃO muda:** a classificação `ÂNCORAS_VÁLIDAS` 7/7 (§3) **não dependia** de
 ARG-01. Ela repousa na releitura direta de cada âncora no `AUDIT_COMMIT`, feita
 arquivo a arquivo, linha a linha, e essa releitura permanece integralmente válida.
 ARG-01 era **explicação** do resultado, não sua base.
 
-**O que muda:** o fundamento explicativo é substituído pelo de §2.2, que é mais
-simples, verificado e mais forte.
+**O que muda:** o fundamento explicativo é substituído pelo de §2.2 + §2.4, que é
+mais simples, verificado e mais forte.
 
 ### 2.1 O fato de OBS-INV-01 permanece — e permanece relevante para a run
 
@@ -163,7 +165,7 @@ auditado** — premissa que o `AUDIT_SCOPE.md` §2.3 ainda afirma (§4).
 O que a retificação estabelece é mais estreito e mais preciso: **esse risco, real
 em princípio, é inócuo para estes 7 findings em particular.**
 
-### 2.2 Verificação arquivo a arquivo — nenhuma âncora cai nos 8 alterados
+### 2.2 Verificação arquivo a arquivo em `server/src` — nenhuma âncora cai nos 8 alterados
 
 Os 8 arquivos alterados entre `c9359be` e `c1311a6f` (`git diff --name-only
 c9359be c1311a6f… -- server/src`, saída do orquestrador):
@@ -208,14 +210,54 @@ Como um arquivo só pode ser âncora se for nomeado, a ausência total de menç�
 (`ReceivePurchaseItemsUseCase.ts`). São **arquivos distintos** — a interseção
 permanece vazia, mas a vizinhança é registrada em vez de omitida.
 
-**Limite de alcance desta verificação, declarado:** o `git diff --name-only
-c9359be c1311a6f` do orquestrador foi escopado a **`server/src`**. Para as âncoras
-**fora** de `server/src` — `server/database/postgresql/00_baseline_frozen.sql` e as
-2 migrations (FIND-ERP-002), `client/src/**` (FIND-ERP-008), `server/tests/**`,
-`docs/business/**` — o delta `c9359be → c1311a6f` **não foi medido**. Consequência
-honesta: para essas âncoras, o fundamento do veredito é **exclusivamente** a
-releitura direta no `AUDIT_COMMIT` (§3), que é suficiente por si só, mas a
-explicação "não mudou desde a baseline" **não está provada** e não é afirmada aqui.
+### 2.4 ADENDO-02 — o vão de alcance está FECHADO
+
+A **v2** deste relatório declarou honestamente um limite: o `git diff --name-only
+c9359be c1311a6f` disponível estava escopado a `server/src`, deixando **não
+medido** o delta baseline→AUDIT_COMMIT para as âncoras fora dali (schema congelado,
+migrations, `client/`, testes). **Esse limite foi fechado por medição direta.**
+
+**Autoria e custódia:** evidência coletada pelo **orquestrador da sessão** (que
+dispõe de Bash), **não** por agente auditor VeriCore — mesmo padrão de
+transparência de E1 (§1.1) e do ADENDO-01. Todos os comandos são read-only sobre
+`.git`, reprodutíveis por qualquer terceiro com acesso de leitura ao repositório, e
+não tocam o produto nem qualquer banco (regime `APR-2026-016` intacto).
+
+Comando, com `<caminho>` variando: `git diff --name-only c9359be
+c1311a6f76b512fef893f7e60d934179cae3409f -- <caminho>`
+
+| # | `<caminho>` | Saída | Âncoras que isso cobre |
+|---|---|---|---|
+| **A2-01** | `server/migrations` | **vazia** | as 2 migrations de GRANT ancoradas pelo `FIND-ERP-002` (`20260806-000080-create-app-role-least-privilege.cjs`, `20260810-000041-reapply-app-role-privileges.cjs`) — **não mudaram** |
+| **A2-02** | `client/src` | **vazia** | `client/src/api/sst.ts:388-393` e `client/src/pages/sst/AccidentsTab.tsx` (`FIND-ERP-008`) — **não mudaram** |
+| **A2-03** | `*baseline_frozen*` | **vazia** | `server/database/postgresql/00_baseline_frozen.sql`, âncora estrutural do `FIND-ERP-002` (as 3 tabelas + os 13 triggers) — **não mudou** |
+| **A2-04** | `*.sql` | **1 arquivo:** `product/SIM-002/src/schema.sql` | artefato do simulado, **excluído por E1** do `AUDIT_SCOPE.md` §6, e **não ancorado por nenhum finding**. Nenhum `.sql` do ERP mudou |
+| **A2-05** | `server/tests` | **17 arquivos:** os 9 de `characterization/` (novos, criados no passo 30, **posteriores** ao discovery) + 8 unitários (`engineering-sample-requisition`, `integrity-transaction-guards`, `items-use-cases`, `material-receipt-quarantine`, `purchase-approval-authority`, `purchase-payable-no-recebimento-g13`, `requisition-receipt-status`, `warehouse-stock`) | os 8 unitários foram confrontados nominalmente com os 7 arquivos de finding: **nenhum é citado por nenhum finding**. Os testes que os findings **de fato** ancoram (`mrp-rerun-idempotency`, `mrp-requisition-helper-idempotency`, `juridico-contract-use-cases`, `rh-contract-use-cases`, `sst-accident`, `purchase-segregation-of-duties`) **não estão entre os 17** — logo, **não mudaram** |
+
+**Proximidade registrada em A2-05, no mesmo critério de §2.2:**
+`purchase-approval-authority.test.ts` é **tematicamente vizinho** do `FIND-ERP-009`
+(alçada/segregação na cadeia de Compras), mas **não é citado por ele**.
+**Vizinhança, não interseção** — registrada em vez de omitida.
+
+> **RESULTADO: o fundamento "os arquivos ancorados não mudaram" deixa de valer só
+> para `server/src` e passa a valer INTEGRALMENTE.** Nenhuma âncora de **código**,
+> **schema declarado**, **migration**, **client** ou **teste** de nenhum dos 7
+> findings cai em caminho alterado entre `c9359be` e `c1311a6f`. A ressalva de
+> alcance da v2 **está retirada** — mantê-la subdeclararia a força da conclusão, o
+> que é o erro simétrico ao de superdeclarar.
+
+**Cautela residual — apenas o que a evidência realmente não cobre:** o delta
+baseline→AUDIT_COMMIT **não foi medido para `docs/`**. Isso alcança exclusivamente
+as âncoras **documentais** de três findings — `docs/business/BLOCO_3_JUR_API.md`
+(FIND-ERP-005), `docs/business/BLOCO_6_RH_API.md` (FIND-ERP-007),
+`docs/business/BLOCO_1_SST_*` (FIND-ERP-008) e `docs/governance/TODO.md`
+(FIND-ERP-009), além de `coretriad/states/…/PRODUCTION_STATUS_MAP.md`. A cautela é
+**inócua para o veredito de T-00 por dois motivos independentes**: (i) essas
+âncoras documentais **não foram reconferidas por T-00** de todo modo — estão
+expressamente delegadas a **T-17** (contrato de API) e **T-23** (documentação ×
+código), como já declarado em §3.5 e §3.6; e (ii) nenhum veredito
+`ÂNCORAS_VÁLIDAS` deste relatório se apoia nelas. **Nenhuma outra cautela
+permanece.**
 
 ### 2.3 Estado da tese "declararam um commit e leram outro"
 
@@ -233,9 +275,10 @@ explicação "não mudou desde a baseline" **não está provada** e não é afir
 
 **Consequência registrada:** T-00 **não afirma** que os 7 findings foram lidos fora
 da baseline declarada. Afirma o que verificou: **as âncoras conferem no
-`AUDIT_COMMIT`**, e **os arquivos ancorados não estão entre os 8 que mudaram** —
-de modo que, para estes 7 findings, **a questão de qual dos dois commits foi lido é
-materialmente indiferente**, porque o conteúdo ancorado é o mesmo nos dois.
+`AUDIT_COMMIT`**, e **nenhuma âncora cai em caminho que mudou entre a baseline e o
+`AUDIT_COMMIT`** (§2.2 + §2.4) — de modo que, para estes 7 findings, **a questão de
+qual dos dois commits foi lido é materialmente indiferente**, porque o conteúdo
+ancorado é o mesmo nos dois.
 
 ---
 
@@ -281,7 +324,7 @@ citada 71-126 × corpo real 71-123), que **não afeta** nenhuma afirmação do f
 **Observação de completude, registrada sem alterar o finding (Regra 15) —
 retificada pelo ADENDO-01:** o `execute` de `CreateInventoryMovementUseCase`
 contém o ramo `item_id` (L80-90) que o texto do finding não descreve. **Correção:
-esse ramo NÃO tem origem em `3dee99f`** — ele já existia na baseline `c9359be`
+esse ramo NÃO tem origem em `3dee99f`** — já existia na baseline `c9359be`
 (comandos R-01/R-04, §2.0), e o arquivo é **idêntico** nos dois commits. Segue
 sendo superfície **não enumerada pelo finding**, e por isso permanece como insumo
 dirigido a **T-06** (módulo `inventory`) — mas **deixa de ser** insumo a T-05/RA-08,
@@ -332,10 +375,9 @@ escapou da varredura original.
 
 **Nota de escopo, sem prejulgamento:** as âncoras de **privilégio** (as duas
 migrations de `GRANT`) não foram reconferidas linha a linha por T-00 — a alegação
-de GRANT amplo é **matéria de mérito de T-03/T-13**, não de re-ancoragem.
-Registre-se ainda (§2.2, limite de alcance) que o delta baseline→AUDIT_COMMIT
-**não foi medido** para `server/database/` nem `server/migrations/`; o veredito
-deste finding repousa integralmente na releitura direta no `AUDIT_COMMIT`.
+de GRANT amplo é **matéria de mérito de T-03/T-13**, não de re-ancoragem. Consta
+do ADENDO-02 (A2-01/A2-03) que **nem o schema congelado nem as migrations mudaram**
+entre a baseline e o `AUDIT_COMMIT`.
 
 ### 3.3 FIND-ERP-005 (CRITICAL) — RA-02 — **ÂNCORAS_VÁLIDAS**
 
@@ -429,7 +471,8 @@ finding **não segue à SanaCore** até o ponto 409×422 retornar ao autor de or
 **T-00 não toca nesse status**: re-ancorar ≠ reabrir mérito. A determinação
 independente sobre 409×422 é de **T-12** e **T-17**, confrontadas em T-25. As
 âncoras **documentais** (`BLOCO_6_RH_API.md:526, 542, 577`) **não foram
-reconferidas por T-00** — são objeto de T-23 e T-17.
+reconferidas por T-00** — são objeto de T-23 e T-17, e são exatamente a cautela
+residual declarada em §2.4.
 
 ### 3.6 FIND-ERP-008 (HIGH) — RA-05 — **ÂNCORAS_VÁLIDAS**
 
@@ -445,11 +488,12 @@ reconferidas por T-00** — são objeto de T-23 e T-17.
 | `client/src/api/sst.ts:388-393` (**UI produz a combinação errada**) | **L388** `export async function emitCat(accidentId: number, emitente: string)`; **L391** `{ tipo: 'inicial', emitente },` — `tipo` **hard-coded**, sem ramo para óbito | **exata** |
 
 **Veredito: ÂNCORAS_VÁLIDAS**, ancorado com precisão de linha nos dois lados
-(server **e** client). Âncoras não reconferidas por T-00, declaradas:
-`legalDeadlineService.ts`, `sst-accident.test.ts:195-202` e as âncoras documentais
-de `BLOCO_1_SST_*` — pertencem a **T-12**, **T-20** e **T-23**. Para as âncoras de
-`client/` vale o limite de alcance de §2.2 (delta baseline→AUDIT_COMMIT não medido
-fora de `server/src`).
+(server **e** client). O ADENDO-02 (A2-02) confirma que **nenhum arquivo de
+`client/src` mudou** entre a baseline e o `AUDIT_COMMIT`.
+
+Âncoras não reconferidas por T-00, declaradas: `legalDeadlineService.ts`,
+`sst-accident.test.ts:195-202` e as âncoras documentais de `BLOCO_1_SST_*` —
+pertencem a **T-12**, **T-20** e **T-23**.
 
 ### 3.7 FIND-ERP-009 (HIGH) — RA-06 — **ÂNCORAS_VÁLIDAS**
 
@@ -473,6 +517,13 @@ foi **reproduzida por método próprio**.
 4 call sites "S". As 23 restantes **não** foram reconferidas por T-00 e vão para
 **T-09** (dona da superfície de ato aprovatório cross-módulo, EMENDA-01 §E.2) com o
 mapa authZ de **T-04**.
+
+**Registro do ADENDO-02 (A2-05):** o teste que este finding ancora
+(`purchase-segregation-of-duties.test.ts`, declarado nele como *"ÚNICO teste de
+segregação do repositório"*) **não** está entre os 17 arquivos de `server/tests`
+alterados desde a baseline — logo, não mudou. O teste alterado
+`purchase-approval-authority.test.ts` é **tematicamente vizinho**, mas **não é
+citado pelo finding**: vizinhança, não interseção.
 
 ---
 
@@ -504,7 +555,8 @@ exige autorização humana (Regra 18).
 
 1. **G6/OBS-INV-01 — mantida, e é suficiente sozinha:** `3dee99f` alterou 8
    arquivos de `server/src` depois da tag. A tag **não** representa o código
-   auditado. Vale para a run inteira, mesmo sendo inócua para os 7 findings (§2.2).
+   auditado. Vale para a run inteira, mesmo sendo inócua para os 7 findings
+   (§2.2 + §2.4).
 2. **G7/EMENDA-02 §8.4.1 — mantida:** com remediação SanaCore em curso, ler `HEAD`
    (e não o `AUDIT_COMMIT`) pode produzir falso negativo — defeito ausente
    **porque já foi corrigido**. Hoje mitigado pelo isolamento em worktree (§1.2),
@@ -529,16 +581,16 @@ evidência da auditoria** e deve constar do relatório final como tal.
 Registradas, não silenciadas (Regra 21). **Nenhuma é finding** — T-00 não emite
 finding (`AUDIT_PLAN.md` §4.1).
 
-| ID | Inconsistência | Estado após ADENDO-01 | Destinatário |
+| ID | Inconsistência | Estado após ADENDO-01 e ADENDO-02 | Destinatário |
 |---|---|---|---|
-| **IN-01** | Os 7 findings declaram `AUDIT_COMMIT`/`BASELINE` = `c9359be…` sem que essa correspondência tenha sido verificada por quem os produziu | **REDUZIDA E REQUALIFICADA.** A v1 afirmava "etiqueta incorreta sobre leitura correta" — isso **não está provado** (ARG-01 refutado, §2.0). O que permanece é mais estreito e verificável: **a declaração de baseline dos 7 findings é não verificada pelos próprios autores**, admitido expressamente em `FIND-ERP-009` LACUNA 2 (*"a correspondência tag → commit… não pôde ser confirmada"*); para os outros 6 é **indício** (modo read-only sem Bash), não fato. **Efeito material: NENHUM** — os arquivos ancorados são idênticos nos dois commits (§2.2) | `vericore-audit-consolidator` (T-26), como nota de rastreabilidade. **Não corrigível por T-00** (Regra 15) |
+| **IN-01** | Os 7 findings declaram `AUDIT_COMMIT`/`BASELINE` = `c9359be…` sem que essa correspondência tenha sido verificada por quem os produziu | **REDUZIDA E REQUALIFICADA.** A v1 afirmava "etiqueta incorreta sobre leitura correta" — **não provado** (ARG-01 refutado, §2.0). Permanece o mais estreito e verificável: **a declaração de baseline é não verificada pelos próprios autores**, admitido em `FIND-ERP-009` LACUNA 2; para os outros 6 é **indício**, não fato. **Efeito material: NENHUM** — nenhuma âncora cai em caminho alterado (§2.2 + §2.4) | `vericore-audit-consolidator` (T-26), como nota de rastreabilidade. **Não corrigível por T-00** (Regra 15) |
 | **IN-02** | `AUDIT_SCOPE.md` §2.3 sabidamente incorreto e não corrigido | **MANTIDA** (§4) | `vericore-audit-scope-agent`, **bloqueado por G6** |
 | **IN-03** | Duas `TRIAGE.md` SanaCore do mesmo período identificam HEADs diferentes (`c1311a6` no CASE-001, `de4dac1` no CASE-002) | **MANTIDA** — efeito material nulo por E1 | registro; nenhuma ação VeriCore |
 | **IN-04** | Heterogeneidade de template: `FIND-ERP-009` usa `BASELINE:` onde os outros 6 usam `AUDIT_COMMIT:`; `FIND-ERP-001` não traz `AMBIENTE`, presente em 005/008/009 | **MANTIDA** | `coretriad/templates/FINDING_TEMPLATE.md` — CoreTriad Director |
 | **IN-05** | `FIND-ERP-001` cita faixa `71-126` onde o corpo real do `execute` termina em `123` | **MANTIDA** — imprecisão inócua de cauda | registro; nenhuma ação |
-| **IN-06** | ~~`FIND-ERP-005` afirma que as 4 falhas foram "confirmadas por leitura direta no AUDIT_COMMIT" sendo que o commit declarado não foi lido — afirmação que "não se sustenta"~~ | **RETIRADA.** A acusação repousava inteiramente em ARG-01, que está refutado (§2.0). Além de a base ter caído, a evidência disponível **favorece o finding**: nenhum arquivo ancorado pelo `FIND-ERP-005` está entre os 8 alterados (§2.2), logo o conteúdo é o mesmo em `c9359be` e `c1311a6f` e a afirmação do finding é **materialmente verdadeira**, independentemente de qual árvore o autor tenha lido. **Nenhuma acusação a artefato de terceiro permanece de pé sobre argumento refutado** | — (encerrada) |
-| **IN-07** | Superfície citada por T-00 e não enumerada pelo `FIND-ERP-001`: o ramo `item_id` de `CreateInventoryMovementUseCase.ts:80-90` | **REQUALIFICADA.** A v1 atribuía o ramo a `3dee99f` — **incorreto**: o ramo já existia na baseline e o arquivo é idêntico nos dois commits (R-01/R-04). Segue sendo superfície não enumerada pelo finding, mas **não** é código novo. Insumo dirigido a **T-06**; **deixa de ser** insumo a T-05/RA-08 | T-06 |
-| **IN-08** *(novo, deste ADENDO)* | **Erro de método do próprio T-00 (v1):** inferência sobre origem de código (`3dee99f`) apresentada como prova, sem verificação de histórico — impossível de verificar sem Bash, e por isso mesmo não apresentável como prova | **REGISTRADA E CORRIGIDA** nesta v2. Regra derivada, vinculante para as demais trilhas: **atribuir origem de código a um commit exige `git log`/`git show` sob custódia declarada; ler o conteúdo do arquivo não estabelece quando ele entrou** | todas as trilhas; T-26 na consolidação |
+| **IN-06** | ~~`FIND-ERP-005` afirma que as 4 falhas foram "confirmadas por leitura direta no AUDIT_COMMIT" sendo que o commit declarado não foi lido~~ | **RETIRADA.** A acusação repousava inteiramente em ARG-01, refutado (§2.0). A evidência disponível **favorece o finding**: nenhum arquivo que ele ancora mudou entre os dois commits, logo a afirmação é **materialmente verdadeira** independentemente da árvore lida. **Nenhuma acusação a artefato de terceiro fica de pé sobre argumento refutado** | — (encerrada) |
+| **IN-07** | Superfície citada por T-00 e não enumerada pelo `FIND-ERP-001`: o ramo `item_id` de `CreateInventoryMovementUseCase.ts:80-90` | **REQUALIFICADA.** A v1 atribuía o ramo a `3dee99f` — **incorreto**: já existia na baseline e o arquivo é idêntico nos dois commits (R-01/R-04). Segue sendo superfície não enumerada pelo finding, mas **não** é código novo. Insumo a **T-06**; **deixa de ser** insumo a T-05/RA-08 | T-06 |
+| **IN-08** | **Erro de método do próprio T-00 (v1):** inferência sobre origem de código apresentada como prova, sem verificação de histórico | **REGISTRADA E CORRIGIDA** (v2). Regra derivada, vinculante para as demais trilhas: **atribuir origem de código a um commit exige `git log`/`git show` sob custódia declarada; ler o conteúdo do arquivo não estabelece quando ele entrou** | todas as trilhas; T-26 na consolidação |
 
 **Nenhuma inconsistência encontrada invalida qualquer um dos 7 findings.**
 
@@ -558,7 +610,7 @@ evidência de outra organização (Regra 15), **não** corrige o `AUDIT_SCOPE.md
 | Critério | Estado |
 |---|---|
 | 7 findings com veredito de re-ancoragem registrado contra `c1311a6f`, com arquivo+linha reconferido | **CUMPRIDO** (§3), com os limites de reconferência dirigida declarados por finding |
-| Lista de arquivos alterados por `3dee99f` reconciliada com a árvore auditada | **CUMPRIDO** (§2.2) — os 8 arquivos foram confrontados com o conjunto de âncoras dos 7 findings, com resultado de interseção vazia verificado por grep próprio. Os 2 serviços novos (`itemProductMirrorService.ts`, `fixedAssetReceiptService.ts`) permanecem **sem cobertura de auditoria** e são **RA-08, de T-05**, como o plano já previa |
+| Lista de arquivos alterados por `3dee99f` reconciliada com a árvore auditada | **CUMPRIDO E COMPLETO** (§2.2 + §2.4) — a reconciliação cobre `server/src`, `server/migrations`, `server/database` (schema congelado), `client/src`, `*.sql` e `server/tests`, com resultado de interseção **vazia** em todos. Os 2 serviços novos (`itemProductMirrorService.ts`, `fixedAssetReceiptService.ts`) permanecem **sem cobertura de auditoria** e são **RA-08, de T-05**, como o plano já previa |
 | Nenhuma citação de finding permanece apontando para `c9359be` sem nota de re-ancoragem | **CUMPRIDO** — §2 e §4 são a nota, e valem para os 7 |
 | Congelamento do manifesto de evidência da run | **A CARGO** do `vericore-audit-evidence-controller` |
 | Reconferência do `AUDIT_PLAN.md` §2 | **CUMPRIDO** (§1.1), com DYN-01 substituída e a substituição declarada (§1.3) |
