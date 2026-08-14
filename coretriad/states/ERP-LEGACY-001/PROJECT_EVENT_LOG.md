@@ -413,3 +413,57 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
 - **Posição do fieldwork:** 11 de 27 trilhas concluídas. Nenhum finding
   `CONFIRMED`. Nenhum `AUDIT_PASSED`. A validação adversarial (T-25) e a
   consolidação (T-26) seguem à frente.
+
+## 2026-08-14 — Passo 31, segunda leva da W2 (4 trilhas em paralelo)
+
+- **T-08 fiscal, T-13 dados/schema, T-15 rastreabilidade concluídas e
+  persistidas** (commits `51ec230` e seguinte). T-14 em execução.
+- **T-08 corrigiu o próprio escopo:** o plano descreve `fiscal` como "2
+  endpoints"; a superfície real no AUDIT_COMMIT é de 7 use cases e 6 rotas
+  em 3 roteadores. A trilha auditou a superfície real, sem amostragem, e
+  declarou a correção — não a silenciou para caber no orçamento de 2 S.
+- **Erro de briefing do orquestrador, corrigido em execução (Regra 21).**
+  Briefei T-14 e T-15 com "165 regras". No AUDIT_COMMIT são **164** —
+  `BR-FIN-003` entrou pela `APR-2026-021`, commit `2a591cf`, **posterior**
+  ao commit auditado, logo fora do objeto pela Regra 14. T-15 detectou de
+  forma independente (`RES-T15-02`) antes de qualquer número depender
+  disso. Correção repassada a T-14 em execução.
+- **`IN-08` × ferramental dos auditores — resolução registrada.** T-13 e
+  T-15 declararam não poder satisfazer `IN-08` (`RES-T13-01`, `LIM-01`):
+  seus tipos de agente são read-only por desenho e **não têm shell**, logo
+  não podem executar `git log`/`git show`. A causa é do briefing do
+  orquestrador, que impôs a regra a agentes incapazes de cumpri-la, não das
+  trilhas. **Resolução: `IN-08` não foi violado.** A regra proíbe *afirmar*
+  origem de código sem prova por git; as duas trilhas cumpriram a proibição
+  integralmente, declarando de forma expressa que **nenhuma atribuição de
+  proveniência temporal é feita** em seus relatórios. Regra satisfeita em
+  substância. Fica o registro para que trilhas futuras que **precisem** de
+  proveniência sejam despachadas a um tipo de agente com shell, ou tenham a
+  verificação encaminhada ao `vericore-audit-verification-runner`.
+- **T-13 respondeu à pergunta que T-06 deixou aberta.** T-06 provou UNIQUE
+  inócuo por NULL em `inventory_movements`; T-13 varreu as **109
+  declarações de unicidade** do schema e localizou o segundo caso —
+  `uq_mrp_sem_duplicidade`, cujo nome afirma exatamente o que a constraint
+  não faz quando `origem_id IS NULL`. Registrou também que o padrão
+  **correto** já existe no próprio repositório em duas formas
+  (`COALESCE` em `uq_budget_lines_*`; índice parcial com `IS NOT NULL` em
+  `uq_production_order_reservations_active`) — a remediação não precisa
+  inventar técnica.
+- **T-13 registrou 7 conformidades provadas**, entre elas: zero tabela sem
+  PK nas 207; soft delete inexistente em todo o schema (o que desloca o
+  risco para a política de `ON DELETE`, onde os findings se concentram); e
+  `is_phantom` **existe** no schema declarado — a falha apontada por T-11 é
+  de código, não de banco. Resultado positivo registrado com o mesmo peso
+  do negativo.
+- **T-15 refutou o passo 29 em dois pontos verificáveis** e provou colisão
+  semântica em `BR-JUR-003` entre o catálogo canônico e o corpus versionado
+  de `docs/business` — com o código e o teste executando o significado do
+  **corpus**, não o do catálogo. O `BR_CATALOG.md:400` declara "nenhuma
+  colisão encontrada" tendo buscado apenas nos 6 arquivos do passo 26.
+  **`ESC-T15-03` toca a `APR-2026-019`, decisão humana registrada: fica
+  para o dono, nenhum agente decide.**
+- **Alerta preventivo entre trilhas.** O escalonamento `ESC-T15-04` foi
+  repassado a T-14 **antes** do fechamento dela, para que não herdasse o
+  ponto cego que T-15 documentou. Instrução expressa de verificar por
+  leitura própria e registrar divergência, nunca aceitar por deferência.
+- **Posição do fieldwork:** 14 de 27 trilhas concluídas.
