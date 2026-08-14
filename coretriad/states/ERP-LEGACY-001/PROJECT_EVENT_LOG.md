@@ -954,3 +954,31 @@ ponto, a lista de decisões pendentes apresentada em linguagem não-técnica:
 
 Nenhuma decisão foi inferida ou assumida por agente — todas as seis vieram
 de resposta direta e explícita do dono nesta data.
+
+---
+
+## T-25 RODADA 2 CONCLUÍDA — 2026-08-14
+
+`vericore-finding-validator` completou a validação adversarial das 13
+trilhas que a Rodada 1 havia deixado sem tentativa própria de refutação
+(T-01, T-03, T-05, T-07, T-09, T-10, T-11, T-13, T-19, T-20, T-21, T-22,
+T-23). Persistido em
+`audit/runs/ERP-LEGACY-001-AUD-001/07-findings/T-25_VALIDACAO_ADVERSARIAL_RODADA2.md`.
+
+Resultado: 10 dessas 13 trilhas produziram HIGH/CRITICAL (T-09, T-20, T-21
+não têm nada acima de MEDIUM). 32 HIGH submetidos a refutação ativa, 0
+CRITICAL novo. Veredito: **20 CONFIRMED, 12 NEEDS_MORE_EVIDENCE, 0
+REFUTED, 0 FALSE_POSITIVE, 0 DUPLICATE.**
+
+**Cobertura adversarial agora declarada completa para as 27 trilhas de
+fieldwork** (14 da Rodada 1 + 13 desta rodada) — todo CRITICAL/HIGH da
+run passou por tentativa de refutação registrada.
+
+Recomendação do próprio T-25: uma 3ª rodada curta, dirigida apenas aos 12
+`NEEDS_MORE_EVIDENCE`, sem tratá-los como bloqueio equivalente aos 4
+CRITICAL que ainda dependem de evidência dinâmica. Registrado como item
+em aberto para T-26 (consolidação), não decidido aqui.
+
+Nenhuma divergência entre trilhas foi resolvida por votação ou
+silenciosamente (Regra 20). Nenhuma declaração de `AUDIT_PASSED`,
+`FINDINGS_CONFIRMED`, `RETEST_PASSED` ou `FINDING CLOSED` foi emitida.
