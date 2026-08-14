@@ -467,3 +467,65 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
   ponto cego que T-15 documentou. Instrução expressa de verificar por
   leitura própria e registrar divergência, nunca aceitar por deferência.
 - **Posição do fieldwork:** 14 de 27 trilhas concluídas.
+
+## 2026-08-14 — T-14 concluída; W2 fechada; divergência aberta entre T-14 e T-15
+
+- **T-14 concluída e persistida.** Placar da revalidação: **145
+  CONFIRMADA · 4 DIVERGENTE · 1 NÃO IMPLEMENTADA · 15 NÃO LOCALIZÁVEL.**
+  A pendência estrutural mais antiga da run — o `SYSTEM_INVENTORY.md` §6
+  registrava que as 164 regras nunca haviam sido revalidadas — está
+  fechada, com lacuna declarada.
+- **Leitura honesta do 87,9% de aderência, feita pela própria trilha:** o
+  número mede aderência do código à declaração do catálogo, **não**
+  qualidade da regra. **32 das 145 CONFIRMADAS são regras cuja declaração é
+  justamente "isto está errado/ausente/contraditório"** — confirmá-las é
+  confirmar um defeito, não uma conformidade.
+- **`T14-F05` (HIGH) — o achado estrutural da trilha:** **≥ 26 regras de
+  negócio implementadas e vivas não têm BR-ID nenhum**, consolidadas dos
+  handoffs de T-01, T-05, T-06, T-07, T-12 e da própria T-14. O padrão
+  adjudicado: **a regra que atravessa dois módulos é a que fica sem BR-ID**
+  — o catálogo é forte onde o módulo é fechado e cego onde o processo
+  atravessa. Converge com o padrão que T-11 mediu do lado do código.
+- **`T14-F03` (HIGH) — risco direto sobre remediação em curso:**
+  `BR-FIN-003` é a **única** regra do catálogo de origem humana e a única
+  sem implementação. Como ela é restrição de projeto sobre a remediação do
+  `FIND-ERP-001` (CASE-001, CRITICAL, em curso), remediar rejeitando nova
+  baixa sobre título `partial` **violaria** a decisão registrada do dono
+  (duas parcelas de mesmo valor são legítimas). Escalonado ao
+  `vericore-finding-validator` e ao CASE-001.
+- **`RES-T14-01` — sub-entrega declarada:** 15 regras `NÃO LOCALIZÁVEL`,
+  nominalmente listadas. **7 delas tocam categorias vedadas por G3**
+  (contratos, estoque/patrimônio, autorização). Custo estimado para suprir:
+  ≈0,7 S. **Decisão do director/dono:** suprir ou registrar redução de
+  cobertura com aceite. Não apresentado como economia.
+- **DIVERGÊNCIA ABERTA — REGISTRADA, NÃO CONCILIADA (Regra 20).** T-14 §4
+  declara confirmar, por conferência própria, que **"não há colisão"** no
+  `BR_CATALOG.md`. T-15 (`T15-F04`, HIGH) provou **colisão semântica em
+  `BR-JUR-003`** contra o corpus versionado de `docs/business`, com o código
+  (`CreateContractAddendumUseCase.ts:37,40`) e o teste
+  (`juridico-contract-use-cases.test.ts:316`) executando o significado do
+  **corpus**, não o do catálogo. **As duas trilhas mediram espaços de busca
+  diferentes:** T-14 conferiu dentro do catálogo; T-15 conferiu contra o
+  corpus externo. O alerta `ESC-T15-04` foi repassado a T-14 **antes** do
+  fechamento dela; o relatório entregue **não o referencia**. A divergência
+  **permanece aberta e vai a T-25** com o `vericore-finding-validator`. A
+  parte que toca a `APR-2026-019` é **decisão do dono** — nenhum agente
+  decide. Registro expresso: não houve conciliação silenciosa, não houve
+  voto, não houve deferência ao relatório mais recente.
+- **Discrepância 164 × 165 mantida em aberto.** A correção (164 no
+  AUDIT_COMMIT; `BR-FIN-003` entrou por commit posterior, Regra 14) foi
+  repassada a T-14 em execução; a trilha manteve 165 e classificou
+  `BR-FIN-003` como NÃO IMPLEMENTADA dentro do escopo. Consequência
+  material registrada: se a regra está fora do commit auditado, a afirmação
+  de `T14-F03` de que ela é "a única de origem humana e a única sem
+  implementação" muda de estatuto. Encaminhado a T-15 e a T-25.
+- **Medição G11-c de T-14:** estimado 6 S, real ≈2,4 S. A própria trilha
+  desqualificou a leitura ingênua do ganho: **parte do desvio é cobertura
+  não executada** (`RES-T14-01`, ~0,7 S), e o desvio defensável é ≈-48%, não
+  -60%. Advertência registrada contra extrapolar o fator: o preditor de
+  esforço não é o número de regras, é **a qualidade da âncora publicada**.
+- **W2 fechada: 10 trilhas.** Fieldwork em **15 de 27**.
+- **W3 despachada, primeira leva, 4 trilhas em paralelo:** T-16 tier 3
+  backend, T-17 contrato de API (681 endpoints), T-18 appsec/segredos/
+  dependências, T-19 arquitetura. T-15 reaberta em paralelo para fechar
+  `RES-T15-01` com a saída de T-14 e registrar a divergência acima.
