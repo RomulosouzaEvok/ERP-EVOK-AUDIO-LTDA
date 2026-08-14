@@ -277,5 +277,211 @@ validação**, porém **não arquivado**.
 
 **Aprovado por:** Gilwagno — 13/08/2026.
 
+---
+
+## APR-2026-015 — Abertura do ERP-LEGACY-001 (passos 21-24)
+
+**Decisão:** aprovada a abertura do programa `ERP-LEGACY-001`
+(`LEGACY_RECOVERY_AND_MODERNIZATION`, Parte VIII do master spec), limitada
+**apenas aos passos 21-24**. Os passos 25-40 exigem novo gate humano
+específico, não coberto por esta aprovação.
+
+**Autoridade:** decisão humana (Regra 18). Esta aprovação é o gate humano
+próprio referenciado em APR-2026-014 §Efeito — a validação operacional do
+CoreTriad, por si só, não autorizava a abertura.
+
+**Skill criada nesta aprovação:** `.claude/skills/coretriad-onboard/SKILL.md`,
+formalizando os passos 21-24 com PARE incondicional ao final do passo 24.
+
+**Condições adicionais impostas pelo dono, permanentes para todo o programa
+`ERP-LEGACY-001` (não apenas para esta abertura):**
+
+1. O `PROJECT_STATE.md` do onboarding (passo 21) deve registrar
+   explicitamente que o ERP-LEGACY-001 está **parcialmente em produção**:
+   parte dos módulos processa dado real da empresa hoje, parte está em
+   desenvolvimento/homologação.
+2. **Antes do passo 23**, a VeriCore deve identificar e listar
+   **separadamente** quais módulos/diretórios estão em produção real e quais
+   não estão (`PRODUCTION_STATUS_MAP.md`) — formalizado como pré-passo 23 na
+   skill.
+3. **Regra permanente de segurança de dado real**: módulos classificados
+   como produção recebem tratamento read-only, porém **sem nenhuma execução
+   de teste, script de diagnóstico ou comando que toque o banco de dados** —
+   apenas leitura de código-fonte, schema declarado e configuração. Inspecionar
+   dado real (uma linha, uma query) exige aprovação humana explícita, caso a
+   caso — nunca por extensão de aprovação anterior.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-016 — Resolução da divergência de status de produção do ERP-LEGACY-001
+
+**Contexto:** o pré-passo 23 do onboarding produziu
+`coretriad/states/ERP-LEGACY-001/PRODUCTION_STATUS_MAP.md`, que identificou
+divergência direta (Regra 20 do `CLAUDE.md`) entre a declaração do
+`PROJECT_STATE.md` ("PARCIALMENTE em produção real") e a SSOT do produto +
+checklist de Go-Live do próprio ERP (Decision Point 1 = "NO-GO", servidor de
+produção não adquirido, `docker-compose.prod.yml` "não exercitado ainda"). O
+agente VeriCore não decidiu sozinho — classificou o sistema como `UNKNOWN` e
+escalou.
+
+**Decisão:** **há dado real de negócio em produção, mesmo sem Go-Live
+formal.** Os 327 insumos reais da fábrica (carregados em 2026-08-10 no banco
+`erp_evok_audio`) — e qualquer outro dado real que venha a ser identificado
+nos módulos hoje classificados `UNKNOWN` — contam como produção real para
+fins deste programa, **independentemente do rótulo formal de Go-Live**. O
+regime read-only reforçado (sem execução de teste, script de diagnóstico ou
+comando que toque banco; inspeção de dado real só com aprovação caso a caso)
+se aplica a esses módulos **de forma permanente**, não condicionada a uma
+futura declaração formal de Go-Live.
+
+**Módulos/diretórios afetados por esta decisão** (de `UNKNOWN` para tratamento
+como produção real, para fins de regime read-only): `items`, `categories`,
+`departments`, `users` (parcialmente — a conta admin, não as 20 contas de
+teste `@teste.evokaudio`), `auth`, `auditLogs`, e o banco por trás de
+`docker-compose.yml` (o ambiente de desenvolvimento que hoje hospeda o dado
+real de catálogo, já que não existe banco de produção separado).
+
+**Autoridade:** decisão humana (Regra 18/20 do `CLAUDE.md`). Resolve a
+divergência escalada pelo VeriCore no pré-passo 23; `PROJECT_STATE.md` e
+`PRODUCTION_STATUS_MAP.md` devem ser atualizados para refletir esta decisão
+como fonte autoritativa corrente.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+---
+
+## APR-2026-017 — Promoção de 2 achados a finding formal + autorização dos passos 25-30 (ERP-LEGACY-001)
+
+**Contexto:** ao fim do passo 24 (`coretriad-onboard` encerrada com PARE
+incondicional), o Control Plane apresentou três caminhos possíveis. O dono
+escolheu uma combinação: promover dois achados **e** prosseguir.
+
+### Decisão A — promoção de 2 achados de discovery a finding formal preliminar
+
+Autorizada a formalização, **fora da sequência normal do passo 31**, de dois
+achados de discovery, por serem risco financeiro/de integridade de dados e
+não apenas dívida arquitetural:
+
+| Finding | Severidade | Confiança | Status | Arquivo |
+|---|---|---|---|---|
+| `FIND-ERP-001` | CRITICAL | CONFIRMED | OPEN | `docs/coretriad/projects/ERP-LEGACY-001/discovery/FIND-ERP-001.md` |
+| `FIND-ERP-002` | HIGH | CONFIRMED | OPEN | `docs/coretriad/projects/ERP-LEGACY-001/discovery/FIND-ERP-002.md` |
+
+Ambos passaram pelo `vericore-finding-validator` adversarial e voltaram
+**CONFIRMED**, sem controle compensatório encontrado.
+
+**Nota sobre a severidade sugerida de FIND-ERP-001:** o dono sugeriu
+CRITICAL para os 8 endpoints de escrita crítica. O `vericore-idempotency-auditor`
+**não aceitou a sugestão sem verificar** (comportamento correto, Regra 19 —
+evidência tem precedência): releu as 8 rotas e comprovou que 6 já têm
+proteção real (lock pessimista + guarda de estado terminal), incluindo
+emissão de NF-e e conversão de MRP. O CRITICAL foi mantido, mas restrito ao
+subconjunto genuinamente vulnerável: `POST /api/inventory/movements` (sem
+nenhuma proteção) e pagamento parcial repetido em `PayPayableUseCase`/
+`ReceivePaymentUseCase` (guarda só rejeita `paid`, não cobre `partial`). O
+validador atestou independentemente que essa diferenciação é honesta.
+
+**Esta promoção é exceção autorizada caso a caso, não regra nova.** Nenhum
+outro achado de discovery pode ser promovido a finding por analogia — os
+demais (violações de Clean Architecture, CNAB órfão, ownership quebrado do
+`auditLogs`, regra de qualidade aplicada dentro do agregado de estoque)
+seguem o fluxo normal até o passo 31.
+
+**Nenhuma remediação foi aplicada nem encaminhada.** O envio de
+FIND-ERP-001/002 à SanaCore depende de decisão humana futura, ainda não
+tomada.
+
+### Decisão B — autorização dos passos 25-30
+
+Autorizados os passos 25-30 da Parte VIII do master spec (domínios, regras
+de negócio descobertas, requisitos recuperados, casos de uso recuperados,
+matriz de rastreabilidade do legado, testes de caracterização), regidos pela
+skill `.claude/skills/coretriad-legacy-discovery/SKILL.md`, criada nesta
+mesma sessão com **PARE incondicional ao final do passo 30**. O passo 31
+(auditoria 360°) permanece BLOQUEADO e exige novo gate humano.
+
+Todas as regras permanentes herdadas do onboarding continuam valendo, em
+especial a **regra de segurança de dado real** (`APR-2026-016`): módulos de
+produção real seguem em regime read-only reforçado; o passo 30 (testes de
+caracterização) é a única execução autorizada, e apenas contra banco de
+teste efêmero — **nunca** contra o banco de desenvolvimento real que hospeda
+os 327 itens.
+
+### Decisão C — SIM-002 em espera
+
+O delta audit do SIM-002 e as pendências `OBS-SIM-002-009`/`OBS-SIM-002-010`
+ficam **em espera**, explicitamente **não bloqueiam** o ERP-LEGACY-001.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
+*Nota de registro: esta entrada foi criada retroativamente na mesma sessão,
+após o `coretriad-director` sinalizar corretamente que a autorização existia
+apenas no Control Plane e não no artefato oficial de aprovações (Regra 17).
+A decisão humana é a mesma; apenas o registro formal estava faltando.*
+
+---
+
+## APR-2026-018 — Promoção de 5 achados do passo 26 a findings formais preliminares
+
+**Decisão:** autorizada a formalização, **fora da sequência normal do passo
+31**, de cinco achados do passo 26 (regras de negócio descobertas), por serem
+risco de autorização, compliance regulatório ou registro legal:
+
+| Finding | Tema | Severidade | Ambiente |
+|---|---|---|---|
+| `FIND-ERP-005` | Alçada de contrato jurídico — 4 falhas encadeadas | CRITICAL | DEV/HOMOLOGAÇÃO |
+| `FIND-ERP-006` | LGPD — sem cadastro de DPO; retenção sem enforcement | HIGH | DEV/HOMOLOGAÇÃO |
+| `FIND-ERP-007` | RH — motivo de rescisão descartado; aviso prévio fixo | HIGH | DEV/HOMOLOGAÇÃO |
+| `FIND-ERP-008` | SST — tipo do CAT × gravidade sem checagem cruzada | HIGH | DEV/HOMOLOGAÇÃO |
+| `FIND-ERP-009` | Segregação de função só existe em Compras (sistêmico) | HIGH | DEV/HOMOLOGAÇÃO |
+
+**Ambiente — condição uniforme desta aprovação:** todos os cinco estão em
+módulos classificados **NÃO-PRODUÇÃO** em
+`coretriad/states/ERP-LEGACY-001/PRODUCTION_STATUS_MAP.md`. A severidade
+atribuída se justifica pelo **padrão que será promovido a produção** (e, nos
+casos de LGPD e SST, pelo risco regulatório/previdenciário na promoção), não
+por exposição atual de dado real. Isso deve constar em cada finding.
+
+**Nenhuma remediação autorizada.** A SanaCore **não** foi acionada para
+nenhum dos cinco. `FIND-ERP-001`, `FIND-ERP-002` e estes cinco permanecem
+`OPEN`, aguardando decisão humana separada sobre o envio à remediação.
+
+### Lacuna de numeração — `FIND-ERP-003` e `FIND-ERP-004` nunca existiram
+
+Registrado deliberadamente, a pedido do dono, para que nenhuma auditoria
+futura conclua que dois findings foram suprimidos: a numeração salta de
+`FIND-ERP-002` para `FIND-ERP-005` porque os IDs `003` e `004` **nunca foram
+atribuídos a nenhum achado**. Não houve finding descartado, rebaixado,
+mesclado nem retirado. A lacuna é um salto de numeração na mensagem de
+autorização do dono, não uma supressão.
+
+**Precedente estabelecido:** ID de finding não é reciclado nem renumerado
+para "fechar buraco". Se um finding for descartado no futuro, o ID
+permanece registrado com o motivo do descarte — nunca desaparece da
+sequência.
+
+### Enquadramento específico de `FIND-ERP-009`
+
+Classificado pelo dono como **achado estrutural, não pontual**. O ponto não é
+que a segregação esteja errada onde existe (está correta e é o melhor
+controle do sistema — decisão D-K, 2026-08-10, sem exceção nem para `admin`).
+O achado é a **assimetria não decidida**: existe decisão registrada mandando
+aplicar em Compras; **não existe nenhuma decisão registrada dizendo que os
+demais pontos de aprovação — contrato jurídico, concessão de acesso, contagem
+de inventário, lançamento contábil, estrutura de produto — não devem ter**.
+É lacuna de política, não bug isolado.
+
+**Escopo desta aprovação:** promoção a finding formal e validação
+adversarial. **Não** autoriza remediação, **não** autoriza o passo 31
+(auditoria 360°), e **não** estende a exceção "promover fora de sequência" a
+nenhum outro achado por analogia — os demais candidatos levantados no passo
+26 (scan mobile furando quarentena, ICMS/IPI divergentes, desconto perdido no
+faturamento, `effectiveness_result` inescrevível, entre outros) seguem o
+fluxo normal até o passo 31.
+
+**Aprovado por:** Gilwagno — 13/08/2026.
+
 Aprovações futuras: adicionar linha com próximo ID sequencial. Nunca editar
 entradas existentes — correções entram como nova linha referenciando a antiga.
