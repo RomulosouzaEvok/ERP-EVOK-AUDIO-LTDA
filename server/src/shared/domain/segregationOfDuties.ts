@@ -81,6 +81,16 @@ export const SEGREGATION_RULES = {
   PURCHASE_ORDER_AUTHORITY: 'D-K-ALCADA',
   /** `POST /api/comex/import-processes/:id/approve` (gate COMEX, G11-COMEX). */
   IMPORT_PROCESS_AUTHORITY: 'D-K-COMEX',
+  /**
+   * `POST /api/jur/contracts/:id/approve` (alçada de contrato jurídico,
+   * RF-JUR-003). Acrescentado na remediação de `FIND-ERP-005` / Falha 4,
+   * por decisão do dono em `APR-2026-021` Parte B decisão 5 — *"a segregação
+   * D-K VALE para aprovação de contrato jurídico"*. Até então o cabeçalho
+   * deste módulo citava nominalmente `resolveAvailableApproverRoles` do
+   * Jurídico como o comportamento oposto ao desejado, mas a regra nunca
+   * havia sido aplicada lá.
+   */
+  JUR_CONTRACT_AUTHORITY: 'D-K-JURIDICO',
 } as const;
 
 /** União dos identificadores de {@link SEGREGATION_RULES}. */
@@ -131,6 +141,64 @@ export function isSelfApproval(
  * @returns `void` quando a aprovação é legítima (aprovador ≠ solicitante, ou solicitante desconhecido).
  * @throws {BusinessRuleError} HTTP 422 com `details.rule` = o identificador do ponto de aprovação, `details.requester_user_id`, `details.approver_user_id` e `details.what_to_do`.
  */
+/** Entrada de {@link assertApproverIsNotPriorApprover}. */
+export interface PriorApproverCheckInput {
+  /** Identificador do ponto de aprovação — vai para `details.rule`. */
+  rule: SegregationRule;
+  /** Aprovações VÁLIDAS já registradas para o documento. Só `approver_user_id` é lido. */
+  existingApprovals: Array<{ approver_user_id?: number | null; approver_role?: string | null }>;
+  /** Quem está aprovando agora. **Sempre `req.user.id` (JWT)**. */
+  approverUserId: number | null | undefined;
+  /** Como o documento aparece para o usuário. Entra na mensagem. */
+  documentLabel: string;
+  /** O que fazer para destravar. Entra na mensagem e em `details.what_to_do`. */
+  approverHint: string;
+}
+
+/**
+ * Aplica a segregação de **identidade entre aprovadores**: a mesma pessoa
+ * não pode registrar duas aprovações do mesmo documento, ainda que em
+ * papéis diferentes.
+ *
+ * Isto não é a mesma regra de {@link assertApproverIsNotRequester} (aprovador
+ * ≠ solicitante) — é a exigência intrínseca da **dupla aprovação**: dois
+ * papéis satisfeitos por uma pessoa só não são duas aprovações. Foi a Falha 4
+ * de `FIND-ERP-005`: `resolveAvailableApproverRoles` devolvia os dois papéis
+ * para `admin` e o único controle anti-duplicidade era por PAPEL
+ * (`findByContractAndRole` + a unique de banco
+ * `uq_jur_contract_approvals_contract_role`), nunca por PESSOA.
+ *
+ * `role === 'admin'` **não isenta**, pelo mesmo motivo já registrado no
+ * cabeçalho deste módulo: identidade não é concedível. A rejeição é por
+ * identidade e não por papel — dois administradores **diferentes** aprovando
+ * papéis diferentes é legítimo e continua passando (R4(c) do reteste).
+ *
+ * @param input - Ver {@link PriorApproverCheckInput}.
+ * @returns `void` quando ninguém com o mesmo id já aprovou o documento.
+ * @throws {BusinessRuleError} HTTP 422 com `details.rule`, `details.approver_user_id`, `details.existing_role` e `details.what_to_do`.
+ */
+export function assertApproverIsNotPriorApprover(input: PriorApproverCheckInput): void {
+  const already = (input.existingApprovals ?? []).find(
+    (approval) => isSelfApproval(approval?.approver_user_id, input.approverUserId),
+  );
+  if (!already) return;
+
+  throw new BusinessRuleError(
+    `Segregacao de funcao: voce ja registrou a aprovacao "${already.approver_role ?? 'anterior'}" de ${input.documentLabel}, `
+      + 'entao nao pode registrar tambem a segunda. Dupla aprovacao exige DUAS PESSOAS. '
+      + `Peca a segunda aprovacao a ${input.approverHint}. `
+      + 'Se ninguem mais tem esse acesso hoje, o administrador precisa cadastrar um segundo aprovador '
+      + '(Administracao > Perfis de Acesso) — ser administrador nao isenta, porque nenhum nivel de permissao '
+      + 'transforma uma pessoa em duas.',
+    {
+      rule: input.rule,
+      approver_user_id: input.approverUserId,
+      existing_role: already.approver_role ?? null,
+      what_to_do: `Solicitar a segunda aprovacao a ${input.approverHint}.`,
+    },
+  );
+}
+
 export function assertApproverIsNotRequester(input: SegregationCheckInput): void {
   if (!isSelfApproval(input.requesterUserId, input.approverUserId)) return;
 

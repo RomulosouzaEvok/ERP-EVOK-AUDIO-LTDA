@@ -53,6 +53,12 @@ interface JurContractAttributes {
   termination_reason: string | null;
   termination_date: string | null;
   created_by: number;
+  /**
+   * Política de alçada (RF-JUR-003) vigente NO INSTANTE da ativação —
+   * FIND-ERP-005 R1(d): permite auditar a posteriori sob qual regra o
+   * contrato foi ativado. Preenchido por `ActivateContractUseCase`.
+   */
+  approval_policy_snapshot: Record<string, unknown> | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -93,6 +99,7 @@ const JurContract = sequelize.define<any, JurContractAttributes>('JurContract', 
   termination_reason: { type: DataTypes.TEXT, allowNull: true },
   termination_date: { type: DataTypes.DATEONLY, allowNull: true },
   created_by: { type: DataTypes.INTEGER, allowNull: false },
+  approval_policy_snapshot: { type: DataTypes.JSONB, allowNull: true },
 }, {
   tableName: 'jur_contracts',
   underscored: true,

@@ -173,6 +173,9 @@ import JurLgpdDataSubjectRequest = require('./JurLgpdDataSubjectRequest');
 import JurLgpdIncident = require('./JurLgpdIncident');
 import JurCorporateAct = require('./JurCorporateAct');
 import JurContractApproval = require('./JurContractApproval');
+// FIND-ERP-005 / Falha 1 — alcada de contrato como TABELA CONFIGURAVEL (APR-2026-021 Parte B decisao 3).
+import JurApprovalThreshold = require('./JurApprovalThreshold');
+import JurApprovalThresholdHistory = require('./JurApprovalThresholdHistory');
 import AccountingChartOfAccount = require('./AccountingChartOfAccount');
 import AccountingEntry = require('./AccountingEntry');
 import AccountingEntryItem = require('./AccountingEntryItem');
@@ -1411,6 +1414,10 @@ JurProxy.belongsTo(JurProxy, { foreignKey: 'superseded_proxy_id', as: 'supersede
 JurContract.hasMany(JurContractApproval, { foreignKey: 'contract_id', as: 'approvals' });
 JurContractApproval.belongsTo(JurContract, { foreignKey: 'contract_id', as: 'contract' });
 
+// JurApprovalThreshold ↔ JurApprovalThresholdHistory (historico da politica de alcada, FIND-ERP-005)
+JurApprovalThreshold.hasMany(JurApprovalThresholdHistory, { foreignKey: 'threshold_id', as: 'history' });
+JurApprovalThresholdHistory.belongsTo(JurApprovalThreshold, { foreignKey: 'threshold_id', as: 'threshold' });
+
 // JurIntellectualProperty ↔ JurContract (N:N via JurIpContractLink)
 JurIntellectualProperty.hasMany(JurIpContractLink, { foreignKey: 'ip_id', as: 'contractLinks' });
 JurIpContractLink.belongsTo(JurIntellectualProperty, { foreignKey: 'ip_id', as: 'ipAsset' });
@@ -1567,6 +1574,7 @@ export {
   JurLegalCaseProvision, JurLegalAlert, JurProxy, JurIntellectualProperty,
   JurIpContractLink, JurLgpdProcessingActivity, JurLgpdDataSubjectRequest, JurLgpdIncident,
   JurCorporateAct, JurContractApproval,
+  JurApprovalThreshold, JurApprovalThresholdHistory,
   AccountingChartOfAccount, AccountingEntry, AccountingEntryItem,
   TreasuryBankAccount, TreasuryFinancialOperation,
   BudgetLine,

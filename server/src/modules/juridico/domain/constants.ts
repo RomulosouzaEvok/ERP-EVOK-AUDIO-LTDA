@@ -1,47 +1,35 @@
 /**
- * Constantes de negócio do módulo Jurídico (RF-JUR-003 — alçada de
- * aprovação de contrato por valor), decisão do dono do produto em
- * 2026-08-08 fechando a pendência deixada no cabeçalho de
- * `ActivateContractUseCase.ts`. Threshold como constante de código (não
- * tabela de configuração editável nesta rodada) — mesmo padrão já usado em
- * `server/src/modules/marketing/domain/constants.ts`.
+ * Constantes de negócio do módulo Jurídico.
  *
- * Regras (baseadas em `jur_contracts.value`):
- * - valor <= {@link JUR_APPROVAL_THRESHOLD_DIRECTOR}: sem aprovação extra —
- *   comportamento já existente, ativação direta por qualquer
- *   `juridico:operate`.
- * - {@link JUR_APPROVAL_THRESHOLD_DIRECTOR} < valor <=
- *   {@link JUR_APPROVAL_THRESHOLD_FINANCE}: exige 1 aprovação de um usuário
- *   com módulo de acesso `diretor`.
- * - valor > {@link JUR_APPROVAL_THRESHOLD_FINANCE}: exige 2 aprovações
- *   distintas — 1 de `diretor` E 1 de `financeiro`.
+ * ## ⚠️ Os limiares de alçada NÃO moram mais aqui (FIND-ERP-005, Falha 1)
+ *
+ * Até 2026-08-14 este arquivo continha
+ * `JUR_APPROVAL_THRESHOLD_DIRECTOR = 50000` e
+ * `JUR_APPROVAL_THRESHOLD_FINANCE = 300000` mais a função pura
+ * `requiredApproverRoles(value)`. Isso contrariava o contrato de API
+ * (`docs/business/BLOCO_3_JUR_API.md` §2.7 — tabela `jur_approval_thresholds`,
+ * "nenhum valor de alçada é hard-coded") e produzia duas fontes autoritativas
+ * contraditórias, registrado como Falha 1 de `FIND-ERP-005`.
+ *
+ * Por decisão do dono (`APR-2026-021` Parte B, decisão 3 — **tabela
+ * configurável**), os limiares passaram a ser **configuração persistida**:
+ *
+ * - dados: `jur_approval_thresholds` (migration `20260814-000048`);
+ * - histórico/auditoria das alterações: `jur_approval_threshold_history`;
+ * - interpretação (estrutura técnica, sem valores):
+ *   {@link module:modules/juridico/domain/approvalPolicy};
+ * - leitura/escrita server-side: `GET`/`PUT
+ *   /api/jur/settings/approval-thresholds` (escrita exige `juridico:approve`).
+ *
+ * **Não reintroduza limiar literal neste arquivo** — R1(a) do
+ * RETEST_SPECIFICATION de FIND-ERP-005 reprova a remediação se um `50000`/
+ * `300000` com semântica de alçada voltar ao código.
  *
  * @module modules/juridico/domain/constants
  */
 
-/** Acima deste valor (R$), ativação de contrato exige 1 aprovação do papel `diretor`. */
-export const JUR_APPROVAL_THRESHOLD_DIRECTOR = 50000;
-
-/** Acima deste valor (R$), ativação de contrato exige 1 aprovação `diretor` E 1 `financeiro`. */
-export const JUR_APPROVAL_THRESHOLD_FINANCE = 300000;
-
 /** Papéis de aprovador válidos para `jur_contract_approvals.approver_role`. */
 export type ContractApproverRole = 'diretor' | 'financeiro';
 
-/**
- * Resolve os papéis de aprovador exigidos para ativar um contrato de
- * determinado valor (RF-JUR-003).
- *
- * @param value - Valor do contrato (`jur_contracts.value`), pode ser `null`/`undefined` (tratado como 0 — sem alçada extra).
- * @returns Lista de papéis exigidos (vazia se dentro da faixa sem aprovação extra).
- */
-export function requiredApproverRoles(value: string | number | null | undefined): ContractApproverRole[] {
-  const numericValue = value === null || value === undefined ? 0 : Number(value);
-  if (Number.isNaN(numericValue) || numericValue <= JUR_APPROVAL_THRESHOLD_DIRECTOR) {
-    return [];
-  }
-  if (numericValue <= JUR_APPROVAL_THRESHOLD_FINANCE) {
-    return ['diretor'];
-  }
-  return ['diretor', 'financeiro'];
-}
+/** Todos os papéis de aprovador conhecidos — usado para validar a configuração. */
+export const CONTRACT_APPROVER_ROLES: ContractApproverRole[] = ['diretor', 'financeiro'];

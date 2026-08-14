@@ -51,6 +51,7 @@ const corporateActController = require('../controllers/corporateActController');
 const ipAssetController = require('../controllers/ipAssetController');
 const lgpdController = require('../controllers/lgpdController');
 const alertController = require('../controllers/alertController');
+const approvalThresholdController = require('../controllers/approvalThresholdController');
 const reportController = require('../controllers/reportController');
 const { authorizeAnyModule } = require('../../../../middlewares/authorizeAnyModule');
 
@@ -68,7 +69,27 @@ router.get('/reports/financeiro', reportController.financeiro);
 // `diretor`/`financeiro` não necessariamente têm o módulo `juridico` —
 // por isso é montada ANTES do gate geral, com `authorizeAnyModule` (OR
 // diretor/financeiro) no lugar de `authorizeModule('juridico', ...)`.
-router.post('/contracts/:id/approve', authorizeAnyModule([{ moduleKey: 'diretor' }, { moduleKey: 'financeiro' }]), contractController.approve);
+//
+// FIND-ERP-005 / Falha 2 (remediação 2026-08-14): o `requiredLevel:
+// 'approve'` abaixo é obrigatório e NÃO pode ser removido. Sem ele, o
+// middleware aplica o default `'operate'` (`authorizeAnyModule.ts:82`) e um
+// usuário com `diretor:'operate'` — o nível MAIS BAIXO existente, que
+// explicitamente não é `approve` — registrava a aprovação de diretoria e
+// destravava sozinho a faixa inteira acima do primeiro limiar.
+//
+// A correção mora AQUI, no call site, e não no default do middleware, de
+// propósito: `authorizeAnyModule` tem 7 pontos de uso, 6 deles de LEITURA
+// (`comex`, `purchases`, `facilities`, `marketing` e o `GET` logo abaixo),
+// 5 dos quais dependem do default `'operate'`. Mudar o default quebraria
+// rotas legítimas em módulos de produção. Blast radius desta linha: 1 rota.
+router.post(
+  '/contracts/:id/approve',
+  authorizeAnyModule([
+    { moduleKey: 'diretor', requiredLevel: 'approve' },
+    { moduleKey: 'financeiro', requiredLevel: 'approve' },
+  ]),
+  contractController.approve,
+);
 
 // `GET /contracts/:id/approvals` acompanha a exceção acima: o aprovador
 // (`diretor`/`financeiro`, que pode não ter o módulo `juridico`) precisa
@@ -81,6 +102,15 @@ router.get(
 );
 
 router.use(authorizeModule('juridico', 'operate'));
+
+// ---- Configuração de alçada (RF-JUR-003, BLOCO_3_JUR_API.md §2.7) ----
+// Os dois endpoints estavam declarados no contrato de API desde a redação
+// original e nunca existiram em `server/src` — Falha 1 de FIND-ERP-005.
+// Implementados na remediação (APR-2026-021 B.3, "alçada = tabela
+// configurável"). Leitura em `operate` (o aprovador precisa ver a régua);
+// ESCRITA em `approve`, server-side — alterar a alçada é ato de governança.
+router.get('/settings/approval-thresholds', approvalThresholdController.list);
+router.put('/settings/approval-thresholds', authorizeModule('juridico', 'approve'), approvalThresholdController.replace);
 
 // ---- Grupo 1 — Contratos (UC-52, 13 endpoints) ----
 router.get('/contracts', contractController.list);

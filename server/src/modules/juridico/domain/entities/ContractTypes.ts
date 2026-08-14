@@ -80,6 +80,13 @@ export interface CreateContractAddendumInput {
   description: string;
   document_url?: string | null;
   createdBy: number;
+  /**
+   * `true` quando quem registra o aditivo tem nivel `approve` no modulo
+   * juridico (resolvido no controller a partir do RBAC server-side, NUNCA do
+   * body). Exigido para EFETIVAR elevacao de valor — FIND-ERP-005 Falha 3,
+   * decisao `APR-2026-021` Parte B 4.
+   */
+  requesterHasApprove?: boolean;
 }
 
 export interface TerminateContractInput {

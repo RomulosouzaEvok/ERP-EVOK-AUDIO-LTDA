@@ -16,7 +16,9 @@ import UseCase from '../../../../../shared/application/UseCase';
 import ContractRepository from '../../../domain/repositories/ContractRepository';
 import ContractApprovalRepository from '../../../domain/repositories/ContractApprovalRepository';
 import { NotFoundError } from '../../../../../errors';
-import { requiredApproverRoles, type ContractApproverRole } from '../../../domain/constants';
+import ApprovalThresholdRepository from '../../../domain/repositories/ApprovalThresholdRepository';
+import { type ContractApproverRole } from '../../../domain/constants';
+import { resolveContractApprovalPolicy } from '../../../domain/approvalPolicy';
 
 interface ListContractApprovalsInput {
   contractId: number;
@@ -36,11 +38,17 @@ interface ListContractApprovalsOutput {
 class ListContractApprovalsUseCase extends UseCase<ListContractApprovalsInput, ListContractApprovalsOutput> {
   private readonly repository: ContractRepository;
   private readonly approvalRepository: ContractApprovalRepository;
+  private readonly thresholdRepository: ApprovalThresholdRepository;
 
-  public constructor(repository: ContractRepository, approvalRepository: ContractApprovalRepository) {
+  public constructor(
+    repository: ContractRepository,
+    approvalRepository: ContractApprovalRepository,
+    thresholdRepository: ApprovalThresholdRepository,
+  ) {
     super();
     this.repository = repository;
     this.approvalRepository = approvalRepository;
+    this.thresholdRepository = thresholdRepository;
   }
 
   /**
@@ -50,7 +58,9 @@ class ListContractApprovalsUseCase extends UseCase<ListContractApprovalsInput, L
     const contract = await this.repository.findById(input.contractId);
     if (!contract) throw new NotFoundError(`Contrato ${input.contractId} não encontrado.`);
 
-    const requiredRoles = requiredApproverRoles(contract.value);
+    // FIND-ERP-005 / Falha 1: papeis exigidos vem da politica configuravel.
+    const policy = await resolveContractApprovalPolicy(this.thresholdRepository as any, contract);
+    const requiredRoles = policy.requiredRoles;
     const approvals = await this.approvalRepository.listByContract(input.contractId);
     const approvedRoles = new Set(approvals.map((approval: any) => approval.approver_role));
     const missingRoles = requiredRoles.filter((role) => !approvedRoles.has(role));

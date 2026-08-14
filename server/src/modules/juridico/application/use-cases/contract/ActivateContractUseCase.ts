@@ -8,10 +8,23 @@
  * existente, não alterado). Acima disso, exige aprovação(ões) prévias
  * registradas em `jur_contract_approvals`
  * (`ApproveContractUseCase`/`POST /api/jur/contracts/:id/approve`) — ver
- * `server/src/modules/juridico/domain/constants.ts` para os thresholds e
- * papéis exigidos por faixa. `approvalRepository` é opcional no construtor
- * apenas por compatibilidade retroativa de teste unitário — o controller de
- * produção sempre injeta a implementação Sequelize.
+ * ## Remediação FIND-ERP-005 (SanaCore, caso ERP-LEGACY-001-CASE-002)
+ *
+ * **Agravante transversal / R5 — fail-open eliminado.** Até 2026-08-14 o
+ * gate inteiro era `if (requiredRoles.length > 0 && this.approvalRepository)`,
+ * com `approvalRepository?` OPCIONAL no construtor: instanciado sem ele, a
+ * alçada era calculada e descartada, sem erro, log ou aviso. Agora
+ * `approvalRepository` e `thresholdRepository` são **obrigatórios** e a
+ * ausência é erro de construção — a invariante deixou de depender do
+ * chamador (ASVS V4.1.5).
+ *
+ * **Falha 1** — os limiares vêm de `jur_approval_thresholds` (política
+ * configurável, `APR-2026-021` B.3), não de literais. A política vigente no
+ * instante da ativação é gravada em `jur_contracts.approval_policy_snapshot`
+ * (R1(d): auditável a posteriori).
+ *
+ * **Falha 3** — uma aprovação só cobre a ativação se o valor que ela aprovou
+ * (`approved_value`) for compatível com o valor ATUAL do contrato.
  *
  * @module modules/juridico/application/use-cases/contract/ActivateContractUseCase
  */
@@ -21,7 +34,8 @@ import ContractRepository from '../../../domain/repositories/ContractRepository'
 import LegalAlertRepository from '../../../domain/repositories/LegalAlertRepository';
 import ContractApprovalRepository from '../../../domain/repositories/ContractApprovalRepository';
 import { NotFoundError, BusinessRuleError, ValidationError } from '../../../../../errors';
-import { requiredApproverRoles } from '../../../domain/constants';
+import ApprovalThresholdRepository from '../../../domain/repositories/ApprovalThresholdRepository';
+import { resolveContractApprovalPolicy } from '../../../domain/approvalPolicy';
 import type { ActivateContractInput } from '../../../domain/entities/ContractTypes';
 
 const CHECKLIST_REQUIRED_TYPES = ['employment', 'supplier', 'nda'];
@@ -36,13 +50,39 @@ function addDays(date: Date, days: number): string {
 class ActivateContractUseCase extends UseCase<ActivateContractInput, any> {
   private readonly repository: ContractRepository;
   private readonly alertRepository: LegalAlertRepository;
-  private readonly approvalRepository?: ContractApprovalRepository;
+  private readonly approvalRepository: ContractApprovalRepository;
+  private readonly thresholdRepository: ApprovalThresholdRepository;
 
-  public constructor(repository: ContractRepository, alertRepository: LegalAlertRepository, approvalRepository?: ContractApprovalRepository) {
+  /**
+   * @param repository - Repositorio de contratos.
+   * @param alertRepository - Repositorio de alertas juridicos.
+   * @param approvalRepository - **Obrigatorio** (FIND-ERP-005 R5(a)): impoe a alcada.
+   * @param thresholdRepository - **Obrigatorio**: politica configuravel de alcada.
+   * @throws {Error} Quando qualquer uma das dependencias que impoem a alcada falta — fail-closed por construcao.
+   */
+  public constructor(
+    repository: ContractRepository,
+    alertRepository: LegalAlertRepository,
+    approvalRepository: ContractApprovalRepository,
+    thresholdRepository: ApprovalThresholdRepository,
+  ) {
     super();
+    if (!approvalRepository) {
+      throw new Error(
+        'ActivateContractUseCase: approvalRepository e obrigatorio — sem ele a alcada de valor (RF-JUR-003) '
+        + 'seria pulada em silencio (FIND-ERP-005, agravante transversal / R5).',
+      );
+    }
+    if (!thresholdRepository) {
+      throw new Error(
+        'ActivateContractUseCase: thresholdRepository e obrigatorio — sem ele nao ha politica de alcada '
+        + 'configurada para consultar (FIND-ERP-005, Falha 1 / R5).',
+      );
+    }
     this.repository = repository;
     this.alertRepository = alertRepository;
     this.approvalRepository = approvalRepository;
+    this.thresholdRepository = thresholdRepository;
   }
 
   /**
@@ -58,11 +98,23 @@ class ActivateContractUseCase extends UseCase<ActivateContractInput, any> {
       throw new ValidationError('Contrato não está em draft/in_approval/approved — não pode ser ativado.');
     }
 
-    // RF-JUR-003: alçada de aprovação por valor.
-    const requiredRoles = requiredApproverRoles(contract.value);
-    if (requiredRoles.length > 0 && this.approvalRepository) {
+    // RF-JUR-003: alçada de aprovação por valor, lida da política
+    // configurável (`jur_approval_thresholds`). SEM `&& this.approvalRepository`:
+    // as dependências são obrigatórias no construtor (FIND-ERP-005 R5).
+    const policy = await resolveContractApprovalPolicy(this.thresholdRepository as any, contract);
+    const requiredRoles = policy.requiredRoles;
+    if (requiredRoles.length > 0) {
       const approvals = await this.approvalRepository.listByContract(input.id);
-      const approvedRoles = new Set(approvals.map((a: any) => a.approver_role));
+      // FIND-ERP-005 / Falha 3: aprovação só conta se cobrir o valor ATUAL.
+      // `approved_value` nulo = aprovação legada, anterior à remediação
+      // (tabela vazia em NÃO-PRODUÇÃO) — conta, por compatibilidade; toda
+      // aprovação criada a partir daqui sempre grava o valor.
+      const contractValue = Number(contract.value ?? 0);
+      const covering = approvals.filter((approval: any) => {
+        if (approval?.approved_value === null || approval?.approved_value === undefined) return true;
+        return Number(approval.approved_value) >= contractValue;
+      });
+      const approvedRoles = new Set(covering.map((a: any) => a.approver_role));
       const missing = requiredRoles.filter((role) => !approvedRoles.has(role));
       if (missing.length > 0) {
         throw new BusinessRuleError(
@@ -104,6 +156,8 @@ class ActivateContractUseCase extends UseCase<ActivateContractInput, any> {
       status: 'active',
       responsible_user_id: responsibleUserId,
       signed_at: contract.signed_at ?? new Date().toISOString().slice(0, 10),
+      // FIND-ERP-005 R1(d): qual alçada vigia no instante da ativação.
+      approval_policy_snapshot: policy.snapshot,
     });
 
     // RF-JUR-005: alerta de vencimento se end_date definida.

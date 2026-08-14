@@ -11,6 +11,7 @@ import type { Request, Response, NextFunction } from 'express';
 const SequelizeContractRepository = require('../../infrastructure/sequelize/SequelizeContractRepository');
 const SequelizeLegalAlertRepository = require('../../infrastructure/sequelize/SequelizeLegalAlertRepository');
 const SequelizeContractApprovalRepository = require('../../infrastructure/sequelize/SequelizeContractApprovalRepository');
+const SequelizeApprovalThresholdRepository = require('../../infrastructure/sequelize/SequelizeApprovalThresholdRepository');
 const { logAction } = require('../../../../services/auditLogService');
 
 const CreateContractUseCase = require('../../application/use-cases/contract/CreateContractUseCase');
@@ -33,6 +34,8 @@ const CrossReferenceContractsUseCase = require('../../application/use-cases/cont
 const contractRepository = new SequelizeContractRepository();
 const alertRepository = new SequelizeLegalAlertRepository();
 const approvalRepository = new SequelizeContractApprovalRepository();
+/** Politica configuravel de alcada (FIND-ERP-005 Falha 1, APR-2026-021 B.3). */
+const thresholdRepository = new SequelizeApprovalThresholdRepository();
 
 function hasApprove(req: Request): boolean {
   const user = (req as any).user;
@@ -43,14 +46,38 @@ function hasApprove(req: Request): boolean {
  * Resolve os papéis de aprovador (`diretor`/`financeiro`) que o usuário
  * logado efetivamente possui — RBAC real (RF-JUR-003), nunca aceito do
  * body. `role === 'admin'` é tratado como tendo os dois papéis (mesmo
- * curto-circuito de `authorizeModule`/`authorizeAnyModule`).
+ * curto-circuito de `authorizeModule`/`authorizeAnyModule`): privilégio é
+ * concedível. Quem impede o `admin` de sozinho satisfazer a dupla aprovação
+ * é a segregação de IDENTIDADE (D-K) no use case, não esta função.
+ *
+ * ## FIND-ERP-005 / Falha 2 — fim da truthiness
+ *
+ * Até 2026-08-14 esta função testava `if (user?.permissions?.diretor)`:
+ * truthiness pura, satisfeita por **qualquer** string não vazia — inclusive
+ * `'operate'`, que é o nível mais baixo existente
+ * (`AccessModuleLevel = 'operate' | 'approve'`) e explicitamente NÃO é
+ * `approve`. Um `diretor:operate` registrava a aprovação de diretoria.
+ *
+ * A comparação agora é **estrita** (`=== 'approve'`). Estrita, e não uma
+ * lista de valores proibidos: assim os vetores adversariais de R2(e)
+ * (`'read'`, `''`, `0`, `'Approve'`, `'APPROVE'`, `' approve '`, `true`,
+ * `['approve']`, `{}`, `null`) caem todos pelo mesmo motivo, sem tratamento
+ * caso a caso.
+ *
+ * A rota é a primeira barreira (`requiredLevel: 'approve'` em `juridico.ts`);
+ * esta função é a segunda, porque é ela que NOMEIA o papel gravado — deixar
+ * truthiness aqui faria qualquer rota futura que a reutilize herdar a falha.
  */
+function hasApproveLevel(value: unknown): boolean {
+  return value === 'approve';
+}
+
 function resolveAvailableApproverRoles(req: Request): Array<'diretor' | 'financeiro'> {
   const user = (req as any).user;
   if (user?.role === 'admin') return ['diretor', 'financeiro'];
   const roles: Array<'diretor' | 'financeiro'> = [];
-  if (user?.permissions?.diretor) roles.push('diretor');
-  if (user?.permissions?.financeiro) roles.push('financeiro');
+  if (hasApproveLevel(user?.permissions?.diretor)) roles.push('diretor');
+  if (hasApproveLevel(user?.permissions?.financeiro)) roles.push('financeiro');
   return roles;
 }
 
@@ -140,7 +167,7 @@ exports.updateChecklist = async (req: Request, res: Response, next: NextFunction
 /** `POST /api/jur/contracts/:id/activate` */
 exports.activate = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const contract = await new ActivateContractUseCase(contractRepository, alertRepository, approvalRepository).execute({
+    const contract = await new ActivateContractUseCase(contractRepository, alertRepository, approvalRepository, thresholdRepository).execute({
       id: Number(req.params.id),
       responsible_user_id: req.body?.responsible_user_id ?? null,
       approverHasApprove: hasApprove(req),
@@ -159,7 +186,7 @@ exports.activate = async (req: Request, res: Response, next: NextFunction) => {
  */
 exports.approve = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const approval = await new ApproveContractUseCase(contractRepository, approvalRepository).execute({
+    const approval = await new ApproveContractUseCase(contractRepository, approvalRepository, thresholdRepository).execute({
       contractId: Number(req.params.id),
       approverUserId: (req as any).user.id,
       availableRoles: resolveAvailableApproverRoles(req),
@@ -177,7 +204,7 @@ exports.approve = async (req: Request, res: Response, next: NextFunction) => {
  */
 exports.listApprovals = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await new ListContractApprovalsUseCase(contractRepository, approvalRepository).execute({
+    const data = await new ListContractApprovalsUseCase(contractRepository, approvalRepository, thresholdRepository).execute({
       contractId: Number(req.params.id),
     });
     res.json({ success: true, data });
@@ -187,10 +214,13 @@ exports.listApprovals = async (req: Request, res: Response, next: NextFunction) 
 /** `POST /api/jur/contracts/:id/addendums` */
 exports.addAddendum = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const addendum = await new CreateContractAddendumUseCase(contractRepository).execute({
+    const addendum = await new CreateContractAddendumUseCase(contractRepository, approvalRepository, thresholdRepository).execute({
       contractId: Number(req.params.id),
       ...req.body,
       createdBy: (req as any).user.id,
+      // FIND-ERP-005 Falha 3 / APR-2026-021 B.4: nivel resolvido server-side,
+      // DEPOIS do spread do body — nenhum campo do cliente pode sobrescreve-lo.
+      requesterHasApprove: hasApprove(req),
     });
     logAction(req, { action: 'create', entityType: 'JurContractAddendum', entityId: addendum.id, newValues: addendum });
     res.status(201).json({ success: true, data: addendum });
