@@ -603,6 +603,63 @@ política de controle interno**, não bug isolado — e por isso a remediação
 correta começa por **decisão do dono sobre o escopo da política**, não por
 código (aplicar sem decisão violaria a Regra 6 do `CLAUDE.md`).
 
+## Passo 31 — auditoria 360° e remediação preliminar (execução em curso)
+
+**Run:** `ERP-LEGACY-001-AUD-001`, `AUDIT_COMMIT c1311a6f76b512fef893f7e60d934179cae3409f`
+(tripla verificação em disco). **Fieldwork NÃO autorizado** — a run para no gate
+humano do plano.
+
+**Estágios concluídos:** escopo (10 exclusões, conflito de interesse sem
+impedimento, com restrição vinculante de que autor de finding preliminar não
+reexamina o próprio achado como voz única) e inventário revalidado (21 contagens
+confirmadas, 7 com dupla validação; estratificação 6/20/22 módulos = 48 e
+39/381/261 endpoints = 681, fechando com duas contagens independentes).
+
+### OBS-INV-01 — a baseline não representa o código auditado (material)
+
+O commit `3dee99f` (2026-08-13, "espelhamento item↔produto e recebimento de
+imobilizado") alterou 8 arquivos de `server/src` **depois da tag
+`legacy-baseline-001` (`c9359be`) e antes do discovery (`1979beb`)** —
+verificado pelo orquestrador com `git merge-base --is-ancestor` nos dois
+sentidos. Consequência: **os 7 findings preliminares estão ancorados em
+`c9359be`, um commit que já não refletia o código no momento do discovery**;
+apenas `FIND-ERP-001` foi re-ancorado (pela triagem do CASE-001). Os outros 6
+**não**. `itemProductMirrorService.ts` e `fixedAssetReceiptService.ts` são
+código que nenhuma auditoria examinou. Isso **não invalida os findings a
+priori** — invalida a premissa de que a baseline representa o código auditado.
+Re-ancoragem dos 6 é item do plano.
+
+### Remediação — triagens concluídas (SanaCore não implementou nada ainda)
+
+- **CASE-001 (`FIND-ERP-001`)**: causa-raiz reconfirmada com evidência dinâmica
+  (66/66 verdes); **constraint UNIQUE de negócio descartada com evidência**
+  (quebraria transferência entre depósitos e recebimento parcial); plano por
+  `operation_id` UUID + UNIQUE parcial + tabela `financial_payment_events`.
+  **3 superfícies irmãs** com a mesma causa-raiz (`POST /api/products/movements`,
+  `/api/mobile-inventory/scan`, `/batch`) — **não incorporadas por analogia**,
+  decisão do dono.
+- **CASE-002 (`FIND-ERP-005`)**: 4 falhas reconfirmadas, zero divergência.
+  Falhas 2 e 4 com plano executável (blast radius **1 rota**; instrução
+  explícita de **não tocar o middleware compartilhado**, cuja mudança de default
+  quebraria 5 rotas de leitura em 4 módulos). Falhas 1 e 3 dependem de **3
+  decisões do dono**, com desenho condicional por ramo. Regra 24 **não** enquadra
+  (permissões recarregadas do banco a cada request) — registrado que isso não
+  rebaixa a severidade. Lacuna declarada: reprodução dinâmica não executada
+  (`psql` fora do PATH, Docker sem resposta); estática determinística nas 4
+  cadeias.
+
+### Achado material da triagem do CASE-002 — NÃO promovido
+
+O padrão da Falha 2 (aprovação por presença de módulo, `authorizeModule`/
+`authorizeAnyModule` com default `operate`, mais truthiness no controller)
+**se repete idêntico nas alçadas de Compras e COMEX** —
+`purchaseController.ts:54`, `purchases.ts:48`, `importProcesses.ts:34` — que são
+**módulos de PRODUÇÃO**, ao contrário do `juridico`. Registrado para finding
+próprio; **não promovido por analogia** (precedente `APR-2026-018`). Contexto
+favorável cruzado do FIND-ERP-009: dos ~55 endpoints de ato aprovatório, **51
+declaram `approve`** — o defeito está em 4 linhas / 3 pontos, não é o padrão
+dominante.
+
 ## Incidentes de processo registrados (transparência)
 
 Registrados aqui porque **são exatamente o tipo de comportamento que o modelo
