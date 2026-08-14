@@ -710,10 +710,17 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
   exige novo gate humano explícito e registrado.**
 - **O risco conhecido do passo 29 se confirmou:** a matriz nasceu quebrada na
   origem (ausência de BR-ID canônico e de OWNER em ~167 regras; 90 RFs sem AC/TC).
-  Como resolver isso é **decisão do dono**, não antecipada pelo director — segue
-  pendente junto do encaminhamento dos findings à SanaCore. **Ao fim do passo 30
-  o programa para incondicionalmente**; o passo 31 exige novo gate humano
-  explícito e registrado. Duas coisas dependem de decisão do dono e **não são
-  antecipadas pelo `coretriad-director`**: (a) o encaminhamento dos sete
-  findings a SanaCore; (b) como tratar o risco conhecido do passo 29
-  (ausência de BR-ID canônico e de OWNER nominal).
+  **Atualização 2026-08-14 — a parte do BR-ID foi RESOLVIDA por decisão do
+  dono (`APR-2026-019`):** o esquema canônico foi adotado como convenção
+  técnica — os IDs provisórios do passo 26 (`BR-<ÁREA>-NNN`) foram promovidos
+  a canônicos **sem renumeração**, materializados em
+  `docs/coretriad/projects/ERP-LEGACY-001/BR_CATALOG.md`. **A parte do OWNER
+  segue PENDENTE por decisão explícita do dono:** nenhum OWNER foi atribuído
+  em lote; a atribuição por área será feita aos poucos, pelo dono, com os
+  responsáveis reais de cada área da empresa — **é vedado a agente decidir ou
+  inferir OWNER** (tabela de atribuição no próprio `BR_CATALOG.md`, 100%
+  `PENDENTE — decisão humana`). **Ao fim do passo 30 o programa parou
+  incondicionalmente**; o passo 31 exige novo gate humano explícito e
+  registrado. Pendências que dependem do dono e **não são antecipadas pelo
+  `coretriad-director`**: (a) o encaminhamento dos sete findings a SanaCore;
+  (b) a atribuição incremental de OWNER por área; (c) o gate do passo 31.

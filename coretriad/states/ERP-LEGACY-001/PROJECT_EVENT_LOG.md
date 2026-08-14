@@ -269,3 +269,35 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
   registrado. Pendências do dono (não antecipadas): encaminhamento dos 7
   findings à SanaCore; esquema de BR-ID canônico + OWNER; decisões abertas dos
   passos 26-29.
+
+## 2026-08-14 — APR-2026-019: esquema de BR-ID canônico adotado; OWNER segue pendente por área
+
+- **Decisão do dono registrada em `APR-2026-019`** (`coretriad/governance/APPROVALS.md`),
+  respondendo à pendência (b) do fechamento do passo 30: (1) esquema de BR-ID
+  canônico adotado AGORA como convenção técnica — IDs provisórios do passo 26
+  (`BR-<ÁREA>-NNN`) promovidos a canônicos **sem renumeração**, preservando as
+  referências cruzadas dos passos 26-30; (2) **nenhum OWNER atribuído em
+  lote** — atribuição por área fica pendente, para o dono resolver aos poucos
+  com os responsáveis reais de cada área; **vedado a agente decidir ou
+  inferir OWNER**.
+- **Catálogo materializado por trilha OpusCore** (business analyst):
+  `docs/coretriad/projects/ERP-LEGACY-001/BR_CATALOG.md` — **164 regras**, 20
+  prefixos de área, OWNER `PENDENTE — decisão humana` em 100% das linhas.
+  Distribuição por status (passo 26, inalterado): 72 CONFIRMED, 52 DISCOVERED,
+  32 CONFLICTING, 5 UNKNOWN, 3 OBSOLETE_CANDIDATE — **37 exigem decisão
+  humana**. Nenhuma colisão de ID entre clusters. Anomalias herdadas
+  registradas sem renumerar (sufixo `016b`, série `D<nn>` de
+  pessoas-governanca, IDs reservados citados só no código, lacunas de
+  numeração em JUR/TI). Reconciliação 164 × ~167 do passo 29: as ~3 linhas
+  extras da matriz não têm BR-ID e **não receberam ID retroativo por agente**
+  (Regra 6) — sumários de 4 dos 6 BRC divergem das próprias fichas; o catálogo
+  conta por ficha e registra a divergência.
+- **O catálogo não valida regra nenhuma**: status do passo 26 permanece até
+  validação humana caso a caso. Não reabre o discovery nem antecipa o passo 31
+  — o PARE segue em vigor.
+- `PROJECT_STATE.md` e o §8 do `CHARACTERIZATION_TESTS.md` atualizados
+  (pendência (b) parcialmente resolvida; pendências vivas: encaminhamento dos
+  7 findings, OWNER por área, gate do passo 31). Registro de processo: o
+  classificador de segurança do PowerShell ficou temporariamente indisponível
+  durante o registro da APR — contornado com Edit direto (mesmo padrão de
+  13/08); normalizado em seguida.

@@ -51,8 +51,9 @@ passo valida correção; nenhum código de `server/src/**` foi alterado.
   `src/`. É exatamente o mecanismo que o passo 30 existe para exercitar.
 - **Execução final (2026-08-14):** `npm run test:characterization` →
   **9 suítes, 66 testes, 66 verdes, 0 skips**, contra
-  `localhost:5432/erp_evok_audio_test` (resultado em
-  `server/tmp/jest-characterization.json`).
+  `localhost:5432/erp_evok_audio_test` (JSON de resultado gravado pelo runner
+  em `server/tmp/`, arquivo `jest-characterization.json` — saída local, fora
+  do Git).
 - Transparência: 2 falhas **pré-existentes** em `tests/unit/` (fora desta
   suíte: `docs-path-reference-guard.test.ts` e asserção relativa a data em
   `onda3-shipping-cockpit-cashflow.test.ts`) reproduzem sem as mudanças deste
@@ -153,3 +154,8 @@ promoção por analogia). Todas seguem ao passo 31 como observação.
   dos 7 findings formais à SanaCore; (b) esquema de BR-ID canônico + OWNER
   (causa-raiz nº 1 da matriz do passo 29); (c) decisões abertas listadas nos
   artefatos dos passos 26-29.
+- *Adendo (2026-08-14, mesmo dia, após o fechamento deste artefato):* a
+  pendência (b) foi parcialmente resolvida por `APR-2026-019` — esquema de
+  BR-ID canônico adotado (IDs do passo 26 promovidos sem renumeração,
+  catálogo em `docs/coretriad/projects/ERP-LEGACY-001/BR_CATALOG.md`); a
+  atribuição de OWNER por área segue pendente, por decisão explícita do dono.

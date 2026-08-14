@@ -483,5 +483,45 @@ fluxo normal até o passo 31.
 
 **Aprovado por:** Gilwagno — 13/08/2026.
 
+---
+
+## APR-2026-019 — Adoção do esquema de BR-ID canônico (sem atribuição de OWNER em lote)
+
+**Contexto:** pendência (b) registrada ao fim do passo 30 do `ERP-LEGACY-001`
+— a ausência de BR-ID canônico é a causa-raiz nº 1 da quebra da matriz de
+rastreabilidade do passo 29 (0 cadeias completas em ~167 regras).
+
+**Decisão (duas partes, nesta ordem):**
+
+1. **Adotar AGORA o esquema de BR-ID canônico como convenção técnica de
+   nomenclatura.** Os IDs provisórios do passo 26 (`BR-<ÁREA>-NNN`, ex.:
+   `BR-QE-011`, `BR-PP-013`, `BR-COM-010`) são **promovidos a canônicos sem
+   renumeração** — preserva todas as referências cruzadas já gravadas nos
+   artefatos dos passos 26-30, inclusive nos cabeçalhos dos testes de
+   caracterização. Materialização em
+   `docs/coretriad/projects/ERP-LEGACY-001/BR_CATALOG.md` (registro/índice;
+   os arquivos `BUSINESS_RULE_CANDIDATES_*.md` permanecem a fonte descritiva
+   — o catálogo não duplica o texto das regras).
+2. **NENHUM OWNER é atribuído em lote.** A atribuição de responsável por
+   domínio fica como **item pendente explicitamente registrado**, a ser
+   resolvido aos poucos pelo dono com os responsáveis reais de cada área da
+   empresa. **É vedado a qualquer agente decidir ou inferir OWNER** — a
+   coluna OWNER nasce `PENDENTE — decisão humana` em 100% das linhas.
+
+**O que esta aprovação NÃO faz:** não valida nenhuma regra. BR-ID canônico
+fixa a *âncora* de rastreabilidade, não a *aprovação* da regra — todo status
+do passo 26 (`CONFIRMED`/`DISCOVERED`/`CONFLICTING`/`UNKNOWN`/
+`OBSOLETE_CANDIDATE`) permanece inalterado até validação humana caso a caso
+(Regra 6 do `CLAUDE.md`; regra 3 do programa). Também não reabre o discovery
+nem antecipa o passo 31 — o PARE do passo 30 segue em vigor.
+
+**Precedente estendido (de `APR-2026-018`, findings → regras):** BR-ID não é
+reciclado nem renumerado. Colisão de ID herdada do passo 26, se existir, é
+registrada explicitamente no catálogo com desambiguação aditiva — nunca por
+renumeração silenciosa. Se uma regra for descartada no futuro, o ID permanece
+na sequência com o motivo.
+
+**Aprovado por:** Gilwagno (dono do CoreTriad), em sessão — 14/08/2026.
+
 Aprovações futuras: adicionar linha com próximo ID sequencial. Nunca editar
 entradas existentes — correções entram como nova linha referenciando a antiga.
