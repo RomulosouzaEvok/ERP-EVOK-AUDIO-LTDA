@@ -607,3 +607,172 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
   **3** na definição frouxa (elo BR das três agora **verificado**, não
   presumido); **0 de 90** RFs com elo `REQ → BR` versionado.
 - **Fieldwork: 15 de 27 trilhas.** W3 primeira leva em execução.
+
+## 2026-08-14 — W3 primeira leva concluída (T-16, T-17, T-18, T-19)
+
+- **Amarração ao `AUDIT_COMMIT` provada pelo orquestrador** —
+  `audit/runs/ERP-LEGACY-001-AUD-001/00-scope/AUDIT_COMMIT_BINDING_VERIFICATION.md`.
+  **Zero arquivos do objeto auditado alterados** entre `c1311a6f` e HEAD.
+  Fecha `RES-T17-02` (que T-17 declarara **bloqueante** da formalização de
+  seus três HIGH) e `RES-T18-01`. `IN-08` fica cumprido **por abstenção**:
+  nenhuma trilha fez afirmação de proveniência temporal, que é exatamente o
+  que a regra exige. O resíduo era de ferramental do orquestrador, não de
+  rigor das trilhas — as três recusaram-se corretamente a afirmar o que não
+  podiam provar.
+
+### Achados estruturais da leva
+
+- **`T19-F01` (HIGH) — a arquitetura real nomeada.** T-19 mediu: **148
+  arquivos de módulo importam `server/src/services/`** e **140 importam
+  `server/src/models/`** (288 declarações), contra **~40 arestas entre os 48
+  módulos**. O acoplamento não é horizontal — é **vertical, em estrela, em
+  torno de um núcleo legado que nenhum módulo possui**. E o agravante:
+  `docs/arquitetura/DIAGRAMA_CLASSES_CAMADAS.md:93,167-179,193-194` declara
+  `UseCase -> InventoryService -> SequelizeProduct` como fluxo legítimo — ou
+  seja, **o segundo caminho de acesso a dado, que contorna a interface de
+  repositório do domínio, é a arquitetura pretendida e versionada, não
+  drift acidental.** Isso nomeia a convergência independente de cinco
+  trilhas: T-06 (defeito no núcleo servindo 4 rotas de 3 módulos), T-11
+  (regra que atravessa módulos fica sem dono de código), T-13 (`models/`
+  sem dono, 190/459 FKs sem índice em colunas de autoria), T-14 (regra que
+  atravessa módulos fica sem BR-ID) e T-08 (módulo fiscal disperso em 3
+  roteadores). **Convergência declarada; nenhuma divergência a escalar.**
+- **`T16-F01` (HIGH) — escalada de privilégio por TI, com cadeia completa
+  lida.** Um usuário com `ti:approve`, ou com `ti:operate` sendo gestor de
+  qualquer departamento, **atribui qualquer perfil de acesso a qualquer
+  funcionário, inclusive a si mesmo**, sem passar por `admin` e sem segunda
+  pessoa: `ti.ts:79` aceita `department_id` **livre** do cliente;
+  `CreateAccessRequestUseCase.ts:39` deixa esse valor sobrepor o
+  departamento real do funcionário; `approverEligibilityService.ts:26-37`
+  resolve o aprovador **a partir do valor que o solicitante escolheu**;
+  `ApproveAccessRequestUseCase.ts:29-41` **não compara `requested_by` com o
+  aprovador** — autoaprovação permitida; e `execute` chama
+  `AssignAccessProfileUseCase`, **o mesmo use case que `users.ts:20`
+  protege com `authorize(admin)`**. Colateral: se o funcionário não tiver
+  usuário, cria-se conta ativa com senha temporária **nunca comunicada**.
+  O que sustenta o HIGH não é analogia: `shared/domain/segregationOfDuties`
+  **existe e é aplicado** em `ApproveImportProcessUseCase.ts:82-88` e em
+  `ApprovePurchaseUseCase.ts:86-92` — **o ato que concede permissão
+  administrativa é o único dos três que não usa o mecanismo.**
+- **DIVERGÊNCIA MATERIAL REGISTRADA (Regra 20) — T-16 × T-04.** T-04 fixou
+  `AUD-SEC-T04-01` em MEDIUM apoiado na premissa de que "CRUD de perfis é
+  exclusivo de admin". T-16 demonstra que **a atribuição de perfil — que
+  é o que efetivamente concede `diretor` a alguém — não é exclusiva de
+  admin**. A pré-condição mitigante cai de "ato do administrador" para
+  "ato de um gestor com `ti:operate`", e a cadeia se fecha:
+  `ti` -> concede `diretor` a si mesmo -> `purchases.ts:48` aprova alçada de
+  diretoria. T-16 **não alterou severidade alheia** e pediu arbitragem.
+  **Vai a T-25 com T-04 e T-09 na mesa.**
+- **`T19-F03` (HIGH) — ciclo de dependência `items` <-> `mrp`, com o insumo de
+  discovery afirmando que não existe.** Ida:
+  `items/application/use-cases/ExplodeItemStructureUseCase.ts:5` importa
+  `mrp/application/mrpEngine`. Volta: 5 arquivos de `mrp` importam `items`,
+  incluindo as classes concretas em `mrpController.ts:4,5`. `items` é
+  **tier 1 / PRODUÇÃO REAL** e passa a depender, em tempo de compilação, do
+  motor de planejamento não-produtivo. `CURRENT_ARCHITECTURE.md:152-156`
+  afirma "dependência circular: não encontrada" — **refutado com âncora**;
+  a varredura de origem provavelmente buscou só em `presentation`/
+  `infrastructure`, e a aresta vive em `application`. T-19 declarou
+  expressamente que **não afirma ser o único ciclo** (`RES-T19-04`).
+- **T-17 corrigiu o denominador da run.** O inventário exaustivo mediu
+  **683 handlers registrados** — e um grep de linha única **perde 4
+  endpoints reais** (chamadas multi-linha), o que explica o 681 herdado.
+  Superfície **alcançável**: **676** (menos 8 do `cnab.ts`, que **nenhum
+  arquivo importa** e cujo próprio docblock afirma falsamente estar
+  montado; mais 2 de `health.ts`; mais 1 do `GET /api` inline em
+  `app.ts:227`). **Consequência material:** o bloco "Financeiro" do
+  `SYSTEM_MAP.md:86` conta 30 onde o alcançável é 22 — toda métrica de
+  cobertura publicada contra 681 precisa ser reafirmada em T-26.
+- **`T17-F01` (HIGH) — o envelope de erro da API é bimodal e indecidível.**
+  O campo `error` é **string** em 6 ramos do `errorHandler` e **objeto** em
+  2 — inclusive **dois 409 do mesmo handler com formas diferentes**
+  (`:75-80` contra `:102-105`). Nos middlewares de autorização, o mesmo 401
+  sai como string em `auth.ts:221` e como objeto em
+  `authorizeSelfOrModule.ts:49`. `API.md:30-55` documenta a bimodalidade
+  **sem dizer qual endpoint usa qual** — o contrato é indecidível para o
+  cliente, e há **consumidor externo confirmado**.
+- **`T17-F03` (HIGH) — paginação sem teto.** `shared/presentation/pagination.ts`
+  define `PAGINATION_MAX_LIMIT = 100` e **`paginate(` tem ZERO chamadores**
+  em todo `server/src` — o helper é código morto. Só 3 use cases impõem
+  teto, com **três valores diferentes**. Restam **~108 de 111 listas sem
+  teto algum**, incluindo `GET /api/jur/lgpd/data-subject-requests`, que
+  T-12 provou carregar CPF: `?limit=999999` exfiltra a base de titulares em
+  uma requisição.
+- **`T18-F01` (HIGH) — mass assignment com sobrescrita do id de caminho,
+  verificado pessoalmente pelo orquestrador.** `contractController.ts:87`
+  compõe `{ id: Number(req.params.id), ...req.body }` — o spread vem
+  **depois**, logo um `id` no corpo vence;
+  `UpdateContractUseCase.ts:30,44` consome o id sobrescrito e repassa
+  `rest` sem whitelist; `juridico.ts:89` não tem middleware de validação.
+  Efeitos: **contorna o gate `authorizeAnyModule([diretor, financeiro])` de
+  `juridico.ts:71`** gravando `status`/`approved_by` direto, e o
+  `logAction` registra o id **da rota**, não o mutado — a trilha de
+  auditoria aponta para o contrato errado exatamente no caso de abuso.
+  **Atinge diretamente o `CASE-002`/`FIND-ERP-005`, em remediação:** a
+  alçada que a SanaCore está construindo é contornável por outra porta.
+- **`T18-F02` (HIGH) — `NODE_ENV` com default `development` torna todo o
+  bloco de guardas de produção código morto.** `runtimeEnv.ts:72-75`
+  retorna cedo fora de produção, inutilizando **nove** guardas
+  (`:94,103,111,119,127,135,143,151,159`); `docker-compose.yml:43` tem
+  default `development`. O deploy que esquecer de exportar `NODE_ENV` sobe
+  com tudo desligado, em silêncio.
+- **`T18-F07`** — o scanner de segredos do próprio projeto tem allowlist por
+  **substring de caminho**: `dist` casa `distribuicao`/`distrato`, e
+  `.git` casa `.github/` — os workflows de CI **inteiros** ficam fora da
+  varredura. Um gate que dá verde sem exercer o controle é pior que a
+  ausência do gate.
+- **`T18-F08` — `OBS-INV-08` refutada na forma enunciada.** Não existe
+  contrato compartilhado entre client e server: `Glob` em
+  `{shared,contracts,packages}/**` retorna **zero**. O achado real é pior —
+  o contrato é **redeclarado à mão em 40+ páginas do cliente**, contra
+  validadores independentes no servidor, sem fonte única, sem geração e sem
+  teste que reprove divergência. A `OBS-INV-08` deve ser **reformulada**,
+  não fechada.
+
+### Conformidades registradas com o mesmo peso
+
+- **`comex` é o módulo mais bem construído do tier 3** (T-16): segregação
+  de funções nomeada (`D-K-COMEX`), leitura com lock antes de decidir,
+  guarda de status contra aprovação retroativa, transação com
+  `rollbackIfPending` em **todas** as 5 escritas, e reuso do serviço
+  compartilhado de recebimento em vez de duplicá-lo. É o padrão de
+  referência contra o qual `T16-F01`, `F02` e `F05` se medem.
+- **`reports` resiste em todas as dimensões** (T-16): SQL sempre
+  parametrizado, injeção de fórmula em CSV neutralizada, escape RFC 4180
+  correto, authZ por sub-permissão real do SSOT.
+- **Regra 24 — não violada** em nenhuma das duas trilhas que a varreram
+  (T-16 nos 174 endpoints do tier 3; T-18 no núcleo): o payload do JWT
+  contém apenas id e passwordVersion; `role` e `permissions` vêm do
+  banco a cada requisição (`middlewares/auth.ts:77-87,110,118`).
+- **T-19:** erro genuinamente centralizado (**1** `res.status(500)` em 106
+  controllers); **zero `console.*` em `server/src/modules/`**; acoplamento
+  horizontal **baixo** (~40 arestas para 48 módulos — se alguma trilha
+  reportar "módulos altamente acoplados", é falso positivo); camada
+  `domain` livre de ORM em **47 dos 48 módulos**.
+
+### Lacunas e incidentes
+
+- **`RES-T18-04` — G3 NÃO ATENDIDA nesta classe de defeito.** T-18
+  identificou **13 call sites** do padrão de mass assignment e rastreou
+  **1**. Despachei trilha dirigida (T-18-A) para fechar os 12 restantes,
+  **e ela caiu por limite de sessão da API** antes de concluir. **A lacuna
+  permanece aberta e é bloqueante para a condição G3**, que veda amostragem
+  reduzida em segurança, autorização e contratos. Redespachar é a primeira
+  ação da retomada.
+- **`RES-T16-06`** — `RegisterImportTrackingUseCase`, o gate que consome a
+  alçada G11-COMEX, é **o único item G3-crítico do escopo de T-16 sem
+  leitura**. Decisão do director: suprir ou registrar.
+- **T-16 declarou honestamente cobertura desigual por dimensão:** D1/D2/D3
+  em **174/174**; D4-D8 em **cerca de 91/174 (52%)**, com os 6 resíduos
+  nominais. Não apresentou os 174 como auditados em profundidade.
+- **T-19 refutou 4 afirmações do `CURRENT_ARCHITECTURE.md`** (D-1 a D-4),
+  entre elas a de que o padrão adapter não conhece a infraestrutura do
+  fornecedor — **4 adapters requerem o repositório Sequelize estrangeiro**.
+- **T-19: zero ADR preenchido em todo o repositório** e o diretório
+  `architecture/`, declarado no `CLAUDE.md` como território de OpusCore,
+  **não existe**. Consequência declarada pela trilha: **nenhum finding de
+  arquitetura pode ser fundamentado em "viola o ADR-nnn"**, porque não há
+  objeto de comparação. Isso limita objetivamente o alcance de T-19 e deve
+  constar da matriz executada de T-26.
+
+**Fieldwork: 19 de 27 trilhas.** Nenhum finding `CONFIRMED`.
