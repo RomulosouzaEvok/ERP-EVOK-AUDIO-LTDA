@@ -1047,3 +1047,84 @@ aqui): (a) se quer a prova literal de escrita em `audit_logs` via uma
 exceção nomeada e controlada; (b) se autoriza recriar `erp_evok_audio_test`
 do zero a partir de `AUDIT_COMMIT` puro antes de fechar findings de
 schema; (c) se autoriza uma bateria 02 com o servidor de fato no ar.
+
+---
+
+## SANACORE CASE-002 (FIND-ERP-005) — REMEDIATION_COMPLETE / READY_FOR_RETEST — 2026-08-14
+
+Retomado o handoff de remediação pendente. Estado encontrado **divergia
+materialmente do registro**: o último commit publicado no `origin`
+(`67b49fb`) declarava "remediação PARCIAL — NÃO concluída, NÃO
+retestável", mas a worktree local `sana/ERP-LEGACY-001/FIND-ERP-005`
+continha 5 commits não publicados com a remediação essencialmente
+completa. Divergência registrada, não silenciada (Regra 20).
+
+**Trabalho implementado (ramos exatamente conforme decisão humana):**
+`APR-2026-021` Parte B itens 3/4/5, reafirmados por `APR-2026-022`,
+correspondem 1:1 aos ramos executados — A1 (alçada em tabela configurável
+`jur_approval_thresholds` + histórico), B1 (aditivo que ELEVA valor exige
+`approve`; redução e prazo seguem em `operate`), C1 (segregação D-K
+estendida ao Jurídico, novo ponto `D-K-JURIDICO` em `shared/domain`).
+
+**Duas lacunas foram levantadas pelo `sanacore-remediation-evidence` e
+ambas resolvidas por evidência, não por deferência (Regras 20/21):**
+
+1. **ALARME FALSO — "APR-2026-021 não registrada".** O agente leu
+   `coretriad/governance/APPROVALS.md` **do worktree**, congelado no corte
+   da branch (última entrada `APR-2026-020`). O orquestrador verificou no
+   repositório principal: `APR-2026-021` (:573), `APR-2026-022` (:681) e
+   `APR-2026-023` (:761) existem. **Armadilha metodológica registrada e
+   generalizável:** o `coretriad/` de um worktree SanaCore de vida longa
+   **não é fonte de verdade** sobre aprovações, estados ou handoffs —
+   ausência de um `APR-…` ali é evidência de defasagem da branch, nunca de
+   ausência da decisão. Consultar sempre o repositório principal.
+2. **REAL — a prova dinâmica não existia.** Os 14 casos da suíte de
+   integração do caso falhavam **na fixture**, antes de exercitar
+   qualquer comportamento do produto. Eram 3 defeitos de fixture, não 1:
+   `signatory_type`→`party_type`, `document_url`/`is_signed`/
+   `version_number`→`file_url`/`is_signed_version`, e `activate` sem
+   `responsible_user_id` (que por desenho não é persistido na criação).
+   Corrigidos. **Resultado real: suíte do caso 14 falhas → 20/20 PASSED;
+   integração completa 24 falhas → 8 falhas / 267.**
+
+**Verificação independente do orquestrador (não aceita por relato):**
+`git diff --stat 48c93cd..HEAD -- server/src client/src` → **saída
+vazia**. Nenhuma linha de código de produto foi alterada nos commits de
+correção de fixture — o teste foi ajustado ao produto, não o produto ao
+teste. Unitários reconfirmados: 46/46 no alvo do caso.
+
+**Correção do orquestrador registrada contra si mesmo:** ao instruir o
+agente, afirmei que a citação `jur-contract-authority-...` estava errada e
+deveria ser `juridico-contract-authority-...`. O agente verificou e
+**refutou com evidência**: os dois arquivos existem, com nomes
+deliberadamente distintos (`tests/unit/juridico-...` e
+`tests/integration/jur-...`). A citação original estava correta; a
+observação do orquestrador é que estava errada.
+
+**Estado do caso:** `REMEDIATION_COMPLETE` / `READY_FOR_RETEST`, **sem
+ressalva de evidência**. `REMEDIATION_COMMIT`: `1046e16`. Artefatos em
+`remediation/cases/ERP-LEGACY-001-CASE-002/` do worktree
+(`REMEDIATION_EVIDENCE_PACKAGE.md`, `REMEDIATION_RESPONSE.md`,
+`CASE_STATUS.md`). Nenhum `RETEST_PASSED`, `FINDING CLOSED` ou
+`RISK_ACCEPTED` declarado — `FIND-ERP-005` permanece `OPEN` e o reteste é
+autoridade exclusiva da VeriCore (Regras 3-4).
+
+**DUAS PENDÊNCIAS DE AÇÃO HUMANA, não técnicas, bloqueiam o fechamento:**
+1. **`cross-database-drift-guard` reprova** porque a migration nova
+   (`jur_approval_thresholds`) foi aplicada só ao banco de teste. Corrigir
+   exige DDL em `erp_evok_audio` — **banco PRODUÇÃO REAL** por
+   `APR-2026-016`, reafirmado intocável em `APR-2026-021` Parte D. **Não é
+   passo técnico de agente algum.** O dono decide *quando*: antes do
+   merge, junto com ele, ou só no deploy.
+2. **Contagem de perfis com `diretor`/`financeiro` em nível `'operate'` no
+   banco de produção** — no banco de teste é 0, mas a TRIAGE §3.3 alerta
+   que perfis nessa condição **perdem a capacidade de aprovar** após a
+   correção (efeito pretendido, contrapartida organizacional). Levantar em
+   produção é ato do dono, não de agente.
+
+Ressalva de honestidade registrada pelo próprio agente: as 7 falhas de
+integração restantes (`bom-tipo-nao-produtivo`,
+`traceability-and-audit-log-regression`) não têm relação com este caso
+(confirmado por `git log` — nem os testes nem `modules/products`/
+`modules/inventory` foram tocados pela branch), mas a prova definitiva
+seria rodá-las na `main`, o que não foi feito.
