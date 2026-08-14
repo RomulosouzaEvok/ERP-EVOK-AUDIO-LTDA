@@ -982,3 +982,68 @@ em aberto para T-26 (consolidação), não decidido aqui.
 Nenhuma divergência entre trilhas foi resolvida por votação ou
 silenciosamente (Regra 20). Nenhuma declaração de `AUDIT_PASSED`,
 `FINDINGS_CONFIRMED`, `RETEST_PASSED` ou `FINDING CLOSED` foi emitida.
+
+---
+
+## BATERIA DE VERIFICAÇÃO DINÂMICA 01 CONCLUÍDA — 2026-08-14
+
+`vericore-audit-verification-runner` executou, dentro do escopo restrito
+autorizado pelo dono ("somente para essa finalidade e exclusividade"),
+um subconjunto priorizado das ~103 verificações dinâmicas (`DYN-T*`)
+catalogadas ao longo do fieldwork, contra `erp_evok_audio_test`
+exclusivamente. Persistido em
+`audit/runs/ERP-LEGACY-001-AUD-001/07-findings/DYN_VERIFICACAO_BATERIA_01.md`.
+Nenhuma escrita em banco (só `SELECT`); `erp_evok_audio` (real) nunca foi
+endereçado; working tree confirmado limpo pelo orquestrador antes e
+depois (`git status --porcelain --branch`).
+
+**Resultado — 4 achados novos confirmados por execução real (não apenas
+leitura estática):**
+1. A role de runtime do banco usada pela API (`evok_admin`) **é
+   superusuário do Postgres** — eleva `AUD-DB-01`/`FIND-ERP-002` de
+   estático para confirmado por catálogo.
+2. Vulnerabilidade **HIGH** ativa hoje em `server` (`js-yaml`,
+   `CVE-2026-59870`); 14 HIGH em `mobile`, 12 HIGH em `tv` (dependências
+   transitivas de terceiros).
+3. `RES-T23-01` fechado com precisão: citação quebrada localizada em
+   `docs/coretriad/planning/SIM-002_VALIDATION_REPORT.md:46` (aponta para
+   `docs/API.md`, que não existe).
+4. `T20-F03` (bug de fuso horário no cálculo de fluxo de caixa) **agora é
+   confirmado por execução real** (teste falhou de fato), não apenas por
+   leitura estática de alta confiança.
+
+**Achado sobre a integridade do próprio ambiente de teste (não é achado
+sobre o ERP, é sobre a ferramenta de auditoria):** `erp_evok_audio_test`
+carrega uma migration (`20260814-000048-jur-approval-thresholds-and-authority-find-erp-005.cjs`)
+proveniente de uma branch remota do SanaCore (`origin/sana/ERP-LEGACY-001/FIND-ERP-005`,
+commit `67b49fb`, explicitamente marcado como remediação PARCIAL e NÃO
+retestável), que não é ancestral de `AUDIT_COMMIT` nem de `main`. Ou seja,
+o banco de teste efêmero é na prática **compartilhado** entre sessões
+diferentes de VeriCore e SanaCore, não recriado do zero a cada execução.
+Isso não invalida os achados de catálogo acima (não tocam as tabelas
+afetadas), mas afeta pequenas contagens de schema (`T13-F0x`: 480 FKs
+reais vs. 478 estimadas por T-13, 208 tabelas vs. 207 estimadas — diferença
+de 1-2, atribuível a essa migration extra).
+
+**Recusa deliberada por desenho, registrada, não decidida por agente:** o
+runner recusou-se a executar `DYN-T03-02`/`DYN-T03-05` (que provariam por
+escrita real que `UPDATE`/`DELETE` em `audit_logs` funcionam, dado
+superusuário + zero trigger) porque sua carta de responsabilidades proíbe
+qualquer escrita em banco, mesmo em teste efêmero, e a autorização
+recebida do dono não nomeava essa exceção especificamente. A conclusão já
+é matematicamente inevitável pelas duas evidências de catálogo coletadas
+(2 e 4 acima), mas a prova literal por execução de escrita, se desejada,
+exige pedido novo, explícito e nomeado do dono.
+
+**Não executado nesta bateria** (ver relatório completo para lista e
+motivo item a item): ~70 verificações que exigem o servidor de fato no ar
+(`server` rodando contra `erp_evok_audio_test`, emitindo JWT reais) —
+incluindo as que sustentariam diretamente os dois CRITICAL de maior
+prioridade (`AUD-AUTHN-01`, `T24-F01`). Recomendado pelo runner como
+bateria 02 dedicada, condicionada a nova instrução.
+
+Decisões que ficam para o dono a partir deste resultado (não decididas
+aqui): (a) se quer a prova literal de escrita em `audit_logs` via uma
+exceção nomeada e controlada; (b) se autoriza recriar `erp_evok_audio_test`
+do zero a partir de `AUDIT_COMMIT` puro antes de fechar findings de
+schema; (c) se autoriza uma bateria 02 com o servidor de fato no ar.
