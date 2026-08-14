@@ -100,14 +100,20 @@ describeIntegration('FIND-ERP-005 — alçada de contrato jurídico (RF-JUR-003)
       const signatory = await api()
         .post(`${JUR_BASE}/contracts/${contractId}/signatories`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ signatory_type: party, name: `Signatario ${party}`, email: `${party}@evok.local` });
+        // `party_type` (nao `signatory_type`): e o campo exigido por
+        // AddContractSignatoryUseCase:26 e documentado em BLOCO_3_JUR_API 2.3.
+        // O use case mapeia party_type -> coluna signatory_role.
+        .send({ party_type: party, name: `Signatario ${party}` });
       expect([200, 201]).toContain(signatory.status);
     }
 
     const document = await api()
       .post(`${JUR_BASE}/contracts/${contractId}/documents`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ document_url: 'https://example.invalid/assinado.pdf', is_signed: true, version_number: 1 });
+      // `file_url` + `is_signed_version` sao os campos reais
+      // (AddContractDocumentUseCase:26,39). `version_number` e calculado pelo
+      // backend e nunca informado pelo cliente.
+      .send({ file_url: 'https://example.invalid/assinado.pdf', is_signed_version: true });
     expect([200, 201]).toContain(document.status);
 
     return contractId;
@@ -259,7 +265,10 @@ describeIntegration('FIND-ERP-005 — alçada de contrato jurídico (RF-JUR-003)
       const ativacao = await api()
         .post(`${JUR_BASE}/contracts/${contractId}/activate`)
         .set('Authorization', `Bearer ${juridicoToken}`)
-        .send({});
+        // `responsible_user_id` NAO e persistido na criacao (por desenho,
+        // BLOCO_3_JUR_API 2.1) — e exigido aqui (BR-JUR-001). Sem ele a
+        // ativacao retorna 422 antes de exercitar a alcada.
+        .send({ responsible_user_id: 1 });
       expect(ativacao.status).toBe(200);
       expect(ativacao.body.data.status).toBe('active');
       // R1(d): a alçada vigente ficou registrada.
@@ -320,7 +329,8 @@ describeIntegration('FIND-ERP-005 — alçada de contrato jurídico (RF-JUR-003)
       const ativacao = await api()
         .post(`${JUR_BASE}/contracts/${contractId}/activate`)
         .set('Authorization', `Bearer ${criador.token}`)
-        .send({});
+        // Ver nota em R4(b): responsible_user_id so entra na ativacao.
+        .send({ responsible_user_id: 1 });
       expect(ativacao.status).toBe(200);
       return contractId;
     }
@@ -394,7 +404,8 @@ describeIntegration('FIND-ERP-005 — alçada de contrato jurídico (RF-JUR-003)
       const ativacao = await api()
         .post(`${JUR_BASE}/contracts/${contractId}/activate`)
         .set('Authorization', `Bearer ${criador.token}`)
-        .send({});
+        // Ver nota em R4(b): responsible_user_id so entra na ativacao.
+        .send({ responsible_user_id: 1 });
       expect(ativacao.status).toBe(200);
 
       const aditivo = await api()

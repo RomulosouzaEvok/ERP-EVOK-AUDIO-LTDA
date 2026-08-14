@@ -4,36 +4,87 @@ CASE_ID: ERP-LEGACY-001-CASE-002
 FINDING_ID: FIND-ERP-005
 PROJECT_ID: ERP-LEGACY-001
 PRODUZIDO_POR: sanacore-remediation-evidence
-DATA: 2026-08-14
+DATA: 2026-08-14 (revisado na mesma data, após verificação do orquestrador — ver §0)
 WORKTREE: `sana/ERP-LEGACY-001/FIND-ERP-005` (`C:/Sistema EvokAudio/ERP-Evok-sana-FIND-ERP-005`)
 FINDING_FONTE: `docs/coretriad/projects/ERP-LEGACY-001/discovery/FIND-ERP-005.md` (não editado por este agente)
 TRIAGE_FONTE: `remediation/cases/ERP-LEGACY-001-CASE-002/TRIAGE.md` (não editada por este agente)
 
-> **Aviso de governança (leia antes do resto do pacote).** Este pacote
-> reporta o estado real, incluindo duas lacunas que, na avaliação deste
-> agente, impedem hoje uma declaração honesta de "pronto para PASS": (1) a
-> suíte de integração HTTP — a única evidência dinâmica prevista para
-> R1(b)(c)/R2/R3/R4 — falha 14/14 testes por um defeito de fixture (não do
-> produto); (2) `APR-2026-021`, citada como autorização das decisões (a)/(b)/
-> (c) em código, testes e documentação, **não está registrada** em
-> `coretriad/governance/APPROVALS.md`. Ver §4 e §7. SanaCore não decide o que
-> fazer com isso (Regras 3/4/6) — apenas registra e devolve.
+---
+
+## 0. Nota de revisão e armadilha metodológica (leia primeiro)
+
+A **primeira versão** deste pacote declarou duas lacunas materiais. Após
+verificação do `coretriad-director` e reverificação própria, o estado é:
+
+| Lacuna declarada na v1 | Veredito | Onde ficou |
+|---|---|---|
+| `APR-2026-021` não registrada em `APPROVALS.md` | **ALARME FALSO — retratado** | §0.1 |
+| Suíte de integração HTTP do caso não exercitava nada (14/14 falhas) | **REAL — corrigida nesta revisão** | §5.4 |
+
+### 0.1 Retratação — `APR-2026-021` EXISTE, e o erro foi meu, com causa identificável
+
+A v1 afirmou que `APR-2026-021` não estava registrada. **Errado.** A
+afirmação foi produzida lendo `coretriad/governance/APPROVALS.md` **do
+worktree**, cuja última entrada é `APR-2026-020` — porque a branch
+`sana/ERP-LEGACY-001/FIND-ERP-005` foi cortada antes dessas aprovações
+serem gravadas.
+
+Verificado agora no repositório principal
+(`C:/Sistema EvokAudio/ERP-Evok--Audio-LTDA`, leitura apenas):
+`APR-2026-021` (`:573`), `APR-2026-022` (`:681`) e `APR-2026-023` (`:761`)
+existem. `APR-2026-021` Parte B registra as decisões, e `APR-2026-022`
+corrige o vínculo, deixando explícito que os itens **3, 4 e 5 pertencem ao
+`CASE-002`/`FIND-ERP-005`** — exatamente as perguntas (a)/(b)/(c) da TRIAGE:
+
+| Item | Decisão do dono | Ramo da TRIAGE | Implementado? |
+|---|---|---|---|
+| B.3 | Alçada = **tabela configurável**, não constante | A1 (§7.1) | Sim — §2 |
+| B.4 | Aditivo que eleva valor **exige `approve`**; `operate` nunca basta | B1 (§7.2) | Sim — provado em §5.7 |
+| B.5 | Segregação D-K **vale** para aprovação de contrato jurídico | C1 (§8.3) | Sim — §2 |
+
+**Os três ramos implementados batem com o que o dono decidiu.** Não há
+lacuna de governança neste caso.
+
+> ### ARMADILHA METODOLÓGICA — registrar para não repetir
+>
+> **`coretriad/` dentro de um worktree SanaCore de vida longa está congelado
+> no ponto do corte da branch e NÃO é fonte de verdade sobre aprovações,
+> estados ou handoffs.** O control plane é escrito pelo CoreTriad Director no
+> repositório principal e não acompanha a branch de remediação.
+>
+> Regra prática para qualquer agente SanaCore futuro: **toda consulta a
+> `coretriad/governance/APPROVALS.md`, `coretriad/states/` e
+> `coretriad/handoffs/` deve ser feita no repositório principal**, mesmo
+> quando o trabalho é no worktree. Ausência de um `APR-...` no worktree é
+> evidência de **defasagem da branch**, nunca de ausência da decisão.
+>
+> Isto reforça, não contradiz, a Regra 7: o artefato versionado é a fonte
+> oficial — mas é preciso ler a *cópia certa* dele.
+
+### 0.2 Divergência registrada por evidência (Regra 20), não por deferência
+
+O orquestrador apontou que eu teria citado o caminho da suíte de integração
+como `juridico-contract-authority-...` em vez de `jur-contract-authority-...`.
+Verificado por `ls`: **existem os dois arquivos, com nomes diferentes**, e as
+citações da v1 estavam corretas:
+
+- `server/tests/unit/juridico-contract-authority-find-erp-005.test.ts` — 46 testes unitários
+- `server/tests/integration/jur-contract-authority-find-erp-005.test.ts` — 20 testes de integração HTTP
+
+Nenhuma correção de citação era necessária; registro aqui para que a
+diferença de nomes (que é confusa de fato) não vire ruído no reteste.
 
 ---
 
 ## 1. ROOT_CAUSE
 
-Confirmada, não hipótese (reconfirmada nesta sessão por leitura do HEAD e
-pela suíte unitária determinística de 46 casos, sem depender de memória):
+Confirmada, não hipótese:
 
 > O controle de alçada do Jurídico foi implementado como **"registro de um
 > ato de aprovação"**, não como **"invariante do contrato"**. O sistema
 > perguntava *"existe uma linha em `jur_contract_approvals` com este
 > papel?"* em vez de *"este valor está coberto por aprovações válidas, dadas
 > por pessoas distintas com poder de aprovar, sob a política vigente?"*.
-
-Quatro dimensões da mesma pergunta mal formulada, cada uma uma falha
-independente e suficiente para contornar o controle:
 
 | Dimensão | Falha | Causa pontual |
 |---|---|---|
@@ -45,385 +96,377 @@ independente e suficiente para contornar o controle:
 Agravante transversal: `ActivateContractUseCase` aceitava `approvalRepository`
 opcional — gate pulado em silêncio (fail-open) quando a dependência faltava.
 
-## 2. LOCAL_FIX (o que foi implementado, commit a commit)
-
-Trabalho realizado majoritariamente **antes** desta sessão de empacotamento
-(commit `67b49fb`, preservado pelo orquestrador após interrupção de sessão) e
-completado pelos 5 commits locais não enviados ainda ao GitHub:
+## 2. LOCAL_FIX (o que foi implementado)
 
 | Commit | Conteúdo |
 |---|---|
 | `67b49fb` (preservação) | Código das 4 falhas: migration `jur_approval_thresholds`+histórico, models, `approvalPolicy.ts`, ajustes em `ActivateContractUseCase`/`ApproveContractUseCase`/`CreateContractAddendumUseCase`, endpoints `GET`/`PUT /settings/approval-thresholds`, extensão de `segregationOfDuties.ts` |
-| `cd6f45b` | Ajuste de construtores em `juridico-contract-use-cases.test.ts` (31/31 verdes; nenhuma asserção alterada — ver §5.3) |
-| `afde1d0` | Suíte de regressão nova: 46 testes unitários (`juridico-contract-authority-find-erp-005.test.ts`) + suíte de integração HTTP (`jur-contract-authority-find-erp-005.test.ts`, 24 casos); `contractController` ganha export `__test__` para exercitar vetores adversariais de R2(e) |
+| `cd6f45b` | Ajuste de construtores em `juridico-contract-use-cases.test.ts` (31/31 verdes; nenhuma asserção alterada — §5.3) |
+| `afde1d0` | Suítes de regressão novas (unit + integração HTTP); `contractController` ganha export `__test__` para os vetores adversariais de R2(e) |
 | `8a2c5e3` | `purchase-segregation-of-duties.test.ts` atualizado para o 5º ponto de `SEGREGATION_RULES` (`D-K-JURIDICO`) |
-| `33b8633` | Cliente: remove terceira cópia dos limiares de alçada; UI passa a usar `required_roles` de `GET /contracts/:id/approvals` |
-| `54572b7` | `BLOCO_3_JUR_API.md` §2/§2.5/§2.7 reescritos para descrever o mecanismo real; contradição §214×§233 eliminada |
+| `33b8633` | Cliente: remove a terceira cópia dos limiares; UI usa `required_roles` de `GET /contracts/:id/approvals` |
+| `54572b7` | `BLOCO_3_JUR_API.md` §2/§2.5/§2.7 descrevem o mecanismo real; contradição §214×§233 eliminada |
+| `48c93cd` | v1 deste pacote de evidência |
+| (commit desta revisão) | Correção do fixture de integração + contagem canônica de migrations + revisão deste pacote |
 
-### Falha 1 — tabela configurável (Ramo A1 da TRIAGE §7.1)
+### Falha 1 — tabela configurável (APR-2026-021 B.3 / ramo A1)
 `jur_approval_thresholds` + `jur_approval_threshold_history` (migration
 `20260814-000048-jur-approval-thresholds-and-authority-find-erp-005.cjs`);
 `approvalPolicy.ts` interpreta a política (comparação, precedência por
-`contract_type`, vigência, **fail-closed** quando a política está vazia ou o
-repositório ausente); seed reproduz os valores atuais (50k/300k) para
-`contract_type='*'`; `jur_contracts.approval_policy_snapshot` registra a
-política vigente no instante da ativação (R1d); endpoints
-`GET`/`PUT /api/jur/settings/approval-thresholds`, `PUT` exige `approve`.
+`contract_type`, vigência, **fail-closed** com política vazia ou repositório
+ausente); seed preserva 50k/300k para `contract_type='*'`;
+`jur_contracts.approval_policy_snapshot` registra a política vigente no
+instante da ativação (R1d); endpoints `GET`/`PUT
+/api/jur/settings/approval-thresholds`, o `PUT` exigindo `approve`.
 
 ### Falha 2 — nível `approve` + fail-closed
 `requiredLevel: 'approve'` nos dois candidatos de `juridico.ts:71`;
-comparação estrita `=== 'approve'` em `resolveAvailableApproverRoles`
-(exportado como `__test__` para os vetores adversariais); `approvalRepository`
-e `thresholdRepository` tornados **obrigatórios** no construtor de
-`ActivateContractUseCase` (fecha o fail-open agravante, R5).
+comparação estrita `=== 'approve'` em `resolveAvailableApproverRoles`;
+`approvalRepository` e `thresholdRepository` **obrigatórios** no construtor
+de `ActivateContractUseCase` (fecha o fail-open, R5).
+`authorizeAnyModule.ts` **não foi tocado** (instrução da TRIAGE §3.1 —
+verificado por diff).
 
-### Falha 3 — reabertura de alçada
-`new_value` só é aplicado com `change_type === 'value'` (fecha a variante
-cruzada); elevação de faixa **invalida** as aprovações incompatíveis (mantém
-histórico) e devolve o contrato a `in_approval`; elevar valor sem nível
-`approve` no módulo é rejeitado (`APR-2026-021 B.4`, decisão B1 da TRIAGE
-§7.2); redução de valor não exige `approve`.
+### Falha 3 — reabertura de alçada (APR-2026-021 B.4 / ramo B1)
+`new_value` só é aplicado com `change_type === 'value'`; elevação de faixa
+**invalida** aprovações incompatíveis (preserva histórico via
+`invalidated_at`) e devolve o contrato a `in_approval`; **elevação de valor
+exige nível `approve`** (`CreateContractAddendumUseCase.ts:131`); redução de
+valor não exige. Ordenação fail-safe documentada no cabeçalho do use case,
+no lugar de transação única (limitação declarada — a camada de repositório
+não tem plumbing de transação).
 
-### Falha 4 — segregação D-K estendida ao Jurídico
+### Falha 4 — segregação D-K estendida ao Jurídico (APR-2026-021 B.5 / ramo C1)
 Nova regra `D-K-JURIDICO` em `shared/domain/segregationOfDuties.ts`
 (`assertApproverIsNotPriorApprover`, reaproveitando `isSelfApproval`);
-`admin` não isenta; **e** — além do mínimo do plano executável da TRIAGE §6.2
-(que previa apenas F4-A, independente de decisão) — a decisão (c) da TRIAGE
-§8.3 foi respondida **C1** (estender a criador/`created_by`), com R4(d)
-implementado.
+`admin` não isenta; R4(d) (criador não aprova) implementado.
 
 ## 3. SYSTEMIC_FIX_REQUIRED / BLAST_RADIUS
 
-Herdado da TRIAGE §3, reconfirmado, **não ampliado por este agente** (fora do
-escopo deste caso, por decisão explícita da triagem):
+Herdado da TRIAGE §3, **não ampliado** por este caso:
 
-- `purchases.ts:48` (`POST /api/purchases/:id/approve`) e
-  `importProcesses.ts:34` (COMEX) replicam a mesma truthiness de papel que a
-  Falha 2 corrigiu no Jurídico — **módulos de PRODUÇÃO**, fora de escopo
-  deste caso. Encaminhamento já registrado na TRIAGE §3.2; reafirmado aqui
-  para que a VeriCore não assuma cobertura inexistente.
-- `authorizeAnyModule.ts` **não foi tocado** (instrução expressa da TRIAGE
-  §3.1, para não quebrar as 5 rotas de leitura que dependem do default
-  `'operate'`) — verificado: `git diff` confirma zero alterações no arquivo.
+- `purchases.ts:48` e `importProcesses.ts:34` replicam a mesma truthiness de
+  papel da Falha 2 — **módulos de PRODUÇÃO**, fora de escopo deste caso.
+  Encaminhamento registrado na TRIAGE §3.2 e reafirmado aqui para que
+  ninguém assuma cobertura inexistente.
+- `authorizeAnyModule.ts` intocado (5 rotas de leitura em 4 módulos dependem
+  do default `'operate'`).
 
-## 4. LACUNA DE GOVERNANÇA — `APR-2026-021` não registrada (achado desta sessão)
+## 4. GOVERNANÇA — autorização humana das decisões
 
-Código (`ApproveContractUseCase.ts`, `CreateContractAddendumUseCase.ts`,
-`segregationOfDuties.ts`), testes (`juridico-contract-authority-find-erp-005.
-test.ts`, `jur-contract-authority-find-erp-005.test.ts`,
-`purchase-segregation-of-duties.test.ts`) e documentação
-(`BLOCO_3_JUR_API.md`) citam **`APR-2026-021`** (Partes B/C/D) como a
-autorização humana das 3 decisões da TRIAGE §8 — Ramo A1 (tabela
-configurável), Ramo B1 (aditivo exige `approve` para efetivar elevação) e C1
-(estender D-K ao `created_by`).
+**Registrada e verificada** (§0.1): `APR-2026-021` Parte B itens 3/4/5,
+reafirmados por `APR-2026-022`. Nenhuma decisão de negócio foi tomada por
+agente: a TRIAGE formulou as 3 perguntas (§8), o dono respondeu, e os ramos
+implementados (A1/B1/C1) correspondem item a item.
 
-**Verificado nesta sessão:** `grep -n "APR-2026-0" coretriad/governance/
-APPROVALS.md` não retorna nenhuma entrada `APR-2026-021`. A última entrada
-registrada é `APR-2026-020` (`:528`). Não existe outro arquivo de aprovações
-no repositório (`find . -iname APPROVALS.md` → um único arquivo).
+`APR-2026-021` Parte C fixa os limites que este pacote respeita: *"vedada
+implementação parcial apresentada como finding resolvido"*; *"SanaCore NÃO
+está autorizada a fechar finding, marcar `RETEST_PASSED`, usar banco real ou
+transformar ausência de Docker/psql em evidência de sucesso"*.
 
-Isso é uma divergência entre código/teste/documentação e o único artefato
-canônico de decisão humana (Regra 21 do `CLAUDE.md`: "Quando houver
-contradição entre memória, documento, código e evidência, interrompa a
-decisão e determine a fonte autoritativa"; Regra 17/18: aprovações só valem
-registradas, nunca por inferência). **SanaCore não pode e não deve inferir
-se a decisão foi de fato tomada** — só registra a divergência. Se
-`APR-2026-021` existiu como decisão humana real (em sessão, fora do
-artefato), falta apenas o registro formal; se não existiu, as Falhas 1 e 3
-foram implementadas **sem** a autorização que a TRIAGE exigia antes de
-iniciar (§8, "enquanto não houver registro, as Falhas 1 e 3 ficam paradas").
-Este pacote não determina qual dos dois casos é o real — isso é decisão do
-`coretriad-director`/dono, não da SanaCore.
+## 5. TESTES EXECUTADOS E RESULTADOS (execução real desta sessão)
 
-## 5. TESTES EXECUTADOS E RESULTADOS (evidência real desta sessão, não hipótese)
+**Guarda de banco aplicada antes de cada execução dinâmica:**
+`server/.env.test` → `DB_NAME=erp_evok_audio_test`; o runner
+(`scripts/run-api-suite.cjs`) impõe o sufixo `_test`/`_ci`; o log do servidor
+confirma `PostgreSQL conectado: localhost:5432/erp_evok_audio_test`.
+**Nenhuma conexão foi aberta contra `erp_evok_audio`** (linha vermelha
+`APR-2026-016`, reafirmada em `APR-2026-021` Parte D).
 
-### 5.1 Unitários — alvo (FIND-ERP-005 + não-regressão direta)
+### 5.1 Unitários — alvo
 
 ```
 npx jest --runInBand tests/unit/juridico-contract-authority-find-erp-005.test.ts \
   tests/unit/juridico-contract-use-cases.test.ts \
   tests/unit/purchase-segregation-of-duties.test.ts
 ```
-**Resultado: 3 suítes, 95/95 testes PASSED.** (Confirma o número já
-reportado pelo orquestrador antes deste agente; reexecutado de forma
-independente, mesmo resultado.)
+**3 suítes, 95/95 PASSED.**
 
-Cobertura declarada no cabeçalho do próprio arquivo de teste, verificada
-linha a linha contra o RETEST_SPECIFICATION do finding:
-R1(a)-(d), R2(e), R3(a)-(c)(e), R4(a)-(d), R5(a)(b) — **todos os itens
-"depende de decisão? não" e também os dependentes de (a)/(b)/(c), já que as
-decisões foram implementadas** (ver ressalva §4 sobre o registro formal
-dessas decisões).
+### 5.2 Unitários — suíte completa
 
-### 5.2 Unitários — suíte completa do server
-
-```
-npx jest --runInBand tests/unit
-```
-**Resultado: 176 suítes passed, 2 failed; 1996/1998 testes passed.**
-
-As 2 falhas (`tests/unit/onda3-shipping-cockpit-cashflow.test.ts` e
-`tests/unit/docs-path-reference-guard.test.ts`) são **pré-existentes e
-não relacionadas** a `juridico`/FIND-ERP-005 — confirmado por leitura: nenhum
-dos dois arquivos referencia `juridico`/`jur_`/`JurContract`; o commit
-`8a2c5e3` já registrava esse mesmo par de falhas como idêntico ao HEAD do
-`main` (`8b572c8`) antes de qualquer alteração desta remediação. Este agente
-não alterou nenhum dos dois arquivos e não investiga sua causa raiz (fora do
-escopo deste caso).
+`npx jest --runInBand tests/unit` → **1996/1998 PASSED**, 2 falhas
+pré-existentes e não relacionadas (`onda3-shipping-cockpit-cashflow`;
+`docs-path-reference-guard`, que acusa
+`SIM-002_VALIDATION_REPORT.md:46 → docs/API.md`, citação quebrada
+preexistente). Reexecutado ao final desta revisão: **mesmo resultado**.
 
 ### 5.3 Não-regressão em `juridico-contract-use-cases.test.ts:174-333` (R6c)
 
-Verificado por `git diff cd6f45b~1 cd6f45b -- server/tests/unit/juridico-
-contract-use-cases.test.ts`: as únicas mudanças na faixa são a injeção de
+`git diff cd6f45b~1 cd6f45b` na faixa: apenas injeção de
 `makeApprovalRepository()`/`makeThresholdRepository()` nos construtores.
-**Nenhuma linha de `expect(...)` foi alterada.** `makeThresholdRepository()`
-reproduz exatamente o seed das 3 faixas (0-50k / 50k-300k / 300k+) para
-preservar o comportamento observável. R6(c) satisfeito.
+**Nenhuma linha de `expect(...)` alterada.** O fixture de política reproduz
+o seed das 3 faixas, preservando o comportamento observável. R6(c)
+satisfeito.
 
-### 5.4 Integração HTTP — `npm run test:integration` (suíte completa)
+### 5.4 Integração HTTP — a lacuna real da v1, agora CORRIGIDA
 
-**Pré-requisito verificado antes de qualquer execução:** `server/.env.test`
-confere `DB_NAME=erp_evok_audio_test` (sufixo `_test`, guardado por
-`scripts/run-api-suite.cjs`). Nenhuma conexão foi aberta contra
-`erp_evok_audio` (produção/dev real, linha vermelha `APR-2026-016`).
+**Estado na v1:** a suíte do caso falhava **14/14** sem exercitar nada do
+produto. O diagnóstico da v1 (defeito de *fixture*, não do produto) foi
+confirmado pelo orquestrador e por releitura própria.
 
-Diferente da lacuna L-T1 declarada pela TRIAGE (Docker não respondia na
-sessão da triagem), **nesta sessão a infraestrutura respondeu** e a suíte
-completa rodou:
+Três defeitos de fixture corrigidos nesta revisão, cada um verificado contra
+o código **e** contra o contrato de API antes de tocar o teste:
 
-```
-Test Suites: 5 failed, 55 passed, 60 total
-Tests:       24 failed, 243 passed, 267 total
-```
-
-**Achado crítico desta seção — a suíte-alvo do caso falhou por completo:**
-
-`tests/integration/jur-contract-authority-find-erp-005.test.ts` —
-**14 testes, 14 falhas**, todas no mesmo ponto: o helper de fixture
-compartilhado `createActivatableContract` (linha 103) envia
-`{ signatory_type: party, ... }` para `POST /contracts/:id/signatories`, mas
-o use case (`AddContractSignatoryUseCase.ts:26`) e a própria documentação do
-endpoint (`BLOCO_3_JUR_API.md` §2.3, `:328`) exigem o campo `party_type`.
-Confirmado por leitura do código (`party_type` é anterior a esta
-remediação — `git log` mostra a última mudança no arquivo em
-`0d97b12`, muito antes de FIND-ERP-005) e por leitura do próprio use case
-(`if (!input.party_type || !input.name) throw new ValidationError(...)`):
-**é um defeito de nomenclatura no arquivo de teste** (`signatory_type` em
-vez de `party_type`), não um defeito do código de produção corrigido por
-este caso. Toda requisição de criação de signatário retorna `400`, o helper
-nunca chega a criar um contrato ativável, e **nenhum dos 24 casos**
-desenhados para R1(b)(c)/R2(a)-(d)/R3(a)(b)(c)(e)/R4(a)-(d) chegou a
-exercitar o comportamento real do sistema.
-
-**Consequência declarada, sem maquiagem:** a única evidência dinâmica HTTP
-prevista pelo RETEST_SPECIFICATION para as Falhas 2, 3 e 4 (que o próprio
-finding registra como "invisíveis a teste que instancie o use case
-diretamente") **não existe hoje, de fato**, apesar de o arquivo de teste
-estar versionado e ser estruturalmente completo. A cobertura R2/R3/R4 desta
-remediação está demonstrada apenas por: (i) leitura estática do código
-(idêntica ao método usado pela TRIAGE, não é prova dinâmica), e (ii) os 46
-testes unitários de `juridico-contract-authority-find-erp-005.test.ts`, que
-o próprio cabeçalho do arquivo declara não substituírem a prova HTTP para
-R2/R4 (linhas 8-13 do arquivo). Este pacote **não afirma R2/R3/R4 provados
-dinamicamente** — reporta a lacuna para a VeriCore decidir se aceita a
-evidência estática+unitária ou exige a correção do fixture antes do reteste.
-
-**Correção do fixture não realizada por este agente.** É alteração em
-`server/tests/**`, fora do meu escopo de escrita (hook bloqueia SanaCore de
-editar código do produto/testes fora de triagem; este agente é o
-empacotador de evidência, não o engenheiro). Fica registrada como item
-pendente para o `sanacore-remediation-engineer` ou para decisão do
-`coretriad-director` sobre como prosseguir.
-
-**Demais falhas da suíte de integração, verificadas uma a uma quanto a
-relação com este caso:**
-
-| Suíte | Falhas | Relação com FIND-ERP-005 |
+| # | Fixture errado | Verdade (arquivo:linha) |
 |---|---|---|
-| `cross-database-drift-guard.test.ts` | 1 | **Causada por esta remediação.** A nova migration (`20260814-000048`) foi aplicada apenas no banco de teste (`erp_evok_audio_test`, por restrição de segurança desta sessão — nunca tocar `erp_evok_audio`). O guard compara os dois bancos e acusa 40 divergências, todas as 4 tabelas/índices/constraints novos do caso. Esperado até que alguém aplique a migration no banco de desenvolvimento antes do merge — **não é regressão de comportamento**, é passo de implantação pendente. |
-| `docs-reality-drift-guard.test.ts` | 1 | **Causada por esta remediação.** `docs/project-memory/product/ERP_SSOT.md` e `docs/database/00-INDICE.md` declaram 169 migrations; `SequelizeMeta`/disco têm **170** (confirmado por `ls server/migrations \| wc -l` = 170) — a nova migration deste caso não foi refletida nos dois pontos canônicos. **Item de documentação pendente, não corrigido por este agente** (fora do escopo declarado: a TRIAGE só pediu atualização de `BLOCO_3_JUR_API.md`). |
-| `bom-tipo-nao-produtivo.test.ts` | 5 | **Não relacionada.** Zero referências a `juridico`/`jur_`/`JurContract` no arquivo. Falhas são timeout e `NaN` em `product_id` — parecem depender de seed/fixture do módulo de Compras/BOM, não tocado por este caso. Não foi possível confirmar se é pré-existente no `main` sem rodar a suíte lá, o que está fora do escopo autorizado desta sessão (não tocar o repositório principal). |
-| `traceability-and-audit-log-regression.test.ts` | 1 | **Não relacionada.** Zero referências a `juridico`/`jur_`. Depende de `TEST_SUPPLIER_ID`/`TEST_PRODUCT_ID` (variáveis de ambiente/seed) e expira por timeout. Mesma ressalva de não confirmação contra o `main`. |
+| 1 | `signatory_type` no `POST .../signatories` | `party_type` — `AddContractSignatoryUseCase.ts:26`, mapeado para a coluna `signatory_role` em `:33`; `BLOCO_3_JUR_API.md` §2.3 |
+| 2 | `document_url`/`is_signed`/`version_number` no `POST .../documents` | `file_url` + `is_signed_version` — `AddContractDocumentUseCase.ts:26,39`; `version_number` é calculado pelo backend |
+| 3 | `activate` com `.send({})` nas 3 ativações que devem dar **200** | `responsible_user_id` **não é persistido na criação, por desenho** (`CreateContractUseCase.ts:56-77` não o grava; `BLOCO_3_JUR_API.md` §2.1 diz isso explicitamente) e é exigido em `activate` (`ActivateContractUseCase.ts:128`, BR-JUR-001) |
 
-### 5.5 Typecheck
+Detalhe que importa ao reteste: as ativações que devem retornar **422 por
+`RF-JUR-003`** (R2(d) e R1(b)) foram **deixadas como estavam**, com
+`.send({})`, e passam pelo motivo certo — a alçada é verificada **antes** do
+responsável (`ActivateContractUseCase.ts:106` vs `:128`), e ambas asseguram
+`details.rule === 'RF-JUR-003'`.
 
-`npx tsc --noEmit` (server) e `npx tsc -b` (client): **ambos limpos, exit
-0.** Confirma o que o commit `33b8633` já reportava para o client.
+**Nenhuma linha de código de produto foi alterada para fazer teste passar.**
+As três correções são no arquivo de teste, e cada uma alinha o fixture ao
+contrato de API já documentado.
 
-### 5.6 Levantamento pedido pela TRIAGE §3.3 — perfis `diretor`/`financeiro:'operate'`
+**Resultado após a correção** (`npm run test:integration`, extraído de
+`tmp/jest-integration.json`, não de leitura de tela):
 
-Consulta somente-leitura executada **exclusivamente contra
-`erp_evok_audio_test`** (script descartável, apagado ao final; DB_NAME
-verificado por guarda de sufixo antes de qualquer query):
+```
+tests/integration/jur-contract-authority-find-erp-005.test.ts
+status: passed | total: 20 | passed: 20 | failed: 0 | skipped: 0
+```
+
+Os 20, nominalmente: R2(a), R2(b), R2(c), R2(d), `GET approvals` em
+`operate`; R4(a), R4(b), R4(c), R4(d); R3(a), R3(b), `APR-2026-021 B.4`,
+R3(c), R3(e); `GET settings`, `PUT` exige `approve`, `PUT` rejeita política
+vazia, `PUT` rejeita papel inválido, R1(b), R1(c).
+
+**Consequência para o reteste:** R1(b)(c), R2(a)-(d), R3(a)(b)(c)(e) e
+R4(a)-(d) passam a ter **prova dinâmica HTTP real**, autenticada, contra
+banco — exatamente o que o finding exigia e o que a suíte antiga não fazia.
+A lacuna L-T1 da TRIAGE deixa de valer para este caso.
+
+### 5.5 Suíte de integração completa — evolução e estado final
+
+| Execução | Test Suites | Tests |
+|---|---|---|
+| v1 (antes das correções) | 5 failed / 60 | 24 failed / 267 |
+| após correção do fixture | 4 failed / 60 | 9 failed / 267 |
+| após correção da doc de migrations | **3 failed / 60** | **8 failed / 267 — 259 passed** |
+
+| Suíte que ainda falha | Falhas | Natureza | Ação |
+|---|---|---|---|
+| `cross-database-drift-guard` | 1 | **Efeito direto desta remediação.** A migration `20260814-000048` está aplicada só em `erp_evok_audio_test`; o guard compara os dois bancos e acusa as tabelas/índices/constraints novos. | **Depende de decisão — §5.6.** Não corrigível por mim. |
+| `bom-tipo-nao-produtivo` | 5 | **Não relacionada.** `git log 8b572c8..HEAD` confirma que nem o teste nem `modules/products`/`modules/inventory` foram tocados por esta branch. Falhas são timeout e `product_id: NaN` (dependência de seed/fixture). | Fora de escopo. |
+| `traceability-and-audit-log-regression` | 2 | **Não relacionada.** Idem — arquivo não tocado; depende de `TEST_SUPPLIER_ID`/`TEST_PRODUCT_ID` e expira por timeout. | Fora de escopo. |
+
+Ressalva honesta sobre as 7 falhas "não relacionadas": a prova definitiva de
+que são pré-existentes seria rodá-las no `main`, o que **não fiz** porque
+mexer no repositório principal está vedado nesta sessão. O verificável que
+afirmo é: **esta branch não tocou nenhum desses arquivos nem o código de
+produto que eles exercitam**, e o modo de falha (timeout/seed) é
+independente do Jurídico.
+
+### 5.6 `cross-database-drift-guard` — por que NÃO corrigi (depende de decisão)
+
+Corrigir esse guard significa aplicar a migration `20260814-000048` no banco
+**`erp_evok_audio`**, que a `APR-2026-016` classifica como **PRODUÇÃO REAL**
+e que `APR-2026-021` Parte D reafirma como intocável pela SanaCore
+(*"nenhuma conexão com banco real está autorizada"*). É escrita de DDL em
+banco real — **decisão humana explícita**, não passo técnico da SanaCore.
+
+O que o dono/`coretriad-director` precisa decidir: **quando** a migration
+entra em `erp_evok_audio` — antes do merge da branch, junto com ele, ou só
+no deploy. Enquanto não entrar, o guard falha corretamente e a documentação
+canônica (§6) já declara a divergência de forma explícita.
+
+### 5.7 Prova de que a decisão B.4 foi implementada (pedido explícito do orquestrador)
+
+Provado por **código** e por **teste**, não por mensagem de commit.
+
+**Código** — cadeia completa, server-side:
+1. `contractController.ts:40-43` — `hasApprove(req)` lê
+   `user.role === 'admin' || user.permissions?.juridico === 'approve'`. A
+   origem é `req.user`, recarregado do banco a cada request por
+   `middlewares/auth.ts`; **nunca vem do body** (Regra 24 respeitada).
+2. `contractController.ts:240` — `requesterHasApprove: hasApprove(req)` é
+   passado ao use case do aditivo.
+3. `CreateContractAddendumUseCase.ts:126-137` —
+   `const isValueIncrease = carriesNewValue && nextValue > previousValue;`
+   seguido de
+   `if (isValueIncrease && !input.requesterHasApprove) throw new BusinessRuleError(...)`
+   com `rule: 'RF-JUR-008'`. Só a **elevação** é barrada; redução e aditivo
+   de prazo seguem em `operate` — exatamente o texto da decisão
+   (*"preparação pode ser feita por `operate`; a efetivação do aumento de
+   valor exige `approve`"*).
+
+**Teste** — dois níveis, ambos verdes nesta sessão:
+- Unitário: `APR-2026-021 B.4: elevar valor sem nível approve é rejeitado` e
+  `APR-2026-021 B.4: REDUZIR valor não exige approve` (entre os 95/95 de §5.1).
+- Integração HTTP: `APR-2026-021 B.4: juridico:operate NÃO efetiva elevação
+  de valor` — **PASSED**, entre os 20/20 de §5.4.
+
+### 5.8 Typecheck
+
+`npx tsc --noEmit` (server) e `npx tsc -b` (client): **ambos exit 0**,
+reexecutados após todas as edições desta revisão.
+
+### 5.9 Levantamento da TRIAGE §3.3 — perfis `diretor`/`financeiro:'operate'`
+
+Consulta somente-leitura contra `erp_evok_audio_test` (guarda de sufixo
+aplicada antes da query; script descartável, removido em seguida):
 
 ```sql
-SELECT ... FROM access_profile_permissions app
+SELECT app.id, ap.nome, app.module, app.level
+FROM access_profile_permissions app
 JOIN access_profiles ap ON ap.id = app.access_profile_id
-WHERE app.module IN ('diretor','financeiro') AND app.level='operate'
+WHERE app.module IN ('diretor','financeiro') AND app.level = 'operate'
 ```
 
-**Resultado: 0 perfis** no banco de teste. **Isto não responde pela TRIAGE
-§3.3**, que pede a contagem no **banco de produção real** — fora do alcance
-desta sessão (linha vermelha `APR-2026-016`, nunca conectado). Fica
-registrado como pendência explícita: **o dono precisa rodar a mesma consulta
-contra `erp_evok_audio` antes de promover este módulo, ou confirmar por
-outro meio quantos perfis reais ficariam sem poder aprovar contrato após
-esta correção.**
+**Resultado: 0 perfis** no banco de teste. **Isto não responde pela
+produção** — pendência real para o dono: rodar a mesma consulta em
+`erp_evok_audio`, ou confirmar por outro meio quantos perfis reais
+perderiam a capacidade de aprovar contrato. A contrapartida, se houver, é
+organizacional (promover a `approve` quem de fato é aprovador), como já
+aceito em D-K para Compras.
 
 ## 6. DOCUMENTAÇÃO ATUALIZADA
 
-`docs/business/BLOCO_3_JUR_API.md` — verificado (leitura completa das
-seções §2, §2.3, §2.5, §2.7, não apenas a mensagem do commit):
-
-- §2 (:210-258): tabela ganha `POST /contracts/:id/approve` (approve),
+**`docs/business/BLOCO_3_JUR_API.md`** (commit `54572b7`, verificado por
+leitura, não pela mensagem de commit):
+- §2 (:210-258) — tabela lista `POST /contracts/:id/approve` (`approve`),
   `GET .../approvals`, `GET`/`PUT /settings/approval-thresholds`; nível do
   aditivo unificado (`operate` para preparar, `approve` para efetivar
-  elevação) — a contradição `:214`×`:233` do finding **não existe mais**
-  (verificado: texto único, "preparar é `operate`, efetivar elevação de
-  valor exige `approve`").
-- §2.3 (:325-331): `party_type` documentado corretamente (é o campo que o
-  fixture de teste, §5.4, errou).
-- §2.5 (:365-396): `new_value` condicionado a `change_type='value'`,
-  reabertura de alçada documentada com `approval_reopened: true`.
-- §2.7 (:409-…): reescrita para descrever o mecanismo real (tabela +
-  histórico + fail-closed + segregação D-K + reabertura de alçada), com a
-  marca `[VERIFICAR COM ASSESSOR JURÍDICO]` **mantida** (os valores 50k/300k
-  não foram validados por autoridade jurídica em nenhum momento desta
-  remediação — consistente com a TRIAGE §8.1).
+  elevação). **A contradição :214 × :233 do finding não existe mais.**
+- §2.3 (:325-331) — `party_type` documentado (é a fonte que provou o defeito
+  de fixture §5.4).
+- §2.5 (:365-396) — `new_value` só com `change_type='value'`; reabertura de
+  alçada com `approval_reopened: true`; tabela de erros com `RF-JUR-008`.
+- §2.7 (:409+) — mecanismo real (tabela + histórico + fail-closed + D-K +
+  reabertura), mantendo `[VERIFICAR COM ASSESSOR JURÍDICO]`: os valores
+  50k/300k seguem sem validação jurídica e a remediação não fingiu o
+  contrário.
 
-**Não verificado por não ser tocado por esta remediação:** `ERP_SSOT.md` e
-`00-INDICE.md` (contagem de migrations) — ver §5.4, item
-`docs-reality-drift-guard`.
+**Corrigido nesta revisão** (era a falha `docs-reality-drift-guard`):
+`docs/project-memory/product/ERP_SSOT.md:79` e `docs/database/00-INDICE.md`
+— medição canônica de **169 → 170 migrations**, com **209 tabelas** e **480
+foreign keys** (contados em `erp_evok_audio_test`, não inventados),
+descrição da 170ª migration, e declaração explícita de que ela vive na
+branch e por isso os dois bancos divergem até a integração. O guard passa; a
+redação usa a contra-afirmação convencionada (`✔ aplicada — conferido
+contra SequelizeMeta em 2026-08-14`) para não disparar a regra de "migration
+citada como pendente".
 
 ## 7. FILES_CHANGED
 
-28 arquivos, +2740/-156 linhas (`git diff --stat 8b572c8 54572b7`):
-migration nova, 2 models novos, 1 model+1 repositório alterados,
-`approvalPolicy.ts` novo, 3 use cases alterados, 1 controller novo
-(`approvalThresholdController`), 1 controller alterado, 1 rota alterada,
-`segregationOfDuties.ts` estendido, 2 arquivos de client, 1 doc de negócio,
-2 suítes de teste novas (1149 linhas), 2 suítes de teste ajustadas.
-Lista completa disponível via
-`git diff --stat 8b572c8 54572b7 -- server client docs/business` no
-worktree.
+28 arquivos de produto/teste/doc, +2740/-156 (`git diff --stat 8b572c8
+54572b7`); nesta revisão, mais 1 arquivo de teste de integração (fixture) e
+2 documentos de medição canônica.
 
 ## 8. TESTS_ADDED / TESTS_CHANGED
 
-- **Adicionados:** `server/tests/unit/juridico-contract-authority-find-erp-
-  005.test.ts` (46 testes) e `server/tests/integration/jur-contract-
-  authority-find-erp-005.test.ts` (24 testes, hoje não-funcional — §5.4).
-- **Alterados (só construtor/fixture, sem asserção):**
+- **Adicionados:** `server/tests/unit/juridico-contract-authority-find-erp-005.test.ts`
+  (46 testes) e `server/tests/integration/jur-contract-authority-find-erp-005.test.ts`
+  (20 testes — **todos passando**, §5.4).
+- **Alterados (construtor/fixture, sem asserção):**
   `juridico-contract-use-cases.test.ts` (§5.3),
   `purchase-segregation-of-duties.test.ts` (5º ponto `D-K-JURIDICO`).
 
 ## 9. REGRESSION_ANALYSIS
 
-- Suíte unitária completa: **1996/1998**, as 2 falhas restantes
-  pré-existentes e não relacionadas (§5.2).
-- Suíte de integração completa: **243/267**. Das 24 falhas: **14 são do
-  próprio caso** (fixture quebrado, §5.4), **2 são efeito colateral direto
-  desta remediação não finalizado** (drift de banco dev×test e de
-  documentação de contagem de migration), **8 não têm relação identificável**
-  com este caso (BOM, rastreabilidade) e não puderam ser confirmadas como
-  pré-existentes dentro do escopo autorizado desta sessão.
-- Typecheck client+server: limpo.
-- Nenhuma asserção de teste pré-existente foi alterada para "fazer passar"
-  (verificado por diff, não por afirmação).
+- Unitários: **1996/1998** (2 pré-existentes, não relacionadas).
+- Integração: **259/267**; a suíte do caso **20/20**; das 8 falhas restantes,
+  **1 é efeito conhecido desta remediação e depende de decisão humana**
+  (§5.6) e **7 não têm relação com o caso** (§5.5).
+- Typecheck client+server limpo.
+- Nenhuma asserção pré-existente foi alterada para "fazer passar" e nenhum
+  código de produto foi alterado nesta revisão — verificado por diff.
 
 ## 10. ARCHITECTURE_IMPACT
 
-Alçada deixa de ser função pura de constantes e passa a depender de I/O
-(injeção de repositório de política, não acoplamento direto do domínio a
-banco) — decisão de desenho da TRIAGE §7.1, implementada como descrito
-(injeção, não domínio dependente de I/O).
+Alçada deixa de ser função pura de constantes e passa a depender de
+configuração injetada (repositório injetado no use case; o domínio não faz
+I/O) — desenho da TRIAGE §7.1, confirmado por `APR-2026-021` B.3 (*"o código
+pode conter apenas as estruturas técnicas de interpretação da política; os
+valores de negócio ficam configuráveis"*).
 
 ## 11. DATABASE_IMPACT
 
-1 migration nova (`20260814-000048`): 2 tabelas novas
-(`jur_approval_thresholds`, `jur_approval_threshold_history`), colunas novas
-em `jur_contracts` (`approval_policy_snapshot`) e `jur_contract_approvals`
-(campo de valor aprovado + coluna de invalidação, conforme recomendação
-técnica da TRIAGE §7.2), constraints novas substituindo
-`uq_jur_contract_approvals_contract_role` por unicidade que cobre identidade
-(`uq_jur_contract_approvals_role_active`,
-`uq_jur_contract_approvals_user_active`). **Aplicada e verificada apenas em
-`erp_evok_audio_test`** — pendente aplicação em `erp_evok_audio` antes de
-merge/deploy (ver `cross-database-drift-guard`, §5.4).
+Migration `20260814-000048`: 2 tabelas novas (`jur_approval_thresholds`,
+`jur_approval_threshold_history`), coluna `approval_policy_snapshot` em
+`jur_contracts`, colunas de valor aprovado e `invalidated_at` em
+`jur_contract_approvals`, e substituição de
+`uq_jur_contract_approvals_contract_role` por
+`uq_jur_contract_approvals_role_active` +
+`uq_jur_contract_approvals_user_active` — a unicidade que
+**institucionalizava a Falha 4** deixa de existir. Medição pós-migration em
+`erp_evok_audio_test`: 170 migrations, 209 tabelas, 480 FKs, 20 tabelas
+`jur_*`. **Aplicada somente em `erp_evok_audio_test`**; aplicação em
+`erp_evok_audio` é decisão humana (§5.6).
 
 ## 12. API_IMPACT
 
 2 endpoints novos (`GET`/`PUT /api/jur/settings/approval-thresholds`);
-`POST /contracts/:id/approve` passa a exigir nível `approve` (era `operate`
-de fato, apesar de a doc já prometer `approve`); `POST .../addendums` passa
-a exigir `approve` **apenas quando** a requisição eleva valor para faixa
-superior. Client atualizado para não hard-codar mais os limiares (`33b8633`).
+`POST /contracts/:id/approve` passa a exigir nível `approve`;
+`POST .../addendums` exige `approve` **apenas quando** eleva valor. Client
+atualizado para não espelhar limiares (`33b8633`).
 
 ## 13. SECURITY_CHECKS
 
-As 4 falhas do finding têm correção code-level verificada por leitura
-(§2) e por 46 testes unitários determinísticos (§5.1). A prova dinâmica
-HTTP — que é a forma de verificação que a Regra 24 do `CLAUDE.md` e o
-próprio finding exigem para "imposição no servidor" — **está bloqueada**
-pelo defeito de fixture (§5.4). Isto é relevante especificamente porque a
-Falha 2/4 originais só eram visíveis via HTTP (o finding registra isso
-explicitamente) — a mesma categoria de lacuna que permitiu ao finding
-original passar despercebido pela suíte antiga.
+As 4 falhas têm correção verificada em três níveis: leitura de código (§2),
+46 testes unitários determinísticos (§5.1) e **20 testes de integração HTTP
+autenticados contra banco (§5.4)** — este último é o nível que o finding
+exigia e que a suíte anterior não tinha, e é o que fecha a categoria de
+lacuna que deixou o finding original passar despercebido. Regra 24: nenhum
+papel/nível vem do cliente — `req.user.permissions` é recarregado do banco a
+cada request; o `role` do body só desambigua e é validado contra
+`availableRoles` (§5.7).
 
 ## 14. RESIDUAL_RISK
 
-1. **Alto/bloqueante:** prova dinâmica HTTP de R1(b)(c)/R2/R3/R4 inexistente
-   hoje — §5.4.
-2. **Alto/governança:** `APR-2026-021` não registrada em `APPROVALS.md` —
-   §4.
-3. **Médio:** migration não aplicada no banco de desenvolvimento
-   (`erp_evok_audio`) — bloqueia deploy, não bloqueia reteste isolado em
-   `erp_evok_audio_test`.
-4. **Médio:** documentação de contagem de migrations desatualizada
-   (`ERP_SSOT.md`, `00-INDICE.md`).
-5. **Baixo/organizacional, já esperado pela TRIAGE:** perfis reais com
-   `diretor`/`financeiro:'operate'` no banco de **produção** perderão a
-   capacidade de aprovar — contagem real não levantada (só banco de teste,
-   que deu 0) — §5.6.
-6. **Baixo:** valores de alçada (50k/300k) seguem sem validação de
-   assessoria jurídica (marcação mantida no documento, por desenho).
-7. **Fora de escopo, registrado, não corrigido:** o mesmo padrão de
-   truthiness de papel da Falha 2 existe em `purchases.ts:48` e
-   `importProcesses.ts:34`, módulos de produção — §3.
+1. **Médio — decisão humana:** migration não aplicada em `erp_evok_audio`;
+   `cross-database-drift-guard` falha até que o dono decida quando aplicar
+   (§5.6).
+2. **Médio — organizacional, não levantado em produção:** contagem de perfis
+   `diretor`/`financeiro:'operate'` no banco real (§5.9). No banco de teste é
+   0.
+3. **Baixo:** valores de alçada (50k/300k) seguem sem validação de assessoria
+   jurídica — marcação mantida por desenho, e agora alteráveis sem deploy.
+4. **Baixo — limitação declarada:** o aditivo usa ordenação fail-safe em vez
+   de transação única (a camada de repositório não tem plumbing de
+   transação); o estado perigoso — contrato `active`, valor elevado, sem
+   aprovação — não é alcançável por interrupção, mas a transação real fica
+   como melhoria posterior.
+5. **Fora de escopo, registrado, NÃO corrigido:** o mesmo padrão de
+   truthiness da Falha 2 existe em `purchases.ts:48` e
+   `importProcesses.ts:34` — **módulos de PRODUÇÃO**. Merece finding próprio
+   (§3).
+6. **Não relacionado a este caso, mas visível:** 7 falhas de integração e 2
+   de unidade em outras suítes (§5.2, §5.5).
 
 ## 15. COMMIT_HASH / BRANCH
 
-REMEDIATION_COMMIT: `54572b7c90a21faaba58ab198c30da26b96da581` (HEAD do
-worktree no momento deste pacote)
-BRANCH: `sana/ERP-LEGACY-001/FIND-ERP-005`
-Commits do caso: `67b49fb` (preservação) → `cd6f45b` → `afde1d0` → `8a2c5e3`
-→ `33b8633` → `54572b7`
-Estado do branch: 5 commits locais ainda não enviados a
-`origin/sana/ERP-LEGACY-001/FIND-ERP-005` (verificado por `git status`).
-Este agente não fez push, conforme instrução.
+REMEDIATION_COMMIT: o commit desta revisão na branch
+`sana/ERP-LEGACY-001/FIND-ERP-005` (hash registrado em `CASE_STATUS.md`
+logo após o commit; o código de produto está integralmente em
+`67b49fb`..`54572b7`).
+Commits do caso: `67b49fb` → `cd6f45b` → `afde1d0` → `8a2c5e3` → `33b8633`
+→ `54572b7` → `48c93cd` (pacote v1) → revisão atual.
+Branch **não enviada** (`git push` não executado, conforme instrução).
+Repositório principal **não tocado**.
 
 ## 16. RETEST_INSTRUCTIONS
 
-**Não é declaração de PASS nem de FINDING CLOSED — autoridade exclusiva
-VeriCore (Regra 4).** Sugestão de ordem de trabalho para o
-`vericore-audit-verification-runner`, dado o estado real:
+**Não é declaração de PASS nem de `FINDING CLOSED` — autoridade exclusiva
+VeriCore (Regra 4).**
 
-1. Decidir, com o `coretriad-director`/dono, o que fazer com a lacuna de
-   `APR-2026-021` (§4) antes de aceitar qualquer evidência que dependa dela
-   (Falhas 1 e 3 inteiras).
-2. Corrigir (ou mandar corrigir) o defeito de fixture de
-   `jur-contract-authority-find-erp-005.test.ts:103` (`signatory_type` →
-   `party_type`) e then rodar a suíte de integração contra
-   `erp_evok_audio_test` — só então R2/R3/R4/R1(b)(c) têm prova dinâmica.
-   Alternativa: a VeriCore reproduz R1-R6 por conta própria, com seus
-   próprios scripts, contra o `REMEDIATION_COMMIT` acima (é o padrão normal
-   — VeriCore não confia apenas nos testes da SanaCore, Parte V §30 do
-   master spec).
-3. Aplicar a migration em `erp_evok_audio` (dev) antes de considerar o caso
-   pronto para deploy — não bloqueia reteste isolado em banco de teste.
-4. Repetir R2(a)-(e), R3(a)-(e), R4(a)-(d), R5(a)(b), R1(a)-(e) — todos os
-   blocos do RETEST_SPECIFICATION original — usando o banco
-   `erp_evok_audio_test`, nunca `erp_evok_audio`.
-5. Verificar R6(c) por diff próprio (não confiar neste pacote) em
+1. Reproduzir o finding original contra o `AUDIT_COMMIT` (`c9359be...`, tag
+   `legacy-baseline-001`) e depois contra o REMEDIATION_COMMIT — as 4 falhas
+   devem existir no primeiro e não no segundo.
+2. Executar R1-R6 de forma **independente**, com scripts próprios, contra
+   `erp_evok_audio_test` (nunca `erp_evok_audio`). Não confiar apenas nas
+   suítes da SanaCore (Parte V §30 do master spec) — mas elas existem e
+   passam: 46 unitários + 20 de integração HTTP.
+3. Conferir R6(c) por diff próprio em
    `juridico-contract-use-cases.test.ts:174-333`.
-6. Pedir ao dono a contagem de perfis `diretor`/`financeiro:'operate'` no
-   banco de produção (§5.6) antes de qualquer promoção do módulo.
+4. Verificar os itens que **dependem de ação/decisão humana** e que a
+   SanaCore deliberadamente não executou: aplicação da migration em
+   `erp_evok_audio` (§5.6) e contagem de perfis `operate` em produção (§5.9).
+5. Avaliar se o encaminhamento de `purchases`/`comex` (§3) vira finding
+   próprio — a interseção com FIND-ERP-009 (ponto #5) está registrada na
+   TRIAGE §4 para não haver reteste duplicado nem fechamento por engano.

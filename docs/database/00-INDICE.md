@@ -29,11 +29,11 @@ nota no topo desse arquivo).
 >
 > | Métrica | Valor |
 > |---|---|
-> | Migrations aplicadas | **169** |
-> | Tabelas (`information_schema.tables`, schema `public`) | **207** |
-> | Foreign keys (`pg_constraint`, `contype='f'`) | **478** |
+> | Migrations aplicadas | **170** |
+> | Tabelas (`information_schema.tables`, schema `public`) | **209** |
+> | Foreign keys (`pg_constraint`, `contype='f'`) | **480** |
 > | Tabelas `sst_*` | 35 |
-> | Tabelas `jur_*` | 18 |
+> | Tabelas `jur_*` | 20 |
 > | Tabelas `marketing_*` | 6 |
 > | Tabelas `hr_*` | 22 |
 > | Tabelas `facility_*` | 13 |
@@ -45,6 +45,20 @@ nota no topo desse arquivo).
 > `meeting_minutes`, `business_risks`) e 7 foreign keys novas. A 169ª é
 > `20260812-000047-hr-absences-open-unique.cjs` (achado de auditoria de
 > arquitetura — índice único parcial em `hr_absences`, sem tabela/FK nova).
+> A 170ª é
+> `20260814-000048-jur-approval-thresholds-and-authority-find-erp-005.cjs`
+> (remediação SanaCore do `FIND-ERP-005`, caso `ERP-LEGACY-001-CASE-002`),
+> que acrescentou 2 tabelas (`jur_approval_thresholds`,
+> `jur_approval_threshold_history`) e 2 foreign keys novas, além de colunas
+> em `jur_contracts`/`jur_contract_approvals` e da troca da unicidade
+> `uq_jur_contract_approvals_contract_role` por unicidades que cobrem
+> identidade do aprovador.
+>
+> **Medição de 2026-08-14 feita em `erp_evok_audio_test`** (✔ aplicada —
+> conferido contra `SequelizeMeta` em 2026-08-14). A 170ª nasce na branch
+> `sana/ERP-LEGACY-001/FIND-ERP-005`; enquanto essa branch não for
+> integrada, `erp_evok_audio` e `erp_evok_audio_test` **divergem por ela**,
+> e a guarda `cross-database-drift-guard` acusa a diferença corretamente.
 >
 > Os números de "auditoria de origem" abaixo (80 tabelas, 175 FKs, 66
 > migrations) são de 2026-08-06 e ficam **apenas como registro histórico** —

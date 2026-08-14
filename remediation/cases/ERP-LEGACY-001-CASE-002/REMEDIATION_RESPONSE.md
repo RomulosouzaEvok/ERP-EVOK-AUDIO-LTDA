@@ -11,59 +11,80 @@ FINDING_ID: FIND-ERP-005
 PROJECT_ID: ERP-LEGACY-001
 RESPONDIDO_POR: SanaCore (`sanacore-remediation-triage` →
 `sanacore-remediation-engineer` → `sanacore-remediation-evidence`)
-REMEDIATION_COMMIT: `54572b7c90a21faaba58ab198c30da26b96da581`
-BRANCH: `sana/ERP-LEGACY-001/FIND-ERP-005`
-EVIDÊNCIA COMPLETA: `remediation/cases/ERP-LEGACY-001-CASE-002/
-REMEDIATION_EVIDENCE_PACKAGE.md`
+AUTORIZAÇÃO DAS DECISÕES: `APR-2026-021` Parte B itens **3, 4 e 5**,
+reafirmados por `APR-2026-022` (que também fixa o vínculo dos itens 3/4/5 a
+este caso)
+BRANCH: `sana/ERP-LEGACY-001/FIND-ERP-005` (não enviada — sem `push`)
+EVIDÊNCIA COMPLETA: `remediation/cases/ERP-LEGACY-001-CASE-002/REMEDIATION_EVIDENCE_PACKAGE.md`
 
 ## O que a SanaCore fez
 
-Implementou correção para as 4 falhas do finding (thresholds hard-coded,
-aprovação por presença de módulo, aditivo elevando valor sem reabrir alçada,
-`admin` autoaprovando os dois lados), incluindo o agravante estrutural
-(fail-open no gate de alçada). Escreveu 46 testes unitários determinísticos
-e uma suíte de integração HTTP de 24 casos referenciando `FIND-ERP-005` e
-`RF-JUR-003`. Atualizou `docs/business/BLOCO_3_JUR_API.md` para eliminar a
-contradição §214×§233 e descrever o mecanismo real. Detalhe completo com
-citação de arquivo:linha no `REMEDIATION_EVIDENCE_PACKAGE.md`.
+Corrigiu as 4 falhas do finding e o agravante estrutural (fail-open no gate
+de alçada), seguindo item a item as decisões do dono:
+
+| Decisão registrada | Ramo | Entrega |
+|---|---|---|
+| `APR-2026-021` B.3 — alçada = tabela configurável | A1 | `jur_approval_thresholds` + histórico + `approvalPolicy.ts` + 2 endpoints; literais removidos do domínio e do client |
+| `APR-2026-021` B.4 — aditivo que eleva valor exige `approve` | B1 | `CreateContractAddendumUseCase.ts:131`, alimentado por `hasApprove(req)` server-side; `new_value` só com `change_type='value'`; reabertura de alçada com invalidação de aprovações |
+| `APR-2026-021` B.5 — D-K vale para contrato jurídico | C1 | `D-K-JURIDICO` em `shared/domain/segregationOfDuties.ts`; `admin` não isenta; criador não aprova |
+
+Evidência executada, não afirmada: **95/95** testes unitários no alvo,
+**1996/1998** na suíte unitária completa (2 pré-existentes não
+relacionadas), **20/20** na suíte de integração HTTP do caso contra
+`erp_evok_audio_test`, e typecheck limpo em client e server.
+
+## Correção de rota desta revisão (transparência)
+
+A **v1** deste pacote declarou duas lacunas materiais. Uma era falsa:
+
+- **`APR-2026-021` "não registrada" — ALARME FALSO, retratado.** Eu havia
+  lido `coretriad/governance/APPROVALS.md` **do worktree**, que está
+  congelado no corte da branch. No repositório principal as aprovações 021,
+  022 e 023 existem. Registrei a armadilha metodológica no §0.1 do pacote de
+  evidência: **o `coretriad/` de um worktree SanaCore não é fonte de verdade
+  sobre aprovações** — consultar sempre o repositório principal.
+- **Suíte de integração inoperante — REAL, e agora corrigida.** Eram 3
+  defeitos de *fixture* (`signatory_type` em vez de `party_type`;
+  `document_url`/`is_signed` em vez de `file_url`/`is_signed_version`;
+  `activate` sem `responsible_user_id`, que por desenho não é persistido na
+  criação). Nenhuma linha de código de produto foi alterada para fazer teste
+  passar. Resultado: de 14 falhas para **20/20 passando**, e R1(b)(c),
+  R2(a)-(d), R3(a)(b)(c)(e) e R4(a)-(d) ganham a prova dinâmica HTTP que o
+  finding exigia.
 
 ## O que a SanaCore NÃO fez e não pode fazer
 
-- **Não declara `RETEST_PASSED` nem `FINDING CLOSED`** — autoridade exclusiva
-  VeriCore (Regra 4).
-- **Não decidiu** se a alçada vem de tabela configurável ou de constante, se
-  o aditivo exige `approve`, ou se a segregação D-K se estende ao criador do
-  contrato — essas 3 decisões (TRIAGE §8) foram **implementadas como se
-  tivessem sido tomadas** (Ramo A1 / B1 / C1), mas a autorização citada
-  (`APR-2026-021`) **não está registrada** em `coretriad/governance/
-  APPROVALS.md` no momento deste pacote. Ver §4 do `REMEDIATION_EVIDENCE_
-  PACKAGE.md` — é o item que mais precisa de atenção do `coretriad-director`
-  antes de qualquer reteste ser levado a sério.
-- **Não corrigiu** o defeito de fixture que impede a suíte de integração
-  HTTP de rodar de verdade (`signatory_type` → deveria ser `party_type` em
-  `jur-contract-authority-find-erp-005.test.ts:103`) — está fora do escopo
-  de escrita deste agente (empacotador de evidência, não engenheiro).
-- **Não aplicou** a migration no banco de desenvolvimento/produção
-  (`erp_evok_audio`) — só em `erp_evok_audio_test`, por restrição de
-  segurança (`APR-2026-016`).
-- **Não confirmou** quantos perfis reais de produção têm `diretor`/
-  `financeiro:'operate'` (pedido explícito da TRIAGE §3.3) — só consultou o
-  banco de teste (0 perfis lá, o que não responde pela produção).
+- **Não declara `RETEST_PASSED` nem `FINDING CLOSED`** — autoridade
+  exclusiva VeriCore (Regra 4). Também não declara `RISK_ACCEPTED`.
+- **Não aplicou a migration `20260814-000048` em `erp_evok_audio`** — é DDL
+  em banco classificado PRODUÇÃO REAL (`APR-2026-016`, reafirmado em
+  `APR-2026-021` Parte D). Por isso `cross-database-drift-guard` continua
+  falhando, **corretamente**. **Depende de decisão humana:** quando aplicar
+  — antes do merge, junto com ele, ou só no deploy.
+- **Não levantou a contagem de perfis `diretor`/`financeiro:'operate'` em
+  produção** (TRIAGE §3.3). No banco de teste é 0; a consulta em
+  `erp_evok_audio` cabe ao dono.
+- **Não ampliou escopo** para `purchases`/`comex`, que têm o mesmo padrão de
+  truthiness da Falha 2 e são **módulos de PRODUÇÃO** — registrado para
+  virar finding próprio, não silenciado.
+- **Não corrigiu** as 7 falhas de integração alheias ao caso
+  (`bom-tipo-nao-produtivo`, `traceability-and-audit-log-regression`) nem as
+  2 unitárias pré-existentes: nenhum desses arquivos, nem o código de
+  produto que eles exercitam, foi tocado por esta branch.
 
-## Pedido explícito à VeriCore / coretriad-director
+## Pedido ao coretriad-director / VeriCore
 
-1. Resolver a lacuna de `APR-2026-021` antes de aceitar a evidência das
-   Falhas 1 e 3 como coberta por decisão humana válida.
-2. Reproduzir R1-R6 de forma independente (não confiar nos 46 testes
-   unitários da SanaCore para R2/R3/R4 — o próprio finding diz que essas
-   falhas são invisíveis a teste sem HTTP real).
-3. Decidir se o defeito de fixture volta para a SanaCore corrigir antes do
-   reteste, ou se a VeriCore prefere escrever sua própria prova dinâmica.
+1. Decidir **quando** a migration entra em `erp_evok_audio` (único item
+   deste caso que depende de ação humana para o guard voltar a verde).
+2. Pedir ao dono a contagem de perfis `operate` em produção antes de
+   promover o módulo.
+3. Reteste independente de R1-R6 pela VeriCore contra o REMEDIATION_COMMIT,
+   sem confiar apenas nas suítes da SanaCore — que existem, são versionadas
+   e passam.
+4. Avaliar abertura de finding próprio para `purchases`/`comex`.
 
 ## Status do caso (não é o status do finding)
 
-`REMEDIATION_COMPLETE` no sentido de "código, testes e documentação
-entregues, worktree pronta para inspeção" — **com as ressalvas acima**, que
-tornam este pacote `READY_FOR_RETEST COM LACUNAS DECLARADAS`, não um "PASS"
-antecipado. Ver `CASE_STATUS.md` neste mesmo diretório para o registro
-formal de estado.
+`REMEDIATION_COMPLETE` e `READY_FOR_RETEST`. As lacunas remanescentes são de
+**ação humana** (migration em banco real, contagem em produção), não de
+implementação nem de evidência. Ver `CASE_STATUS.md`.
