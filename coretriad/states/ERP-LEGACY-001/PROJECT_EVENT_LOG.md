@@ -347,3 +347,69 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
   antes de escrever qualquer arquivo — **nenhum trabalho perdido, nenhum
   artefato parcial em disco**; ambas redespachadas do zero. O trabalho
   concluído foi commitado antes (`de4dac1`) para não depender da sessão.
+
+## 2026-08-14 — Passo 31, fieldwork: ondas W0, W1 e W2 concluídas
+
+- **W0 concluída** — `T-00_REANCHORING_REPORT.md` (v3). O argumento de
+  deslocamento de linha oferecido na v1 como prova de leitura pós-`3dee99f`
+  foi **REFUTADO** e permanece registrado como refutado, não removido: o
+  blob `b471e49b…` é **idêntico** nos dois commits. Consequências
+  registradas na própria trilha — `IN-06` (acusação contra FIND-ERP-005)
+  RETIRADA, `IN-01` rebaixado a indício não provado, e `IN-08` criado como
+  **regra vinculante da run**: atribuir a origem de um trecho de código a um
+  commit exige `git log`/`git show`; ler o conteúdo do arquivo não
+  estabelece quando aquilo entrou.
+- **W1 concluída** (commit `dcc6a35`) — T-01 a T-05 persistidas.
+- **CORREÇÃO DE CONTAGEM (Regra 21 — divergência corrigindo o próprio
+  registro).** A mensagem do commit `dcc6a35` declara *"1 CRITICAL, 5 HIGH"*.
+  **Está errada.** A recontagem por leitura dos cinco relatórios persistidos
+  dá **1 CRITICAL e 13 HIGH**:
+
+  | Trilha | CRITICAL | HIGH | Âncora da contagem |
+  |---|---|---|---|
+  | T-01 cadastro | 0 | 2 | `T-01_TIER1_CADASTRO.md:36` |
+  | T-02 identidade | 1 | 2 | `T-02_TIER1_IDENTIDADE_REPORT.md:206` |
+  | T-03 audit log | 0 | 3 | `T-03_AUDIT_LOG_REPORT.md:14` |
+  | T-04 authZ transversal | 0 | 0 | `T-04_TRANSVERSAL_AUTHZ.md:144` |
+  | T-05 fluxo item→produto | 0 | 6 | `T-05_FLUXO_ITEM_PRODUTO_RECEBIMENTO.md:32` |
+  | **Total W1** | **1** | **13** | — |
+
+  O erro foi do orquestrador na redação da mensagem de commit, não das
+  trilhas — os relatórios sempre trouxeram os números certos. A mensagem de
+  commit é imutável e **não é reescrita**; esta entrada é a correção
+  oficial. O número que vale para a consolidação (T-26) é **1 CRITICAL +
+  13 HIGH** na W1. Nenhum deles está `CONFIRMED`: todos seguem `PROPOSED` ao
+  `vericore-finding-validator` (Regra 22).
+- **W2 concluída** (commits `a7eefb4` e `8711a21`) — seis trilhas: T-06
+  estoque/idempotência, T-07 financeiro, T-09 authZ aplicada e segregação,
+  T-10 suprimentos e vendas, T-11 produção e MRP, T-12 pessoas e compliance.
+  Os cinco relatórios pendentes foram persistidos **sem alteração de
+  conteúdo** — auditores VeriCore são read-only por desenho e não escrevem
+  em `audit/`; a única transformação aplicada foi promoção de cabeçalho a H1
+  e desescape de entidades HTML, declarada em cada arquivo.
+- **Refutações produzidas pela própria W2, contra artefatos desta run** (o
+  resultado que justifica a auditoria existir depois do discovery):
+  - **T-11 refutou premissa do passo 30** — desde G1 o
+    `SequelizeMrpRepository` delega ao `BomStructureProjection`, logo os dois
+    motores de BOM leem a mesma tabela. O defeito real é a projeção não
+    carregar `is_phantom`.
+  - **T-06 refutou a correção óbvia de FIND-ERP-001** — UNIQUE nos campos de
+    referência seria **inócuo**: os campos são descartados, todas as linhas
+    colidem em `('adjustment', NULL)` e NULL não colide em Postgres.
+  - **T-09 refutou o inventário de FIND-ERP-009** — encontrou um **5º** ponto
+    de segregação (`ConfirmDeadlineUseCase.ts:36-41`, BR-JUR-013) e uma **5ª**
+    falha em FIND-ERP-005 (aprovação de contrato sem gate de status).
+  - **T-12 resolveu o item 3 de FIND-ERP-007** — o contrato de API atribui
+    **dois códigos de status diferentes à mesma regra** em dois endpoints:
+    é requisito ambíguo, não defeito de mapeamento.
+- **Sub-entrega declarada, não silenciada** — T-12 declarou-se PARCIAL
+  (`RES-T12-01`): 108 dos 132 endpoints não alcançaram profundidade
+  exaustiva em D3/D4. Registro explícito vale mais que cobertura alegada.
+- **Segunda leva da W2 despachada em paralelo** (4 trilhas simultâneas,
+  conforme a Parallelism Policy e a autorização do dono): T-08 fiscal, T-13
+  dados e schema, T-14 revalidação das 165 regras de negócio, T-15
+  requisitos/UC/rastreabilidade. T-15 inicia em paralelo e **fecha depois**
+  de T-14, por dependência de conteúdo declarada no plano.
+- **Posição do fieldwork:** 11 de 27 trilhas concluídas. Nenhum finding
+  `CONFIRMED`. Nenhum `AUDIT_PASSED`. A validação adversarial (T-25) e a
+  consolidação (T-26) seguem à frente.
