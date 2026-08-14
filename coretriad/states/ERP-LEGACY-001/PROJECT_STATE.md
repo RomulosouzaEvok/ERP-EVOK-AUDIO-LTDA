@@ -8,10 +8,10 @@
 | Programa | `LEGACY_RECOVERY_AND_MODERNIZATION` |
 | Data de registro | 2026-08-13 |
 | Estado atual | `DISCOVERY` |
-| Situação do ciclo | Passos 21-24 CONCLUÍDOS — **passos 25-30 AUTORIZADOS** (`APR-2026-017`) — **passo 25 CONCLUÍDO** (`DOMAIN_MAP.md`) — **passo 26 CONCLUÍDO** (6 clusters de domínio auditados, ~130 regras de negócio candidatas recuperadas do código; ver seção "Passo 26" abaixo) — **passo 27 (requisitos recuperados) CONCLUÍDO** (`REQUIREMENTS_BASELINE.md` — 89 requisitos: 21 CONFIRMED, 24 CONFLICTING, 38 INFERRED/fantasma, 6 OBSOLETE_CANDIDATE) — **passo 28 (casos de uso recuperados) é o próximo**. A validação adversarial independente dos cinco findings `FIND-ERP-005`-`009` está **CONCLUÍDA** (todos CONFIRMED; `FIND-ERP-007` **rebaixado de HIGH a MEDIUM**, com item 3 em `NEEDS_MORE_EVIDENCE`, e por isso **não segue à SanaCore**). **Sete** achados foram promovidos a **findings formais preliminares**, fora da sequência do passo 31, por autorização humana explícita (`APR-2026-017` para 2; `APR-2026-018` para 5) — ver seção "Findings preliminares" abaixo. **PARE incondicional agora reside ao fim do passo 30** (skill `coretriad-legacy-discovery`); o passo 31 (auditoria 360°) exige novo gate humano. |
+| Situação do ciclo | Passos 21-24 CONCLUÍDOS — passos 25-30 AUTORIZADOS (`APR-2026-017`) — **passos 25, 26, 27, 28, 29 e 30 CONCLUÍDOS** (ver tabela "Progresso dos passos"). **O passo 30 encerrou a fase de discovery em 2026-08-14**: 9 arquivos de teste de caracterização, 66/66 verdes contra banco efêmero (`CHARACTERIZATION_TESTS.md`). A validação adversarial independente dos cinco findings `FIND-ERP-005`-`009` está **CONCLUÍDA** (todos CONFIRMED; `FIND-ERP-007` **rebaixado de HIGH a MEDIUM**, com item 3 em `NEEDS_MORE_EVIDENCE`, e por isso **não segue à SanaCore**). **Sete** achados foram promovidos a **findings formais preliminares**, fora da sequência do passo 31, por autorização humana explícita (`APR-2026-017` para 2; `APR-2026-018` para 5) — ver seção "Findings preliminares" abaixo. **PARE INCONDICIONAL EM VIGOR** (skill `coretriad-legacy-discovery` ENCERRADA ao fim do passo 30); o passo 31 (auditoria 360°) exige novo gate humano explícito e registrado. |
 | Status de produção | **PARCIAL — classificação final resolvida por `APR-2026-016`** — ver seção "Status de produção" abaixo |
 | Baseline imutável | tag `legacy-baseline-001` → commit `c9359be399c45191fe90e8e9707803125a5ba91d` (Regras 12 e 13 do `CLAUDE.md`; ver seção "Baseline imutável" abaixo) |
-| HEAD do repositório nesta sessão | `1979beb1fd0edc167f5d6460dec68d674ce4772c` (`1979beb`) — **verificado por leitura direta de `.git/refs/heads/main` nesta sessão**, não por contexto injetado. Ver seção "Incidentes de processo", item 3. |
+| HEAD do repositório nesta sessão | `8cc650a` (pré-commit do passo 30) — **verificado por `git rev-parse` nesta sessão (2026-08-14)**, não por contexto injetado. Ver seção "Incidentes de processo", item 3. |
 | Aprovação humana de abertura | `APR-2026-015` em `coretriad/governance/APPROVALS.md` — **limitada aos passos 21-24** |
 | Aprovação humana da fase atual | `APR-2026-017` (passos 25-30 + promoção de `FIND-ERP-001`/`FIND-ERP-002`) e `APR-2026-018` (promoção de `FIND-ERP-005` a `FIND-ERP-009`), ambas em `coretriad/governance/APPROVALS.md`. **A pendência de governança antes registrada aqui (Regra 17 — autorização sem entrada numerada) está RESOLVIDA:** `APR-2026-017` foi criada e este campo foi corrigido; ver "Notas de governança". |
 | Skill que rege o programa | Passos 21-24: `.claude/skills/coretriad-onboard/SKILL.md` (**ENCERRADA** ao final do passo 24). Passos 25-30: `.claude/skills/coretriad-legacy-discovery/SKILL.md` (**criada em 2026-08-13** especificamente para esta fase, com **PARE incondicional ao fim do passo 30**). |
@@ -348,8 +348,8 @@ inferência, nem por analogia: exige novo gate humano explícito e registrado.
 | 27 | Requisitos recuperados | **CONCLUÍDO** | `docs/coretriad/projects/ERP-LEGACY-001/discovery/REQUIREMENTS_BASELINE.md` |
 | 28 | Casos de uso recuperados | **CONCLUÍDO** | 6 × `USE_CASES_RECOVERED_*.md` (~200 UCs) |
 | 29 | Matriz de rastreabilidade do legado | **CONCLUÍDO** — nasceu quebrada, como previsto (0 cadeias completas canônicas) | 6 × `LEGACY_TRACEABILITY_MATRIX_*.md` + `LEGACY_TRACEABILITY_MATRIX.md` (consolidação) |
-| 30 | Testes de caracterização | **PRÓXIMO** — não iniciado; trava dura `APR-2026-016` (banco efêmero, nunca o real) | — |
-| 31 | Auditoria 360° | **BLOQUEADO** — PARE incondicional ao fim do passo 30; exige novo gate humano | — |
+| 30 | Testes de caracterização | **CONCLUÍDO** (2026-08-14) — 9 arquivos, 66/66 verdes contra `erp_evok_audio_test`; trava `APR-2026-016` respeitada | `CHARACTERIZATION_TESTS.md` + `server/tests/characterization/` |
+| 31 | Auditoria 360° | **BLOQUEADO — PARE INCONDICIONAL EM VIGOR**; exige novo gate humano explícito e registrado | — |
 
 ## Passo 26 — Regras de negócio descobertas (execução e observações)
 
@@ -696,12 +696,18 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
   `effectiveness_result` inescrevível, permissão `V` inexistente, CNAB órfão,
   divergência MRP × OP na explosão de BOM) **seguem o fluxo normal até o
   passo 31** e **não podem ser promovidos por analogia**.
-- **Próxima ação prevista:** passo 30 (testes de caracterização), sob a skill
-  `coretriad-legacy-discovery`, com trava dura de `APR-2026-016` (banco efêmero,
-  nunca o real). **Ao fim do passo 30 o programa PARA incondicionalmente** para
-  novo gate humano antes do passo 31. (Passos 28 e 29 concluídos — ver tabela e
-  as seções abaixo; a matriz de rastreabilidade nasceu quebrada como previsto,
-  0 cadeias completas canônicas nos 6 clusters — ver `LEGACY_TRACEABILITY_MATRIX.md`.)
+- **Passo 30 CONCLUÍDO (2026-08-14) — a fase de discovery (passos 25-30)
+  terminou e a skill `coretriad-legacy-discovery` está ENCERRADA.** Execução:
+  3 trilhas OpusCore de teste + 1 de infraestrutura; 9 arquivos em
+  `server/tests/characterization/`; 66/66 verdes contra `erp_evok_audio_test`
+  (guard do runner recusa banco sem sufixo de teste — `APR-2026-016`
+  respeitada; o banco real não recebeu conexão). Consolidação:
+  `docs/coretriad/projects/ERP-LEGACY-001/discovery/CHARACTERIZATION_TESTS.md`.
+  A 1ª execução refutou empiricamente uma premissa de leitura estática
+  (cancelamento de NF-e reverte `invoiced → confirmed` desde a correção D-M) —
+  divergência registrada no §5 do artefato, corrigida no teste, nunca em
+  `src/`. **Nenhuma ação seguinte é convocada por esta skill: o passo 31
+  exige novo gate humano explícito e registrado.**
 - **O risco conhecido do passo 29 se confirmou:** a matriz nasceu quebrada na
   origem (ausência de BR-ID canônico e de OWNER em ~167 regras; 90 RFs sem AC/TC).
   Como resolver isso é **decisão do dono**, não antecipada pelo director — segue

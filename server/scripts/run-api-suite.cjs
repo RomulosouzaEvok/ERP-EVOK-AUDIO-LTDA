@@ -484,7 +484,7 @@ async function ensureFixtures() {
 /**
  * Roda uma suite Jest contra a API ja no ar.
  *
- * @param {string} suiteName - Pasta sob `tests/` (`integration` | `edge`).
+ * @param {string} suiteName - Pasta sob `tests/` (`integration` | `edge` | `characterization`).
  * @param {NodeJS.ProcessEnv} env - Ambiente com os tokens/fixtures exportados.
  * @param {string} [filter] - Regex opcional de caminho (`process.argv[3]`) para
  *   rodar so alguns arquivos durante depuracao. Com filtro, a checagem de
@@ -599,6 +599,13 @@ async function main() {
       await runJestSuite('integration', testEnv, filter);
     } else if (suite === 'edge') {
       await runJestSuite('edge', testEnv, filter);
+    } else if (suite === 'characterization') {
+      // Testes de caracterizacao do legado (ERP-LEGACY-001, passo 30):
+      // documentam o comportamento ATUAL da API, certo ou errado. Rodam
+      // apenas sob demanda (`npm run test:characterization`) — ficam FORA
+      // do default `api` de proposito, para nao mudar o escopo do CI
+      // existente.
+      await runJestSuite('characterization', testEnv, filter);
     } else {
       await runJestSuite('integration', testEnv, filter);
       await runJestSuite('edge', testEnv, filter);

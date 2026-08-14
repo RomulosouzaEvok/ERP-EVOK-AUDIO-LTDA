@@ -17,6 +17,7 @@
     "test:integration": "node scripts/run-api-suite.cjs integration",
     "test:integration:skipped": "jest --runInBand tests/integration",
     "test:edge": "jest --runInBand tests/edge",
+    "test:characterization": "node scripts/run-api-suite.cjs characterization",
     "test:coverage": "jest --coverage",
     "test:unit:ci": "jest --runInBand tests/unit --ci --json --outputFile=tmp/jest-unit.json",
     "test:unit:strict": "npm run test:unit:ci && node scripts/assert-jest-no-skips.cjs tmp/jest-unit.json",

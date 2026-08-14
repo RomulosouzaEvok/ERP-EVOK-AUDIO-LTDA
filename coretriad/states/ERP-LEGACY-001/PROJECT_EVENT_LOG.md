@@ -230,3 +230,42 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
 - **Paralelismo aplicado** conforme diretiva do dono: até 6 trilhas read-only concorrentes com write-ownership separado (um arquivo de saída por cluster), respeitando §11 do master spec (nunca sobrescrever silenciosamente). Reportado ao dono quantas rodavam a cada momento.
 - Registro por persistência-pelo-orquestrador (agentes VeriCore sem Write fora de `audit/`). Nenhum teste/script/banco executado. Nenhum finding promovido; candidatos de rastreabilidade seguem ao passo 31.
 - **Próximo:** passo 30 (testes de caracterização, banco efêmero). PARE incondicional ao fim do passo 30.
+
+## 2026-08-14 — Passo 30 concluído: testes de caracterização (PARE incondicional em vigor)
+
+- **Passo 30 (testes de caracterização) CONCLUÍDO** — 3 trilhas OpusCore (uma
+  por cluster priorizado: comercial-financeiro, qualidade-estoque,
+  planejamento-producao) + 1 trilha de infraestrutura de suíte. **9 arquivos
+  novos** em `server/tests/characterization/`, **66 testes, 66 verdes** contra
+  o banco efêmero `erp_evok_audio_test` (trava dura de `APR-2026-016`
+  respeitada — o guard do runner recusa `DB_NAME` sem sufixo de teste; o banco
+  real não recebeu conexão). Artefato consolidado:
+  `docs/coretriad/projects/ERP-LEGACY-001/discovery/CHARACTERIZATION_TESTS.md`.
+- **Escopo congelado:** matriz 6×6 da OP; divergência de explosão de BOM
+  MRP×OP; lote mínimo × estoque de segurança na mesma coluna; pagamento
+  parcial repetido e duplicação de lançamento de estoque (FIND-ERP-001 grupo
+  B); desconto perdido pedido→NF-e→AR (BR-COM-010); tributos vigentes
+  ICMS/IPI (BR-FIS-001/003); scan mobile furando quarentena (BR-QE-011);
+  máquina de estados da venda pós-cancelamento de NF-e.
+- **A 1ª execução refutou uma premissa de leitura estática** (mecanismo do
+  passo funcionando): cancelar NF-e autorizada REVERTE a venda
+  `invoiced → confirmed` (correção D-M, `CancelSaleNfeUseCase.ts:203,221-223`)
+  — a guarda dedicada de `nfe_status` no embarque é inalcançável pelo caminho
+  público, e JSDoc de produção + BRC L-3 + matriz do cluster herdam a premissa
+  velha. Ajuste feito NO TESTE (congelar o real), nunca em `src/`. Divergência
+  registrada no artefato §5; segue ao passo 31 como observação (Regra 22 — sem
+  promoção por analogia).
+- Duas divergências adicionais reveladas: `reference_type`/`reference_id`
+  descartados silenciosamente na rota manual de movimentos; sub-relato de
+  cobertura reconfirmado (cenários unit de `shipped` já cobertos em arquivo
+  com nome fora do padrão BR/UC). Ambas no §5 do artefato, não promovidas.
+- Mudanças de código restritas a: 9 testes novos, branch `characterization` no
+  runner (fora do default `api` — CI intocado), script
+  `test:characterization` no `package.json`. Nenhum arquivo de `server/src/**`,
+  migration, seed ou teste existente alterado. Regra 1 do programa respeitada
+  na única exceção parcial que o passo 30 admite.
+- **SKILL `coretriad-legacy-discovery` ENCERRADA — PARE INCONDICIONAL EM
+  VIGOR.** O passo 31 (auditoria 360°) exige novo gate humano explícito e
+  registrado. Pendências do dono (não antecipadas): encaminhamento dos 7
+  findings à SanaCore; esquema de BR-ID canônico + OWNER; decisões abertas dos
+  passos 26-29.
