@@ -14,10 +14,14 @@ import type { ItemResponse, ListResponse } from './types';
  * CORREÇÃO 2026-08-08 (backend commit `97628ae`): adiciona os 2 clusters que
  * faltavam — Atos Societários (`corporate-acts`, RF-JUR-030, CRUD completo)
  * e alçada de aprovação de contrato por valor (RF-JUR-003,
- * `POST /contracts/:id/approve`). Ver `server/src/modules/juridico/domain/constants.ts`
- * para os thresholds oficiais (espelhados abaixo só para exibição —
- * `requiredApproverRoles` no client NUNCA decide autorização, apenas ajuda a
- * montar a UI; a autorização real é sempre do backend).
+ * `POST /contracts/:id/approve`).
+ *
+ * CORREÇÃO 2026-08-14 (remediação de `FIND-ERP-005`, `APR-2026-021` B.3): os
+ * limiares de alçada deixaram de existir no client. Eram espelho de dois
+ * literais do servidor que, por sua vez, deixaram de existir — a alçada agora
+ * é configuração de banco (`jur_approval_thresholds`), consultada em runtime.
+ * A UI usa o `required_roles` devolvido por `GET /contracts/:id/approvals`. A
+ * autorização real sempre foi, e continua sendo, do backend.
  *
  * Nota de tipos importante: como o backend deste bloco NÃO usa um mapper de
  * DTO na resposta (os controllers devolvem a instância Sequelize crua), os
@@ -233,25 +237,24 @@ export async function activateContract(id: number, responsibleUserId?: number) {
 
 export type ContractApproverRole = 'diretor' | 'financeiro';
 
-/** Espelha `server/src/modules/juridico/domain/constants.ts` — só para montar a UI, NUNCA usado para decidir autorização (isso é sempre do backend/RBAC). */
-export const JUR_APPROVAL_THRESHOLD_DIRECTOR = 50000;
-/** Espelha `server/src/modules/juridico/domain/constants.ts` — só para montar a UI, NUNCA usado para decidir autorização (isso é sempre do backend/RBAC). */
-export const JUR_APPROVAL_THRESHOLD_FINANCE = 300000;
-
 /**
- * Resolve (client-side, só para exibição) quais papéis de aprovador o valor
- * do contrato exige, espelhando `requiredApproverRoles` do backend
- * (`server/src/modules/juridico/domain/constants.ts`). Usado para desenhar
- * a seção "Alçada de aprovação" antes de qualquer tentativa de ativação —
- * a situação real (quem já aprovou, o que falta) vem de
- * {@link getContractApprovals}, que é a fonte de verdade.
+ * ⚠️ Os limiares de alçada NÃO são mais espelhados no client
+ * (FIND-ERP-005 / Falha 1, remediação de 2026-08-14).
+ *
+ * Havia aqui `JUR_APPROVAL_THRESHOLD_DIRECTOR = 50000`,
+ * `JUR_APPROVAL_THRESHOLD_FINANCE = 300000` e uma cópia de
+ * `requiredApproverRoles`. Eram uma **terceira** fonte da mesma regra (código
+ * do servidor, contrato de API e client), e a decisão do dono
+ * (`APR-2026-021` Parte B decisão 3) tornou a alçada configurável em banco:
+ * qualquer valor fixo no client passaria a **mentir** no instante seguinte a
+ * uma alteração da política, e a mesma decisão exige explicitamente
+ * *"nenhuma autorização baseada apenas no frontend"*.
+ *
+ * A fonte única para a UI é `GET /api/jur/contracts/:id/approvals`
+ * ({@link getContractApprovals}), que devolve `required_roles` já resolvidos
+ * pela política vigente no servidor. Enquanto a query não responde, a UI não
+ * desenha a seção — mostrar uma alçada adivinhada é pior do que não mostrar.
  */
-export function requiredApproverRoles(value: string | number | null | undefined): ContractApproverRole[] {
-  const numericValue = value === null || value === undefined || value === '' ? 0 : Number(value);
-  if (Number.isNaN(numericValue) || numericValue <= JUR_APPROVAL_THRESHOLD_DIRECTOR) return [];
-  if (numericValue <= JUR_APPROVAL_THRESHOLD_FINANCE) return ['diretor'];
-  return ['diretor', 'financeiro'];
-}
 
 export interface ContractApproval {
   id: number;

@@ -382,9 +382,14 @@ function ContractDetailDialog({ contractId, onClose }: { contractId: number | nu
     'Não foi possível adicionar o signatário',
   );
 
-  // Enquanto `GET /approvals` não respondeu, cai no cálculo client-side dos
-  // papéis exigidos (só desenha a seção; o estado de cada papel vem da query).
-  const requiredApproverRoles = approvalStatus?.required_roles ?? (contract ? jurApi.requiredApproverRoles(contract.value) : []);
+  // Fonte ÚNICA dos papéis exigidos: o servidor, que consulta a política
+  // configurável de alçada (`jur_approval_thresholds`). O cálculo
+  // client-side de fallback foi removido na remediação de FIND-ERP-005 —
+  // com a alçada configurável, um espelho no front vira mentira assim que a
+  // política muda (APR-2026-021 B.3: nenhuma autorização baseada apenas no
+  // frontend). Enquanto `GET /approvals` não responde, a seção não é
+  // desenhada.
+  const requiredApproverRoles = approvalStatus?.required_roles ?? [];
   const approvedRoles = new Set(approvalStatus?.approvals.map((approval) => approval.approver_role) ?? []);
   const canApproveRole = (role: jurApi.ContractApproverRole) => hasModuleAccess(role === 'diretor' ? 'diretor' : 'financeiro');
 
