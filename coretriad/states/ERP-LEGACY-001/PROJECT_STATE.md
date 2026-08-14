@@ -346,9 +346,9 @@ inferência, nem por analogia: exige novo gate humano explícito e registrado.
 | 25 | Domínios descobertos | **CONCLUÍDO** | `docs/coretriad/projects/ERP-LEGACY-001/discovery/DOMAIN_MAP.md` |
 | 26 | Regras de negócio descobertas (`DISCOVERED_BUSINESS_BEHAVIOR`) | **CONCLUÍDO** | 6 × `docs/coretriad/projects/ERP-LEGACY-001/discovery/BUSINESS_RULE_CANDIDATES_*.md` |
 | 27 | Requisitos recuperados | **CONCLUÍDO** | `docs/coretriad/projects/ERP-LEGACY-001/discovery/REQUIREMENTS_BASELINE.md` |
-| 28 | Casos de uso recuperados | **PRÓXIMO** — não iniciado | — |
-| 29 | Matriz de rastreabilidade do legado | Não iniciado — **nasce com risco conhecido**, ver "Risco conhecido do passo 29" | — |
-| 30 | Testes de caracterização | Não iniciado | — |
+| 28 | Casos de uso recuperados | **CONCLUÍDO** | 6 × `USE_CASES_RECOVERED_*.md` (~200 UCs) |
+| 29 | Matriz de rastreabilidade do legado | **CONCLUÍDO** — nasceu quebrada, como previsto (0 cadeias completas canônicas) | 6 × `LEGACY_TRACEABILITY_MATRIX_*.md` + `LEGACY_TRACEABILITY_MATRIX.md` (consolidação) |
+| 30 | Testes de caracterização | **PRÓXIMO** — não iniciado; trava dura `APR-2026-016` (banco efêmero, nunca o real) | — |
 | 31 | Auditoria 360° | **BLOQUEADO** — PARE incondicional ao fim do passo 30; exige novo gate humano | — |
 
 ## Passo 26 — Regras de negócio descobertas (execução e observações)
@@ -696,9 +696,16 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
   `effectiveness_result` inescrevível, permissão `V` inexistente, CNAB órfão,
   divergência MRP × OP na explosão de BOM) **seguem o fluxo normal até o
   passo 31** e **não podem ser promovidos por analogia**.
-- **Próxima ação prevista:** passo 28 (casos de uso recuperados), sob a skill
-  `coretriad-legacy-discovery`, seguindo até o passo 30. (Passo 27 concluído —
-  `REQUIREMENTS_BASELINE.md`; validação dos 5 findings concluída — ver tabela.) **Ao fim do passo 30
+- **Próxima ação prevista:** passo 30 (testes de caracterização), sob a skill
+  `coretriad-legacy-discovery`, com trava dura de `APR-2026-016` (banco efêmero,
+  nunca o real). **Ao fim do passo 30 o programa PARA incondicionalmente** para
+  novo gate humano antes do passo 31. (Passos 28 e 29 concluídos — ver tabela e
+  as seções abaixo; a matriz de rastreabilidade nasceu quebrada como previsto,
+  0 cadeias completas canônicas nos 6 clusters — ver `LEGACY_TRACEABILITY_MATRIX.md`.)
+- **O risco conhecido do passo 29 se confirmou:** a matriz nasceu quebrada na
+  origem (ausência de BR-ID canônico e de OWNER em ~167 regras; 90 RFs sem AC/TC).
+  Como resolver isso é **decisão do dono**, não antecipada pelo director — segue
+  pendente junto do encaminhamento dos findings à SanaCore. **Ao fim do passo 30
   o programa para incondicionalmente**; o passo 31 exige novo gate humano
   explícito e registrado. Duas coisas dependem de decisão do dono e **não são
   antecipadas pelo `coretriad-director`**: (a) o encaminhamento dos sete

@@ -220,3 +220,13 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
   - Nenhum é DUPLICATE nem FALSE_POSITIVE. Seções `## Validação (finding-validator)` anexadas aos 5 arquivos.
 - **Registro feito diretamente pelo orquestrador**, não pelo agente `coretriad-director`: o despacho de Agent estava bloqueado por indisponibilidade temporária do classificador de segurança (Write/Edit/leitura seguiram funcionando). Mesmo padrão de persistência-pelo-orquestrador já usado nos passos 23/24 e na validação dos findings. Nenhum teste, script ou comando de banco foi executado.
 - **Próximo:** passo 28 (casos de uso recuperados). PARE incondicional ao fim do passo 30 antes do passo 31.
+
+## 2026-08-14 — Passos 28 e 29 concluídos (paralelismo por cluster)
+
+- **Passo 28 (casos de uso recuperados) CONCLUÍDO** — 6 trilhas `vericore-use-case-auditor` (2 ondas de 3, por contexto), ~200 UCs recuperados do código e cruzados com `04-USE_CASES.md` sem confiar nele. Commits `3eb0b5e` (onda 1) e `7b705f1` (onda 2). Achado transversal: catálogo reusa UC-IDs (UC-52/53/71) — quebra Regra 17.
+- **Passo 29 (matriz de rastreabilidade) CONCLUÍDO** — 6 trilhas `vericore-traceability-auditor` em PARALELO (uma onda, arquivos de saída distintos, por diretiva do dono sobre paralelismo) + consolidação `LEGACY_TRACEABILITY_MATRIX.md`. **O risco conhecido se confirmou:** 0 cadeias BR→REQ→UC→CÓDIGO→TC completas e canônicas nos 6 clusters; único elo íntegro é o CÓDIGO; quebra na origem (sem BR-ID canônico) e no REQ (90 RFs sem AC/TC).
+- **Divergência entre trilhas reconciliada (Regra 20):** identidade-acesso contou "7 cadeias completas" sob definição frouxa (BR-ID provisório como âncora); as outras 5 contaram 0 sob definição estrita (exige BR-ID canônico). Consolidação adota a estrita (0 em todos) e preserva o número frouxo como nota.
+- **Correção metodológica material:** a trilha planejamento-producao refutou a premissa dos passos 26/28 de que `laboratory`/`engineering` não tinham teste — a suíte vive em `server/tests/`, não co-locada; um Glob restrito à pasta do módulo produz falsas LACUNAS. Cobertura real do cluster ~17/22 UCs. **Vale para o passo 30:** varrer `server/tests/`.
+- **Paralelismo aplicado** conforme diretiva do dono: até 6 trilhas read-only concorrentes com write-ownership separado (um arquivo de saída por cluster), respeitando §11 do master spec (nunca sobrescrever silenciosamente). Reportado ao dono quantas rodavam a cada momento.
+- Registro por persistência-pelo-orquestrador (agentes VeriCore sem Write fora de `audit/`). Nenhum teste/script/banco executado. Nenhum finding promovido; candidatos de rastreabilidade seguem ao passo 31.
+- **Próximo:** passo 30 (testes de caracterização, banco efêmero). PARE incondicional ao fim do passo 30.
