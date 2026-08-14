@@ -63,10 +63,36 @@ function makeApprovalRepository(overrides: Partial<any> = {}) {
   const approvals: any[] = overrides.initialApprovals ?? [];
   return {
     listByContract: jest.fn(async () => approvals),
+    listAllByContract: jest.fn(async () => approvals),
     findByContractAndRole: jest.fn(async (_contractId: any, role: string) => approvals.find((a) => a.approver_role === role) ?? null),
+    invalidateByContract: jest.fn(async () => {
+      let count = 0;
+      approvals.forEach((approval) => { if (!approval.invalidated_at) { approval.invalidated_at = new Date(); count += 1; } });
+      approvals.length = 0; // `listByContract` passa a devolver apenas as vivas
+      return count;
+    }),
     create: jest.fn(async (data: any) => { const approval = { id: approvals.length + 1, ...data }; approvals.push(approval); return approval; }),
     ...overrides,
   };
+}
+
+/**
+ * Politica de alcada usada pelos testes — FIND-ERP-005 / Falha 1.
+ *
+ * Os limiares R$ 50.000 / R$ 300.000 sairam de `domain/constants.ts` e viraram
+ * DADO configuravel (`jur_approval_thresholds`, migration `20260814-000048`).
+ * Este fixture reproduz o seed da migration, para que as assercoes de faixa
+ * abaixo continuem exercitando exatamente o mesmo comportamento (R6(c) —
+ * nenhuma expectativa foi alterada; so os construtores receberam a nova
+ * dependencia obrigatoria).
+ */
+function makeThresholdRepository(overrides: Partial<any> = {}) {
+  const rules = overrides.rules ?? [
+    { id: 1, contract_type: '*', min_value: 0, max_value: 50000, required_roles: [], required_level: 'approve', active: true },
+    { id: 2, contract_type: '*', min_value: 50000, max_value: 300000, required_roles: ['diretor'], required_level: 'approve', active: true },
+    { id: 3, contract_type: '*', min_value: 300000, max_value: null, required_roles: ['diretor', 'financeiro'], required_level: 'approve', active: true },
+  ];
+  return { listAll: jest.fn(async () => rules) };
 }
 
 describe('CreateContractUseCase', () => {
@@ -112,7 +138,7 @@ describe('ActivateContractUseCase', () => {
     const repo = makeContractRepository({ initialContract: makeContract({ responsible_user_id: 12, end_date: '2027-08-31' }) });
     const alertRepo = makeAlertRepository();
 
-    const result = await new ActivateContractUseCase(repo, alertRepo).execute({ id: 900, approverHasApprove: false });
+    const result = await new ActivateContractUseCase(repo, alertRepo, makeApprovalRepository(), makeThresholdRepository()).execute({ id: 900, approverHasApprove: false });
 
     expect(result.status).toBe('active');
     expect(alertRepo.create).toHaveBeenCalledWith(expect.objectContaining({ origin_type: 'contract', alert_subtype: 'expiration' }));
@@ -123,7 +149,7 @@ describe('ActivateContractUseCase', () => {
     const alertRepo = makeAlertRepository();
 
     await expect(
-      new ActivateContractUseCase(repo, alertRepo).execute({ id: 900, approverHasApprove: false }),
+      new ActivateContractUseCase(repo, alertRepo, makeApprovalRepository(), makeThresholdRepository()).execute({ id: 900, approverHasApprove: false }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
@@ -135,7 +161,7 @@ describe('ActivateContractUseCase', () => {
     const alertRepo = makeAlertRepository();
 
     await expect(
-      new ActivateContractUseCase(repo, alertRepo).execute({ id: 900, approverHasApprove: false }),
+      new ActivateContractUseCase(repo, alertRepo, makeApprovalRepository(), makeThresholdRepository()).execute({ id: 900, approverHasApprove: false }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
@@ -147,7 +173,7 @@ describe('ActivateContractUseCase', () => {
     const alertRepo = makeAlertRepository();
 
     await expect(
-      new ActivateContractUseCase(repo, alertRepo).execute({ id: 900, approverHasApprove: false }),
+      new ActivateContractUseCase(repo, alertRepo, makeApprovalRepository(), makeThresholdRepository()).execute({ id: 900, approverHasApprove: false }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
@@ -158,7 +184,7 @@ describe('ActivateContractUseCase', () => {
     const alertRepo = makeAlertRepository();
 
     await expect(
-      new ActivateContractUseCase(repo, alertRepo).execute({ id: 900, approverHasApprove: false }),
+      new ActivateContractUseCase(repo, alertRepo, makeApprovalRepository(), makeThresholdRepository()).execute({ id: 900, approverHasApprove: false }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
@@ -166,7 +192,7 @@ describe('ActivateContractUseCase', () => {
     const repo = makeContractRepository({ findById: jest.fn(async () => null) });
     const alertRepo = makeAlertRepository();
     await expect(
-      new ActivateContractUseCase(repo, alertRepo).execute({ id: 999, approverHasApprove: false }),
+      new ActivateContractUseCase(repo, alertRepo, makeApprovalRepository(), makeThresholdRepository()).execute({ id: 999, approverHasApprove: false }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 });
@@ -177,7 +203,7 @@ describe('ActivateContractUseCase — RF-JUR-003 (alçada de aprovação por val
     const alertRepo = makeAlertRepository();
     const approvalRepo = makeApprovalRepository();
 
-    const result = await new ActivateContractUseCase(repo, alertRepo, approvalRepo).execute({ id: 900, approverHasApprove: false });
+    const result = await new ActivateContractUseCase(repo, alertRepo, approvalRepo, makeThresholdRepository()).execute({ id: 900, approverHasApprove: false });
 
     expect(result.status).toBe('active');
     // Valor no limite exato (<=) não exige alçada — nem consulta os approvals.
@@ -190,7 +216,7 @@ describe('ActivateContractUseCase — RF-JUR-003 (alçada de aprovação por val
     const approvalRepo = makeApprovalRepository();
 
     await expect(
-      new ActivateContractUseCase(repo, alertRepo, approvalRepo).execute({ id: 900, approverHasApprove: false }),
+      new ActivateContractUseCase(repo, alertRepo, approvalRepo, makeThresholdRepository()).execute({ id: 900, approverHasApprove: false }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
@@ -199,7 +225,7 @@ describe('ActivateContractUseCase — RF-JUR-003 (alçada de aprovação por val
     const alertRepo = makeAlertRepository();
     const approvalRepo = makeApprovalRepository({ initialApprovals: [{ id: 1, contract_id: 900, approver_role: 'diretor', approver_user_id: 5 }] });
 
-    const result = await new ActivateContractUseCase(repo, alertRepo, approvalRepo).execute({ id: 900, approverHasApprove: false });
+    const result = await new ActivateContractUseCase(repo, alertRepo, approvalRepo, makeThresholdRepository()).execute({ id: 900, approverHasApprove: false });
     expect(result.status).toBe('active');
   });
 
@@ -209,7 +235,7 @@ describe('ActivateContractUseCase — RF-JUR-003 (alçada de aprovação por val
     const approvalRepo = makeApprovalRepository({ initialApprovals: [{ id: 1, contract_id: 900, approver_role: 'diretor', approver_user_id: 5 }] });
 
     await expect(
-      new ActivateContractUseCase(repo, alertRepo, approvalRepo).execute({ id: 900, approverHasApprove: false }),
+      new ActivateContractUseCase(repo, alertRepo, approvalRepo, makeThresholdRepository()).execute({ id: 900, approverHasApprove: false }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
@@ -223,7 +249,7 @@ describe('ActivateContractUseCase — RF-JUR-003 (alçada de aprovação por val
       ],
     });
 
-    const result = await new ActivateContractUseCase(repo, alertRepo, approvalRepo).execute({ id: 900, approverHasApprove: false });
+    const result = await new ActivateContractUseCase(repo, alertRepo, approvalRepo, makeThresholdRepository()).execute({ id: 900, approverHasApprove: false });
     expect(result.status).toBe('active');
   });
 });
@@ -233,7 +259,7 @@ describe('ApproveContractUseCase (RF-JUR-003)', () => {
     const repo = makeContractRepository({ initialContract: makeContract({ value: '150000.00' }) });
     const approvalRepo = makeApprovalRepository();
 
-    const result = await new ApproveContractUseCase(repo, approvalRepo).execute({
+    const result = await new ApproveContractUseCase(repo, approvalRepo, makeThresholdRepository()).execute({
       contractId: 900, approverUserId: 5, availableRoles: ['diretor'],
     });
 
@@ -247,7 +273,7 @@ describe('ApproveContractUseCase (RF-JUR-003)', () => {
     const approvalRepo = makeApprovalRepository();
 
     await expect(
-      new ApproveContractUseCase(repo, approvalRepo).execute({ contractId: 900, approverUserId: 5, availableRoles: ['diretor', 'financeiro'] }),
+      new ApproveContractUseCase(repo, approvalRepo, makeThresholdRepository()).execute({ contractId: 900, approverUserId: 5, availableRoles: ['diretor', 'financeiro'] }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
@@ -256,7 +282,7 @@ describe('ApproveContractUseCase (RF-JUR-003)', () => {
     const approvalRepo = makeApprovalRepository();
 
     await expect(
-      new ApproveContractUseCase(repo, approvalRepo).execute({ contractId: 900, approverUserId: 5, availableRoles: ['financeiro'], desiredRole: 'diretor' }),
+      new ApproveContractUseCase(repo, approvalRepo, makeThresholdRepository()).execute({ contractId: 900, approverUserId: 5, availableRoles: ['financeiro'], desiredRole: 'diretor' }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
@@ -265,7 +291,7 @@ describe('ApproveContractUseCase (RF-JUR-003)', () => {
     const approvalRepo = makeApprovalRepository();
 
     await expect(
-      new ApproveContractUseCase(repo, approvalRepo).execute({ contractId: 900, approverUserId: 5, availableRoles: ['diretor'] }),
+      new ApproveContractUseCase(repo, approvalRepo, makeThresholdRepository()).execute({ contractId: 900, approverUserId: 5, availableRoles: ['diretor'] }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
@@ -274,7 +300,7 @@ describe('ApproveContractUseCase (RF-JUR-003)', () => {
     const approvalRepo = makeApprovalRepository({ initialApprovals: [{ id: 1, contract_id: 900, approver_role: 'diretor', approver_user_id: 5 }] });
 
     await expect(
-      new ApproveContractUseCase(repo, approvalRepo).execute({ contractId: 900, approverUserId: 9, availableRoles: ['diretor'] }),
+      new ApproveContractUseCase(repo, approvalRepo, makeThresholdRepository()).execute({ contractId: 900, approverUserId: 9, availableRoles: ['diretor'] }),
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
@@ -283,7 +309,7 @@ describe('ApproveContractUseCase (RF-JUR-003)', () => {
     const approvalRepo = makeApprovalRepository();
 
     await expect(
-      new ApproveContractUseCase(repo, approvalRepo).execute({ contractId: 999, approverUserId: 5, availableRoles: ['diretor'] }),
+      new ApproveContractUseCase(repo, approvalRepo, makeThresholdRepository()).execute({ contractId: 999, approverUserId: 5, availableRoles: ['diretor'] }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 });
@@ -316,7 +342,7 @@ describe('CreateContractAddendumUseCase', () => {
   it('rejeita change_type=value sem new_value (BR-JUR-003)', async () => {
     const repo = makeContractRepository({ initialContract: makeContract({ status: 'active' }) });
     await expect(
-      new CreateContractAddendumUseCase(repo).execute({
+      new CreateContractAddendumUseCase(repo, makeApprovalRepository(), makeThresholdRepository()).execute({
         contractId: 900, change_type: 'value', description: 'Reajuste', createdBy: 1,
       } as any),
     ).rejects.toBeInstanceOf(BusinessRuleError);
@@ -324,7 +350,7 @@ describe('CreateContractAddendumUseCase', () => {
 
   it('cria aditivo term e atualiza end_date do contrato (fluxo principal)', async () => {
     const repo = makeContractRepository({ initialContract: makeContract({ status: 'active', end_date: '2027-08-31' }) });
-    const addendum = await new CreateContractAddendumUseCase(repo).execute({
+    const addendum = await new CreateContractAddendumUseCase(repo, makeApprovalRepository(), makeThresholdRepository()).execute({
       contractId: 900, change_type: 'term', new_end_date: '2028-08-31', description: 'Prorrogação', createdBy: 1,
     });
     expect(addendum.previous_end_date).toBe('2027-08-31');
@@ -336,7 +362,7 @@ describe('ListContractApprovalsUseCase (RF-JUR-003)', () => {
   it('retorna alçada vazia e completa para contrato abaixo do threshold', async () => {
     const repo = makeContractRepository({ initialContract: makeContract({ value: '10000.00' }) });
     const approvalRepo = makeApprovalRepository();
-    const result = await new ListContractApprovalsUseCase(repo, approvalRepo).execute({ contractId: 900 });
+    const result = await new ListContractApprovalsUseCase(repo, approvalRepo, makeThresholdRepository()).execute({ contractId: 900 });
     expect(result.required_roles).toEqual([]);
     expect(result.missing_roles).toEqual([]);
     expect(result.approval_complete).toBe(true);
@@ -345,7 +371,7 @@ describe('ListContractApprovalsUseCase (RF-JUR-003)', () => {
   it('aponta diretor como pendente na faixa intermediária sem aprovação', async () => {
     const repo = makeContractRepository({ initialContract: makeContract({ value: '150000.00' }) });
     const approvalRepo = makeApprovalRepository();
-    const result = await new ListContractApprovalsUseCase(repo, approvalRepo).execute({ contractId: 900 });
+    const result = await new ListContractApprovalsUseCase(repo, approvalRepo, makeThresholdRepository()).execute({ contractId: 900 });
     expect(result.required_roles).toEqual(['diretor']);
     expect(result.missing_roles).toEqual(['diretor']);
     expect(result.approval_complete).toBe(false);
@@ -356,7 +382,7 @@ describe('ListContractApprovalsUseCase (RF-JUR-003)', () => {
     const approvalRepo = makeApprovalRepository({
       initialApprovals: [{ id: 1, contract_id: 900, approver_role: 'diretor', approver_user_id: 5 }],
     });
-    const result = await new ListContractApprovalsUseCase(repo, approvalRepo).execute({ contractId: 900 });
+    const result = await new ListContractApprovalsUseCase(repo, approvalRepo, makeThresholdRepository()).execute({ contractId: 900 });
     expect(result.required_roles).toEqual(['diretor', 'financeiro']);
     expect(result.missing_roles).toEqual(['financeiro']);
     expect(result.approval_complete).toBe(false);
@@ -371,7 +397,7 @@ describe('ListContractApprovalsUseCase (RF-JUR-003)', () => {
         { id: 2, contract_id: 900, approver_role: 'financeiro', approver_user_id: 7 },
       ],
     });
-    const result = await new ListContractApprovalsUseCase(repo, approvalRepo).execute({ contractId: 900 });
+    const result = await new ListContractApprovalsUseCase(repo, approvalRepo, makeThresholdRepository()).execute({ contractId: 900 });
     expect(result.missing_roles).toEqual([]);
     expect(result.approval_complete).toBe(true);
   });
