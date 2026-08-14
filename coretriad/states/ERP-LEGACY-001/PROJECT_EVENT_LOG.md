@@ -529,3 +529,81 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
   backend, T-17 contrato de API (681 endpoints), T-18 appsec/segredos/
   dependências, T-19 arquitetura. T-15 reaberta em paralelo para fechar
   `RES-T15-01` com a saída de T-14 e registrar a divergência acima.
+
+## 2026-08-14 — T-15 fechada; a divergência T-14×T-15 se dissolve em evidência
+
+- **`RES-T15-01` FECHADO** nos três itens, com a saída de T-14 como insumo.
+  T-15 permanece com lacunas declaradas (`RES-T15-02..06`).
+- **Elo `BR ↔ REQ` medido dos dois lados, por métodos disjuntos, com
+  resultado convergente:** T-14 mediu do código para cima (145/165 com
+  âncora `BR → código` decidida); T-15 mediu do requisito para baixo
+  (**0 de 90 RFs citam um BR-ID**). Veredito conjunto: **a cadeia não
+  quebra por falta de regra nem por falta de código — quebra exatamente na
+  junta entre eles, e do lado do requisito.** Convergência de evidência,
+  não votação (Regra 20).
+- **T-15 recusou-se a inflar a matriz.** Dez dos 90 RFs têm BR atribuído,
+  mas **apenas no `REQUIREMENTS_BASELINE.md`, que é produto de trabalho de
+  auditoria, nunca no artefato versionado do objeto**. Classificados como
+  `ATRIBUÍDO-POR-AUDITORIA` e **não promovidos a elo PROVADO**: vínculo que
+  só existe em relatório de auditoria é reconstrução, não rastreabilidade.
+  Registro expresso da trilha: promovê-los seria "completar a matriz para
+  parecer coberta".
+- **A DIVERGÊNCIA T-14 × T-15 SOBRE COLISÃO DE BR-ID SE DISSOLVEU EM
+  EVIDÊNCIA — nenhuma trilha cedeu.** T-15 leu
+  `juridico/domain/constants.ts` integralmente e provou que **o arquivo não
+  contém a string `BR-JUR-003` em lugar algum** — seu cabeçalho (`:2`) e
+  sua função (`:33`) dizem **`RF-JUR-003`**. E o módulo emite, em runtime,
+  os dois identificadores para regras **diferentes**:
+  `ApproveContractUseCase.ts:62,68,81,87` lança
+  `BusinessRuleError(..., { rule: 'RF-JUR-003' })` para a alçada por valor;
+  `CreateContractAddendumUseCase.ts:37,40` lança `{ rule: 'BR-JUR-003' }`
+  para a regra do aditivo. **Conclusão: T-14 confirmou a regra certa contra
+  o código certo sob o ID errado** — validou o par (ID, âncora) tal como o
+  catálogo os publica, sem varrer quem mais usa aquele ID. **Os dois
+  vereditos coexistem; nenhum precisa ceder.** A conferência de T-14 é
+  internamente válida (dentro do catálogo não há ID repetido); o que não se
+  sustenta é a inferência do `BR_CATALOG.md:400` — uma busca confinada ao
+  arquivo não pode, por construção lógica, fundamentar conclusão sobre o
+  **namespace**.
+- **Prova negativa registrada:** grep no relatório de T-14 por
+  `docs/business|BLOCO_|BRIEF_|briefs` retorna **0**. O ponto cego
+  documentado por `T15-F03`/`T15-F04` não foi endereçado; `ESC-T15-04`
+  consta como **não referenciado** pela trilha destinatária. Fato de
+  processo registrado, sem juízo sobre causa.
+- **`ESC-T15-05` (novo)** — a divergência formalizada com os dois espaços de
+  busca enunciados lado a lado. Mérito vai a **T-25** com o
+  `vericore-finding-validator`; a parte que toca a `APR-2026-019` (esquema
+  canônico que produz colisão por construção) é **decisão do dono**.
+- **`T14-F05` × `T15-F03/F04` — populações disjuntas do mesmo defeito.**
+  T-14 mede regras **sem ID** (≥26, elo a criar — ato humano); T-15 mede
+  regras **com ID versionado fora do índice** (88 fichas, 456 refs, 18
+  `rule:` em código — elo existe e não está indexado) e **ID com dois
+  significados vivos** (≥1 provado — elo ambíguo, pior que ausente).
+  Nenhuma das duas via a outra. `T14-F05` **refina** o §4 de T-15; contradiz
+  apenas num ponto delimitado: a afirmação de que a `APR-2026-019` "já
+  resolveu" só é sustentável dentro do espaço de busca de T-14.
+- **Padrão estrutural medido por dois caminhos independentes.** T-14: *"o
+  catálogo é forte onde o módulo é fechado e cego onde o processo
+  atravessa"*. T-15, sem conhecer essa conclusão: os **44 RFs sem UC** se
+  concentram em processos que atravessam módulos, e os **3 domínios sem
+  requisito algum** (`accounting`, `budget`, `treasury`) são os de maior
+  travessia. **Na fronteira entre módulos, a documentação de todos os
+  níveis desaparece simultaneamente — BR, REQ e UC.**
+- **`RF-EST-07` (scan mobile) eleito o exemplar mais completo de cadeia
+  falsamente verde do ERP:** requisito diz `[IMPLEMENTADO]`; a BR que o
+  sustenta é DIVERGENTE por omissão de escopo; a implementação é CRITICAL
+  confirmada por T-06; o UC é inexistente; AC e TC-ID inexistem; e o teste
+  que existe é cego. **Elo falso em cinco pontos da mesma linha.**
+  Encaminhado a T-26.
+- **Ressalva de escopo sobre `T14-F03`, levantada por T-15 e NÃO resolvida
+  por agente:** se `BR-FIN-003` está fora do `AUDIT_COMMIT` (Regra 14), o
+  finding muda de estatuto — de achado sobre o objeto auditado para achado
+  sobre norma **posterior** ao objeto, e o descumprimento torna-se
+  anacrônico por construção. **O mérito quanto ao risco de remediação do
+  `CASE-001` permanece intacto e real**; muda apenas contra qual baseline é
+  medido. Decisão de escopo é do director e toca a `APR-2026-021`.
+- **Números finais de T-15:** cadeias completas **0 de 90** (definição
+  estrita, inalterada e reforçada — T-14 não produz AC nem TC-ID);
+  **3** na definição frouxa (elo BR das três agora **verificado**, não
+  presumido); **0 de 90** RFs com elo `REQ → BR` versionado.
+- **Fieldwork: 15 de 27 trilhas.** W3 primeira leva em execução.
