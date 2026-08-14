@@ -919,3 +919,38 @@ adversarial de todo CRITICAL/HIGH, incluindo a divergência aberta T-14×T-15
 sobre colisão de BR-ID e a arbitragem pendente T-16×T-04 sobre a premissa
 mitigante de `AUD-SEC-T04-01`) e T-26 (consolidação, cobertura executada e
 relatórios finais).
+
+---
+
+## DECISÕES HUMANAS REGISTRADAS — 2026-08-14 (dono, respostas diretas)
+
+Em conformidade com a Regra 18 (human gates só por decisão humana explícita
+registrada, nunca por memória ou inferência), o dono respondeu, ponto a
+ponto, a lista de decisões pendentes apresentada em linguagem não-técnica:
+
+1. **Segunda rodada de T-25 (13 trilhas ainda sem refutação: T-01, T-03,
+   T-05, T-07, T-09, T-10, T-11, T-13, T-19, T-20, T-21, T-22, T-23)** —
+   **APROVADO.** Executar antes da consolidação (T-26).
+2. **`AUD-SEC-T04-01` — elevar de MEDIUM para HIGH** (recomendação de T-25,
+   premissa mitigante original derrubada por T-16) — **APROVADO.** Registrar
+   adendo formal ao achado por agente VeriCore (não pelo Director).
+3. **`BR-FIN-003` fora do `AUDIT_COMMIT` (aprovada depois, por
+   `APR-2026-021`)** — dono confirmou entendimento; segue como está,
+   nenhuma ação adicional.
+4. **15 regras de negócio não localizadas (`RES-T14-01`)** —
+   **NÃO investigar mais.** Aceita registrar como lacuna de cobertura no
+   relatório final, sem gastar esforço adicional.
+5. **`RES-T16-06` (gate de rastreamento de importação COMEX,
+   `RegisterImportTrackingUseCase`, único item G3-crítico do escopo de
+   T-16 sem leitura)** — **APROVADO examinar antes do fechamento.**
+6. **Bateria de verificação dinâmica (`DYN-Tnn` acumulados nas trilhas,
+   contra banco de teste efêmero, nunca o banco real — G4)** —
+   **APROVADO, com escopo explicitamente restrito pelo dono**: "autorizo
+   somente para essa finalidade e exclusividade" — ou seja, a execução
+   dinâmica autorizada aqui serve exclusivamente para fechar os gaps de
+   evidência já registrados nesta run (`DYN-T*` existentes nos relatórios
+   07-findings), contra `erp_evok_audio_test`, e não é autorização
+   permanente/genérica para qualquer execução futura fora deste propósito.
+
+Nenhuma decisão foi inferida ou assumida por agente — todas as seis vieram
+de resposta direta e explícita do dono nesta data.
