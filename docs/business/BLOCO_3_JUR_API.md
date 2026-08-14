@@ -210,9 +210,23 @@ direto de outro módulo:**
 ## 2. Grupo 1 — Contratos (Processo P1, UC-52)
 
 Base: `/api/jur/contracts`. `authorizeModule('juridico', ...)`: leituras e
-escritas comuns `operate`; ativação de contrato com alçada acima do
-configurado e assinatura de aditivo que altera valor `approve` (RF-JUR-003
-— tabela de alçada por valor/tipo, ver §2.6).
+escritas comuns `operate`; **registrar aprovação de alçada** e **efetivar
+aditivo que ELEVA o valor** exigem `approve` (RF-JUR-003 — tabela
+configurável de alçada por valor/tipo, ver **§2.7**).
+
+> **Nota de correção (2026-08-14, remediação de `FIND-ERP-005`).** Esta seção
+> tinha duas divergências que a auditoria confirmou como falhas, ambas
+> corrigidas por decisão do dono registrada em `APR-2026-021` Parte B:
+>
+> 1. A tabela abaixo **não listava** `POST /contracts/:id/approve` nem
+>    `GET /contracts/:id/approvals` (nasceram depois da redação original) —
+>    agora listam, com o nível realmente imposto pelo servidor.
+> 2. O texto exigia `approve` para *"assinatura de aditivo que altera valor"*
+>    enquanto a tabela dizia `operate` para o mesmo endpoint: o documento
+>    contradizia a si mesmo e o código seguira a versão mais permissiva.
+>    Agora há **uma única versão** — preparar o aditivo é `operate`,
+>    **efetivar elevação de valor exige `approve`** (`APR-2026-021` B.4) —
+>    e a verificação é server-side, dentro do use case, não só na rota.
 
 Contrato é modelado como **transição de estado controlada**
 (`draft → in_approval → signed → active → (expired | terminated)`), não CRUD
@@ -229,12 +243,19 @@ livre de status — mesmo padrão de `ItTicket`/`EntregaEPI`.
 | `POST` | `/api/jur/contracts/:id/signatories` | operate | Adiciona `ContratoSignatario` (parte ou testemunha) |
 | `GET` | `/api/jur/contracts/:id/signatories` | operate | Lista signatários |
 | `POST` | `/api/jur/contracts/:id/checklist` | operate | Responde item do checklist de cláusulas (PI/confidencialidade/não concorrência) — `employment`/`supplier`/`nda` |
-| `POST` | `/api/jur/contracts/:id/activate` | operate ou **approve** (conforme alçada, §2.6) | Transição para `active`; gera `AlertaJuridico` de vencimento automaticamente |
-| `POST` | `/api/jur/contracts/:id/addendums` | operate | Cria e assina `ContratoAditivo`; atualiza campos vigentes (`new_end_date`/`new_value`) e recalcula alertas |
+| `POST` | `/api/jur/contracts/:id/activate` | operate (a alçada é verificada **dentro** do use case, §2.7) | Transição para `active`; exige as aprovações de alçada já registradas; grava `approval_policy_snapshot`; gera `AlertaJuridico` de vencimento |
+| `POST` | `/api/jur/contracts/:id/approve` | **approve** em `diretor` **ou** `financeiro` (`authorizeAnyModule`, fora do gate `juridico`) | Registra **1** aprovação de alçada (RF-JUR-003). Grava `approver_user_id` (do JWT), `approver_role` (do RBAC) e `approved_value`. Sujeito à segregação D-K (§2.7) |
+| `GET` | `/api/jur/contracts/:id/approvals` | operate em `juridico`, `diretor` **ou** `financeiro` | Situação da alçada: `required_roles`, aprovações vivas e `missing_roles`. Somente leitura — é a fonte que a UI usa |
+| `POST` | `/api/jur/contracts/:id/addendums` | operate para preparar; **approve** para EFETIVAR elevação de valor | Cria e assina `ContratoAditivo`; atualiza campos vigentes. `new_value` só é aceito com `change_type='value'`; elevação de faixa **reabre a alçada** (§2.7) |
 | `GET` | `/api/jur/contracts/:id/addendums` | operate | Lista aditivos (histórico imutável) |
 | `POST` | `/api/jur/contracts/:id/terminate` | operate | Encerra: `terminated` (com `termination_reason`+data) ou `expired` (fim natural) |
+| `GET` | `/api/jur/settings/approval-thresholds` | operate | Política de alçada vigente + histórico de alterações (§2.7) |
+| `PUT` | `/api/jur/settings/approval-thresholds` | **approve** | Substitui o conjunto de faixas da política; registra o estado anterior e o novo em `jur_approval_threshold_history` (§2.7) |
 
-**13 endpoints.**
+**13 endpoints de contrato** + **2 de alçada** (`approve`/`approvals`) +
+**2 de configuração** (`settings/approval-thresholds`) = **17 rotas**
+efetivamente montadas em `juridico.ts`. A contagem histórica de "13" era
+anterior à alçada (2026-08-08) e à política configurável (2026-08-14).
 
 ### 2.1 POST /api/jur/contracts — Request
 
@@ -338,7 +359,8 @@ Efeitos, todos na mesma transação:
 | 422 | `BUSINESS_RULE_VIOLATION` | Menos de 2 `ContratoSignatario` tipo parte ou sem versão assinada anexada (E3) | E3 (UC-52) |
 | 422 | `BUSINESS_RULE_VIOLATION` | Checklist obrigatório não respondido (`employment`/`supplier`/`nda`) | RF-JUR-010 |
 | 400 | `VALIDATION_ERROR` | Contrato não está em `draft`/`in_approval` (já `active`/`signed`) | — |
-| 403 | `FORBIDDEN` | Valor do contrato acima da alçada `operate` sem nível `approve` (§2.6) | RF-JUR-003 |
+| 422 | `BUSINESS_RULE_VIOLATION` | Alçada de valor pendente: falta aprovação de `diretor`/`financeiro` (`details.rule = 'RF-JUR-003'`, `details.missingRoles`) — §2.7 | RF-JUR-003 |
+| 422 | `BUSINESS_RULE_VIOLATION` | Política de alçada não configurada (`APPROVAL_POLICY_UNAVAILABLE`, fail-closed) — §2.7.2 | RF-JUR-003 |
 
 ### 2.5 POST /api/jur/contracts/:id/addendums — Request
 
@@ -352,9 +374,26 @@ os valores anteriores (`previous_end_date`/`previous_value`, gravados
 automaticamente no momento da criação) são imutáveis; correção de aditivo
 já criado é um novo aditivo, nunca `PUT`.
 
-**Erro (422/`BUSINESS_RULE_VIOLATION`)** — sequência do aditivo fora de
-ordem (nunca reaproveitada); `change_type=value` sem `new_value`, ou
-`change_type=term` sem `new_end_date`.
+**`new_value` só é aceito com `change_type = 'value'`** (correção de
+2026-08-14, `FIND-ERP-005` Falha 3). O exemplo acima traz `"new_value": null`
+justamente porque é um aditivo de prazo: enviar um número ali resulta em
+`422`. Antes da correção, o campo era aplicado sem consultar o
+`change_type`, e um aditivo declarado como `term` alterava o valor do
+contrato.
+
+**Erros (422/`BUSINESS_RULE_VIOLATION`):**
+
+| Quando | `details.rule` |
+|---|---|
+| Sequência do aditivo fora de ordem (nunca reaproveitada) | — |
+| `change_type=value` sem `new_value`; `change_type=term` sem `new_end_date` | `BR-JUR-003` |
+| `new_value` em aditivo cujo `change_type` **não** é `value` | `RF-JUR-008` |
+| Elevação de valor sem nível `approve` no módulo `juridico` | `RF-JUR-008` |
+
+Quando a elevação leva o contrato a uma faixa não coberta pelas aprovações
+vigentes, a resposta é `201` — mas as aprovações antigas são invalidadas e o
+contrato volta a `in_approval` (§2.7.5). O corpo da resposta traz
+`approval_reopened: true` nesse caso.
 
 ### 2.6 POST /api/jur/contracts/:id/terminate — Request
 
@@ -367,20 +406,131 @@ ordem (nunca reaproveitada); `change_type=value` sem `new_value`, ou
 permite transição `expired`/`terminated → active` (BR-JUR-006) —
 `400/VALIDATION_ERROR` explícito se tentado via `PUT`.
 
-### 2.7 Alçada de aprovação (RF-JUR-003, `[VERIFICAR COM ASSESSOR JURÍDICO DA EMPRESA]`)
+### 2.7 Alçada de aprovação (RF-JUR-003) — **implementada como tabela configurável**
 
-Tabela de configuração `jur_approval_thresholds` (fora do escopo deste
-contrato modelar em detalhe — decisão de schema do `AdmDBA`), consultada por
-`POST .../activate` para decidir se `operate` basta ou se é exigido
-`approve`: `{ contract_type, min_value, max_value, required_level }`.
-Nenhum valor de alçada é hard-coded no contrato de API — a rota sempre
-consulta a configuração vigente. `GET /api/jur/settings/approval-thresholds`
-e `PUT /api/jur/settings/approval-thresholds` (nível `approve`) ficam fora
-da contagem de endpoints deste bloco por serem CRUD de configuração
-genérico, mas **precisam existir** antes de `POST .../activate` poder checar
-a regra — pendência explícita para a próxima passada de contrato, mesmo
-padrão de `ti_settings` do Bloco 2 (§2 de `BLOCO_2_TI_API.md`, nota da
-auditoria cruzada).
+> **Status:** IMPLEMENTADO em 2026-08-14 (remediação de `FIND-ERP-005`,
+> caso SanaCore `ERP-LEGACY-001-CASE-002`, autorizada por `APR-2026-021`
+> Partes B e C). Até essa data esta seção descrevia uma tabela que **não
+> existia**: os limiares eram dois literais em
+> `server/src/modules/juridico/domain/constants.ts` (`50000` e `300000`) e
+> os dois endpoints de configuração nunca haviam sido criados. Esta seção
+> agora descreve **o que o código faz**.
+>
+> **Os valores continuam `[VERIFICAR COM ASSESSOR JURÍDICO DA EMPRESA]`.**
+> A migração para tabela preservou os números que já vigiam; nunca houve
+> validação por autoridade jurídica. Com a política configurável, corrigi-los
+> deixou de exigir deploy — mas continua exigindo decisão de quem tem
+> alçada para tomá-la.
+
+#### 2.7.1 Onde a política vive
+
+| Artefato | Papel |
+|---|---|
+| `jur_approval_thresholds` | as faixas em si (migration `20260814-000048`) |
+| `jur_approval_threshold_history` | histórico/auditoria de toda alteração (`previous_values`, `new_values`, `changed_by`, `change_reason`) |
+| `modules/juridico/domain/approvalPolicy.ts` | **apenas** a interpretação: comparação, precedência por `contract_type`, vigência, fail-closed. Nenhum valor de negócio |
+| `jur_contracts.approval_policy_snapshot` | qual política vigia **no instante da ativação** — auditável a posteriori |
+
+Colunas de `jur_approval_thresholds`:
+
+```
+{ id, contract_type, min_value, max_value, required_roles[],
+  required_level, active, valid_from, valid_to, notes, created_by }
+```
+
+- **Faixa:** `min_value < valor <= max_value`; `max_value = null` = sem teto.
+- **`contract_type`:** o tipo do contrato, ou `'*'` (curinga). Se existir
+  **qualquer** faixa vigente para o tipo do contrato, o conjunto `'*'` é
+  ignorado por completo — os conjuntos não se mesclam, para não produzir
+  faixas sobrepostas silenciosas.
+- **`required_roles`:** papéis exigidos (`diretor`, `financeiro`).
+- **`required_level`:** nível de RBAC exigido do aprovador.
+- **Vigência:** `active` + `valid_from`/`valid_to`.
+
+**Seed inicial (`contract_type = '*'`)**, que reproduz exatamente o
+comportamento anterior à remediação:
+
+| min_value | max_value | required_roles |
+|---|---|---|
+| 0 | 50.000 | — |
+| 50.000 | 300.000 | `diretor` |
+| 300.000 | (sem teto) | `diretor` + `financeiro` |
+
+#### 2.7.2 Fail-closed
+
+Se **não houver** política vigente aplicável (tabela vazia, tudo inativo ou
+fora de vigência), `approve`, `activate`, `addendums` e `approvals`
+**falham** com `RF-JUR-003 / APPROVAL_POLICY_UNAVAILABLE`. Política ausente
+nunca é lida como "nenhuma aprovação exigida". Pelo mesmo motivo,
+`ActivateContractUseCase` e `CreateContractAddendumUseCase` **não podem ser
+construídos** sem os repositórios que impõem a alçada — antes da remediação
+a dependência era opcional e, sem ela, o gate era pulado sem erro nem log.
+
+#### 2.7.3 Endpoints de configuração
+
+| Método | Rota | Nível | Efeito |
+|---|---|---|---|
+| `GET` | `/api/jur/settings/approval-thresholds` | operate | `{ rules, history }` |
+| `PUT` | `/api/jur/settings/approval-thresholds` | **approve** | Substitui o conjunto de faixas |
+
+`PUT` recebe `{ rules: [...], reason?: string }` e valida **no servidor**:
+conjunto vazio → `400`; `max_value <= min_value` → `400`; papel fora de
+`diretor`/`financeiro` → `400`; `required_level` fora de
+`operate`/`approve` → `400`. `changed_by` vem sempre do JWT. A substituição
+e o registro de histórico ocorrem na **mesma transação**.
+
+A escrita é atrás de `authorizeModule('juridico','approve')`: **nenhuma
+autorização baseada apenas no frontend** (`APR-2026-021` B.3). O client não
+espelha mais limiar nenhum — a UI usa o `required_roles` devolvido por
+`GET /contracts/:id/approvals`.
+
+#### 2.7.4 Registrar aprovação (`POST /contracts/:id/approve`)
+
+Exige nível **`approve`** no módulo `diretor` **ou** `financeiro`
+(`authorizeAnyModule` com `requiredLevel: 'approve'` nos dois candidatos).
+`diretor:operate` recebe **403** e **nada é gravado** — antes da remediação,
+`operate` bastava, porque a rota omitia o nível e o controller resolvia o
+papel por *truthiness*.
+
+Cada aprovação grava `approver_user_id` (do JWT), `approver_role` (do RBAC;
+o `role` do body apenas **desambigua**, nunca concede) e **`approved_value`**
+— o valor do contrato no momento da aprovação.
+
+**Segregação de função (D-K), `APR-2026-021` B.5 — vale para contrato
+jurídico:**
+
+- a **mesma pessoa** não registra as duas aprovações do mesmo contrato,
+  ainda que tenha os dois papéis (`422` com `details.rule = 'D-K-JURIDICO'`);
+- **quem criou** o contrato não o aprova;
+- **`admin` não é exceção**: identidade não é concedível. A rejeição é por
+  identidade e **não** por papel — dois administradores **diferentes**
+  aprovando papéis diferentes é legítimo e passa.
+
+O banco reforça: índice único parcial `(contract_id, approver_user_id)
+WHERE invalidated_at IS NULL`. A unicidade por papel também virou parcial,
+para que uma aprovação invalidada não impeça a nova.
+
+#### 2.7.5 Aditivo × alçada (`POST /contracts/:id/addendums`)
+
+Decisão `APR-2026-021` B.4 — *preparar* é `operate`, *efetivar aumento de
+valor* é `approve`:
+
+1. `new_value` **só** é aceito com `change_type = 'value'`. Um aditivo de
+   prazo carregando `new_value` é **rejeitado** (`422`), não silenciosamente
+   ignorado.
+2. **Elevar** o valor exige nível `approve` no módulo `juridico`. Reduzir
+   não exige.
+3. Se o valor novo exige papéis que as aprovações vivas não cobrem
+   (comparação contra `approved_value`), as aprovações são **invalidadas**
+   — preservadas como histórico em `invalidated_at`/`invalidated_reason`, não
+   apagadas — e o contrato volta a **`in_approval`**. Uma aprovação dada para
+   R$ 60.000 não sustenta um contrato que virou R$ 5.000.000.
+
+Ordenação de escrita **fail-safe**: invalidação + trava de status ocorrem
+**antes** de o valor novo ser gravado, de modo que nenhuma interrupção deixe
+o contrato `active` com valor elevado e sem aprovação. (A camada de
+repositório deste módulo não tem plumbing de transação; a transação única
+está registrada como melhoria posterior no `REMEDIATION.md` do caso.)
 
 ---
 
