@@ -7,7 +7,7 @@
 | Tipo | `EXISTING_SYSTEM` |
 | Programa | `LEGACY_RECOVERY_AND_MODERNIZATION` |
 | Data de registro | 2026-08-13 |
-| Estado atual | `DISCOVERY` |
+| Estado atual | `IN_AUDIT` (passo 31 aberto por `APR-2026-020` — fase de escopo/plano; fieldwork bloqueado até gate humano do plano). **Nota de concorrência registrada:** remediação preliminar SanaCore corre em paralelo (CASE-001/CASE-002, triagem) — a state machine linear não modela essa concorrência de programa legado; registrado como ocorreu, conciliação de modelo fica com VeriCore + humano (mesmo tratamento da dívida já registrada em `STATE_MACHINE.md`). |
 | Situação do ciclo | Passos 21-24 CONCLUÍDOS — passos 25-30 AUTORIZADOS (`APR-2026-017`) — **passos 25, 26, 27, 28, 29 e 30 CONCLUÍDOS** (ver tabela "Progresso dos passos"). **O passo 30 encerrou a fase de discovery em 2026-08-14**: 9 arquivos de teste de caracterização, 66/66 verdes contra banco efêmero (`CHARACTERIZATION_TESTS.md`). A validação adversarial independente dos cinco findings `FIND-ERP-005`-`009` está **CONCLUÍDA** (todos CONFIRMED; `FIND-ERP-007` **rebaixado de HIGH a MEDIUM**, com item 3 em `NEEDS_MORE_EVIDENCE`, e por isso **não segue à SanaCore**). **Sete** achados foram promovidos a **findings formais preliminares**, fora da sequência do passo 31, por autorização humana explícita (`APR-2026-017` para 2; `APR-2026-018` para 5) — ver seção "Findings preliminares" abaixo. **PARE INCONDICIONAL EM VIGOR** (skill `coretriad-legacy-discovery` ENCERRADA ao fim do passo 30); o passo 31 (auditoria 360°) exige novo gate humano explícito e registrado. |
 | Status de produção | **PARCIAL — classificação final resolvida por `APR-2026-016`** — ver seção "Status de produção" abaixo |
 | Baseline imutável | tag `legacy-baseline-001` → commit `c9359be399c45191fe90e8e9707803125a5ba91d` (Regras 12 e 13 do `CLAUDE.md`; ver seção "Baseline imutável" abaixo) |
@@ -349,7 +349,7 @@ inferência, nem por analogia: exige novo gate humano explícito e registrado.
 | 28 | Casos de uso recuperados | **CONCLUÍDO** | 6 × `USE_CASES_RECOVERED_*.md` (~200 UCs) |
 | 29 | Matriz de rastreabilidade do legado | **CONCLUÍDO** — nasceu quebrada, como previsto (0 cadeias completas canônicas) | 6 × `LEGACY_TRACEABILITY_MATRIX_*.md` + `LEGACY_TRACEABILITY_MATRIX.md` (consolidação) |
 | 30 | Testes de caracterização | **CONCLUÍDO** (2026-08-14) — 9 arquivos, 66/66 verdes contra `erp_evok_audio_test`; trava `APR-2026-016` respeitada | `CHARACTERIZATION_TESTS.md` + `server/tests/characterization/` |
-| 31 | Auditoria 360° | **BLOQUEADO — PARE INCONDICIONAL EM VIGOR**; exige novo gate humano explícito e registrado | — |
+| 31 | Auditoria 360° | **EM CURSO** — gate aprovado (`APR-2026-020` Decisão A, 2026-08-14); run `ERP-LEGACY-001-AUD-001` em fase de escopo/inventário/plano; **fieldwork bloqueado até gate humano do plano** | `audit/runs/ERP-LEGACY-001-AUD-001/` |
 
 ## Passo 26 — Regras de negócio descobertas (execução e observações)
 
@@ -453,10 +453,15 @@ sequência.
 ### Tabela consolidada dos 7 findings
 
 Severidade, confiança e status são **autoridade VeriCore** — apenas
-transcritos aqui. **Nenhuma remediação foi feita ou encaminhada** em nenhum
-dos sete: discovery não corrige (Regra 1 do programa); a SanaCore **não** foi
-acionada; o encaminhamento depende de decisão humana separada, ainda não
-tomada.
+transcritos aqui. **Atualização 2026-08-14 (`APR-2026-020` Decisão B): o
+encaminhamento à SanaCore foi AUTORIZADO pelo dono**, na sequência: 2
+CRITICAL primeiro (`FIND-ERP-001` → `ERP-LEGACY-001-CASE-001`;
+`FIND-ERP-005` → `ERP-LEGACY-001-CASE-002` — casos em
+`coretriad/handoffs/ERP-LEGACY-001/`, triagem SanaCore em curso); depois os
+4 HIGH (`002`, `006`, `008`, `009` — aguardando abertura de caso);
+`FIND-ERP-007` (MEDIUM) **não segue** até o item 3 voltar ao autor. Nenhum
+finding foi fechado — fechamento continua autoridade exclusiva VeriCore
+(Regra 4).
 
 | ID | Tema | Sev. | Confiança declarada no artefato | Validação adversarial independente | Status | Autorização |
 |---|---|---|---|---|---|---|
