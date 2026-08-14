@@ -81,6 +81,23 @@ function resolveAvailableApproverRoles(req: Request): Array<'diretor' | 'finance
   return roles;
 }
 
+/**
+ * Exposição **somente para teste** de `resolveAvailableApproverRoles`.
+ *
+ * A Falha 2 de `FIND-ERP-005` vive metade na rota e metade nesta função, e o
+ * finding registra que a suíte passava verde justamente porque nada
+ * exercitava a camada de apresentação. Os vetores adversariais de R2(e)
+ * (`'read'`, `''`, `0`, `'Approve'`, `'APPROVE'`, `' approve '`, `true`,
+ * `['approve']`, `{}`, `null`) não são todos inseríveis em
+ * `access_profile_permissions` por perfil normal (o enum de nível barra a
+ * maioria), então são exercitados **aqui**, em teste unitário, contra a
+ * função que nomeia o papel gravado. O caminho HTTP (403 + zero linhas) é
+ * coberto em `tests/integration/jur-contract-authority-find-erp-005.test.ts`.
+ *
+ * Não é usado por nenhuma rota.
+ */
+exports.__test__resolveAvailableApproverRoles = resolveAvailableApproverRoles;
+
 /** `GET /api/jur/contracts` */
 exports.list = async (req: Request, res: Response, next: NextFunction) => {
   try {
