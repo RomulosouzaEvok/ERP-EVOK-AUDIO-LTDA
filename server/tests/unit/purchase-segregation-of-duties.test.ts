@@ -134,9 +134,15 @@ describe('D-K — regra pura (shared/domain/segregationOfDuties)', () => {
       PURCHASE_ORDER: 'D-K-PEDIDO',
       PURCHASE_ORDER_AUTHORITY: 'D-K-ALCADA',
       IMPORT_PROCESS_AUTHORITY: 'D-K-COMEX',
+      // 5o ponto, acrescentado em 2026-08-14 pela remediacao de FIND-ERP-005
+      // (Falha 4): a decisao D-K passou a valer tambem para a alcada de
+      // contrato juridico (APR-2026-021 Parte B decisao 5). Ate entao o
+      // cabecalho deste modulo citava o Juridico nominalmente como o
+      // comportamento OPOSTO ao desejado, sem a regra estar aplicada la.
+      JUR_CONTRACT_AUTHORITY: 'D-K-JURIDICO',
     });
-    // Os 4 valores sao distintos: um cliente consegue diferenciar qual gate reprovou.
-    expect(new Set(Object.values(SEGREGATION_RULES)).size).toBe(4);
+    // Os 5 valores sao distintos: um cliente consegue diferenciar qual gate reprovou.
+    expect(new Set(Object.values(SEGREGATION_RULES)).size).toBe(5);
   });
 
   it('auto-aprovacao e apenas "mesma pessoa", nao "mesmo papel"', () => {
