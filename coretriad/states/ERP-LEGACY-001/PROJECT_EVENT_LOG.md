@@ -859,3 +859,63 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
   despachada — resolve 5 pendências dirigidas por T-08, T-15, T-17, T-19 e
   T-20 (`RES-T20-01`: qual citação de caminho quebrada explica a 2ª falha
   de teste pré-existente).
+
+## 2026-08-14 — FIELDWORK CONCLUÍDO: 27 de 27 trilhas persistidas
+
+- **T-23 (documentação × código), última trilha do plano, concluída.**
+  Resolveu os 5 itens escalados por outras trilhas:
+  1. **`RES-T20-01` — NÃO fechado apesar de varredura extensa.** Verificou
+     manualmente ~30 candidatos de citação de caminho quebrada contra
+     ~4.374 ocorrências totais em 182 arquivos `.md`; todos os candidatos
+     plausíveis estavam **corretamente isentos** pelas convenções do guard
+     (banner histórico, citação dentro de bloco de aspas, checklist
+     fechado, marcador de proposta). **Registrou como conformidade** (a
+     disciplina de isenção está sendo aplicada de verdade, não é
+     mascaramento) e recomendou fechar via execução direta do teste
+     (`DYN-T20-06`), que resolve em segundos o que a leitura estática não
+     fecha com certeza contra um universo desse tamanho.
+  2. **Confirmado:** `DIAGRAMA_CLASSES_CAMADAS.md` cobre 10/48 módulos e
+     documenta a espinha legada como camada intencionada — **e a
+     convivência `services/`×`modules/` nunca foi formalizada em ADR**
+     (`T23-F01`, MEDIUM). Risco concreto: sem decisão registrada, um
+     colaborador futuro pode "corrigir" por iniciativa própria uma
+     coexistência que é deliberada.
+  3. **Confirmado e ampliado:** o único fluxograma do processo fiscal
+     (`docs/tributario/00-README.md:56-86`) **inverte o sujeito do regime
+     tributário** (trata como do cliente o que é do emitente) **e omite os
+     três eventos pós-emissão mais comuns** — cancelamento, negação da
+     SEFAZ, carta de correção (`T23-F02`, HIGH). É a especificação que
+     qualquer implementação ou revisão fiscal usaria como referência.
+  4. **Confirmado:** `API.md` se autodeclara "a" documentação da API e
+     **não tem nenhum ponteiro** para os 6 documentos que cobrem os 348
+     endpoints omitidos (`T23-F03`, HIGH, mesma severidade de T-17 — não
+     rebaixada).
+  5. **Confirmado, com nuance que reduz a severidade:** `04-USE_CASES.md`
+     (SSOT declarada) tem UC-56/57/63-66 sem seção; a colisão UC-52/53
+     **já é auto-declarada pelo próprio documento** como dívida reconhecida
+     — reduz de HIGH para MEDIUM em relação à leitura ingênua, porque não
+     é uma SSOT que mente sem saber (`T23-F04`).
+- **Achado novo:** fence de código Markdown não fechado corrompe a
+  renderização do fim de `docs/rh/00-README.md` (`T23-F05`, LOW).
+- **Conformidade destacada:** `docs/rh/00-README.md:30-38` lista
+  explicitamente quais arquivos que o próprio índice promete **não
+  existem** — o oposto exato do defeito de "SSOT falsa" que outras partes
+  do corpus documental cometem.
+
+---
+
+## FIELDWORK ENCERRADO — 27 de 27 trilhas concluídas e persistidas
+
+Todas as trilhas do plano (T-00 a T-24, com T-15 fechada por adendo e o
+bloqueante de T-18 fechado por extensão dirigida T-18-A) estão em
+`audit/runs/ERP-LEGACY-001-AUD-001/07-findings/`. Nenhum finding é
+`CONFIRMED` — todos permanecem `PROPOSED` (Regra 22). Nenhuma declaração de
+`AUDIT_PASSED`, `FINDINGS_CONFIRMED` ou `RETEST_PASSED` foi emitida por
+nenhuma trilha, em conformidade com a Regra 5 (CoreTriad Director orquestra,
+não implementa nem audita).
+
+**Próxima fase, condicionada a nova instrução do dono:** T-25 (validação
+adversarial de todo CRITICAL/HIGH, incluindo a divergência aberta T-14×T-15
+sobre colisão de BR-ID e a arbitragem pendente T-16×T-04 sobre a premissa
+mitigante de `AUD-SEC-T04-01`) e T-26 (consolidação, cobertura executada e
+relatórios finais).
