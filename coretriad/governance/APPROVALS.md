@@ -756,5 +756,60 @@ Pendente para fechar o caso: `REMEDIATION.md` e `REMEDIATION_EVIDENCE_PACKAGE`.
 
 **Aprovado por:** Gilwagno (dono do CoreTriad) — 14/08/2026.
 
+---
+
+## APR-2026-023 — G4/G5/G6/G7 aprovados, G11 opção (c), e implantação da chave em 3 etapas com gate humano
+
+### Parte A — Implantação da chave de idempotência obrigatória (FIND-ERP-001)
+
+Confirmada a obrigatoriedade da `APR-2026-022` decisão 2, **sem corte direto**,
+em **três etapas obrigatórias e nesta ordem**:
+
+| Etapa | Conteúdo | Estado |
+|---|---|---|
+| **1** | A automação externa passa a **enviar** a chave | Trabalho **fora deste repositório** (instância de automação); depende do dono |
+| **2** | A rota aceita chamadas **com e sem** chave durante a janela de migração | Implementável no ERP agora |
+| **3** | A exigência entra em vigor (chamada sem chave é rejeitada) | **BLOQUEADA** — ver gate abaixo |
+
+**GATE HUMANO OBRIGATÓRIO ENTRE AS ETAPAS 2 E 3.** Determinação expressa do
+dono: *"Documente cada etapa e confirme comigo antes de avançar da etapa 2 para
+a 3."* Nenhum agente — OpusCore, SanaCore ou VeriCore — pode promover a etapa 3
+sem nova aprovação humana registrada. Avançar sem ela é violação de gate
+(Regra 18) e produz interrupção da integração em produção.
+
+**Cada etapa deve ser documentada** ao ser concluída, com evidência do que
+mudou e de como se verificou.
+
+### Parte B — Gates da auditoria `ERP-LEGACY-001-AUD-001`
+
+| Gate | Veredito | Efeito prático |
+|---|---|---|
+| **G4** | **APROVADO** | A fila `DYN-01…DYN-08` fica autorizada **contra `erp_evok_audio_test`**. Desfaz o `CONFLITO-G3×G4`: as trilhas antes em `READY_TO_CLOSE_BLOCKED_BY_G4` passam a poder fechar. **O banco real permanece proibido** — `APR-2026-016` intacto e o guard que recusa banco sem sufixo de teste segue ativo. |
+| **G5** | **APROVADO** | Homologada a dispensa das trilhas de IA e do `agent-permission-auditor`, **com a cláusula de reabertura**: qualquer trilha que encontre modelo, embedding ou agente interrompe e escala ao director; reabertura por adição ao plano, nunca por decisão do auditor que achou. |
+| **G6** | **APROVADO** | `RA-09` liberada: o `vericore-audit-scope-agent` pode emendar formalmente o `AUDIT_SCOPE.md` §2.3, cuja afirmação sobre a baseline é sabidamente incorreta. |
+| **G7** | **APROVADO** | Confirmado que as remediações SanaCore **não entram** nesta run e exigirão **delta audit** (Regra 14). Nenhum `RETEST_PASSED`/`FINDING CLOSED` de `FIND-ERP-001` ou `FIND-ERP-005` sai desta auditoria. |
+| **G11** | **OPÇÃO (c)** | Liberada a **primeira etapa dentro das 110 sessões já aprovadas**; o restante (W2/W3) fica retido até o dono receber o **número real medido**, não estimado. |
+
+### Parte C — Escopo liberado para fieldwork por G11(c)
+
+**W0 — CONCLUÍDA** (`T-00`, re-ancoragem: `ÂNCORAS_VÁLIDAS` 7/7).
+
+**W1 — LIBERADA, 20 sessões, dentro das 110:** `T-01` (tier 1 cadastro:
+`items`/`categories`/`departments`, 22 endpoints), `T-02` (tier 1 identidade:
+`auth`/`users`, 15 endpoints), `T-03` (tier 1 audit log: `auditLogs` +
+`auditLogService.ts`), `T-04` (transversal authZ: `middlewares/` + montagem em
+`app.ts` — gargalo de W2), `T-05` (fluxo item↔produto↔recebimento, cross-tier,
+inclui RA-08: cobertura integral dos 2 serviços sem auditoria anterior).
+
+**W2, W3 e W4 permanecem RETIDOS.** A liberação depende de o dono receber a
+medição real de esforço produzida pela execução de W1 e decidir sobre o
+delta 110 → 144.
+
+**Obrigação de medição:** a execução de W1 deve produzir esforço **medido** por
+trilha, para substituir a estimativa. É o objeto da opção (c) — trocar
+estimativa por medida antes de comprometer número.
+
+**Aprovado por:** Gilwagno (dono do CoreTriad) — 14/08/2026.
+
 Aprovações futuras: adicionar linha com próximo ID sequencial. Nunca editar
 entradas existentes — correções entram como nova linha referenciando a antiga.
