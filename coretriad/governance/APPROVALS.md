@@ -676,5 +676,85 @@ parte 2 e satisfaz o gate G9.
 
 **Aprovado por:** Gilwagno (dono do CoreTriad), em sessão — 14/08/2026.
 
+---
+
+## APR-2026-022 — Reafirmação das 5 decisões de negócio + MUDANÇA na decisão 2 (chave obrigatória)
+
+**Referência:** reafirma e, em um ponto, **altera** a `APR-2026-021` Parte B.
+Registrada como entrada nova, nunca por edição da anterior.
+
+### Nota de correspondência (correção de registro, não de mérito)
+
+A mensagem do dono intitula as cinco como "perguntas de negócio do
+`FIND-ERP-005`". Para a rastreabilidade ficar correta: **as perguntas 1 e 2
+pertencem ao `CASE-001` / `FIND-ERP-001`** (idempotência — parcelas e
+movimentação de estoque); **as perguntas 3, 4 e 5 pertencem ao `CASE-002` /
+`FIND-ERP-005`** (alçada de contrato jurídico). O mérito das decisões não muda;
+apenas o vínculo de cada uma ao seu caso.
+
+### Decisões 1, 3, 4 e 5 — REAFIRMADAS, sem alteração de conteúdo
+
+Idênticas ao já registrado na `APR-2026-021` Parte B, itens 1, 3, 4 e 5:
+
+1. **Parcelas de mesmo valor no mesmo título são caso legítimo** — conforme o
+   desenho recomendado, não bloqueante. Registrada como `BR-FIN-003` no
+   `BR_CATALOG.md`.
+3. **Alçada de contrato vem de TABELA CONFIGURÁVEL**, não de constante no
+   código — alinhada ao que o contrato de API já promete.
+4. **Aditivo que eleva valor exige `approve`**; `operate` nunca basta.
+5. **A segregação D-K vale para aprovação de contrato jurídico: SIM.**
+
+### Decisão 2 — ALTERADA em relação à `APR-2026-021`
+
+| | `APR-2026-021` (anterior) | `APR-2026-022` (vigente) |
+|---|---|---|
+| Status do consumidor externo | `UNKNOWN` — vedado inferir | **CONFIRMADO — existe consumidor externo (automação)** |
+| Chave de idempotência | Opcional; **vedado** breaking change | **OBRIGATÓRIA** |
+| Estratégia | Backward-compatible obrigatória | Definida por esta decisão |
+
+**Fundamento da mudança:** conhecimento do dono sobre a operação real da
+empresa, que o inventário estático não podia alcançar. O
+`EXTERNAL_CONSUMER_INVENTORY.md` havia concluído — corretamente — que prova de
+ausência é inalcançável por varredura de repositório, e devolvido a questão ao
+dono. **A questão foi respondida com informação de fora do repositório: o
+consumidor externo existe.** O inventário permanece válido como evidência do
+que o código mostra; esta decisão o complementa, não o contradiz.
+
+**`EXTERNAL_CONSUMER_STATUS = CONFIRMED` (automação).**
+
+### Risco material registrado pelo Control Plane (Regra 20 — divergência não silenciada)
+
+A `APR-2026-021` vedava breaking change **porque** um consumidor externo
+poderia existir. Confirmado que **existe**, tornar a chave obrigatória é
+exatamente o breaking change que a vedação anterior pretendia evitar: **a
+automação passa a receber erro em toda chamada que não enviar a chave, a partir
+do deploy**. O efeito é interrupção de integração em produção, não degradação
+suave.
+
+Isto **não invalida a decisão** — obrigatoriedade é a única forma de a proteção
+de idempotência ser efetiva contra um cliente que faz retry, e essa é
+prerrogativa do dono. Mas a **sequência de implantação** deixa de ser detalhe
+técnico e passa a ser parte da decisão. Registrado para que a SanaCore não
+implante obrigatoriedade sem que a automação tenha sido migrada antes, e para
+que nenhuma auditoria futura leia esta aprovação como autorização de indisponibilidade.
+
+**Condição de implantação que o Control Plane registra como pendente de
+confirmação do dono:** a obrigatoriedade só entra em vigor **depois** de a
+automação externa passar a enviar a chave, com a rota aceitando ambas as formas
+durante a janela de migração. Se o dono determinar corte direto, isso deve ser
+decisão explícita e registrada, ciente da interrupção.
+
+### Efeito sobre as Falhas 1 e 3 do `FIND-ERP-005`
+
+O dono determina a liberação das Falhas 1 e 3 à SanaCore. **Registro de estado:
+elas já haviam sido liberadas pela `APR-2026-021` Parte B (itens 3 e 4) e já
+foram IMPLEMENTADAS** — commits `cd6f45b`, `afde1d0`, `8a2c5e3`, `33b8633` e
+`54572b7` na branch `sana/ERP-LEGACY-001/FIND-ERP-005`, com typecheck limpo e
+95 testes unit verdes verificados de forma independente pelo orquestrador. Esta
+aprovação **confirma** a liberação; não abre trabalho novo nas Falhas 1 e 3.
+Pendente para fechar o caso: `REMEDIATION.md` e `REMEDIATION_EVIDENCE_PACKAGE`.
+
+**Aprovado por:** Gilwagno (dono do CoreTriad) — 14/08/2026.
+
 Aprovações futuras: adicionar linha com próximo ID sequencial. Nunca editar
 entradas existentes — correções entram como nova linha referenciando a antiga.
