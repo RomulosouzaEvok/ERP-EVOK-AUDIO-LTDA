@@ -301,3 +301,49 @@ Control Plane, e só a VeriCore pode declarar `RETEST_PASSED`/`CLOSED`
   classificador de segurança do PowerShell ficou temporariamente indisponível
   durante o registro da APR — contornado com Edit direto (mesmo padrão de
   13/08); normalizado em seguida.
+
+## 2026-08-14 — APR-2026-020: passo 31 aberto (AUD-001) + remediação SanaCore iniciada (2 CRITICAL)
+
+- **Decisão do dono registrada em `APR-2026-020`**: (A) gate do passo 31
+  APROVADO — auditoria 360° na ordem PRODUÇÃO REAL → alto risco → restante,
+  parando no gate humano do plano; (B) encaminhamento dos 7 findings à
+  SanaCore AUTORIZADO — 2 CRITICAL primeiro, 4 HIGH depois, `FIND-ERP-007`
+  retido até o item 3 voltar ao autor. OWNER por área permanece pendente
+  (`APR-2026-019`), vedado a agente inferir.
+- **Estado do projeto: `DISCOVERY` → `IN_AUDIT`.** Nota de concorrência
+  registrada: remediação preliminar corre em paralelo à auditoria; a state
+  machine linear não modela essa concorrência de programa legado — registrado
+  como ocorreu, conciliação de modelo fica com VeriCore + humano.
+- **Casos de remediação abertos** em `coretriad/handoffs/ERP-LEGACY-001/`:
+  `CASE-001` (FIND-ERP-001) e `CASE-002` (FIND-ERP-005), no contrato
+  `coretriad/contracts/REMEDIATION_CASE.md`.
+- **Escopo da auditoria registrado** — `audit/runs/ERP-LEGACY-001-AUD-001/00-scope/AUDIT_SCOPE.md`:
+  **AUDIT_COMMIT `c1311a6`** fixado por tripla verificação em disco
+  (`.git/refs/heads/main` + reflog + `packed-refs`); 10 exclusões E1-E10;
+  conflito de interesse verificado **sem impedimento**, com restrição
+  vinculante registrada — autor de finding preliminar não reexamina o próprio
+  achado como voz única no fieldwork. **Fieldwork NÃO autorizado.**
+- **Terceira ocorrência da mesma classe de incidente (contexto injetado
+  desatualizado):** o scope agent recebeu HEAD `8cc650a` por contexto
+  injetado, **3 commits atrás da ponta real**, e o rejeitou corretamente por
+  leitura direta. A regra do programa (nenhum número de contexto injetado sem
+  releitura da fonte) segue funcionando como projetada.
+- **Triagem SanaCore do `CASE-001` CONCLUÍDA** —
+  `remediation/cases/ERP-LEGACY-001-CASE-001/TRIAGE.md`: causa-raiz
+  reconfirmada no HEAD com **evidência dinâmica** (suíte characterization
+  9/9, 66/66 verdes contra `erp_evok_audio_test`); **constraint UNIQUE de
+  negócio DESCARTADA com evidência** (quebraria transferência entre depósitos
+  e recebimento parcial, e seria inócua na rota vulnerável por `reference`
+  nulo/NULLS DISTINCT); plano recomendado por `operation_id` UUID + UNIQUE
+  parcial + tabela `financial_payment_events` (que cria o histórico de baixas
+  hoje inexistente). **Divergência corrigindo o próprio caso (Regra 21):** a
+  afirmação de que nenhum commit posterior tocou `server/src` é **falsa** — o
+  commit `3dee99f` alterou 8 arquivos; nenhum é âncora do finding, impacto
+  zero sobre a validade. **3 superfícies irmãs** com a mesma causa-raiz
+  (`POST /api/products/movements`, `/api/mobile-inventory/scan`, `/batch`)
+  ficam para decisão do dono — **não incorporadas por analogia**.
+- **Interrupção por limite de sessão da API (registro de transparência):** a
+  triagem do `CASE-002` e o inventário da run caíram por limite de sessão
+  antes de escrever qualquer arquivo — **nenhum trabalho perdido, nenhum
+  artefato parcial em disco**; ambas redespachadas do zero. O trabalho
+  concluído foi commitado antes (`de4dac1`) para não depender da sessão.
