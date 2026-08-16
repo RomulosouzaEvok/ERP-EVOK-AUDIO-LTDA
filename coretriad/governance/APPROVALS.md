@@ -966,3 +966,33 @@ validado ou fechado (Regras 5 e 6).
 
 Aprovações futuras: adicionar linha com próximo ID sequencial. Nunca editar
 entradas existentes — correções entram como nova linha referenciando a antiga.
+
+---
+
+## APR-2026-025 — Guarda de sufixo `_test`/`_ci` em `DB_NAME` nos dois scripts destrutivos, fail-closed, encaminhada à SanaCore
+
+**Data:** 2026-08-16
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto nesta sessão
+**Registrado por:** `coretriad-director`
+**Artefato de despacho:** `coretriad/handoffs/ERP-LEGACY-001/REMEDIATION_CASE-ERP-LEGACY-001-CASE-003.md`
+
+**Texto verbatim:** *"Aprovo a recomendação: estenda `limpar-dados-transacionais.cjs`
+e `seed-usuarios-departamentos.cjs` com a mesma checagem de sufixo `_test`/`_ci`
+em `DB_NAME` que já existe e funciona em `run-api-suite.cjs:530-536`, recusando
+rodar (fail-closed) se o banco não tiver esse sufixo — antes de qualquer DELETE.
+Encaminhe para a SanaCore como remediação prioritária de `RC-PROC-01`, com
+reteste independente da VeriCore depois."*
+
+**Divergência resolvida (Regra 20):** instrução anterior do dono previa "guarda
+com escape explícito"; a posterior determina fail-closed **sem** escape.
+Prevalece a posterior. Consequência aceita e registrada: limpar o banco real
+antes do Go-Live exigirá alteração de código naquele momento.
+
+**Escopo:** exatamente os dois scripts nomeados + notas de cabeçalho. **Não**
+autoriza ampliação por analogia a outros scripts, **não** autoriza mexer em
+`.env.example`/`docker-compose.yml`, **não** fecha `AUD-PROC-CUSTODIA-01`, **não**
+declara `CE-01`…`CE-09` cumpridos e **não** aceita risco algum.
+
+**Fluxo:** SanaCore implementa em worktree `sana/ERP-LEGACY-001/CASE-003`;
+VeriCore reatesta de forma independente. `RETEST_PASSED`/`FINDING CLOSED` seguem
+exclusivos da VeriCore (Regras 3 e 4).

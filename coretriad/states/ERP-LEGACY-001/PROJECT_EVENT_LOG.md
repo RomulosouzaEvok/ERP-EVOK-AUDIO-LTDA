@@ -1377,3 +1377,94 @@ Esta nota é registro factual do orquestrador, **não** juízo de auditoria: nã
 altera severidade, não fecha finding, não fecha a classe `RC-PROC-01` e não
 declara `RETEST_PASSED`. O encerramento de `CE-01`…`CE-09` segue sendo decisão
 do dono sobre evidência VeriCore (Regra 4).
+
+## REMEDIATION_CASE-003 ABERTO — GUARDA DE BANCO EM SCRIPTS DESTRUTIVOS — 2026-08-16
+
+| campo | valor |
+|---|---|
+| timestamp | 2026-08-16 |
+| from | DISCOVERY / passo 31 em curso (sem transição) |
+| to | idem — **não é transição de state machine** |
+| actor | `coretriad-director` (registro) sob decisão do **humano (dono, Gilwagno)** |
+| organization | HUMANO (autorização) / CORETRIAD (registro) → despacho a SanaCore |
+| artifact/evidence | `coretriad/handoffs/ERP-LEGACY-001/REMEDIATION_CASE-ERP-LEGACY-001-CASE-003.md` |
+
+**Regra 18 — autorização humana explícita, texto verbatim do dono nesta sessão:**
+*"Aprovo a recomendação: estenda `limpar-dados-transacionais.cjs` e
+`seed-usuarios-departamentos.cjs` com a mesma checagem de sufixo `_test`/`_ci`
+em `DB_NAME` que já existe e funciona em `run-api-suite.cjs:530-536`, recusando
+rodar (fail-closed) se o banco não tiver esse sufixo — antes de qualquer DELETE.
+Encaminhe para a SanaCore como remediação prioritária de `RC-PROC-01`, com
+reteste independente da VeriCore depois."*
+
+**Objeto, verificado por leitura própria do director no HEAD de 2026-08-16
+(nenhum comando executado, nenhuma conexão de banco aberta — `APR-2026-016`):**
+`server/scripts/limpar-dados-transacionais.cjs` tem três guardas — `NODE_ENV`
+(`:199-200`), simulação por padrão com `--confirmar` (`:204`, `:250-251`) e
+detecção **pós-fato** de perda colateral (`:314-325`) — e **nenhuma confere o
+nome do banco**: `DB_NAME` é lido cru em `:207`, com `DELETE` em `:269`/`:272`.
+`server/scripts/seed-usuarios-departamentos.cjs` tem o mesmo gap com guarda só
+por `NODE_ENV` (`:459-462`) e **um agravante próprio, descoberto nesta leitura e
+não constante do insumo original: `DB_NAME` tem default para o banco REAL no
+código** (`:315`, `:469` — `process.env.DB_NAME || 'erp_evok_audio'`), de modo
+que com `DB_NAME` ausente ele conecta à produção por omissão; `DELETE` em
+`:340`, `:346`, `:354`, `:402`.
+
+**Por que a guarda de `NODE_ENV` não cobre o vetor real:** `server/.env.example`
+traz `NODE_ENV=development` (`:9`) **junto com** `DB_NAME=erp_evok_audio` (`:15`,
+banco REAL por `APR-2026-016`), e o próprio arquivo manda copiá-lo para `.env`
+(`:4-5`), porque este projeto **não tem banco de dev separado do real**. A
+guarda cobre o deploy de produção; não cobre estação de trabalho de
+desenvolvedor nem agente automatizado com `.env` padrão.
+
+**Padrão a replicar, confirmado em disco:** `server/scripts/run-api-suite.cjs`
+**`:517-536`** — `:524-529` recusa `NODE_ENV=production` e `/prod/i` em
+`DB_NAME`/`DB_HOST`; `:530-536` recusa `DB_NAME` sem sufixo `_test`/`_ci`.
+Fail-closed por construção (`DB_NAME` ausente → `''` → não casa → recusa).
+**Precisão de registro:** a guarda cobre *três* variáveis, não apenas `DB_NAME`.
+
+**DIVERGÊNCIA REGISTRADA E RESOLVIDA (Regra 20), não silenciada:** o dono
+aprovou primeiro *"guarda com escape explícito"* (flag deliberada de contorno,
+preservando a limpeza pré-Go-Live) e, em seguida, instruiu *"fail-closed,
+recusando rodar"*, **sem escape**. **Prevalece a instrução mais recente:
+fail-closed sem escape.** **Consequência operacional registrada para não se
+perder: limpar dados transacionais do banco real antes do Go-Live passará a
+exigir alteração de código naquele momento** — não haverá flag, env var ou
+argumento que contorne. A divergência foi levada ao dono pelo orquestrador; se
+houver retificação, ela entra como **EMENDA-01 ao `CASE-003`**, por adição,
+nunca por reescrita (Regra 15).
+
+**Vínculo e não-vínculo (distinção registrada por ser material):** o caso remedia
+**um vetor da classe `RC-PROC-01`**
+(`coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`), e
+**NÃO** o finding `AUD-PROC-CUSTODIA-01`
+(`audit/runs/ERP-LEGACY-001-AUD-001/07-findings/`, HIGH, CONFIRMED por `T-30`),
+que tem vetor próprio (`docker exec … psql`) e reteste próprio (`RT-CUST-*`).
+São objetos distintos: **concluir este caso não produz efeito algum sobre o
+status daquele finding.** O caso também **não declara nenhum critério
+`CE-01`…`CE-09` cumprido**, nem parcialmente — inclusive `CE-03`, cujo resíduo é
+parente do gap aqui tratado.
+
+**Fluxo determinado pelo dono:** implementação pela **SanaCore**; **reteste
+independente pela VeriCore depois**. Registrado que **nenhum `RETEST_PASSED`,
+`FINDING CLOSED`, `REMEDIATION_ACCEPTED` ou fechamento de `CE-*` decorre da
+implementação** (Regras 3 e 4).
+
+**Pré-condição operacional bloqueante:** o hook bloqueia escrita de agente
+SanaCore em `server/` no **worktree principal** — verificado por leitura direta
+de `.claude/hooks/org-isolation.js:80-89`
+(`deniedInMainWorktree: [/^(src|server|client|product|tests|mobile)\//]`).
+A implementação **exige** worktree `sana/ERP-LEGACY-001/CASE-003` (Regras 11 e 23).
+
+**Escopo fechado, sem ampliação por analogia:** apenas os **dois** scripts
+nomeados pelo dono, mais a atualização das notas de cabeçalho que hoje declaram
+o gap aberto e que se tornarão **falsas** após a correção. Outros scripts
+destrutivos eventualmente encontrados devem ser **listados como observação, não
+corrigidos**. Fora de escopo: alterar `.env.example`/`docker-compose.yml` ou
+criar banco de dev separado (decisão aberta do dono).
+
+**Aprovação registrada:** `APR-2026-025` (`coretriad/governance/APPROVALS.md`).
+
+Nenhum comando, teste ou conexão de banco executado. Nenhum commit. Nenhuma
+severidade atribuída ou alterada (Regra 22). Nenhum `RETEST_PASSED`,
+`FINDING CLOSED` ou `CE-*` declarado (Regras 4 e 5).
