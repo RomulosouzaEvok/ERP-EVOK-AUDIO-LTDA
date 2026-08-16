@@ -121,25 +121,25 @@ não deixa rastro; a simulação (E19) não deixa rastro nenhum, embora leia o c
 
 | ID | Achado | Sev. | Âncora |
 |---|---|---|---|
-| `F06` | `clients`, `employees`, `nonConformities` sem **nenhum** audit log de escrita (9 endpoints) | MEDIUM | ausência em `clientController`/`employeeController`/`nonConformityController`; `app.ts` sem middleware global |
-| `F07` | `DELETE` repetido reescreve dado de encerramento (idempotência destrutiva) | MEDIUM | `CloseNonConformityUseCase.ts:46-49`; `DeactivateEmployeeUseCase.ts:73` |
-| `F08` | RNC fecha sem máquina de estados; nenhuma transição validada | MEDIUM | `NonConformity.ts:77`; `UpdateNonConformityUseCase.ts:34` |
-| `F09` | `nonConformities` sem **nenhuma** validação de entrada | MEDIUM | `nonConformityController.ts:44,55`; único guard em `CreateNonConformityUseCase.ts:130` |
-| `F10` | Numeração por `Date.now()` sob UNIQUE → 500 em colisão | MEDIUM | `CreateNonConformityUseCase.ts:160`; `CreateQualityInspectionUseCase.ts:147` |
-| `F11` | Inspeção reprovada não é atômica com o bloqueio do lote: **material fica não contido** | MEDIUM | `CreateQualityInspectionUseCase.ts:176-196` |
-| `F12` | `POST /quality/inspections` sem idempotência: reenvio duplica RNC e **zera `quality_score`** do fornecedor | MEDIUM | fórmula em `CreateNonConformityUseCase.ts:274-286`; grava em `SequelizeNonConformitiesRepository.ts:75-80` |
-| `F13` | `PUT /clients/:id` aceita `cpf_cnpj`, responde 200 e **não grava** | MEDIUM | `clientValidators.ts:31` × `UpdateClientUseCase.ts:18-21,45-47` |
-| `F14` | `address` aceito, validado e nunca persistido | MEDIUM | `clientValidators.ts:11` × `Client.ts:39-69` (sem coluna) |
-| `F15` | Cliente inativado sem caminho de reativação pela API | MEDIUM | `UpdateClientUseCase.ts:19` × `clientValidators.ts:6-31` (`.strict()` sem `status`) |
-| `F16` | Importação troca `product_type` de produto com BOM ativa, só com aviso | MEDIUM | `validarPlanilhaCadastro.ts:372-378` × `bomService.ts:203-206` |
-| `F17` | `DELETE /clients/:id`: check-then-act sem transação nem lock | LOW | `DeactivateClientUseCase.ts:31-36` |
-| `F18` | `sanitizeSearch` aplicado duas vezes (escape duplo quebra busca por `%`) | LOW | `ListClientsUseCase.ts:41` + `SequelizeClientsRepository.ts:18`; `validators.ts:163-166` |
-| `F19` | Paginação sem teto em `clients`, `employees`, `nonConformities` | LOW | `clientController.ts:21-25`; `ListEmployeesUseCase.ts:55-57`; `ListNonConformitiesUseCase.ts:46-49` |
-| `F20` | `GET /non-conformities/:id` devolve `User` e `Supplier` inteiros | LOW | `SequelizeNonConformitiesRepository.ts:33-42` (sem `attributes`) × `:22-26` (com) |
-| `F21` | Importação sem limite de linhas: transação longa + N+1 | LOW | `spreadsheetUpload.ts:19,23`; `validarPlanilhaCadastro.ts:750` |
-| `F22` | Comentário normativo obsoleto em `SequelizeQualityRepository` | LOW | `:4-11` × `models/index.ts:48,663-681,1530` |
-| `F23` | `employees` mantém `authorize('admin')` legado, fora do retrofit `authorizeModule` | MEDIUM | `employees.ts:21-23` × `clients.ts:4-8`, `nonConformities.ts:10-14`, `qualityInspections.ts:11-18` |
-| `F24` | `employees` sem validação de entrada em criação e atualização | LOW | `employeeController.ts:76,87`; `CreateEmployeeUseCase.ts:79-84` |
+| `T33-A-F06` | `clients`, `employees`, `nonConformities` sem **nenhum** audit log de escrita (9 endpoints) | MEDIUM | ausência em `clientController`/`employeeController`/`nonConformityController`; `app.ts` sem middleware global |
+| `T33-A-F07` | `DELETE` repetido reescreve dado de encerramento (idempotência destrutiva) | MEDIUM | `CloseNonConformityUseCase.ts:46-49`; `DeactivateEmployeeUseCase.ts:73` |
+| `T33-A-F08` | RNC fecha sem máquina de estados; nenhuma transição validada | MEDIUM | `NonConformity.ts:77`; `UpdateNonConformityUseCase.ts:34` |
+| `T33-A-F09` | `nonConformities` sem **nenhuma** validação de entrada | MEDIUM | `nonConformityController.ts:44,55`; único guard em `CreateNonConformityUseCase.ts:130` |
+| `T33-A-F10` | Numeração por `Date.now()` sob UNIQUE → 500 em colisão | MEDIUM | `CreateNonConformityUseCase.ts:160`; `CreateQualityInspectionUseCase.ts:147` |
+| `T33-A-F11` | Inspeção reprovada não é atômica com o bloqueio do lote: **material fica não contido** | MEDIUM | `CreateQualityInspectionUseCase.ts:176-196` |
+| `T33-A-F12` | `POST /quality/inspections` sem idempotência: reenvio duplica RNC e **zera `quality_score`** do fornecedor | MEDIUM | fórmula em `CreateNonConformityUseCase.ts:274-286`; grava em `SequelizeNonConformitiesRepository.ts:75-80` |
+| `T33-A-F13` | `PUT /clients/:id` aceita `cpf_cnpj`, responde 200 e **não grava** | MEDIUM | `clientValidators.ts:31` × `UpdateClientUseCase.ts:18-21,45-47` |
+| `T33-A-F14` | `address` aceito, validado e nunca persistido | MEDIUM | `clientValidators.ts:11` × `Client.ts:39-69` (sem coluna) |
+| `T33-A-F15` | Cliente inativado sem caminho de reativação pela API | MEDIUM | `UpdateClientUseCase.ts:19` × `clientValidators.ts:6-31` (`.strict()` sem `status`) |
+| `T33-A-F16` | Importação troca `product_type` de produto com BOM ativa, só com aviso | MEDIUM | `validarPlanilhaCadastro.ts:372-378` × `bomService.ts:203-206` |
+| `T33-A-F17` | `DELETE /clients/:id`: check-then-act sem transação nem lock | LOW | `DeactivateClientUseCase.ts:31-36` |
+| `T33-A-F18` | `sanitizeSearch` aplicado duas vezes (escape duplo quebra busca por `%`) | LOW | `ListClientsUseCase.ts:41` + `SequelizeClientsRepository.ts:18`; `validators.ts:163-166` |
+| `T33-A-F19` | Paginação sem teto em `clients`, `employees`, `nonConformities` | LOW | `clientController.ts:21-25`; `ListEmployeesUseCase.ts:55-57`; `ListNonConformitiesUseCase.ts:46-49` |
+| `T33-A-F20` | `GET /non-conformities/:id` devolve `User` e `Supplier` inteiros | LOW | `SequelizeNonConformitiesRepository.ts:33-42` (sem `attributes`) × `:22-26` (com) |
+| `T33-A-F21` | Importação sem limite de linhas: transação longa + N+1 | LOW | `spreadsheetUpload.ts:19,23`; `validarPlanilhaCadastro.ts:750` |
+| `T33-A-F22` | Comentário normativo obsoleto em `SequelizeQualityRepository` | LOW | `:4-11` × `models/index.ts:48,663-681,1530` |
+| `T33-A-F23` | `employees` mantém `authorize('admin')` legado, fora do retrofit `authorizeModule` | MEDIUM | `employees.ts:21-23` × `clients.ts:4-8`, `nonConformities.ts:10-14`, `qualityInspections.ts:11-18` |
+| `T33-A-F24` | `employees` sem validação de entrada em criação e atualização | LOW | `employeeController.ts:76,87`; `CreateEmployeeUseCase.ts:79-84` |
 
 **Nota sobre `F23`:** `hasFullEmployeeAccess` (`employeeSensitiveFields.ts:66-70`) concede **leitura**
 do dado sensível a quem tem o módulo `rh`; a **escrita** continua restrita a `role==='admin'`. Um
