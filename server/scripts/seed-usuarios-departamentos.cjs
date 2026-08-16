@@ -44,18 +44,21 @@
  * apenas como hash bcrypt. Perdeu, roda de novo.
  *
  * ⚠️ **Este script NÃO deve rodar em produção.** Ele recusa quando
- * `NODE_ENV === 'production'` — mas essa recusa **não checa o nome do
- * banco**. `process.env.DB_NAME` é lido direto, sem exigir sufixo
- * `_test`/`_ci` (diferente de `run-api-suite.cjs:530-536`). Como
+ * `NODE_ENV === 'production'` **e, desde `CASE-003` (SanaCore,
+ * `sana/ERP-LEGACY-001/CASE-003`, `APR-2026-025`), também recusa quando
+ * `DB_NAME` não tem sufixo `_test`/`_ci`** — igual a
+ * `run-api-suite.cjs:530-536`, fail-closed, sem escape por flag ou variável de
+ * ambiente. A checagem usa `resolveDbName()`, que resolve o mesmo default
+ * (`|| 'erp_evok_audio'`) usado por `connect()`: isso é deliberado, porque
  * `server/.env.example` traz `DB_NAME=erp_evok_audio` (o banco REAL,
  * `APR-2026-016`) junto com `NODE_ENV=development` — configuração normal de
- * dev local neste projeto, que não tem banco de dev separado do real —
- * rodar este script fora de `NODE_ENV=production` ainda pode escrever
- * usuários de teste no banco real se `DB_NAME` não for trocado
- * explicitamente para `_test`/`_ci`. Residual registrado em
+ * dev local neste projeto, que não tem banco de dev separado do real — e o
+ * *agravante próprio deste script* era que, com `DB_NAME` **ausente** do
+ * ambiente, o default apontava para o banco real **sem passar por checagem
+ * nenhuma**. Agora o default é resolvido antes da guarda, então também cai
+ * na recusa. Residual que motivou a correção registrado em
  * `coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`
- * (`CE-03`); reforço de guarda por sufixo é decisão de engenharia do dono,
- * não implementada por esta nota.
+ * (`CE-03`).
  *
  * @module scripts/seed-usuarios-departamentos
  */
@@ -306,13 +309,56 @@ function generatePassword(length = 16) {
 }
 
 /**
+ * Resolve o nome do banco efetivo, incluindo o default (`erp_evok_audio`,
+ * o banco REAL) que este script usa quando `DB_NAME` não está no ambiente.
+ *
+ * Existe como função separada — em vez de o default ficar só dentro de
+ * `connect()` — para que `assertBancoDescartavel()` avalie o mesmo valor
+ * que de fato será usado na conexão, incluindo o default. Se o default
+ * fosse resolvido só dentro de `connect()`, a guarda de sufixo checaria
+ * `process.env.DB_NAME` (possivelmente `undefined`) e não o valor real de
+ * conexão — o próprio agravante que motivou `CASE-003`.
+ *
+ * @returns {string}
+ */
+function resolveDbName() {
+  return process.env.DB_NAME || 'erp_evok_audio';
+}
+
+/**
+ * Recusa (fail-closed, sem escape por flag/env) rodar fora de um banco
+ * descartável. Mesmo padrão de `run-api-suite.cjs:530-536` — sufixo
+ * `_test`/`_ci` obrigatório. Deve receber o valor **resolvido** (com
+ * default já aplicado — ver `resolveDbName()`), nunca `process.env.DB_NAME`
+ * cru, senão o default escaparia da checagem.
+ *
+ * Implementado em `CASE-003` (SanaCore, `sana/ERP-LEGACY-001/CASE-003`,
+ * `APR-2026-025`) — decisão do dono foi fail-closed **sem** escape; não
+ * adicione flag, variável de ambiente ou argumento que contorne esta guarda.
+ *
+ * @param {string} dbName valor já resolvido (com default aplicado)
+ * @returns {void}
+ */
+function assertBancoDescartavel(dbName) {
+  if (!/(_test|_ci)$/i.test(dbName || '')) {
+    console.error(
+      `RECUSADO: DB_NAME="${dbName}" nao tem sufixo "_test" ou "_ci" — nao parece ser um banco descartavel. ` +
+      'seed-usuarios-departamentos.cjs cria e apaga usuarios/perfis de teste (DELETE em massa no modo --limpar) ' +
+      'e se recusa a rodar fora de um banco de teste/CI. Configure DB_NAME para um banco com sufixo _test ou _ci ' +
+      '(ver server/.env.test) antes de rodar.',
+    );
+    process.exit(1);
+  }
+}
+
+/**
  * Abre a conexão com o PostgreSQL a partir do `.env` do servidor.
  *
  * @returns {import('sequelize').Sequelize} Instância conectada.
  */
 function connect() {
   return new Sequelize(
-    process.env.DB_NAME || 'erp_evok_audio',
+    resolveDbName(),
     process.env.DB_USER || 'postgres',
     process.env.DB_PASSWORD,
     {
@@ -461,12 +507,14 @@ async function main() {
     process.exit(1);
   }
 
+  assertBancoDescartavel(resolveDbName());
+
   const limparModo = process.argv.includes('--limpar');
   const sequelize = connect();
 
   try {
     await sequelize.authenticate();
-    console.log(`Banco: ${process.env.DB_NAME || 'erp_evok_audio'} @ ${process.env.DB_HOST || 'localhost'}\n`);
+    console.log(`Banco: ${resolveDbName()} @ ${process.env.DB_HOST || 'localhost'}\n`);
 
     if (limparModo) {
       console.log('Removendo usuários e perfis de teste...');

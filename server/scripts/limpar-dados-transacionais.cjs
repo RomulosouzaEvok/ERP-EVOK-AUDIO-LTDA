@@ -72,20 +72,20 @@
  * de fato pretende esvaziar antes de copiar e colar:
  * `docker exec evok-postgres pg_dump -U evok_admin -d erp_evok_audio --format=custom > backup.dump`
  *
- * ⚠️ **Recusa rodar em produção** (`NODE_ENV === 'production'`) — mas isso
- * **não é uma guarda de nome de banco**. Este script lê `process.env.DB_NAME`
- * diretamente, sem checar sufixo `_test`/`_ci` (diferente de
- * `run-api-suite.cjs:530-536`). Se `.env` tiver `DB_NAME=erp_evok_audio` (o
- * default de `server/.env.example`) e `NODE_ENV` não estiver
- * `production` — configuração normal de dev local, por este projeto não ter
- * banco de dev separado do real — `--confirmar` apaga dado real de produção.
- * A recusa por `NODE_ENV` cobre o deploy de produção; **não cobre** a estação
- * de trabalho de um desenvolvedor ou de um agente automatizado apontando para
- * o banco real fora do NODE_ENV de produção. Residual registrado em
+ * ⚠️ **Recusa rodar em produção** (`NODE_ENV === 'production'`) **e recusa
+ * rodar fora de um banco descartável** — desde `CASE-003` (SanaCore,
+ * `sana/ERP-LEGACY-001/CASE-003`, `APR-2026-025`), este script também checa o
+ * sufixo `_test`/`_ci` em `process.env.DB_NAME`, igual a
+ * `run-api-suite.cjs:530-536`, e recusa (fail-closed, sem escape por flag ou
+ * variável de ambiente) antes de instanciar o `Sequelize` e antes de qualquer
+ * `DELETE`. `DB_NAME` ausente vira string vazia, que não casa o regex, então
+ * também recusa. A guarda por `NODE_ENV` permanece como segunda linha de
+ * defesa; a guarda por sufixo é a que de fato cobre a estação de trabalho de
+ * um desenvolvedor ou de um agente automatizado com `.env` padrão apontando
+ * para o banco real. Ver `assertBancoDescartavel()` abaixo. Residual que
+ * motivou a correção registrado em
  * `coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`
- * (`CE-03`) — recomendação de reforço (checar sufixo `_test`/`_ci` em
- * `DB_NAME`, como `run-api-suite.cjs`) é decisão de engenharia do dono, não
- * implementada por esta nota.
+ * (`CE-03`).
  *
  * @module scripts/limpar-dados-transacionais
  */
@@ -146,6 +146,31 @@ function devePreservar(tabela) {
 }
 
 /**
+ * Recusa (fail-closed, sem escape por flag/env) rodar fora de um banco
+ * descartável. Mesmo padrão de `run-api-suite.cjs:530-536` — sufixo
+ * `_test`/`_ci` obrigatório em `DB_NAME`. `dbName` ausente/vazio vira `''`,
+ * que não casa o regex, então também recusa.
+ *
+ * Implementado em `CASE-003` (SanaCore, `sana/ERP-LEGACY-001/CASE-003`,
+ * `APR-2026-025`) — decisão do dono foi fail-closed **sem** escape; não
+ * adicione flag, variável de ambiente ou argumento que contorne esta guarda.
+ *
+ * @param {string | undefined} dbName
+ * @returns {void}
+ */
+function assertBancoDescartavel(dbName) {
+  if (!/(_test|_ci)$/i.test(dbName || '')) {
+    console.error(
+      `RECUSADO: DB_NAME="${dbName}" nao tem sufixo "_test" ou "_ci" — nao parece ser um banco descartavel. ` +
+      'limpar-dados-transacionais.cjs apaga dados de forma irreversivel (DELETE em massa) e se recusa a rodar ' +
+      'fora de um banco de teste/CI. Configure DB_NAME para um banco com sufixo _test ou _ci ' +
+      '(ver server/.env.test) antes de rodar.',
+    );
+    process.exit(1);
+  }
+}
+
+/**
  * Extrai a primeira coluna de uma linha de resultado.
  *
  * O driver deste ambiente devolve as linhas de query crua como **array**
@@ -200,6 +225,8 @@ async function main() {
     console.error('RECUSADO: este script nao roda com NODE_ENV=production.');
     process.exit(1);
   }
+
+  assertBancoDescartavel(process.env.DB_NAME);
 
   const confirmado = process.argv.includes('--confirmar');
 
