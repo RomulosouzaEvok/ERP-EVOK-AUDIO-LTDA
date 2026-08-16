@@ -494,3 +494,170 @@ independente da lógica completa. `CE-07` continua **PARCIAL**.
 critérios são cumulativos e resíduo aceito não é dispensa: enquanto `CE-06`,
 `CE-08` e as partes abertas de `CE-03`, `CE-04` e `CE-07` não forem resolvidos
 ou explicitamente aceitos, a classe não fecha.
+
+---
+
+## 10. ADENDO — decisão de `CE-06` e correção de citação de `CE-05` (`APR-2026-027`)
+
+Adição posterior por decisão humana explícita. **Nenhuma linha das seções 1-9 foi
+alterada** (Regra 15). A §9.4 permanece como registro histórico do estado que
+vigorava antes desta decisão; a tabela da §10.3 abaixo **prevalece sobre ela** a
+partir de 2026-08-16, e **somente** para os dois critérios nomeados.
+
+> **A §10.1 foi redigida antes de existir a prova de escopo que ela própria
+> exige. A prova passou a existir na mesma data e refutou a premissa. Ler
+> obrigatoriamente com a §11.**
+
+### 10.1 `CE-06` — passa de `ABERTO` a `EM IMPLEMENTAÇÃO`
+
+`CE-06` admitia duas saídas: retenção de evidência independente **ou** aceitação
+registrada de que o cumprimento é verificável apenas por declaração do agente.
+**O dono recusou a segunda e escolheu o mecanismo** (`APR-2026-027`, D1):
+implementar `log_connections` no PostgreSQL, ativação imediata no banco de teste,
+e **procedimento preparado + janela de manutenção** para produção, sem execução
+sem confirmação humana de dia e horário.
+
+Isso é coerente com a tese da própria classe e com §5: *contenção por disciplina
+não é controle*; aceitar `CE-06` por autorreporte fecharia o critério de
+auditabilidade com a substância que a classe declara insuficiente.
+
+**CONDIÇÃO TÉCNICA, registrada como condição e não como resultado:** o container
+`evok-postgres` hospeda teste e produção **na mesma instância**, e
+`log_connections` é **parâmetro de servidor**. Se só admitir escopo de cluster,
+ativá-lo no teste **atinge produção**, contrariando a instrução. O agente de
+infraestrutura foi instruído a **provar o escopo antes de aplicar** e a **não
+aplicar nada** se a separação for tecnicamente impossível — nesse caso a ativação
+inteira vira item da janela. **Essa prova ainda não existe.** Este adendo **não
+afirma** que qualquer banco foi alterado.
+
+**Pendência de produção rastreada:** `PEND-2026-001` em
+`coretriad/governance/PENDING_SCHEDULED_ACTIONS.md`, estado
+**`AGUARDANDO JANELA — data/horário a definir pelo dono`**.
+
+**`CE-06` NÃO está satisfeito.** Fecha somente com **retenção efetiva nos dois
+bancos**, verificada pela VeriCore, **ou** com aceitação escrita do resíduo.
+
+### 10.2 `CE-05` — citação órfã sanada (o critério não muda de estado)
+
+A §9.4 registrou `CE-05` como *"SATISFEITO para o vetor VeriCore … (23/23 casos)"*
+quando a bateria correspondente **não estava versionada** — citação órfã apontada
+pelo reteste de `AUD-PROC-CUSTODIA-01`. Pela regra que esta classe fixa em §5,
+evidência que só existe no relato de um agente não sustenta critério de
+encerramento.
+
+**Sanada, e confirmado por leitura própria do `coretriad-director` nesta data:**
+`.claude/hooks/org-isolation.test.cjs` **existe**, é executável por
+`node .claude/hooks/org-isolation.test.cjs`, contém **23 casos** (`C1`…`C23`,
+último em `:313`; sumário `ok/CASOS.length` em `:336`) e **executa o hook real**
+via `spawnSync` alimentando payload no stdin, **sem mock** (`:55-60`). O cabeçalho
+do arquivo declara a própria razão de existir e remete a esta classe.
+
+**Limite do que este registro afirma:** confirmo **existência, executabilidade e
+estrutura do arquivo**. O resultado *23/23* é o relatado pelo executor —
+**nenhuma execução foi feita por este registro** (§8). O estado de `CE-05`
+**não muda** por este adendo; o que muda é que a evidência deixou de ser órfã e
+passou a ser reauditável por qualquer pessoa. Os resíduos já declarados na §9.4
+(`Bash` não passa por `ORG_RULES`; OpusCore/SanaCore/sessão principal sem
+impedimento) **permanecem abertos**.
+
+### 10.3 Estado atualizado — somente os dois critérios desta decisão
+
+| Critério | Estado após `APR-2026-027` |
+|---|---|
+| `CE-05` | **SATISFEITO para o vetor VeriCore, agora com evidência versionada** — bateria persistida em `.claude/hooks/org-isolation.test.cjs` (23 casos, hook real, sem mock), executável por qualquer pessoa. Citação órfã da §9.4 sanada. **Resíduos da §9.4 inalterados e abertos** |
+| `CE-06` | **EM IMPLEMENTAÇÃO** — decisão tomada (`APR-2026-027`): mecanismo escolhido em vez de aceitação por autorreporte. Banco de teste **em execução, condicionado à prova de escopo** (§10.1); **produção aguardando janela** (`PEND-2026-001`). **NÃO satisfeito** |
+
+Os demais critérios permanecem **exatamente** como na §9.4 — inclusive `CE-08`,
+sobre o qual há divergência detectada e **não conciliada** (§10.4).
+
+### 10.4 Divergência detectada e não conciliada (Regra 20) — `CE-08`
+
+A §9.4 registra `CE-08` como `PENDENTE`. Posteriormente, na mesma data, a VeriCore
+emitiu `audit/runs/ERP-LEGACY-001-AUD-001/30-retest/RETEST_AUD-PROC-CUSTODIA-01.md`,
+declarando `AUD-PROC-CUSTODIA-01` como `RETEST_PASSED` / `FINDING CLOSED` (§5) e
+afirmando: *"[`CE-08`] considero-o SATISFEITO por este documento. A conversão
+disso em estado da classe é registro do `coretriad-director`."*
+
+**A conversão não foi feita neste adendo**, cujo despacho se limitou a `CE-06` e
+`CE-05`. Registrada como `PEND-2026-004`
+(`coretriad/governance/PENDING_SCHEDULED_ACTIONS.md`), estado
+`AGUARDANDO RECONCILIAÇÃO` — deliberadamente, para não repetir o **incidente 4**
+desta própria classe: artefato de Control Plane envelhecendo em silêncio.
+
+### 10.5 Estado da classe
+
+**`RC-PROC-01` permanece ABERTA.** Pela regra de encerramento da §6, os critérios
+são cumulativos, resíduo aceito não é dispensa e "em implementação" não é
+satisfação. `CE-06` continua aberto até haver retenção efetiva nos dois bancos ou
+aceitação escrita do resíduo.
+
+**Este adendo não declara `AUDIT_PASSED`, `RETEST_PASSED` nem `FINDING CLOSED`,
+não atribui nem altera severidade, não fecha nenhum `CE-*` e não fecha a classe.
+Nenhum comando, script, teste ou conexão de banco foi executado para produzi-lo.**
+
+---
+
+## 11. ADENDO — resultado da prova de escopo de `CE-06` (`APR-2026-028`)
+
+Adição posterior, mesma data, **por evidência de execução**. Nenhuma linha das
+§§1-10 foi alterada (Regra 15). Esta seção **corrige a premissa da §10.1**.
+
+### 11.1 A separação exigida pela §10.1 é tecnicamente impossível
+
+Evidência: `audit/runs/ERP-LEGACY-001-AUD-001/07-findings/G4_CE06_LOG_CONNECTIONS.md`.
+
+`log_connections` e `log_disconnections` têm `context = superuser-backend`: o
+valor só pode ser fixado **na abertura da conexão**. `ALTER DATABASE … SET` é
+recusado pelo próprio servidor (`ERROR: parameter "log_connections" cannot be set
+after connection start`), `pg_db_role_setting` está vazio e `pgaudit` não existe
+na imagem em uso. **O escopo é de cluster, e só de cluster.**
+
+Portanto: **ativar no banco de teste ativa em produção junto.** A instrução da
+§10.1 ("ativação imediata no banco de teste") **não é executável em isolamento**.
+
+**Pela regra da própria §10.1 item 2, NADA FOI APLICADO** — nem no teste, nem em
+produção. Estado do cluster verificado após a tentativa: inalterado.
+
+Alternativa que funciona e foi **rejeitada como controle**:
+`PGOPTIONS="-c log_connections=on"` é **opt-in do cliente** — quem não quiser ser
+registrado omite a opção. Tem exatamente o defeito do autorreporte que `CE-06`
+existe para eliminar. Aceitá-la seria fechar o critério com a substância que §5
+declara insuficiente.
+
+### 11.2 Decisões do dono decorrentes (`APR-2026-028`)
+
+1. **Ativação cluster-wide confirmada**, com a janela escolhida **antes** de
+   qualquer execução. `PEND-2026-001` passa de escopo "produção" a
+   **cluster-wide**, sub-estado *"opções propostas, aguardando escolha"*. A
+   proibição de executar sem confirmação de dia e horário **segue em vigor**.
+2. **Retenção APROVADA** — cópia diária append-only fora do container, 90 dias,
+   replicada para fora do host. Passa de proposta a **requisito da janela**:
+   `CE-06` não fecha com o parâmetro ligado, fecha com **retenção efetiva
+   verificada pela VeriCore**.
+3. **Instância PostgreSQL separada** — correção de causa raiz desta classe
+   inteira (teste e produção compartilham instância; `.env.example` aponta dev
+   para o banco real). **Registrada como recomendação estrutural, explicitamente
+   NÃO autorizada nesta fase.** Nenhum agente pode iniciá-la.
+4. **Lacuna de papel de infraestrutura** — consequência nomeada de `CE-04`:
+   desarmar os 15 agentes de `_deprecated/` fechou o vetor do incidente original
+   e deixou o programa **sem agente de infraestrutura na taxonomia CoreTriad**.
+   Item de arquitetura pendente, **sem prioridade imediata**; contorno autorizado
+   é OpusCore ou orquestrador. `PEND-2026-006`.
+
+### 11.3 `PEND-2026-003` — RESOLVIDA
+
+Os dois scripts receberam a guarda de confirmação explícita
+(`apply-pending-migrations.cjs` commit `8050506`, **`RETEST_PASSED`**;
+`criar-aprovador.cjs` commit `95aeff4`, `RETEST_REQUIRED`). `APR-2026-028` §4 é a
+autorização nominal que faltava. Divergência nova aberta como `PEND-2026-005`: o
+cabeçalho de `apply-pending-migrations.cjs:22-23` cita `APR-2026-026`, que
+declara textualmente **não** autorizar ampliação por analogia.
+
+### 11.4 Estado de `CE-06` após este adendo
+
+**`EM IMPLEMENTAÇÃO`, sem alteração de estado.** O que mudou: a rota está provada
+e o escopo é conhecido. O que **não** mudou: nada foi ativado, nenhuma retenção
+existe, e `CE-06` **não está satisfeito**. **`RC-PROC-01` permanece ABERTA.**
+
+Nenhum `CE-*` foi declarado satisfeito. Nenhum finding foi criado, alterado ou
+fechado. Nenhuma severidade atribuída.

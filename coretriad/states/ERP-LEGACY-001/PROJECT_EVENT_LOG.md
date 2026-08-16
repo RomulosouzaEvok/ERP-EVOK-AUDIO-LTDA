@@ -1468,3 +1468,88 @@ criar banco de dev separado (decisão aberta do dono).
 Nenhum comando, teste ou conexão de banco executado. Nenhum commit. Nenhuma
 severidade atribuída ou alterada (Regra 22). Nenhum `RETEST_PASSED`,
 `FINDING CLOSED` ou `CE-*` declarado (Regras 4 e 5).
+
+---
+
+## GATE HUMANO — `CE-06` DECIDIDO POR MECANISMO + PROVA DE ESCOPO — 2026-08-16 (`APR-2026-027`, `APR-2026-028`)
+
+**Tipo:** gate humano e registro de governança. **Não é transição da state
+machine** — o estado do projeto permanece o mesmo.
+
+### O que o dono decidiu (`APR-2026-027`)
+
+`CE-06` da classe `RC-PROC-01` admitia como saída *"aceitação registrada de que o
+cumprimento é verificável apenas por declaração do agente"*. **O dono recusou
+essa saída** e determinou implementar `log_connections` no PostgreSQL. Decisão
+significativa no contexto da classe: `RC-PROC-01` existe porque **contenção por
+disciplina não é controle**, e fechar o critério de auditabilidade por
+autorreporte teria a mesma substância que a classe declara insuficiente.
+
+Também nesta aprovação: `criar-aprovador.cjs` passa a exigir confirmação
+explícita contra o alvo (D2), e `comparar-bancos.cjs` fica **sem ação, por
+decisão fundamentada de não agir** (D3) — registrada como decisão e não como
+omissão, para que uma varredura futura saiba que o script foi examinado e
+dispensado, não esquecido.
+
+### O que a execução provou (`APR-2026-028`)
+
+`APR-2026-027` D1.1 exigia **provar o escopo antes de aplicar**, e **não aplicar
+nada** se a separação entre teste e produção fosse impossível. A prova foi feita:
+
+- `log_connections`/`log_disconnections`: `context = superuser-backend`,
+  `source = default`, valor `off`. PostgreSQL 16.14.
+- `ALTER DATABASE … SET log_connections = on;` →
+  `ERROR: parameter "log_connections" cannot be set after connection start`.
+- `pg_db_role_setting` vazio; estado do cluster **inalterado** após a tentativa.
+- `pgaudit` indisponível na imagem em uso.
+
+**O escopo é de cluster, e só de cluster.** Ativar no teste ativa em produção
+junto. A instrução "ative imediatamente no teste, não toque em produção"
+**não é executável em isolamento** — e, pela regra da própria aprovação,
+**nada foi aplicado**.
+
+`PGOPTIONS="-c log_connections=on"` funciona e foi **rejeitado como controle**:
+é opt-in do cliente, tem exatamente o defeito do autorreporte que `CE-06` existe
+para eliminar.
+
+Evidência: `audit/runs/ERP-LEGACY-001-AUD-001/07-findings/G4_CE06_LOG_CONNECTIONS.md`.
+
+### Quatro decisões decorrentes (`APR-2026-028`)
+
+1. **Ativação cluster-wide confirmada**, com janela escolhida pelo dono **antes**
+   de qualquer execução. `PEND-2026-001` passa a escopo cluster-wide.
+2. **Retenção APROVADA** — cópia diária append-only fora do container, 90 dias,
+   replicada para fora do host. Vira **requisito de saída** de `CE-06`.
+3. **Instância PostgreSQL separada** — causa raiz da classe inteira. Registrada
+   como recomendação estrutural, **explicitamente não autorizada nesta fase**.
+4. **Lacuna de papel de infraestrutura** — consequência nomeada de `CE-04`:
+   o desarmamento dos 15 agentes de `_deprecated/` deixou o programa sem agente
+   de infraestrutura na taxonomia. Item de arquitetura **sem prioridade**;
+   contorno autorizado é OpusCore ou orquestrador. Evidência concreta: o agente
+   `docker` foi despachado para o `CE-06`, voltou sem executar e **corretamente
+   se recusou a fabricar saída de comando**; o orquestrador executou no lugar.
+
+### Escopo de `PEND-2026-003`, resolvido
+
+Os dois scripts receberam a guarda de confirmação explícita:
+`apply-pending-migrations.cjs` (`8050506`, **`RETEST_PASSED`** pela VeriCore em
+`remediation/cases/ERP-LEGACY-001-CASE-003/RETEST_REPORT_EXTENSAO.md`) e
+`criar-aprovador.cjs` (`95aeff4`, 22/22, **`RETEST_REQUIRED`**).
+
+**Divergência nova, bloqueante (`PEND-2026-005`):** o cabeçalho de
+`server/scripts/apply-pending-migrations.cjs:22-23` cita `APR-2026-026`, que
+encerra em `APPROVALS.md:1103` com *"Não autoriza ampliação por analogia a nenhum
+outro controle ou script."* A única autorização registrada que o código citava
+dizia o oposto do que ele fez. Levantada pela VeriCore, não pela organização que
+escreveu o código. `APR-2026-028` §4 é a autorização nominal que faltava; a
+correção da citação é ato posterior da SanaCore.
+
+**`CE-06` permanece `EM IMPLEMENTAÇÃO` — não satisfeito. `RC-PROC-01` permanece
+ABERTA.** Nenhum `CE-*` declarado satisfeito, nenhum finding criado, alterado ou
+fechado, nenhuma severidade atribuída, nenhuma alteração em banco algum.
+
+**Pendências com ID:** `PEND-2026-001` (janela, cluster-wide),
+`PEND-2026-004` (`CE-08`, reconciliação), `PEND-2026-005` (citação órfã
+invertida, bloqueante), `PEND-2026-006` (lacuna de papel),
+`PEND-2026-007` (instância separada). `PEND-2026-002` e `PEND-2026-003`
+resolvidos. Rastreio: `coretriad/governance/PENDING_SCHEDULED_ACTIONS.md`.

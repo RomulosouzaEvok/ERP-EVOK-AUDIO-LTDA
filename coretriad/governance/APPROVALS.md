@@ -1101,3 +1101,287 @@ artefatos apareceriam como `CAMINHO_INEXISTENTE` (falha), não aviso.
 - **Não** decide sobre o `Bash` dos 15 agentes em `.claude/agents/_deprecated/`
   — segue pendente.
 - **Não** autoriza ampliação por analogia a nenhum outro controle ou script.
+
+---
+
+## APR-2026-027 — `CE-06` implementado (não aceito por autorreporte) + destino dos três scripts remanescentes
+
+**Data:** 2026-08-16
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto nesta sessão
+**Registrado por:** `coretriad-director` — registro de decisão humana já tomada
+**Classe de risco:** `RC-PROC-01`
+(`coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`)
+**Rastreio de execução:** `coretriad/governance/PENDING_SCHEDULED_ACTIONS.md`
+
+> **LEITURA OBRIGATÓRIA JUNTO COM `APR-2026-028`.** Esta entrada foi redigida
+> **antes** de existir a prova de escopo exigida pela sua própria D1.1. A prova
+> passou a existir na mesma data e **refutou a premissa de D1** de que o banco de
+> teste poderia ser ativado isoladamente. `APR-2026-028` registra o resultado e
+> as decisões que dele decorreram. Esta entrada é preservada sem alteração como
+> registro histórico (Regra 15) — **não a cite isoladamente**.
+
+### D1 — `CE-06`: IMPLEMENTAR, não aceitar por autorreporte
+
+**Texto verbatim:** *"Decisão CE-06: implementar `log_connections` no PostgreSQL,
+não apenas aceitar por autorreporte. No banco de teste, ative imediatamente. No
+banco de produção, prepare o comando/procedimento e registre como pendência
+agendada para uma janela de manutenção — não execute contra produção sem minha
+confirmação explícita do dia/horário. Registre a decisão em `APPROVALS.md`."*
+
+**O que esta decisão muda, e por que é significativa.** `CE-06` era, na redação
+da §6, o único critério que oferecia **duas saídas**: retenção de evidência
+independente **ou** *"aceitação registrada de que o cumprimento é verificável
+apenas por declaração do agente"*. **O dono recusou a segunda saída e escolheu o
+mecanismo.** No contexto desta classe isso não é detalhe: `RC-PROC-01` existe
+justamente porque *contenção por disciplina não é controle*, e aceitar `CE-06`
+por autorreporte seria fechar o critério de auditabilidade com a mesma substância
+que a classe declara insuficiente. A escolha é coerente com §5 — *"só é controle
+o que é versionado, reauditável e imposto por quem não é o restringido"*.
+
+**Precedente fixado:** um critério de encerramento cuja alternativa é "aceitar
+que só existe a palavra do agente" deve ser tratado como **último recurso**, não
+como saída equivalente.
+
+### D1.1 — CONDIÇÃO TÉCNICA VINCULANTE (registrada como condição, NÃO como resultado)
+
+O container `evok-postgres` hospeda o banco de **teste** e o de **produção** na
+**mesma instância**. `log_connections` é **parâmetro de servidor**: se o escopo
+efetivo for de cluster, ativá-lo "só no teste" **atinge produção**, contrariando
+a própria instrução do dono.
+
+Levantado pelo orquestrador **antes** do despacho. O agente de infraestrutura foi
+instruído a:
+
+1. **Provar o escopo antes de aplicar** — evidência de que a ativação é ou não
+   isolável por banco;
+2. **Não aplicar nada** se a separação for tecnicamente impossível, tratando a
+   ativação **inteira** (teste + produção) como item da janela de manutenção.
+
+**O resultado dessa prova NÃO existe nesta data.** Esta aprovação **não** afirma
+que `log_connections` foi ativado em banco algum. Qualquer registro futuro que
+cite esta entrada como "ativado no teste" estará afirmando o que ela não diz.
+
+### D1.2 — PENDÊNCIA AGENDADA DE PRODUÇÃO — `PEND-2026-001`
+
+> **ESTADO: `AGUARDANDO JANELA — data/horário a definir pelo dono`.**
+>
+> Preparar o comando/procedimento está autorizado. **Executá-lo contra o banco
+> de produção real NÃO está**, até confirmação humana explícita de dia e horário,
+> registrada em `APPROVALS.md`. **Nenhum agente pode dispensar esta restrição**
+> (Regra 18), e ela não decai por decurso de prazo.
+>
+> Rastreada em `coretriad/governance/PENDING_SCHEDULED_ACTIONS.md`
+> (`PEND-2026-001`), com condição de saída explícita, porque pendência sem
+> gatilho é exatamente o modo de falha que o incidente 4 da classe documenta.
+
+**`CE-06` NÃO é declarado satisfeito por esta aprovação.** Passa de `ABERTO` a
+**`EM IMPLEMENTAÇÃO`**. Só fecha com **retenção efetiva nos dois bancos**,
+verificada pela VeriCore, **ou** com aceitação escrita do resíduo pelo dono.
+
+### D2 — `criar-aprovador.cjs`: guarda de confirmação explícita (extensão de `CASE-003`)
+
+**Texto verbatim:** *"aplique a mesma guarda de confirmação explícita já usada em
+`apply-pending-migrations.cjs` (script legítimo em produção por desenho, mas
+precisa de confirmação obrigatória contra o alvo, já que `NODE_ENV` sozinho não
+cobre o vetor real)."*
+
+**Decisão registrada:** `criar-aprovador.cjs` passa a exigir **confirmação
+explícita contra o alvo** antes de operar, como extensão do padrão de `CASE-003`.
+O script é **legítimo em produção por desenho** — existe para criar conta
+operacional real —, então a guarda correta é confirmação obrigatória do alvo,
+**não** recusa por sufixo, que o inutilizaria.
+
+**DIVERGÊNCIA REGISTRADA (Regra 7 — o artefato vence), verificada por leitura
+direta do `coretriad-director` nesta data:**
+
+1. **A guarda de referência não existe.** `server/scripts/apply-pending-migrations.cjs:17-25`
+   declara no próprio cabeçalho *"⚠️ Sem guarda de ambiente … NÃO checa `NODE_ENV`
+   nem sufixo de `DB_NAME`"*, e `:35` usa `process.env.DB_NAME` com default no
+   banco real. O reteste da VeriCore
+   (`audit/runs/ERP-LEGACY-001-AUD-001/30-retest/RETEST_AUD-PROC-CUSTODIA-01.md`
+   §4, resíduo R2) registra o mesmo, agravado por o script **aplicar DDL**.
+   **Logo: o padrão precisa ser CRIADO, não replicado.**
+2. **`criar-aprovador.cjs` não tem sequer guarda de `NODE_ENV`.** `Grep` devolve
+   **uma** ocorrência (`:18`), em comentário, **descrevendo outro script**
+   (`seed-usuarios-departamentos.cjs`). As recusas implementadas são e-mail
+   (`:247-250`), domínio de teste (`:251-257`) e chave de perfil (`:258-262`);
+   nenhuma avalia o alvo do banco, e `connect()` (`:173-188`) faz default no
+   banco real. O reteste o descreve como *"só guarda `NODE_ENV`"* —
+   imprecisão registrada aqui e **não corrigida**: artefato de auditoria não é
+   alterado por este documento (Regras 2 e 15).
+
+**Efeito da divergência: reforça D2, não a enfraquece** — a proteção existente é
+**menor** do que qualquer das duas fontes supunha. A intenção do dono é clara e
+permanece válida.
+
+**Ficam abertos, sem decisão (`PEND-2026-003`):** (a) o texto/UX exato da
+confirmação, por não haver referência a copiar; (b) se `apply-pending-migrations.cjs`
+— hoje o script **sem guarda alguma que aplica DDL** — também recebe a guarda.
+O `coretriad-director` **não amplia escopo por analogia** (precedente `APR-2026-018`).
+
+*(Ambos resolvidos por `APR-2026-028` §4, na mesma data.)*
+
+### D3 — `comparar-bancos.cjs`: NENHUMA AÇÃO — decisão de não agir, com fundamento
+
+**Texto verbatim:** *"nenhuma ação necessária — já confirmado como somente
+leitura, fora da classe de risco."*
+
+**Registrado explicitamente como DECISÃO DE NÃO AGIR, não como omissão.** A
+distinção é o que a torna auditável: existe data, autoridade, fundamento e
+evidência, e uma varredura futura que reencontre o script saberá que ele foi
+**examinado e dispensado**, não esquecido.
+
+Fundamento verificado por leitura nesta data: `Grep` por
+`DELETE|UPDATE|INSERT|TRUNCATE|DROP|ALTER|createTable` em
+`server/scripts/comparar-bancos.cjs` retorna **zero ocorrências**; o reteste da
+VeriCore registra `permission denied for schema public` *"confirmando
+leitura-apenas"*. O script permanece citado em `R2` do reteste apenas por
+**alcançar** o banco, não por escrever nele.
+
+### O que esta aprovação NÃO cobre
+
+- **Não** declara `CE-06` satisfeito — passa a **`EM IMPLEMENTAÇÃO`**.
+- **Não** afirma que `log_connections` foi ativado em qualquer banco; a prova de
+  escopo (D1.1) ainda não existe.
+- **Não** autoriza executar nada contra produção. A janela é `PEND-2026-001`.
+- **Não** decide o destino de `apply-pending-migrations.cjs` (`PEND-2026-003`).
+- **Não** fecha `CE-01`…`CE-05`, `CE-07`, `CE-08` nem `CE-09`, e **não** fecha
+  a classe `RC-PROC-01`.
+- **Não** reabre, altera ou reavalia `AUD-PROC-CUSTODIA-01`, cujo `RETEST_PASSED`
+  e `FINDING CLOSED` são autoridade exclusiva da VeriCore (Regras 4 e 5).
+- **Não** corrige o texto do reteste da VeriCore quanto às imprecisões de D2 —
+  apenas as registra (Regras 2 e 15).
+- **Não** autoriza ampliação por analogia a nenhum outro controle ou script.
+
+---
+
+## APR-2026-028 — resultado da prova de escopo de `CE-06` e quatro decisões decorrentes
+
+**Data:** 2026-08-16 (posterior a `APR-2026-027` na mesma data)
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto nesta sessão
+**Registrado por:** orquestrador da sessão — registro de decisão humana já tomada
+**Relação:** **emenda e supera parcialmente `APR-2026-027` D1**, que permanece
+íntegra como registro histórico (Regra 15)
+
+### 1. O resultado que `APR-2026-027` D1.1 exigia — a separação é IMPOSSÍVEL
+
+Evidência de execução:
+`audit/runs/ERP-LEGACY-001-AUD-001/07-findings/G4_CE06_LOG_CONNECTIONS.md`
+(executada pelo orquestrador; o agente `docker` foi despachado, está em
+`_deprecated/` sem `Bash` desde `CE-04`, e **corretamente se recusou a fabricar
+saída de comando**).
+
+- `log_connections` e `log_disconnections`: `context = superuser-backend`,
+  `source = default`, valor `off`. PostgreSQL 16.14, imagem `postgres:16-alpine`.
+- `ALTER DATABASE <banco de teste> SET log_connections = on;` →
+  `ERROR: parameter "log_connections" cannot be set after connection start`.
+- `pg_db_role_setting` **vazio**; estado pós-tentativa **inalterado**.
+- `PGOPTIONS="-c log_connections=on"` **funciona**, mas é **opt-in do cliente** —
+  rejeitado como controle: tem exatamente o defeito do autorreporte que `CE-06`
+  existe para eliminar.
+- `pgaudit` **indisponível** na imagem em uso.
+
+**Conclusão vinculante:** o parâmetro só admite escopo de **cluster**. Ativá-lo
+no banco de teste **ativa em produção junto**. A premissa de `APR-2026-027` D1
+("ative imediatamente no teste, não toque em produção") **não é executável**.
+
+**Pela regra fixada em `APR-2026-027` D1.1 item 2, NADA FOI APLICADO** — nem no
+teste, nem em produção.
+
+### 2. DECISÃO — ativação cluster-wide, com a janela escolhida antes da execução
+
+**Texto verbatim:** *"Confirmo: ativação cluster-wide de `log_connections`. Teste
+imediato, produção agendada — proponha 2-3 opções de data/horário de baixo
+movimento (fim de semana ou madrugada) para eu escolher, antes de executar contra
+produção."*
+
+**Interpretação registrada, para não gerar citação futura equivocada:** o dono
+confirmou o **modo** (cluster-wide) e manteve a **exigência de escolher a janela
+antes de qualquer execução contra produção**. Como teste e produção são o mesmo
+ato nesta topologia (§1), **"teste imediato" permanece tecnicamente inexecutável
+em isolamento** e a ativação inteira vai para a janela.
+
+> **NENHUMA ATIVAÇÃO FOI EXECUTADA.** `PEND-2026-001` permanece
+> **`AGUARDANDO JANELA`**, agora com escopo **cluster-wide** e sub-estado
+> *"opções propostas, aguardando escolha do dono"*. A proibição de
+> `APR-2026-027` D1.2 segue integralmente em vigor.
+
+Procedimento preparado e não executado (`ALTER SYSTEM` + `pg_reload_conf()`,
+reload sem restart, sem downtime, com plano de reversão simétrico), incluindo
+`log_line_prefix` — sem ele o log registra que houve conexão mas **não permite
+atribuí-la**, que é justamente o que `CE-06` exige. Detalhe integral na §4 de
+`G4_CE06_LOG_CONNECTIONS.md`.
+
+### 3. DECISÃO — retenção APROVADA
+
+**Texto verbatim:** *"Aprovo a retenção proposta: cópia diária para arquivo
+append-only fora do container, 90 dias, replicado para fora do host."*
+
+Deixa de ser proposta e passa a ser **requisito da janela**: o rotation do Docker
+(50 MB / 5 arquivos) serve para disponibilidade operacional, **não como evidência
+de auditoria** — roda por sobrescrita, sem cópia externa, e o container pode ser
+recriado. `CE-06` não fecha só com o parâmetro ligado; fecha com **retenção
+efetiva verificada pela VeriCore**.
+
+### 4. DECISÃO — escopo de `PEND-2026-003`, resolvido
+
+A pergunta aberta de `APR-2026-027` D2 ("`apply-pending-migrations.cjs` também
+recebe a guarda?") **foi respondida pelo dono na mesma sessão, antes daquele
+registro**: sim, com **confirmação explícita obrigatória**, tratado como extensão
+de `CASE-003`. O director não tinha essa informação quando registrou.
+
+Estado verificado por artefato:
+
+| Script | Desenho | Commit | Evidência |
+|---|---|---|---|
+| `apply-pending-migrations.cjs` | confirmação com escape (`--confirmar-banco-real`) | `8050506` | `remediation/cases/ERP-LEGACY-001-CASE-003/RETEST_REPORT_EXTENSAO.md` — **`RETEST_PASSED`** pela VeriCore |
+| `criar-aprovador.cjs` | idêntico, mesmas funções | `95aeff4` | `PROVA_GUARDA_CRIAR_APROVADOR.cjs`, 22/22 — **`RETEST_REQUIRED`**, reteste independente pendente |
+
+Ambos na branch `sana/ERP-LEGACY-001/CASE-003`.
+
+**Esta entrada é a autorização nominal** para os dois scripts acima, que
+`APR-2026-025` (*"exatamente os dois scripts nomeados"*) e `APR-2026-026`
+(*"não autoriza ampliação por analogia"*) **não cobriam**. A ausência dessa
+autorização foi levantada pela VeriCore como pendência bloqueante
+(`PEND-EXT-05`), corretamente: **mensagem de agente não é registro** (Regra 18) e
+não substitui artefato versionado (Regra 7).
+
+**Ação decorrente, da SanaCore:** o cabeçalho de
+`server/scripts/apply-pending-migrations.cjs:22-23` cita `APR-2026-026`, que diz
+o oposto do que o script fez. Deve passar a citar **`APR-2026-028`**. Correção
+só depois deste registro existir, nunca antes.
+
+### 5. DECISÃO — instância PostgreSQL separada: recomendação estrutural, NÃO autorizada
+
+**Texto verbatim:** *"Instância PostgreSQL separada fica registrada como
+recomendação estrutural futura, fora do escopo autorizado agora. Não avançar
+nisso nesta fase do programa."*
+
+É a correção de causa raiz de toda esta classe de problema — teste e produção
+compartilham instância, e `.env.example` aponta o ambiente de desenvolvimento
+para o banco real. **Registrada como recomendação, explicitamente não autorizada
+nesta fase.** Nenhum agente pode iniciá-la.
+
+### 6. DECISÃO — lacuna de papel de infraestrutura: item de arquitetura, sem prioridade
+
+**Texto verbatim:** *"Registre a lacuna de papel (infraestrutura sem agente
+CoreTriad dedicado após o desarmamento do docker) como item de arquitetura
+pendente, sem prioridade imediata. Continue com OpusCore/orquestrador cobrindo
+trabalho de infra por enquanto."*
+
+Consequência nomeada de `CE-04`: desarmar os 15 agentes de `_deprecated/` fechou
+o vetor do incidente original e deixou o programa **sem agente de infraestrutura
+na taxonomia**. **Não é defeito da decisão** — é lacuna de papel. Contorno
+autorizado: OpusCore ou orquestrador. Rastreada como `PEND-2026-006`.
+
+### O que esta aprovação NÃO cobre
+
+- **Não** declara `CE-06` satisfeito — segue **`EM IMPLEMENTAÇÃO`**.
+- **Não** autoriza executar a ativação: a janela ainda não foi escolhida.
+- **Não** afirma que qualquer banco foi alterado. **Nada foi aplicado.**
+- **Não** fecha `CASE-003` nem declara `RETEST_PASSED` de `criar-aprovador.cjs`
+  — autoridade exclusiva da VeriCore (Regra 4).
+- **Não** corrige, por si, a citação órfã no cabeçalho do script — isso é ato da
+  SanaCore, posterior a este registro.
+- **Não** autoriza a instância separada (§5) nem cria agente novo (§6).
+- **Não** fecha `RC-PROC-01`.
