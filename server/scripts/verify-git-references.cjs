@@ -61,7 +61,14 @@ const COMMIT_CONTEXT = new RegExp(
     'REMEDIATION_COMMIT',
     'BASELINE_TAG',
     'PARENT_COMMIT',
-    '\\bcommits?\\b',
+    // Cobre tambem as conjugacoes em portugues: commitado/commitada/commitados/
+    // commitadas/commitou/commitaram/commitando/commitar. O padrao anterior era
+    // `\bcommits?\b`, que exige fronteira de palavra logo apos "commit" e por isso
+    // NAO casava nenhuma dessas formas — falso negativo real, ja presente no corpus
+    // (PROJECT_EVENT_LOG.md: "foi commitado antes (`de4dac1`)", hash nunca
+    // verificado). Achado da validacao independente do vericore-sdet-auditor;
+    // decisao do dono em 2026-08-16 foi corrigir de imediato (APR-2026-026 item 1).
+    '\\bcommit(s|ad[oa]s?|ou|aram|ando|ar)?\\b',
     '\\bHEAD\\b',
     '\\btags?\\b',
     '\\bbaselines?\\b',

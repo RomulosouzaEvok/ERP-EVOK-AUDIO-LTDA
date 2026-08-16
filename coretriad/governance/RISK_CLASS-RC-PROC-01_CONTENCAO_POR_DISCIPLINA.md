@@ -399,3 +399,98 @@ ausência de ocorrência não é evidência de controle.
   `RETEST_PASSED` nem `FINDING CLOSED`; nenhuma severidade é atribuída,
   alterada ou validada; nenhum finding é criado ou promovido (Regras 4, 5 e 22).
 - **Nenhum commit foi feito por este registro.**
+
+---
+
+## 9. ADENDO — decisões do dono de 2026-08-16 sobre `CE-02` e `CE-07` (`APR-2026-026`)
+
+Adição posterior ao registro original, por decisão humana explícita. **Nenhuma
+linha das seções 1-8 foi alterada** (Regra 15) — este adendo atualiza o estado
+dos critérios sem reescrever o histórico.
+
+### 9.1 `CE-02` — RESÍDUO ACEITO, não satisfeito
+
+Demonstrado por execução que a guarda de banco do hook **é evadível por
+ofuscação de shell** (nome do banco montado em variáveis concatenadas), porque
+o hook não avalia o comando após a expansão do shell — limitação estrutural,
+não bug pontual.
+
+**Decisão do dono:** aceito que a guarda cobre **acidente de configuração, não
+evasão deliberada**. Fundamento registrado: o histórico de 5 incidentes mostra
+padrão consistente de erro não intencional **com autorreporte**, nunca tentativa
+de ocultar violação. Reforço contra evasão intencional fica como melhoria
+futura, sem prioridade atual.
+
+**Efeito sobre o estado de `CE-02`:** deixa de ser `PENDENTE` e passa a
+**`RESÍDUO ACEITO`** — categoria distinta de `SATISFEITO`, e deve constar assim
+em qualquer relatório de encerramento da classe. O critério **não** foi
+cumprido; o risco foi aceito por escrito, que é a única via prevista pela regra
+de encerramento da §6.
+
+### 9.2 `CE-07` — permanece PARCIAL, com um item corrigido e dois aceitos
+
+A validação independente dos dois verificadores detectivos, executada pelo
+`vericore-sdet-auditor` (agente que **não** os escreveu, conforme precedente
+`TEST-SEAL-001/002`), produziu três achados. Destino decidido pelo dono:
+
+| # | Achado | Destino |
+|---|---|---|
+| 1 | `COMMIT_CONTEXT` não casava conjugações em português (`commitado`, `commitou`, …), deixando hashes citados nessas formas **sem verificação alguma** — falso negativo **real, já presente no corpus** | **CORRIGIDO EM 2026-08-16** |
+| 2 | Três `SYSTEM_MAP.md` homônimos (70/74/165 linhas): citação `arquivo.md:N` é aceita se **qualquer** homônimo tiver N linhas | **RESÍDUO ACEITO** — efeito é citação incorretamente atribuída, não passagem de dado ruim |
+| 3 | Downgrade `FALHA→AVISO` para artefato de branch de remediação funciona local, mas não em runner de CI | **RESÍDUO ACEITO, COM CONDIÇÃO VINCULANTE `CD-CI-01`** (§9.3) |
+
+Item 1, executado: padrão passou de `\bcommits?\b` para
+`\bcommit(s|ad[oa]s?|ou|aram|ando|ar)?\b`. Verificado por 16/16 casos (8
+conjugações, 5 de não-regressão, 3 controles negativos), com o regex **extraído
+do arquivo real**, não reimplementado no teste. Execução no repositório:
+citações candidatas 515→**517**, commits distintos 57→**58**, **sem falso
+positivo novo**.
+
+**Registro de honestidade que acompanha o item 1:** a correção fecha o vetor de
+*conjugação*, não o vetor do **incidente 3**. O commit daquele incidente
+(`65bd66d`) **existe** — o erro foi citar commit real porém desatualizado, e
+nenhum dos dois verificadores detecta isso, conforme confirmado por leitura
+independente da lógica completa. `CE-07` continua **PARCIAL**.
+
+### 9.3 CONDIÇÃO VINCULANTE `CD-CI-01`
+
+> **Antes de qualquer decisão futura de promover o job
+> `governance-detective-controls` de INFORMATIVO para BLOQUEANTE — isto é, de
+> remover `continue-on-error: true` de `.github/workflows/server-ci.yml` — o
+> problema das branches de remediação não baixadas pelo `actions/checkout`
+> PRECISA ser resolvido primeiro.**
+>
+> `verify-control-plane.cjs` rebaixa `FALHA→AVISO` para artefato que só existe
+> em `sana/*` consultando `git log --all`, o que depende de essas branches
+> existirem como refs locais. O `actions/checkout` traz o histórico completo do
+> ref sob checkout (garantido por `fetch-depth: 0`), mas **não** traz as demais
+> branches remotas. Num runner limpo, esses artefatos viram
+> `CAMINHO_INEXISTENTE` — falha, não aviso.
+>
+> Promover sem corrigir faz o CI reprovar por artefatos que **existem**; a
+> divergência local-vs-runner vira ruído e o desfecho previsível é o gate ser
+> desligado — o antipadrão que `AUD-CICD-DEPGATE-01` documenta.
+>
+> **Replicada em três lugares, deliberadamente:** `APPROVALS.md`
+> (`APR-2026-026`), o comentário do próprio job em
+> `.github/workflows/server-ci.yml`, e este documento.
+> **Nenhum agente pode dispensá-la — só decisão humana explícita registrada.**
+
+### 9.4 Estado dos nove critérios após este adendo
+
+| Critério | Estado |
+|---|---|
+| `CE-01` | **SATISFEITO** — controle de plataforma existe e teve eficácia demonstrada por execução (8/8 casos, `SEGREGATION_TEST_REPORT_2026-08-16.md`) |
+| `CE-02` | **RESÍDUO ACEITO** (§9.1) — não satisfeito; risco aceito por escrito |
+| `CE-03` | **PARCIAL** — `docs/` e `server/scripts/` tratados; `CASE-003` corrigiu os dois scripts destrutivos com `RETEST_PASSED`. Resíduo: vetor estrutural (`.env.example` sem banco de dev separado) segue aberto |
+| `CE-04` | **SATISFEITO quanto ao texto** — 34 agentes com `Bash` passaram a citar a regra. **Resíduo: é reforço de prompt, não controle**; o `Bash` dos 15 agentes de `_deprecated/` segue decisão aberta do dono |
+| `CE-05` | **SATISFEITO para o vetor VeriCore** — hook bloqueia escrita sobre artefato de finding em `docs/` (23/23 casos). Resíduos declarados: `Bash` não passa por `ORG_RULES`; OpusCore/SanaCore/sessão principal seguem sem impedimento |
+| `CE-06` | **ABERTO** — decisão do dono pendente |
+| `CE-07` | **PARCIAL** (§9.2) — controles construídos e validados independentemente; itens 2 e 3 aceitos como resíduo; vetor dos incidentes 3 e 4 permanece sem cobertura |
+| `CE-08` | **PENDENTE** — reteste de `AUD-PROC-CUSTODIA-01` pela VeriCore. **Nota: o `RETEST_PASSED` do `CASE-003` NÃO satisfaz este critério** — vetores distintos |
+| `CE-09` | **EM OBSERVAÇÃO** |
+
+**A classe `RC-PROC-01` permanece ABERTA.** Pela regra de encerramento da §6, os
+critérios são cumulativos e resíduo aceito não é dispensa: enquanto `CE-06`,
+`CE-08` e as partes abertas de `CE-03`, `CE-04` e `CE-07` não forem resolvidos
+ou explicitamente aceitos, a classe não fecha.

@@ -996,3 +996,108 @@ declara `CE-01`…`CE-09` cumpridos e **não** aceita risco algum.
 **Fluxo:** SanaCore implementa em worktree `sana/ERP-LEGACY-001/CASE-003`;
 VeriCore reatesta de forma independente. `RETEST_PASSED`/`FINDING CLOSED` seguem
 exclusivos da VeriCore (Regras 3 e 4).
+
+---
+
+## APR-2026-026 — CE-02 aceito como resíduo + destino dos 3 achados da validação independente dos verificadores
+
+**Data:** 2026-08-16
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto nesta sessão
+**Registrado por:** `coretriad-director` / orquestrador
+**Classe de risco:** `RC-PROC-01`
+(`coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`)
+
+### DECISÃO — `CE-02` (evasão da guarda de banco)
+
+**Contexto:** demonstrado que a guarda contra comandos Bash referenciando o
+banco de produção pode ser contornada por ofuscação de shell (ex.: nome do
+banco montado em variáveis concatenadas), pois o hook não avalia o comando
+após expansão do shell — **limitação estrutural, não bug pontual**.
+
+**Decisão:** aceito que a guarda cobre **acidente de configuração, não evasão
+deliberada**. Histórico de incidentes (5 casos) mostra padrão consistente de
+erro não intencional com autorreporte, nunca tentativa de ocultar violação.
+Reforçar contra evasão intencional fica registrado como **melhoria futura, sem
+prioridade atual**.
+
+**Aprovado por:** Gilwagno — 2026-08-16.
+
+**Nota de evidência (não altera a decisão):** a evasão foi demonstrada por
+execução nesta sessão pelo orquestrador (`A="erp_evok"; B="_audio"` →
+comando aprovado), e a limitação já constava, declarada, do relatório de
+entrega do `opuscore-devops-engineer` que implementou a guarda. `CE-02`
+permanece **não satisfeito no eixo de evasão**, por aceitação explícita — não
+por ausência de conhecimento.
+
+### Item 1 — Conjugação verbal: CORRIGIR AGORA (executado)
+
+**Achado** (`vericore-sdet-auditor`, validação independente): o
+`COMMIT_CONTEXT` de `server/scripts/verify-git-references.cjs` usava
+`\bcommits?\b`, que exige fronteira de palavra logo após "commit" e por isso
+**não casava nenhuma conjugação em português** (commitado/commitada/commitou/
+commitando/commitar). Falso negativo **real e já presente no corpus**:
+`PROJECT_EVENT_LOG.md` contém *"foi commitado antes (`de4dac1`)"* — hash
+citado e nunca verificado.
+
+**Decisão:** *"corrija agora — é ajuste de uma linha de regex que fecha falso
+negativo real já existente no repositório."*
+
+**Executado em 2026-08-16.** Padrão passou a
+`\bcommit(s|ad[oa]s?|ou|aram|ando|ar)?\b`. Verificação: 16/16 casos
+(8 conjugações + 5 não-regressão + 3 controles negativos, extraindo o regex
+do arquivo real, não reimplementado). Execução no repositório: candidatos
+subiram de 515→**517** citações e 57→**58** commits distintos, **sem
+introduzir falso positivo** (verificador segue `EXIT=0`).
+
+### Item 2 — Ambiguidade `SYSTEM_MAP.md`: RESÍDUO ACEITO
+
+**Achado:** existem três arquivos `SYSTEM_MAP.md` no repositório (70, 74 e 165
+linhas) e `verify-control-plane.cjs` considera válida uma citação
+`SYSTEM_MAP.md:N` se **qualquer** candidato homônimo tiver N linhas — podendo
+confirmar por coincidência uma citação que aponta para o arquivo errado.
+
+**Decisão:** *"aceito como resíduo — efeito é citação incorretamente atribuída,
+não passagem de dado ruim."*
+
+**Registro:** o verificador continua trocando "path existe" por "path existe em
+algum lugar com esse nome". Nenhuma ação corretiva autorizada.
+
+### Item 3 — Downgrade em CI: RESÍDUO ACEITO **COM CONDIÇÃO VINCULANTE**
+
+**Achado:** quando um artefato citado só existe em branch de remediação
+(`sana/*`), `verify-control-plane.cjs` rebaixa `FALHA` para `AVISO` consultando
+`git log --all` — o que funciona **localmente**, onde essas branches existem
+como refs. O job de CI usa `actions/checkout@v4` com `fetch-depth: 0` e
+`fetch-tags: true`, que garantem histórico completo **do ref sob checkout**,
+mas **não** trazem as demais branches remotas. Num runner limpo, esses
+artefatos apareceriam como `CAMINHO_INEXISTENTE` (falha), não aviso.
+
+**Decisão:** *"aceito como resíduo, COM CONDIÇÃO EXPLÍCITA registrada."*
+
+> ### ⚠️ CONDIÇÃO VINCULANTE — CD-CI-01
+>
+> **Antes de qualquer decisão futura de promover o job
+> `governance-detective-controls` de INFORMATIVO para BLOQUEANTE (isto é, de
+> remover `continue-on-error: true` de `.github/workflows/server-ci.yml`), o
+> problema das branches de remediação não baixadas pelo `actions/checkout`
+> PRECISA ser resolvido primeiro.**
+>
+> Promover o job sem resolver isso faria o CI reprovar por artefatos que
+> existem — divergência entre máquina local e runner —, e o resultado previsível
+> é o gate ser desligado por ruído, que é exatamente o antipadrão que
+> `AUD-CICD-DEPGATE-01` documenta.
+>
+> **Esta condição está replicada em três lugares para não se perder:** aqui
+> (`APR-2026-026`), no comentário do próprio job em
+> `.github/workflows/server-ci.yml`, e no `RC-PROC-01` (`CE-07`).
+> **Nenhum agente pode dispensá-la; só decisão humana explícita registrada.**
+
+### O que esta aprovação NÃO cobre
+
+- **Não** fecha `CE-02` como satisfeito — fecha como **resíduo aceito**, que é
+  categoria distinta e deve constar assim em qualquer relatório de encerramento.
+- **Não** fecha `CE-07`, que permanece parcial pelos itens 2 e 3.
+- **Não** fecha `AUD-PROC-CUSTODIA-01`, `CE-06`, `CE-08` nem `CE-09`.
+- **Não** decide sobre o `Bash` dos 15 agentes em `.claude/agents/_deprecated/`
+  — segue pendente.
+- **Não** autoriza ampliação por analogia a nenhum outro controle ou script.

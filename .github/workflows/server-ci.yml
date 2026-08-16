@@ -29,6 +29,30 @@ jobs:
   #     verde com conformidade verificada.
   # Promover para bloqueante e decisao humana registrada (Regra 18): basta
   # remover `continue-on-error`. Nenhum agente deve fazer isso sozinho.
+  #
+  # ===========================================================================
+  # !! PARE — CONDICAO VINCULANTE CD-CI-01 (APR-2026-026, item 3) !!
+  #
+  # NAO remova `continue-on-error: true` sem antes resolver o problema abaixo.
+  #
+  # `verify-control-plane.cjs` rebaixa FALHA -> AVISO quando um artefato citado
+  # so existe em branch de remediacao (`sana/*`), consultando `git log --all`.
+  # Isso funciona NA MAQUINA LOCAL, onde essas branches existem como refs.
+  # NAO funciona aqui: `actions/checkout` traz o historico completo do ref sob
+  # checkout (e o que `fetch-depth: 0` garante), mas NAO traz as demais branches
+  # remotas. Num runner limpo, esses artefatos aparecem como CAMINHO_INEXISTENTE
+  # -- falha, nao aviso.
+  #
+  # Consequencia de promover a bloqueante sem corrigir: o CI reprova por
+  # artefatos que EXISTEM, a divergencia local-vs-runner vira ruido, e o gate e
+  # desligado -- exatamente o antipadrao que AUD-CICD-DEPGATE-01 documenta.
+  #
+  # Achado da validacao independente do `vericore-sdet-auditor` (2026-08-16),
+  # aceito como residuo pelo dono COM esta condicao. Registrado tambem em
+  # `coretriad/governance/APPROVALS.md` (APR-2026-026) e em
+  # `coretriad/governance/RISK_CLASS-RC-PROC-01_...md` (CE-07).
+  # Nenhum agente pode dispensar esta condicao.
+  # ===========================================================================
   # ---------------------------------------------------------------------------
   governance-detective-controls:
     name: Controles detectivos de governanca (informativo, nao bloqueante)
