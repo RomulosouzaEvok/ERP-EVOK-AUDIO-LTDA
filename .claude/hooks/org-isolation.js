@@ -97,6 +97,60 @@ function touchesSealed(value, depth = 0) {
   return false;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Guarda de acesso ao BANCO DE PRODUÇÃO (ferramenta Bash).
+//
+// Origem: AUD-PROC-CUSTODIA-01 — um agente executou `docker exec evok-postgres
+// psql -U evok_admin -d erp_evok_audio -c "SELECT ..."` contra o banco real e
+// NENHUM controle técnico o impediu. Regra 23 do CLAUDE.md exige hook, não só
+// prompt.
+//
+// DISCRIMINADOR = NOME DO BANCO, NÃO O CONTAINER. O container `evok-postgres`
+// hospeda os dois bancos (`erp_evok_audio` e `erp_evok_audio_test`) — ver
+// docker-compose.yml. Bloquear por container inviabilizaria toda a verificação
+// dinâmica legítima da auditoria.
+//
+// O token é capturado com o sufixo colado (`[A-Za-z0-9_]*`) justamente porque
+// `erp_evok_audio_test` CONTÉM `erp_evok_audio`: um regex ingênuo bloquearia o
+// uso legítimo. Só passa quando o token termina em `_test` ou `_ci`.
+const PROD_DB_TOKEN_SOURCE = 'erp_evok_audio[A-Za-z0-9_]*';
+const SAFE_DB_SUFFIX = /(_test|_ci)$/i;
+
+// Escopo: TODOS os chamadores — subagente e sessão principal. O incidente foi
+// de agente, mas a barreira pedida ("tecnicamente impossível") não admite
+// exceção por quem chama; o hook é o único ponto onde isso é imponível.
+const SHELL_TOOLS = new Set(['bash', 'shell', 'run_command']);
+
+// Mesmo padrão recursivo do selo (touchesSealed): varre as strings de ACESSO do
+// tool_input (command, arrays de comandos, campos aninhados) e ignora
+// CONTENT_FIELDS — citar o nome do banco dentro de um texto não é acesso.
+function findProdDbRef(value, depth = 0) {
+  if (depth > 4) return null;
+  if (typeof value === 'string') {
+    const tokens = value.match(new RegExp(PROD_DB_TOKEN_SOURCE, 'gi')) || [];
+    for (const t of tokens) {
+      if (!SAFE_DB_SUFFIX.test(t)) return t;
+    }
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const hit = findProdDbRef(v, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (CONTENT_FIELDS.has(k)) continue;
+      const hit = findProdDbRef(v, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  return null;
+}
+
 function respond(decision, reason) {
   process.stdout.write(JSON.stringify({ decision, reason }));
   process.exit(0);
@@ -129,6 +183,20 @@ process.stdin.on('end', () => {
   // Bash, Write...) vinda de subagente, não só escrita.
   if (isSubagent && touchesSealed(payload.tool_input || payload.input || {})) {
     return respond('block', 'org-isolation: artefato SELADO (gabarito de simulado) — inacessível a subagentes.');
+  }
+
+  // Banco de PRODUÇÃO via shell: bloqueio para QUALQUER chamador (subagente ou
+  // sessão principal). Precede o approve genérico de tools não-escrita, que
+  // hoje libera todo Bash.
+  if (SHELL_TOOLS.has(String(tool).toLowerCase())) {
+    const hit = findProdDbRef(payload.tool_input || payload.input || {});
+    if (hit) {
+      return respond(
+        'block',
+        `org-isolation: comando referencia o BANCO DE PRODUÇÃO ("${hit}") — acesso proibido a qualquer agente (AUD-PROC-CUSTODIA-01, Regra 23). ` +
+          'Use um banco descartável com sufixo _test ou _ci.'
+      );
+    }
   }
 
   if (!WRITE_TOOLS.has(tool)) return respond('approve', 'tool não é de escrita');

@@ -85,6 +85,10 @@ DB_NAME=erp_evok_audio_test NODE_ENV=test npm run migration:up
 npm run test:integration:strict      # roda a suíte inteira, inclui este arquivo
 
 # execução principal (ambiente no ar), a partir de server/:
+# ⚠️ transcrição histórica (2026-08-10) — DB_NAME=erp_evok_audio é o banco
+# classificado PRODUÇÃO REAL por APR-2026-016 (decidido depois desta data).
+# Nenhum agente pode repetir este comando: regra permanente de segurança de
+# dado real em coretriad/states/ERP-LEGACY-001/PROJECT_STATE.md.
 RUN_INTEGRATION=true \
 TEST_API_URL=http://127.0.0.1:5000 \
 TEST_AUTH_TOKEN=<JWT admin id=1 assinado com o JWT_SECRET da raiz> \

@@ -5,6 +5,25 @@
 Este fluxo padroniza o deploy do backend `server/` usando artefato Docker
 imutavel, PostgreSQL local/isolado e rollback reproduzivel.
 
+## Aviso — o `DB_NAME=erp_evok_audio` usado abaixo é DADO REAL de produção
+
+`erp_evok_audio` e o unico banco do projeto — nao existe banco de producao
+separado. Por decisao humana explicita (`APR-2026-016`, em
+`coretriad/governance/APPROVALS.md`), ele e classificado **PRODUCAO REAL**
+(catalogo de itens/categorias/departamentos, conta `admin`, `auth`,
+`auditLogs`), independente de nao haver Go-Live formal.
+
+- **Quem PODE rodar os comandos deste runbook:** um humano responsavel,
+  fazendo deploy real. Este documento e um runbook de operacao humana.
+- **Quem NAO PODE, sem excecao:** nenhum agente automatizado (IA) pode
+  executar comando que conecte a `-e DB_NAME=erp_evok_audio` — a **regra
+  permanente de seguranca de dado real**
+  (`coretriad/states/ERP-LEGACY-001/PROJECT_STATE.md`) veda isso em
+  qualquer passo do programa `ERP-LEGACY-001` (21-40).
+- **Referencia normativa:** `APR-2026-016` + `PROJECT_STATE.md` (secao
+  "Regra permanente de seguranca de dado real"). Aviso adicionado apos o
+  finding `AUD-PROC-CUSTODIA-01`.
+
 ## Pre requisitos
 
 - Docker e Docker Compose instalados.

@@ -1128,3 +1128,252 @@ integração restantes (`bom-tipo-nao-produtivo`,
 (confirmado por `git log` — nem os testes nem `modules/products`/
 `modules/inventory` foram tocados pela branch), mas a prova definitiva
 seria rodá-las na `main`, o que não foi feito.
+
+---
+
+## T-25 RODADA 3 CONCLUÍDA — 2026-08-16
+
+`vericore-finding-validator` fechou, em três blocos, exatamente os 12
+`NEEDS_MORE_EVIDENCE` deixados pela Rodada 2. Persistido em
+`07-findings/T-25_VALIDACAO_ADVERSARIAL_RODADA3_{A,B,C}.md`.
+
+- **Bloco A** (`T-05-02`, `T-05-05`, `T-05-06`, `T-10-02`) — **4 CONFIRMED**,
+  0 REFUTED, 0 FALSE_POSITIVE. Nenhuma severidade rebaixada. Acolhida correção
+  de redação em `T-05-05`: o espelhamento **é executado** incidentalmente por
+  suítes de integração em CI; o que não existe é teste que o **verifique**.
+- **Bloco B** (`T11-F02`, `T11-F04`, `T11-F10`, `AUD-SERVICE-3`) — **3
+  CONFIRMED + 1 FALSE_POSITIVE**. `T11-F10` refutado por controle
+  compensatório na própria camada (`CreateItemStructureUseCase` não possui
+  caminho de retorno bem-sucedido; prova estática fechada, convergente com
+  `AUD-T01-10`). Corrigida a atribuição de trilha de `AUD-SERVICE-3`: é de
+  **T-07 (Financeiro)**, não de T-16.
+- **Bloco C** (`T13-F01`, `T13-F04`, `T19-F02`, `T23-F02`) — **4 CONFIRMED**,
+  com recomendação de rebaixamento HIGH → MEDIUM em `T13-F01` e `T13-F04`
+  (fato de schema integralmente verificado; explorabilidade refutada por
+  controle compensatório de aplicação).
+
+**Placar da rodada: 11 CONFIRMED, 1 FALSE_POSITIVE, 0 remanescentes em
+`NEEDS_MORE_EVIDENCE`.** Nenhum `AUDIT_PASSED`, `FINDINGS_CONFIRMED`,
+`RETEST_PASSED` ou `FINDING CLOSED` emitido.
+
+**DIVERGÊNCIA REGISTRADA, NÃO CONCILIADA (Regra 20):** `T-26_CONSOLIDACAO.md`
+§1.4 compõe os 41 `CONFIRMED` como "4 + 9 (R1) + 20 (R2) + **8** (R3-A/B/C)",
+enquanto a soma dos três relatórios da Rodada 3 é **11**. O
+`coretriad-director` não resolve — **escalado ao
+`vericore-software-audit-director`** para determinação da fonte autoritativa
+antes de qualquer veredito.
+
+---
+
+## T-26 CONCLUÍDA — CONSOLIDAÇÃO E COBERTURA EXECUTADA — 2026-08-16
+
+`vericore-audit-consolidator` entregou o par obrigatório
+`07-findings/T-26_CONSOLIDACAO.md` + `24-coverage/AUDIT_COVERAGE_EXECUTED.md`,
+em regime read-only (`APR-2026-016`), sem emitir finding novo e sem declarar
+`AUDIT_PASSED`, `FINDINGS_CONFIRMED`, `RETEST_PASSED` nem `FINDING CLOSED`.
+
+**Placar consolidado:** 7 findings preliminares + 247 de fieldwork = **254
+IDs**; menos 1 `FALSE_POSITIVE` = **253 vigentes**. Severidade: **6 CRITICAL**
+(`FIND-ERP-001`, `FIND-ERP-005`, `AUD-AUTHN-01`, `AUD-INTEG-03`, `T08-F01`,
+`T24-F01`), **67 HIGH**, **118 MEDIUM**, **57 LOW**, **5 INFO**. Validação:
+**41 CONFIRMED**, 1 FALSE_POSITIVE, 0 `NEEDS_MORE_EVIDENCE` remanescentes, 1
+de origem (`FIND-ERP-007` item 3), **211 PROPOSED sem passagem pela Regra 22 —
+todos MEDIUM/LOW/INFO, que a Regra 22 não exige**. Nenhum CRITICAL/HIGH ficou
+sem tentativa de refutação: 27/27 trilhas com registro adversarial.
+
+**Decisões de severidade registradas, nunca silenciosas:** `T11-F10` →
+FALSE_POSITIVE com propagação executada (invariante I-18 revertida a
+PROTEGIDA, `DYN-T11-D` retirado da fila); `T13-F01` e `T13-F04` → HIGH
+rebaixados a MEDIUM com custo declarado; `AUD-SEC-T04-01` → MEDIUM elevado a
+HIGH (elevação já aprovada pelo dono em 2026-08-14, formalizada por adendo de
+agente VeriCore, não pelo Director).
+
+**DÉFICIT DE COBERTURA MEDIDO — o achado material da trilha:** `DEF-01`
+(`juridico` D3+D4, prometido E 75/75, executado A(38/75) ⇒ **37 endpoints**),
+`DEF-02` (`rh`+`sst` D3+D4, prometido E 132/132, executado A(~24/132) ⇒ **108
+endpoints**), `DEF-03` (`rfq` D3+D4 ⇒ **≈5 endpoints + tabelas de preço**) —
+**soma ≈150 endpoints, todos em categorias que G3 veda amostrar**. Além
+deles: **70 das 137 células elevadas pela EMENDA-02 não executadas** nos 43
+endpoints rasos do tier 3 (maior divergência planejado × executado da run);
+**126 páginas do `client/` não amostradas**; **`mobile/` e `tv/` não
+explorados nem estruturalmente**; **185 de 207 tabelas sem semântica de
+coluna**; agregado: **≈81 das 137 células não entregues como `E`** — "a
+cobertura executada corresponde, em larga medida, à matriz PRÉ-EMENDA-02".
+
+**Divergências escaladas ao `vericore-software-audit-director`, em aberto:**
+`DIV-SEV-01` (`T17-F05` MEDIUM × `T23-F03` HIGH sobre o mesmo fato) e
+`INV-01` × `INV-02` (673 × 676 endpoints alcançáveis, irreconciliáveis sem
+decisão de definição). **Lacunas de adjudicação registradas:** `T16-F15`,
+`T21-F01`, `RES-T13-04`/`RES-T13-05`.
+
+**Correção do Control Plane exigida pela trilha e executada:**
+`AUDIT_COVERAGE_EXECUTED.md` §1.1 apontou que o `PROJECT_STATE.md` §OBS-INV-01
+estava desatualizado (dizia re-ancoragem 1/7; o executado é **7/7
+`ÂNCORAS_VÁLIDAS`**) e **escalou ao director em vez de corrigir**, porque
+`coretriad/` não é namespace de escrita da VeriCore (Regra 16). Corrigido no
+`PROJECT_STATE.md` em 2026-08-16 por adição rastreável (Correção C-01), com o
+texto histórico preservado e com a ressalva de que em 006/007/008/009 a
+reconferência foi **dirigida às âncoras load-bearing**, com as documentais
+delegadas e com **T-17 aceitando o elo 4 de T-12 como insumo, não como
+verificação própria**.
+
+---
+
+## DECISÕES HUMANAS REGISTRADAS — 2026-08-16 (`APR-2026-024`)
+
+Regra 18 — human gate só por decisão humana explícita registrada. As três
+decisões abaixo vieram de resposta direta do dono nesta sessão; nenhuma foi
+inferida por agente. Registro formal: `coretriad/governance/APPROVALS.md`,
+`APR-2026-024`.
+
+**D1 — Déficit de cobertura do G3: OPÇÃO A (estender a auditoria agora).** A
+Opção B (aceitar cobertura parcial com exclusão registrada) foi
+**explicitamente recusada**. Escopo autorizado: os ≈150 endpoints de
+`DEF-01`/`DEF-02`/`DEF-03`. Trilhas despachadas:
+`T-27_DEF-01_JURIDICO_D3D4`, `T-27_DEF-02A_RH_D3D4`, `T-27_DEF-02B_SST_D3D4`,
+`T-27_DEF-03_RFQ_PRECOS_D3D4`. **RESSALVA VINCULANTE, apresentada ao dono
+antes da decisão:** o déficit medido é MAIOR — 70 células dos 43 rasos, 126
+páginas do `client/`, `mobile/` e `tv/` não explorados, 185 de 207 tabelas
+sem semântica de coluna. Fechar os ≈150 cumpre `DEF-01/02/03` e **não
+autoriza declarar o G3 integralmente cumprido**; a segunda leva **permanece
+decisão ABERTA do dono**.
+
+**D2 — Achado `js-yaml` HIGH (`CVE-2026-59870`) promovido a finding formal**,
+com prioridade para a SanaCore avaliar a atualização da dependência,
+**independentemente da decisão sobre o G3**. Origem: `OBS-T26-01`, achado
+novo produzido por execução (`npm audit`, bateria dinâmica 01), **não
+catalogado por nenhuma das 27 trilhas**. Trilha despachada:
+`vericore-dependency-security-auditor` → `07-findings/AUD-DEP-JSYAML-01.md`.
+**CONDIÇÃO DA REGRA 22:** sendo HIGH, precisa passar pelo `finding-validator`
+antes de seguir à remediação; **a promoção não dispensa essa validação, e ela
+ainda NÃO ocorreu**.
+
+**D3 — Recriação do `erp_evok_audio_test` do zero**, isolado de qualquer
+branch SanaCore não mesclada, com confirmação de integridade, **antes de
+qualquer trilha que dependa de teste dinâmico (G4)**. Motivo de fato: a
+bateria 01 provou que o banco carregava a migration
+`20260814-000048-jur-approval-thresholds-and-authority-find-erp-005.cjs`, de
+`origin/sana/ERP-LEGACY-001/FIND-ERP-005` (`67b49fb`), não ancestral do
+`AUDIT_COMMIT` nem de `main` (480 FKs / 208 tabelas × 478 / 207 no
+versionado). Trilha despachada: agente `docker` →
+`G4_PRECONDICAO_BANCO_TESTE.md`. **RESOLVE a pendência (b)** da bateria 01;
+**(a) prova literal de escrita em `audit_logs` por exceção nomeada e
+controlada e (c) bateria dinâmica 02 com o servidor no ar PERMANECEM
+ABERTAS.**
+
+**Estado verificado em disco no momento do registro (pelo director):** nenhum
+dos seis artefatos despachados existia ainda no repositório — o registro do
+director é de decisão e despacho, jamais de resultado. **Os seis foram
+persistidos em seguida pelo orquestrador**, a partir do texto integral
+relatado por cada agente (nenhum dos quatro auditores de negócio nem o
+auditor de dependências tinha ferramenta de escrita disponível nesta
+sessão), **sem alteração de conteúdo** — mesmo padrão de ressalva de
+transparência dos passos 23 e 24.
+
+Nenhum commit foi feito (decisão explícita do dono). Nenhum
+`RETEST_PASSED`, `FINDING CLOSED`, `AUDIT_PASSED` ou `FINDINGS_CONFIRMED` foi
+declarado por esta atualização de Control Plane (Regras 4 e 5).
+
+---
+
+## CLASSE DE RISCO DE GOVERNANÇA RC-PROC-01 ABERTA — 2026-08-16
+
+Regra 18 — por decisão humana explícita do dono nesta sessão: *"Registre o
+padrão de recorrência (5º incidente, contido por disciplina e não por controle
+técnico) como item de governança formal, separado do finding pontual — para não
+se repetir uma 6ª vez."*
+
+**Artefato criado:** `coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`.
+Objeto: a **classe transversal**, não o incidente — este já está em
+`audit/runs/ERP-LEGACY-001-AUD-001/07-findings/AUD-PROC-CUSTODIA-01.md` (HIGH,
+CONFIRMED por `T-30_VALIDACAO_AUD-PROC-CUSTODIA-01.md`).
+
+**Inventário verificado por leitura própria do director.** Dos 5 itens
+catalogados em `PROJECT_STATE.md:888-935` + custódia: pertencem à classe os
+incidentes 1 (sobrescrita de `FIND-ERP-002.md` ao sondar fronteira de escrita),
+3 (número de commit vindo de contexto injetado), 4 (Control Plane divergindo da
+evidência) e 5 (conexão ao banco de PRODUÇÃO REAL). O item 2 **não pertence**:
+é registro de mecanismo funcionando.
+
+**DIVERGÊNCIA REGISTRADA (Regra 20), não conciliada:** (a) "5º incidente" é
+ordinal de lista, correto; contando apenas atravessamentos de restrição, é o
+**4º desvio**. (b) "2º contido apenas por disciplina" vale sob critério estrito
+(ato de fronteira com potencial irreversível: incidentes 1 e 5); sob o critério
+literal da classe — nenhum mecanismo impediu, detectou ou reverteu — são **4 de
+5**. A classe é, portanto, maior do que o finding pontual sugere, e as correções
+em curso endereçam apenas o incidente 5.
+
+**Decisões do dono registradas (decisão e despacho, nunca resultado):**
+- **D-1** — estender `.claude/hooks/org-isolation.js` para interceptar Bash
+  contra o banco de produção (`opuscore-devops-engineer`). **Artefato PRESENTE
+  em disco** (`:100-152` e `:188-200`, antes do approve genérico de `:202`).
+  **Eficácia NÃO verificada — nenhum teste executado por este registro.**
+- **D-2** — corrigir `docs/infra/DEPLOY_UBUNTU.md` e
+  `docs/database/03-MODELO_FISICO.md` (`documentador`). **NÃO CONSTATADO em
+  disco** no momento do registro (Grep por `AUD-PROC-CUSTODIA`/`APR-2026-016`:
+  zero ocorrências). **Ressalva:** `T-30` §7.1 identifica **seis** arquivos que
+  ensinam o comando; a decisão nomeia dois — o restante é decisão ABERTA do
+  dono, não ampliada por analogia.
+- **D-3** — este registro de governança (`coretriad-director`). CONCLUÍDO.
+- **D-4** — validação posterior com os casos sintéticos de segregação do início
+  do programa (precedente `TEST-SEAL-001/002`, `APR-2026-014`). **PENDENTE.**
+
+**CORREÇÃO DE REGISTRO ANTERIOR (Regra 20) — o guard EXISTE.** A afirmação feita
+nesta sessão de que `APPROVALS.md:787` ("o guard que recusa banco sem sufixo de
+teste segue ativo") não corresponderia a mecanismo algum está **REFUTADA**, por
+`T-30` §3 e por releitura direta do director:
+`server/scripts/run-api-suite.cjs:530-536`
+(`if (!/(_test|_ci)$/i.test(process.env.DB_NAME || '')) { throw … }`), com
+`:524-529` recusando `NODE_ENV=production` e `/prod/i`. A afirmação da aprovação
+é **verdadeira no escopo em que foi feita** (fila DYN executada pela suíte);
+**não há divergência governança × mecanismo nesse ponto** e `RT-CUST-03` do
+finding **perde o objeto**. O que não existia era controle para o vetor
+`docker exec … psql`.
+
+**Critérios objetivos de encerramento fixados:** `CE-01`…`CE-09` no artefato,
+cumulativos; nenhum dispensável por decurso de prazo ou por decisão de agente —
+só por aceitação de risco explícita do dono. Estado nesta data: `CE-01` artefato
+presente/eficácia não verificada; `CE-02`, `CE-03`, `CE-04`, `CE-08` pendentes;
+`CE-05` e `CE-06` abertos; `CE-07` parcial; `CE-09` em observação.
+
+Nenhum comando, teste ou conexão de banco foi executado. Nenhum commit.
+Nenhum `RETEST_PASSED`, `FINDING CLOSED`, `AUDIT_PASSED` ou `FINDINGS_CONFIRMED`
+declarado (Regras 4 e 5). Nenhuma severidade atribuída ou alterada (Regra 22).
+
+### NOTA DE CORREÇÃO FACTUAL DO ORQUESTRADOR — 2026-08-16, posterior ao registro acima
+
+O registro do `coretriad-director` acima é fiel ao estado do disco **no momento
+em que ele leu**, mas duas linhas envelheceram por corrida de tempo entre
+agentes concorrentes. Corrigidas aqui por adição, sem alterar o texto original
+(Regra 15):
+
+- **D-2 está CONCLUÍDO, não "NÃO CONSTATADO".** Verificado pelo orquestrador
+  após o término do agente `documentador`: `grep -l` por
+  `APR-2026-016|AUD-PROC-CUSTODIA` retorna os **seis** arquivos —
+  `docs/infra/DEPLOY_UBUNTU.md`, `docs/database/03-MODELO_FISICO.md`,
+  `docs/infra/DOCKER_POSTGRES_SETUP.md`, `docs/infra/DEPLOY.md`,
+  `docs/database/DATABASE_SETUP.md`, `docs/database/07-DISASTER_RECOVERY.md`.
+  `03-MODELO_FISICO.md` passou a usar `erp_evok_audio_test` em 7 pontos.
+  **A ressalva do director sobre o escopo perdeu o objeto na prática:** o
+  agente varreu `docs/` inteiro por iniciativa própria e tratou **7 arquivos**,
+  não os 2 nomeados — 1 por substituição, 5 por aviso normativo e 1 por nota
+  inline em evidência histórica. Cerca de 40 outras ocorrências foram
+  deliberadamente **não** alteradas, por serem menções narrativas ou registro
+  histórico protegido pela Regra 15.
+- **D-4 está CONCLUÍDO, não "PENDENTE".** Executado após o registro acima:
+  `docs/coretriad/planning/SEGREGATION_TEST_REPORT_2026-08-16.md` —
+  **8 casos, 8 PASS, 0 FAIL, 0 NOT_PROVEN**, cobrindo as 4 fronteiras
+  organizacionais originais (`TEST-HOOK-001`…`004`), a nova classe de comando de
+  banco em subagente (`TEST-HOOK-005`) e **na sessão principal**
+  (`TEST-HOOK-006`), mais dois controles negativos. Hook validado:
+  `git hash-object` = `7eb8316d2936a40e86d37a54158ff15bf9050be1`. Segregação
+  respeitada: quem implementou (`opuscore-devops-engineer`) não validou.
+  **`CE-01` deixa de estar em "eficácia não verificada"** — a eficácia está
+  demonstrada por execução, dentro dos limites declarados na §6 daquele
+  relatório (guarda sintática; não cobre `PGDATABASE`, indireção por script,
+  ofuscação, nem `evok_admin` usado diretamente).
+
+Esta nota é registro factual do orquestrador, **não** juízo de auditoria: não
+altera severidade, não fecha finding, não fecha a classe `RC-PROC-01` e não
+declara `RETEST_PASSED`. O encerramento de `CE-01`…`CE-09` segue sendo decisão
+do dono sobre evidência VeriCore (Regra 4).

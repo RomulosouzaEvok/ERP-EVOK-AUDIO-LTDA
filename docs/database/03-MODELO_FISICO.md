@@ -7,11 +7,27 @@ seção "Schema Strategy & Migrations (ADR-DB-001)".
 
 ## Como este DDL foi obtido
 
+> 🔒 **Por que os exemplos abaixo usam `erp_evok_audio_test`, não `erp_evok_audio`**
+>
+> `erp_evok_audio` é o banco classificado **PRODUÇÃO REAL** por decisão
+> humana explícita (`APR-2026-016`), e a **regra permanente de segurança de
+> dado real** (`coretriad/states/ERP-LEGACY-001/PROJECT_STATE.md`) proíbe
+> qualquer agente de executar comando que abra conexão com ele, mesmo
+> somente leitura. Os comandos desta seção são **introspecção de schema**
+> (`pg_dump --schema-only`, `SELECT` em `information_schema`), não operação
+> administrativa — por isso o exemplo aponta para `erp_evok_audio_test`, cujo
+> schema é mantido idêntico ao real por guarda automatizada
+> (`cross-database-drift-guard`, ver `docs/database/DATABASE.md`). Um humano
+> que precise regenerar este artefato a partir do banco real pode substituir
+> o nome do banco manualmente — mas o exemplo versionado aqui nunca deve
+> apontar por padrão para dado real. Referência: `APR-2026-016` +
+> `AUD-PROC-CUSTODIA-01`.
+
 `docs/database/schema.sql` (anexo deste diretório) é o resultado literal
 de:
 
 ```bash
-docker exec evok-postgres pg_dump -U evok_admin -d erp_evok_audio \
+docker exec evok-postgres pg_dump -U evok_admin -d erp_evok_audio_test \
   --schema-only --no-owner --no-privileges \
   > docs/database/schema.sql
 ```
@@ -24,7 +40,14 @@ garante que o DDL documentado é **exatamente** o que roda, não uma
 reconstrução manual sujeita a divergir do real (o mesmo risco que o
 `server/database/postgresql/01_schema.sql` legado já materializou —
 está marcado HISTÓRICO/DEPRECATED e não deve ser usado para provisionar
-banco novo, ver `docs/infra/DEPLOY_UBUNTU.md`).
+banco novo, ver `docs/infra/DEPLOY_UBUNTU.md`). **Nota histórica:** a
+execução original de 2026-08-06 é anterior a `APR-2026-016`
+(13/08/2026) e ao aviso acima — não se sabe, sem checar o log daquela
+sessão, se rodou contra o banco real ou o de teste; como os dois têm
+schema idêntico (guarda `cross-database-drift-guard`), o DDL resultante é
+válido de qualquer forma. **Toda execução futura deste comando, por
+qualquer agente, deve usar `erp_evok_audio_test`**, conforme o aviso
+acima.
 
 ## Quando regenerar
 
@@ -32,7 +55,7 @@ banco novo, ver `docs/infra/DEPLOY_UBUNTU.md`).
 com sucesso), no mesmo ciclo de trabalho, regenerar o dump:
 
 ```bash
-docker exec evok-postgres pg_dump -U evok_admin -d erp_evok_audio \
+docker exec evok-postgres pg_dump -U evok_admin -d erp_evok_audio_test \
   --schema-only --no-owner --no-privileges \
   > docs/database/schema.sql
 ```
@@ -49,8 +72,10 @@ introspecção via `information_schema` (não lê migrations/models — reflete
 o banco real):
 
 ```bash
-# 1. Exportar colunas e constraints do banco real
-docker exec evok-postgres psql -U evok_admin -d erp_evok_audio -X -A -F"|" -c "
+# 1. Exportar colunas e constraints (banco de teste — schema idêntico ao
+#    real por guarda cross-database-drift-guard; ver aviso no topo deste
+#    arquivo. Nunca erp_evok_audio real, mesmo somente leitura.)
+docker exec evok-postgres psql -U evok_admin -d erp_evok_audio_test -X -A -F"|" -c "
 SELECT c.table_name, c.ordinal_position, c.column_name,
   CASE WHEN c.data_type='character varying' THEN 'VARCHAR('||c.character_maximum_length||')'
        WHEN c.data_type='numeric' THEN 'NUMERIC('||c.numeric_precision||','||c.numeric_scale||')'
@@ -62,7 +87,7 @@ WHERE c.table_schema='public' AND c.table_name NOT IN ('SequelizeMeta')
 ORDER BY c.table_name, c.ordinal_position;
 " > docs/database/_columns_raw.psv
 
-docker exec evok-postgres psql -U evok_admin -d erp_evok_audio -X -A -F"|" -c "
+docker exec evok-postgres psql -U evok_admin -d erp_evok_audio_test -X -A -F"|" -c "
 SELECT tc.table_name, kcu.column_name, tc.constraint_type, ccu.table_name AS foreign_table,
   ccu.column_name AS foreign_column, tc.constraint_name
 FROM information_schema.table_constraints tc

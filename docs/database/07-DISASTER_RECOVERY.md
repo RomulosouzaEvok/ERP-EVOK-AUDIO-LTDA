@@ -1,5 +1,29 @@
 # Plano de Continuidade (Disaster Recovery) — ERP EVOK ÁUDIO
 
+> 🔒 **AVISO — comandos deste documento contra `erp_evok_audio` (sem sufixo `_test`) tocam DADO REAL de produção**
+>
+> `erp_evok_audio` é o único banco do projeto — não existe banco de produção
+> separado. Por decisão humana explícita (`APR-2026-016`, em
+> `coretriad/governance/APPROVALS.md`, posterior a este documento), ele é
+> classificado **PRODUÇÃO REAL**, mesmo descrito abaixo como "ambiente de
+> desenvolvimento local". Isso vale sobretudo para a seção "Processo de
+> Restore" (`pg_restore -d erp_evok_audio --clean --if-exists`), que
+> **sobrescreve** o banco real.
+>
+> - **Quem PODE executar:** um humano responsável, em cenário real de
+>   recuperação de desastre ou teste de restore autorizado.
+> - **Quem NÃO PODE, sem exceção:** nenhum agente automatizado (IA) — a
+>   **regra permanente de segurança de dado real**
+>   (`coretriad/states/ERP-LEGACY-001/PROJECT_STATE.md`) veda a qualquer
+>   agente, em qualquer passo do programa `ERP-LEGACY-001` (21-40), comando
+>   que conecte a este banco. Testes de restore por agente devem sempre usar
+>   um banco descartável (como já faz §2.1 abaixo, em
+>   `erp_evok_audio_restore_test`), nunca sobrescrever `erp_evok_audio` em
+>   si.
+> - **Referência normativa:** `APR-2026-016` + `PROJECT_STATE.md` (seção
+>   "Regra permanente de segurança de dado real"). Aviso adicionado após o
+>   finding `AUD-PROC-CUSTODIA-01`.
+
 Auditoria real do ambiente em 2026-08-06 — o que está **implementado**
 vs. o que é **aspiracional** (mencionado no CLAUDE.md/checklists, mas
 ainda não exercitado de fato). **Atualizado no mesmo dia (rodada de

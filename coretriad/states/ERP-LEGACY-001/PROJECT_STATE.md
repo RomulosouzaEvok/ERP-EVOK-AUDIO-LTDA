@@ -7,14 +7,15 @@
 | Tipo | `EXISTING_SYSTEM` |
 | Programa | `LEGACY_RECOVERY_AND_MODERNIZATION` |
 | Data de registro | 2026-08-13 |
-| Estado atual | `IN_AUDIT` (passo 31 aberto por `APR-2026-020` — fase de escopo/plano; fieldwork bloqueado até gate humano do plano). **Nota de concorrência registrada:** remediação preliminar SanaCore corre em paralelo (CASE-001/CASE-002, triagem) — a state machine linear não modela essa concorrência de programa legado; registrado como ocorreu, conciliação de modelo fica com VeriCore + humano (mesmo tratamento da dívida já registrada em `STATE_MACHINE.md`). |
-| Situação do ciclo | Passos 21-24 CONCLUÍDOS — passos 25-30 AUTORIZADOS (`APR-2026-017`) — **passos 25, 26, 27, 28, 29 e 30 CONCLUÍDOS** (ver tabela "Progresso dos passos"). **O passo 30 encerrou a fase de discovery em 2026-08-14**: 9 arquivos de teste de caracterização, 66/66 verdes contra banco efêmero (`CHARACTERIZATION_TESTS.md`). A validação adversarial independente dos cinco findings `FIND-ERP-005`-`009` está **CONCLUÍDA** (todos CONFIRMED; `FIND-ERP-007` **rebaixado de HIGH a MEDIUM**, com item 3 em `NEEDS_MORE_EVIDENCE`, e por isso **não segue à SanaCore**). **Sete** achados foram promovidos a **findings formais preliminares**, fora da sequência do passo 31, por autorização humana explícita (`APR-2026-017` para 2; `APR-2026-018` para 5) — ver seção "Findings preliminares" abaixo. **PARE INCONDICIONAL EM VIGOR** (skill `coretriad-legacy-discovery` ENCERRADA ao fim do passo 30); o passo 31 (auditoria 360°) exige novo gate humano explícito e registrado. |
+| Estado atual | `IN_AUDIT` — **CAMPO CORRIGIDO EM 2026-08-16 (ver "Correção C-02" abaixo; texto anterior preservado ali).** A run `ERP-LEGACY-001-AUD-001` **não está mais em fase de escopo/plano com fieldwork bloqueado**: o **fieldwork está ENCERRADO (27/27 trilhas)**, a validação adversarial `T-25` teve **3 rodadas** (a 3ª concluída em 2026-08-16) e a consolidação `T-26` + `AUDIT_COVERAGE_EXECUTED.md` estão **CONCLUÍDAS**. A run segue **sem veredito**: nenhum `AUDIT_PASSED`, `FINDINGS_CONFIRMED`, `RETEST_PASSED` ou `FINDING CLOSED` foi emitido, e o fechamento do déficit de cobertura do G3 (`APR-2026-024` Decisão A) precede qualquer veredito final. **Nota de concorrência registrada:** remediação preliminar SanaCore corre em paralelo (CASE-001/CASE-002) — a state machine linear não modela essa concorrência de programa legado; registrado como ocorreu, conciliação de modelo fica com VeriCore + humano (mesmo tratamento da dívida já registrada em `STATE_MACHINE.md`). |
+| Situação do ciclo | Passos 21-24 CONCLUÍDOS — passos 25-30 AUTORIZADOS (`APR-2026-017`) — **passos 25, 26, 27, 28, 29 e 30 CONCLUÍDOS** (ver tabela "Progresso dos passos"). **O passo 30 encerrou a fase de discovery em 2026-08-14**: 9 arquivos de teste de caracterização, 66/66 verdes contra banco efêmero (`CHARACTERIZATION_TESTS.md`). **Passo 31 EM CURSO com fieldwork ENCERRADO** — ver seção "Passo 31 — estado corrente (2026-08-16)". A validação adversarial independente dos cinco findings `FIND-ERP-005`-`009` está **CONCLUÍDA** (todos CONFIRMED; `FIND-ERP-007` **rebaixado de HIGH a MEDIUM**, com item 3 em `NEEDS_MORE_EVIDENCE`, e por isso **não segue à SanaCore**). **Sete** achados foram promovidos a **findings formais preliminares**, fora da sequência do passo 31, por autorização humana explícita (`APR-2026-017` para 2; `APR-2026-018` para 5) — ver seção "Findings preliminares" abaixo. |
 | Status de produção | **PARCIAL — classificação final resolvida por `APR-2026-016`** — ver seção "Status de produção" abaixo |
 | Baseline imutável | tag `legacy-baseline-001` → commit `c9359be399c45191fe90e8e9707803125a5ba91d` (Regras 12 e 13 do `CLAUDE.md`; ver seção "Baseline imutável" abaixo) |
-| HEAD do repositório nesta sessão | `8cc650a` (pré-commit do passo 30) — **verificado por `git rev-parse` nesta sessão (2026-08-14)**, não por contexto injetado. Ver seção "Incidentes de processo", item 3. |
+| `AUDIT_COMMIT` da run AUD-001 | `c1311a6f76b512fef893f7e60d934179cae3409f` — fixado por tripla verificação em disco (`00-scope/AUDIT_SCOPE.md`; `00-scope/AUDIT_COMMIT_BINDING_VERIFICATION.md`) |
+| HEAD do repositório nesta sessão | `8cc650a` (pré-commit do passo 30) — **verificado por `git rev-parse` na sessão de 2026-08-14**, não por contexto injetado. **Este campo é histórico e não foi reverificado em 2026-08-16** (Regra 5 do programa: nenhum número relido não pode ser reafirmado). Ver seção "Incidentes de processo", item 3. |
 | Aprovação humana de abertura | `APR-2026-015` em `coretriad/governance/APPROVALS.md` — **limitada aos passos 21-24** |
-| Aprovação humana da fase atual | `APR-2026-017` (passos 25-30 + promoção de `FIND-ERP-001`/`FIND-ERP-002`) e `APR-2026-018` (promoção de `FIND-ERP-005` a `FIND-ERP-009`), ambas em `coretriad/governance/APPROVALS.md`. **A pendência de governança antes registrada aqui (Regra 17 — autorização sem entrada numerada) está RESOLVIDA:** `APR-2026-017` foi criada e este campo foi corrigido; ver "Notas de governança". |
-| Skill que rege o programa | Passos 21-24: `.claude/skills/coretriad-onboard/SKILL.md` (**ENCERRADA** ao final do passo 24). Passos 25-30: `.claude/skills/coretriad-legacy-discovery/SKILL.md` (**criada em 2026-08-13** especificamente para esta fase, com **PARE incondicional ao fim do passo 30**). |
+| Aprovação humana da fase atual | `APR-2026-020` (gate do passo 31 + encaminhamento dos 7 findings), `APR-2026-021`/`APR-2026-022`/`APR-2026-023` (gates G3-G11 e decisões de negócio) e **`APR-2026-024`** (Opção A no déficit de cobertura do G3; promoção do achado `js-yaml`; recriação do banco de teste) — todas em `coretriad/governance/APPROVALS.md` |
+| Skill que rege o programa | Passos 21-24: `.claude/skills/coretriad-onboard/SKILL.md` (**ENCERRADA** ao final do passo 24). Passos 25-30: `.claude/skills/coretriad-legacy-discovery/SKILL.md` (**criada em 2026-08-13** especificamente para esta fase, com **PARE incondicional ao fim do passo 30** — **ENCERRADA**). |
 | State machine | `coretriad/states/STATE_MACHINE.md` |
 | Event log | `coretriad/states/ERP-LEGACY-001/PROJECT_EVENT_LOG.md` |
 | Referência normativa | `docs/coretriad/CORETRIAD_MASTER_SPEC.md` — Parte VIII |
@@ -349,7 +350,7 @@ inferência, nem por analogia: exige novo gate humano explícito e registrado.
 | 28 | Casos de uso recuperados | **CONCLUÍDO** | 6 × `USE_CASES_RECOVERED_*.md` (~200 UCs) |
 | 29 | Matriz de rastreabilidade do legado | **CONCLUÍDO** — nasceu quebrada, como previsto (0 cadeias completas canônicas) | 6 × `LEGACY_TRACEABILITY_MATRIX_*.md` + `LEGACY_TRACEABILITY_MATRIX.md` (consolidação) |
 | 30 | Testes de caracterização | **CONCLUÍDO** (2026-08-14) — 9 arquivos, 66/66 verdes contra `erp_evok_audio_test`; trava `APR-2026-016` respeitada | `CHARACTERIZATION_TESTS.md` + `server/tests/characterization/` |
-| 31 | Auditoria 360° | **EM CURSO** — gate aprovado (`APR-2026-020` Decisão A, 2026-08-14); run `ERP-LEGACY-001-AUD-001` em fase de escopo/inventário/plano; **fieldwork bloqueado até gate humano do plano** | `audit/runs/ERP-LEGACY-001-AUD-001/` |
+| 31 | Auditoria 360° | **EM CURSO — LINHA CORRIGIDA EM 2026-08-16 (ver "Correção C-02").** Gate aprovado (`APR-2026-020` Decisão A); run `ERP-LEGACY-001-AUD-001` com **fieldwork ENCERRADO (27/27 trilhas)**, `T-25` em **3 rodadas** e `T-26` (consolidação + cobertura executada) **concluída**. **Sem veredito.** Extensão de cobertura autorizada por `APR-2026-024` em execução (4 trilhas `T-27_DEF-*`) | `audit/runs/ERP-LEGACY-001-AUD-001/` |
 
 ## Passo 26 — Regras de negócio descobertas (execução e observações)
 
@@ -422,7 +423,9 @@ finding formal hoje:
 
 ## Findings preliminares (fora da sequência do passo 31)
 
-Existem hoje **sete** findings formais no `ERP-LEGACY-001`. Todos foram
+Existem hoje **sete** findings formais preliminares no `ERP-LEGACY-001`
+(além dos 247 findings emitidos pelas 27 trilhas de fieldwork da run
+`AUD-001` — ver "Passo 31 — estado corrente"). Todos os sete foram
 promovidos **fora da sequência normal do passo 31**, por autorização humana
 explícita e caso a caso — **nunca por analogia**:
 
@@ -609,6 +612,11 @@ código (aplicar sem decisão violaria a Regra 6 do `CLAUDE.md`).
 (tripla verificação em disco). **Fieldwork NÃO autorizado** — a run para no gate
 humano do plano.
 
+> **TEXTO ACIMA SUPERADO — ver "Correção C-02" e "Passo 31 — estado corrente
+> (2026-08-16)".** O parágrafo é preservado como registro histórico do estado
+> em 2026-08-14 (Regra 15: evidência histórica não é apagada). O fieldwork foi
+> autorizado e está **encerrado**.
+
 **Estágios concluídos:** escopo (10 exclusões, conflito de interesse sem
 impedimento, com restrição vinculante de que autor de finding preliminar não
 reexamina o próprio achado como voz única) e inventário revalidado (21 contagens
@@ -629,6 +637,60 @@ código que nenhuma auditoria examinou. Isso **não invalida os findings a
 priori** — invalida a premissa de que a baseline representa o código auditado.
 Re-ancoragem dos 6 é item do plano.
 
+#### Correção C-01 (2026-08-16) — o placar de re-ancoragem acima está DESATUALIZADO
+
+**O texto do `OBS-INV-01` acima permanece integralmente preservado como
+evidência histórica** (Regra 15) e descreve corretamente o estado **anterior à
+execução da onda W0**. A afirmação *"apenas `FIND-ERP-001` foi re-ancorado […]
+Os outros 6 não"* **deixou de ser verdadeira** e é corrigida aqui por adição,
+nunca por reescrita silenciosa (Regras 7 e 20 — o artefato versionado vence).
+
+**Fonte relida diretamente pelo `coretriad-director` nesta data:**
+`audit/runs/ERP-LEGACY-001-AUD-001/07-findings/T-00_REANCHORING_REPORT.md`
+(v3, §0 sumário executivo) e
+`audit/runs/ERP-LEGACY-001-AUD-001/24-coverage/AUDIT_COVERAGE_EXECUTED.md`
+§1.1, que escalou a correção ao director precisamente porque `coretriad/` não
+é namespace de escrita da VeriCore (Regra 16).
+
+**Estado real: T-00 executou RA-01…RA-07 e registrou veredito individual para
+7 de 7 findings, todos `ÂNCORAS_VÁLIDAS` — zero `ÂNCORAS_DERIVADAS`, zero
+`ÂNCORAS_INVÁLIDAS`.**
+
+| Finding | RA | Veredito | Profundidade declarada pelo próprio T-00 |
+|---|---|---|---|
+| `FIND-ERP-001` (CRITICAL) | RA-07 | `ÂNCORAS_VÁLIDAS` | 14 arquivos / 24 faixas — **confirmação independente** da re-ancoragem da triagem SanaCore, que entrou como hipótese e nunca como prova |
+| `FIND-ERP-002` (HIGH) | RA-01 | `ÂNCORAS_VÁLIDAS` | 5 arquivos / 12 faixas + varredura própria |
+| `FIND-ERP-005` (CRITICAL) | RA-02 | `ÂNCORAS_VÁLIDAS` | 9 arquivos / 17 faixas; leitura na árvore de `main`, **jamais** na worktree SanaCore |
+| `FIND-ERP-006` (HIGH) | RA-03 | `ÂNCORAS_VÁLIDAS` | **amostra dirigida às âncoras load-bearing** — 5 arquivos / 8 faixas |
+| `FIND-ERP-007` (MEDIUM) | RA-04 | `ÂNCORAS_VÁLIDAS` | 3 arquivos / 5 faixas (as 3 load-bearing) |
+| `FIND-ERP-008` (HIGH) | RA-05 | `ÂNCORAS_VÁLIDAS` | 4 arquivos / 6 faixas, server + client |
+| `FIND-ERP-009` (HIGH) | RA-06 | `ÂNCORAS_VÁLIDAS` | alegação de exaustividade **reproduzida por varredura própria** (4 call sites de `assertApproverIsNotRequester`) |
+
+Registrado também que a reconciliação dos 8 arquivos de `3dee99f` com as
+âncoras dos 7 findings deu **interseção vazia** em `server/src`,
+`server/migrations`, `server/database`, `client/src`, `*.sql` e `server/tests`
+(`T-00` §2.2 + §2.4 ADENDO-02) — o que **explica** por que as âncoras
+sobreviveram. A frase histórica de que `itemProductMirrorService.ts` e
+`fixedAssetReceiptService.ts` "nenhuma auditoria examinou" também foi superada:
+os dois serviços receberam cobertura integral por `RA-08`/`T-05`
+(**265 linhas, 100%**, 14 regras extraídas, 13 sem BR).
+
+**RESSALVA QUE ACOMPANHA A CORREÇÃO — 7/7 não significa profundidade
+uniforme.** Levantada pelo consolidador em `AUDIT_COVERAGE_EXECUTED.md` §1.1 e
+§8 (`RES-T26-05`), registrada aqui para não se perder:
+
+- Nos findings **006, 007, 008 e 009** a reconferência foi **dirigida às
+  âncoras load-bearing**, e o próprio T-00 declarou isso finding a finding.
+  As âncoras **documentais** e as não-load-bearing foram **delegadas** a T-12,
+  T-17, T-20 e T-23 — não reconferidas por T-00.
+- **T-17 aceitou o elo 4 de T-12 como insumo, não como verificação própria**
+  (declaração textual em `T-17_CONTRATO_DE_API.md`), de modo que a cadeia de
+  verificação dessas âncoras é **mais rasa do que "7/7 re-ancorados" sugere**.
+- Em `FIND-ERP-009`, **23 das 28 linhas da tabela do finding não foram
+  reconferidas** por T-00 — delegadas a T-09.
+- Re-ancoragem **não é validação de mérito**, não é remediação, não é
+  `RETEST_PASSED` e não fecha nada (T-00 §6). O mérito é objeto de `T-25`.
+
 ### Remediação — triagens concluídas (SanaCore não implementou nada ainda)
 
 - **CASE-001 (`FIND-ERP-001`)**: causa-raiz reconfirmada com evidência dinâmica
@@ -648,6 +710,15 @@ Re-ancoragem dos 6 é item do plano.
   (`psql` fora do PATH, Docker sem resposta); estática determinística nas 4
   cadeias.
 
+> **Atualização de estado (registro, não juízo técnico):** o `CASE-002` está
+> hoje em `REMEDIATION_COMPLETE` / `READY_FOR_RETEST`, `REMEDIATION_COMMIT`
+> `1046e16`, com **duas pendências de ação humana** que bloqueiam o fechamento
+> (DDL da migration `jur_approval_thresholds` no banco de produção; contagem de
+> perfis `diretor`/`financeiro` em nível `operate` em produção) — ambas
+> registradas em detalhe no `PROJECT_EVENT_LOG.md` (2026-08-14). **Nenhum
+> `RETEST_PASSED` ou `FINDING CLOSED` foi declarado**; `FIND-ERP-005` permanece
+> `OPEN` e o reteste é autoridade exclusiva da VeriCore (Regras 3 e 4).
+
 ### Achado material da triagem do CASE-002 — NÃO promovido
 
 O padrão da Falha 2 (aprovação por presença de módulo, `authorizeModule`/
@@ -659,6 +730,160 @@ próprio; **não promovido por analogia** (precedente `APR-2026-018`). Contexto
 favorável cruzado do FIND-ERP-009: dos ~55 endpoints de ato aprovatório, **51
 declaram `approve`** — o defeito está em 4 linhas / 3 pontos, não é o padrão
 dominante.
+
+## Passo 31 — estado corrente (2026-08-16)
+
+Seção **nova**, criada pela correção de estado desta data. Todos os números
+abaixo foram **relidos diretamente dos artefatos** pelo `coretriad-director`,
+não copiados de contexto injetado (regra 5 do programa). Severidade, confiança
+e status permanecem **autoridade VeriCore** — aqui apenas transcritos.
+
+### Fieldwork — ENCERRADO
+
+**27 de 27 trilhas** do plano concluídas e persistidas em
+`audit/runs/ERP-LEGACY-001-AUD-001/07-findings/` (T-00 a T-24, com `T-15`
+fechada por adendo e o bloqueante de `T-18` fechado pela extensão dirigida
+`T-18-A`).
+
+### `T-25` — validação adversarial em 3 rodadas
+
+| Rodada | Escopo | Resultado |
+|---|---|---|
+| **Rodada 1** | 14 trilhas | 4 CRITICAL + 9 HIGH `CONFIRMED`; arbitragens registradas (inclui `AUD-SEC-T04-01`) |
+| **Rodada 2** | as 13 trilhas sem refutação própria (T-01, T-03, T-05, T-07, T-09, T-10, T-11, T-13, T-19, T-20, T-21, T-22, T-23) | 32 HIGH submetidos a refutação ativa; **20 CONFIRMED, 12 `NEEDS_MORE_EVIDENCE`, 0 REFUTED, 0 FALSE_POSITIVE, 0 DUPLICATE**. Cobertura adversarial declarada completa para as 27 trilhas |
+| **Rodada 3** (A/B/C — concluída em 2026-08-16) | exatamente os 12 `NEEDS_MORE_EVIDENCE` da Rodada 2 | **11 `CONFIRMED` + 1 `FALSE_POSITIVE` (`T11-F10`), 0 remanescentes em `NEEDS_MORE_EVIDENCE`** |
+
+Detalhe da Rodada 3, por bloco, conforme os três relatórios:
+- **3-A** (`T-05-02`, `T-05-05`, `T-05-06`, `T-10-02`): **4 CONFIRMED**, nenhuma
+  severidade rebaixada; acolhida correção de redação em `T-05-05`.
+- **3-B** (`T11-F02`, `T11-F04`, `T11-F10`, `AUD-SERVICE-3`): **3 CONFIRMED + 1
+  FALSE_POSITIVE** (`T11-F10`, refutado por controle compensatório na própria
+  camada); corrigida a atribuição de trilha de `AUD-SERVICE-3` (T-07, não T-16).
+- **3-C** (`T13-F01`, `T13-F04`, `T19-F02`, `T23-F02`): **4 CONFIRMED**, com
+  **recomendação de rebaixamento HIGH → MEDIUM** em `T13-F01` e `T13-F04`
+  (acolhida pela consolidação).
+
+**Divergência aritmética registrada, não conciliada (Regra 20):** o
+`T-26_CONSOLIDACAO.md` §1.4 compõe os 41 `CONFIRMED` como
+"4 + 9 (R1) + 20 (R2) + **8** (Rodadas 3-A/B/C)", enquanto a soma dos três
+relatórios de Rodada 3 lidos diretamente é **11 CONFIRMED** (4 + 3 + 4). O
+`coretriad-director` **não resolve** a divergência — não é sua autoridade
+(Regras 5 e 20). **Escalada ao `vericore-software-audit-director`** para
+determinação da fonte autoritativa antes de qualquer veredito.
+
+### `T-26` — consolidação e cobertura executada (concluídas, 2026-08-16)
+
+Artefatos: `07-findings/T-26_CONSOLIDACAO.md` e
+`24-coverage/AUDIT_COVERAGE_EXECUTED.md` (par obrigatório).
+
+**Placar consolidado** (transcrição — autoridade VeriCore):
+
+| Origem / severidade | Qtd |
+|---|---|
+| Findings preliminares do discovery (`FIND-ERP-*`) | 7 |
+| Findings emitidos pelas 27 trilhas de fieldwork | 247 |
+| **Total de IDs** | **254** |
+| menos 1 `FALSE_POSITIVE` (`T11-F10`) | −1 |
+| **Total vigente** | **253** |
+| **CRITICAL** | **6** (`FIND-ERP-001`, `FIND-ERP-005`, `AUD-AUTHN-01`, `AUD-INTEG-03`, `T08-F01`, `T24-F01`) |
+| **HIGH** | **67** (4 preliminares + 63 de trilha) |
+| **MEDIUM** | **118** (1 preliminar + 117 de trilha) |
+| **LOW** | **57** |
+| **INFO** | **5** |
+
+Estado de validação declarado pela consolidação: **41 `CONFIRMED`**, **1
+`FALSE_POSITIVE`**, **0 `NEEDS_MORE_EVIDENCE` remanescentes** da Rodada 2, **1
+`NEEDS_MORE_EVIDENCE` de origem** (`FIND-ERP-007` item 3, pendência
+procedimental de `APR-2026-020` B.3), e **211 `PROPOSED` sem passagem pela
+Regra 22 — todos MEDIUM/LOW/INFO, que a Regra 22 não exige**. Nenhum CRITICAL
+ou HIGH ficou sem tentativa de refutação registrada.
+
+Decisões de severidade registradas pela consolidação, nunca silenciosas:
+`T11-F10` → `FALSE_POSITIVE` com propagação executada; `T13-F01` e `T13-F04`
+→ HIGH rebaixados a MEDIUM com custo declarado; `AUD-SEC-T04-01` → MEDIUM
+elevado a HIGH (elevação já aprovada pelo dono em 2026-08-14 e formalizada por
+adendo de agente VeriCore).
+
+**Nenhum veredito foi emitido:** a consolidação declara expressamente que não
+emite `AUDIT_PASSED`, `FINDINGS_CONFIRMED`, `RETEST_PASSED` nem
+`FINDING CLOSED`.
+
+### Déficit de cobertura medido (o achado material de `T-26`)
+
+Medido em `AUDIT_COVERAGE_EXECUTED.md`, com número nominal e declaração da
+própria trilha em cada caso:
+
+| Item | Medição |
+|---|---|
+| `DEF-01` — `juridico` D3+D4 | prometido E 75/75, executado A(38/75) ⇒ **37 endpoints** |
+| `DEF-02` — `rh`+`sst` D3+D4 | prometido E 132/132, executado A(~24/132) ⇒ **108 endpoints** |
+| `DEF-03` — `rfq` D3+D4 | prometido E 7/7, executado parcial ⇒ **≈5 endpoints + tabelas de preço** |
+| **Soma dos déficits de W2 em D3/D4** | **≈150 endpoints**, todos em categorias que G3 veda amostrar |
+| 43 endpoints rasos do tier 3 | **70 das 137 células elevadas pela EMENDA-02 NÃO executadas** — a maior divergência planejado × executado da run |
+| `client/` | **126 páginas não amostradas** (executado A(41/167)) |
+| `mobile/` e `tv/` | **não explorados nem estruturalmente** |
+| Schema | **185 de 207 tabelas sem semântica de coluna** (executado A(22/207)) |
+| Agregado | das 137 células elevadas, **≈81 não entregues como `E`** |
+
+Divergências escaladas ao `vericore-software-audit-director` e ainda abertas:
+`DIV-SEV-01` (`T17-F05` MEDIUM × `T23-F03` HIGH sobre o mesmo fato) e
+`INV-01` × `INV-02` (673 × 676 endpoints alcançáveis — irreconciliáveis sem
+uma decisão de definição do que conta como endpoint).
+
+### Decisões humanas de 2026-08-16 (`APR-2026-024`)
+
+1. **Opção A no déficit do G3** — estender a auditoria agora e fechar os ≈150
+   endpoints de `DEF-01`/`DEF-02`/`DEF-03`; **Opção B recusada**. Quatro
+   trilhas complementares despachadas (`T-27_DEF-01_JURIDICO_D3D4`,
+   `T-27_DEF-02A_RH_D3D4`, `T-27_DEF-02B_SST_D3D4`,
+   `T-27_DEF-03_RFQ_PRECOS_D3D4`). **Ressalva vinculante:** fechar os ≈150 não
+   autoriza declarar o G3 integralmente cumprido — as 70 células, as 126
+   páginas, `mobile/`, `tv/` e as 185 tabelas **permanecem decisão aberta do
+   dono**.
+2. **Promoção do achado `js-yaml` HIGH (`CVE-2026-59870`) a finding formal**,
+   com prioridade para a SanaCore avaliar a atualização da dependência,
+   **independentemente da decisão sobre o G3**. Trilha despachada:
+   `vericore-dependency-security-auditor` → `07-findings/AUD-DEP-JSYAML-01.md`.
+   **Condição da Regra 22: sendo HIGH, o finding precisa passar pelo
+   `finding-validator` antes de seguir à remediação — e isso ainda NÃO
+   ocorreu.**
+3. **Recriação do banco `erp_evok_audio_test` do zero**, isolado de qualquer
+   branch SanaCore não mesclada, com confirmação de integridade, antes de
+   qualquer trilha que dependa de teste dinâmico (G4). Trilha despachada:
+   agente `docker` → `G4_PRECONDICAO_BANCO_TESTE.md`. **Resolve a pendência
+   (b)** da bateria dinâmica 01; **as pendências (a)** (prova literal de
+   escrita em `audit_logs` por exceção nomeada) **e (c)** (bateria dinâmica 02
+   com o servidor no ar) **permanecem ABERTAS**.
+
+**Estado de verificação em disco no momento deste registro:** os artefatos
+`AUD-DEP-JSYAML-01.md` e `G4_PRECONDICAO_BANCO_TESTE.md`, bem como os quatro
+relatórios `T-27_DEF-*`, **ainda não existem no repositório** (verificado por
+Glob nesta sessão). As trilhas foram **despachadas**, não concluídas — o
+registro acima é de decisão e despacho, jamais de resultado.
+
+## Correções de registro aplicadas em 2026-08-16
+
+Registradas por adição, no padrão já usado neste arquivo; **nenhum texto
+histórico foi apagado** (Regra 15), e cada correção nomeia a fonte relida
+(Regra 7 — o artefato versionado vence).
+
+- **Correção C-01 — `OBS-INV-01`, placar de re-ancoragem.** Dizia "1 de 7";
+  o executado é **7/7 `ÂNCORAS_VÁLIDAS`**. Detalhe e ressalvas na própria
+  seção `OBS-INV-01` acima. Fontes: `T-00_REANCHORING_REPORT.md` §0;
+  `AUDIT_COVERAGE_EXECUTED.md` §1.1 (que escalou a correção ao director por
+  não poder escrever em `coretriad/` — Regra 16).
+- **Correção C-02 — campo "Estado atual" e linha do passo 31.** Descreviam a
+  run como "fase de escopo/plano, fieldwork bloqueado até gate humano do
+  plano". Isso deixou de ser verdade: o fieldwork foi liberado
+  (`APR-2026-023` Parte C, G11 opção (c), e liberações subsequentes) e está
+  **encerrado com 27/27 trilhas**; `T-25` teve 3 rodadas e `T-26` está
+  concluída. Os textos anteriores permanecem visíveis no próprio campo e no
+  parágrafo de abertura da seção "Passo 31 — auditoria 360° e remediação
+  preliminar", marcados como superados.
+- **O que estas correções NÃO fazem:** não emitem juízo de auditoria, não
+  alteram severidade, confiança ou status de nenhum finding, não fecham
+  finding e não declaram veredito. O `coretriad-director` registra estado
+  (Regra 5).
 
 ## Incidentes de processo registrados (transparência)
 
@@ -698,6 +923,16 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
    contagem, versão ou qualquer identificador vindo de contexto injetado sem
    releitura direta da fonte.* Contexto injetado é conveniência, não
    evidência (Regras 8 e 19 do `CLAUDE.md`).
+4. **Quarta ocorrência da mesma classe, em sentido inverso (2026-08-16) —
+   registro deste arquivo.** O próprio `PROJECT_STATE.md` passou a divergir
+   materialmente da evidência versionada em dois pontos (re-ancoragem 1/7 ×
+   7/7; passo 31 "fieldwork bloqueado" × fieldwork encerrado). A divergência
+   foi detectada **por um agente VeriCore lendo o Control Plane**
+   (`AUDIT_COVERAGE_EXECUTED.md` §1.1) e escalada ao director em vez de
+   corrigida por quem a encontrou — comportamento correto (Regra 16).
+   **Lição registrada: artefato de Control Plane também envelhece, e
+   envelhecer sem correção é, na prática, alimentar contexto injetado
+   desatualizado para toda a organização.**
 
 ## Regras do programa que valem do passo 21 ao 40 (sem exceção)
 
@@ -719,7 +954,7 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
    `RISK_ACCEPTED` em produção.
 5. **Nenhum número (commit, tag, contagem, versão) pode ser citado a partir
    de contexto injetado sem releitura direta da fonte** — regra reforçada
-   pelo incidente 3 acima.
+   pelo incidente 3 acima e reafirmada pelo incidente 4.
 
 ## Pendências fora deste projeto (não bloqueantes)
 
@@ -728,17 +963,41 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
   (2026-08-13, `APR-2026-017` decisão C)**. Explicitamente **não bloqueia** o
   `ERP-LEGACY-001`.
 
+## Decisões do dono ainda ABERTAS (não antecipadas pelo `coretriad-director`)
+
+1. **Segunda leva do déficit de cobertura do G3** — 70 células do tier 3
+   raso, 126 páginas do `client/`, `mobile/`, `tv/`, 185 de 207 tabelas sem
+   semântica de coluna. `APR-2026-024` **não** as cobre.
+2. **Pendência (a) da bateria dinâmica 01** — prova literal de escrita em
+   `audit_logs` por exceção nomeada e controlada ao veto de escrita em banco.
+3. **Pendência (c) da bateria dinâmica 01** — bateria dinâmica 02 com o
+   servidor de fato no ar.
+4. **As duas pendências humanas do `CASE-002`** — DDL da migration
+   `jur_approval_thresholds` em `erp_evok_audio` (banco PRODUÇÃO REAL) e
+   levantamento em produção dos perfis `diretor`/`financeiro` em nível
+   `operate`.
+5. **Atribuição incremental de OWNER por área** no `BR_CATALOG.md` — 100% das
+   linhas seguem `PENDENTE — decisão humana`; **vedado a agente decidir ou
+   inferir** (`APR-2026-019` parte 2, reafirmada em `APR-2026-020` e
+   `APR-2026-021` Parte E).
+6. **Etapa 3 da chave de idempotência** (`APR-2026-023` Parte A) — gate humano
+   obrigatório entre as etapas 2 e 3, ainda não dado.
+7. **`FIND-ERP-007` item 3** — pendência procedimental da `APR-2026-020` B.3
+   (retorno ao autor de origem) não verificada.
+
 ## Notas de governança
 
 - Este registro é feito exclusivamente pelo `coretriad-director`, que não
   implementa, não audita, não corrige e não toca `src/`/`product/`/`tests/`
   (Regra 5 do `CLAUDE.md`) — este arquivo é registro de Control Plane, não
-  decisão técnica. A severidade, a confiança e o status dos sete findings
-  acima são **autoridade VeriCore**, apenas transcritos aqui.
+  decisão técnica. A severidade, a confiança e o status de todos os findings
+  citados são **autoridade VeriCore**, apenas transcritos aqui.
 - Nenhum teste, script de diagnóstico ou comando de banco foi executado para
-  produzir este registro. As verificações desta etapa foram exclusivamente
-  leitura de arquivo (`.git/refs/heads/main`, `.git/packed-refs`,
-  `APPROVALS.md`, cabeçalhos dos 5 findings, listagem de `discovery/`).
+  produzir este registro. As verificações da atualização de 2026-08-16 foram
+  exclusivamente leitura de arquivo (`T-00_REANCHORING_REPORT.md`,
+  `T-26_CONSOLIDACAO.md`, `AUDIT_COVERAGE_EXECUTED.md`, os três relatórios de
+  `T-25` Rodada 3, `DYN_VERIFICACAO_BATERIA_01.md`, `APPROVALS.md` e o
+  `PROJECT_EVENT_LOG.md`) e uma listagem por Glob.
 - **Pendência de governança RESOLVIDA (correção de registro anterior):** este
   arquivo afirmava, em versões anteriores, que a autorização humana dos
   passos 25-30 e da promoção dos dois primeiros findings **ainda não tinha
@@ -746,7 +1005,7 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
   afirmação **deixou de ser verdadeira**: `APR-2026-017` existe e cobre as
   quatro decisões (a)-(d), com nota própria de que foi criada retroativamente
   na mesma sessão. Os campos e seções que ainda declaravam a pendência foram
-  corrigidos nesta atualização, sob Regra 20 (divergência entre documento e
+  corrigidos naquela atualização, sob Regra 20 (divergência entre documento e
   evidência resolvida em favor do artefato versionado — Regra 7). **Nenhuma
   evidência histórica foi apagada**: o histórico da pendência permanece
   íntegro no `PROJECT_EVENT_LOG.md` e na nota de registro do próprio
@@ -756,8 +1015,9 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
   regra nova do programa. `APR-2026-018` é explícita: os demais candidatos do
   passo 26 (scan mobile, ICMS/IPI, desconto perdido no faturamento,
   `effectiveness_result` inescrevível, permissão `V` inexistente, CNAB órfão,
-  divergência MRP × OP na explosão de BOM) **seguem o fluxo normal até o
-  passo 31** e **não podem ser promovidos por analogia**.
+  divergência MRP × OP na explosão de BOM) **seguem o fluxo normal** e **não
+  podem ser promovidos por analogia**. `APR-2026-024` Decisão B reafirma o
+  precedente: a promoção do `js-yaml` vale só para ele.
 - **Passo 30 CONCLUÍDO (2026-08-14) — a fase de discovery (passos 25-30)
   terminou e a skill `coretriad-legacy-discovery` está ENCERRADA.** Execução:
   3 trilhas OpusCore de teste + 1 de infraestrutura; 9 arquivos em
@@ -768,8 +1028,7 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
   A 1ª execução refutou empiricamente uma premissa de leitura estática
   (cancelamento de NF-e reverte `invoiced → confirmed` desde a correção D-M) —
   divergência registrada no §5 do artefato, corrigida no teste, nunca em
-  `src/`. **Nenhuma ação seguinte é convocada por esta skill: o passo 31
-  exige novo gate humano explícito e registrado.**
+  `src/`.
 - **O risco conhecido do passo 29 se confirmou:** a matriz nasceu quebrada na
   origem (ausência de BR-ID canônico e de OWNER em ~167 regras; 90 RFs sem AC/TC).
   **Atualização 2026-08-14 — a parte do BR-ID foi RESOLVIDA por decisão do
@@ -781,8 +1040,71 @@ de segregação do CoreTriad existe para tornar visível** (Regras 14 e 19 do
   em lote; a atribuição por área será feita aos poucos, pelo dono, com os
   responsáveis reais de cada área da empresa — **é vedado a agente decidir ou
   inferir OWNER** (tabela de atribuição no próprio `BR_CATALOG.md`, 100%
-  `PENDENTE — decisão humana`). **Ao fim do passo 30 o programa parou
-  incondicionalmente**; o passo 31 exige novo gate humano explícito e
-  registrado. Pendências que dependem do dono e **não são antecipadas pelo
-  `coretriad-director`**: (a) o encaminhamento dos sete findings a SanaCore;
-  (b) a atribuição incremental de OWNER por área; (c) o gate do passo 31.
+  `PENDENTE — decisão humana`).
+
+## Classe de risco de governança RC-PROC-01 (aberta em 2026-08-16)
+
+A seção "Incidentes de processo registrados" acima (`:888-935`) permanece
+**íntegra e inalterada**. Esta seção é **adição**: eleva o padrão transversal
+por trás daqueles incidentes a item de governança formal, por decisão humana
+explícita do dono (Regra 18).
+
+**Artefato:** `coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`.
+**Classe:** restrição categórica cuja contenção dependeu da disciplina do
+agente, não de controle técnico — evidência empírica de que a **Regra 23** do
+`CLAUDE.md` não estava satisfeita para as restrições inventariadas.
+**Status:** ABERTA. **Encerramento:** decisão do dono sobre evidência VeriCore
+(Regra 4); **o `coretriad-director` não fecha esta classe.**
+
+**Pertencem à classe** os incidentes **1, 3, 4** da lista acima e o **5º**
+(`AUD-PROC-CUSTODIA-01`). **O incidente 2 NÃO pertence** — é registro de
+mecanismo funcionando corretamente, e sua presença na mesma lista é
+precisamente o hábito que esta classe corrige: "o controle funcionou" e "o
+agente se comportou" não são a mesma coisa.
+
+**Divergência de contagem registrada, não conciliada (Regra 20):** "5º
+incidente" é ordinal de lista (correto); em desvios efetivos é o 4º. "2º contido
+apenas por disciplina" vale sob critério estrito; sob o critério literal da
+classe são 4 de 5.
+
+**Vetores ainda sem controle técnico, verificados em disco em 2026-08-16:**
+escrita de agente VeriCore sobre artefato de finding em `docs/` (`ORG_RULES` da
+`vericore` em `org-isolation.js:31-39` não lista `docs/`); citação de número
+vindo de contexto injetado (não imponível por hook, por natureza); Control Plane
+envelhecido sem gatilho de reconciliação. Controle **criado** para o vetor de
+banco de produção via shell (`org-isolation.js:100-152,188-200`).
+
+**Correção de registro:** o guard citado em `APPROVALS.md:787` **existe** —
+`server/scripts/run-api-suite.cjs:517-536` — e a afirmação da aprovação é
+verdadeira no escopo da fila DYN executada pela suíte. O que não existia era
+controle para `docker exec … psql`.
+
+Esta atualização não emite juízo de auditoria, não altera severidade, confiança
+ou status de finding, não fecha finding e não declara veredito (Regra 5).
+
+### Nota de correção factual do orquestrador (posterior ao registro do director)
+
+O registro acima diz que a eficácia do controle criado em D-1 "é objeto de
+reteste da VeriCore, não declarada aqui" e lista D-2/D-4 como não concluídos.
+Isso era verdade quando o director leu o disco; deixou de ser em seguida.
+Corrigido por adição, sem alterar o texto original (Regra 15):
+
+- **D-2 (documentação) CONCLUÍDO.** Seis arquivos de `docs/` passaram a citar
+  `APR-2026-016`/`AUD-PROC-CUSTODIA-01`; `03-MODELO_FISICO.md` migrou para
+  `erp_evok_audio_test`. O agente varreu `docs/` inteiro e tratou **7**
+  arquivos, não os 2 nomeados, mantendo ~40 menções narrativas intactas por
+  Regra 15.
+- **D-4 (validação) CONCLUÍDO, com 8/8 PASS.**
+  `docs/coretriad/planning/SEGREGATION_TEST_REPORT_2026-08-16.md`. As quatro
+  fronteiras organizacionais originais seguem impostas por hook (não houve
+  regressão), a nova guarda de banco bloqueia em subagente **e na sessão
+  principal**, e os controles negativos (`_test`, `_ci`, `postgres`) passam —
+  provando discriminação, não bloqueio indiscriminado. Hook validado:
+  `7eb8316d2936a40e86d37a54158ff15bf9050be1`.
+
+**Limites da eficácia demonstrada**, para que o `PASS` não seja lido como
+cobertura maior do que é: a guarda é **sintática sobre a string do comando** —
+não cobre `PGDATABASE` exportado em chamada anterior, indireção por script
+(`bash deploy.sh`, `npm run <script>`), ofuscação trivial, nem conexão por
+código executado. E `evok_admin` segue superusuária sobre os dois bancos; o
+controle complementar é a role `evok_audit`, sem `CONNECT` em produção.

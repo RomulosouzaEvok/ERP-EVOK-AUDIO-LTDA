@@ -27,6 +27,27 @@ cp server/.env.example server/.env    # server — para rodar o Node local
 
 ### Por que existem dois
 
+> 🔒 **AVISO — `erp_evok_audio` (mencionado abaixo) é DADO REAL de produção, não um banco de dev descartável**
+>
+> Este guia descreve como subir o **único banco do projeto**
+> (`erp_evok_audio`, atrás de `docker-compose.yml`) — não existe banco de
+> produção separado. Por decisão humana explícita (`APR-2026-016`, em
+> `coretriad/governance/APPROVALS.md`), ele é classificado **PRODUÇÃO REAL**
+> (catálogo de itens/categorias/departamentos, conta `admin`, `auth`,
+> `auditLogs`), mesmo rodando localmente via Docker.
+>
+> - **Quem PODE executar os comandos deste guia:** um humano configurando seu
+>   próprio ambiente de desenvolvimento.
+> - **Quem NÃO PODE, sem exceção:** nenhum agente automatizado (IA) pode
+>   executar comando que conecte a `erp_evok_audio` (nem `pg_isready`, nem
+>   `psql -c "SELECT ..."`, nem para diagnóstico) — a **regra permanente de
+>   segurança de dado real**
+>   (`coretriad/states/ERP-LEGACY-001/PROJECT_STATE.md`) veda isso em
+>   qualquer passo do programa `ERP-LEGACY-001` (21-40).
+> - **Referência normativa:** `APR-2026-016` + `PROJECT_STATE.md` (seção
+>   "Regra permanente de segurança de dado real"). Aviso adicionado após o
+>   finding `AUD-PROC-CUSTODIA-01`.
+
 - Se você só quer o **banco** em Docker e roda o **backend Node direto no seu
   PC** (fluxo mais comum em dev): use `server/.env` com `DB_HOST=localhost`.
 - Se você sobe **banco + API dentro do Docker** (`docker compose up -d` sem

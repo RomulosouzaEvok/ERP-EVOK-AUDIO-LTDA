@@ -811,5 +811,158 @@ estimativa por medida antes de comprometer número.
 
 **Aprovado por:** Gilwagno (dono do CoreTriad) — 14/08/2026.
 
+---
+
+## APR-2026-024 — Opção A no déficit de cobertura do G3, promoção do achado `js-yaml` a finding formal, e recriação do banco de teste antes de qualquer trilha dinâmica
+
+**Contexto:** encerramento do fieldwork da run `ERP-LEGACY-001-AUD-001` (27/27
+trilhas), três rodadas de validação adversarial `T-25` e a consolidação `T-26`
+com a medição de cobertura executada
+(`audit/runs/ERP-LEGACY-001-AUD-001/24-coverage/AUDIT_COVERAGE_EXECUTED.md`).
+O Control Plane apresentou ao dono o déficit medido entre a matriz de cobertura
+prometida (pós-`EMENDA-02`, elevada justamente para cumprir a condição (a) do
+gate **G3** de `APR-2026-021`) e a cobertura de fato entregue pelas trilhas. O
+dono respondeu com três decisões, registradas abaixo. **Nenhuma foi inferida
+por agente** (Regra 18).
+
+### Decisão A — fechar o déficit de cobertura do G3 ANTES de qualquer veredito final (Opção A)
+
+**Escolhida a Opção A: estender a auditoria agora.** A **Opção B** — aceitar
+cobertura parcial com exclusão registrada no relatório final — foi
+**explicitamente recusada pelo dono**.
+
+Escopo imediato autorizado: os **≈150 endpoints** dos três déficits materiais
+de W2, declarados pelas próprias trilhas e medidos em
+`AUDIT_COVERAGE_EXECUTED.md` §3.1:
+
+| Déficit | Célula | Prometido | Executado | Déficit nominal | Declarado por |
+|---|---|---|---|---|---|
+| `DEF-01` | C-01/C-02 — `juridico` D3+D4 | E 75/75 | A(38/75) | **37 endpoints** | `T-09` §6 |
+| `DEF-02` | C-03…C-06 — `rh`+`sst` D3+D4 | E 132/132 | A(~24/132) | **108 endpoints** | `T-12` §5 (`RES-T12-01`) |
+| `DEF-03` | C-10/C-11 — `rfq` D3+D4 | E 7/7 | A (parcial) | **≈5 endpoints + tabelas de preço** | `T-10` §4 (`RES-T10-01`) |
+
+Os três recaem em categorias que a condição de G3 **veda amostrar**
+(contratos/jurídico, dado pessoal sensível e obrigação legal com prazo,
+operações financeiras/segregação).
+
+Trilhas complementares despachadas em consequência desta decisão:
+`T-27_DEF-01_JURIDICO_D3D4`, `T-27_DEF-02A_RH_D3D4`, `T-27_DEF-02B_SST_D3D4`,
+`T-27_DEF-03_RFQ_PRECOS_D3D4`.
+
+**RESSALVA VINCULANTE, apresentada pelo orquestrador ao dono antes da decisão e
+registrada aqui para que não se perca — o déficit medido é MAIOR que esses
+≈150 endpoints.** Também consta de `AUDIT_COVERAGE_EXECUTED.md`, medido e
+nominal:
+
+| Item | Medição registrada | Fonte |
+|---|---|---|
+| **70 células não executadas** nos 43 endpoints rasos do tier 3 (D1, D2, D3, D4, D5, D6, D9 elevados a `E` pela EMENDA-02, entregues como `R`) | 70 de 70 não entregues — "a maior divergência planejado × executado desta run"; `N-05` e `N-06` permanecem materialmente em vigor | §4 (C-63…C-132), §7.1, §7.2 |
+| **126 páginas do `client/` não amostradas** | `N-07` "EM VIGOR com número medido"; executado A(41/167) contra triagem 100% prometida (C-133) | §4, §7.2 |
+| **`mobile/` e `tv/` não explorados — nem estruturalmente** | `N-08` "EM VIGOR E AGRAVADA"; C-134 e C-135 não cumpridas | §4, §7.2 |
+| **185 de 207 tabelas sem semântica de coluna** | C-137 entregue como A(22/207) em nulabilidade/semântica | §5, §7.1 |
+| Agregado das células elevadas | das **137** células elevadas pela EMENDA-02, **≈81 não entregues como `E`**; "a cobertura executada corresponde, em larga medida, à matriz PRÉ-EMENDA-02" | §7.1 |
+
+**Efeito normativo desta ressalva:** fechar os ≈150 endpoints cumpre
+`DEF-01`/`DEF-02`/`DEF-03` e **nada além disso**. **Não autoriza declarar o G3
+integralmente cumprido**, não revoga `N-05`, `N-06`, `N-07` nem `N-08`, e não
+supre as células C-63…C-137. **Essa segunda leva permanece decisão ABERTA do
+dono** — e, como todo gate, só pode ser resolvida por decisão humana explícita
+registrada (Regra 18), nunca por inferência a partir desta aprovação.
+
+### Decisão B — promoção do achado `js-yaml` HIGH a finding formal
+
+Autorizada a promoção a finding formal do achado registrado como `OBS-T26-01`
+em `T-26_CONSOLIDACAO.md` §7: **`js-yaml`, `CVE-2026-59870`, HIGH, ativo hoje
+em `server`**; acompanham 21 vulnerabilidades (14 HIGH) em `mobile` e 19
+(12 HIGH) em `tv`. É **achado novo, produzido por execução** (`npm audit`,
+bateria de verificação dinâmica 01 —
+`07-findings/DYN_VERIFICACAO_BATERIA_01.md`) e **não catalogado por nenhuma
+das 27 trilhas de fieldwork**: nenhuma leitura estática de `package.json`
+poderia produzi-lo.
+
+**Prioridade determinada pelo dono:** a SanaCore deve avaliar a atualização da
+dependência **independentemente da decisão sobre o G3** — este item não fica na
+fila atrás do fechamento de cobertura.
+
+Trilha despachada: `vericore-dependency-security-auditor`, produzindo
+`audit/runs/ERP-LEGACY-001-AUD-001/07-findings/AUD-DEP-JSYAML-01.md`.
+
+**CONDIÇÃO DA REGRA 22, registrada expressamente:** sendo **HIGH**, o finding
+precisa passar pelo `vericore-finding-validator` **antes** de seguir para
+remediação. **A promoção autorizada pelo dono NÃO dispensa essa validação, e
+ela ainda NÃO ocorreu.** Enquanto não ocorrer, trata-se de finding **promovido
+e não validado**: nenhum agente pode tratá-lo como `CONFIRMED`, e esta
+aprovação, isoladamente, não constitui encaminhamento formal à SanaCore.
+
+### Decisão C — recriação do banco de teste `erp_evok_audio_test` do zero
+
+Determinada a **recriação do banco de teste `erp_evok_audio_test` do zero**,
+**isolado de qualquer branch SanaCore não mesclada**, com **confirmação de
+integridade**, **antes de qualquer trilha que dependa de teste dinâmico (G4)**.
+
+**Motivo de fato:** a bateria dinâmica 01 provou que `erp_evok_audio_test`
+carregava a migration
+`20260814-000048-jur-approval-thresholds-and-authority-find-erp-005.cjs`,
+proveniente de `origin/sana/ERP-LEGACY-001/FIND-ERP-005` (commit `67b49fb`,
+marcado como remediação PARCIAL e NÃO retestável), que **não é ancestral do
+`AUDIT_COMMIT` nem de `main`** — ou seja, o banco de teste vinha sendo
+**compartilhado** entre sessões VeriCore e SanaCore, não recriado a cada
+execução. Efeito medido: 480 FKs / 208 tabelas no banco efêmero contra
+478 / 207 no versionado.
+
+Trilha despachada: agente `docker`, produzindo `G4_PRECONDICAO_BANCO_TESTE.md`.
+
+**Esta decisão RESOLVE a pendência (b)** das três que a bateria de verificação
+dinâmica 01 deixou explicitamente para o dono. **As outras duas permanecem
+ABERTAS:**
+
+- **(a) prova literal de escrita em `audit_logs`** por exceção nomeada e
+  controlada ao veto de escrita em banco — o `vericore-audit-verification-runner`
+  recusou `DYN-T03-02`/`DYN-T03-05` por desenho, porque sua carta de
+  responsabilidades proíbe qualquer escrita em banco, mesmo em teste efêmero, e
+  a autorização recebida não nomeava essa exceção. **PERMANECE ABERTA.**
+- **(c) bateria dinâmica 02 com o servidor de fato no ar** — ~70 verificações
+  que exigem `server` rodando contra `erp_evok_audio_test` e emitindo JWT
+  reais, incluindo as que sustentariam diretamente os dois CRITICAL de maior
+  prioridade (`AUD-AUTHN-01`, `T24-F01`). **PERMANECE ABERTA.**
+
+### O que esta aprovação NÃO cobre
+
+1. **Não declara o G3 cumprido.** Ver a ressalva da Decisão A — o déficit
+   remanescente (70 células do tier 3 raso, 126 páginas do `client/`,
+   `mobile/`, `tv/`, 185 de 207 tabelas) segue sem decisão do dono.
+2. **Não estende autorização por analogia a nenhum outro achado.** A promoção a
+   finding vale **exclusivamente** para o achado `js-yaml`/`CVE-2026-59870`. As
+   demais observações não promovidas de `T-26_CONSOLIDACAO.md` §7 e as lacunas
+   de adjudicação de §2.5 (`T16-F15`, `T21-F01`, `RES-T13-04`, `RES-T13-05`)
+   **não** são promovidas por esta aprovação. Precedente de `APR-2026-018`
+   reafirmado: promoção fora de sequência é exceção caso a caso, nunca regra
+   nova, nunca por analogia.
+3. **Não estende autorização a nenhuma outra escrita em banco.** A Decisão C
+   autoriza **recriar o banco de teste**, e só isso. Não autoriza a prova
+   literal de escrita em `audit_logs` (pendência (a)); não autoriza a bateria
+   02 (pendência (c)); não autoriza DDL nem DML em `erp_evok_audio` — banco
+   **PRODUÇÃO REAL** por `APR-2026-016`, reafirmado intocável em
+   `APR-2026-021` Parte D — e não resolve a pendência humana nº 1 do `CASE-002`
+   (a migration `jur_approval_thresholds` aplicada somente ao banco de teste,
+   cuja aplicação em produção é ato do dono, não de agente).
+4. **Não declara `AUDIT_PASSED`, `FINDINGS_CONFIRMED`, `RETEST_PASSED` nem
+   `FINDING CLOSED`** — autoridade exclusiva da VeriCore (Regras 4 e 5).
+   Nenhum finding é fechado, aberto para remediação ou reclassificado por esta
+   aprovação.
+5. **Não resolve as divergências escaladas ao `vericore-software-audit-director`**
+   pela consolidação e pela cobertura executada — em especial `DIV-SEV-01`
+   (`T17-F05` MEDIUM × `T23-F03` HIGH), a irreconciliação `INV-01` × `INV-02`
+   (673 × 676 endpoints alcançáveis) e a divergência aritmética do placar de
+   validação registrada no `PROJECT_EVENT_LOG.md` desta data.
+6. **Não altera `APR-2026-023` Parte A:** o gate humano obrigatório entre as
+   etapas 2 e 3 da chave de idempotência continua integralmente em vigor.
+
+**Aprovado por:** Gilwagno (dono do CoreTriad), em sessão — 16/08/2026.
+
+**Registrado por:** `coretriad-director` — registro de decisão humana já
+tomada. Nenhum juízo técnico, nenhuma severidade decidida, nenhum finding
+validado ou fechado (Regras 5 e 6).
+
 Aprovações futuras: adicionar linha com próximo ID sequencial. Nunca editar
 entradas existentes — correções entram como nova linha referenciando a antiga.

@@ -26,6 +26,36 @@
 
 ---
 
+> 🔒 **AVISO — todo comando abaixo que usa `-d erp_evok_audio` toca DADO REAL de produção**
+>
+> `erp_evok_audio` é, hoje, o único banco do projeto — não existe banco de
+> produção separado. Por decisão humana explícita (`APR-2026-016`, em
+> `coretriad/governance/APPROVALS.md`), ele é classificado **PRODUÇÃO REAL**
+> (catálogo de itens/categorias/departamentos, conta `admin`, `auth`,
+> `auditLogs`), independentemente de não haver Go-Live formal. Todo comando
+> `docker exec`/`psql`/`pg_dump`/`pg_restore` deste arquivo que aponta para
+> `-d erp_evok_audio` (sem sufixo `_test`/`_ci`) conecta a esse banco real.
+>
+> - **Quem PODE executar:** um humano responsável, fazendo deploy/operação
+>   real neste servidor. Este é um runbook de operação humana — os comandos
+>   aqui existem para isso e continuam legítimos quando rodados por uma
+>   pessoa.
+> - **Quem NÃO PODE executar, sem exceção:** nenhum agente automatizado (IA)
+>   em nenhuma circunstância — nem leitura, nem "só contar linhas", nem
+>   diagnóstico. A **regra permanente de segurança de dado real**
+>   (`coretriad/states/ERP-LEGACY-001/PROJECT_STATE.md`) veda a qualquer
+>   agente, em qualquer passo do programa `ERP-LEGACY-001` (21-40), executar
+>   comando que abra conexão com este banco. Inspecionar dado real exige
+>   aprovação humana explícita, caso a caso — nunca por inferência.
+> - **Referência normativa:** `APR-2026-016` +
+>   `coretriad/states/ERP-LEGACY-001/PROJECT_STATE.md` (seção "Regra
+>   permanente de segurança de dado real"). Este aviso foi adicionado após o
+>   finding `AUD-PROC-CUSTODIA-01` (HIGH, CONFIRMED) apurar que um agente
+>   executou um comando contra o banco real seguindo, entre outras causas, a
+>   documentação deste projeto.
+
+---
+
 ## 🔧 Pré-Requisitos
 
 ### Instalado no Ubuntu

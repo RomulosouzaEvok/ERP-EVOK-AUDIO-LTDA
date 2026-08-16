@@ -22,6 +22,26 @@
 
 ---
 
+> 🔒 **AVISO — `erp_evok_audio` (usado nos exemplos abaixo) é DADO REAL de produção**
+>
+> `erp_evok_audio` é o único banco do projeto — não existe banco de produção
+> separado. Por decisão humana explícita (`APR-2026-016`, em
+> `coretriad/governance/APPROVALS.md`), ele é classificado **PRODUÇÃO REAL**
+> (catálogo de itens/categorias/departamentos, conta `admin`, `auth`,
+> `auditLogs`), inclusive quando referido aqui como "Desenvolvimento Local".
+>
+> - **Quem PODE executar os comandos deste guia** (`migration:up`, scripts de
+>   backfill, `psql -f .../02d_validation.sql`, etc.): um humano configurando
+>   ambiente ou fazendo migração de dados real.
+> - **Quem NÃO PODE, sem exceção:** nenhum agente automatizado (IA) pode
+>   executar comando que conecte a `erp_evok_audio` — nem migration, nem
+>   backfill, nem validação, nem leitura. A **regra permanente de segurança
+>   de dado real** (`coretriad/states/ERP-LEGACY-001/PROJECT_STATE.md`) veda
+>   isso em qualquer passo do programa `ERP-LEGACY-001` (21-40).
+> - **Referência normativa:** `APR-2026-016` + `PROJECT_STATE.md` (seção
+>   "Regra permanente de segurança de dado real"). Aviso adicionado após o
+>   finding `AUD-PROC-CUSTODIA-01`.
+
 ## Resumo Executivo
 
 O projeto usa **PostgreSQL 16** como banco de dados canônico. A configuração foi unificada em um arquivo `.env` que pode ser replicado entre ambientes (local, staging, produção). O schema é provisionado via **migrations versionadas do Sequelize** (`npm run migration:up`) — não via SQL manual.
