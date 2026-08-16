@@ -21,3 +21,12 @@ server/=1
 backups/
 # Credenciais de teste geradas por server/scripts/seed-usuarios-departamentos.cjs
 *.local.txt
+
+# Evidência de conexão do PostgreSQL capturada por
+# ops/postgres-log-retention/Export-PostgresLogs.ps1 (CE-06 / APR-2026-028).
+# Fica no disco local para cópia manual e NUNCA vai para o GitHub: o log nomeia
+# usuário, banco e host de produção. O que é versionado é o job e a prova de que
+# ele funciona — jamais o conteúdo capturado. O README fica de fora do ignore
+# para que a pasta continue explicada no repositório.
+coretriad/evidence/postgres-connection-logs/*
+!coretriad/evidence/postgres-connection-logs/README.md
