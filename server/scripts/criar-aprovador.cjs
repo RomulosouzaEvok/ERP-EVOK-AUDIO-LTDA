@@ -171,6 +171,9 @@ function gerarSenha(length = 18) {
  * @returns {import('sequelize').Sequelize}
  */
 function connect() {
+  // Default 'erp_evok_audio' é o banco REAL de producao (APR-2026-016) —
+  // deliberado: este script existe para criar contas operacionais de
+  // verdade (ver cabecalho), diferente de seed-usuarios-departamentos.cjs.
   return new Sequelize(
     process.env.DB_NAME || 'erp_evok_audio',
     process.env.DB_USER || 'postgres',

@@ -24,7 +24,10 @@
     "test:integration:strict": "node scripts/run-api-suite.cjs integration",
     "test:edge:strict": "node scripts/run-api-suite.cjs edge",
     "test:api:strict": "node scripts/run-api-suite.cjs",
-    "scan:secrets": "node scripts/scan-tracked-secrets.cjs"
+    "scan:secrets": "node scripts/scan-tracked-secrets.cjs",
+    "verify:git-refs": "node scripts/verify-git-references.cjs",
+    "verify:control-plane": "node scripts/verify-control-plane.cjs",
+    "verify:governance": "npm run verify:git-refs && npm run verify:control-plane"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

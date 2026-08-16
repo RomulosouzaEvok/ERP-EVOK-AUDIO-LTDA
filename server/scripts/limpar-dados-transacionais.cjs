@@ -66,10 +66,26 @@
  * node scripts/limpar-dados-transacionais.cjs --confirmar # executa de verdade
  * ```
  *
- * ⚠️ **Faça backup antes.** `pg_dump` do banco inteiro leva segundos:
+ * ⚠️ **Faça backup antes.** `pg_dump` do banco inteiro leva segundos — comando
+ * de exemplo abaixo, contra `erp_evok_audio` (DADO REAL de produção, sem
+ * sufixo `_test`/`_ci` — `APR-2026-016`). Adapte `-d` para o banco que você
+ * de fato pretende esvaziar antes de copiar e colar:
  * `docker exec evok-postgres pg_dump -U evok_admin -d erp_evok_audio --format=custom > backup.dump`
  *
- * ⚠️ **Recusa rodar em produção** (`NODE_ENV === 'production'`).
+ * ⚠️ **Recusa rodar em produção** (`NODE_ENV === 'production'`) — mas isso
+ * **não é uma guarda de nome de banco**. Este script lê `process.env.DB_NAME`
+ * diretamente, sem checar sufixo `_test`/`_ci` (diferente de
+ * `run-api-suite.cjs:530-536`). Se `.env` tiver `DB_NAME=erp_evok_audio` (o
+ * default de `server/.env.example`) e `NODE_ENV` não estiver
+ * `production` — configuração normal de dev local, por este projeto não ter
+ * banco de dev separado do real — `--confirmar` apaga dado real de produção.
+ * A recusa por `NODE_ENV` cobre o deploy de produção; **não cobre** a estação
+ * de trabalho de um desenvolvedor ou de um agente automatizado apontando para
+ * o banco real fora do NODE_ENV de produção. Residual registrado em
+ * `coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`
+ * (`CE-03`) — recomendação de reforço (checar sufixo `_test`/`_ci` em
+ * `DB_NAME`, como `run-api-suite.cjs`) é decisão de engenharia do dono, não
+ * implementada por esta nota.
  *
  * @module scripts/limpar-dados-transacionais
  */
@@ -313,6 +329,8 @@ async function main() {
     console.error('\nRestaure do backup antes de continuar:');
     console.error('  docker cp <backup>.dump evok-postgres:/tmp/b.dump');
     console.error('  MSYS_NO_PATHCONV=1 docker exec evok-postgres \\');
+    // ⚠️ Exemplo de restauração — "-d erp_evok_audio" abaixo é o banco REAL de
+    // produção (APR-2026-016). Adapte "-d" para o banco correto antes de rodar.
     console.error('    pg_restore -U evok_admin -d erp_evok_audio --data-only -t <tabela> /tmp/b.dump');
     process.exitCode = 1;
   } else {

@@ -44,7 +44,18 @@
  * apenas como hash bcrypt. Perdeu, roda de novo.
  *
  * ⚠️ **Este script NÃO deve rodar em produção.** Ele recusa quando
- * `NODE_ENV === 'production'`.
+ * `NODE_ENV === 'production'` — mas essa recusa **não checa o nome do
+ * banco**. `process.env.DB_NAME` é lido direto, sem exigir sufixo
+ * `_test`/`_ci` (diferente de `run-api-suite.cjs:530-536`). Como
+ * `server/.env.example` traz `DB_NAME=erp_evok_audio` (o banco REAL,
+ * `APR-2026-016`) junto com `NODE_ENV=development` — configuração normal de
+ * dev local neste projeto, que não tem banco de dev separado do real —
+ * rodar este script fora de `NODE_ENV=production` ainda pode escrever
+ * usuários de teste no banco real se `DB_NAME` não for trocado
+ * explicitamente para `_test`/`_ci`. Residual registrado em
+ * `coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`
+ * (`CE-03`); reforço de guarda por sufixo é decisão de engenharia do dono,
+ * não implementada por esta nota.
  *
  * @module scripts/seed-usuarios-departamentos
  */

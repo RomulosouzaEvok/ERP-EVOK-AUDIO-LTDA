@@ -28,14 +28,46 @@ function isMainWorktree(cwd) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Artefato de FINDING vivendo fora de `audit/` (vetor do incidente 1).
+//
+// Origem: RC-PROC-01 §2.2 incidente 1 — um `vericore-finding-validator`
+// sobrescreveu `docs/coretriad/projects/ERP-LEGACY-001/discovery/FIND-ERP-002.md`
+// com texto de teste AO SONDAR se tinha permissão de escrita, e restaurou por
+// conduta própria. A regra `vericore` negava
+// product|src|server|client|mobile|tests|database|infrastructure|requirements|architecture
+// e **não** negava `docs/` — a escrita foi tecnicamente permitida.
+//
+// ESCOPO DELIBERADAMENTE ESTREITO: o discriminador é o **nome do artefato**
+// (prefixo de ID de finding/observação, convenção da Regra 17 do CLAUDE.md),
+// NÃO o diretório. Negar `docs/` inteiro — ou mesmo `discovery/` inteiro —
+// quebraria trabalho legítimo da VeriCore, que produz no MESMO diretório
+// `LEGACY_TRACEABILITY_MATRIX*.md`, `BUSINESS_RULE_CANDIDATES*.md`,
+// `USE_CASES_RECOVERED*.md`, `*_INVENTORY.md`, `REQUIREMENTS_BASELINE.md` etc.
+// (skill `coretriad-legacy-discovery`, passos 21-27), além de relatórios em
+// `docs/coretriad/planning/`. Esses ficam FORA do bloqueio, por decisão de
+// escopo registrada.
+//
+// Cobre qualquer profundidade sob `docs/`, para que um finding criado amanhã em
+// outro subdiretório caia na mesma regra sem precisar editar o hook.
+const DOCS_FINDING_ARTIFACT = /^docs\/(?:[^/]+\/)*(?:FIND|FINDING|AUD|OBS)[-_][A-Za-z0-9][A-Za-z0-9._-]*$/;
+
 const ORG_RULES = [
   {
     org: 'vericore',
     match: (a) => a.includes('vericore'),
-    deniedPaths: [/^(product|src|server|client|mobile|tests|database|infrastructure|requirements|architecture)\//],
+    deniedPaths: [
+      /^(product|src|server|client|mobile|tests|database|infrastructure|requirements|architecture)\//,
+      DOCS_FINDING_ARTIFACT,
+    ],
+    // A exceção do evidence-controller permanece restrita a `audit/`: ela NÃO
+    // se estende ao artefato de finding em `docs/`. Fora de `audit/` não existe
+    // canal de escrita de finding para nenhum agente VeriCore — a persistência
+    // é manual, pelo director ou pela sessão principal, exatamente como no
+    // item 2 do inventário de RC-PROC-01, catalogado como sucesso de mecanismo.
     allowedException: (agent, p) =>
       agent.includes('evidence-controller') && /^audit\//.test(p),
-    reason: 'VeriCore é read-only sobre o objeto auditado. Evidências só via audit-evidence-controller em audit/.',
+    reason: 'VeriCore é read-only sobre o objeto auditado, e não reescreve artefato de finding fora de audit/. Evidências só via audit-evidence-controller em audit/.',
   },
   {
     org: 'opuscore',

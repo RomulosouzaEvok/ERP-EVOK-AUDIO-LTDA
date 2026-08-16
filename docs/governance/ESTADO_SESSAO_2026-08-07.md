@@ -14,6 +14,30 @@
 >
 > *Banner adicionado em 2026-08-12 pela auditoria documental.*
 
+> 🔒 **AVISO — os comandos da seção 3 ("Como subir o sistema em outra máquina") tocam `erp_evok_audio`, que é DADO REAL de produção**
+>
+> `erp_evok_audio` é o único banco do projeto — não existe banco de produção
+> separado. Por decisão humana explícita (`APR-2026-016`, em
+> `coretriad/governance/APPROVALS.md`, posterior a este documento), ele é
+> classificado **PRODUÇÃO REAL** (catálogo de itens/categorias/departamentos,
+> conta `admin`, `auth`, `auditLogs`), mesmo quando referido aqui como banco
+> local de desenvolvimento. Isso vale para `DB_NAME=erp_evok_audio` no
+> `.env` e para `docker compose up -d --build` /
+> `node server/scripts/apply-pending-migrations.cjs` descritos na seção 3.
+>
+> - **Quem PODE executar os comandos da seção 3:** um humano configurando
+>   ambiente ou fazendo migração de dados real.
+> - **Quem NÃO PODE, sem exceção:** nenhum agente automatizado (IA) pode
+>   executar comando que conecte a `erp_evok_audio` — nem migration, nem
+>   leitura, nem "só verificar". A **regra permanente de segurança de dado
+>   real** (`coretriad/states/ERP-LEGACY-001/PROJECT_STATE.md`) veda isso em
+>   qualquer passo do programa `ERP-LEGACY-001` (21-40).
+> - **Referência normativa:** `APR-2026-016` + `PROJECT_STATE.md` (seção
+>   "Regra permanente de segurança de dado real"). Aviso adicionado após o
+>   finding `AUD-PROC-CUSTODIA-01`.
+
+---
+
 **Objetivo deste documento:** snapshot exato de onde o trabalho parou nesta máquina
 e o passo a passo para continuar/subir o sistema em outra máquina. Complementa
 `docs/governance/RESIDUAIS_ABERTOS_2026-08-10.md` (fonte de pendências medida),

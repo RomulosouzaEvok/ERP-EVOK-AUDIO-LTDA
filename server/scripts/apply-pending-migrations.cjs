@@ -13,6 +13,16 @@
  *
  * Requer server/.env com DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD
  * (Postgres do docker compose exposto em localhost:5432).
+ *
+ * ⚠️ **Sem guarda de ambiente.** Diferente de outros scripts deste
+ * diretório, este NÃO checa `NODE_ENV` nem sufixo de `DB_NAME` antes de
+ * aplicar migrations — e o default abaixo, se `DB_NAME` não estiver no
+ * `.env`, é `erp_evok_audio`, o banco REAL de produção (`APR-2026-016`).
+ * Isso é esperado: aplicar migration em produção é operação humana legítima
+ * (é para isso que o script existe). Confira `DB_NAME`/`DB_HOST` no `.env`
+ * carregado ANTES de rodar. Residual registrado em
+ * `coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md`
+ * (`CE-03`).
  */
 const fs = require('fs');
 const path = require('path');

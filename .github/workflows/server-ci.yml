@@ -8,6 +8,56 @@ on:
   pull_request:
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Controles DETECTIVOS de governanca -- classe de risco RC-PROC-01,
+  # incidentes 3 (numero citado sem releitura da fonte) e 4 (Control Plane
+  # divergindo da evidencia). Ver
+  # coretriad/governance/RISK_CLASS-RC-PROC-01_CONTENCAO_POR_DISCIPLINA.md
+  #
+  # ESTE PASSO E INFORMATIVO, NAO BLOQUEANTE -- E POR QUE:
+  #   Os dois verificadores nasceram nesta data e ainda nao tem historico de
+  #   taxa de falso positivo em uso real. Torna-los bloqueantes agora
+  #   arriscaria travar merges legitimos por ruido de deteccao, e a reacao
+  #   previsivel a isso e desabilitar o gate -- perdendo o controle inteiro.
+  #
+  # ISTO NAO E O ANTIPADRAO DE `AUD-CICD-DEPGATE-01` (gate que sinaliza
+  # conformidade sem exerce-la). A distincao, declarada explicitamente:
+  #   - o passo EXECUTA os verificadores de verdade, a cada push e PR;
+  #   - a saida completa fica no log da execucao;
+  #   - `continue-on-error` afeta apenas a COR do check, nunca a execucao;
+  #   - o nome do job diz "informativo", entao nenhum leitor pode confundir
+  #     verde com conformidade verificada.
+  # Promover para bloqueante e decisao humana registrada (Regra 18): basta
+  # remover `continue-on-error`. Nenhum agente deve fazer isso sozinho.
+  # ---------------------------------------------------------------------------
+  governance-detective-controls:
+    name: Controles detectivos de governanca (informativo, nao bloqueante)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 e fetch-tags sao OBRIGATORIOS: com o checkout raso
+          # padrao (depth 1), commits e tags legitimamente citados apareceriam
+          # como inexistentes -- o verificador viraria uma fabrica de falso
+          # positivo. verify-git-references.cjs detecta o clone raso e avisa,
+          # mas a correcao certa e ter o historico.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Sem `npm ci`: ambos os scripts sao Node puro, sem dependencia externa,
+      # pelo mesmo principio de portabilidade do hook do projeto.
+      - name: Referencias git citadas existem no repositorio (RC-PROC-01 / incidente 3)
+        run: node server/scripts/verify-git-references.cjs
+
+      - name: Control Plane reconciliado com o disco (RC-PROC-01 / incidente 4)
+        if: always()
+        run: node server/scripts/verify-control-plane.cjs
+
   validate:
     runs-on: ubuntu-latest
     services:

@@ -34,6 +34,13 @@ const { Sequelize } = require('sequelize');
  * descartável provisionado só por migrations nasce idêntico ao atual:
  *
  *     node scripts/comparar-bancos.cjs erp_evok_audio erp_evok_audio_baseline_check
+ *
+ * Nota de conformidade (CE-03, `RISK_CLASS-RC-PROC-01`): este script é
+ * **somente leitura** — todas as consultas em `readSchema`/`readIndexes`/
+ * `readConstraints`/`summary` são `SELECT`; nenhuma escrita é feita em
+ * nenhum dos dois bancos. O default apontar para `erp_evok_audio` (banco
+ * REAL) é intencional e seguro por essa razão: comparar o schema real contra
+ * o de teste é o propósito declarado do script.
  */
 const [argA, argB] = process.argv.slice(2);
 const DEV = argA || process.env.DB_NAME || 'erp_evok_audio';
