@@ -352,6 +352,10 @@ cd server && npm run migration:status
 
 ### Armadilhas conhecidas deste projeto
 - **Nunca** rodar `migration:up` cru — usar `server/scripts/apply-pending-migrations.cjs`.
+  *(Anotação de 2026-08-16, `CASE-003` extensão — não altera o registro histórico acima:
+  esse script agora **recusa** aplicar DDL em banco sem sufixo `_test`/`_ci`. Contra o
+  banco real, repita o comando com `--confirmar-banco-real`. A recusa é intencional e a
+  própria mensagem diz qual é o alvo lido e o que fazer.)*
 - Após `git pull` que toque `server/`, rodar `docker compose up -d --build`
   (senão a imagem da API fica com código velho).
 - `comment:` dentro de `addColumn` corrompe o SQL quando o texto tem parênteses —

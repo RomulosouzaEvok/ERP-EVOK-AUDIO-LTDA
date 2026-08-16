@@ -98,6 +98,11 @@ docker compose up -d --build
 
 # 5. Aplicar migrations pendentes (NÃO usar migration:up cru — ver comentário
 #    no próprio script; ele é idempotente e respeita a ordem)
+#    Anotação de 2026-08-16 (CASE-003 extensão): se DB_NAME não terminar em
+#    _test/_ci — é o caso do .env padrão, que aponta para o banco real — o
+#    script RECUSA e pede confirmação explícita. Confira o alvo que ele
+#    imprime e, se estiver certo, repita com a flag:
+#      node server/scripts/apply-pending-migrations.cjs --confirmar-banco-real
 node server/scripts/apply-pending-migrations.cjs
 
 # 6. Rebuild da API após migrations novas (se o passo 4 buildou antes do pull)
