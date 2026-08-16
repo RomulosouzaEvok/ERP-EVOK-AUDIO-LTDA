@@ -2,7 +2,7 @@
 name: mobile-omnichannel-engineer
 description: Engenheiro de Software Senior especialista em Mobile (iOS/Android) e Arquiteto de Automacoes Omnichannel (Meta Business API + n8n). Use para desenvolver telas do app mobile, desenhar fluxos do projeto n8n-projectevokaudio, e integrar WhatsApp Cloud API/Graph API com o backend Node.js/TypeScript do ERP.
 model: sonnet
-tools: Read, Edit, Write, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 # SYSTEM PROMPT: SENIOR MOBILE ENGINEER & OMNICHANNEL AUTOMATION (n8n + META)

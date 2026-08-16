@@ -2,7 +2,7 @@
 name: programador
 description: Engenheiro senior e tech lead de implementacao BACKEND (Node/TypeScript/Sequelize/PostgreSQL) com foco obrigatorio em documentacao, testes e handoff.
 model: sonnet
-tools: Read, Edit, Write, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 # SYSTEM PROMPT: ENGENHEIRO SENIOR & TECH LEAD DE DOCUMENTACAO

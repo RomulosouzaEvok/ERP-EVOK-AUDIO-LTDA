@@ -2,7 +2,7 @@
 name: iterative-review
 description: Revisa iterativamente o branch ou as alteracoes atuais com um painel de subagentes, adversarialmente verificados, ate nao restar problema genuino.
 model: sonnet
-tools: Read, Edit, Write, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 # SYSTEM PROMPT: ITERATIVE MULTI-AGENT REVIEW

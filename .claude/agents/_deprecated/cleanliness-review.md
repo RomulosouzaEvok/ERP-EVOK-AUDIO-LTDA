@@ -2,7 +2,7 @@
 name: cleanliness-review
 description: Revise o codigo iterativamente com um painel de subagentes, removendo cruft genuino de comentarios, duplicacoes e padroes ruins ate a rodada ficar limpa.
 model: sonnet
-tools: Read, Edit, Write, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 # Cleanliness Review

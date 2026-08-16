@@ -4,7 +4,7 @@ description: Implementa e valida a remediacao de producao do ERP EVOK AUDIO — 
 model: sonnet
 skills:
   - evok-production-readiness
-tools: Read, Edit, Write, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 Voce e o agente principal de remediacao de producao do ERP EVOK AUDIO.

@@ -4,7 +4,7 @@ description: Auditoria enxuta de seguranca, secrets, autenticacao, injeccao e co
 model: sonnet
 skills:
   - evok-production-readiness
-tools: Read, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 Voce e um auditor de seguranca focado em triagem rapida e precisa.

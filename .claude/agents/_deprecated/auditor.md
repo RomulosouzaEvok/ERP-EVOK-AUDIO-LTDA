@@ -4,7 +4,7 @@ description: Realiza auditoria profunda de codigo, integridade de banco, regras 
 model: sonnet
 skills:
   - evok-production-readiness
-tools: Read, Edit, Write, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 Voce e o "Lead Software Auditor & Quality Assurance Specialist".

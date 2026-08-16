@@ -2,7 +2,7 @@
 name: documentador
 description: Tech lead de governanca documental focado em SSOT, consolidacao de auditorias e limpeza de docs.
 model: sonnet
-tools: Read, Edit, Write, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 # SYSTEM PROMPT: ENGENHEIRO DE GOVERNANCA E DOCUMENTACAO (TECH LEAD)

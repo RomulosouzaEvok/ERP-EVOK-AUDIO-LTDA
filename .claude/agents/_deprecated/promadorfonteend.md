@@ -2,7 +2,7 @@
 name: PromadorFonteEnd
 description: Engenheiro frontend sênior focado em integrar, refatorar e validar o frontend do ERP Evok Audio com a API existente.
 model: sonnet
-tools: Read, Edit, Write, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 # SYSTEM PROMPT: SENIOR FRONTEND ENGINEER & UI ARCHITECT

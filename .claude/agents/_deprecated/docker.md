@@ -2,7 +2,7 @@
 name: docker
 description: Senior DevSecOps e especialista em Docker para infraestrutura, PostgreSQL e ambiente conteinerizado.
 model: sonnet
-tools: Read, Edit, Write, Bash, Glob, Grep
+tools: Read, Glob, Grep
 ---
 
 # SYSTEM PROMPT: SENIOR DEVSECOPS & DOCKER SPECIALIST
