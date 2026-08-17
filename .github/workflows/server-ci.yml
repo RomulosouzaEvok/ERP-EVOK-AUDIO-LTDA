@@ -35,12 +35,28 @@ jobs:
       DB_PASSWORD: evok_ci_password
       DB_SSL: false
       DB_LOGGING: false
-      JWT_SECRET: ci-test-secret-with-at-least-32-characters
+      # AUD-AUTHN-01 / CASE-005 — JWT_SECRET NAO e declarado aqui, de proposito.
+      # Um valor fixo neste arquivo e uma chave de assinatura VERSIONADA: com
+      # mais de 32 caracteres e sem prefixo de placeholder, ela e aceita pela
+      # guarda de `runtimeEnv.ts` em QUALQUER ambiente, nao apenas no CI — a
+      # mesma classe de defeito de `docker-compose.yml:54`. O valor passa a ser
+      # gerado por execucao, no passo "Generate ephemeral JWT_SECRET" abaixo.
       CORS_ORIGIN: http://localhost:5173
       ADMIN_SEED_PASSWORD: EvokCiAdmin123456!
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Generate ephemeral JWT_SECRET
+        # Gerado por execucao e mascarado no log: o job continua assinando token
+        # normalmente, mas nao existe mais no repositorio uma chave de
+        # assinatura fixa que o runtime aceite. `openssl` ja vem no runner
+        # ubuntu-latest; `add-mask` impede que o valor apareca em qualquer log
+        # deste job. Precisa vir antes do primeiro passo que sobe a aplicacao.
+        run: |
+          SECRET="$(openssl rand -hex 32)"
+          echo "::add-mask::$SECRET"
+          echo "JWT_SECRET=$SECRET" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -104,7 +120,7 @@ jobs:
             -e DB_PASSWORD=evok_ci_password \
             -e DB_SSL=false \
             -e DB_LOGGING=false \
-            -e JWT_SECRET=ci-test-secret-with-at-least-32-characters \
+            -e JWT_SECRET="$JWT_SECRET" \
             -e CORS_ORIGIN=http://localhost:5173 \
             -e ADMIN_SEED_PASSWORD=EvokCiAdmin123456! \
             -p 5000:5000 \
