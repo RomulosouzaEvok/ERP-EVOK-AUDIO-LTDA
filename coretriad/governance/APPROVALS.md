@@ -2200,3 +2200,85 @@ fechadas em `T-43`) **+** dado biométrico (2 nomeadas, censo pendente).
 - **Não** fecha `C-137`, que segue em `A(75/207)`.
 - **Não** estende cobertura a `C-136` nem aos demais blocos sem decisão.
 - **Não** declara `AUDIT_PASSED`, não fecha finding, não altera severidade.
+
+---
+
+## APR-2026-040 — `employees.photo_url` na categoria especial + 2ª retificação da exclusão + fechamento do censo
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto
+**Origem:** `T-45` §9, itens 1 a 4
+
+### D1 — `RES-T45-01`: `employees.photo_url` **ENTRA** na categoria especial
+
+**Texto verbatim, com a fundamentação do dono:**
+
+> *"Incluir `employees.photo_url` na categoria especial. Mesmo que tecnicamente
+> uma foto simples não seja 'dado biométrico' no sentido estrito da LGPD (que
+> exige processamento técnico de identificação), o custo de protegê-la como se
+> fosse é baixo e evita erro pelo lado mais arriscado. Categoria passa a ter 6
+> tabelas, não 5."*
+
+**Registro que a decisão é deliberadamente mais protetiva que a letra da lei, e
+por quê.** O auditor havia deixado a fronteira A **não resolvida** (`T-45` §1.3),
+por não encontrar uso identificatório — comportamento correto (Regra 6). O dono
+resolve **incluindo**, com o critério declarado: assimetria de custo. Proteger
+indevidamente custa pouco; deixar de proteger custa caro.
+
+**Isto passa a ser o critério de desempate da categoria especial neste run:** na
+dúvida entre incluir e excluir, **incluir e declarar a dúvida**. Está repassado
+ao auditor no despacho do censo das tabelas sem model.
+
+**Dois fatos verificados que a decisão corrige** (`T-45` §1.3): `employees.photo_url`
+**não** consta de `SENSITIVE_EMPLOYEE_FIELDS` (`employeeSensitiveFields.ts:36-51`),
+e `GET /api/employees` é **acessível a qualquer autenticado** — logo a foto de
+rosto de todo funcionário é legível por todo usuário logado. A remediação passa a
+incluir a inclusão da coluna na deny-list, com a mesma condição fixada em
+`APR-2026-032` §3: **no mesmo commit**, nunca depois.
+
+**Categoria biometria: 6 tabelas.** Categoria especial completa (art. 5º II):
+**17 tabelas** — 11 de saúde + 6 de biometria.
+
+### D2 — 2ª RETIFICAÇÃO de `APR-2026-037` §5.2: `facility_visitors` sai da exclusão
+
+**Texto verbatim:** *"É aplicação consistente de um mecanismo já aprovado
+(`APR-2026-039` §2), não decisão nova."*
+
+`facility_visitors.photo_path` é imagem facial de terceiro capturada no controle
+de acesso, com uso identificatório demonstrado (`VisitUseCases.ts:53-73`).
+**Sai da exclusão e entra na cobertura** — já coberta em `T-45` §2.
+
+**A lista efetiva da §5.2 cai de 9 para 8.** Somada à D1, `employees` também
+deixa de poder ser tratada como fora da categoria.
+
+**Histórico da lista de exclusão, para que o relatório final use o número certo:**
+14 (`APR-2026-037`) → 11 nominais / 9 efetivas (`APR-2026-039` §2) → **8**
+(esta entrada). **A lista do relatório final é esta, e a fonte nominal é `T-45` §9
+com `T-43` §9.**
+
+### D3 — `T45-SST-F01` despachado ao validator
+
+**Texto verbatim:** *"A contraprova é forte (empresa já exige documento assinado
+para algo tão menor quanto notebook, e aqui é biometria sem artefato nenhum,
+imutável para sempre). Segue o mesmo tratamento de todos os outros HIGH."*
+
+Despachado. Regra 22 preservada sem exceção.
+
+### D4 — `DYN-T45-10` + `DYN-T43-10` autorizados como trabalho único
+
+Enumerar as ~20 tabelas sem model restantes e passar os dois léxicos — clínico e
+biométrico. **É o que separa "categoria fechada entre as 186 tabelas com model"
+de "categoria fechada".** Despachado, com o critério conservador de D1 aplicado.
+
+Fecha também, ou corrige, `RES-T35-02` / `RES-T41-07` / `RES-T42-05` /
+`RES-T45-06` — a série de resíduos que vem se arrastando desde o lote 2.
+
+### O que esta entrada NÃO faz
+
+- **Não** fecha `C-137`, em `A(79/207)`.
+- **Não** resolve a contradição **G3 × EMENDA-01** (`APR-2026-038` D3), que segue
+  como **condição de fechamento**. O fechamento da categoria especial reduz a
+  tensão; as 8 tabelas de dado pessoal **não sensível** seguem excluídas, e o G3
+  fala em *"dado pessoal"*.
+- **Não** decide `C-136`.
+- **Não** declara `AUDIT_PASSED`, não fecha finding, não altera severidade.
