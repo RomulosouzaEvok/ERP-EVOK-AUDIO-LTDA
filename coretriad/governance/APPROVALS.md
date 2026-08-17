@@ -1385,3 +1385,73 @@ autorizado: OpusCore ou orquestrador. Rastreada como `PEND-2026-006`.
   SanaCore, posterior a este registro.
 - **Não** autoriza a instância separada (§5) nem cria agente novo (§6).
 - **Não** fecha `RC-PROC-01`.
+
+---
+
+## APR-2026-029 — REGISTRO DE EXECUÇÃO da janela de `CE-06` (não é aprovação nova)
+
+**Data:** 2026-08-16
+**Natureza:** registro factual de execução autorizada por `APR-2026-028` §2.
+Não concede autorização nova, não altera escopo, não fecha critério.
+**Evidência integral:** `coretriad/evidence/ce06-janela-2026-08-16/EXECUCAO_JANELA.md`
+e `BASELINE_PRE_JANELA.md`
+
+### Horário
+
+| Item | Valor |
+|---|---|
+| Janela confirmada pelo dono | 2026-08-16, **22h00-23h00** |
+| Antecipação | pelo dono, texto direto: *"não precisa esperar, já pode disparar"* |
+| Prova de reversão (no-op) | **20h53** |
+| **Aplicação efetiva** | **2026-08-16, 20h54m53s** (horário local, UTC-3) |
+| Verificação em conexão nova | 20h56m27s |
+| Primeira execução da retenção | 20h58m56s |
+
+A execução ocorreu **fora do horário originalmente confirmado, por antecipação
+explícita do dono**. Registrado assim, e não como "executado na janela", porque
+a diferença é exatamente o tipo de detalhe que uma auditoria futura precisa
+poder verificar (Regra 18).
+
+### Resultado
+
+**Aplicado com sucesso, sem downtime, sem restart.**
+
+- `log_connections = on`, `log_disconnections = on`,
+  `log_line_prefix = '%m [%p] user=%u db=%d host=%h '`, os três com
+  `source = configuration file`.
+- Banco responde normalmente (`pg_isready`: accepting connections).
+- **Conexão logada e atribuível nos dois bancos** — usuário, banco, host, porta,
+  método de autenticação e tempo de sessão. Escopo de cluster confirmado na
+  prática, como a §1 de `APR-2026-028` previa.
+- **Nenhuma conexão foi aberta pelo executor contra o banco de produção**: a
+  prova do lado de produção veio do tráfego que já existe (healthcheck do
+  container e pool do `evok-api`). `APR-2026-016` respeitada sem enfraquecer a
+  prova.
+- Retenção: 14 arquivos diários append-only, ~1,3 MB, **85 linhas de conexão
+  reais** capturadas. Tarefa agendada `\EvokAudio\CE-06 Retencao Log PostgreSQL`,
+  diária às 03h00, estado `Ready`.
+
+### Correção de estimativa anterior, registrada
+
+O procedimento preparado em `G4_CE06_LOG_CONNECTIONS.md` §4 afirmava que *"com
+pool persistente do Sequelize, o regime estável é baixo"*. **Medição real:
+~55.400 linhas e ~8,7 MB por dia** — o healthcheck do container e o pool do
+`evok-api` abrem conexão a cada 10s. Com os 50 MB de rotation do Docker, a
+margem antes de perder log é de **~5-6 dias**, não indefinida. A execução diária
+segue adequada; a folga é menor do que eu havia afirmado.
+
+### O que este registro NÃO faz
+
+- **Não declara `CE-06` satisfeito.** Continua **`EM IMPLEMENTAÇÃO`**: o
+  mecanismo, a captura append-only, a poda e o agendamento estão feitos, mas a
+  **replicação para fora do host permanece pendente** por decisão do dono
+  (cópia manual por ora). Evidência que vive só na máquina auditada não
+  sobrevive ao incidente que deveria documentar.
+- **Não fecha `PEND-2026-001`** — o item fecha com retenção efetiva verificada
+  pela VeriCore, não com a ativação.
+- **Não declara `RETEST_PASSED` nem `FINDING CLOSED`** — autoridade exclusiva da
+  VeriCore (Regra 4).
+- **Não fecha `RC-PROC-01`**, que permanece ABERTA.
+- Não alterou `logging_collector`, `log_statement` nem qualquer outro parâmetro
+  além dos três nomeados. `log_statement` permanece `none`: a janela registra
+  conexões, não comandos.
