@@ -1664,3 +1664,64 @@ física, e a decisão era esta.
   identificar **USER e origem** — gravar a ação sem o autor não fecha.
 - Itens C-H de `AUD-ALOG-01` e o parcial de `sales` **não** estão nesta
   autorização — seguem a fila.
+
+---
+
+## APR-2026-034 — `OR-21` (rota do UUID) e escopo de encerramento do `C-137`
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno), respostas a questionário estruturado
+
+### D1 — `OR-21`: **Rota 2, contorno documentado declaradamente**
+
+Decisão sobre a dependência condicional do item B de `AUD-ALOG-01`
+(`PATCH /api/items/:id/inactivate` + `DELETE /api/items/:id`).
+
+**Escolhida:** gravar `entityId` indefinido e identificar o item em
+`entityDescription`, com as quatro condições vinculantes registradas na §5 do
+`TRIAGE_REPORT.md` do `CASE-004`. Precedente já existente no código
+(`engineeringController.ts:258-265`).
+
+**Recusada:** resolver o recorte `Item`/UUID de `AUD-DB-04` antes — exigiria
+migration nova em tabela transversal aplicada em produção real, fora do escopo
+de `APR-2026-033`, e subordinaria um item de fila prioritária (HIGH, produção
+real) a um MEDIUM.
+
+**Fundamento técnico reforçado pela triagem (§6.2), registrado porque muda a
+natureza do obstáculo:** o baseline congelado carrega o DDL estático e marca
+160 migrations como aplicadas; as duas migrations de `audit_logs` estão **dentro
+do conjunto congelado**. Portanto `entity_id integer` **vem do dump, por
+construção, em todo banco novo** — não há nada na fila de migrations que o
+resolva, e a Rota 1 exigiria migration escrita do zero.
+
+**O que esta decisão NÃO faz:** não fecha `AUD-DB-04`, que permanece MEDIUM e
+aberto; o contorno é **contorno declarado**, não correção de causa-raiz, e deve
+constar assim no `REMEDIATION_EVIDENCE_PACKAGE` e no reteste.
+
+### D2 — `C-137`: cobertura por risco, com exclusão declarada por escrito
+
+Das 155 tabelas restantes:
+
+- **Cobertura integral (7 critérios)** para o que resta das bandas
+  **dinheiro, estoque, fiscal e dado pessoal** — estimadas em ~40-50 tabelas,
+  2-3 lotes no padrão do `T-35`.
+- **Cobertura parcial declarada** para o restante (SST, Jurídico, Facilities,
+  TI, Marketing e apoio), registrada por escrito como **exclusão explícita** —
+  mesmo mecanismo aplicado ao G3, e não omissão silenciosa.
+
+**Fundamento aceito pelo dono:** o `T-35` mediu a densidade de coluna opaca
+(~1,3 por tabela, **uniforme**, não concentrada), de modo que o retorno marginal
+de aplicar os 7 critérios às bandas de apoio é baixo, enquanto o custo é de
+2-3 dias adicionais antes dos relatórios finais.
+
+**Condição vinculante:** a exclusão precisa constar **nominalmente** — a lista
+das tabelas não cobertas, não uma frase genérica de escopo. Cobertura declarada
+vale; cobertura alegada não.
+
+### O que esta entrada NÃO cobre
+
+- **Não** decide `D-01`, `D-R1`, `D-R2`, `D-R3` — seguem abertas.
+- **Não** autoriza o Estágio 2 a ignorar as condições vinculantes da triagem
+  (privacidade do payload, co-mudança da guarda de cobertura).
+- **Não** declara `AUDIT_PASSED` nem fecha `C-137` — fecha o **critério de
+  encerramento** da célula, que é coisa diferente.
