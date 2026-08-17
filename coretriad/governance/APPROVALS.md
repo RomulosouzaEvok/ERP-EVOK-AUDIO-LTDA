@@ -1629,3 +1629,38 @@ física, e a decisão era esta.
   (produção real). `AUD-RH-VTHORISTA-01` fica pronto para quando sua posição
   chegar.
 - **Não** decide `D-01`, `D-R1`, `D-R2`, `D-R3`.
+
+---
+
+## APR-2026-033 — abertura de `CASE-004`: remediação de `AUD-ALOG-01`
+
+**Data:** 2026-08-16
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto:
+
+> *"Autorizo abrir o caso de remediação para `AUD-ALOG-01/A` (desligamento sem
+> trilha, CRITICAL, produção real) — cabeça da fila. Prossiga também com `/B`
+> (inativação de item) na sequência natural da fila, e com VTHORISTA no
+> estrato 3 conforme já posicionado."*
+
+### O que fica autorizado
+
+1. **`ERP-LEGACY-001-CASE-004`** aberto para `AUD-ALOG-01`, começando pelo
+   **item A** (`DELETE /api/employees/:id`, CRITICAL, produção real, posição 1
+   da fila de `T-39`).
+2. **Item B** (`PATCH /api/items/:id/inactivate` + `DELETE /api/items/:id`,
+   HIGH, produção real) na sequência natural, **carregando `OR-21`**: tratar
+   `AUD-DB-04` como dependência no recorte `Item`/UUID **ou** adotar contorno
+   documentado declaradamente — a escolha é da execução e deve ficar registrada.
+3. **`AUD-RH-VTHORISTA-01`** permanece no estrato 3, integralmente destravado
+   por `APR-2026-032`, aguardando a posição.
+
+### Condições vinculantes
+
+- Trabalho em worktree `sana/ERP-LEGACY-001/CASE-004` (Regra 11).
+- **Nenhuma conexão com o banco de produção real** (`APR-2026-016`) —
+  reprodução e teste apenas em banco com sufixo `_test`/`_ci`.
+- SanaCore não fecha o próprio finding (Regra 3); reteste é da VeriCore
+  (Regra 4). Requisito do reteste já fixado no finding: o registro deve
+  identificar **USER e origem** — gravar a ação sem o autor não fecha.
+- Itens C-H de `AUD-ALOG-01` e o parcial de `sales` **não** estão nesta
+  autorização — seguem a fila.
