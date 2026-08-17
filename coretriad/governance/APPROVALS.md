@@ -2282,3 +2282,149 @@ Fecha também, ou corrige, `RES-T35-02` / `RES-T41-07` / `RES-T42-05` /
   fala em *"dado pessoal"*.
 - **Não** decide `C-136`.
 - **Não** declara `AUDIT_PASSED`, não fecha finding, não altera severidade.
+
+---
+
+## APR-2026-041 — `DYN-T47-01` e `DYN-T47-02` autorizados, restritos ao banco de teste
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto:
+
+> *"Autorize DYN para os seis contêineres de texto livre/jsonb, restrito ao
+> banco de teste `erp_evok_audio_test`, seguindo o mesmo protocolo de todas as
+> outras coletas dinâmicas desta auditoria."*
+
+### O que fica autorizado
+
+Coleta dinâmica sobre os **6 contêineres genéricos** de `T-47` §2.4 — a única
+condicionalidade que restou no fechamento das duas categorias especiais:
+
+| Coluna | Tabela |
+|---|---|
+| `antes`, `depois` (`jsonb`) | `auditoria_eventos` |
+| `payload`, `resposta` (`jsonb`) | `webhooks_eventos` |
+| `notes` | `hr_candidates`, `hr_performance_reviews` |
+| `motivo` | `sst_estornos_entrega_epi` |
+
+**Restrição absoluta, sem exceção:** apenas `erp_evok_audio_test`. **Proibida
+qualquer conexão com `erp_evok_audio`** (`APR-2026-016`), nem para contar linhas.
+
+### LIMITAÇÃO METODOLÓGICA, registrada ANTES da coleta
+
+**O banco de teste não contém os dados de produção.** Portanto:
+
+- **"Zero linhas" no teste NÃO prova "zero linhas em produção".** Prova apenas
+  que o banco de teste não tem o dado.
+- A coleta responde com força a **estrutura e forma** (as colunas existem? que
+  chaves aparecem num `jsonb` real? o schema permite o conteúdo?), e responde
+  **fracamente** à pergunta de conteúdo real, que é a que a condicionalidade de
+  `T-47` §2.4 formulou.
+
+**Consequência que precisa constar do relatório final:** se o resultado for
+"zero linhas", a condicionalidade de `RES-T47-02` **não fecha** — ela é
+**rebaixada** de "não decidível estaticamente" para "não decidível sem acesso a
+produção", que é decisão de outra natureza e não está autorizada.
+
+Registro isto **antes** do resultado, e não depois, para que a limitação não
+pareça justificativa construída para acomodar um desfecho.
+
+### Protocolo — o mesmo das coletas anteriores
+
+- Executor: `vericore-audit-verification-runner` (único agente da VeriCore com
+  ferramenta de execução).
+- Somente **leitura**. Nenhum `INSERT`/`UPDATE`/`DELETE`/DDL.
+- **Nenhum valor de conteúdo sensível é copiado para o relatório** — apenas
+  contagens, presença/ausência de termo e nomes de chave. Copiar o conteúdo de
+  um contêiner que pode ter dado clínico para dentro de um artefato de auditoria
+  reproduziria o vazamento que a trilha investiga.
+- Saída literal dos comandos, sem edição.
+
+### O que esta entrada NÃO faz
+
+- **Não** autoriza `DYN-T47-03`, `-04`, `-05` nem qualquer outro pedido dinâmico
+  do run — só os dois nomeados.
+- **Não** autoriza tocar produção sob nenhuma circunstância.
+- **Não** fecha `RES-T47-02` por antecipação — o fechamento depende do resultado
+  e da limitação acima.
+
+---
+
+## APR-2026-042 — decisões de fechamento de escopo de `C-137` e liberação para os relatórios finais
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto
+
+### D1 — Denominador oficial: **207 tabelas, 22 sem model**
+
+Resolve a escolha que `T-47` §1.3 deixou para o Control Plane, publicando as duas
+leituras provadas. **Fica fixado 207/22**, incluindo `SequelizeMeta` no universo.
+
+**O relatório final usa este par e nenhum outro.** A leitura alternativa
+(206/21) permanece registrada em `T-47` §1.3 como prova de que o "21" anterior
+era defensável — não como número oficial.
+
+Fecha `RES-T35-02`. `T35-META-F01` fica **retificado de 21 para 22**, sem
+alteração do artefato original (Regra 15).
+
+### D2 — `hr_candidates` **ENTRA** na categoria biometria: **7 tabelas**
+
+Resolve `RES-T47-01`, aplicando o critério conservador que o próprio dono fixou
+em `APR-2026-040`.
+
+**Composição final da categoria especial (art. 5º II): 18 tabelas**
+— **11 de saúde** (`T-43` §1.2) + **7 de biometria** (`T-45` §1.2 as cinco,
+mais `employees` por `APR-2026-040` D1, mais `hr_candidates` por esta entrada).
+
+**Nota que o relatório deve carregar:** das 7 de biometria, **6 são contáveis**
+em `C-137` e **1 não é** — `hr_candidates` não tem model, e a regra de contagem
+exige model lido coluna a coluna. Isso **não** reduz sua proteção; reduz apenas
+o que a métrica de cobertura pode afirmar sobre ela.
+
+### D3 — Seis tabelas de RH: **gap documentado, decisão de produto adiada**
+
+**Texto verbatim:**
+
+> *"As seis tabelas de RH de admissão ficam registradas como gap conhecido, sem
+> decisão de construir ou deprecar nesta sessão — isso é decisão de produto, não
+> de auditoria, e será resolvida em momento apropriado, fora do ritmo da
+> auditoria. Documente no relatório como 'estrutura de banco presente, sem uso de
+> aplicação — decisão de produto pendente', sem prazo."*
+
+**Redação vinculante para o relatório final**, literal:
+
+> **Estrutura de banco presente, sem uso de aplicação — decisão de produto
+> pendente.**
+
+Aplica-se a `hr_job_vacancies`, `hr_candidates`, `hr_performance_reviews`,
+`hr_time_sheet_summaries`, `hr_payroll_import_batches`, `hr_payroll_import_items`.
+
+**Sem prazo, por determinação expressa.** O `vericore-audit-reporting-agent` fica
+proibido de atribuir prazo, urgência ou recomendação de construir/deprecar a
+este item — **e igualmente proibido de omiti-lo**, porque gap documentado só
+cumpre função se aparecer.
+
+`T47-RH-F01` e `T47-RH-F02` **permanecem LOW e permanecem abertos**: adiar a
+decisão de produto não fecha finding (Regra 4). O que a decisão faz é dizer que
+**a ausência de decisão é deliberada e registrada**, não esquecimento.
+
+### D4 — Liberação para consolidação rodada 5 e relatórios finais
+
+**Texto verbatim:** *"Prossiga para consolidação rodada 5 → relatórios finais."*
+
+### O que continua BLOQUEANDO a declaração final de encerramento
+
+Esta entrada libera a **produção** dos relatórios. **Não** libera o encerramento
+da auditoria. Continuam pendentes, e o relatório deve exibi-los como tais:
+
+1. **Contradição G3 × EMENDA-01** (`APR-2026-038` D3) — condição de fechamento,
+   com destaque obrigatório no **Relatório Executivo**, sem redação minimizadora.
+2. **`C-136`** — sem decisão (`APR-2026-038` D2), com a caracterização registrada.
+3. **`RES-T47-02`** — os 6 contêineres, sujeitos ao resultado de `APR-2026-041`
+   e à limitação metodológica ali declarada.
+4. **Blocos de `CELULAS_SEM_AUTORIZACAO_ACEITACAO.md`** ainda sem decisão.
+
+### O que esta entrada NÃO faz
+
+- **Não** declara `AUDIT_PASSED`, não fecha finding, não altera severidade.
+- **Não** fecha `C-137`, que permanece `A(79/207)` com déficit 128 integralmente
+  nominal.
