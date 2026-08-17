@@ -3287,3 +3287,51 @@ iniciada.
 Worktree `sana/ERP-LEGACY-001/CASE-007` **criada** pela orquestração (preparo de
 infraestrutura, não implementação — Regra 5 preservada: nenhuma linha de código
 de correção foi escrita pela sessão).
+
+---
+
+## APR-2026-052 EMENDA-01 — `D1` revisto para 1600/min; `D2` fixado em 300/15min
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad
+
+### Texto do dono
+
+> *"Ajuste `D1` para 1600 requisições/minuto por IP (80 terminais × 20/min,
+> preservando o ritmo atual por terminal com folga, evitando 429 legítimo em pico
+> real). `D2` confirmado explicitamente: 300/15min por usuário autenticado, mesmo
+> valor de hoje."*
+
+### O que muda
+
+| | Antes (`APR-2026-052`) | Agora |
+|---|---|---|
+| **`D1`** — teto por IP | 1000/min | **1600/min** |
+| **`D2`** — teto por usuário | *(sem número — assunção do despacho)* | **300/15min — DECISÃO** |
+
+### Por que a emenda importa, e não é ajuste cosmético
+
+`APR-2026-052` registrou uma ressalva aritmética medida: **1000/min ÷ 80 terminais
+= 12,5/min por terminal**, contra os **20/min por usuário** vigentes — ou seja, o
+número original **apertaria** o usuário legítimo atrás de NAT, e produziria 429
+legítimo em pico real.
+
+A revisão fecha exatamente essa lacuna: **1600 ÷ 80 = 20/min por terminal**, o
+ritmo atual preservado. O dono não só aceitou a ressalva — **derivou o número a
+partir dela**, com a conta explícita no próprio texto.
+
+### `D2` deixa de ser assunção
+
+O despacho original adotou `300/15min` como **assunção declarada** (Regra 6), por
+ausência de número. **Agora é decisão registrada do dono, com o mesmo valor.** A
+diferença não é do número — é de **autoridade**: o executor não pode mais tratá-lo
+como default revisável por conveniência técnica.
+
+### Aplicado
+
+`coretriad/states/ERP-LEGACY-001/REMEDIATION_CASE-007.md` atualizado: os dois
+números, a derivação de `D1`, a remoção da linguagem de assunção em `D2`, e a
+instrução de que **nenhum dos dois se altera por conta própria, em nenhuma
+direção**.
+
+Ambos em constante nomeada, cada um num só lugar, configuráveis.

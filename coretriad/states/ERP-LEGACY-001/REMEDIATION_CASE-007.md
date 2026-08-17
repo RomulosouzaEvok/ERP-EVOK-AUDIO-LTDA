@@ -63,9 +63,13 @@ o caso acidental e o eixo autorização, nunca o caso adversarial. Portanto
 "trocar decode por verify" NÃO é a correção: quebraria a proteção de limitar
 antes de autenticar. Separe as duas coisas.
 
-DECISÕES DO DONO — vinculantes (APR-2026-052)
-  D1  Teto por IP: 1000 requisições/minuto. Margem para 80 terminais.
+DECISÕES DO DONO — vinculantes (APR-2026-052, D1 e D2 revistos na EMENDA-01)
+  D1  Teto por IP: 1600 requisições/minuto.
+      Derivação explícita do dono: 80 terminais × 20/min — preserva o ritmo
+      atual POR TERMINAL, com folga, para evitar 429 legítimo em pico real.
   D2  Cota COMBINADA: por IP **E** por usuário autenticado. Não é ou/ou.
+      Valor por usuário: 300 / 15min — CONFIRMADO pelo dono, mesmo valor de
+      hoje. Não é assunção: é decisão registrada.
   D3  TRUST_PROXY entra no escopo. Sem ele, com proxy na frente, o limite por
       IP conta a fábrica inteira como um único cliente.
   D4  Todo acionamento de 429 gera log/métrica observável. Hoje não há
@@ -74,20 +78,24 @@ DECISÕES DO DONO — vinculantes (APR-2026-052)
   D5  A proteção pode ser condicional a F3 (rotação da chave JWT do CASE-005).
       Não espere a rotação.
 
-ASSUNÇÃO DECLARADA, NÃO DECISÃO — corrija se o dono fixar outro número
-  O valor da cota POR USUÁRIO não foi fornecido em D2. Adote preservar o
-  comportamento atual: 300 / 15min por usuário autenticado (app.ts:113).
-  Motivo: é o status quo, o finding não exige alterá-lo, e é reversível por
-  configuração. Deixe o número em constante nomeada, num só lugar.
+OS DOIS NÚMEROS, EM CONSTANTES NOMEADAS
+  Teto por IP        1600 / minuto
+  Teto por usuário    300 / 15 minutos   (autenticado)
+  Ambos em constante nomeada, cada um num só lugar, configuráveis. Os dois são
+  DECISÃO DO DONO — não os altere por conta própria, em nenhuma direção.
 
 O QUE MUDA DE FATO
-  Hoje  apiLimiter = 300 / 15min = 20/min, com chave FORJÁVEL (não existe na
-        prática — rotação de `id` anula o teto).
-  Novo  camada IP = 1000/min com chave REAL + camada por usuário autenticado.
-  Nota aritmética que o dono já viu: 1000/min ÷ 80 terminais = 12,5/min por
-  terminal, mais apertado que os 20/min de hoje. Se aparecer 429 legítimo em
-  pico, é consequência de D1, não defeito seu — reporte, não "conserte"
-  mexendo no número por conta própria.
+  Hoje  apiLimiter = 300 / 15min = 20/min, com chave FORJÁVEL — o teto não
+        existe na prática: rotação de `id` o anula.
+  Novo  camada IP = 1600/min com chave REAL
+        + camada por usuário autenticado = 300/15min (o valor de hoje).
+
+  Aritmética verificada, e é o ponto de D1: 1600 ÷ 80 terminais = 20/min por
+  terminal — exatamente o ritmo atual. A revisão de D1 (de 1000 para 1600)
+  existe justamente para NÃO apertar o usuário legítimo atrás de NAT.
+
+  Se ainda assim aparecer 429 legítimo em pico real, isso é insumo para o dono
+  rever o número — reporte com medição. NÃO "conserte" mexendo na constante.
 
 TRÊS ARMADILHAS CONFIRMADAS PELA TRIAGEM — não caia em nenhuma
 
