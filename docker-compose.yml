@@ -72,6 +72,10 @@ services:
       # próximo rebuild da imagem. Este diretório DEVE entrar na rotina de
       # backup junto com o dump do Postgres (ver docs/infra/DEPLOY_UBUNTU.md).
       - app_uploads:/app/uploads
+      # Fallback de falhas de auditoria (`logs/audit-failures.log`) e logs
+      # estruturados precisam sobreviver a rebuild/recreate. O Dockerfile cria
+      # /app/logs com dono do usuario nao-root `evok` para evitar EACCES.
+      - app_logs:/app/logs
     healthcheck:
       test: ["CMD", "node", "-e", "const http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));"]
       interval: 15s
@@ -91,3 +95,5 @@ volumes:
   # recreate do container `api`. Inclua no backup junto com o dump do
   # Postgres (ver checklist em docs/infra/DEPLOY_UBUNTU.md).
   app_uploads:
+  # Persistencia de logs e fallback de auditoria.
+  app_logs:

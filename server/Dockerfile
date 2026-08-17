@@ -27,7 +27,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/config ./config
 
 RUN groupadd --system evok && useradd --system --gid evok --create-home evok \
-  && mkdir -p /app/uploads \
+  && mkdir -p /app/uploads /app/logs \
   && chown -R evok:evok /app
 
 USER evok

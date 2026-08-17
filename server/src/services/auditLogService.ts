@@ -32,6 +32,34 @@ interface LogActionParams {
 
 const FAILURE_LOG_PATH = path.join(process.cwd(), 'logs', 'audit-failures.log');
 const RETRY_DELAY_MS = 200;
+const DEFAULT_DRAIN_TIMEOUT_MS = 5000;
+
+interface AuditFailureStats {
+  totalFailures: number;
+  persistedFailures: number;
+  fileFailures: number;
+  webhookFailures: number;
+  lastErrorMessage: string | null;
+  lastFailureAt: string | null;
+  pendingActions: number;
+}
+
+interface AuditDrainResult {
+  drained: boolean;
+  pendingActions: number;
+  timedOut: boolean;
+}
+
+const pendingAuditActions = new Set<Promise<void>>();
+const auditFailureStats: AuditFailureStats = {
+  totalFailures: 0,
+  persistedFailures: 0,
+  fileFailures: 0,
+  webhookFailures: 0,
+  lastErrorMessage: null,
+  lastFailureAt: null,
+  pendingActions: 0,
+};
 
 /**
  * Valores canônicos que ESTE banco comprovadamente ainda não conhece
@@ -44,6 +72,46 @@ const RETRY_DELAY_MS = 200;
  * completo volta a ser tentado de primeira. Nenhuma configuração a mudar.
  */
 const actionsRejectedByDatabase = new Set<string>();
+
+function updatePendingActionCount(): void {
+  auditFailureStats.pendingActions = pendingAuditActions.size;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function safeJsonStringify(value: unknown): string {
+  const seen = new WeakSet<object>();
+
+  try {
+    return JSON.stringify(value, (_key, currentValue) => {
+      if (typeof currentValue === 'bigint') {
+        return currentValue.toString();
+      }
+
+      if (typeof currentValue === 'function') {
+        return `[Function ${currentValue.name || 'anonymous'}]`;
+      }
+
+      if (typeof currentValue === 'object' && currentValue !== null) {
+        if (seen.has(currentValue)) {
+          return '[Circular]';
+        }
+        seen.add(currentValue);
+      }
+
+      return currentValue;
+    });
+  } catch (serializationError) {
+    return JSON.stringify({
+      level: 'critical',
+      message: 'Falha ao serializar evento de auditoria',
+      timestamp: new Date().toISOString(),
+      error: errorMessage(serializationError),
+    });
+  }
+}
 
 /**
  * Persiste um evento de auditoria que falhou em gravar mesmo apos retry, em
@@ -64,12 +132,19 @@ async function persistFailureAndAlert(params: LogActionParams, error: Error): Pr
     event: params,
   };
 
-  console.error(JSON.stringify(entry));
+  auditFailureStats.totalFailures += 1;
+  auditFailureStats.lastErrorMessage = error.message;
+  auditFailureStats.lastFailureAt = entry.timestamp;
+
+  const serializedEntry = safeJsonStringify(entry);
+  console.error(serializedEntry);
 
   try {
     fs.mkdirSync(path.dirname(FAILURE_LOG_PATH), { recursive: true });
-    fs.appendFileSync(FAILURE_LOG_PATH, `${JSON.stringify(entry)}\n`);
+    fs.appendFileSync(FAILURE_LOG_PATH, `${serializedEntry}\n`);
+    auditFailureStats.persistedFailures += 1;
   } catch (fileError) {
+    auditFailureStats.fileFailures += 1;
     console.error('[auditLogService] Falha ao persistir audit-failures.log:', fileError);
   }
 
@@ -84,9 +159,74 @@ async function persistFailureAndAlert(params: LogActionParams, error: Error): Pr
         }),
       });
     } catch (webhookError) {
+      auditFailureStats.webhookFailures += 1;
       console.error('[auditLogService] Falha ao notificar webhook de alerta:', webhookError);
     }
   }
+}
+
+function trackAuditAction(promise: Promise<void>): Promise<void> {
+  pendingAuditActions.add(promise);
+  updatePendingActionCount();
+
+  void promise.finally(() => {
+    pendingAuditActions.delete(promise);
+    updatePendingActionCount();
+  });
+
+  return promise;
+}
+
+function getAuditFailureStats(): AuditFailureStats {
+  updatePendingActionCount();
+  return { ...auditFailureStats };
+}
+
+async function waitForPendingAuditLogs(timeoutMs = DEFAULT_DRAIN_TIMEOUT_MS): Promise<AuditDrainResult> {
+  if (pendingAuditActions.size === 0) {
+    updatePendingActionCount();
+    return { drained: true, pendingActions: 0, timedOut: false };
+  }
+
+  const pending = Array.from(pendingAuditActions);
+  let timedOut = false;
+  let timeoutHandle: NodeJS.Timeout | null = null;
+
+  try {
+    await Promise.race([
+      Promise.allSettled(pending),
+      new Promise<void>((resolve) => {
+        timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle !== null) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+
+  updatePendingActionCount();
+
+  return {
+    drained: pendingAuditActions.size === 0,
+    pendingActions: pendingAuditActions.size,
+    timedOut,
+  };
+}
+
+function __resetAuditLogRuntimeStateForTests(): void {
+  pendingAuditActions.clear();
+  actionsRejectedByDatabase.clear();
+  auditFailureStats.totalFailures = 0;
+  auditFailureStats.persistedFailures = 0;
+  auditFailureStats.fileFailures = 0;
+  auditFailureStats.webhookFailures = 0;
+  auditFailureStats.lastErrorMessage = null;
+  auditFailureStats.lastFailureAt = null;
+  auditFailureStats.pendingActions = 0;
 }
 
 /**
@@ -119,7 +259,7 @@ async function persistFailureAndAlert(params: LogActionParams, error: Error): Pr
  * @param params - Dados do evento de auditoria.
  * @returns Nunca rejeita.
  */
-async function logAction(req: Request, params: LogActionParams): Promise<void> {
+async function performLogAction(req: Request, params: LogActionParams): Promise<void> {
   const {
     action,
     entityType,
@@ -213,4 +353,17 @@ async function logAction(req: Request, params: LogActionParams): Promise<void> {
   }
 }
 
-export = { logAction };
+function logAction(req: Request, params: LogActionParams): Promise<void> {
+  return trackAuditAction(
+    performLogAction(req, params).catch(async (error: unknown) => {
+      await persistFailureAndAlert(params, error instanceof Error ? error : new Error(errorMessage(error)));
+    }),
+  );
+}
+
+export = {
+  logAction,
+  getAuditFailureStats,
+  waitForPendingAuditLogs,
+  __resetAuditLogRuntimeStateForTests,
+};

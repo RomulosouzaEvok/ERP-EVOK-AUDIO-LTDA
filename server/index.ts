@@ -8,11 +8,17 @@ import app from './app';
 import connectDB from './config/db';
 import logger from './src/config/logger';
 import { sequelize } from './src/config/database';
+import { registerProcessSafetyHandlers } from './src/config/processSafety';
 import { loadRuntimeEnv } from './src/config/runtimeEnv';
 import { setShuttingDown } from './src/config/runtimeState';
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
 let server: Server | null = null;
 let shuttingDown = false;
+
+registerProcessSafetyHandlers();
 
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) {
@@ -39,6 +45,14 @@ async function shutdown(signal: string): Promise<void> {
           resolve();
         });
       });
+    }
+
+    const drainResult = await waitForPendingAuditLogs(10000);
+    if (!drainResult.drained) {
+      logger.error(
+        `Shutdown prosseguindo com ${drainResult.pendingActions} audit logs pendentes `
+        + `(timedOut=${drainResult.timedOut}).`,
+      );
     }
 
     await sequelize.close();
