@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 
 import { getJwtRuntimeConfig, JWT_ISSUER, JWT_AUDIENCE } from '../config/runtimeEnv';
 import { AccessModuleKey, AccessModuleLevel } from '../shared/domain/accessModules';
+import { applyAuthenticatedRateLimits } from './rateLimitPolicy';
 
 // Models are CommonJS - dynamic require is safest for the current hybrid setup.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -126,7 +127,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     };
 
     (req as any).user = requestUser;
-    next();
+    await applyAuthenticatedRateLimits(req, res, next);
   } catch (error: unknown) {
     if (error instanceof jwt.TokenExpiredError) {
       res.status(401).json({ success: false, error: 'Token expirado' });
