@@ -3228,3 +3228,62 @@ job `governance-detective-controls` (verificado: zero ocorrências, zero
 `continue-on-error`). A §7 da triagem descrevia outro estado do arquivo. Nenhum
 job foi promovido a bloqueante e nada foi tocado — mas a premissa estava errada e
 fica corrigida aqui.
+
+---
+
+## APR-2026-052 — `CASE-007` (`AUD-AUTHN-03`): decisões D1-D5 e autorização de despacho ao Codex
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad
+**Insumo:** `remediation/cases/ERP-LEGACY-001-CASE-007/TRIAGE.md`
+
+### As cinco decisões
+
+| # | Decisão do dono |
+|---|---|
+| **D1** | **Pico legítimo: 1000 requisições/minuto por IP** — margem para até **80 terminais** simultâneos em uso normal. *(Ajustado pelo dono a partir de uma primeira definição de 400/min para 30 terminais; a razão por terminal se mantém — ~12,5/min.)* |
+| **D2** | **Cota combinada: por IP E por usuário autenticado** — não só um dos dois. |
+| **D3** | **`TRUST_PROXY` entra no escopo.** Sem ele, com proxy/load balancer na frente, o limite por IP conta a fábrica inteira como um único usuário. |
+| **D4** | **Sim — todo acionamento de 429 gera log/métrica observável.** |
+| **D5** | **Proteção condicional a `F3` aceita** — são independentes; a correção do limiter não espera a rotação da chave. |
+
+**Despacho ao Codex autorizado.**
+
+### Observação de engenharia registrada — o dono precisa saber o delta
+
+**O limite vigente é `max: 300 / windowMs: 15min` (`app.ts:113`) = 20 req/min.**
+`D1` = 1000/min = 15000/15min: **aumento de 50×** no eixo IP.
+
+Isto **não é afrouxamento líquido de segurança**, e o motivo é o finding: hoje a
+chave é **escolhida pelo atacante** (`apiRequestKey` usa `jwt.decode`), então o
+teto de 20/min **não existe na prática** — é anulado por rotação de `id`. Trocar
+uma chave forjável de 20/min por uma chave real de 1000/min é ganho, não perda.
+
+**Ressalva medida, para não virar surpresa operacional:** 1000/min divididos por
+80 terminais = **12,5/min por terminal**, contra os 20/min por usuário de hoje.
+Para usuário autenticado atrás de NAT em pico, o teto por IP é **mais apertado**
+que o atual. Se a fábrica realmente operar 80 terminais simultâneos, haverá 429
+legítimo. É consequência aritmética de `D1`, não defeito da correção — e é
+reversível por configuração.
+
+### Lacuna de `D2` — número por usuário não fornecido
+
+`D2` define **que** haja cota por usuário, não **qual**. Sem decisão do dono e sem
+inventar regra (Regra 6), o despacho adota **preservar o comportamento atual**:
+`300 / 15min` por usuário autenticado.
+
+Fundamento: é o **status quo**, o finding não exige alterá-lo, e é reversível por
+configuração. **Assunção declarada, não decisão.** Se o dono fixar outro número, é
+troca de constante.
+
+### Limitação de execução — o despacho é preparado, não invocado
+
+**O Codex CLI não está no `PATH` desta máquina.** A sessão Claude Code **não
+consegue invocá-lo**. O que foi produzido é o **pacote de despacho**
+(`coretriad/states/ERP-LEGACY-001/REMEDIATION_CASE-007.md`), para ser executado
+na sessão Codex do dono. **A implementação não começou** e não deve ser lida como
+iniciada.
+
+Worktree `sana/ERP-LEGACY-001/CASE-007` **criada** pela orquestração (preparo de
+infraestrutura, não implementação — Regra 5 preservada: nenhuma linha de código
+de correção foi escrita pela sessão).
