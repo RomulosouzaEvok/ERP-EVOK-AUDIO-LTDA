@@ -2700,3 +2700,81 @@ dos relatórios finais.
   (`F-5` §5.2)
 
 **Nenhum `AUDIT_PASSED` é declarado por esta entrada.**
+
+---
+
+## APR-2026-045 — severidade fixada e **encerramento de decisões desta sessão**
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno)
+**Natureza:** fixa a última severidade pendente e **reserva formalmente** as
+demais decisões para sessão futura.
+
+### D1 — `AUD-RH-VALIDADENULA-01`: **HIGH**
+
+**Texto verbatim:**
+
+> *"HIGH. A recomendação está bem fundamentada: o defeito ocorre pelo caminho
+> mais comum possível (omitir um campo opcional num formulário), sem precisar de
+> nada especial, e libera decisão real sobre aptidão de retorno ao trabalho e
+> admissão. Manter MEDIUM contrariaria a régua que vocês já aplicaram a
+> `T41-RH-F02` e `T43-SST-F01`, que são HIGH pela mesma família."*
+
+**O fundamento é de coerência de régua, e fica registrado como tal:** a decisão
+não trata só deste finding — trata de **manter a escala estável**. Os três
+defeitos são da mesma família (decisão de saúde ocupacional tomada sobre dado que
+o sistema não garante), e os outros dois já são HIGH. Classificar este abaixo
+teria criado inconsistência de escala dentro do próprio corpus.
+
+**Consequências imediatas:**
+
+- **Regra 22 acionada** — despachado ao `vericore-finding-validator`. O universo
+  passa de 100 para **101**; até o veredito, a Regra 22 está em **100/101**.
+- **`DIV-REP-04` fica resolvida** — o finding deixa de ser "sem severidade
+  fixada". O placar passa a **484 vigentes**, com o finding em HIGH. A
+  reconciliação formal do placar segue com o consolidador.
+- **Não liberado à SanaCore** até o veredito do validator.
+
+### D2 — As demais decisões: **RESERVADAS para sessão futura, sem prazo**
+
+**Texto verbatim:**
+
+> *"Apenas a #1 (severidade HIGH de `AUD-RH-VALIDADENULA-01`) é confirmada agora.
+> As demais (#2, #3, #4, #5) ficam explicitamente reservadas para sessão futura,
+> sem prazo."*
+
+| # | Item | Estado | Motivo declarado pelo dono |
+|---|---|---|---|
+| 2 | **`C-136`** — redimensionamento com 628 rotas IN | **reservada** | *"É escopo futuro, não bloqueia nada agora, e depende da decisão #5, que também estou adiando."* |
+| 3 | **`B9`** — prova dinâmica em bloco (~190 pedidos) | **reservada** | *"Mantenho minha própria delimitação já registrada: sessão própria, não hoje, não em bloco."* |
+| 4 | **Janela para `DYN-T41-03` e `DYN-T49-03`** | **reservada** | *"Não decido a data agora. Fica pendente, com as quatro condições já fixadas."* |
+| 5 | **Qualificação por rota em tier 1/2** (420 endpoints) | **reservada** | *"Custo de 3-4 sessões inteiras para ganho não garantido não é decisão para tomar cansado, de madrugada."* |
+| 6 | **Seis tabelas de RH** | **já decidida** | `APR-2026-042` D3 — gap documentado, sem prazo |
+
+**Registro de método, porque é precedente:** o motivo de D2 item 5 — *"não é
+decisão para tomar cansado, de madrugada"* — é reserva **deliberada**, não
+esquecimento. Reservar por juízo de condição própria é exercício de autoridade,
+não omissão dela, e fica registrado como tal para que nenhuma sessão futura leia
+essas quatro como "pendências que evaporaram".
+
+**Nenhuma delas bloqueia o encerramento da auditoria.** Todas constam do
+Remediation Backlog e do `HANDOFF_PROXIMA_FASE.md`.
+
+### D3 — Gate de `AUDIT_PASSED`: apresentar após o validator
+
+**Texto verbatim:** *"Prossiga com o validator do item #1 e, assim que concluído,
+apresente o gate de `AUDIT_PASSED` para minha decisão final."*
+
+**Sequência determinada:** veredito do validator sobre `AUD-RH-VALIDADENULA-01`
+→ apresentação do gate → **decisão final do dono**.
+
+**Limite de autoridade, reafirmado:** `AUDIT_PASSED` é declaração da **VeriCore
+sobre evidência** (Regra 4), submetida a gate humano (Regra 18). Nem o
+orquestrador nem o director podem declará-la, e a apresentação do gate **não é**
+a declaração.
+
+### O que esta entrada NÃO faz
+
+- **Não** declara `AUDIT_PASSED`.
+- **Não** fecha finding, não libera remediação, não altera outra severidade.
+- **Não** revoga nenhuma reserva de D2 — cada uma exige decisão própria, futura.

@@ -6,8 +6,8 @@ AUDIT_COMMIT:   c1311a6f76b512fef893f7e60d934179cae3409f
 ORIGEM:         candidato T49-RH-C01 (T-49 §5), proposto pelo autor de T-41
                 a partir de OBS-T48-04 (T-48) e de descoberta própria do T-49
 AUTORIZAÇÃO:    APR-2026-044 D1 — abertura determinada pelo dono
-SEVERIDADE:     PROPOSED — HIGH recomendada; aguarda fixação pelo dono
-ESTADO:         PROPOSED
+SEVERIDADE:     HIGH — fixada pelo dono em 2026-08-17 (APR-2026-045 D1)
+ESTADO:         CONFIRMED — segue ao vericore-finding-validator (Regra 22)
 AMBIENTE:       ver §7 — depende do módulo, e a Admissão difere da Demissão
 ```
 
@@ -86,7 +86,25 @@ Aplico o teste decisivo deste run: **o defeito ocorre pelo caminho normal do sis
 
 O que a decisão errada libera: **retorno ao trabalho após afastamento** e **conclusão de admissão**, os dois sobre exame de aptidão cuja vigência não foi verificada. É a mesma família de `T41-RH-F02` (HIGH) e `T43-SST-F01` (HIGH) — decisão de saúde ocupacional tomada sobre dado que o sistema não garante.
 
-**A severidade não é minha para fixar** (Regra 18). Registro a recomendação e o fundamento; a decisão é do dono. **Se fixada em HIGH, segue para o `vericore-finding-validator`** (Regra 22) antes de remediação.
+**A severidade não é minha para fixar** (Regra 18). Registro a recomendação e o fundamento; a decisão é do dono.
+
+### 5.1 Severidade FIXADA — HIGH (`APR-2026-045` D1, 2026-08-17)
+
+**Texto verbatim do dono:**
+
+> *"HIGH. A recomendação está bem fundamentada: o defeito ocorre pelo caminho
+> mais comum possível (omitir um campo opcional num formulário), sem precisar de
+> nada especial, e libera decisão real sobre aptidão de retorno ao trabalho e
+> admissão. Manter MEDIUM contrariaria a régua que vocês já aplicaram a
+> `T41-RH-F02` e `T43-SST-F01`, que são HIGH pela mesma família."*
+
+**Fundamento de coerência de régua, registrado:** a decisão não é só sobre este
+finding — é sobre **manter a régua estável**. Os três defeitos pertencem à mesma
+família (decisão de saúde ocupacional tomada sobre dado que o sistema não
+garante) e os outros dois já são HIGH. Classificar este abaixo teria criado
+inconsistência de escala dentro do próprio corpus.
+
+**Segue ao `vericore-finding-validator`** (Regra 22) antes de remediação.
 
 ## 6. Critério de reteste (objetivo, estático + teste)
 
