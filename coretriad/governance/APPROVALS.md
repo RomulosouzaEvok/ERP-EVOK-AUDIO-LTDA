@@ -1587,3 +1587,45 @@ decisões `D-R1` (severidade de `AUD-DB-09`), `D-R2` (ratificação dos 5 MEDIUM
 - **Não** decide `D-R1`/`D-R2`/`D-R3`.
 - **Não** altera severidade de nenhum outro finding, não fecha finding, não
   declara `RETEST_PASSED`.
+
+---
+
+## APR-2026-032 — ratificação semântica de `employees.salary` para comissionados
+
+**Data:** 2026-08-16
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto
+**Contexto:** hipótese H4 de `T-40_VALIDACAO_AUD-RH-COMISSAO-01.md` — a
+dependência que travava o caso comissionado do VT era **decisional**, não
+física, e a decisão era esta.
+
+### A ratificação, verbatim
+
+> *"`employees.salary`, para funcionários comissionados, armazena SOMENTE a
+> parte fixa mensal hoje. A comissão variável não está representada no sistema
+> atualmente."*
+
+### Efeitos determinados pelo dono
+
+1. **`benefitRules.ts` trata comissionado como mensal** para cálculo de VT.
+   Com isso, `AUD-RH-VTHORISTA-01` (CRITICAL) fica **integralmente destravado
+   para remediação** — horista e comissionado — **sem depender** da migration
+   do campo de percentual. A dependência de ordem registrada na §5 daquele
+   finding está satisfeita por esta ratificação.
+2. **`AUD-RH-COMISSAO-01` (HIGH) permanece ABERTO.** A ratificação resolve o
+   cálculo do VT; **não cria o campo que falta** para representar a comissão.
+   Nenhuma leitura desta entrada pode tratá-lo como mitigado.
+3. **Achado de segurança confirmado pelo dono:** o campo de percentual de
+   comissão entra na deny-list de `employeeSensitiveFields.ts` **no mesmo
+   commit que criar a coluna — nunca depois**. Fundamento: `GET /api/employees`
+   é aberto a qualquer autenticado e o padrão de vazamento já se repetiu
+   (caso `pcd`, documentado no próprio arquivo). Isso é **requisito de
+   remediação**, não recomendação.
+
+### O que esta entrada NÃO cobre
+
+- **Não** fecha `AUD-RH-VTHORISTA-01` nem `AUD-RH-COMISSAO-01` — destravar não
+  é remediar, e fechar é da VeriCore (Regra 4).
+- **Não** reordena a fila de `T-39`: a cabeça continua `AUD-ALOG-01/A` e `/B`
+  (produção real). `AUD-RH-VTHORISTA-01` fica pronto para quando sua posição
+  chegar.
+- **Não** decide `D-01`, `D-R1`, `D-R2`, `D-R3`.

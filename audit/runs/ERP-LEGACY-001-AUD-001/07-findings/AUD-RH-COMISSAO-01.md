@@ -79,14 +79,27 @@ Há ainda uma dependência de ordem: a fórmula correta de VT para comissionado
 precisa ler **a parte fixa**. Enquanto ela não existir separada, **a fórmula
 correta não tem insumo**.
 
-## 4. Decisão de negócio já registrada (não é pendência)
+## 4. Decisões de negócio já registradas (não são pendências)
 
 **Vale-transporte de comissionado incide sobre a parte FIXA**, não sobre a
 comissão variável. Decisão do dono, 2026-08-16, coerente com a regra geral de VT
 no Brasil.
 
-Isso **não** é pergunta aberta e a SanaCore não precisa consultar ninguém sobre
-ela. O que segue aberto é o desenho de armazenamento, na §5.
+**Ratificação semântica (`APR-2026-032`, 2026-08-16):** `employees.salary`, para
+comissionados, **armazena somente a parte fixa mensal hoje**; a comissão variável
+não está representada no sistema. Isso destravou o caso comissionado de
+`AUD-RH-VTHORISTA-01` sem esperar a migration — e **não mitiga este finding**,
+que segue aberto pelo campo que continua não existindo. O dono foi explícito:
+*"a ratificação resolve o cálculo do VT, não cria o campo que falta."*
+
+**Requisito de remediação confirmado pelo dono (não recomendação):** o campo de
+percentual entra na deny-list de `employeeSensitiveFields.ts` **no mesmo commit
+que criar a coluna — nunca depois** (`GET /api/employees` aberto a qualquer
+autenticado; precedente `pcd` já documentado no próprio arquivo; mecanismo é
+deny-list, então campo fora da lista **vaza por construção** — `T-40` H5).
+
+A SanaCore não precisa consultar ninguém sobre nada disso. O que segue aberto é
+o desenho de armazenamento, na §5.
 
 ## 5. Pendência técnica de remediação — não é decisão do dono
 

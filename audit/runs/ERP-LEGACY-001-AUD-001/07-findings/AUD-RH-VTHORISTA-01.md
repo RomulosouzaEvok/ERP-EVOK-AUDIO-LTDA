@@ -119,12 +119,21 @@ Por determinação do dono, foram separados. **A remediação de um não fecha o
 outro**, e nenhum dos dois deve ser marcado como resolvido pelo avanço do
 outro.
 
-### Ordem de remediação
+### Ordem de remediação — ATUALIZADA em 2026-08-16 pela ratificação `APR-2026-032`
 
 O caso `'horista'` **não depende** de nada disso e pode seguir imediatamente.
-O caso `'comissionado'` depende de `AUD-RH-COMISSAO-01` estar resolvido, porque
-antes disso **não existe onde ler a parte fixa** — a fórmula correta não tem
-insumo.
+
+O caso `'comissionado'` dependia de `AUD-RH-COMISSAO-01`, porque não existia
+declaração de onde ler a parte fixa. **A dependência foi satisfeita por
+ratificação do dono** (`APR-2026-032`, hipótese H4 de `T-40`): *"`employees.salary`,
+para funcionários comissionados, armazena SOMENTE a parte fixa mensal hoje."*
+
+Determinação decorrente: **`benefitRules.ts` trata comissionado como mensal**
+para o cálculo de VT. **Este finding está integralmente destravado para
+remediação — horista e comissionado — sem depender da migration do percentual.**
+
+`AUD-RH-COMISSAO-01` permanece aberto: a ratificação resolve o insumo do VT,
+não cria o campo da comissão.
 
 ## 6. Critério de reteste (objetivo, estático + teste)
 
