@@ -27,6 +27,13 @@ ESTADO:       PRONTO PARA RETESTE APOS COMMIT
 8. Avaliar explicitamente o risco residual declarado: entrada lot-blind sem `LotControl`.
 9. Avaliar o blast radius declarado para SST/EPI e Facilities.
 
+## Pendencia explicita para VeriCore
+
+- Executar de forma conclusiva `server/tests/integration/product-movement-concurrency.test.ts`.
+- Na sessao SanaCore/Codex, este teste ficou `skipped` porque `hasIntegrationPrerequisites()` nao encontrou os prerequisitos de integracao.
+- A VeriCore deve providenciar os prerequisitos esperados pela suite de integracao (ambiente/API/banco de teste autorizado, nunca producao `erp_evok_audio`) ou registrar quais prerequisitos faltaram.
+- Esta pendencia existe porque o teste valida a propriedade concorrente real do endpoint legado `POST /api/products/movements`: duas saidas simultaneas nao podem gerar saldo negativo e somente uma deve vencer quando o saldo do deposito e suficiente para uma unica saida.
+
 ## Comandos locais ja executados pela SanaCore/Codex
 
 ```powershell
