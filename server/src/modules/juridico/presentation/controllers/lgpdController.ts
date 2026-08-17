@@ -17,6 +17,7 @@ const SequelizeLgpdManualTaskRepository = require('../../infrastructure/sequeliz
 const { logAction } = require('../../../../services/auditLogService');
 
 const CreateProcessingActivityUseCase = require('../../application/use-cases/lgpd/CreateProcessingActivityUseCase');
+const CreateRetentionPolicyUseCase = require('../../application/use-cases/lgpd/CreateRetentionPolicyUseCase');
 const UpdateProcessingActivityUseCase = require('../../application/use-cases/lgpd/UpdateProcessingActivityUseCase');
 const ListProcessingActivitiesUseCase = require('../../application/use-cases/lgpd/ListProcessingActivitiesUseCase');
 const GetProcessingActivityByIdUseCase = require('../../application/use-cases/lgpd/GetProcessingActivityByIdUseCase');
@@ -45,6 +46,18 @@ const retentionPolicyRepository = new SequelizeLgpdRetentionPolicyRepository();
 const manualTaskRepository = new SequelizeLgpdManualTaskRepository();
 
 // ---- RoPA ----
+
+/** `POST /api/jur/lgpd/retention-policies` */
+exports.createRetentionPolicy = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const policy = await new CreateRetentionPolicyUseCase(retentionPolicyRepository).execute({
+      ...req.body,
+      createdBy: (req as any).user.id,
+    });
+    logAction(req, { action: 'create', entityType: 'JurLgpdRetentionPolicy', entityId: policy.id, newValues: policy });
+    res.status(201).json({ success: true, data: policy });
+  } catch (error) { next(error); }
+};
 
 /** `GET /api/jur/lgpd/processing-activities` */
 exports.listActivities = async (req: Request, res: Response, next: NextFunction) => {

@@ -11,6 +11,7 @@
  */
 
 const CreateProcessingActivityUseCase = require('../../src/modules/juridico/application/use-cases/lgpd/CreateProcessingActivityUseCase');
+const CreateRetentionPolicyUseCase = require('../../src/modules/juridico/application/use-cases/lgpd/CreateRetentionPolicyUseCase');
 const ReviewProcessingActivityUseCase = require('../../src/modules/juridico/application/use-cases/lgpd/ReviewProcessingActivityUseCase');
 const PendingCriticalIncidentsUseCase = require('../../src/modules/juridico/application/use-cases/lgpd/PendingCriticalIncidentsUseCase');
 
@@ -62,6 +63,20 @@ function makeDpoDesignationRepository(activeUserId = 77) {
 function makeRetentionPolicyRepository(retentionValue = '12 meses') {
   return {
     findActiveById: jest.fn(async (id: number) => ({ id, retention_value: retentionValue })),
+  };
+}
+
+function makeOperationalRetentionPolicyRepository() {
+  const policies = new Map<number, any>();
+  let nextId = 1;
+
+  return {
+    create: jest.fn(async (data: any) => {
+      const policy = { id: nextId++, status: 'active', auto_delete_enabled: false, ...data };
+      policies.set(policy.id, policy);
+      return policy;
+    }),
+    findActiveById: jest.fn(async (id: number) => policies.get(Number(id)) ?? null),
   };
 }
 
@@ -137,7 +152,7 @@ describe('CreateDataSubjectRequestUseCase', () => {
   it('calcula due_date = received_at + 15 dias (RF-JUR-037)', async () => {
     const repo = makeRequestRepository();
     const result = await new CreateDataSubjectRequestUseCase(repo, makeDpoDesignationRepository()).execute({
-      type: 'access', received_at: '2026-08-01', dpoUserId: 1,
+      type: 'access', received_at: '2026-08-01', dpoUserId: 77,
     });
     expect(result.due_date).toBe('2026-08-16');
   });
@@ -161,6 +176,15 @@ describe('CreateDataSubjectRequestUseCase', () => {
         type: 'access', received_at: '2026-08-01',
       } as any),
     ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('rejeita dpoUserId do payload diferente do DPO ativo', async () => {
+    const repo = makeRequestRepository();
+    await expect(
+      new CreateDataSubjectRequestUseCase(repo, makeDpoDesignationRepository(123)).execute({
+        type: 'access', received_at: '2026-08-01', dpoUserId: 999,
+      }),
+    ).rejects.toThrow('dpoUserId deve corresponder ao DPO ativo configurado.');
   });
 
   it('rejeita type invalido', async () => {
@@ -262,6 +286,51 @@ describe('CreateIncidentUseCase', () => {
         detected_at: '2026-08-07T08:00:00Z', description: 'Acesso indevido', risk_assessment: 'medio', createdBy: 1,
       }),
     ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('rejeita dpoUserId do payload diferente do DPO ativo', async () => {
+    const repo = makeIncidentRepository();
+    await expect(
+      new CreateIncidentUseCase(repo, makeDpoDesignationRepository(222)).execute({
+        detected_at: '2026-08-07T08:00:00Z', description: 'Acesso indevido', risk_assessment: 'medio', createdBy: 1, dpoUserId: 999,
+      }),
+    ).rejects.toThrow('dpoUserId deve corresponder ao DPO ativo configurado.');
+  });
+});
+
+describe('CreateRetentionPolicyUseCase (RoPA operacional)', () => {
+  it('cria politica usando somente os campos fornecidos pelo payload', async () => {
+    const retentionRepo = makeOperationalRetentionPolicyRepository();
+    const result = await new CreateRetentionPolicyUseCase(retentionRepo).execute({
+      category: 'Dados de RH', retention_value: 'prazo definido pela organizacao', retention_basis: 'revisao interna pendente', createdBy: 7,
+    });
+
+    expect(result).toMatchObject({ category: 'Dados de RH', retention_value: 'prazo definido pela organizacao', created_by: 7 });
+    expect(retentionRepo.create).toHaveBeenCalledWith(expect.not.objectContaining({ auto_delete_enabled: expect.anything() }));
+  });
+
+  it('rejeita politica sem categoria ou valor de retencao', async () => {
+    const retentionRepo = makeOperationalRetentionPolicyRepository();
+    await expect(
+      new CreateRetentionPolicyUseCase(retentionRepo).execute({ category: '', retention_value: '', createdBy: 7 }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('permite criar atividade depois de cadastrar politica de retencao', async () => {
+    const retentionRepo = makeOperationalRetentionPolicyRepository();
+    const policy = await new CreateRetentionPolicyUseCase(retentionRepo).execute({
+      category: 'Dados de RH', retention_value: 'prazo definido pela organizacao', createdBy: 7,
+    });
+    const activityRepo = { create: jest.fn(async (data: any) => ({ id: 50, ...data })) };
+    const { Department } = require('../../src/models/index');
+    jest.spyOn(Department, 'findByPk').mockResolvedValueOnce({ id: 5 });
+
+    const activity = await new CreateProcessingActivityUseCase(activityRepo, retentionRepo).execute({
+      purpose: 'Gestao de folha', legal_basis: 'legal_obligation', data_categories: ['dados cadastrais'], data_subject_categories: ['funcionarios'], department_id: 5, createdBy: 7, retentionPolicyId: policy.id,
+    });
+
+    expect(activity.retention_policy_id).toBe(policy.id);
+    expect(activity.retention_period).toBe('prazo definido pela organizacao');
   });
 });
 

@@ -902,6 +902,7 @@ export interface LgpdProcessingActivity {
   source_system: string | null;
   sharing_description: string | null;
   retention_period: string | null;
+  retention_policy_id: number;
   security_measures: string | null;
   department_id: number;
   last_reviewed_at: string | null;
@@ -935,8 +936,22 @@ export interface CreateProcessingActivityInput {
   source_system?: string;
   sharing?: string[] | string;
   retention_period?: string;
+  retention_policy_id: number;
   security_measures?: string;
   department_id: number;
+}
+
+export interface CreateRetentionPolicyInput {
+  category: string;
+  retention_value: string;
+  retention_basis?: string | null;
+  status?: 'active' | 'inactive';
+  legal_guidance_status?: 'pending_formal_guidance' | 'approved';
+}
+
+export async function createRetentionPolicy(input: CreateRetentionPolicyInput) {
+  const { data } = await httpClient.post<ItemResponse<any>>('/api/jur/lgpd/retention-policies', input);
+  return data.data;
 }
 
 export async function createProcessingActivity(input: CreateProcessingActivityInput) {

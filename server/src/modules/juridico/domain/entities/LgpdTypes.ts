@@ -30,6 +30,15 @@ export interface UpdateProcessingActivityInput {
   [key: string]: unknown;
 }
 
+export interface CreateRetentionPolicyInput {
+  category: string;
+  retention_value: string;
+  retention_basis?: string | null;
+  status?: 'active' | 'inactive';
+  legal_guidance_status?: 'pending_formal_guidance' | 'approved';
+  createdBy: number;
+}
+
 export interface ReviewProcessingActivityInput {
   id: number;
   reviewedAt?: string | null;

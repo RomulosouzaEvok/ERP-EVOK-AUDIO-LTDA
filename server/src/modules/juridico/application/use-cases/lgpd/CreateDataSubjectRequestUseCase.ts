@@ -37,13 +37,13 @@ class CreateDataSubjectRequestUseCase extends UseCase<CreateDataSubjectRequestIn
   }
 
   private async resolveDpoUserId(input: CreateDataSubjectRequestInput): Promise<number> {
-    if (input.dpoUserId !== undefined && input.dpoUserId !== null) {
-      return Number(input.dpoUserId);
-    }
-
     const activeDesignation = await this.dpoDesignationRepository.findActive();
     if (!activeDesignation?.user_id) {
       throw new ValidationError('Nenhum DPO ativo configurado. Cadastre uma designacao formal antes de registrar a solicitacao.');
+    }
+
+    if (input.dpoUserId !== undefined && input.dpoUserId !== null && Number(input.dpoUserId) !== Number(activeDesignation.user_id)) {
+      throw new ValidationError('dpoUserId deve corresponder ao DPO ativo configurado.');
     }
 
     return Number(activeDesignation.user_id);

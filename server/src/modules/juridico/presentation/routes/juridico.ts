@@ -150,6 +150,7 @@ router.get('/ip-assets/:id/contracts', ipAssetController.listContractLinks);
 
 // ---- Grupo 6 — LGPD (UC-56, 17 endpoints) ----
 // RoPA (5 endpoints)
+router.post('/lgpd/retention-policies', authorizeModule('juridico', 'approve'), lgpdController.createRetentionPolicy);
 router.get('/lgpd/processing-activities', lgpdController.listActivities);
 router.get('/lgpd/processing-activities/:id', lgpdController.getActivityById);
 router.post('/lgpd/processing-activities', lgpdController.createActivity);

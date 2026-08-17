@@ -12,10 +12,12 @@ const REQUIRED_ARTIFACTS = [
   'src/modules/juridico/application/use-cases/lgpd/CreateDataSubjectRequestUseCase.ts',
   'src/modules/juridico/application/use-cases/lgpd/CreateIncidentUseCase.ts',
   'src/modules/juridico/application/use-cases/lgpd/CreateProcessingActivityUseCase.ts',
+  'src/modules/juridico/application/use-cases/lgpd/CreateRetentionPolicyUseCase.ts',
   'src/modules/juridico/application/use-cases/lgpd/ResolveDataSubjectRequestUseCase.ts',
   'src/modules/juridico/application/use-cases/lgpd/PendingCriticalIncidentsUseCase.ts',
   'src/modules/juridico/presentation/controllers/lgpdController.ts',
   'src/modules/juridico/presentation/routes/juridico.ts',
+  'scripts/check-lgpd-release-readiness.ts',
 ];
 
 function resolveArtifact(relativePath: string): string {

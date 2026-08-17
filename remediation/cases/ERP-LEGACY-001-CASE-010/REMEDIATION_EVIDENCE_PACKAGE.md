@@ -87,3 +87,46 @@ documentado com guarda estática versionada.
 
 REMEDIATION_COMPLETE
 
+## Correcao 01 - resposta a segunda opiniao da VeriCore
+
+### 1. D5 - guarda de promocao exercitada pelo build
+
+- Problema: a guarda estatica era lida apenas pelo seu teste unitario e nao participava de verificacao obrigatoria de release.
+- Correcao: `server/scripts/check-lgpd-release-readiness.ts` importa `LGPD_PROMOTION_BLOCKED` e retorna codigo diferente de zero quando a guarda bloquear. O script `release:check` foi conectado ao final de `npm run build`.
+- Arquivos: `server/package.json`, `server/scripts/check-lgpd-release-readiness.ts`, `server/src/modules/juridico/domain/lgpdOperationalControlGuard.ts` e `server/tests/unit/juridico-lgpd-operational-control-guard.test.ts`.
+
+### 2. D1 - DPO informado pelo payload validado
+
+- Problema: `dpo_user_id` fornecido pelo cliente era aceito sem conferir a designacao ativa.
+- Correcao: os use cases de solicitacao de titular e incidente sempre leem a designacao ativa e rejeitam `dpoUserId` divergente com `ValidationError`.
+- Arquivos: `CreateDataSubjectRequestUseCase.ts`, `CreateIncidentUseCase.ts` e `juridico-lgpd-alert-use-cases.test.ts`.
+
+### 3. D2 - RoPA operacional sem seed manual
+
+- Problema: uma atividade exigia politica ativa, mas nao havia mecanismo de aplicacao/API para cadastrar essa politica em ambiente novo.
+- Correcao: criado `CreateRetentionPolicyUseCase`, contrato/repositório `create`, handler e `POST /api/jur/lgpd/retention-policies` protegido por `authorizeModule('juridico', 'approve')`. A politica recebe somente os campos fornecidos e nunca habilita exclusao automatica.
+- Testes: criacao valida, rejeicao de campos obrigatorios ausentes e fluxo em memoria que cria a politica e depois uma atividade RoPA usando o `id` retornado.
+- Arquivos: `CreateRetentionPolicyUseCase.ts`, `LgpdRetentionPolicyRepository.ts`, `SequelizeLgpdRetentionPolicyRepository.ts`, `LgpdTypes.ts`, `lgpdController.ts`, `juridico.ts`, `client/src/api/juridico.ts` e `juridico-lgpd-alert-use-cases.test.ts`.
+
+### 4. Prova vermelha segura contra `752b6d8`
+
+Foi criada uma worktree temporaria, destacada no commit `752b6d8`, sem banco real. A suite focada `juridico-lgpd-correction-red-proof.test.ts` falhou em 4/4 asserts antes da correcao:
+
+- `rejects a request payload DPO that differs from the active designation`: a promise resolveu e gravou `dpo_user_id: 999`.
+- `rejects an incident payload DPO that differs from the active designation`: a promise resolveu e gravou `dpo_user_id: 999`.
+- `provides the retention policy creation use case required by the RoPA`: modulo `CreateRetentionPolicyUseCase` inexistente.
+- `runs the LGPD release check from the required build command`: `build` era somente `tsc -p tsconfig.build.json`, sem `npm run release:check`.
+
+### 5. Prova verde apos a correcao
+
+- `npx jest --runInBand tests/unit/juridico-lgpd-alert-use-cases.test.ts tests/unit/juridico-lgpd-operational-control-guard.test.ts` - passou: 33/33.
+- `npm run typecheck` - passou.
+- `npm run build` - passou e executou `npm run release:check`, com `LGPD release readiness passed (2026-08-14-case-010)`.
+- `git diff --check` - passou.
+
+### 6. Risco residual
+
+- Numeros reais de retencao e orientacao juridica formal continuam fora do CoreTriad. A politica exige valor fornecido pelo responsavel autorizado.
+- A meta de 72h permanece escolha operacional interna; exclusao automatica continua desabilitada.
+
+REMEDIATION_COMPLETE

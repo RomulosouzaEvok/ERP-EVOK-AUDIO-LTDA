@@ -40,13 +40,13 @@ class CreateIncidentUseCase extends UseCase<CreateIncidentInput, any> {
   }
 
   private async resolveDpoUserId(input: CreateIncidentInput): Promise<number> {
-    if (input.dpoUserId !== undefined && input.dpoUserId !== null) {
-      return Number(input.dpoUserId);
-    }
-
     const activeDesignation = await this.dpoDesignationRepository.findActive();
     if (!activeDesignation?.user_id) {
       throw new ValidationError('Nenhum DPO ativo configurado. Cadastre uma designacao formal antes de abrir o incidente.');
+    }
+
+    if (input.dpoUserId !== undefined && input.dpoUserId !== null && Number(input.dpoUserId) !== Number(activeDesignation.user_id)) {
+      throw new ValidationError('dpoUserId deve corresponder ao DPO ativo configurado.');
     }
 
     return Number(activeDesignation.user_id);
