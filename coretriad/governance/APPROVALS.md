@@ -2843,3 +2843,78 @@ O `vericore-software-audit-director` deve produzir o veredito **e** o registro n
 humano que o autorizou. Se concluir que alguma condição **não** está satisfeita,
 **deve recusar a emissão e dizer qual** — recusa fundamentada é resultado
 legítimo deste despacho, e não desobediência ao dono.
+
+---
+
+## APR-2026-047 — Integração Codex: sincronização escopada + achado de enforcement (Regra 23)
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad — decisão de escopo
+**Base normativa:** `CORETRIAD_MASTER_SPEC.md` Parte VI §35 ("Codex como segunda engine")
+
+### D1 — Estado verificado de `.codex/agents/*.toml`
+
+Verificação por contagem, não por impressão:
+
+| Medida | Valor |
+|---|---|
+| Arquivos `.toml` | 21, todos de 2026-08-12 23:32 |
+| Roster CoreTriad atual (`.claude/agents/`) | 96 |
+| `.toml` que correspondem ao roster **atual** | **0** |
+| `.toml` que correspondem a `_deprecated/` | 15 |
+| `.toml` sem contraparte em lugar nenhum | 6 — `especialista-{facilities,juridico,marketing,rh,sst,ti}` |
+
+**Conclusão: não sincronizado.** Os `.toml` são espelho do roster pré-CoreTriad.
+
+### D2 — ACHADO DE ENFORCEMENT: o hook de segregação não alcança o Codex
+
+O isolamento organizacional é imposto por `.claude/settings.json` →
+`PreToolUse` → `.claude/hooks/org-isolation.js`. **Esse mecanismo é do Claude
+Code.** O Codex CLI não lê `.claude/settings.json` e não dispara o hook.
+
+**Consequência:** qualquer agente Codex com capacidade de escrita opera **fora do
+único mecanismo que impõe as Regras 1-4**. Um `sanacore-*` em Codex escreveria em
+`audit/`; um `vericore-*` em Codex escreveria em `src/` — sem nada negar.
+
+A **Regra 23** diz em letra que o prompt é reforço e **nunca o único mecanismo**.
+Para o lado Codex, hoje, o prompt seria o único mecanismo. Este é o motivo pelo
+qual espelhar o roster inteiro foi **rejeitado nesta decisão**, e não uma questão
+de esforço.
+
+**Registrado como pendência aberta, sem prazo:** não existe enforcement de
+segregação do lado Codex. Enquanto não existir, nenhum agente Codex com escrita
+deve ser criado.
+
+### D3 — Escopo decidido pelo dono
+
+Apresentadas três rotas (3 papéis §35 read-only · espelho de 96 · só o papel
+SanaCore). **Escolha: "Só o papel SanaCore agora, resto depois."**
+
+Aplicado:
+
+- **Criado:** `.codex/agents/coretriad-rootcause-review-sanacore.toml` — papel
+  §35 "root-cause second opinion, remediação alternativa, patch review".
+  **Somente leitura, somente parecer.** Não escreve, não aplica patch, não
+  commita, não abre conexão de banco. Devolve texto; quem persiste é a sessão
+  Claude Code, sob o hook.
+- **Vocabulário de parecer fixado**, sem sinônimo: `SEGUNDA_OPINIAO_CONCORDA`,
+  `…_COM_RESSALVA`, `…_DIVERGE`, `INCONCLUSIVO`. **Nenhum deles libera reteste,
+  aprova patch ou vincula a SanaCore** — são insumo, não decisão (Regras 3 e 4).
+- **Mantidos como estão:** os 21 `.toml` obsoletos. Não foram removidos.
+- **Adiado:** os papéis Codex de OpusCore (segunda opinião técnica) e VeriCore
+  (cross-audit independente) — sessão futura.
+
+**Limite de mecanismo declarado, não escondido:** o arquivo `.toml` sozinho não
+impõe read-only. A invocação precisa usar o sandbox de leitura do Codex. O agente
+foi instruído a declarar, na primeira linha do parecer, se perceber que recebeu
+permissão de escrita — detecção, não prevenção. É reforço, e está registrado
+como tal.
+
+### D4 — Aplicação ao próximo caso de remediação
+
+O dono determinou que o papel §35 seja aplicado ao **próximo caso do topo da
+fila**, com a divisão: **SanaCore implementa via Claude Code** (worktree,
+evidência, processo já estabelecido); **Codex atua como segunda opinião de
+causa-raiz e revisão do patch, antes do reteste da VeriCore.**
+
+Esta entrada **autoriza a abertura** desse caso.
