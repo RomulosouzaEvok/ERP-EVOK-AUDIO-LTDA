@@ -2428,3 +2428,159 @@ da auditoria. Continuam pendentes, e o relatório deve exibi-los como tais:
 - **Não** declara `AUDIT_PASSED`, não fecha finding, não altera severidade.
 - **Não** fecha `C-137`, que permanece `A(79/207)` com déficit 128 integralmente
   nominal.
+
+---
+
+## APR-2026-043 — as CINCO pendências de encerramento do run, decididas
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno), decisão sobre as cinco pendências
+listadas como condição de encerramento de `ERP-LEGACY-001-AUD-001`.
+
+**Nota de método, registrada porque importa:** ao pedir a lista, o dono afirmou
+que duas destas (`BUSINESS_RULES` §12 e o critério de reteste) já estariam
+decididas nesta sessão. **Não estavam** — verificado no histórico. O orquestrador
+recusou aplicá-las como se estivessem, por ser exatamente o que a Regra 6 veda,
+e as devolveu como decisão pendente. O dono então as decidiu. **A recusa de
+inventar decisão do dono é o que torna esta entrada um registro e não uma
+inferência.**
+
+---
+
+### D1 — Gate `G3`: **REDUÇÃO FORMAL pela via do `G8`**
+
+**Texto verbatim:**
+
+> *"Aprovo a redução formal via `G8`. É um caminho legítimo, não atalho: o
+> próprio gate já previa esse mecanismo de exclusão explícita registrada.
+> Reconcilia sem refazer trabalho, e o registro fica honesto ('reduzido por
+> decisão', não 'contornado')."*
+>
+> *"Reduzir `G3` formalmente pela via do `G8`: a exclusão nominal da EMENDA-01 é
+> a exclusão explícita que o `G8` prevê. Registrar como reconciliação, não como
+> contorno."*
+
+**A contradição que isto resolve:** `G3` (`APPROVALS.md:584`) veda amostragem
+reduzida em integridade de dados, dado pessoal, contratos e regras críticas;
+`APR-2026-037` aceita cobertura parcial em bandas que os incluem. Os dois
+aprovados, os dois em vigor.
+
+**O mecanismo aplicado é o do próprio `G8`** (`:585`): *"Redução futura = nova
+decisão humana registrada como exclusão explícita."* A exclusão nominal da
+EMENDA-01 — 25 tabelas de dinheiro, 8 de dado pessoal, 22 de 2ª ordem, 53 da
+banda excluída, 22 sem model, todas nomeadas em `T-43` §9 e `T-45` §9 — **é** a
+exclusão explícita que o `G8` prevê.
+
+**Estado do `G3` a partir desta entrada: `REDUCED_BY_DECISION`.** O gate **não
+foi contornado**; foi reduzido por decisão humana registrada, com a exclusão
+nominal como instrumento. **`APR-2026-038` D3 fica RESOLVIDA** — deixa de ser
+condição de fechamento e passa a fato registrado.
+
+**Redação vinculante para o relatório final:** apresentar como **reconciliação
+formal**, não como contorno nem como pendência. A §1 do Executivo deve ser
+reescrita nesses termos, **preservando o histórico** — que houve contradição, e
+que ela foi resolvida por decisão, não por omissão.
+
+### D2 — `C-136`: **DIVIDIR**
+
+**Texto verbatim:** *"dividir — matriz completa só nas rotas de categoria vedada
+pelo `G3`, exclusão nominal com dimensão declarada no resto. Depende de `F-5`
+(1 varredura)."*
+
+- **Cobertura integral** da matriz de 11 dimensões apenas nas rotas de categoria
+  vedada pelo `G3`.
+- **Exclusão nominal com dimensão declarada** no complemento — dizer **quais
+  colunas** não foram preenchidas e **em quais rotas**, nunca frase genérica.
+- **Pré-requisito:** `F-5`, a lista nominal IN × OUT dos 174 endpoints. Uma
+  varredura. **Despachada.**
+
+Isto substitui a leitura literal de ~50 lotes, que era o único item da lista
+capaz de mover o prazo de dias para meses.
+
+### D3 — `BUSINESS_RULES` §12: **prevalece o item 3**
+
+**Texto verbatim:**
+
+> *"Vou com a recomendação dele, mais simples e mais bem fundamentada que minha
+> ideia anterior: item 3 (ativos) prevalece, porque é o que o código implementa,
+> o que o model cita, e o que torna a invariante testável. Item 2 vira só
+> correção de texto, não regra concorrente."*
+
+**Regra vigente, sem ambiguidade:**
+
+```
+saldo_total(produto) = Σ saldo(produto, depósito) para todo depósito ATIVO
+```
+
+O item 2 (`docs/business/BUSINESS_RULES.md:344-349`), que diz *"todos os
+depósitos"*, **não é regra concorrente** — é **redação a corrigir**, e a correção
+entra no Remediation Backlog como item de documentação (OpusCore).
+
+**Resolve `OBS-T48-02`**, que bloqueava a remediação de `T41-EST-F01`. A SanaCore
+agora tem regra declarada e **não precisa inventá-la** (Regra 6).
+
+**Registro de método:** o dono trocou a própria ideia anterior pela recomendação
+do auditor, declarando o motivo. Fica registrado como **mudança de posição por
+argumento**, não como correção de erro.
+
+### D4 — `T41-EST-F01` e `T41-RH-F02`: **devolvidos à trilha de origem**
+
+**Texto verbatim:** *"Aprovo devolver os dois à trilha de origem para reescrever
+antes de remediação. Fechamento falso custa mais depois do que corrigir agora."*
+
+O `T-48` demonstrou que os critérios estão subdimensionados:
+
+- `T41-EST-F01` cobre **1 de 4** vetores — faltam crédito em depósito inativo,
+  contagem de inventário que não valida o depósito, e transferência pendente
+  aprovada depois.
+- `T41-RH-F02` cobre **2 de 4** tabelas — a aptidão vive em quatro, e a Admissão
+  não usa o gate comum.
+
+**Os dois permanecem HIGH, `CONFIRMED`, e NÃO liberados à SanaCore** até o
+critério ser reescrito. **Despachado** ao autor de origem.
+
+**Fundamento registrado, que vira precedente:** *"fechamento falso custa mais
+depois do que corrigir agora"* — um reteste que passa com critério subdimensionado
+fecha o finding sem fechar o defeito, e a VeriCore não poderia reabri-lo sem
+delta audit.
+
+### D5 — Blocos `B1`-`B9`: **critério de D1 aplicado em cascata**
+
+**Texto verbatim:**
+
+> *"Aplicar o critério do item 1 em cascata a `B2`, `B3`, `B3-bis`, `B4`, `B5`,
+> `B7`, `B8` (cobrir onde o `G3` veda, exclusão nominal no resto). `B6` permanece
+> com a VeriCore, sem decisão minha. `B9` (prova dinâmica) fica para decisão
+> separada, em outra sessão — não autorizo execução de ~190 pedidos agora."*
+
+| Bloco | Decisão |
+|---|---|
+| `B1` (`C-136`) | **dividir** — D2 |
+| `B2`, `B3`, `B3-bis`, `B4`, `B5`, `B7`, `B8` | **critério de D1 em cascata**: cobrir onde o `G3` veda, exclusão nominal no resto |
+| `B6` | **não é do dono** — definição da VeriCore, corretamente atribuída |
+| `B9` (prova dinâmica) | **decisão separada, em outra sessão.** Execução de ~190 pedidos **NÃO autorizada** |
+
+**A distinção que o dono fez em `B9` e que fica registrada como precedente:**
+*"prova dinâmica é execução, não documentação — decido separada, não hoje, para
+não autorizar às cegas 190 pedidos."* Autorizar coleta dinâmica em bloco é
+categoria diferente de autorizar critério de cobertura documental, e não se
+resolve por cascata.
+
+---
+
+## Estado de encerramento após esta entrada
+
+**As cinco pendências de encerramento estão DECIDIDAS.** O que resta é
+**execução**, nominal e curta:
+
+1. `F-5` — 1 varredura (**despachada**)
+2. Reescrita dos dois critérios de reteste (**despachada**)
+3. Aplicação em cascata do critério de D1 aos blocos (**despachada** ao director)
+4. Revisão dos três relatórios finais para refletir estas decisões
+5. Correção da redação do `BUSINESS_RULES` §12 — item de backlog, OpusCore
+
+**Permanece fora deste encerramento, por decisão expressa:** `B9`, a prova
+dinâmica (~190 pedidos), reservada a sessão própria.
+
+**Nenhum `AUDIT_PASSED` é declarado por esta entrada** — o veredito final é da
+VeriCore sobre evidência (Regra 4), e depende da execução acima.
