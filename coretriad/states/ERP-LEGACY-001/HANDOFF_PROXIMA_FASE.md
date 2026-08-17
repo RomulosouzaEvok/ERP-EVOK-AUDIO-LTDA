@@ -153,6 +153,37 @@ Vale mais que o placar. Cada uma custou um erro real para ser aprendida.
 
 ---
 
+## 6-BIS. PARADA DETERMINADA PELO DONO — leia antes de despachar qualquer coisa
+
+**Decisão de 2026-08-17 (`APR-2026-051`, e reforço explícito do dono):**
+
+> *"Termine o `CASE-005` até o fechamento (reteste da VeriCore, veredito final) e
+> **PARE**. Não inicie nenhum caso novo."*
+
+**`CASE-006` (`AUD-INTEG-03`) NÃO está autorizado a começar.** Ele é o próximo da
+fila (`T-39` §2.1, estrato 1 posição 3, cluster `C-31` com `T32-SUP-F03`), mas
+abrir caso exige **novo aval do dono**. Fila não é autorização.
+
+### Divisão de papéis a partir do `CASE-006` — permanente
+
+| Papel | Motor |
+|---|---|
+| Triagem / causa-raiz | **Claude Code** |
+| **Implementação** | **Codex** — `.codex/agents/sanacore-remediation-engineer.toml` |
+| Segunda opinião / revisão | **Claude Code** |
+| Reteste e fechamento | **VeriCore** — autoridade inalterada (Regra 4) |
+
+**Claude Code não implementa mais nada a partir do `CASE-006`.** Estrutura pronta
+e testada: credencial `codex_dev`, agente `.toml`, worktree
+`sana/ERP-LEGACY-001/<CASE-ID>`, git hook (`sh scripts/install-git-hooks.sh` em
+máquina nova). Ver `coretriad/infra/CODEX_ENGINE_SETUP.md`.
+
+Precedente que motivou a regra: **`RC-PROC-02`** — o orquestrador implementou
+remediação (commit `2a10049`) e o artefato saiu com poder discriminante quase
+nulo. A faixa errada produziu o pior artefato do caso.
+
+---
+
 ## 7. Como retomar
 
 1. Leia este arquivo, o **`AUDIT_VERDICT.md`** e o **Relatório Executivo** — nessa ordem.
