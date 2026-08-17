@@ -2918,3 +2918,70 @@ evidência, processo já estabelecido); **Codex atua como segunda opinião de
 causa-raiz e revisão do patch, antes do reteste da VeriCore.**
 
 Esta entrada **autoriza a abertura** desse caso.
+
+---
+
+## APR-2026-048 — Codex assume o PAPEL `sanacore-remediation-engineer` (sem estrutura paralela)
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad — ajuste de plano
+**Base:** `CORETRIAD_MASTER_SPEC.md` Parte VI §35
+**Evidência de implantação:** `coretriad/infra/CODEX_ENGINE_SETUP.md`
+
+### O ajuste
+
+Substitui o desenho de `APR-2026-047` (Codex como parecerista externo). O Codex
+passa a exercer o **papel institucional** `sanacore-remediation-engineer` já
+definido — **mesmos contratos, mesma nomenclatura, mesma worktree, mesmo formato
+de evidência. Nada de estrutura paralela.** O prefixo `sanacore-` é mantido para
+que a auditabilidade mostre o mesmo papel, independente do motor.
+
+### Itens executados
+
+| # | Item | Estado |
+|---|---|---|
+| 1 | Role `codex_dev`: sem `CONNECT` em produção, escrita normal em `erp_evok_audio_test` | **FEITO E TESTADO** |
+| 2 | `.codex/agents/sanacore-remediation-engineer.toml`, espelhando o contrato | **FEITO** |
+| 3 | Worktree `sana/ERP-LEGACY-001/<CASE-ID>` — mesma convenção, sem pasta `codex/` | **FEITO** |
+| 4 | Git hook `pre-commit` + `pre-push`, agnóstico de ferramenta | **FEITO E TESTADO** |
+| 5 | Fluxo a→e registrado | **FEITO** |
+
+### Achados da própria implantação — registrados porque mudam o resultado
+
+**A barreira de ontem protegeu a credencial de hoje.** Nenhum comando precisou ser
+emitido contra produção: o `REVOKE CONNECT ... FROM PUBLIC` de 2026-08-16 já havia
+retirado o `CONNECT` de `PUBLIC`, então `codex_dev` nasceu sem acesso. Medido
+antes de agir, não assumido.
+
+**O git hook falhou ABERTO no primeiro teste, e o teste é que pegou.**
+`core.hooksPath` relativo não resolve numa worktree `sana/` cuja branch é anterior
+à criação de `.githooks/` — o commit passou. Corrigido para caminho absoluto e
+resolução por `$(dirname "$0")`. O commit de teste foi revertido e a worktree
+`CASE-003` restaurada a `95aeff4`, verificado. **Se a bateria não executasse
+`git commit` de verdade, a guarda teria sido declarada pronta estando furada.**
+
+**O `org-isolation.js` bloqueou a própria sessão principal** ao tentar ler o
+catálogo do cluster, por conter a string do banco de produção. O hook agiu
+corretamente; a consequência está na pendência abaixo.
+
+### Pendência de prova — D1
+
+**Não executada:** a prova dinâmica de que `codex_dev` é recusada por produção.
+O comando exigiria nomear o banco, e o hook bloqueia — inclusive a sessão
+principal. Existe a prova **estática** (ausência na ACL; `PUBLIC` sem `CONNECT`),
+que é o mecanismo; falta a **confirmação** dinâmica, que o precedente `evok_audit`
+teve.
+
+Para igualar o precedente é preciso **autorização humana explícita e escopada**
+para um único comando de tentativa de conexão, que **deve falhar**. Caso a caso,
+nunca por extensão (`APR-2026-016`). **Não decidido aqui.**
+
+### Limites declarados
+
+- `git commit --no-verify` contorna o hook: guarda contra **engano**, não barreira
+  contra **intenção**.
+- `core.hooksPath` é config local — máquina nova precisa rodar
+  `sh scripts/install-git-hooks.sh`. Relevante porque o projeto opera em duas
+  máquinas.
+- A autoridade de fechamento da VeriCore é **inalterada** por esta entrada
+  (Regras 3 e 4).

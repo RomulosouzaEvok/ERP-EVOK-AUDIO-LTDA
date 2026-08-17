@@ -1,0 +1,18 @@
+#!/bin/sh
+# CORETRIAD — pre-commit. Avalia o que está no stage.
+#
+# A guarda é resolvida pelo diretório DESTE script, nunca por
+# `git rev-parse --show-toplevel`. Motivo medido em 2026-08-17: numa worktree
+# `sana/` cuja branch é anterior à criação de `.githooks/`, o toplevel não
+# contém a guarda — e o hook falharia ABERTO, que é o modo errado.
+set -eu
+
+guarda="$(dirname "$0")/coretriad-guard.sh"
+
+# Fail-closed: sem a guarda, não commite achando que está protegido.
+if [ ! -f "$guarda" ]; then
+    echo "CORETRIAD: coretriad-guard.sh não encontrado em $(dirname "$0") — commit bloqueado por precaução." >&2
+    exit 1
+fi
+
+sh "$guarda" "$(git diff --cached --name-only --diff-filter=ACMR)"

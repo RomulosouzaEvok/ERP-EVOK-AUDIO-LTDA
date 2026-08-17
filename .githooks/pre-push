@@ -1,0 +1,30 @@
+#!/bin/sh
+# CORETRIAD — pre-push. Segunda camada: pega o que passou por `--no-verify`
+# no commit. Avalia os arquivos dos commits que estão sendo enviados.
+set -eu
+
+guarda="$(dirname "$0")/coretriad-guard.sh"
+
+if [ ! -f "$guarda" ]; then
+    echo "CORETRIAD: coretriad-guard.sh não encontrado em $(dirname "$0") — push bloqueado por precaução." >&2
+    exit 1
+fi
+
+z40="0000000000000000000000000000000000000000"
+
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+    [ "$local_sha" = "$z40" ] && continue
+
+    if [ "$remote_sha" = "$z40" ]; then
+        base=$(git merge-base "$local_sha" HEAD 2>/dev/null || echo "")
+        if [ -n "$base" ] && [ "$base" != "$local_sha" ]; then
+            arquivos=$(git diff --name-only "$base" "$local_sha")
+        else
+            arquivos=$(git show --pretty=format: --name-only "$local_sha")
+        fi
+    else
+        arquivos=$(git diff --name-only "$remote_sha" "$local_sha")
+    fi
+
+    sh "$guarda" "$arquivos"
+done
