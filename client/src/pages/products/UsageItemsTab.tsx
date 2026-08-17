@@ -31,7 +31,6 @@ const usageItemSchema = z.object({
   descricao: z.string().trim().min(1, 'Informe a descrição.'),
   tipo: z.enum(USAGE_ITEM_TYPES),
   unidade: z.string().trim().min(1, 'Informe a unidade (ex.: UN, KG).'),
-  estoque_atual: z.coerce.number().min(0).optional(),
   custo_padrao: z.coerce.number().min(0).optional(),
 });
 
@@ -84,7 +83,6 @@ export function UsageItemsTab() {
         descricao: values.descricao,
         tipo: values.tipo,
         unidade: values.unidade,
-        estoque_atual: values.estoque_atual,
         custo_padrao: values.custo_padrao,
       }),
     onSuccess: () => {
@@ -187,15 +185,11 @@ export function UsageItemsTab() {
                   <Input id="usage-descricao" {...register('descricao')} />
                   {errors.descricao && <p className="text-sm text-destructive">{errors.descricao.message}</p>}
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="usage-unidade">Unidade</Label>
                     <Input id="usage-unidade" placeholder="UN, KG, PC..." {...register('unidade')} />
                     {errors.unidade && <p className="text-sm text-destructive">{errors.unidade.message}</p>}
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="usage-estoque">Estoque inicial</Label>
-                    <Input id="usage-estoque" type="number" step="any" {...register('estoque_atual')} />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="usage-custo">Custo padrão</Label>

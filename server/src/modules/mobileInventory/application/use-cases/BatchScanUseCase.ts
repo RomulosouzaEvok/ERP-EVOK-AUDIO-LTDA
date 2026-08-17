@@ -1,82 +1,81 @@
 /**
- * Use case: registrar em lote movimentações de estoque via scanner mobile.
+ * Use case: registra movimentacoes em lote via scanner mobile.
  *
- * Cada item da lista é processado com `InventoryService.adjust` (lock
- * pessimista, validação e persistência atômica), dentro de uma única
- * transação Sequelize fornecida pelo controller — se qualquer item falhar,
- * toda a transação deve ser revertida pelo chamador.
- *
- * @module modules/mobileInventory/application/use-cases/BatchScanUseCase
+ * CASE-006: cada item precisa informar deposito para que Product.quantity e
+ * product_warehouse_stock sejam atualizados atomica e consistentemente.
  */
 
 import UseCase from '../../../../shared/application/UseCase';
 import { ValidationError, NotFoundError } from '../../../../errors';
 import MobileInventoryRepository from '../../domain/repositories/MobileInventoryRepository';
 
-const InventoryService: any = require('../../../../services/inventoryService');
+const ManualStockAdjustmentService: any = require('../../../../services/manualStockAdjustmentService');
 
 interface BatchScanItem {
   product_code?: string;
   quantity?: number | string;
   type?: string;
+  warehouse_code?: string;
   description?: string;
 }
 
 interface BatchScanInput {
   items?: BatchScanItem[];
+  warehouse_code?: string;
   userId: number;
-  transaction: unknown;
+  transaction: any;
 }
 
 class BatchScanUseCase extends UseCase<BatchScanInput, any> {
   private readonly mobileInventoryRepository: MobileInventoryRepository;
 
-  /** @param mobileInventoryRepository - Repositorio de inventário mobile. */
   public constructor(mobileInventoryRepository: MobileInventoryRepository) {
     super();
     this.mobileInventoryRepository = mobileInventoryRepository;
   }
 
-  /**
-   * @param input - Lista de itens a processar, id do usuário e transação ativa.
-   * @returns Quantidade de itens processados e detalhes de cada movimentação.
-   * @throws {ValidationError} Se a lista estiver vazia ou algum item tiver dados inválidos.
-   * @throws {NotFoundError} Se algum produto referenciado não existir.
-   */
   public async execute(input: BatchScanInput): Promise<any> {
     const { items, userId, transaction } = input;
 
     if (!items || items.length === 0) {
-      throw new ValidationError('Lista de itens é obrigatória');
+      throw new ValidationError('Lista de itens e obrigatoria');
     }
 
     const results: any[] = [];
     for (const item of items) {
       const { product_code, quantity, type, description } = item;
-      if (!product_code || quantity === undefined || !type) {
-        throw new ValidationError('Cada item deve ter product_code, quantity e type');
+      const warehouseCode = item.warehouse_code ?? input.warehouse_code;
+
+      if (!product_code || quantity === undefined || !type || !warehouseCode) {
+        throw new ValidationError('Cada item deve ter product_code, quantity, type e warehouse_code');
       }
-      const qty = parseFloat(String(quantity));
-      if (qty <= 0) {
-        throw new ValidationError(`Quantidade inválida para ${product_code}`);
+
+      const qty = Number(quantity);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        throw new ValidationError(`Quantidade invalida para ${product_code}`);
       }
       if (!['in', 'out'].includes(type)) {
-        throw new ValidationError(`Tipo inválido para ${product_code}`);
+        throw new ValidationError(`Tipo invalido para ${product_code}`);
       }
 
       const product = await this.mobileInventoryRepository.findProductByCode(product_code);
       if (!product) {
-        throw new NotFoundError(`Produto ${product_code} não encontrado`);
+        throw new NotFoundError(`Produto ${product_code} nao encontrado`);
+      }
+      if (type === 'out' && Number(product.quantity) < qty) {
+        throw new ValidationError(`Estoque insuficiente para ${product_code}. Disponivel: ${product.quantity}`);
       }
 
-      const movement = await InventoryService.adjust(
-        product.id,
+      const movement = await ManualStockAdjustmentService.adjustWithWarehouse({
+        productId: product.id,
         type,
-        qty,
+        quantity: qty,
         userId,
-        description || `Batch scan ${type}`,
-        transaction
-      );
+        reason: description || `Batch scan ${type}`,
+        transaction,
+        warehouseCode,
+      });
+
       results.push({ product_code, product_name: product.name, type, quantity: qty, movement_id: movement.movementId });
     }
 

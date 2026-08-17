@@ -28,7 +28,6 @@ describeIntegration('Regressao: concorrencia em POST /api/products/movements', (
         code: `CONC-${Date.now()}`,
         category_id: categoryId,
         unit: 'UN',
-        quantity: 5,
         min_quantity: 1,
         cost_price: 1,
         price: 2,
@@ -36,7 +35,25 @@ describeIntegration('Regressao: concorrencia em POST /api/products/movements', (
     expect(product.status).toBe(201);
     const productId = product.body.data.id;
 
-    const payload = { product_id: productId, type: 'out', quantity: 5, description: 'Teste de concorrencia' };
+    const seed = await api()
+      .post('/api/inventory/movements')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        product_id: productId,
+        type: 'in',
+        quantity: 5,
+        warehouse_code: 'INSUMOS',
+        description: 'Seed seguro para teste de concorrencia',
+      });
+    expect(seed.status).toBe(201);
+
+    const payload = {
+      product_id: productId,
+      type: 'out',
+      quantity: 5,
+      warehouse_code: 'INSUMOS',
+      description: 'Teste de concorrencia',
+    };
 
     const [first, second] = await Promise.allSettled([
       api().post('/api/products/movements').set('Authorization', `Bearer ${token}`).send(payload),

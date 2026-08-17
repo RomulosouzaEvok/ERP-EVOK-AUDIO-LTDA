@@ -23,6 +23,7 @@ export interface ScanItemRequest {
   product_code: string;
   quantity: number;
   type: MovementType;
+  warehouse_code: string;
   description?: string;
 }
 

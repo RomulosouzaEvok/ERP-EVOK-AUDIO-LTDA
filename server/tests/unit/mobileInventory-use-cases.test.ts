@@ -24,7 +24,7 @@ describe('Use cases de inventário mobile', () => {
     const useCase = new ScanItemUseCase(mobileInventoryRepository as any);
 
     await expect(
-      useCase.execute({ product_code: 'XYZ', quantity: 5, type: 'in', userId: 1, transaction: {} })
+      useCase.execute({ product_code: 'XYZ', quantity: 5, type: 'in', warehouse_code: 'INSUMOS', userId: 1, transaction: {} })
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -36,7 +36,7 @@ describe('Use cases de inventário mobile', () => {
     const useCase = new ScanItemUseCase(mobileInventoryRepository as any);
 
     await expect(
-      useCase.execute({ product_code: 'DRV-6', quantity: 5, type: 'out', userId: 1, transaction: {} })
+      useCase.execute({ product_code: 'DRV-6', quantity: 5, type: 'out', warehouse_code: 'INSUMOS', userId: 1, transaction: {} })
     ).rejects.toBeInstanceOf(ValidationError);
   });
 

@@ -7,7 +7,7 @@
  * e `ScanItemUseCase.ts` / `ListMobileInventoryMovementsUseCase.ts`):
  *
  *   POST /api/mobile-inventory/scan
- *     Request:  { product_code, quantity, type: 'in'|'out', description? }
+ *     Request:  { product_code, quantity, type: 'in'|'out', warehouse_code, description? }
  *     Response: { success: true, data: { product: {id,name,code}, movement, new_quantity } }
  *     Requer permissão `estoque:operate` (403 se o perfil não tiver o nível).
  *

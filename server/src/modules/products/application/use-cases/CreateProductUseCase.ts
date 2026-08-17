@@ -70,7 +70,7 @@ class CreateProductUseCase extends UseCase {
       category_id: input.category_id,
       price: parseFloat(String(input.price)),
       cost_price: input.cost_price !== undefined ? parseFloat(String(input.cost_price)) : 0,
-      quantity: input.quantity || 0,
+      quantity: 0,
       min_quantity: input.min_quantity || 5,
       product_type: input.product_type || 'finished',
       ncm: input.ncm || '85182100',

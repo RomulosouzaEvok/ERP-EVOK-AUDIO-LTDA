@@ -22,6 +22,7 @@ export default function HomeScreen() {
   const { user, logout } = useAuth();
 
   const [productCode, setProductCode] = useState('');
+  const [warehouseCode, setWarehouseCode] = useState('');
   const [quantity, setQuantity] = useState('');
   const [type, setType] = useState<MovementType>('in');
   const [description, setDescription] = useState('');
@@ -48,10 +49,15 @@ export default function HomeScreen() {
     setErrorMessage(null);
 
     const trimmedCode = productCode.trim();
+    const trimmedWarehouseCode = warehouseCode.trim().toUpperCase();
     const parsedQuantity = Number(quantity);
 
     if (!trimmedCode) {
       setErrorMessage('Escaneie ou digite o código do produto.');
+      return;
+    }
+    if (!trimmedWarehouseCode) {
+      setErrorMessage('Informe o codigo do deposito.');
       return;
     }
     if (!quantity || Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
@@ -65,6 +71,7 @@ export default function HomeScreen() {
         product_code: trimmedCode,
         quantity: parsedQuantity,
         type,
+        warehouse_code: trimmedWarehouseCode,
         description: description.trim() || undefined,
       });
       setLastResult(result);
@@ -136,6 +143,17 @@ export default function HomeScreen() {
             <Text style={styles.scanButtonText}>Escanear</Text>
           </Pressable>
         </View>
+
+        <Text style={styles.label}>Deposito</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ex.: INSUMOS"
+          placeholderTextColor="#94A3B8"
+          value={warehouseCode}
+          onChangeText={setWarehouseCode}
+          autoCapitalize="characters"
+          editable={!submitting}
+        />
 
         <Text style={styles.label}>Quantidade</Text>
         <TextInput

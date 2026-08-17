@@ -55,7 +55,6 @@ const createItemSchema = z.object({
   descricao: z.string().trim().min(1, 'Informe a descrição.'),
   tipo: z.enum(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO', 'USO_E_CONSUMO', 'ATIVO_IMOBILIZADO']),
   unidade: z.string().trim().min(1, 'Informe a unidade (ex.: UN, KG).'),
-  estoque_atual: z.coerce.number().min(0).optional(),
   estoque_seguranca: z.coerce.number().min(0).optional(),
   lote_minimo: z.coerce.number().min(0).optional(),
   lead_time_dias: z.coerce.number().int().min(0).optional(),
@@ -192,15 +191,11 @@ export default function ItemMasterPage() {
                   <Input id="descricao" {...register('descricao')} />
                   {errors.descricao && <p className="text-sm text-destructive">{errors.descricao.message}</p>}
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="unidade">Unidade</Label>
                     <Input id="unidade" placeholder="UN, KG, PC..." {...register('unidade')} />
                     {errors.unidade && <p className="text-sm text-destructive">{errors.unidade.message}</p>}
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="estoque_atual">Estoque inicial</Label>
-                    <Input id="estoque_atual" type="number" step="any" {...register('estoque_atual')} />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="custo_padrao">Custo padrão</Label>

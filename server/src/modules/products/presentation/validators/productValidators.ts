@@ -13,6 +13,9 @@ const decimalQuantity = z.coerce.number().nonnegative().refine((value) => {
   const [, decimals = ''] = value.toString().split('.');
   return decimals.length <= 6;
 }, { message: 'Valor decimal deve ter no maximo 6 casas.' });
+const zeroInitialQuantity = decimalQuantity.refine((value) => value === 0, {
+  message: 'Saldo inicial nao pode ser informado no cadastro; use movimentacao/recebimento com deposito.',
+});
 
 const PRODUCT_TYPES = ['finished', 'semi_finished', 'component', 'raw_material'] as const;
 const PRODUCT_STATUSES = ['active', 'inactive'] as const;
@@ -60,7 +63,7 @@ export const createProductSchema = z.object({
   category_id: z.coerce.number().int().positive().optional(),
   price: z.coerce.number().positive('Preço deve ser maior que zero.'),
   cost_price: z.coerce.number().nonnegative().optional(),
-  quantity: decimalQuantity.optional(),
+  quantity: zeroInitialQuantity.optional(),
   min_quantity: decimalQuantity.optional(),
   product_type: z.enum(PRODUCT_TYPES).optional(),
   status: z.enum(PRODUCT_STATUSES).optional(),
@@ -99,6 +102,7 @@ export const productMovementSchema = z.object({
   product_id: z.coerce.number().int().positive(),
   type: z.enum(['in', 'out']),
   quantity: decimalQuantity.refine((value) => value > 0, { message: 'Quantidade deve ser maior que zero.' }),
+  warehouse_code: z.string().trim().min(1, 'Deposito e obrigatorio.').max(40),
   description: z.string().trim().max(500).optional(),
 }).strict();
 

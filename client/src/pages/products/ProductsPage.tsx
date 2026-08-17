@@ -41,7 +41,6 @@ const productSchema = z.object({
   code: z.string().min(1, 'Informe o código.'),
   category_id: z.coerce.number().int().positive('Selecione uma categoria.'),
   unit: z.string().min(1, 'Informe a unidade (ex.: UN, KG).'),
-  quantity: z.coerce.number().min(0),
   min_quantity: z.coerce.number().min(0),
   cost_price: z.coerce.number().min(0),
   price: z.coerce.number().min(0),
@@ -184,15 +183,9 @@ export default function ProductsPage() {
                       {errors.unit && <p className="text-sm text-destructive">{errors.unit.message}</p>}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="quantity">Quantidade inicial</Label>
-                      <Input id="quantity" type="number" step="any" {...register('quantity')} />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-1.5">
                       <Label htmlFor="min_quantity">Estoque mínimo</Label>
-                      <Input id="min_quantity" type="number" step="any" {...register('min_quantity')} />
-                    </div>
+                    <Input id="min_quantity" type="number" step="any" {...register('min_quantity')} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">

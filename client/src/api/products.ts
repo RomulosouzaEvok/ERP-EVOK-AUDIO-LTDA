@@ -37,7 +37,6 @@ export interface ProductInput {
   code: string;
   category_id: number;
   unit: string;
-  quantity: number;
   min_quantity: number;
   cost_price: number;
   price: number;
@@ -72,6 +71,7 @@ export interface StockMovementInput {
   product_id: number;
   type: 'in' | 'out';
   quantity: number;
+  warehouse_code: string;
   description?: string;
 }
 

@@ -5,6 +5,7 @@ import UseCase from '../../../../shared/application/UseCase';
 const InventoryMovementEntity = require('../../domain/entities/InventoryMovementEntity');
 const InventoryService = require('../../../../services/inventoryService');
 const WarehouseStockService = require('../../../../services/warehouseStockService');
+const QuarantineBalanceService = require('../../../../services/quarantineBalanceService');
 const SequelizeItemRepository = require('../../../items/infrastructure/sequelize/SequelizeItemRepository');
 const { BusinessRuleError } = require('../../../../errors');
 
@@ -101,6 +102,14 @@ class CreateInventoryMovementUseCase extends UseCase {
     // didatico em removeFromWarehouse), garantindo que products.quantity
     // e o saldo por deposito nunca divirjam.
     if (input.type === 'out') {
+      const withheldByProduct = await QuarantineBalanceService.sumWithheldByProduct([Number(input.product_id)], transaction);
+      const withheld = Number(withheldByProduct.get(Number(input.product_id)) ?? 0);
+      if (withheld > 0) {
+        throw new BusinessRuleError(
+          'Saida sem lote bloqueada: o produto possui saldo em quarentena/bloqueado. Use um fluxo com lote liberado pela Qualidade.',
+          { product_id: Number(input.product_id), withheld_quantity: withheld }
+        );
+      }
       await WarehouseStockService.removeFromWarehouse(input.product_id, warehouse.id, input.quantity, transaction);
     }
 

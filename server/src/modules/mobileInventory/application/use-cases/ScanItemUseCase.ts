@@ -1,55 +1,44 @@
 /**
- * Use case: registrar uma movimentação de estoque via scanner mobile
- * (entrada/saída de um único item).
+ * Use case: registra uma movimentacao de estoque via scanner mobile
+ * (entrada/saida de um unico item).
  *
- * A lógica transacional (lock pessimista, validação de estoque disponível,
- * persistência atômica do `InventoryMovement`) permanece 100% em
- * `server/src/services/inventoryService.ts` (`InventoryService.adjust`),
- * conforme já reutilizado pelo módulo `inventory`
- * (`CreateInventoryMovementUseCase`) — não duplicada aqui.
- *
- * @module modules/mobileInventory/application/use-cases/ScanItemUseCase
+ * CASE-006: o scan mobile agora exige deposito e passa pelo mesmo dual-write
+ * de estoque por deposito usado pelo modulo de inventario.
  */
 
 import UseCase from '../../../../shared/application/UseCase';
 import { ValidationError, NotFoundError } from '../../../../errors';
 import MobileInventoryRepository from '../../domain/repositories/MobileInventoryRepository';
 
-const InventoryService: any = require('../../../../services/inventoryService');
+const ManualStockAdjustmentService: any = require('../../../../services/manualStockAdjustmentService');
 
 interface ScanItemInput {
   product_code?: string;
   quantity?: number | string;
   type?: string;
+  warehouse_code?: string;
   description?: string;
   userId: number;
-  transaction: unknown;
+  transaction: any;
 }
 
 class ScanItemUseCase extends UseCase<ScanItemInput, any> {
   private readonly mobileInventoryRepository: MobileInventoryRepository;
 
-  /** @param mobileInventoryRepository - Repositorio de inventário mobile. */
   public constructor(mobileInventoryRepository: MobileInventoryRepository) {
     super();
     this.mobileInventoryRepository = mobileInventoryRepository;
   }
 
-  /**
-   * @param input - Dados do scan (product_code, quantity e type obrigatórios), id do usuário e transação ativa.
-   * @returns Produto, movimentação registrada e nova quantidade em estoque.
-   * @throws {ValidationError} Se dados obrigatórios estiverem ausentes/inválidos.
-   * @throws {NotFoundError} Se o produto não existir.
-   * @throws {ValidationError} Se o estoque for insuficiente para saída (`type='out'`).
-   */
   public async execute(input: ScanItemInput): Promise<any> {
-    const { product_code, quantity, type, description, userId, transaction } = input;
+    const { product_code, quantity, type, warehouse_code, description, userId, transaction } = input;
 
-    if (!product_code || quantity === undefined || !type) {
-      throw new ValidationError('Código do produto, quantidade e tipo são obrigatórios');
+    if (!product_code || quantity === undefined || !type || !warehouse_code) {
+      throw new ValidationError('Codigo do produto, quantidade, tipo e deposito sao obrigatorios');
     }
-    const qty = parseInt(String(quantity), 10);
-    if (qty <= 0) {
+
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
       throw new ValidationError('Quantidade deve ser maior que zero');
     }
     if (!['in', 'out'].includes(type)) {
@@ -58,25 +47,26 @@ class ScanItemUseCase extends UseCase<ScanItemInput, any> {
 
     const product = await this.mobileInventoryRepository.findProductByCode(product_code);
     if (!product) {
-      throw new NotFoundError('Produto não encontrado');
+      throw new NotFoundError('Produto nao encontrado');
     }
-    if (type === 'out' && product.quantity < qty) {
-      throw new ValidationError(`Estoque insuficiente. Disponível: ${product.quantity}`);
+    if (type === 'out' && Number(product.quantity) < qty) {
+      throw new ValidationError(`Estoque insuficiente. Disponivel: ${product.quantity}`);
     }
 
-    const movement = await InventoryService.adjust(
-      product.id,
+    const movement = await ManualStockAdjustmentService.adjustWithWarehouse({
+      productId: product.id,
       type,
-      qty,
+      quantity: qty,
       userId,
-      description || `Scan mobile ${type}`,
-      transaction
-    );
+      reason: description || `Scan mobile ${type}`,
+      transaction,
+      warehouseCode: warehouse_code,
+    });
 
     return {
       product: { id: product.id, name: product.name, code: product.code },
       movement,
-      new_quantity: movement.quantityAfter
+      new_quantity: movement.quantityAfter,
     };
   }
 }

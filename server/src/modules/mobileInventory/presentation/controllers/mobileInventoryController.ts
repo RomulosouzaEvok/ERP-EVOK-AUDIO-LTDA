@@ -38,7 +38,7 @@ exports.batchScan = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = (req as any).user;
     const useCase = new BatchScanUseCase(mobileInventoryRepository);
-    const result = await useCase.execute({ items: req.body.items, userId: user.id, transaction: t });
+    const result = await useCase.execute({ items: req.body.items, warehouse_code: req.body.warehouse_code, userId: user.id, transaction: t });
     await t.commit();
     res.json({ success: true, data: result });
   } catch (error) {

@@ -93,7 +93,6 @@ export interface CreateItemInput {
   descricao: string;
   tipo: ItemType;
   unidade: string;
-  estoque_atual?: number;
   estoque_seguranca?: number;
   lote_minimo?: number;
   lead_time_dias?: number;

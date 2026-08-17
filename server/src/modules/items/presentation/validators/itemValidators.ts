@@ -3,6 +3,9 @@ import { ValidationError } from '../../../../errors';
 import { decimalQuantitySchema } from '../../../../shared/utils/decimal';
 
 const decimalLike = decimalQuantitySchema();
+const zeroInitialStock = z.coerce.number().min(0).refine((value) => value === 0, {
+  message: 'Estoque inicial nao pode ser informado no cadastro; use movimentacao/recebimento com deposito.',
+});
 
 /** Schema para criar item industrial. */
 export const createItemSchema = z.object({
@@ -11,7 +14,7 @@ export const createItemSchema = z.object({
   tipo: z.enum(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO', 'USO_E_CONSUMO', 'ATIVO_IMOBILIZADO']),
   unidade: z.string().trim().min(1).max(12),
   status: z.enum(['ATIVO', 'INATIVO', 'BLOQUEADO']).optional(),
-  estoque_atual: z.coerce.number().min(0).optional(),
+  estoque_atual: zeroInitialStock.optional(),
   estoque_reservado: z.coerce.number().min(0).optional(),
   estoque_seguranca: z.coerce.number().min(0).optional(),
   lote_minimo: z.coerce.number().min(0).optional(),
