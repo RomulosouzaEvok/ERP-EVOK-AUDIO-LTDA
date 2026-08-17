@@ -31,6 +31,13 @@ const booleanFromEnv = z.preprocess((value) => {
 }, z.boolean());
 
 const runtimeEnvSchema = z.object({
+  // AUD-AUTHN-01 / CASE-005 — o default 'development' e' MANTIDO de proposito:
+  // torna-lo obrigatorio reprovaria todo boot de script, CLI e ferramenta que
+  // hoje nao declara NODE_ENV, e essa mudanca de regime pertence a `T18-F02`
+  // (estrato 2), nao a este caso. O que AUD-AUTHN-01 exigia era que a guarda de
+  // JWT_SECRET parasse de DEPENDER deste default — ver o bloco sempre ativo no
+  // inicio do `superRefine` abaixo. As demais oito guardas continuam restritas
+  // a producao e continuam sendo item aberto de `T18-F02`.
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(5000),
   DB_HOST: z.string().min(1).default('localhost'),
@@ -70,6 +77,36 @@ const runtimeEnvSchema = z.object({
   // regra. Ver a validação de produção no `superRefine` abaixo.
   PRODUCTION_TRACKING_REQUIRED: z.string().optional(),
 }).superRefine((env, ctx) => {
+  // ---------------------------------------------------------------------
+  // GUARDA SEMPRE ATIVA — nao depende de NODE_ENV (AUD-AUTHN-01, CASE-005).
+  //
+  // Ate 2026-08-17 esta verificacao vivia so depois do `return` abaixo. Como
+  // NODE_ENV tem default 'development' (`:34`) e o proprio repositorio instrui
+  // `NODE_ENV=development` (`.env.docker.example`, `server/.env.example`), a
+  // rejeicao de chave de assinatura fraca era codigo morto em qualquer boot que
+  // nao declarasse producao — que e' o boot normal. Com um default de
+  // JWT_SECRET publicado no `docker-compose.yml`, qualquer leitor do
+  // repositorio podia assinar um token valido para qualquer usuario.
+  //
+  // A chave de assinatura nao tem versao "de brincadeira": um segredo fraco em
+  // desenvolvimento assina token que o mesmo codigo aceita em qualquer lugar.
+  // Por isso a regra vale em todos os ambientes.
+  //
+  // AUSENCIA de JWT_SECRET continua NAO reprovando fora de producao: quem nao
+  // emite nem verifica token (migrations, seeds, ferramentas de linha de
+  // comando) nao precisa de chave, e a falha continua acontecendo no uso, em
+  // `getJwtRuntimeConfig`. Em producao, a ausencia segue reprovada logo abaixo.
+  if (env.JWT_SECRET !== undefined
+    && (env.JWT_SECRET.length < 32 || ENV_PLACEHOLDER_PATTERN.test(env.JWT_SECRET))) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['JWT_SECRET'],
+      message: 'JWT_SECRET invalido: precisa de ao menos 32 caracteres e nao pode ser um placeholder '
+        + '(CHANGE_ME.../dev-only-change-me...) em ambiente nenhum. Gere um valor proprio '
+        + '(ex.: `openssl rand -hex 32`) e defina no .env.',
+    });
+  }
+
   if (env.NODE_ENV !== 'production') {
     return;
   }
@@ -100,11 +137,14 @@ const runtimeEnvSchema = z.object({
     });
   }
 
-  if (!env.JWT_SECRET || env.JWT_SECRET.length < 32 || ENV_PLACEHOLDER_PATTERN.test(env.JWT_SECRET)) {
+  // Comprimento e placeholder ja foram verificados acima, em todos os
+  // ambientes. O que sobra de especifico de producao e' a AUSENCIA: subir
+  // producao sem chave de assinatura declarada tem de reprovar no boot.
+  if (!env.JWT_SECRET) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['JWT_SECRET'],
-      message: 'JWT_SECRET deve ter ao menos 32 caracteres e nao pode usar placeholder em producao.',
+      message: 'JWT_SECRET deve ser definido em producao (ao menos 32 caracteres, sem placeholder).',
     });
   }
 
