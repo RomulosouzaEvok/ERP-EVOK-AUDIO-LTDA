@@ -1854,3 +1854,137 @@ genérica de escopo.
   demais permanecem sob a recusa de `APR-2026-024` Decisão A, cuja lista o dono
   pediu para ver antes de decidir.
 - **Não** altera severidade nem fecha finding algum.
+
+---
+
+## APR-2026-037 — EMENDA-01 a `APR-2026-024`: critério final de encerramento de cobertura
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto
+**Natureza:** **emenda formal a `APR-2026-024` Decisão A**, que havia recusado a
+Opção B (aceitar cobertura parcial com exclusão registrada no relatório final).
+**O dono emenda a própria recusa**, e é isso que esta entrada registra.
+
+### 1. A decisão, em texto verbatim
+
+> *"Siga pela terceira opção: feche a cobertura de dado de saúde (as 3 tabelas
+> da banda de dado pessoal que carregam essa categoria especial da LGPD) agora,
+> ~2-3 lotes. O restante das tabelas de 1ª ordem de `C-137` entra como exclusão
+> declarada por escrito, usando o mesmo mecanismo já validado
+> (`APR-2026-024`/`034`): cobertura total onde importa mais (dinheiro, estoque,
+> fiscal, dado de saúde), cobertura parcial documentada no restante."*
+
+### 2. O que muda em relação a `APR-2026-024` Decisão A
+
+`APR-2026-024` recusou aceitar cobertura parcial no relatório final. **Esta
+emenda a substitui por um critério explícito**, e não por uma exceção pontual:
+
+> **Cobertura total onde o risco é maior — dinheiro, estoque, fiscal e dado de
+> saúde. Cobertura parcial documentada, com lista nominal, no restante.**
+
+A recusa original permanece válida como **princípio** — cobertura parcial não é
+aceitável em silêncio. O que a emenda estabelece é que ela **é** aceitável
+quando a exclusão é nominal, escrita e submetida a decisão humana, que é
+exatamente o mecanismo de `APR-2026-034` e `APR-2026-036`.
+
+### 3. Estado da célula `C-137` no momento desta decisão
+
+| Item | Valor | Fonte |
+|---|---|---|
+| Cobertas | **67 / 207** | `T-42` §11 |
+| 1ª ordem sob escopo obrigatório (`APR-2026-036`) | 57 | `T-42` §2.2 |
+| 1ª ordem já coberta | 15 | `T-41` §6.1 + `T-42` §4 |
+| **Banda ESTOQUE de 1ª ordem** | **FECHADA (5/5)** | `T-42` §2.3 |
+| **Banda FISCAL de 1ª ordem** | **FECHADA (3/3)** | `T-42` §2.3 |
+| 1ª ordem restante | 42 | `T-42` §2.4 |
+
+### 4. O que AINDA SERÁ COBERTO por esta decisão
+
+**As tabelas de dado de saúde de trabalhador** (LGPD art. 5º II), identificadas
+em `T-42` §2.4 como as três em negrito:
+
+1. `sst_exames_complementares`
+2. `sst_acidentes`
+3. `sst_acidente_complementos`
+
+**Condição vinculante:** se a auditoria verificar que o conjunto de tabelas com
+dado de saúde é **maior que três**, o excedente **entra na cobertura**, não na
+exclusão — a decisão do dono é sobre a **categoria**, não sobre o número. O
+número três veio de uma marcação do auditor, não de um censo, e a diferença
+precisa ser reportada em vez de acomodada.
+
+Somam-se a `sst_asos`, já coberta em `T-41` §6.1.
+
+### 5. EXCLUSÃO DECLARADA — lista nominal completa
+
+Esta é a lista que a condição vinculante de `APR-2026-034` e `APR-2026-036`
+exige, e que o dono determinou registrar **antes** do relatório final. São
+tabelas **não auditadas** quanto aos 7 critérios de `C-137` — afirmação, não
+omissão.
+
+#### 5.1 De 1ª ordem, banda DINHEIRO — 25
+
+`purchase_order_items`, `purchase_requisition_items`, `rfq_items`, `rfq_quotes`,
+`import_processes`, `import_process_items`, `item_estruturas`,
+`item_detalhes_comerciais`, `production_routes`, `production_route_steps`,
+`non_conformities`, `maintenance_orders`, `service_orders`,
+`marketing_campaigns`, `marketing_events`, `hr_training_courses`,
+`hr_employee_job_history`, `hr_employee_benefits`, `engineering_projects`,
+`jur_contract_addendums`, `jur_legal_cases`, `facility_fines`,
+`facility_vehicle_details`, `facility_vehicle_documents`, `facility_fuel_records`.
+
+**Ressalva material, registrada e não minimizada:** dinheiro é banda de risco
+alto, e esta exclusão é a mais custosa da decisão. Os lotes anteriores
+encontraram, justamente em tabelas desta banda, o padrão sistêmico *"coluna
+monetária cuja unidade é função de outra coluna que não a declara"* — três
+ocorrências independentes (`T35-RH-F02`, `T41-TI-F04`, `T41-JUR-F05`). **É
+razoável supor que haja mais ocorrências entre estas 25, e elas não serão
+encontradas por esta auditoria.**
+
+#### 5.2 De 1ª ordem, banda DADO PESSOAL (sem dado de saúde) — 14
+
+`hr_employee_contracts`, `hr_admission_processes`, `hr_termination_processes`,
+`hr_vacation_accrual_periods`, `marketing_leads`,
+`marketing_lead_saneamento_log`, `sst_investigacoes_acidente`,
+`sst_acidente_testemunhas`, `sst_entregas_epi`, `sst_devolucoes_epi`,
+`jur_contract_signatories`, `jur_external_lawyers`, `facility_drivers`,
+`facility_visitors`.
+
+**Ressalva:** `sst_investigacoes_acidente` e `sst_acidente_testemunhas` são
+adjacentes a acidente de trabalho. Se a verificação da §4 concluir que carregam
+dado de saúde, **saem desta lista e entram na cobertura**.
+
+#### 5.3 De 2ª ordem — 23
+
+Já excluídas por `APR-2026-036`, reproduzidas em `T-42` §2.5 e mantidas.
+
+#### 5.4 Banda EXCLUÍDA da triagem — 53
+
+Lista nominal em `T-41` §3.2. Mantida.
+
+#### 5.5 Sem model Sequelize — 21
+
+**Não nomeáveis e, portanto, NÃO cobertas por esta exclusão declarada**
+(`RES-T42-05`). Excluir nominalmente exige nomear. Permanecem como lacuna
+aberta e devem constar assim no relatório final — não como exclusão aceita.
+
+### 6. O que o relatório final poderá e não poderá afirmar
+
+**Poderá:** que `C-137` teve cobertura total nas bandas de estoque, fiscal e
+dado de saúde, e cobertura parcial documentada com lista nominal nas demais.
+
+**Não poderá:** afirmar `C-137` fechada, nem afirmar cobertura integral da banda
+dinheiro. E deve reproduzir as listas da §5 **nominalmente**, não por referência
+genérica de escopo.
+
+### 7. O que esta entrada NÃO faz
+
+- **Não** estende o critério a `C-136` nem às demais células da lista de
+  `CELULAS_SEM_AUTORIZACAO_ACEITACAO.md` — aquelas permanecem sem decisão.
+- **Não** relaxa o gate **G3** (`APPROVED_WITH_CONDITIONS`), que veda amostragem
+  em segurança, integridade de dados, dado pessoal, contratos e regras críticas.
+  A relação entre esta emenda e o G3 nas bandas afetadas **precisa ser
+  examinada** antes do relatório final — o director levantou o ponto e ele
+  segue aberto.
+- **Não** fecha `C-137`, não altera severidade, não fecha finding, não declara
+  `AUDIT_PASSED`.
