@@ -2778,3 +2778,68 @@ a declaração.
 - **Não** declara `AUDIT_PASSED`.
 - **Não** fecha finding, não libera remediação, não altera outra severidade.
 - **Não** revoga nenhuma reserva de D2 — cada uma exige decisão própria, futura.
+
+---
+
+## APR-2026-046 — GATE HUMANO: aprovação para emissão do veredito `AUDIT_PASSED`
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno) — **gate humano** (Regra 18)
+**Natureza:** autoriza a **emissão** do veredito formal. **Não é o veredito.**
+
+### O texto do dono
+
+> *"Aprovo. Despache o `vericore-software-audit-director` para emitir o veredito
+> formal `AUDIT_PASSED` com o `HUMAN_GATE_RECORD` correspondente."*
+
+### A distinção que esta entrada preserva (Regras 4, 5 e 18)
+
+`AUDIT_PASSED` é **declaração da VeriCore sobre evidência** (Regra 4), submetida a
+**gate humano** (Regra 18). São dois atos distintos e nenhum substitui o outro:
+
+- **O gate humano é este registro** — o dono aprovou que o veredito seja emitido.
+- **O veredito é ato do `vericore-software-audit-director`**, sobre a evidência do
+  run, e ele **pode recusar emiti-lo** se encontrar condição não satisfeita. A
+  aprovação do dono **autoriza**, não **determina** o conteúdo.
+
+Nem o orquestrador nem o `coretriad-director` podem declarar `AUDIT_PASSED`
+(Regra 5). Esta entrada não o declara.
+
+### Estado que fundamenta a autorização
+
+| Item | Estado |
+|---|---|
+| Findings vigentes | **484** — 9 CRITICAL · 92 HIGH · 248 MEDIUM · 124 LOW · 11 INFO |
+| **Regra 22** | **101/101** com veredito de validador — fechada por `T-50` |
+| Par de cobertura | reconciliado até `T-40` (`AUDIT_COVERAGE_EXECUTED_RODADA4.md`) |
+| `C-137` | `A(79/207)`, déficit **128 integralmente nominal** (106 + 22) |
+| Categoria especial art. 5º II | **censo fechado entre as 207 tabelas** — 18 tabelas |
+| Gate `G3` | `REDUCED_BY_DECISION` (`APR-2026-043` D1) |
+| Relatórios finais | Executivo, Técnico e Backlog **emitidos e revisados** |
+| Conformidades verificadas | **42** |
+| Falsos positivos evitados | **17** |
+| Erros da própria auditoria publicados | **6** |
+
+### O que o veredito NÃO significará — para constar do próprio veredito
+
+**Não** significa que o sistema está correto. Significa que **o que foi examinado
+foi examinado com método**, e que **o que não foi está nomeado**.
+
+Ficam abertos, legitimamente, e devem aparecer no veredito:
+
+- **484 findings**, nenhum remediado — exceto os dois itens do `CASE-004`, que
+  aguardam **reteste independente** e não estão fechados
+- **`C-137`** com déficit de 128 tabelas, todas nominadas
+- **`C-136`** sem cobertura, com exclusão declarada em 628 rotas
+- **Quatro decisões reservadas** pelo dono (`APR-2026-045` D2), sem prazo
+- **Gate `G4`** (prova dinâmica) aberto por decisão, não por trabalho
+- **`CE-06`** — replicação para fora do host pendente, critério não satisfeito
+- **`PEND-2026-005`** — bloqueia a branch `CASE-003` de sair de worktree
+
+### Instrução ao emissor
+
+O `vericore-software-audit-director` deve produzir o veredito **e** o registro no
+`HUMAN_GATE_RECORD-ERP-LEGACY-001-AUD-001.md`, citando esta entrada como o gate
+humano que o autorizou. Se concluir que alguma condição **não** está satisfeita,
+**deve recusar a emissão e dizer qual** — recusa fundamentada é resultado
+legítimo deste despacho, e não desobediência ao dono.
