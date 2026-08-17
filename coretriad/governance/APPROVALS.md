@@ -3335,3 +3335,73 @@ instrução de que **nenhum dos dois se altera por conta própria, em nenhuma
 direção**.
 
 Ambos em constante nomeada, cada um num só lugar, configuráveis.
+
+---
+
+## APR-2026-053 — `CASE-008` (`AUD-DB-02`): Opção C sem webhook, `D3` e `D4` decididas
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad
+**Insumo:** `remediation/cases/ERP-LEGACY-001-CASE-008/TRIAGE.md`
+
+### Texto do dono
+
+> *"`D4`: sem alerta por e-mail por enquanto. Prossiga com a Opção C SEM a conexão
+> do webhook/e-mail — apenas dreno no shutdown, handlers de processo, fechar o
+> `try` de `auditLogService.ts:67`, e fila real. Isso já resolve os dois problemas
+> mais graves (risco de processo morrer, perda de auditoria em todo deploy).
+>
+> `D3`: não é mais necessário tocar `docker-compose.yml`/`Dockerfile` para
+> credencial de e-mail, já que o alerta não será conectado agora."*
+
+### Desambiguação do quarto item — registrada, não inferida
+
+O dono escreveu **"fila real"**. A Opção C da triagem traz **"volume real"**; **"fila
+durável" é a Opção B**, de escopo arquitetural. Perguntado explicitamente, o dono
+confirmou: **volume real, Opção C literal.**
+
+Isso é coerente com o próprio fundamento que ele deu — *"perda de auditoria em
+todo deploy"* só fecha se o arquivo de falha **sobreviver ao recreate**, e hoje
+não sobrevive (único volume é `app_uploads`).
+
+### Escopo autorizado — Opção C, quatro itens
+
+| # | Item | Arquivo |
+|---|---|---|
+| 1 | Dreno da promessa destacada no shutdown | `server/index.ts` |
+| 2 | Handlers de `unhandledRejection` / `uncaughtException` | arquivo novo |
+| 3 | Fechar o `try` de `auditLogService.ts:67` | `auditLogService.ts` |
+| 4 | Volume persistente para `logs/` | `docker-compose.yml` |
+
+**Zero dos 268 call sites.** **Nenhuma mudança semântica:** `logAction` continua
+fire-and-forget e continua não propagando erro ao chamador.
+
+### `D3` — alcance correto da liberação
+
+O dono liberou `docker-compose.yml`/`Dockerfile` **da necessidade de credencial de
+e-mail**. O **volume** (item 4) continua exigindo `docker-compose.yml` — e é
+autorizado pelo próprio item 4.
+
+**Armadilha registrada, medida pela triagem:** `docker-compose.prod.yml:115-120` já
+monta volume em `/app/logs`, caminho que a imagem **não cria** — mountpoint vira
+`root`, processo roda não-root, resultado é **`EACCES` no fallback e no Winston**.
+Repetir esse padrão em `docker-compose.yml` transformaria a correção em
+indisponibilidade de log. Se fechar isso exigir `Dockerfile`, está autorizado
+**para esse fim**; qualquer outro uso, o executor **para e reporta**.
+
+### Consequência de `D4`, declarada
+
+**Sem o alerta conectado, o sumidouro de falhas continua sem consumidor.** Depois
+da Opção C ele passa a ser **durável e drenado**, mas **ninguém é notificado** de
+que houve falha de auditoria — a descoberta segue dependendo de alguém abrir o
+arquivo.
+
+Isto é consequência aceita da decisão, não defeito da remediação. `AUDIT_ALERT_WEBHOOK_URL`
+permanece não repassada ao container, e o item fica **pendência aberta, sem prazo**.
+
+### Decisões que seguem abertas
+
+`D1` (qual perda o negócio prefere) · `D2` (obrigação legal por classe — LGPD art. 37)
+· `D6` (`AUD-DB-04` + migration como bloqueantes) — **nenhuma bloqueia a Opção C**,
+que é ortogonal por construção. `D5` (sequenciamento vs `CASE-004`): a triagem mediu
+**indiferença** em C. `D7` resolvido pelo escopo acima.
