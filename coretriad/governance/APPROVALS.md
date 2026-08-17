@@ -1526,3 +1526,64 @@ detecta → entrada gravada em `ALERTAS.log`. Verificado em 21h26.
 máquina ficar desligada, ninguém alerta. Escolha consciente de proporção: o
 alerta cobre o modo de falha comum (job quebrou, job parou), não sabotagem nem
 máquina desligada por semanas. Registrado em vez de silenciado.
+
+---
+
+## APR-2026-031 — decisões D-11 e D-13 do dono + regularizações de registro
+
+**Data:** 2026-08-16
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto e respostas a
+questionário estruturado nesta sessão
+**Registrado por:** orquestrador — registro de decisões humanas já tomadas
+
+### D-11 — severidade de `AUD-RH-COMISSAO-01`: HIGH
+
+**Justificativa verbatim:** *"bloqueia cálculo correto de VT para funcionário
+comissionado e exige mudança de modelo de dados (armazenar separadamente valor
+fixo e percentual de comissão, que hoje não tem estrutura no cadastro), mas não
+está causando dano ativo hoje porque payroll não está em produção."*
+
+Cláusula fixada: **reavaliar para CRITICAL se o módulo de payroll entrar em
+produção antes desta lacuna ser resolvida.** Aplicado no finding; como HIGH,
+segue à Regra 22.
+
+### D-13 — quatro decisões de classificação de ambiente (fecham os itens 2, 3, 5 e 1 da §5 de `T-38`)
+
+1. **Módulos dev que ESCREVEM sobre os 327 itens reais → PRODUÇÃO REAL.**
+   O dado tocado é real; defeito neles corrompe os 327 itens hoje. Resolve de
+   uma vez `AUD-INTEG-03` (CRITICAL, deixa de ser ambíguo e entra no estrato de
+   produção), `FIND-ERP-001` e `T32-SUP-F03`.
+2. **Itens C, F e G de `AUD-ALOG-01`** (fornecedor de item, categorias,
+   departamentos): **a `APR-2026-016` vence o rótulo da trilha** — cadastros-base
+   carregados com dado real; desativação sem trilha neles é exposição real hoje.
+   Os três sobem ao estrato de produção. Resolve `DIV-T38-01`.
+3. **Alcance do critério de fila: exposição real reordena APENAS os estratos
+   CRITICAL e HIGH.** MEDIUM/LOW de produção real entram depois dos
+   CRITICAL/HIGH de dev — evita inversões extremas de severidade. A decisão
+   A/B de `AUD-ALOG-01` permanece como está (ambos são CRITICAL/HIGH).
+4. **Módulo `employees`: uso real confirmado SÓ para o fluxo de desligamento.**
+   O restante do módulo segue dev/homologação; `AUD-RH-CPFSEARCH-01` mantém o
+   estrato atual.
+
+Itens 4 e 6 da §5 de `T-38` **permanecem abertos**: a convenção "ambiente não
+aplicável" para os 26 findings documentais não foi submetida ao dono nesta
+rodada; a atualização do `PRODUCTION_STATUS_MAP.md` (defasado em `employees`,
+`DIV-T38-02`) é autoridade do director e está encaminhada.
+
+### Regularização de registro (fecha `D-R4` do reexame)
+
+O reexame do bloco `AUD-DB-04…-09` foi autorizado pelo dono em texto direto
+(*"Reexame AUD-DB-04…-09: prossiga com o director, como já encaminhado"*) —
+autorização que até este ponto não constava deste arquivo, defeito apontado pelo
+próprio director (`coretriad/governance/REEXAME_AUD-DB-04-09.md`, divergência 3).
+**Fica registrada aqui.** O resultado do exame está no artefato citado; as
+decisões `D-R1` (severidade de `AUD-DB-09`), `D-R2` (ratificação dos 5 MEDIUM) e
+`D-R3` (condicional de fronteira) **seguem abertas com o dono**.
+
+### O que esta entrada NÃO cobre
+
+- **Não** decide `D-01` (rebaixamento de `AUD-CTB-DEBCRED-01`) — a explicação
+  pedida foi dada; a palavra final é do dono e ainda não veio.
+- **Não** decide `D-R1`/`D-R2`/`D-R3`.
+- **Não** altera severidade de nenhum outro finding, não fecha finding, não
+  declara `RETEST_PASSED`.
