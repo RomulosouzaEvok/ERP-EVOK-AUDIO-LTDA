@@ -83,15 +83,48 @@ para o único valor de enum que a fixture conhece.
   periodicidade: `Employee.ts:65` `(10,2)`, `HrEmployeeJobHistory.ts:21` `(12,2)`,
   `HrJobPosition.ts:21-22` `(12,2)`.
 
-## 5. Gate humano que bloqueia a remediação (Regra 18)
+## 5. Gate humano — RESPONDIDO pelo dono em 2026-08-16
 
-**O que `salary` significa para `salary_type = 'comissionado'`?** Nenhum
-artefato versionado responde — pode ser fixo, base de cálculo ou percentual. A
-SanaCore **não pode arbitrar** isso: é regra de negócio, e inventá-la violaria a
-Regra 6.
+A pergunta que bloqueava era: **o que `salary` significa para
+`salary_type = 'comissionado'`?** Nenhum artefato versionado respondia.
 
-A remediação do caso `'horista'` **não depende** dessa resposta e pode seguir
-antes dela.
+**Resposta do dono, registrada (Regra 18):**
+
+> Para funcionários comissionados existe um **salário FIXO** mais uma
+> **porcentagem sobre venda**. O percentual **pode variar por acordo individual
+> com cada funcionário** — não é uma taxa única para todos os comissionados.
+
+**Decisão de negócio confirmada pelo dono:** o vale-transporte para comissionado
+**incide sobre a parte FIXA do salário, não sobre a comissão variável** — regra
+geral de VT no Brasil e única leitura compatível com o descrito.
+
+### O que a resposta muda neste finding
+
+Confirma o defeito e o **agrava**: `salary` não carrega três unidades, carrega
+três unidades **e**, no caso `'comissionado'`, é um valor único onde o negócio
+tem **dois componentes distintos**, um deles variável por pessoa. O campo atual
+não tem estrutura para representar isso.
+
+### O que a resposta NÃO resolve — e por que virou finding separado
+
+Corrigir a fórmula do VT **não** cria o campo que falta, e criar o campo **não**
+corrige a fórmula. São remediações distintas, com blast radius distinto:
+
+- **este finding** é um erro de cálculo em `benefitRules.ts`, corrigível dentro
+  do módulo de benefícios;
+- **`AUD-RH-COMISSAO-01`** é mudança de **modelo de dados** do cadastro de
+  funcionário — migration, model, API, tela e carga.
+
+Por determinação do dono, foram separados. **A remediação de um não fecha o
+outro**, e nenhum dos dois deve ser marcado como resolvido pelo avanço do
+outro.
+
+### Ordem de remediação
+
+O caso `'horista'` **não depende** de nada disso e pode seguir imediatamente.
+O caso `'comissionado'` depende de `AUD-RH-COMISSAO-01` estar resolvido, porque
+antes disso **não existe onde ler a parte fixa** — a fórmula correta não tem
+insumo.
 
 ## 6. Critério de reteste (objetivo, estático + teste)
 
