@@ -2584,3 +2584,119 @@ dinâmica (~190 pedidos), reservada a sessão própria.
 
 **Nenhum `AUDIT_PASSED` é declarado por esta entrada** — o veredito final é da
 VeriCore sobre evidência (Regra 4), e depende da execução acima.
+
+---
+
+## APR-2026-044 — três decisões de encerramento da devolução `T-49`
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno), decisão sobre os três itens que o
+`T-49` §7 devolveu ao Control Plane.
+
+### D1 — `T49-RH-C01`: **ABRIR como finding próprio**, incluindo o vetor da Admissão
+
+**Texto verbatim:**
+
+> *"O argumento de independência nos dois sentidos é sólido: corrigir o outro
+> finding não fecha esse vetor, e vice-versa. Amarrar os dois deixaria o reteste
+> de `T41-RH-F02` refém de algo que não tem nada a ver com o defeito original
+> dele. Separar contabilidade não custa nada extra — é o mesmo trabalho, só
+> organizado com clareza."*
+>
+> *"Abra `T49-RH-C01` como finding próprio, incluindo o vetor equivalente na
+> Admissão (`ConcludeAdmissionProcessUseCase.ts:125`) no mesmo finding, já que é
+> a mesma classe de defeito."*
+
+**Aberto como `AUD-RH-VALIDADENULA-01`** (convenção de promoção do run;
+`T49-RH-C01` permanece citável como ID de candidato). Cobre os **dois**
+consumidores: `SequelizeEmployeeDocumentRepository.ts:50` (retorno de
+afastamento) e `ConcludeAdmissionProcessUseCase.ts:125` (admissão).
+
+**Severidade: PROPOSED, HIGH recomendada — não fixada.** O fundamento está na §5
+do finding: o defeito ocorre pelo caminho normal, com consumidor real, e basta
+**omitir um campo opcional** para liberar retorno ao trabalho e conclusão de
+admissão sobre exame de vigência não verificada. **Se fixada em HIGH, aciona a
+Regra 22.**
+
+**Efeito colateral registrado:** `CR-T49-RH-09` deixa de ser item condicional de
+`T41-RH-F02` (`T-49` §4.5) — o fallback está desativado pela abertura.
+
+**Compartilha o lote de remediação** com `T41-RH-F02`. O que se separou foi a
+contabilidade, não o trabalho — nas palavras do dono, *"o mesmo trabalho, só
+organizado com clareza"*.
+
+### D2 — `OBS-T48-05`: **anexado como confirmação independente**, não como finding novo
+
+**Texto verbatim:** *"Anexe `OBS-T48-05` como confirmação independente de
+`T43-SST-F01`, não como item novo — dois auditores, caminhos independentes,
+mesmo defeito."*
+
+`OBS-T48-05` (`T-48`) registra que `CreateAsoUseCase.ts:74` grava o ASO **fora**
+da transação, porque `SequelizeAsoRepository.ts:70-72` descarta o parâmetro. **É
+exatamente `T43-SST-F01`**, o HIGH que o `T-46` confirmou com seis refutações.
+
+**Dois auditores, em trilhas distintas, por caminhos independentes, chegaram ao
+mesmo defeito.** Isso **reforça** `T43-SST-F01` e **não** cria item novo — contar
+duas vezes inflaria o placar sobre o mesmo risco, prática que este run rejeita
+expressamente.
+
+**Registro de método:** o autor do `T-49` foi cauteloso e correto ao não abrir o
+item — *"não foi objeto desta devolução e não o verifiquei por leitura própria"*
+(`RES-T49-04`). Ele não tinha como saber que o defeito já estava reportado; a
+convergência só é visível de fora. **A cautela dele é o que tornou a
+reconciliação possível sem duplicata.**
+
+### D3 — `DYN-T41-03` e `DYN-T49-03`: **NÃO autorizados nesta sessão**
+
+**Texto verbatim:**
+
+> *"O raciocínio dele é o correto: rodar contra o banco de teste (vazio)
+> produziria um falso 'zero' que parece prova e não é — pior que não coletar
+> nada, porque poderia ser lido como 'não existe caso real' quando na verdade é
+> só 'banco sem dado nenhum'. E produção exige a mesma disciplina que já
+> aplicamos a noite toda: nunca autorizar por extensão, sempre janela própria,
+> escopada, com consultas nomeadas."*
+>
+> *"Não autorizo `DYN-T41-03` nem `DYN-T49-03` nesta sessão. Registre como
+> pendência para janela futura, escopada especificamente para essas duas
+> consultas nomeadas, somente leitura contra produção — fora do lote de ~190
+> pedidos, decidida separadamente."*
+
+**As duas consultas, nominadas para a janela futura:**
+
+| ID | Pergunta | O que muda |
+|---|---|---|
+| `DYN-T41-03` | Existe funcionário com `sst_asos.resultado='inapto'` vigente **e** `hr_employee_documents` `aso_*` válido com aptidão? | **Único** capaz de mover `T41-RH-F02` de HIGH para **CRITICAL** |
+| `DYN-T49-03` | Há `inventory_movements` cujo `warehouse_id` esteja hoje inativo? | **Único** que separa risco latente de **dano consumado** em `T41-EST-F01` |
+
+**Condições fixadas para a janela futura, por decisão do dono:**
+
+1. **Escopada especificamente a estas duas consultas nomeadas** — não por
+   extensão, não em bloco.
+2. **Somente leitura, contra produção.**
+3. **Fora do lote de ~190 pedidos** de `B9`, que segue reservado a decisão
+   separada (`APR-2026-043` D5).
+4. Exige confirmação humana explícita de dia e horário, como toda operação
+   contra produção neste programa (`APR-2026-016`).
+
+**Fundamento registrado, que vira precedente:** rodar contra o banco de teste
+produziria um **falso zero** — *"pior que não coletar nada, porque poderia ser
+lido como 'não existe caso real' quando na verdade é só 'banco sem dado
+nenhum'"*. É a mesma lição que `DYN-T47` demonstrou empiricamente e que
+`APR-2026-041` já havia registrado **antes** daquela coleta.
+
+### Estado após esta entrada
+
+**As três devoluções do `T-49` estão resolvidas.** Nada mais bloqueia a revisão
+dos relatórios finais.
+
+**Permanecem abertas, e devem constar dos relatórios:**
+
+- Severidade de `AUD-RH-VALIDADENULA-01` (do dono) e, se HIGH, a Regra 22
+- Janela futura para `DYN-T41-03` e `DYN-T49-03`
+- `B9` — prova dinâmica em bloco, sessão própria
+- Reteste independente de `CASE-004` (VeriCore)
+- Redimensionamento de `C-136` com **628** rotas IN, e não com "uma fração"
+  (`F-5` §5.2)
+
+**Nenhum `AUDIT_PASSED` é declarado por esta entrada.**
