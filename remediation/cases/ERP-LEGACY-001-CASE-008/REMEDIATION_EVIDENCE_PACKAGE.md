@@ -6,7 +6,7 @@ PROJECT_ID: `ERP-LEGACY-001`
 TRACK: `Opção C / APR-2026-053`
 BRANCH: `sana/ERP-LEGACY-001/CASE-008`
 WORKTREE: `C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008`
-REMEDIATION_COMMIT: `PENDING_COMMIT`
+REMEDIATION_COMMIT: `a9102738bc9f011af222377525874b3647651933`
 STATUS DESTE PACOTE: evidencia de implementacao. Nao declara `FINDING CLOSED`, `RETEST_PASSED` nem aceite de remediacao; essa autoridade permanece exclusiva da VeriCore.
 
 ---
@@ -140,4 +140,3 @@ Sugestoes para a VeriCore, sem substituir sua autoridade:
 ---
 
 REMEDIATION_COMPLETE
-
