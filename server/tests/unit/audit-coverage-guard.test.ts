@@ -52,7 +52,10 @@ const DEBITO_CONHECIDO = new Set([
   'categories',
   'clients',
   'departments',
-  'employees',
+  // 'employees' SAIU em 2026-08-17 (SanaCore `ERP-LEGACY-001-CASE-004`
+  // estágio 1, `AUD-ALOG-01` item A, `APR-2026-033`): `DELETE
+  // /api/employees/:id` passou a chamar `logAction`. A catraca agora EXIGE
+  // auditoria em `employees` para sempre — remover a chamada reprova aqui.
   'items',
   'mobileInventory',
   'nonConformities',
