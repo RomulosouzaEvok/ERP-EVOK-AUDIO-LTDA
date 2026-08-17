@@ -3164,3 +3164,67 @@ Por isso, e sem inventar veredito (Regra 6):
 
 **Se o dono quiser que qualquer um dos dois seja finding formal, isso exige
 abrir delta audit — decisão dele, não tomada aqui.**
+
+---
+
+## APR-2026-051 — Troca de motor a partir do `CASE-006`; `CASE-005` termina com Claude Code
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad
+
+### D1 — Texto do dono
+
+> *"Confirmado: Claude Code termina o `CASE-005` até o fechamento (reteste da
+> VeriCore, veredito final). Não trocar de ferramenta no meio deste caso.
+>
+> A partir do `CASE-006`, o Codex assume a implementação de fato, usando a
+> estrutura já pronta (credencial `codex_dev`, agente
+> `.codex/agents/sanacore-remediation-engineer.toml`, worktree `sana/`, git hook).
+> Claude Code passa a atuar como triagem/causa-raiz e segunda opinião/revisão para
+> o `CASE-006` em diante — não implementa."*
+
+### D2 — O que isso fixa
+
+| A partir de | Triagem / causa-raiz | Implementação | Segunda opinião | Reteste |
+|---|---|---|---|---|
+| `CASE-005` (em curso) | Claude Code | **Claude Code** | Codex (já feito) | VeriCore |
+| **`CASE-006` em diante** | Claude Code | **Codex** | **Claude Code** | VeriCore |
+
+**O papel institucional não muda com o motor.** Nos dois casos quem implementa é
+`sanacore-remediation-engineer`; muda a ferramenta que o executa. É por isso que o
+`.toml` do Codex mantém o prefixo `sanacore-` (`APR-2026-048`).
+
+**A VeriCore não é afetada em nenhum cenário.** Só ela declara `RETEST_PASSED` e
+`FINDING CLOSED` (Regra 4), seja qual for o motor que implementou.
+
+**Não trocar de ferramenta no meio de um caso** passa a ser regra de processo: o
+`CASE-005` já acumulou três commits, dois motores de parecer e um incidente de
+faixa (`RC-PROC-02`); trocar o motor de implementação agora acrescentaria uma
+variável a um caso que já é o mais instrumentado do programa.
+
+### D3 — `C6` levado DECLARADO ao reteste, não decidido pelo orquestrador
+
+O `C6` (runbook/`README`) **não foi entregue**. A triagem previa `C5+C6` no mesmo
+commit como contenção do risco R1; o `sanacore-remediation-engineer` registrou que
+**discorda** da exclusão e que o `README` está **pior** depois do patch — descreve
+`JWT_SECRET` como *"String longa e aleatória"*, sem mencionar que placeholder
+agora reprova o boot em **todos** os ambientes, nem que `docker compose up` passou
+a exigir `.env`.
+
+**Decisão de forma, registrada:** o orquestrador **não** decide se essa ausência
+bloqueia o fechamento. Isso é juízo sobre suficiência de remediação, e a
+autoridade é da **VeriCore** (Regra 4). O item vai **declarado** no despacho de
+reteste, para que o veredito o trate explicitamente — como bloqueio ou como
+pendência aceita.
+
+A ownership de `docs/` segue **pendência aberta do director** (`TRIAGE.md` §11
+item 2).
+
+### D4 — Correção de premissa do próprio despacho, registrada
+
+O despacho de reassunção passou a trava de **`CD-CI-01`** ao engenheiro. Ela era
+**inaplicável**: o `server-ci.yml` desta branch tem 139 linhas e **não contém** o
+job `governance-detective-controls` (verificado: zero ocorrências, zero
+`continue-on-error`). A §7 da triagem descrevia outro estado do arquivo. Nenhum
+job foi promovido a bloqueante e nada foi tocado — mas a premissa estava errada e
+fica corrigida aqui.
