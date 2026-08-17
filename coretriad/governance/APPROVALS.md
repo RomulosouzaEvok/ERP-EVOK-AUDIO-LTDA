@@ -3069,3 +3069,98 @@ esta entrada (Regra 6) — quem qualifica é a VeriCore.
 **Reteste independente da VeriCore** sobre o `CASE-005`. Autoridade de fechamento
 inalterada: só a VeriCore declara `RETEST_PASSED` e `FINDING CLOSED` (Regra 4).
 `REMEDIATION_COMPLETE` da SanaCore **não** substitui reteste (Regra 3).
+
+---
+
+## APR-2026-050 — Incidente `RC-PROC-02`, simetria do hook, e os dois achados do reteste `cb948fa`
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad
+**Detecção do incidente:** **pelo dono, lendo o relatório** — não por hook, não por teste
+
+### D1 — Incidente do orquestrador registrado como precedente
+
+Classe aberta: `coretriad/governance/RISK_CLASS-RC-PROC-02_ORQUESTRADOR_SEM_GUARDA.md`.
+
+A sessão orquestradora implementou remediação (commit `2a10049`) dentro da
+worktree `sana/`. **O trabalho estava autorizado; o executor não.** Violação das
+Regras 5 e 11.
+
+**Por que nenhuma guarda pegou:** o git hook julga por **branch**, e o commit foi
+feito na branch **certa** — o errado era **quem** escrevia. O `org-isolation.js`
+casa por **identidade de agente**, e o orquestrador **não tem identidade**: caía
+em `respond('approve', 'sessão principal')` antes de qualquer regra. A regra
+`coretriad` já negava `remediation/cases/`, mas ao `coretriad-director`, que é
+subagente.
+
+**A classe, em uma frase:** *toda guarda construída contra subagentes tem ponto
+cego no orquestrador, porque ele é quem despacha as guardas.*
+
+**O sinal de qualidade, que é o registro mais importante:** o reteste mediu que o
+artefato produzido fora da faixa tinha **poder discriminante quase nulo** — a
+asserção central já passava no `AUDIT_COMMIT`. **A faixa errada produziu o pior
+artefato do caso.** A segregação não é burocracia; é o mecanismo que produz
+qualidade, e agora há evidência empírica disso dentro do próprio programa.
+
+### D2 — Simetria do hook — IMPLANTADA E TESTADA
+
+`org-isolation.js` passa a bloquear **ferramenta de escrita da sessão principal**
+em `remediation/**` e em qualquer caminho dentro de worktree `sana/`.
+
+Preservado de propósito — bloquear demais é a próxima desculpa para desligar a
+guarda: `audit/**` (canal legítimo de persistência de evidência de agentes
+read-only), `coretriad/**` (decisão e control plane), e **leitura** de
+`remediation/`.
+
+Bateria: **29/29**, com `C24`-`C29` cobrindo a classe. `C26`-`C28` verificam que a
+guarda **não** bloqueia os canais legítimos.
+
+**Limitações declaradas:** a worktree é detectada por **convenção de nome**
+(`*-sana-*`); a convenção é parte do mecanismo, não estética. E **o Codex não é
+coberto** — `org-isolation.js` é do Claude Code (`APR-2026-047` D2); do lado
+Codex só existe o git hook, que não distingue quem escreve. **Se o orquestrador
+operar via Codex, o gap reabre.**
+
+### D3 — Achado 1: `server-ci.yml` com `JWT_SECRET` que a guarda aceita
+
+`.github/workflows/server-ci.yml` `:38` e `:107` — `len=42`,
+`casaPlaceholder=false`, `REPROVARIA_NO_BOOT=false`. Artefato **versionado** com
+chave de assinatura que o `runtimeEnv` aceita em **qualquer** ambiente.
+`CR-4` sobrevive ao patch de `CASE-005`.
+
+**Determinação do dono:** *"precisa da mesma correção aplicada aos
+`.env*.example`."* **Despachado ao `sanacore-remediation-engineer`**, com duas
+travas: não quebrar o CI (o valor precisa seguir funcional para o job) e não
+esbarrar em **`CD-CI-01`** (`APR-2026-026` item 3 proíbe remover
+`continue-on-error` antes de resolver o fetch de branch do `actions/checkout`).
+
+### D4 — Achado 2: a suíte do `server/` contamina o baseline de TODO reteste
+
+`docs-path-reference-guard.test.ts` valida um caminho dentro de
+`client/node_modules`. Em qualquer worktree sem `npm install` no `client/`, a
+suíte unitária do `server/` falha **por motivo alheio ao código**.
+
+Medido pelo reteste: worktree principal reprova **1** caminho
+(`docs/API.md`, pré-existente); worktree `sana` reprova **2**. **Quem retestar em
+worktree novo verá quebra que não existe no principal.**
+
+**Isto não é finding do sistema auditado — é defeito do aparato de
+verificação.** Afeta a confiabilidade de **qualquer reteste futuro**, não só do
+`CASE-005`. O dono determinou **prioridade** por isso.
+
+### D5 — Limite de forma: por que D3 e D4 não viram finding de `AUD-001`
+
+O run `ERP-LEGACY-001-AUD-001` está **encerrado** com `AUDIT_PASSED` sobre um
+`AUDIT_COMMIT` imutável. Findings novos sobre o objeto auditado exigiriam
+**delta audit ou `AUD-002`** (Regras 12-14) — mesma restrição já registrada para
+`OBS-T50-04`/`OBS-T50-07`.
+
+Por isso, e sem inventar veredito (Regra 6):
+
+- **D3** é tratado como **lacuna de remediação do `CASE-005`**, dentro do caso
+  aberto — não como finding novo.
+- **D4** é **defeito de aparato de verificação**, não do objeto auditado — cabe
+  como item de processo, não como finding.
+
+**Se o dono quiser que qualquer um dos dois seja finding formal, isso exige
+abrir delta audit — decisão dele, não tomada aqui.**

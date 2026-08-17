@@ -98,6 +98,16 @@ const ORG_RULES = [
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
+// Worktree de remediação da SanaCore, detectada por CONVENÇÃO DE NOME.
+//
+// Limitação declarada: um hook não pode pagar o custo de resolver `.git` de
+// worktree e ler a branch a cada chamada, então o discriminador é o nome do
+// diretório. As worktrees deste repositório seguem `ERP-Evok-sana-<CASE>` e a
+// convenção de branch é `sana/<PROJECT>/<CASE>` (Regra 11). Uma worktree
+// batizada fora da convenção NÃO é coberta — por isso a convenção de nome é
+// parte do mecanismo, não estética.
+const SANA_WORKTREE_PATH = /(^|\/)[^/]*-sana-|(^|\/)sana\//i;
+
 // Artefatos selados: nenhum subagente lê, sob nenhuma ferramenta. Usado pelos
 // gabaritos de simulado — um simulado cujo gabarito é legível pelo auditor não
 // mede capacidade de detecção nenhuma. Só a sessão principal (sem contexto de
@@ -266,6 +276,49 @@ process.stdin.on('end', () => {
       // fail-closed: contexto de subagente sem identidade nunca vira permissão
       return respond('block', 'org-isolation: subagente sem identificação (fail-closed).');
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // GAP DE SIMETRIA — fechado em 2026-08-17 (incidente RC-PROC-02).
+    //
+    // Até aqui a sessão principal (orquestrador) passava SEM NENHUMA
+    // restrição. A regra `coretriad` da linha ~93 já negava
+    // `remediation/cases/` ao `coretriad-director`, mas o director é
+    // subagente: o orquestrador não casa com nenhuma regra de ORG_RULES,
+    // porque não tem identidade de agente.
+    //
+    // Foi por essa porta que saiu o commit `2a10049`: a sessão principal
+    // editou `.env*.example` e escreveu um guard test DENTRO da worktree
+    // `sana/ERP-LEGACY-001/CASE-005`, implementando remediação. Violação das
+    // Regras 5 (quem orquestra não corrige) e 11 (a faixa de remediação é da
+    // SanaCore). O reteste independente mediu que esse trabalho saiu com
+    // poder discriminante quase nulo — a faixa errada produziu o pior
+    // artefato do caso.
+    //
+    // O guard de git (`.githooks/`) NÃO pega este caso: ele julga por branch,
+    // e `2a10049` foi feito NA branch `sana/*`, que é a faixa correta para o
+    // caminho. O que estava errado era QUEM escrevia — informação que o git
+    // não tem e este hook tem.
+    //
+    // Mesma lógica de simetria já aplicada ao Bash em AUD-PROC-CUSTODIA-01:
+    // uma direção sem guarda é gap, não economia.
+    if (WRITE_TOOLS.has(tool)) {
+      if (insideRepo && /^remediation\//.test(filePath)) {
+        return respond(
+          'block',
+          'org-isolation: a sessão principal não escreve em `remediation/` — essa é a faixa da SanaCore ' +
+            '(Regras 5 e 11). Despache `sanacore-remediation-triage`/`-engineer`/`-evidence`. ' +
+            'Se o artefato é evidência de VERIFICAÇÃO, o lugar dele é `audit/runs/<RUN>/30-retest/`, não `remediation/`.'
+        );
+      }
+      if (SANA_WORKTREE_PATH.test(filePath)) {
+        return respond(
+          'block',
+          'org-isolation: a sessão principal não escreve dentro de worktree `sana/` — implementar remediação é ' +
+            'da SanaCore (Regras 5 e 11). Despache o `sanacore-remediation-engineer`. Precedente: incidente RC-PROC-02, commit 2a10049.'
+        );
+      }
+    }
+
     return respond('approve', 'sessão principal (sem contexto de subagente)');
   }
 

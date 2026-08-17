@@ -315,6 +315,62 @@ const CASOS = [
     esperado: 'block',
     payload: { tool_name: 'Write', agent_id: 'a99', tool_input: { file_path: FIND_DOCS, content: 'x' } },
   },
+
+  // ───────────────────────────────────────────────────────────────────────
+  // C24-C29 — GAP DE SIMETRIA da sessao principal (incidente RC-PROC-02).
+  //
+  // Antes de 2026-08-17 a sessao principal passava sem NENHUMA restricao: as
+  // ORG_RULES so casam por identidade de agente, e o orquestrador nao tem
+  // identidade. Foi por essa porta que saiu o commit 2a10049, com o
+  // orquestrador implementando remediacao dentro da worktree sana/.
+  //
+  // C26-C28 sao tao importantes quanto C24-C25: uma guarda que bloqueia demais
+  // quebra o canal legitimo de persistencia de evidencia e vira a proxima
+  // desculpa para desliga-la.
+  {
+    id: 'C24',
+    desc: 'sessao principal escrevendo em remediation/ (faixa da SanaCore)',
+    esperado: 'block',
+    payload: { tool_name: 'Write', tool_input: { file_path: 'remediation/cases/X/TRIAGE.md', content: 'x' } },
+  },
+  {
+    id: 'C25',
+    desc: 'sessao principal escrevendo DENTRO de worktree sana (o caso 2a10049)',
+    esperado: 'block',
+    payload: {
+      tool_name: 'Write',
+      tool_input: { file_path: 'c:/Sistema EvokAudio/ERP-Evok-sana-CASE-005/server/x.ts', content: 'x' },
+    },
+  },
+  {
+    id: 'C26',
+    desc: 'sessao principal persistindo evidencia em audit/ (canal legitimo) — NAO pode bloquear',
+    esperado: 'approve',
+    payload: { tool_name: 'Write', tool_input: { file_path: 'audit/runs/R/30-retest/E.md', content: 'x' } },
+  },
+  {
+    id: 'C27',
+    desc: 'sessao principal em coretriad/governance (registro de decisao) — NAO pode bloquear',
+    esperado: 'approve',
+    payload: { tool_name: 'Write', tool_input: { file_path: 'coretriad/governance/APPROVALS.md', content: 'x' } },
+  },
+  {
+    id: 'C28',
+    desc: 'sessao principal LENDO remediation/ — leitura nunca foi o problema',
+    esperado: 'approve',
+    payload: { tool_name: 'Read', tool_input: { file_path: 'remediation/cases/X/TRIAGE.md' } },
+  },
+  {
+    id: 'C29',
+    desc: 'sanacore-engineer escrevendo na worktree sana — a faixa dele, segue liberada',
+    esperado: 'approve',
+    payload: {
+      tool_name: 'Write',
+      agent_type: 'sanacore-remediation-engineer',
+      agent_id: 'a30',
+      tool_input: { file_path: 'c:/Sistema EvokAudio/ERP-Evok-sana-CASE-005/server/x.ts', content: 'x' },
+    },
+  },
 ];
 
 let ok = 0;
