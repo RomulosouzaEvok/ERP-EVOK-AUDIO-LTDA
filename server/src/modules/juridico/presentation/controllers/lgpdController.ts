@@ -11,6 +11,9 @@ import type { Request, Response, NextFunction } from 'express';
 const SequelizeLgpdActivityRepository = require('../../infrastructure/sequelize/SequelizeLgpdActivityRepository');
 const SequelizeLgpdRequestRepository = require('../../infrastructure/sequelize/SequelizeLgpdRequestRepository');
 const SequelizeLgpdIncidentRepository = require('../../infrastructure/sequelize/SequelizeLgpdIncidentRepository');
+const SequelizeLgpdDpoDesignationRepository = require('../../infrastructure/sequelize/SequelizeLgpdDpoDesignationRepository');
+const SequelizeLgpdRetentionPolicyRepository = require('../../infrastructure/sequelize/SequelizeLgpdRetentionPolicyRepository');
+const SequelizeLgpdManualTaskRepository = require('../../infrastructure/sequelize/SequelizeLgpdManualTaskRepository');
 const { logAction } = require('../../../../services/auditLogService');
 
 const CreateProcessingActivityUseCase = require('../../application/use-cases/lgpd/CreateProcessingActivityUseCase');
@@ -30,12 +33,16 @@ const PendingCriticalDataSubjectRequestsUseCase = require('../../application/use
 const CreateIncidentUseCase = require('../../application/use-cases/lgpd/CreateIncidentUseCase');
 const DecideIncidentUseCase = require('../../application/use-cases/lgpd/DecideIncidentUseCase');
 const CloseIncidentUseCase = require('../../application/use-cases/lgpd/CloseIncidentUseCase');
+const PendingCriticalIncidentsUseCase = require('../../application/use-cases/lgpd/PendingCriticalIncidentsUseCase');
 const ListIncidentsUseCase = require('../../application/use-cases/lgpd/ListIncidentsUseCase');
 const GetIncidentByIdUseCase = require('../../application/use-cases/lgpd/GetIncidentByIdUseCase');
 
 const activityRepository = new SequelizeLgpdActivityRepository();
 const requestRepository = new SequelizeLgpdRequestRepository();
 const incidentRepository = new SequelizeLgpdIncidentRepository();
+const dpoDesignationRepository = new SequelizeLgpdDpoDesignationRepository();
+const retentionPolicyRepository = new SequelizeLgpdRetentionPolicyRepository();
+const manualTaskRepository = new SequelizeLgpdManualTaskRepository();
 
 // ---- RoPA ----
 
@@ -59,7 +66,11 @@ exports.getActivityById = async (req: Request, res: Response, next: NextFunction
 /** `POST /api/jur/lgpd/processing-activities` */
 exports.createActivity = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const activity = await new CreateProcessingActivityUseCase(activityRepository).execute({ ...req.body, createdBy: (req as any).user.id });
+    const activity = await new CreateProcessingActivityUseCase(activityRepository, retentionPolicyRepository).execute({
+      ...req.body,
+      createdBy: (req as any).user.id,
+      retentionPolicyId: req.body?.retention_policy_id ?? req.body?.retentionPolicyId ?? undefined,
+    });
     logAction(req, { action: 'create', entityType: 'JurLgpdProcessingActivity', entityId: activity.id, newValues: activity });
     res.status(201).json({ success: true, data: activity });
   } catch (error) { next(error); }
@@ -68,7 +79,7 @@ exports.createActivity = async (req: Request, res: Response, next: NextFunction)
 /** `PUT /api/jur/lgpd/processing-activities/:id` */
 exports.updateActivity = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const activity = await new UpdateProcessingActivityUseCase(activityRepository).execute({ id: Number(req.params.id), ...req.body });
+    const activity = await new UpdateProcessingActivityUseCase(activityRepository, retentionPolicyRepository).execute({ id: Number(req.params.id), ...req.body });
     logAction(req, { action: 'update', entityType: 'JurLgpdProcessingActivity', entityId: Number(req.params.id), newValues: req.body });
     res.json({ success: true, data: activity });
   } catch (error) { next(error); }
@@ -102,6 +113,14 @@ exports.pendingCriticalDataSubjectRequests = async (_req: Request, res: Response
   } catch (error) { next(error); }
 };
 
+/** `GET /api/jur/lgpd/incidents/pending-critical` */
+exports.pendingCriticalIncidents = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await new PendingCriticalIncidentsUseCase(incidentRepository).execute();
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
 /** `GET /api/jur/lgpd/data-subject-requests/:id` */
 exports.getDataSubjectRequestById = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -113,9 +132,9 @@ exports.getDataSubjectRequestById = async (req: Request, res: Response, next: Ne
 /** `POST /api/jur/lgpd/data-subject-requests` */
 exports.createDataSubjectRequest = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const request = await new CreateDataSubjectRequestUseCase(requestRepository).execute({
+    const request = await new CreateDataSubjectRequestUseCase(requestRepository, dpoDesignationRepository).execute({
       ...req.body,
-      dpoUserId: req.body?.dpo_user_id ?? (req as any).user.id,
+      dpoUserId: req.body?.dpo_user_id ?? req.body?.dpoUserId ?? undefined,
     });
     logAction(req, { action: 'create', entityType: 'JurLgpdDataSubjectRequest', entityId: request.id, newValues: request });
     res.status(201).json({ success: true, data: request });
@@ -139,7 +158,7 @@ exports.verifyIdentity = async (req: Request, res: Response, next: NextFunction)
 /** `POST /api/jur/lgpd/data-subject-requests/:id/resolve` */
 exports.resolveDataSubjectRequest = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const request = await new ResolveDataSubjectRequestUseCase(requestRepository).execute({
+    const request = await new ResolveDataSubjectRequestUseCase(requestRepository, manualTaskRepository).execute({
       id: Number(req.params.id),
       resolution_notes: req.body?.resolution_notes,
       answered_at: req.body?.answered_at ?? null,
@@ -183,10 +202,10 @@ exports.getIncidentById = async (req: Request, res: Response, next: NextFunction
 /** `POST /api/jur/lgpd/incidents` */
 exports.createIncident = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const incident = await new CreateIncidentUseCase(incidentRepository).execute({
+    const incident = await new CreateIncidentUseCase(incidentRepository, dpoDesignationRepository).execute({
       ...req.body,
       createdBy: (req as any).user.id,
-      dpoUserId: req.body?.dpo_user_id ?? null,
+      dpoUserId: req.body?.dpo_user_id ?? req.body?.dpoUserId ?? undefined,
     });
     logAction(req, { action: 'create', entityType: 'JurLgpdIncident', entityId: incident.id, newValues: incident });
     res.status(201).json({ success: true, data: incident });

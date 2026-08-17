@@ -171,6 +171,9 @@ import JurIpContractLink = require('./JurIpContractLink');
 import JurLgpdProcessingActivity = require('./JurLgpdProcessingActivity');
 import JurLgpdDataSubjectRequest = require('./JurLgpdDataSubjectRequest');
 import JurLgpdIncident = require('./JurLgpdIncident');
+import JurLgpdDpoDesignation = require('./JurLgpdDpoDesignation');
+import JurLgpdRetentionPolicy = require('./JurLgpdRetentionPolicy');
+import JurLgpdManualTask = require('./JurLgpdManualTask');
 import JurCorporateAct = require('./JurCorporateAct');
 import JurContractApproval = require('./JurContractApproval');
 import AccountingChartOfAccount = require('./AccountingChartOfAccount');
@@ -1566,6 +1569,7 @@ export {
   JurExternalLawyer, JurLegalCase, JurLegalCaseEvent, JurLegalCaseDeadline,
   JurLegalCaseProvision, JurLegalAlert, JurProxy, JurIntellectualProperty,
   JurIpContractLink, JurLgpdProcessingActivity, JurLgpdDataSubjectRequest, JurLgpdIncident,
+  JurLgpdDpoDesignation, JurLgpdRetentionPolicy, JurLgpdManualTask,
   JurCorporateAct, JurContractApproval,
   AccountingChartOfAccount, AccountingEntry, AccountingEntryItem,
   TreasuryBankAccount, TreasuryFinancialOperation,

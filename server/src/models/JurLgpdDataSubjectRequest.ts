@@ -32,6 +32,7 @@ interface JurLgpdDataSubjectRequestAttributes {
   resolution_notes: string | null;
   answered_at: Date | null;
   dpo_user_id: number;
+  manual_review_task_id: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -56,6 +57,7 @@ const JurLgpdDataSubjectRequest = sequelize.define<any, JurLgpdDataSubjectReques
   resolution_notes: { type: DataTypes.TEXT, allowNull: true },
   answered_at: { type: DataTypes.DATE, allowNull: true },
   dpo_user_id: { type: DataTypes.INTEGER, allowNull: false },
+  manual_review_task_id: { type: DataTypes.INTEGER, allowNull: true },
 }, {
   tableName: 'jur_lgpd_data_subject_requests',
   underscored: true,

@@ -25,6 +25,7 @@ interface JurLgpdProcessingActivityAttributes {
   source_system: string | null;
   sharing_description: string | null;
   retention_period: string | null;
+  retention_policy_id: number | null;
   security_measures: string | null;
   department_id: number;
   last_reviewed_at: string | null;
@@ -46,6 +47,7 @@ const JurLgpdProcessingActivity = sequelize.define<any, JurLgpdProcessingActivit
   source_system: { type: DataTypes.STRING(150), allowNull: true },
   sharing_description: { type: DataTypes.TEXT, allowNull: true },
   retention_period: { type: DataTypes.STRING(150), allowNull: true },
+  retention_policy_id: { type: DataTypes.INTEGER, allowNull: true },
   security_measures: { type: DataTypes.TEXT, allowNull: true },
   department_id: { type: DataTypes.INTEGER, allowNull: false },
   last_reviewed_at: { type: DataTypes.DATEONLY, allowNull: true },
@@ -55,7 +57,7 @@ const JurLgpdProcessingActivity = sequelize.define<any, JurLgpdProcessingActivit
   tableName: 'jur_lgpd_processing_activities',
   underscored: true,
   timestamps: true,
-  indexes: [{ fields: ['department_id'] }, { fields: ['next_review_due_at'] }],
+  indexes: [{ fields: ['department_id'] }, { fields: ['next_review_due_at'] }, { fields: ['retention_policy_id'] }],
 });
 
 export = JurLgpdProcessingActivity;

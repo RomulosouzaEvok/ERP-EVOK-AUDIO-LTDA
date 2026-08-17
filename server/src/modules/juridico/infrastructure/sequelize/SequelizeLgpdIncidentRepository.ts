@@ -24,6 +24,20 @@ class SequelizeLgpdIncidentRepository extends LgpdIncidentRepository {
     });
   }
 
+  public async listPendingCritical(): Promise<any[]> {
+    const { Op } = require('sequelize');
+    const limitDate = new Date();
+    limitDate.setHours(limitDate.getHours() + 72);
+
+    return JurLgpdIncident.findAll({
+      where: {
+        status: { [Op.notIn]: ['closed'] },
+        assessment_due_at: { [Op.lte]: limitDate },
+      },
+      order: [['assessment_due_at', 'ASC']],
+    });
+  }
+
   public async findById(id: number | string): Promise<any | null> {
     return JurLgpdIncident.findByPk(id);
   }

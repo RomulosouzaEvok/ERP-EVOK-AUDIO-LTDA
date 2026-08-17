@@ -166,6 +166,7 @@ router.post('/lgpd/data-subject-requests/:id/resolve', lgpdController.resolveDat
 router.post('/lgpd/data-subject-requests/:id/reject', authorizeModule('juridico', 'approve'), lgpdController.rejectDataSubjectRequest);
 
 // Incidente (5 endpoints)
+router.get('/lgpd/incidents/pending-critical', lgpdController.pendingCriticalIncidents);
 router.get('/lgpd/incidents', lgpdController.listIncidents);
 router.get('/lgpd/incidents/:id', lgpdController.getIncidentById);
 router.post('/lgpd/incidents', lgpdController.createIncident);

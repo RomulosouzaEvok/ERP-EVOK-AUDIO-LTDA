@@ -19,6 +19,7 @@ export interface CreateProcessingActivityInput {
   source_system?: string | null;
   sharing?: string[] | string | null;
   retention_period?: string | null;
+  retentionPolicyId?: number | null;
   security_measures?: string | null;
   department_id: number;
   createdBy: number;
@@ -46,7 +47,7 @@ export interface CreateDataSubjectRequestInput {
   requester_email?: string | null;
   subject_category?: string | null;
   received_at?: string | null;
-  dpoUserId: number;
+  dpoUserId?: number | null;
 }
 
 export interface VerifyIdentityInput {

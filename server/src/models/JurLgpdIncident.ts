@@ -28,6 +28,7 @@ interface JurLgpdIncidentAttributes {
   action_plan: string | null;
   status: IncidentStatus;
   dpo_user_id: number;
+  assessment_due_at: Date | null;
   closed_at: Date | null;
   created_by: number;
   readonly createdAt?: Date;
@@ -47,13 +48,14 @@ const JurLgpdIncident = sequelize.define<any, JurLgpdIncidentAttributes>('JurLgp
   action_plan: { type: DataTypes.TEXT, allowNull: true },
   status: { type: DataTypes.ENUM('open', 'investigating', 'closed'), allowNull: false, defaultValue: 'open' },
   dpo_user_id: { type: DataTypes.INTEGER, allowNull: false },
+  assessment_due_at: { type: DataTypes.DATE, allowNull: true },
   closed_at: { type: DataTypes.DATE, allowNull: true },
   created_by: { type: DataTypes.INTEGER, allowNull: false },
 }, {
   tableName: 'jur_lgpd_incidents',
   underscored: true,
   timestamps: true,
-  indexes: [{ fields: ['status'] }, { fields: ['dpo_user_id'] }],
+  indexes: [{ fields: ['status'] }, { fields: ['dpo_user_id'] }, { fields: ['assessment_due_at'] }],
 });
 
 export = JurLgpdIncident;
