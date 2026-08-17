@@ -1800,3 +1800,57 @@ Nenhuma pendência de severidade permanece aberta com o dono. `D-R3` fica
   já tenha antecipado o rebaixamento precisa ser corrigido.
 - **Não** resolve as pendências técnicas remanescentes: `C-137`, a reconciliação
   ±2 e as divergências do par de cobertura.
+
+---
+
+## APR-2026-036 — `C-137`: corte intermediário (1ª ordem cobre, 2ª ordem exclui)
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno)
+**Resolve:** a divergência §4 de `T-41_C137_SEMANTICA_COLUNA_LOTE3.md` e
+`DIV-COV4-06` do par de cobertura.
+
+### O problema que esta decisão resolve
+
+`APR-2026-034` D2 continha **duas definições de escopo que não coincidem** —
+uma por **banda de risco** (dinheiro, estoque, fiscal, dado pessoal) e outra por
+**módulo** (excluir SST, Jurídico, Facilities, TI, Marketing). O `T-41` provou
+que **31 tabelas caem na diferença**, porque módulos nomeados para exclusão
+contêm dado da banda nomeada para inclusão — notadamente **dado de saúde de
+trabalhador** (`sst_asos`, `sst_acidentes`, `sst_exames_complementares`),
+categoria especial da LGPD (art. 5º II).
+
+A decisão anterior **não era autoaplicável**. Esta a torna.
+
+### A decisão — opção (c) do `T-41` §4
+
+**Cobertura integral** das **57 tabelas de 1ª ordem** — as que carregam o
+atributo da banda em si.
+
+**Exclusão declarada nominalmente** das **23 tabelas de 2ª ordem** — cabeçalhos
+de documento e tabelas de vínculo, marcadas com `*` em `T-41` §3.1.
+
+**Consequência que a decisão preserva, e é o motivo dela:** o dado de saúde de
+trabalhador **permanece coberto**. Não houve aceitação de risco sobre categoria
+especial de dado pessoal, que era o custo da alternativa "por módulo".
+
+**Critério de corte, para não depender de interpretação futura:** 1ª ordem é a
+tabela cuja **própria coluna** materializa o valor monetário, a quantidade de
+estoque, o efeito fiscal ou o dado pessoal. 2ª ordem é a que só o referencia —
+numeração, `status`, data-base, par aprovador/data, ou vínculo nominal.
+
+**Condição vinculante mantida de `APR-2026-034` D2:** a exclusão consta
+**nominalmente**, tabela a tabela. A lista das 23 é a de `T-41` §3.1 marcada
+`*`, e deve ser reproduzida no relatório final — não substituída por frase
+genérica de escopo.
+
+### O que esta entrada NÃO faz
+
+- **Não** fecha `C-137`, que segue em `A(61/207)`.
+- **Não** cobre as **21 tabelas sem model** (`T35-META-F01` / `RES-T41-07`) —
+  elas não são triáveis e **não estão na exclusão declarada**, porque excluir
+  nominalmente exige nomear.
+- **Não** estende a cobertura por risco a nenhuma outra célula — `C-136` e
+  demais permanecem sob a recusa de `APR-2026-024` Decisão A, cuja lista o dono
+  pediu para ver antes de decidir.
+- **Não** altera severidade nem fecha finding algum.
