@@ -56,7 +56,18 @@ const DEBITO_CONHECIDO = new Set([
   // estágio 1, `AUD-ALOG-01` item A, `APR-2026-033`): `DELETE
   // /api/employees/:id` passou a chamar `logAction`. A catraca agora EXIGE
   // auditoria em `employees` para sempre — remover a chamada reprova aqui.
-  'items',
+  // 'items' SAIU em 2026-08-17 (SanaCore `ERP-LEGACY-001-CASE-004` estágio 2,
+  // `AUD-ALOG-01` item B, `APR-2026-033` + `APR-2026-034` D1): `PATCH
+  // /api/items/:id/inactivate` e `DELETE /api/items/:id` passaram a chamar
+  // `logAction`.
+  //
+  // ⚠️ COROLÁRIO, para ninguém ler "guarda verde" como "módulo auditado":
+  // esta guarda tem granularidade de MÓDULO (`temAuditoria` abaixo só pergunta
+  // se ALGUM controller do módulo cita `logAction`). Com `items` fora da lista
+  // ela deixa de sinalizar o módulo, mas `itemController.removeSupplier`
+  // (fornecedor de item — item C de `AUD-ALOG-01`, FORA desta autorização)
+  // **continua mudo**, assim como `create` e `update` de item. A guarda NÃO
+  // cobre esses handlers e não passará a cobri-los.
   'mobileInventory',
   'nonConformities',
   'serviceOrders',
