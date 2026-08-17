@@ -1988,3 +1988,118 @@ genérica de escopo.
   segue aberto.
 - **Não** fecha `C-137`, não altera severidade, não fecha finding, não declara
   `AUDIT_PASSED`.
+
+---
+
+## APR-2026-038 — extensão do critério a `C-133`/21 tabelas + contradição G3 × EMENDA-01 registrada como bloqueante
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto
+
+### D1 — Critério de `APR-2026-037` ESTENDIDO ao resíduo de `C-133` e às 21 tabelas sem model
+
+**Texto verbatim:** *"Para o resíduo de `C-133` e as 21 tabelas sem model: pode
+estender o mesmo critério do `C-137` (cobertura total onde é dado
+sensível/dinheiro/estoque/fiscal, parcial documentada no resto) — parecem gaps
+estruturais/administrativos, sem o mesmo sinal de risco de `C-136`."*
+
+Aplica-se aos dois blocos o mesmo mecanismo: **cobertura total nas bandas de
+risco, exclusão declarada nominalmente no restante**.
+
+**Condição vinculante herdada de `APR-2026-034`/`036`/`037`:** a exclusão consta
+**nominalmente**. Para as 21 tabelas sem model isso tem um pré-requisito próprio,
+e ele **não pode ser saltado**: elas hoje **não são nomeáveis** (`RES-T42-05`),
+e `APR-2026-037` §5.5 registra que por isso **não estavam cobertas por exclusão
+alguma**. Portanto:
+
+> **Antes de aceitar as 21 por exclusão, é preciso NOMEÁ-LAS.** A identificação
+> é estática — diferença entre os `CREATE TABLE` do baseline e os `tableName` dos
+> models (`DYN-T35-07` registra que é resolvível sem tocar banco). Aceitar sem
+> nomear violaria a própria condição que o dono fixou três vezes.
+
+Depois de nomeadas, aplica-se o critério: as que forem de dado
+sensível/dinheiro/estoque/fiscal **são cobertas**; as demais entram na exclusão
+nominal.
+
+### D2 — `C-136`: NENHUMA decisão de cobertura parcial. Caracterização entregue, decisão retida.
+
+**Texto verbatim:** *"Antes de estender a emenda: caracterize rapidamente
+`C-136` — o que é, e por que a estimativa original errou por uma ordem de
+grandeza. Não decida cobertura parcial nele até eu ver essa caracterização,
+dado o padrão de hoje (subestimativa grande costuma esconder algo que não foi
+examinado)."*
+
+**A caracterização foi entregue ao dono e o julgamento se confirmou.** Registro
+o essencial, porque é material para o relatório final:
+
+1. **A estimativa errou por unidade de contagem.** O plano tratou `C-136` como
+   **1 célula** — que é o que ela é na planilha — e orçou **1 sessão**
+   (`AUDIT_PLAN_EMENDA_02.md:363`). A célula contém **683 endpoints × 11
+   dimensões ≈ 7.500 células reais**; ao ritmo medido da run (~150 células/lote),
+   **≈50 lotes**. O plano ainda erra o denominador: diz "681/681", e `T-17` §1.3
+   mediu 683, registrando que *"o número 681 está errado nas duas pontas"*.
+2. **O que a subestimativa esconde — e é o motivo de a cautela do dono ter
+   procedido:** `C-136` é a **única superfície onde autorização e idempotência
+   são vistas POR ROTA e não por módulo**. Esta auditoria **já provou duas vezes
+   que trilha por módulo erra por omissão de fronteira** — `AUD-SEC-T04-01` e,
+   de forma decisiva, **`AUD-ALOG-01`**: os 8 endpoints mudos **não foram achados
+   pela trilha do módulo**, apareceram por acaso numa retificação de asserção
+   sobre soft delete. O item mais caro da lista é exatamente o que pegaria a
+   classe de defeito que já escapou aqui dentro, e teve **zero movimento em 4
+   rodadas** (`RES-16`).
+3. É também a base para varrer a **Regra 24** (papel declarado pelo cliente sem
+   verificação server-side) **por rota** — regra que o `CLAUDE.md` classifica como
+   CRITICAL bloqueante para release.
+
+**`C-136` permanece SEM DECISÃO.** Não há autorização de cobertura parcial, não
+há autorização de aceitação. A recomendação do director — dividir, cobrindo a
+matriz nas rotas IN-categoria e declarando exclusão **por dimensão** no
+complemento — depende da lista IN/OUT (`F-5`), que **não existe**.
+
+### D3 — Contradição G3 × EMENDA-01: registrada como BLOQUEANTE, com destaque no Relatório Executivo
+
+**Texto verbatim do dono:**
+
+> *"Não deixe isso como nota de rodapé no relatório. Registre explicitamente
+> como uma contradição real entre dois artefatos de governança aprovados, que
+> precisa de reconciliação formal antes da declaração final de fechamento da
+> auditoria — não é 'questão em aberto' trivial, é um gate que a própria
+> auditoria criou e depois contornou. Isso deve aparecer com destaque no
+> Relatório Executivo, não enterrado no Técnico."*
+
+**A contradição, enunciada sem suavização:**
+
+| Artefato | O que determina |
+|---|---|
+| **Gate G3** (`APPROVED_WITH_CONDITIONS`, `APPROVALS.md:584`) | **VEDA amostragem** em segurança, integridade de dados, dado pessoal, contratos e regras críticas |
+| **`APR-2026-037`** (EMENDA-01 a `APR-2026-024`) | **ACEITA cobertura parcial** com exclusão nominal em bandas que incluem dado pessoal e integridade de dados |
+
+**Os dois estão aprovados. Os dois estão em vigor. Eles se contradizem.**
+
+E a caracterização é do próprio dono: **é um gate que a auditoria criou e depois
+contornou**. `G8` (`:585`) prevê o caminho legítimo — *"redução futura = nova
+decisão humana registrada como exclusão explícita"* —, mas **o G3 não foi
+formalmente reduzido**: a emenda foi escrita como critério de cobertura, sem
+declarar que relaxa o gate.
+
+**Determinações vinculantes:**
+
+1. **É condição de fechamento**, não observação. **Nenhuma declaração final de
+   encerramento da auditoria pode ser emitida** enquanto a contradição não for
+   formalmente reconciliada — seja pela redução explícita do G3 pela via do `G8`,
+   seja pela restrição da EMENDA-01 às bandas que o G3 não veda.
+2. **Vai no Relatório Executivo, com destaque** — não no Técnico, não em nota de
+   rodapé, não em apêndice. O `vericore-audit-reporting-agent` fica **vinculado**
+   a esta determinação.
+3. Deve ser apresentada **como contradição entre dois artefatos aprovados**, com
+   os dois citados por linha, e **não** como "questão em aberto" ou "ponto de
+   atenção" — a redação minimizadora é vedada por esta entrada.
+
+### O que esta entrada NÃO faz
+
+- **Não** decide `C-136` (D2) nem os demais blocos de
+  `CELULAS_SEM_AUTORIZACAO_ACEITACAO.md`.
+- **Não** reduz o gate G3 — apenas registra que a redução seria necessária e não
+  ocorreu.
+- **Não** autoriza aceitar as 21 tabelas sem antes nomeá-las (D1).
+- **Não** declara `AUDIT_PASSED`, não fecha finding, não altera severidade.
