@@ -74,7 +74,51 @@ do Codex não o fecha — ele não tocou no ponto.
 
 ---
 
+## 4-ERRATA (2026-08-17, posterior à implementação) — a §4 abaixo está ERRADA
+
+**O que a §4 afirma:** que o literal de `docker-compose.yml:54` escapa de
+`ENV_PLACEHOLDER_PATTERN`, e que por isso o teste do Codex, sozinho, seria
+falso-verde.
+
+**É falso.** Medido depois, sem imprimir valor:
+
+```
+linha 43: temDefault=true  len=11  casaPlaceholder=false
+linha 54: temDefault=true  len=45  casaPlaceholder=true   <-- casa
+linha 57: temDefault=true  len=25  casaPlaceholder=true
+padrão em runtimeEnv.ts:12 = /^(CHANGE_ME|dev-only-change-me)/i
+```
+
+O literal de `:54` **casa** com o padrão, pelo prefixo `dev-only-change-me`.
+
+**Como o erro entrou:** conflei duas coisas distintas da triagem. `CR-4` diz que a
+denylist é frágil e que **`.env.docker.example:16`** escapa dela; `CR-2` diz que
+**`:54`** passa na guarda de *comprimento* sempre ativa (`:250`). Tratei as duas
+como a mesma afirmação e concluí que `:54` escapava da denylist. **Não li a linha
+54 — usei a síntese.** É exatamente a falha que a regra de método nº 1 deste run
+existe para impedir: *confirmar literal lendo o arquivo, nunca por saída de
+terceiro.* O `TRIAGE.md` §2.1/CR-2 estava certo; a comparação o contradisse e o
+briefing de implementação herdou o erro.
+
+**O que muda e o que não muda:**
+
+- **Não muda o entregável.** `T1` e `T-CODEX` continuam obrigatórios e **ambos
+  reprovam o `AUDIT_COMMIT`**, que é o critério inegociável. Confirmado na
+  execução: 8 testes falham antes do patch, 19 passam depois.
+- **Muda a justificativa.** Os dois exercitam a **mesma** guarda
+  (`ENV_PLACEHOLDER_PATTERN`), não guardas distintas. **O `T-CODEX` nunca foi
+  falso-verde** — a ressalva que levantei contra ele não procedia.
+- **`CR-4` continua válida** como restrição de desenho (denylist ancarada é
+  frágil), mas **não era** o buraco por onde este valor passava. O buraco era só
+  o early-return de `:73-75`.
+
+A §4 fica preservada abaixo, com o erro à vista (Regra 15 — evidência não se
+apaga). Quem a citar deve citar esta errata junto.
+
+---
+
 ## 4. O teste sugerido pelo Codex — entra, mas sozinho é falso-verde
+> **⚠ SUPERADA PELA §4-ERRATA ACIMA.** A premissa desta seção é falsa.
 
 Determinado pelo dono: incluir. **Incluído.** Com a ressalva abaixo, que é o
 achado principal desta comparação.
