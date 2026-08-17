@@ -74,7 +74,11 @@
 [CmdletBinding()]
 param(
     [string]   $Container     = 'evok-postgres',
-    [string]   $LogDir        = (Join-Path $PSScriptRoot '..\..\coretriad\evidence\postgres-connection-logs'),
+    # Vazio de proposito: resolvido no corpo. Sob `powershell.exe -File`, o
+    # $PSScriptRoot ainda nao existe quando o param() e avaliado, e usa-lo aqui
+    # quebra a execucao pelo Agendador com "cadeia de caracteres vazia" -- falha
+    # que nao aparece ao chamar o script de dentro de outra sessao.
+    [string]   $LogDir        = '',
     [string]   $ReplicaPath   = '',
     [int]      $RetentionDays = 90,
     [switch]   $SkipReplica,
@@ -85,6 +89,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($LogDir)) {
+    $raiz = $PSScriptRoot
+    if ([string]::IsNullOrWhiteSpace($raiz)) { $raiz = Split-Path -Parent $MyInvocation.MyCommand.Path }
+    $LogDir = Join-Path $raiz '..\..\coretriad\evidence\postgres-connection-logs'
+}
+
 $EXIT_OK              = 0
 $EXIT_ERRO            = 1
 $EXIT_SEM_REPLICACAO  = 2

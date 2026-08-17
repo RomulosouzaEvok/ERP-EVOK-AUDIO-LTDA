@@ -1455,3 +1455,74 @@ segue adequada; a folga é menor do que eu havia afirmado.
 - Não alterou `logging_collector`, `log_statement` nem qualquer outro parâmetro
   além dos três nomeados. `log_statement` permanece `none`: a janela registra
   conexões, não comandos.
+
+---
+
+## APR-2026-030 — janela de `CE-06` confirmada concluída + alerta de falha do job
+
+**Data:** 2026-08-16
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto
+
+### D1 — Confirmação humana de conclusão da janela
+
+**Texto verbatim:** *"Confirmo a etapa como concluída sem problema. Pode
+registrar isso oficialmente e seguir."*
+
+Confirmação humana explícita (Regra 18) de que a execução registrada em
+`APR-2026-029` terminou sem incidente. Encerra o gate operacional da janela.
+
+**Não é fechamento de `CE-06`**, e o dono foi explícito quanto a isso:
+
+> *"Sobre `CE-06` continuar aberto — está correto e é a mesma disciplina de
+> sempre: mecanismo real implementado, mas replicação fora do host ainda
+> pendente, então não fecha. Não force o fechamento."*
+
+Registrado como **precedente**: mecanismo implementado e provado **não** satisfaz
+critério cujo requisito de saída ainda tem parte pendente. `CE-06` segue
+**`EM IMPLEMENTAÇÃO`**; `PEND-2026-001` segue aberta; `RC-PROC-01` segue ABERTA.
+
+### D2 — Alerta de falha do job de retenção
+
+**Texto verbatim:** *"Configure um alerta simples para falha do job diário de
+retenção — mesmo que seja só um e-mail ou notificação local quando o exit code
+não for 0, ou quando o job não rodar no horário esperado. Não precisa ser
+sofisticado; precisa existir, dado que a margem real do buffer é de 5-6 dias,
+não 'indefinida' como se estimou antes."*
+
+**Implementado:** `ops/postgres-log-retention/Watch-RetentionJob.ps1`, tarefa
+`\EvokAudio\CE-06 Alerta Retencao`, diária às 04h00 (1h após o job). Alerta em
+três condições — código diferente de 0, job parado além de 26h, e ausência de
+arquivo do dia (o caso "sucesso vazio"). Registro em `ALERTAS.log` como fonte de
+verdade, mais notificação local. Bateria de prova: **17/17**.
+
+**Decisão de desenho registrada:** o **código 2** (replicação pendente) alerta
+de propósito. Não é ruído — é o lembrete diário de que `CE-06` não está
+satisfeito. Silenciá-lo seria voltar a fingir que está.
+
+### Dois defeitos reais encontrados pelo próprio alerta, no primeiro uso
+
+1. **O job quebrava sob o Agendador.** `$PSScriptRoot` está vazio quando o
+   PowerShell avalia os defaults do `param()` sob `powershell.exe -File`. O job
+   funcionava quando chamado de dentro de outra sessão e **falharia todo dia às
+   03h00** — perda silenciosa de evidência, exatamente o modo de falha que o
+   alerta existe para cobrir. Corrigido nos dois scripts.
+2. **O alerta mentia sobre tarefa nunca executada.** O Agendador do Windows usa
+   `LastRunTime = 30/11/1999` e `LastTaskResult = 267011`, não
+   `DateTime.MinValue`. A primeira versão reportou *"não roda há 234.165h"* e
+   *"o job FALHOU"* para uma tarefa recém-criada. Corrigido; casos `W-16`,
+   `W-17` e `W-18` acrescentados com os sentinelas reais.
+
+**Observação de método, registrada porque vale para o programa inteiro:** os
+dois defeitos passaram por baterias que estavam verdes. Caso sintético só prova
+alguma coisa se o valor sintético for o que a realidade usa, e prova de script
+agendado só vale se executada **pelo agendador**, não pela sessão do autor.
+
+**Prova fim a fim:** disparo pelo Agendador → job devolve código 2 → vigilante
+detecta → entrada gravada em `ALERTAS.log`. Verificado em 21h26.
+
+### Limite declarado
+
+**Não há watchdog do watchdog.** Se a tarefa de vigilância for desabilitada ou a
+máquina ficar desligada, ninguém alerta. Escolha consciente de proporção: o
+alerta cobre o modo de falha comum (job quebrou, job parou), não sabotagem nem
+máquina desligada por semanas. Registrado em vez de silenciado.
