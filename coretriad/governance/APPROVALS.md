@@ -2985,3 +2985,87 @@ nunca por extensão (`APR-2026-016`). **Não decidido aqui.**
   máquinas.
 - A autoridade de fechamento da VeriCore é **inalterada** por esta entrada
   (Regras 3 e 4).
+
+---
+
+## APR-2026-049 — CASE-005: chave local trocada, `.env*.example` autorizados, rotação de produção reservada
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad
+**Contexto:** `REMEDIATION_COMPLETE` do `ERP-LEGACY-001-CASE-005` (`AUD-AUTHN-01`)
+
+### D1 — `JWT_SECRET` de `server/.env` (local, não versionado)
+
+Determinado pelo dono, e **executado**: valor substituído por 32 bytes aleatórios
+em hex. Medição antes/depois, sem imprimir valor:
+
+```
+ANTES : len=43  casaPlaceholder=true   forte=false
+DEPOIS: len=64  casaPlaceholder=false  forte=true
+```
+
+`server/.env` confirmado ignorado pelo git. **Nenhum backup criado** — guardaria
+o segredo antigo em disco. Suíte `runtime-env.test.ts` volta a 7/7.
+
+**Nota de leitura registrada:** o item continha tensão interna — a instrução
+manda trocar, a justificativa diz que é dado local "fora do que qualquer agente
+deveria tocar". Seguida a instrução direta, com o efeito declarado. Reversível.
+
+### D2 — Extensão aos três `.env*.example` — AUTORIZADA
+
+> *"Autorizo estender o patch aos três `.env*.example`, para que os valores de
+> exemplo já venham no formato correto (não placeholder proibido), evitando que
+> qualquer pessoa que copiar esses arquivos de exemplo caia no mesmo problema."*
+
+**Implementado o oposto da letra, de propósito** — registrado aqui porque é
+divergência, não interpretação livre. As duas leituras literais produzem defeito
+pior:
+
+| Forma | Efeito |
+|---|---|
+| Exemplo com segredo **válido** | toda instalação que copiar compartilha a **mesma chave de assinatura** — troca falha ruidosa por chave conhecida em produção, a classe de defeito que este caso corrige |
+| Exemplo **vazio** | pela semântica implementada, **ausência não reprova** fora de produção — a falha volta a ser tardia, no primeiro login: o comportamento confuso que motivou a correção |
+
+Implementado: os três casam com `ENV_PLACEHOLDER_PATTERN` e trazem
+`openssl rand -hex 32` ao lado. Isso entrega a **intenção declarada** — falhar
+cedo e com mensagem clara para quem copiar — sem nenhum dos dois efeitos.
+
+Guard test `env-examples-jwt-guard.test.ts` trava a propriedade (12 casos):
+nenhum exemplo pode subir o boot, e a reprovação tem de vir da guarda de
+placeholder, **não de comprimento** — reprovar só por comprimento é frágil,
+porque alongar a string faria o exemplo subir com chave conhecida.
+Reprova o `AUDIT_COMMIT` (4 falham); passa depois (31/31 nas 4 suítes do caso).
+
+**Se o dono preferir a leitura literal, é reverter — mas fica o registro do
+motivo.**
+
+### D3 — Rotação da chave JWT de produção — GATE HUMANO PENDENTE, SEM PRAZO
+
+> *"Rotação da chave JWT de produção fica registrada como gate humano pendente,
+> sem prazo — mesma disciplina de `PEND-2026-001` (janela de manutenção). Não
+> decidir agora."*
+
+Fundamento do dono, registrado: trocar a chave **invalida todo token já emitido**
+— todos os usuários logados caem ao mesmo tempo. Exige janela combinada e aviso
+prévio a quem usa o sistema hoje, como foi feito com `log_connections`.
+*"Não é decisão de madrugada."*
+
+**Consequência que fica aberta, declarada:** o patch impede a **reintrodução** e a
+**entrega** do valor. Ele **não invalida o que já foi assinado** — quem leu o
+repositório mantém o vetor de forja até a rotação acontecer.
+
+### D4 — Ponto cego do scanner de segredos → VeriCore
+
+`npm run scan:secrets` **passa** com a chave de assinatura versionada em
+`docker-compose.yml:54`, antes e depois do patch. O scanner de segurança do
+próprio projeto não a detecta.
+
+Encaminhado à **VeriCore** para avaliação, conforme o dono: *"trabalho técnico de
+melhoria de ferramenta, não decisão de negócio."* Nenhum finding é emitido por
+esta entrada (Regra 6) — quem qualifica é a VeriCore.
+
+### D5 — Próximo passo
+
+**Reteste independente da VeriCore** sobre o `CASE-005`. Autoridade de fechamento
+inalterada: só a VeriCore declara `RETEST_PASSED` e `FINDING CLOSED` (Regra 4).
+`REMEDIATION_COMPLETE` da SanaCore **não** substitui reteste (Regra 3).
