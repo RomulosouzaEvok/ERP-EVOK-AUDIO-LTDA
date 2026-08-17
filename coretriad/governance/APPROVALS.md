@@ -2103,3 +2103,100 @@ declarar que relaxa o gate.
   ocorreu.
 - **Não** autoriza aceitar as 21 tabelas sem antes nomeá-las (D1).
 - **Não** declara `AUDIT_PASSED`, não fecha finding, não altera severidade.
+
+---
+
+## APR-2026-039 — RETIFICAÇÃO de `APR-2026-037` §5 + expansão do escopo à categoria especial completa (art. 5º II)
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno), texto direto
+**Natureza:** **retificação da lista de exclusão de `APR-2026-037` §5**, exigida
+pela própria condição vinculante daquela decisão, **mais** expansão de escopo
+determinada pelo dono.
+`APR-2026-037` **não é alterada** — permanece íntegra como registro (Regra 15).
+**Esta entrada prevalece sobre a §5 daquela** a partir desta data.
+
+### 1. Por que a retificação é devida — a condição vinculante funcionou
+
+`APR-2026-037` §4 fixou que, **se o conjunto de tabelas com dado de saúde fosse
+maior que três, o excedente entraria na cobertura, não na exclusão** — porque o
+número três *"veio de uma marcação do auditor, não de um censo"*.
+
+O censo foi feito (`T-43` §1). **O conjunto é de 11 tabelas, não 3 — subestimativa
+de 3,7×.** O auditor registrou que a marcação errada era **dele** (`T-43` §6.3) e
+que decorreu de triar por **nome de módulo** em vez de aplicar o **critério de
+coluna** — o mesmo viés módulo × banda que ele próprio havia denunciado em
+`T-41` §4.
+
+**Consequência material:** sem a condição vinculante, **quatro tabelas com dado
+de saúde de trabalhador teriam entrado na lista de exclusão**, incluindo os
+processos de admissão e demissão.
+
+### 2. RETIFICAÇÃO — quatro tabelas SAEM da exclusão e passam a COBERTAS
+
+| Tabela | Estava em | Motivo da inclusão | Estado |
+|---|---|---|---|
+| `sst_investigacoes_acidente` | `APR-2026-037` §5.2 (exclusão, dado pessoal) | `causas_identificadas`, `evidencias_urls` (*"fotos/depoimentos"* de lesão); 1:1 com o acidente | **coberta** (`T-43` §2) |
+| `hr_admission_processes` | `APR-2026-037` §5.2 | `aso_result`, `aso_confirmed_at`, `aso_valid_until` — aptidão laboral | **coberta** (`T-43` §2) |
+| `hr_termination_processes` | `APR-2026-037` §5.2 | `aso_result`, `aso_confirmed_at` | **coberta** (`T-43` §2) |
+| `sst_ges_funcionarios` | `APR-2026-037` §5.3 (2ª ordem) | exposição **nominal** a agente de risco — base do S-2240/PPP | **coberta** (`T-43` §2) |
+
+**Listas retificadas:**
+
+- **§5.2 (1ª ordem, dado pessoal sem dado de saúde): de 14 para 11 tabelas.**
+  Saem `sst_investigacoes_acidente`, `hr_admission_processes`,
+  `hr_termination_processes`. **Permanecem excluídas as 11:**
+  `hr_employee_contracts`, `hr_vacation_accrual_periods`, `marketing_leads`,
+  `marketing_lead_saneamento_log`, `sst_acidente_testemunhas`,
+  `jur_contract_signatories`, `jur_external_lawyers`, `facility_drivers`,
+  `facility_visitors` — **menos** `sst_entregas_epi` e `sst_devolucoes_epi`, que
+  saem por força da §3 abaixo. **Total efetivo: 9.**
+- **§5.3 (2ª ordem): de 23 para 22 tabelas.** Sai `sst_ges_funcionarios`.
+
+**A lista nominal do relatório final é a de `T-43` §9, não a de `APR-2026-037`
+§5.2.** O `vericore-audit-reporting-agent` fica vinculado a isso.
+
+### 3. EXPANSÃO DE ESCOPO — categoria especial completa do art. 5º II
+
+**Texto verbatim do dono:**
+
+> *"Expanda o escopo para incluir as duas tabelas de biometria
+> (`sst_entregas_epi` e relacionadas) — a intenção original era proteger a
+> categoria de dado sensível da LGPD como um todo (Art. 5º II agrupa saúde e
+> biometria), não apenas dado de saúde no sentido estrito."*
+
+**Resolve `RES-T43-01`.** O auditor havia identificado que
+`sst_entregas_epi.evidencia_tipo` admite `'biometria'` (`SstEntregaEpi.ts:46`)
+com `evidencia_arquivo_url` (`:47`), e **recusou-se a expandir o escopo por
+conta própria** (Regra 6), devolvendo a pergunta — comportamento correto.
+
+**O dono esclarece a intenção original:** o mandato era a **categoria especial de
+dado sensível da LGPD**, e o art. 5º II agrupa saúde **e** biometria. O
+substantivo "saúde" em `APR-2026-037` §4 era descrição, não delimitação.
+
+**Entram na cobertura:** `sst_entregas_epi` e `sst_devolucoes_epi`, **e qualquer
+outra tabela que o censo de biometria revelar** — a mesma condição vinculante da
+§4 de `APR-2026-037` se aplica aqui, pelo mesmo motivo e com a mesma força:
+**a decisão é sobre a categoria, não sobre o número.**
+
+**Escopo da categoria especial, consolidado:** dado de saúde (11 tabelas,
+fechadas em `T-43`) **+** dado biométrico (2 nomeadas, censo pendente).
+
+### 4. O que segue aberto e não é suprido por esta entrada
+
+- **As 21 tabelas sem model não são censáveis** (`RES-T43-05`). A categoria
+  especial está fechada **entre as 186 com model**, e **não está provada fechada
+  entre as 207**. `DYN-T43-10` é o que faltaria; o relatório final deve declarar
+  a ressalva nestes termos, sem arredondar para "categoria fechada".
+- **A contradição G3 × EMENDA-01 permanece** (`APR-2026-038` D3, `RES-T43-09`).
+  O fechamento da categoria especial **reduz** a tensão, mas não a elimina: o G3
+  fala em *"dado pessoal"*, e as tabelas de dado pessoal não-sensível seguem
+  excluídas. Continua sendo condição de fechamento.
+- **`T43-SST-F01` (HIGH)** está no `vericore-finding-validator` (Regra 22).
+
+### 5. O que esta entrada NÃO faz
+
+- **Não** altera `APR-2026-037`, que fica íntegra (Regra 15).
+- **Não** fecha `C-137`, que segue em `A(75/207)`.
+- **Não** estende cobertura a `C-136` nem aos demais blocos sem decisão.
+- **Não** declara `AUDIT_PASSED`, não fecha finding, não altera severidade.
