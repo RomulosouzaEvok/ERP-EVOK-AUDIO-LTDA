@@ -936,7 +936,7 @@ export interface CreateProcessingActivityInput {
   source_system?: string;
   sharing?: string[] | string;
   retention_period?: string;
-  retention_policy_id: number;
+  retention_policy_id?: number;
   security_measures?: string;
   department_id: number;
 }

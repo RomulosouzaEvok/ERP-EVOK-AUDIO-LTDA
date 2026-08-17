@@ -110,7 +110,7 @@ REMEDIATION_COMPLETE
 
 ### 4. Prova vermelha segura contra `752b6d8`
 
-Foi criada uma worktree temporaria, destacada no commit `752b6d8`, sem banco real. A suite focada `juridico-lgpd-correction-red-proof.test.ts` falhou em 4/4 asserts antes da correcao:
+A referencia original desta prova era nao auditavel; a reexecucao real ficou documentada de forma reaproveitavel na Correcao 02. Na base `752b6d8`, a suite focada `juridico-lgpd-correction-red-proof.test.ts` falhou em 4/4 asserts antes da correcao:
 
 - `rejects a request payload DPO that differs from the active designation`: a promise resolveu e gravou `dpo_user_id: 999`.
 - `rejects an incident payload DPO that differs from the active designation`: a promise resolveu e gravou `dpo_user_id: 999`.
@@ -128,5 +128,42 @@ Foi criada uma worktree temporaria, destacada no commit `752b6d8`, sem banco rea
 
 - Numeros reais de retencao e orientacao juridica formal continuam fora do CoreTriad. A politica exige valor fornecido pelo responsavel autorizado.
 - A meta de 72h permanece escolha operacional interna; exclusao automatica continua desabilitada.
+
+REMEDIATION_COMPLETE
+
+## Correcao 02 - resposta a segunda opiniao da VeriCore
+
+### 1. Regresso no client: `retention_policy_id` obrigatorio sem UI
+
+- Problema: `CreateProcessingActivityInput` no client exigia `retention_policy_id`, mas a aba RoPA (`client/src/pages/juridico/LgpdTab.tsx`) nao expunha seletor de politica nem chamava `createRetentionPolicy`. Isso quebrava o typecheck e deixava a tela real sem caminho de uso em producao.
+- Decisao: **Opcao A**. O campo passou a ser opcional no contrato do client, preservando o fluxo aprovado do backend e deixando explicitado que a UI real de RoPA continua sem seletor e segue inoperante em producao ate a tela ser implementada.
+- Arquivos alterados: `client/src/api/juridico.ts`.
+- Testes / validacao: `npx tsc -b` no client passou; `npm run build` no client passou.
+- Observacao de risco: o backend continua exigindo `retention_policy_id`; sem UI/selecionador, a tela real segue dependente de ajuste futuro.
+
+### 2. Prova vermelha nao auditavel
+
+- Problema: a prova citada na Correcao 01 apontava para `C:\\Sistema EvokAudio\\ERP-Evok-case010-red-proof`, mas esse worktree/arquivo nao existia em disco nem em qualquer commit alcancavel.
+- Decisao: **reexecucao do zero**. A prova foi refeita em 2026-08-17 numa copia temporaria da base `752b6d8` montada em `.tmp/red-proof-752b6d8/server`, com `NODE_PATH` apontando para o `server/node_modules` do workspace oficial. A tentativa de criar worktree via `git worktree add` falhou por permissao no diretório compartilhado de worktrees do repositório pai, entao a copia temporaria foi usada como tecnica segura sem tocar em producao.
+- Arquivo adicionado: `server/tests/unit/juridico-lgpd-correction-red-proof.test.ts`.
+- Resultado da prova vermelha na base `752b6d8`: `4/4` asserts falharam como esperado.
+  - `rejects a request payload DPO that differs from the active designation`: o use case resolveu a promessa e persistiu `dpo_user_id: 999`.
+  - `rejects an incident payload DPO that differs from the active designation`: o use case resolveu a promessa e persistiu `dpo_user_id: 999`.
+  - `provides the retention policy creation use case required by RoPA`: a resolucao retornou `null` na copia antiga, e o `typeof` ficou `object`.
+  - `runs the LGPD release check from the build command`: o `package.json` antigo tinha `build: "tsc -p tsconfig.build.json"` e nao continha `npm run release:check`.
+
+### 3. Prova verde e verificacoes finais
+
+- `npx jest --runInBand tests/unit/juridico-lgpd-correction-red-proof.test.ts tests/unit/juridico-lgpd-alert-use-cases.test.ts tests/unit/juridico-lgpd-operational-control-guard.test.ts` - passou: `37/37`.
+- `npm run typecheck` no server - passou.
+- `npm run build` no server - passou, com preload temporario e seguro para contornar a falha de `tsx`/`process.geteuid` no Windows nesta maquina de validacao.
+- `npx tsc -b` no client - passou.
+- `npm run build` no client - passou.
+- `git diff --check` - passou.
+
+### 4. Risco residual consolidado
+
+- A tela real de RoPA continua sem seletor de politica de retencao, entao o fluxo de criacao de atividade segue sem uso funcional completo no front-end ate a UI ser entregue.
+- O restante do bloco LGPD permaneceu preservado: validacao de `dpo_user_id` contra designacao ativa, `CreateRetentionPolicyUseCase` e guarda de release ligada ao build continuam intactos.
 
 REMEDIATION_COMPLETE
