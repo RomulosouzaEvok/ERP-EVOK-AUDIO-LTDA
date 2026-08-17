@@ -1725,3 +1725,78 @@ vale; cobertura alegada não.
   (privacidade do payload, co-mudança da guarda de cobertura).
 - **Não** declara `AUDIT_PASSED` nem fecha `C-137` — fecha o **critério de
   encerramento** da célula, que é coisa diferente.
+
+---
+
+## APR-2026-035 — decisões `D-01`, `D-R1` e `D-R2`: severidades congeladas
+
+**Data:** 2026-08-17
+**Autoridade:** dono do CoreTriad (Gilwagno)
+**Efeito:** encerra as três pendências de severidade que bloqueavam a emissão
+dos relatórios finais.
+
+### `D-01` — `AUD-CTB-DEBCRED-01`: **MANTIDA HIGH**
+
+O dono **recusou o rebaixamento** recomendado pelo validador (`T-34`) e
+reafirmado pelo orquestrador.
+
+A recomendação era rebaixar por haver quatro camadas de contenção
+(`authorizeModule`, Zod `.min(0).strict()`, `validateEntryItemsShape` nos dois
+escritores, estorno fechado sob inversão) e **nenhum caminho de alcance
+demonstrado** — argumento que a régua interna sustentava, já que
+`AUD-DB-T31-01`, da mesma classe, é MEDIUM.
+
+**A decisão é manter HIGH**, e o fundamento é do dono: lançamento contábil sem
+trava no banco é risco que ele trata como alto **independentemente** das camadas
+de aplicação. Registrado como **divergência resolvida por autoridade**, não como
+consenso técnico — o argumento do validador permanece no artefato e não é
+apagado (Regra 20).
+
+**Precedente que isto fixa:** contenção em aplicação, por mais camadas que
+tenha, **não rebaixa por si só** um finding de integridade contábil neste
+programa. A régua de `AUD-DB-T31-01` não é automática para o domínio contábil.
+
+**Item independente, que sobrevive de qualquer forma:** `PostEntryUseCase.ts:66-67`
+**ignora** em vez de **rejeitar** valor `<= 0` — defeito real, com vida própria,
+não afetado por esta decisão.
+
+### `D-R1` — `AUD-DB-09`: **MEDIUM re-fundamentado**
+
+Acolhida a recomendação do director (`REEXAME_AUD-DB-04-09.md` §2.6).
+
+**O MEDIUM que vigora NÃO é o MEDIUM herdado** — a premissa original ("soft
+delete não existe") foi retificada e não existe mais. É MEDIUM **re-fundamentado
+na redação retificada** de `AUD-DB-09_RETIFICACAO_01.md` §2.2, que é mais
+desfavorável ao objeto auditado que a original: soft delete semântico em **34
+tabelas**, filtro **100 % de aplicação, zero lastro em banco**, e **3 falhas
+nomeadas no caminho de escrita** (`cost_centers`, `clients`, `suppliers`).
+
+Fundamento aceito: as 3 falhas concretas **já têm titular** em `T35-DIN-F06`, e
+a dimensão de trilha em `AUD-ALOG-01` — elevar `-09` pelo mesmo conteúdo seria
+**dupla contagem**, prática que este run rejeita expressamente.
+
+### `D-R2` — `AUD-DB-04`, `-05`, `-06`, `-07`, `-08`: **MEDIUM ratificado em lote**
+
+Ratificada a manutenção, com o fundamento verificado finding a finding pelo
+director: `-05`, `-07` e `-08` têm **zero menções** nas retificações (premissas
+intactas **por verificação**, não por presunção); `-06` ganhou apenas interação
+de impacto com `AUD-ALOG-01`; `-04` ganhou dependência **condicional** do item B
+no recorte `Item`/UUID, sem mudança de mérito.
+
+**Esta ratificação fecha a pendência `T-16`.**
+
+### Efeito consolidado
+
+**As severidades do corpus estão congeladas** para efeito dos relatórios finais.
+Nenhuma pendência de severidade permanece aberta com o dono. `D-R3` fica
+**prejudicada**, por ser condicional à elevação de `AUD-DB-09`, que não ocorreu.
+
+### O que esta entrada NÃO faz
+
+- **Não** fecha nenhum finding, não declara `RETEST_PASSED` nem `AUDIT_PASSED`
+  (Regras 3, 4, 5).
+- **Não** dispensa a atualização do placar por severidade na próxima
+  consolidação — `AUD-CTB-DEBCRED-01` permanece HIGH, e qualquer artefato que
+  já tenha antecipado o rebaixamento precisa ser corrigido.
+- **Não** resolve as pendências técnicas remanescentes: `C-137`, a reconciliação
+  ±2 e as divergências do par de cobertura.
