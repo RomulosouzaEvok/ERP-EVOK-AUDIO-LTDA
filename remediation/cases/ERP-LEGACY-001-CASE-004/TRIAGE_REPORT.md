@@ -484,6 +484,18 @@ Nenhuma conexão de banco foi aberta.**
 - **Nenhuma migration posterior a `20260810-000036` toca `audit_logs`.** A
   última do repositório é `20260812-000047-hr-absences-open-unique.cjs` (169
   arquivos no total).
+- **Mecanismo de congelamento, verificado (refina o item acima).** Banco novo
+  não executa as migrations antigas uma a uma: `20260731-000001-baseline-schema.cjs`
+  carrega o DDL estático de `00_baseline_frozen.sql` e depois **marca 160
+  migrations como aplicadas** a partir do bloco `COPY` de
+  `00_baseline_frozen_meta.sql`. **As duas migrations de `audit_logs` estão
+  dentro desse conjunto congelado** — `20260731-000009` (`meta:34`) e
+  `20260810-000036` (`meta:184`). Consequência prática, e é a que importa ao
+  reteste: em qualquer banco construído do zero (incluindo
+  `erp_evok_audio_test`, recriado em 2026-08-16), o ENUM de 24 valores e as
+  colunas nuláveis vêm **do dump congelado, por construção**, sem depender de a
+  migration `20260810-000036` ter rodado alguma vez. E `entity_id integer` vem
+  do mesmo dump — ou seja, **o congelamento também fixa o obstáculo do UUID**.
 - **Efeito sobre a rota do UUID: nenhuma migration pendente muda o quadro.**
   `audit_logs.entity_id` continua `integer` no baseline
   (`00_baseline_frozen.sql`, bloco `CREATE TABLE public.audit_logs`) e no model
@@ -494,8 +506,9 @@ Nenhuma conexão de banco foi aberta.**
   valor **legado** (`auditActions.ts:80-84`) e existe no ENUM desde antes de
   `20260810-000036`. Ainda assim, registro para o reteste: o banco de teste foi
   recriado em 2026-08-16 com as 169 migrations aplicadas
-  (`G4_PRECONDICAO_BANCO_TESTE.md` §§4-5), portanto **`erp_evok_audio_test` tem
-  o ENUM completo**.
+  (`G4_PRECONDICAO_BANCO_TESTE.md` §§4-5) e o ENUM completo chega pelo baseline
+  congelado (bullet anterior), portanto **`erp_evok_audio_test` tem o
+  vocabulário completo por dois caminhos independentes**.
 - **Estado do banco de produção real: NÃO VERIFICADO e NÃO VERIFICÁVEL nesta
   fase** (`APR-2026-016`). Existe contradição documental conhecida sobre isso —
   `AUD-DB-10` (LOW) registra que `auditActions.ts:48-55` e o cabeçalho da
