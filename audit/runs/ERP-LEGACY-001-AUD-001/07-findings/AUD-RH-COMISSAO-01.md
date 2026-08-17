@@ -5,16 +5,24 @@ RUN:            ERP-LEGACY-001-AUD-001
 AUDIT_COMMIT:   c1311a6f76b512fef893f7e60d934179cae3409f
 ORIGEM:         resposta do dono a gate humano de AUD-RH-VTHORISTA-01 (2026-08-16)
 NATUREZA:       lacuna de MODELO DE DADOS (não é defeito de cálculo)
-SEVERIDADE:     PROPOSED — aguarda fixação pelo dono; Regra 22 aplicável se HIGH+
-ESTADO:         PROPOSED
+SEVERIDADE:     HIGH  (fixada pelo dono, 2026-08-16 — decisão D-11)
+ESTADO:         CONFIRMED
 AMBIENTE:       DEV / HOMOLOGAÇÃO
 ```
 
-> **CLÁUSULA DE REAVALIAÇÃO AUTOMÁTICA.** Sem risco ativo hoje porque o módulo
-> de RH não está em produção. **Reavaliar automaticamente para bloqueante quando
-> o módulo de RH entrar em produção** — e antes disso, se algum funcionário
-> comissionado for cadastrado no sistema, porque a partir daí passa a existir
-> dado real sem lugar correto para morar.
+> **SEVERIDADE FIXADA PELO DONO (D-11, 2026-08-16), com justificativa
+> registrada em texto direto:** HIGH porque *"bloqueia cálculo correto de VT
+> para funcionário comissionado e exige mudança de modelo de dados (armazenar
+> separadamente valor fixo e percentual de comissão, que hoje não tem estrutura
+> no cadastro), mas não está causando dano ativo hoje porque payroll não está em
+> produção."*
+
+> **CLÁUSULA DE REAVALIAÇÃO AUTOMÁTICA — fixada pelo dono:** **reavaliar para
+> CRITICAL se o módulo de payroll entrar em produção antes desta lacuna ser
+> resolvida.** A reavaliação não depende de novo despacho nem de lembrança de
+> ninguém. Permanece também o gatilho registrado na abertura: se algum
+> funcionário comissionado for cadastrado antes disso, passa a existir dado real
+> sem lugar correto para morar.
 
 ## 1. Como este finding nasceu
 
@@ -131,4 +139,5 @@ contrapartida no DDL).
 **Não duplica** `AUD-RH-VTHORISTA-01`: aquele é o cálculo, este é o modelo.
 
 Nenhuma declaração de `RETEST_PASSED` ou `FINDING CLOSED` é feita aqui (Regra 4).
-Severidade **não fixada** — aguarda o dono.
+Severidade HIGH fixada pelo dono em 2026-08-16 (D-11). Como HIGH, segue para o
+`vericore-finding-validator` (Regra 22) antes de remediação.
