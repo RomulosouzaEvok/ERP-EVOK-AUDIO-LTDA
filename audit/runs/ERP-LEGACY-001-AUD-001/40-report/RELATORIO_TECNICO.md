@@ -5,8 +5,8 @@ PROGRAMA:      ERP-LEGACY-001
 RUN:           ERP-LEGACY-001-AUD-001
 AUDIT_COMMIT:  c1311a6f76b512fef893f7e60d934179cae3409f   (única referência de leitura)
 PRODUZIDO POR: vericore-audit-reporting-agent (VeriCore)
-DATA:          2026-08-17
-AUTORIZAÇÃO:   APR-2026-042 D4
+DATA:          2026-08-17 — REVISÃO 2 (emissão original 2026-08-17)
+AUTORIZAÇÃO:   APR-2026-042 D4 (emissão) · APR-2026-043 e APR-2026-044 (revisão)
 MÉTODO:        READ → ANALYZE → VERIFY → PROVE → CLASSIFY → REPORT
 REGIME:        read-only. Zero comando, zero execução, zero conexão de banco (APR-2026-016 íntegra).
                Única escrita: audit/runs/ERP-LEGACY-001-AUD-001/40-report/.
@@ -21,6 +21,18 @@ NÃO DECLARA:   AUDIT_PASSED · FINDINGS_CONFIRMED · RETEST_PASSED · FINDING C
 `40-report/REMEDIATION_BACKLOG.md`. Todo número do Executivo é rastreável a este documento, e
 deste às trilhas de origem.
 
+**O que mudou na revisão 2 — índice de rastreabilidade da revisão:**
+
+| Mudança | Autoridade | Onde |
+|---|---|---|
+| `G3` reduzido formalmente pela via do `G8`; contradição com a `EMENDA-01` **reconciliada** | `APR-2026-043` D1 | Executivo §1; aqui §7.4 (nota de moldura) e §16 item 2 |
+| `C-136` **dividida**; `F-5` publicada e alvo redimensionado em **628 IN / 55 OUT** | `APR-2026-043` D2 + `F-5` | §7.2, **§7.6** (nova) |
+| `BUSINESS_RULES` §12: prevalece o **item 3** (depósitos **ativos**); `OBS-T48-02` **resolvida** | `APR-2026-043` D3 | §10, **§6.4** (nova) |
+| Critérios de reteste de `T41-EST-F01` e `T41-RH-F02` **reescritos** (`T-49`); os dois **não liberados** | `APR-2026-043` D4 | **§6.4** (nova), §4.1 |
+| Finding novo **`AUD-RH-VALIDADENULA-01`** (candidato `T49-RH-C01`), `PROPOSED`, HIGH recomendada **não fixada** | `APR-2026-044` D1 | **§4.5** (nova), §2.1 |
+| `OBS-T48-05` anexada como **confirmação independente** de `T43-SST-F01`, **não** como item novo | `APR-2026-044` D2 | §4.4 item 7, §10 |
+| `DYN-T41-03` e `DYN-T49-03` **não autorizados**; pendência de janela futura com 4 condições | `APR-2026-044` D3 | **§8.1** (nova), §12 item 2 |
+
 ---
 
 ## 1. Fontes autoritativas deste relatório
@@ -32,12 +44,15 @@ deste às trilhas de origem.
 | 3 | `07-findings/T-38_CLASSIFICACAO_AMBIENTE_CORPUS.md` | Classificação de ambiente do corpus; os 9 CRITICAL um a um (§4.3); recortes MISTO (§4.4) |
 | 4 | `24-coverage/AUDIT_COVERAGE_EXECUTED_RODADA4.md` | Cobertura executada, célula a célula; déficit do `G3` (`F-1`…`F-12`); estado de `N-04`…`N-08` |
 | 5 | `coretriad/governance/RECONCILIACAO_FINAL_AUD-001.md` | Reconciliação ±2 por enumeração; determinação da errata (`c2`); estado de encerramento |
-| 6 | `coretriad/governance/APPROVALS.md` — `APR-2026-024`, `APR-2026-031` a `APR-2026-042` | Decisões humanas vinculantes: severidades congeladas, escopo de `C-137`, categoria especial, denominador, liberação dos relatórios |
+| 6 | `coretriad/governance/APPROVALS.md` — `APR-2026-024`, `APR-2026-031` a **`APR-2026-044`** | Decisões humanas vinculantes: severidades congeladas, escopo de `C-137`, categoria especial, denominador, liberação dos relatórios, **redução do `G3`, divisão de `C-136`, regra de saldo total, devolução dos critérios, abertura de `AUD-RH-VALIDADENULA-01`, reconciliação de `OBS-T48-05`, não autorização de `DYN-T41-03`/`DYN-T49-03`** |
 | 7 | `07-findings/T-48_VALIDACAO_T41.md` | Fechamento das 2 exceções da Regra 22; 5 observações colaterais |
 | 8 | `07-findings/DYN-T47_COLETA_CONTEINERES.md` | Execução de `DYN-T47-01`/`-02`; veredito sobre `RES-T47-02` |
 | 9 | `07-findings/T-41`, `T-42`, `T-43`, `T-45`, `T-47`; validações `T-40`, `T-44`, `T-46` | Emissão dos 37 IDs da última leva e vereditos adversariais |
 | 10 | `02-plan/AUDIT_COVERAGE_MATRIX.md`, `AUDIT_PLAN_EMENDA_01/02.md` | Matriz prometida, contra a qual a cobertura executada é medida |
 | 11 | `coretriad/governance/CELULAS_SEM_AUTORIZACAO_ACEITACAO.md` | Os 9 blocos sem decisão de aceitação, com custo medido |
+| **12** | **`07-findings/F-5_LISTA_IN_OUT_CATEGORIA.md`** | **Lista nominal IN × OUT por categoria vedada pelo `G3`**; universo 683/683 classificado; 174 nominal por rota; conformidades e divergências próprias |
+| **13** | **`07-findings/T-49_CRITERIOS_RETESTE_T41.md`** | **Critérios de reteste reescritos** de `T41-EST-F01` (12 itens) e `T41-RH-F02` (9 itens); 13 armadilhas de fechamento falso; 2 erros da própria auditoria |
+| **14** | **`07-findings/AUD-RH-VALIDADENULA-01.md`** | Finding aberto por `APR-2026-044` D1; evidência, critério de reteste e severidade **recomendada e não fixada** |
 
 Nenhuma memória foi usada como fonte normativa (Regras 8 e 10).
 
@@ -62,6 +77,30 @@ Nenhuma memória foi usada como fonte normativa (Regras 8 e 10).
 
 Conferência nos dois sentidos: 9 + 91 + 248 + 124 + 11 = **483**; 483 + 1 + 17 = **501**;
 464 + 37 = **501**; 446 + 37 = **483**.
+
+### 2.1-bis Movimento posterior à consolidação — 1 finding aberto, 1 observação reconciliada
+
+| Item | Decisão | Efeito |
+|---|---|---|
+| **`AUD-RH-VALIDADENULA-01`** (candidato `T49-RH-C01`) | **ABERTO** por `APR-2026-044` D1. **`PROPOSED`, HIGH recomendada, severidade NÃO fixada** | **+1 vigente**, na linha *"sem severidade fixada"*. Total vigente **484**; IDs emitidos **502** |
+| **`OBS-T48-05`** | **Anexada como confirmação independente de `T43-SST-F01`** (`APR-2026-044` D2) | **0** — não é item novo. Ver §4.4 item 7 e §10 |
+
+| Linha do placar após a revisão | Valor |
+|---|---|
+| Com severidade fixada (rodada 5, inalterado) | **483** = 9C · 91H · 248M · 124L · 11I |
+| **Sem severidade fixada** | **1** (`AUD-RH-VALIDADENULA-01`) |
+| **TOTAL VIGENTE** | **484** |
+| IDs emitidos | **502** = 501 + 1 |
+| Conferência | 484 + 1 `FALSE_POSITIVE` + 17 absorvidos = **502** |
+
+> **`DIV-REP-04` — divergência aritmética registrada (Regra 7), não forçada.** O placar oficial é
+> o de `T-26_CONSOLIDACAO_RODADA5.md` §1.5 — **483 / 501** — e **não contém**
+> `AUD-RH-VALIDADENULA-01`, aberto depois da consolidação. Este relatório **não** distribui o
+> finding em nenhuma banda de severidade: ele **não tem severidade fixada**, e fixá-la aqui
+> violaria as Regras 6 e 18. Registro a divergência em vez de conciliá-la à força. **A
+> reconciliação formal do placar é ato do `vericore-audit-consolidator` e do
+> `vericore-software-audit-director`.** Precedente do próprio run: `AUD-RH-COMISSAO-01` também
+> transitou como "sem severidade fixada" até `D-11`.
 
 ### 2.2 A errata da base — `RECONCILIACAO_FINAL_AUD-001.md` Bloco 1, executada em `T-26` R5 §1.1
 
@@ -116,6 +155,9 @@ nunca teve objeto.**
 | `T-43` §1.4/§9 — 21 sem model "não censáveis" | não censáveis | **nomeáveis e auditáveis por DDL; não contáveis por falta de model** | `T-45` §6.2, executado por `T-47` |
 | `T-41` §6.4 — 71 INTEGRAL não cobertas | "limite superior" | **número exato** | `T-42` §2.1 — erro do autor a favor dele próprio, autodeclarado |
 | Rodada 4 §7.4 — par de cobertura "não existe" | não existe | **existe** (`24-coverage/AUDIT_COVERAGE_EXECUTED_RODADA4.md`) | listagem em `T-26` R5 |
+| **`T41-EST-F01` §5 item 3** — *"o saldo não pode ser transferido para fora; sem caminho de reversão"* | afirmado | **FACTUALMENTE ERRADO** — as primitivas `add/removeFromWarehouse` recebem id numérico e **não filtram `active`**; existem dois caminhos de saída | `T-48` §2.1 H2; **confirmado por leitura própria do autor de origem** em `T-49` §3.4. **Severidade inalterada** (HIGH): reduz a consequência, não toca o defeito central |
+| **`T41-RH-F02` §5 (elo "Admissão")** — *"o gate decide Admissão/Demissão e o retorno"* | afirmado | **ERRADO quanto à Admissão** — `ConcludeAdmissionProcessUseCase.ts:119` decide por `process.aso_result`, terceira cópia, fora do gate comum | `T-48` §3.1 H2; **confirmado por leitura própria do autor** em `T-49` §4.3. **O erro AMPLIA o finding** |
+| **`T-48` §2.1 (Caminho A, item 1)** — *"`CreateInventoryCountUseCase` não verifica existência nem `active`"* | afirmado | **a existência É imposta pelo banco** — `inventory_counts_warehouse_id_fkey` (`00_baseline_frozen.sql:24132-24136`) rejeita `warehouse_id` inexistente. Falta **apenas** `active` | `T-49` §3.4 (L09). Não altera o vetor; **impede que a remediação persiga o alvo errado** |
 
 Nenhum artefato de origem foi alterado (Regra 15). Este relatório é veículo da leitura corrigida.
 
@@ -220,17 +262,22 @@ não alteradas por consolidação nem por este relatório (Regras 15 e 18).
 > `arquivo:linha`** e não abriu nenhum arquivo de `server/`, `client/`, `docs/`, `product/`,
 > `mobile/` ou `tv/`. As âncoras de código de cada finding vivem no artefato de origem citado na
 > coluna "Fonte", que é a evidência referenciada. Onde a âncora de código aparece abaixo, ela foi
-> transcrita de leitura registrada em `T-48`, `T-43` ou `T-45`. É o mesmo limite que o
-> `vericore-audit-consolidator` declarou (`T-26` R5 §11.2 item 1).
+> transcrita de leitura registrada em `T-48`, `T-49`, `T-43`, `T-45` ou `F-5`. É o mesmo limite que
+> o `vericore-audit-consolidator` declarou (`T-26` R5 §11.2 item 1).
 
 ### 4.1 HIGH — 4, todos com veredito adversarial da Regra 22
 
 | ID | Enunciado | Sev. | Confiança | Veredito | Regra/requisito | Âncoras |
 |---|---|---|---|---|---|---|
-| **`T41-EST-F01`** | Desativar um depósito **com saldo** é permitido pelo caminho normal, e o saldo sai da invariante sem virar movimento | HIGH | Mecanismo **ALTA**; materialização **MÉDIA** | **`CONFIRMED (parcial)`** — `T-48` §2 | `BUSINESS_RULES.md:351-354` — invariante de soma sobre **depósitos ativos** | Rota `inventory.ts:44` · validador `inventoryValidators.ts:57-61` · controller `inventoryController.ts:570-593` · use case `UpdateWarehouseUseCase.ts:38-58` (`:53` grava `active`) · model `Warehouse.ts:42-72` · banco `00_baseline_frozen.sql:14975-14983`, `:18527-18539` — **ausência de guarda verificada em seis camadas** |
-| **`T41-RH-F02`** | O mesmo ASO existe em duas tabelas, com dois domínios grafados diferente, e o gate de retorno ao trabalho lê **a cópia** | HIGH | **ALTA** | **`CONFIRMED`** — `T-48` §3 | RF-RH-028, RF-RH-048; integridade de dado de saúde (LGPD art. 5º II) | Gate `asoGate.ts:20-28` → `SequelizeEmployeeDocumentRepository.ts:43-54` · gravador livre `CreateEmployeeDocumentUseCase.ts:46-65` · enums divergentes `00_baseline_frozen.sql:765-769` (`apto_com_restricao`) × `:2300-2304` (`apto_com_restricoes`) · consumidores `ConcludeTerminationProcessUseCase.ts:71-74`, `ReturnFromAbsenceUseCase.ts:95-103` |
-| **`T43-SST-F01`** | O ASO é gravado **fora** da transação que enfileira a obrigação eSocial; a interface do repositório declara o parâmetro de transação e a implementação o descarta | HIGH | Mecanismo elevado a **`CONFIRMED`**; frequência **MÉDIA** | **`CONFIRMED`** — `T-44` (5 refutações, nenhuma derrubou, duas ampliaram) | Obrigação acessória eSocial S-2220; atomicidade declarada no cabeçalho | `CreateAsoUseCase.ts:72-99` · `SequelizeAsoRepository.ts:70-72` (`createAso(data)` sem transação) · `AsoRepository.ts:30` (assinatura abstrata **prevê** a transação) |
+| **`T41-EST-F01`** | Desativar um depósito **com saldo** é permitido pelo caminho normal, e o saldo sai da invariante sem virar movimento | HIGH | Mecanismo **ALTA**; materialização **MÉDIA** | **`CONFIRMED (parcial)`** — `T-48` §2 | `BUSINESS_RULES.md:351-354` — invariante de soma sobre **depósitos ativos**, **fixada como a regra vigente** por `APR-2026-043` D3 | Rota `inventory.ts:44` · validador `inventoryValidators.ts:57-61` · controller `inventoryController.ts:570-593` · use case `UpdateWarehouseUseCase.ts:38-58` (`:53` grava `active`) · model `Warehouse.ts:42-72` · banco `00_baseline_frozen.sql:14975-14983`, `:18527-18539` — **ausência de guarda verificada em seis camadas**. **Vetores V3/V4 acrescidos por `T-49` §3.3:** `CreateInventoryCountUseCase.ts:90-117`, `ApproveInventoryCountUseCase.ts:89-96`, `CreateWarehouseTransferUseCase.ts:63-69`, `ApproveWarehouseTransferUseCase.ts:59-61` |
+| **`T41-RH-F02`** | O mesmo ASO existe em **quatro** tabelas (o texto original dizia duas), com domínios grafados diferente, e o gate de retorno ao trabalho lê **a cópia** | HIGH | **ALTA** | **`CONFIRMED`** — `T-48` §3 | RF-RH-028, RF-RH-048; integridade de dado de saúde (LGPD art. 5º II) | Gate `asoGate.ts:20-28` → `SequelizeEmployeeDocumentRepository.ts:43-54` · gravador livre `CreateEmployeeDocumentUseCase.ts:46-65` · enums divergentes `00_baseline_frozen.sql:669-673`, `:765-769`, `:839-843` (`apto_com_restricao`) × `:2300-2304` (`apto_com_restricoes`) · consumidores `ConcludeTerminationProcessUseCase.ts:71-74`, `ReturnFromAbsenceUseCase.ts:95-103` · **cópia que decide a admissão** `ConcludeAdmissionProcessUseCase.ts:119` |
+| **`T43-SST-F01`** | O ASO é gravado **fora** da transação que enfileira a obrigação eSocial; a interface do repositório declara o parâmetro de transação e a implementação o descarta | HIGH | Mecanismo elevado a **`CONFIRMED`**; frequência **MÉDIA** | **`CONFIRMED`** — `T-44` (5 refutações, nenhuma derrubou, duas ampliaram) · **confirmação independente adicional: `OBS-T48-05`** (`APR-2026-044` D2) | Obrigação acessória eSocial S-2220; atomicidade declarada no cabeçalho | `CreateAsoUseCase.ts:72-99` (`:74` grava fora de `t`; `:87-92` enfileira dentro) · `SequelizeAsoRepository.ts:70-72` (`createAso(data)` sem transação) · `AsoRepository.ts:30` (assinatura abstrata **prevê** a transação) |
 | **`T45-SST-F01`** | O portão que exige evidência de recebimento de EPI verifica **o rótulo**, não o artefato: `evidencia_tipo='biometria'` com `evidencia_arquivo_url` NULL confirma a entrega, e a linha fica **imutável para sempre** | HIGH | Mecanismo elevado a **`CONFIRMED`**; frequência **MÉDIA** | **`CONFIRMED`** — `T-46` (6 refutações, nenhuma derrubou, uma agravou, uma corrigiu a moldura) | **BR-SST-002** / NR-6 (valor probatório da Ficha de EPI); LGPD art. 5º II (declaração falsa de tratamento de dado biométrico) | Portão `ConfirmEpiDeliveryUseCase.ts:62-64` · gravador `AttachEpiDeliveryEvidenceUseCase.ts:30-42` · único `CHECK` da tabela `00_baseline_frozen.sql:13222` · trigger de imutabilidade total `sst_lock_entrega_epi` `:2971-2988`, `:22240` · rotas `sst.ts:53-54` |
+
+> **Remissão vinculante (Regra 15), acrescida nesta revisão:** para `T41-EST-F01` e `T41-RH-F02`, o
+> critério de reteste **operativo** é o de `T-49` — **não** o de `T-41` §5, que permanece
+> inalterado como registro histórico. Ver **§6.4**. **Os dois seguem HIGH, `CONFIRMED`, e NÃO
+> liberados à SanaCore** até o reteste adotar o critério novo (`APR-2026-043` D4).
 
 **Moldura vinculante de `T45-SST-F01`, acolhida de `T-46` §4.1 (`T-45` não foi alterado):** o eixo
 do finding é o **pareamento rótulo × artefato** — o mecanismo é indiferente ao valor do enum e
@@ -240,7 +287,9 @@ ausência de evidência dinâmica (`DYN-T45-01`/`-02`, bloqueados por `APR-2026-
 
 **Teto de severidade de `T43-SST-F01`, registrado por `T-44` §4.3:** nenhum modo de falha
 determinístico da 2ª escrita foi provado. *"Quem tentar subir isto a CRITICAL alegando falha
-determinística estará errado."*
+determinística estará errado."* **A confirmação independente de `OBS-T48-05` reforça o mecanismo e
+não altera este teto** — dois caminhos independentes provaram o **mesmo** defeito, não um defeito
+maior.
 
 ### 4.2 MEDIUM — 19
 
@@ -288,7 +337,7 @@ determinística estará errado."*
 **Conferência:** 4 HIGH + 19 MEDIUM + 14 LOW = **37**, contra as declarações de fechamento das
 cinco trilhas (`T-41` §12 = 9 · `T-42` §11 = 6 · `T-43` §9 = 11 · `T-45` §9 = 8 · `T-47` §11 = 3).
 
-### 4.4 Não-duplicação — as seis verificações nominadas
+### 4.4 Não-duplicação — as verificações nominadas
 
 1. `T-47` §4 **declara expressamente que NÃO reemite `T45-SST-F02`**, embora a tabela caia no seu
    escopo — não-duplicação por **abstenção do próprio autor**, registrada como precedente.
@@ -303,9 +352,101 @@ cinco trilhas (`T-41` §12 = 9 · `T-42` §11 = 6 · `T-43` §9 = 11 · `T-45` �
 5. `T42-FIS-F03` × `T41-LGPD-F07` — mesma patologia (prazo legal sem lastro), severidades
    distintas por exposição declarada.
 6. `T-44` e `T-46` declararam **0 falsos positivos e 0 duplicatas** nos seus escopos.
+7. **`OBS-T48-05` × `T43-SST-F01` — convergência, não item novo.** `APR-2026-044` D2:
+   *"Anexe `OBS-T48-05` como confirmação independente de `T43-SST-F01`, não como item novo — dois
+   auditores, caminhos independentes, mesmo defeito."* O `vericore-finding-validator` (`T-48`)
+   chegou a `CreateAsoUseCase.ts:74` + `SequelizeAsoRepository.ts:70-72` **por outra trilha e sem
+   conhecer** o finding já emitido por `T-43`/validado por `T-44`. **Não conta no placar**;
+   **reforça** o finding existente. **Registro de método:** o autor de `T-49` foi cauteloso e
+   correto ao **não** abrir o item — *"não foi objeto desta devolução e não o verifiquei por
+   leitura própria"* (`RES-T49-04`). Ele não tinha como saber que o defeito já estava reportado; a
+   convergência só é visível de fora. **A cautela dele é o que tornou a reconciliação possível sem
+   duplicata.**
+8. **`AUD-RH-VALIDADENULA-01` × `T41-RH-F02` — findings distintos, lote único.** A independência foi
+   provada **nos dois sentidos** (§4.5). O que se separou foi a **contabilidade**, não o trabalho:
+   os dois compartilham o lote de remediação. **Não somar duas vezes o mesmo esforço; não fechar um
+   pelo outro.**
 
 **Limite herdado, inalterado:** a deduplicação da consolidação é **sintática, não semântica**.
 `DUP-ABERTA-01` e `DUP-ABERTA-02` continuam abertas.
+
+### 4.5 `AUD-RH-VALIDADENULA-01` — finding aberto por decisão do dono (`APR-2026-044` D1)
+
+```
+ID formal:        AUD-RH-VALIDADENULA-01   (ID de candidato citável: T49-RH-C01)
+Origem:           OBS-T48-04 (T-48) + descoberta própria de T-49 §5 quanto à Admissão
+Autoridade:       APR-2026-044 D1
+Severidade:       PROPOSED — HIGH recomendada, NÃO FIXADA (Regra 18; se HIGH, aciona a Regra 22)
+Estado:           PROPOSED — NÃO entra no Remediation Backlog enquanto não for CONFIRMED
+Ambiente:         heterogêneo — ver "Ambiente", abaixo
+```
+
+**Enunciado.** Um ASO gravado **sem data de validade** é tratado como **válido para sempre** pelos
+**dois** consumidores que decidem sobre ele. Não é ausência de informação tratada como ausência —
+é ausência tratada como **afirmação positiva de validade**.
+
+**Evidência, arquivo e linha** (transcrita de `AUD-RH-VALIDADENULA-01.md` §4; nenhuma âncora foi
+reverificada por este agente):
+
+| # | Artefato | Literal |
+|---|---|---|
+| 1 | `SequelizeEmployeeDocumentRepository.ts:50` | `[Op.or]: [{ valid_until: null }, { valid_until: { [Op.gte]: today } }]` — **`NULL` entra na disjunção como vigente** |
+| 2 | `CreateEmployeeDocumentUseCase.ts:61` | `valid_until: input.valid_until ?? null` — a coluna **nunca é obrigatória**, inclusive para `doc_type` do grupo `aso_*` |
+| 3 | `ConcludeAdmissionProcessUseCase.ts:125` | `if (process.aso_valid_until && ...)` — **a guarda de vigência é pulada inteira** quando a data é nula |
+| 4 | `ReturnFromAbsenceUseCase.ts:95-96` | `hasValidAso(..., 'aso_retorno', ...)` — consumidor real do vetor 1 (RF-RH-048, afastamento > 30 dias) |
+| 5 | `asoGate.ts:26` | `hasValidAso` chama **exclusivamente** `findValidAso` |
+| 6 | `00_baseline_frozen.sql:5919` | `valid_until date` — **nullable, sem `CHECK`, sem `DEFAULT`** |
+| 7 | `HrEmployeeDocument.ts:27` | `valid_until: DataTypes.DATEONLY` — sem `allowNull: false`, sem `validate` |
+
+**Requisito/regra violada:** **RF-RH-048** (exigência de ASO de retorno após afastamento superior a
+30 dias) e o rito de conclusão de admissão sobre exame de aptidão vigente. **Causa raiz comum aos
+dois vetores:** `NULL` tratado como afirmação positiva — a ausência de dado produz o resultado
+**mais permissivo**, em decisão de saúde ocupacional.
+
+**Consequência com consumidor real.** O gate de retorno **não amarra o documento ao afastamento**
+que o motivou: um único `aso_retorno` com `valid_until NULL` **satisfaz todo retorno futuro,
+indefinidamente** — inclusive de afastamentos que ainda não ocorreram. No segundo vetor, a admissão
+conclui **sem que a validade do exame tenha sido verificada**.
+
+**Por que é finding próprio, e não item de `T41-RH-F02`** (ônus assumido em `T-49` §5, ratificado
+pelo dono):
+
+- **Independência nos dois sentidos — o teste decisivo.** Executar **todo** o critério de
+  `T41-RH-F02` (`CR-T49-RH-01` a `-08`) deixa este vetor **inteiramente aberto**: um `aso_retorno`
+  com `valid_until NULL`, emitido pela própria SST, com domínio unificado e FK correta,
+  **perfeitamente concordante**, continua valendo para sempre. Inversamente, corrigir a validade
+  **não reconcilia nada** entre SST e RH.
+- **Coluna e norma diferentes:** `aptitude_result` / RF-RH-028 × `valid_until` / RF-RH-048.
+- **Consequência de rastro:** amarrado ao outro finding, o reteste ficaria refém de defeito alheio.
+
+**Severidade — recomendada HIGH, não fixada.** O fundamento é a régua deste run (*o defeito ocorre
+pelo caminho normal, com consumidor real?*): **sim, nos dois vetores** — não exige escrita fora da
+aplicação, nem concorrência, nem ator mal-intencionado; **basta omitir um campo opcional** num
+formulário. Mesma família de `T41-RH-F02` (HIGH) e `T43-SST-F01` (HIGH). **A fixação é do dono
+(Regra 18); se HIGH, o finding vai ao `vericore-finding-validator` antes de remediação (Regra 22).**
+
+**Confiança:** o mecanismo é **estático e demonstrável por leitura** nos dois vetores. A
+**materialização** é fato de dado **não medido** — `DYN-T49-05` (quantas linhas `aso_*` têm
+`valid_until NULL`) e `DYN-T49-06` (quantos `hr_admission_processes` concluídos têm
+`aso_valid_until NULL`) **não foram executados** (`APR-2026-016`).
+
+**Critério de reteste** (`AUD-RH-VALIDADENULA-01.md` §6, resumo fiel): leitura deixa de tratar
+`NULL` como vigente para `aso_*`; **escrita** passa a exigir `valid_until` para `aso_*` — *corrigir
+só a leitura apenas move o buraco*; a admissão **recusa** conclusão com `aso_valid_until` nula;
+teste que **reprove o estado anterior nos dois caminhos**; e **decisão registrada sobre o passivo**
+já gravado. **Reprova se** corrigir só um dos dois consumidores, ou fechar sem decisão sobre o
+passivo.
+
+**Ambiente — o finding não é homogêneo.** `APR-2026-031` D13 item 4: *"`employees` em uso real
+**somente** no fluxo de desligamento"*; o restante do RH segue DEV/HOMOLOGAÇÃO. **Cláusula de
+reavaliação automática:** reavaliar para bloqueante quando o RH entrar em produção — e antes disso,
+se qualquer fluxo de afastamento/retorno passar a operar com funcionário real.
+
+**Efeitos colaterais registrados:** `CR-T49-RH-09` **deixa de ser item condicional** de
+`T41-RH-F02` (`T-49` §4.5) — o fallback está desativado pela abertura. **Grupo de causa raiz: não
+atribuído** por este relatório — a atribuição é do `vericore-audit-consolidator`; o autor relaciona
+a causa raiz a **semântica de coluna** (matéria de `C-137`), com afinidade declarada a **`G-28`**
+(portão satisfeito por conteúdo que não sustenta a decisão).
 
 ---
 
@@ -325,6 +466,8 @@ cinco trilhas (`T-41` §12 = 9 · `T-42` §11 = 6 · `T-43` §9 = 11 · `T-45` �
 | **G-31** (NOVO) — Meta: aritmética e instrumento **da própria auditoria** | Achados sobre os artefatos da auditoria, não sobre o produto | `T41-META-F09` — **1**. **Não é item de remediação da SanaCore no objeto auditado** |
 
 **Conferência:** 7 + 1 + 5 + 6 + 1 + 6 + 10 + 1 = **37**. Todos os 37 têm grupo; nenhum tem dois.
+**`AUD-RH-VALIDADENULA-01` está fora desta conferência** — é posterior à consolidação e **não teve
+grupo atribuído** (§4.5).
 
 **Subpadrão nomeado, com 8 ocorrências no run:** par **estado × autor/data nullable sem `CHECK`
 que os ligue** — `T35-EST-F05` → `T41-SUP-F08` → `T42-PCP-F02` → `T42-FIS-F03` → `T43-SST-F02` →
@@ -352,6 +495,12 @@ três âncoras independentes:
 **Conclusão registrada: não é limitação técnica; é escolha de onde aplicar o rigor.** Isso torna a
 correção barata e remove a defesa de "limitação de arquitetura".
 
+**Quarta âncora, acrescida nesta revisão** (`T-49` §3.4, L05): no **mesmo arquivo**
+`CreateInventoryCountUseCase.ts`, o campo `assigned_to` **é** validado como usuário existente **e
+ativo** (`:95-107`), e o `warehouse_id` **não recebe a mesma disciplina**. A regra "referência
+precisa estar ativa" existe no arquivo e **não foi aplicada ao depósito** — a assimetria aparece
+dentro de um único use case.
+
 ---
 
 ## 6. Regra 22 — universo, vereditos e as duas exceções que existiram
@@ -372,6 +521,11 @@ correção barata e remove a defesa de "limitação de arquitetura".
 3. **+4 HIGH novos** → universo 100. `T43-SST-F01` validado por `T-44`; `T45-SST-F01` por `T-46`.
 4. **As 2 exceções** — `T41-EST-F01` e `T41-RH-F02` — **fechadas por `T-48`**.
 
+> **Efeito futuro declarado:** `AUD-RH-VALIDADENULA-01` **não está** sob o regime da Regra 22
+> enquanto a severidade não for fixada. **Se o dono a fixar em HIGH, o universo passa a 101** e o
+> finding tem de receber veredito do `vericore-finding-validator` **antes** de remediação. Este
+> relatório não antecipa a fixação (Regra 18).
+
 ### 6.1 A falha de despacho, nomeada
 
 `T-41` §12 declarou expressamente *"os 2 HIGH seguem para `vericore-finding-validator`
@@ -390,14 +544,15 @@ classe de `DIR-DIV-05`. Enquanto durou, as duas ficaram **reservadas e não libe
   controle compensatório.
 - **H2** (o saldo fica preso?) — **procedeu parcialmente**: **o item 3 do finding é FALSO**.
   Existem dois caminhos de saída que o autor não viu — contagem cíclica
-  (`CreateInventoryCountUseCase.ts:90-117` não verifica existência nem `active`;
-  `ApproveInventoryCountUseCase.ts:89-96` usa `count.warehouse_id` direto) e transferência
-  pendente aprovada depois da desativação (`ApproveWarehouseTransferUseCase.ts:59-61` executa por
-  id gravado, sem revalidar). **Isso reduz a consequência ("saldo preso para sempre" → "saldo fora
-  da invariante, recuperável por caminho não óbvio e não exposto na UI") e não toca o defeito
-  central.** Devolvido ao auditor de origem para correção do texto — `T-41` **não foi alterado**
-  (Regra 15).
-- **H3** (a invariante existe como citada?) — **falhou**, e revelou `OBS-T48-02` (§10).
+  (`CreateInventoryCountUseCase.ts:90-117`; `ApproveInventoryCountUseCase.ts:89-96` usa
+  `count.warehouse_id` direto) e transferência pendente aprovada depois da desativação
+  (`ApproveWarehouseTransferUseCase.ts:59-61` executa por id gravado, sem revalidar). **Isso reduz
+  a consequência ("saldo preso para sempre" → "saldo fora da invariante, recuperável por caminho
+  não óbvio e não exposto na UI") e não toca o defeito central.** Devolvido ao auditor de origem
+  para correção do texto — `T-41` **não foi alterado** (Regra 15), e a correção foi **confirmada
+  por leitura própria do autor** em `T-49` §3.4.
+- **H3** (a invariante existe como citada?) — **falhou**, e revelou `OBS-T48-02` (§10), **hoje
+  resolvida por `APR-2026-043` D3**.
 - **H4** (`products.quantity` é a fonte do MRP?) — **falhou**: confirmado por consumidor real
   (`SequelizeItemRepository.listMrpInventoryPositions:58-103`, `:92`). Qualifica o dano com
   precisão maior que a do autor — **o MRP planeja sobre material que o próprio ERP recusa a
@@ -409,8 +564,8 @@ classe de `DIR-DIV-05`. Enquanto durou, as duas ficaram **reservadas e não libe
 **ampliam** o finding: a **Admissão não usa o gate** (`ConcludeAdmissionProcessUseCase.ts:111-127`
 usa `process.aso_result`, uma **terceira** cópia); e existe um **modo 2** que dispensa a
 divergência de enum — `findValidAso` trata `valid_until: null` como **válido para sempre**
-(`SequelizeEmployeeDocumentRepository.ts:50`), de modo que **um único `aso_retorno` sem validade
-satisfaz todo retorno futuro do mesmo funcionário**.
+(`SequelizeEmployeeDocumentRepository.ts:50`). **Este modo 2 foi promovido a finding próprio** por
+`APR-2026-044` D1 (§4.5).
 
 **Controle existente que a remediação NÃO pode destruir:** `00_baseline_frozen.sql:5932` documenta
 que a cópia de RH guarda *"somente aptidão/validade, **nunca laudo clínico** (LGPD art. 5º II)"*.
@@ -431,6 +586,76 @@ A correção é **vincular e igualar domínio**, não copiar conteúdo clínico 
    `T-42`, 1 em `T-43`, 1 em `T-45`, 0 em `T-47`. Cada reprovação tem motivo escrito
    individualmente. **Zero HIGH num lote não é leniência: é a mesma régua aplicada a material que
    não a sustenta.**
+
+### 6.4 `T-49` — critérios de reteste reescritos (`APR-2026-043` D4)
+
+**Autoridade e fundamento.** `APR-2026-043` D4, verbatim: *"Aprovo devolver os dois à trilha de
+origem para reescrever antes de remediação. **Fechamento falso custa mais depois do que corrigir
+agora.**"* Um reteste sobre critério estreito **passaria** e fecharia o finding **sem fechar o
+defeito** — e, fechado, a VeriCore não poderia reabri-lo sem delta audit (Regra 14).
+
+**Regra 15 preservada:** `T-41` §5 e `T-48` **não foram alterados**. `T-49` vive **ao lado** e
+remete a ambos. **O critério operativo — sem o qual não há `RETEST_PASSED` — é o de `T-49`.**
+
+| Finding | Critério original | **Critério vigente (`T-49`)** | Severidade | Estado |
+|---|---|---|---|---|
+| `T41-EST-F01` | `T-41:153` — **1** vetor | **4 vetores · 12 itens** `CR-T49-EST-01`…`-12` (um condicional) + **4 pedidos dinâmicos novos** | **HIGH — inalterada** | `CONFIRMED (parcial)`; **NÃO liberado** |
+| `T41-RH-F02` | `T-41:180` — **2** tabelas | **4 tabelas · 9 itens** `CR-T49-RH-01`…`-09` (um de fallback, **desativado** pela abertura de `AUD-RH-VALIDADENULA-01`) + **3 pedidos dinâmicos novos** | **HIGH — inalterada** | `CONFIRMED`; **NÃO liberado** |
+
+**`T41-EST-F01` — os 4 vetores** (`T-49` §3.3, censo **fechado** sobre as primitivas de saldo: 7
+sítios, 9 linhas, e **exatamente 2** operam sobre id armazenado sem revalidação):
+
+| Vetor | Descrição | Em `T-41`? |
+|---|---|---|
+| **V1** | Desativação sem guarda de saldo (`UpdateWarehouseUseCase.ts:38-58`) | Coberto |
+| **V2** | Primitivas não filtram `active`; **o saldo NÃO fica preso** (`warehouseStockService.ts:111-130`, `:147-185`) | **Refutava o item 3 do texto original** |
+| **V3** | Contagem de inventário sobre depósito inativo (`CreateInventoryCountUseCase.ts`, `ApproveInventoryCountUseCase.ts`) | **Não coberto** |
+| **V4** | Transferência `pending` aprovada após a desativação — **débito e crédito** (`ApproveWarehouseTransferUseCase.ts:59-61`) | **Não coberto** |
+
+**`T41-RH-F02` — as 4 cópias da aptidão** (`T-49` §4.2): `sst_asos.resultado` (ninguém decide);
+`hr_employee_documents.aptitude_result` (decide **demissão** e **retorno**);
+`hr_admission_processes.aso_result` (**decide a admissão, fora do gate comum**);
+`hr_termination_processes.aso_result` (**gravada e nunca lida**). **Duas patologias distintas que o
+critério antigo não separava:** cópia que decide sem vínculo × cópia que ninguém lê.
+
+**As 13 armadilhas de fechamento falso nomeadas** (`A1`-`A5`, `B1`-`B5`, mais as embutidas em
+`CR-T49-EST-06`, `-09` e `-12`) — casos que **passariam** pelo critério antigo sem fechar o
+defeito. As de maior efeito prático:
+
+| ID | Armadilha | Por que passaria |
+|---|---|---|
+| **A1** | `comment` acrescentado a `20260804-000001-create-warehouses.cjs:149-153` | Satisfaz *"comment na migration"* e **nenhum banco o recebe** — a migration está na lista congelada (`00_baseline_frozen_meta.sql:58`) e é marcada como aplicada sem executar |
+| **A2** | Guarda criada e `warehouse-crud.test.ts:136-154` mantido | O teste **afirma** que `active: false` é aceito, com mock **sem** `ProductWarehouseStock`: continuaria **verde**, gerando garantia falsa |
+| **A3** | Guarda lendo `products.quantity` | Fonte errada — é o total do MRP, não o saldo daquele depósito |
+| **A4** | Guarda apenas no Zod (`inventoryValidators.ts:57-61`) | Não alcança os outros chamadores e não é regra de domínio |
+| **A5** | Filtro `active` acrescentado às primitivas "de uma vez" | Fecha o Caminho A **sem reversão** e colide com `T35-DIN-F06` |
+| **B1** | FK só em `hr_employee_documents` | É **literalmente o que o critério antigo pedia** — e deixa a **admissão** decidindo sobre cópia solta |
+| **B2** | Grafia unificada só em `rhEnums.ts`/models | Fonte única **por módulo** é o limite exato onde a divergência sobrevive; o banco continua com 4 domínios |
+| **B3** | `ALTER TYPE ... RENAME VALUE` sem tratar dados das 4 tabelas | Uniformiza o tipo e deixa linhas com rótulo antigo |
+| **B4** | Teste de divergência só entre as duas tabelas originais | Passa verde sem cobrir admissão nem demissão |
+| **B5** | Vínculo implementado **copiando laudo** da SST para RH | Destrói a minimização de `00_baseline_frozen.sql:5932` — troca um HIGH por problema de LGPD |
+
+**Ordem contraintuitiva e obrigatória** (`CR-T49-RH-03`): **vínculo antes ou junto** do domínio —
+unificar a grafia primeiro produz o pior estado intermediário, em que **parece conciliável o que
+continua não sendo conciliado**.
+
+**Dois vetores que `T-49` decidiu NÃO separar, com argumento:** `OBS-T48-01` permanece **dentro** de
+`T41-EST-F01` (`CR-T49-EST-04`) — mesma invariante, mesma coluna, mesma causa raiz, e o teste da
+independência **falha**; e `OBS-T48-05` **não** é vetor de nenhum dos dois — foi encaminhado ao
+diretor e reconciliado com `T43-SST-F01` por `APR-2026-044` D2 (§4.4 item 7).
+
+**Resíduos de `T-49`:** `RES-T49-01` (censo fechado apenas sobre `server/src/**`) · `RES-T49-02`
+(nenhum critério validado contra plano de remediação real) · `RES-T49-03` (camada cliente não
+auditada) · `RES-T49-04` (`OBS-T48-05` não reverificado por leitura própria) · `RES-T49-05`
+(baseline usado como verdade estrutural).
+
+**Regra de negócio que destravou o item:** `APR-2026-043` **D3** fixou
+`saldo_total(produto) = Σ saldo(produto, depósito) para todo depósito ATIVO` (item 3 de
+`BUSINESS_RULES.md` §12). O item 2 (`:345-349`) é **redação a corrigir**, **não** regra
+concorrente, e a correção entra no backlog como item de **documentação (OpusCore)**. Com isso,
+**`OBS-T48-02` está resolvida** e a Regra 6 fica preservada — a SanaCore não precisa inventar a
+regra. Consequência direta no critério: qualquer implementação que some sobre *todos* os depósitos
+**reprova** (`CR-T49-EST-11`).
 
 ---
 
@@ -465,19 +690,21 @@ dimensão (`C-136`), (iv) toda a prova dinâmica.
 | `C-63`…`C-132` — 43 rasos | **ENTREGUES** — 70 células, partição resolvida por enumeração | não |
 | `C-133` — `client/` | **`A(157/167)` PARCIAL ALTA** — 31 lidas dirigidamente, ≈10 sem atribuição nominal | não |
 | `C-134`/`C-135` — `mobile`/`tv` | **`E`**, triagem 100 % | não |
-| **`C-136`** — contrato de API por dimensão | **Nenhuma trilha tocou em 3 levas de fieldwork.** 683 endpoints × 11 dimensões ≈ 7.500 células; ≈50 lotes. **SEM DECISÃO** | **SIM** |
+| **`C-136`** — contrato de API por dimensão | **Nenhuma trilha tocou em 3 levas de fieldwork.** 683 endpoints × 11 dimensões ≈ 7.500 células. **Método decidido** (`APR-2026-043` D2 — dividir); **pré-requisito `F-5` ENTREGUE**; alvo redimensionado para **628 rotas IN** (§7.6) | **SIM** |
 | **`C-137`** | **`A(79/207)`**, déficit 128 integralmente nominal | **SIM** |
 
 ### 7.2 Déficit do `G3`, medido item a item (`F-1`…`F-12`)
 
 `F-1` (70 células dos 43 rasos) **extinto por entrega**, com 3 ressalvas registradas ·
 `F-2` (`client/`) reduzido a ≈10 unidades + 31 leituras dirigidas · `F-3` (`C-137`) ·
-`F-4` (`C-136`) **inalterado em 4 rodadas** · **`F-5` — lista nominal IN × OUT dos 174 profundos,
-NÃO PUBLICADA em 5 rodadas; sem ela a amostra dos 174 não satisfaz a condição (a) do `G3`. É a
-lacuna mais barata da run: 1 varredura** · `F-6` (≈83 endpoints em D4-D8) · `F-7` (4 de 10
-categorias ASVS) · `F-8` (≈13 de `rh`) · `F-9` (≈6 de `sst`) · `F-10` (1 de `juridico`) ·
-`F-11` (evidência dinâmica, ≈232 pedidos contra ~21 executados) · `F-12` (regra de negócio dos
-rasos sem artefato normativo — **lacuna de fonte, não de cobertura**).
+`F-4` (`C-136`) **inalterado em 4 rodadas; método decidido em `APR-2026-043` D2, execução não
+iniciada** · **`F-5` — EXTINTO POR ENTREGA em 2026-08-17**: a lista nominal IN × OUT foi publicada
+(`07-findings/F-5_LISTA_IN_OUT_CATEGORIA.md`), satisfazendo o **passo 4 do `REG-G3`**
+(`AUDIT_PLAN_EMENDA_02.md:97-99`), que exige a lista **fixada e anexada antes da análise**. **A
+condição (a) do `G3` continua NÃO satisfeita** por outro motivo — `F-6` · `F-6` (≈83 endpoints em
+D4-D8) · `F-7` (4 de 10 categorias ASVS) · `F-8` (≈13 de `rh`) · `F-9` (≈6 de `sst`) ·
+`F-10` (1 de `juridico`) · `F-11` (evidência dinâmica, ≈232 pedidos contra ~21 executados) ·
+`F-12` (regra de negócio dos rasos sem artefato normativo — **lacuna de fonte, não de cobertura**).
 
 **Declarações negativas em vigor:** `N-04` (≈19 endpoints sem D3), `N-05` (semântica de coluna),
 `N-07` (`client/`). Propostas de baixa pendentes de ato do director: `N-06` (com 3 ressalvas
@@ -513,6 +740,12 @@ DINHEIRO 29, cobertas 4, **25 na exclusão declarada** · DADO PESSOAL 20, parci
 > `APR-2026-037` §5): **a exclusão consta nominalmente, tabela a tabela — frase genérica de escopo
 > é vedada.** Estas tabelas **não foram auditadas** quanto aos 7 critérios de `C-137`. É
 > **afirmação, não omissão**.
+>
+> **Moldura acrescida na revisão 2 (`APR-2026-043` D1):** estas listas nominais são **o
+> instrumento** pelo qual o `G3` foi formalmente reduzido pela via do `G8` — *"a exclusão nominal
+> da EMENDA-01 **é** a exclusão explícita que o `G8` prevê"*. **Estado do gate:
+> `REDUCED_BY_DECISION`.** A redução **não amplia cobertura nenhuma** e **não converte exclusão em
+> conformidade**: o que estas tabelas dizem continua sendo *"não auditadas"*.
 
 **(a) 1ª ordem, banda DINHEIRO — 25** *(fonte: `T-42` §2.4; `APR-2026-037` §5.1)*
 
@@ -603,7 +836,9 @@ o que satisfaz a condição vinculante de `APR-2026-038` D1)*
 | 22 | `webhooks_eventos` | `:15074-15083` | Órfã PT declarada |
 
 **Estas 22 estão NOMEADAS, e a decisão de cobrir × excluir continua sendo do dono** (bloco `B8` de
-`CELULAS_SEM_AUTORIZACAO_ACEITACAO.md`). Elas **não** são, hoje, "exclusão aceita".
+`CELULAS_SEM_AUTORIZACAO_ACEITACAO.md`, que recebeu o **critério de D1 em cascata** por
+`APR-2026-043` D5: cobrir onde o `G3` veda, exclusão nominal no resto). Elas **não** são, hoje,
+"exclusão aceita" sem essa aplicação.
 
 > **`DIV-REP-03` — divergência aritmética registrada, não suavizada.** A soma nominal das quatro
 > listas de tabelas **com model** é 25 + 8 + 22 + 53 = **108**, contra um déficit medido de
@@ -649,6 +884,97 @@ categoria foram detectadas **pela condição vinculante do dono** — saúde 3 �
 biometria 2 → 5 (`T-45` §6.3). **Sem essa condição, 4 tabelas com dado de saúde de trabalhador —
 incluindo admissão e demissão — teriam entrado na lista de exclusão.**
 
+### 7.6 `F-5` — a lista nominal IN × OUT, publicada (`APR-2026-043` D2)
+
+**Autoridade e finalidade.** `REG-G3` passo 4 (`AUDIT_PLAN_EMENDA_02.md:97-99`) exige que a lista
+nominal das duas classes seja **fixada e anexada antes da análise**. Ela constava como *não
+publicada* em **cinco** rodadas de cobertura (`AUDIT_COVERAGE_EXECUTED_RODADA4.md:258`).
+`APR-2026-043` **D2** tornou-a pré-requisito explícito da divisão de `C-136`. **Foi entregue em
+2026-08-17.** Regime: 100 % estático, zero conexão de banco.
+
+**Universo confirmado por medição independente.** `F-5` mediu por Grep **ancorado no início da
+linha** (`^\s*router\.(get|post|put|patch|delete)\(`), método **diferente** do usado por `T-17`
+(Grep `-o` + 4 leituras manuais de chamada multi-linha), e chegou ao **mesmo 683**: 681 em
+`server/src/modules/**` + 2 em `src/routes/health.ts`. Alcançáveis: 683 − 8 (CNAB definido e **não
+montado**) + 1 (`GET /api`, `app.ts:227`) = **676**, **fechando exatamente** com `T-17` §1.3 a
+partir de base distinta. Fora do universo e declarados: o handler inline `GET /api` e a superfície
+**não enumerável** `GET /uploads/*` (`app.ts:225`), que serve ASO, TRCT e contratos.
+
+**Critério declarado ANTES de aplicado** (`F-5` §2): as 12 categorias vedadas pelo `G3` mais as
+extensões `I-1a` (dado pessoal) e `I-1b` (obrigação legal com prazo), cada uma com critério
+operacional escrito; **três fronteiras discutíveis decididas em aberto** — C2 não é "toda rota com
+middleware de authZ" (a leitura ampla poria 683/683 em IN e esvaziaria a triagem), C6 não é "toda
+escrita", e a **Regra L** define quando leitura é IN. A regra de desempate `I-6`
+(*in dubio pro cobertura*) foi cumprida **e marcada rota a rota**, para que o efeito seja medível
+por terceiro.
+
+**Resultado — a contagem honesta:**
+
+| Faixa | Total | **IN** | **OUT** | Não classificado |
+|---|---|---|---|---|
+| Tier 3 profundo — **nominal por rota** | 174 | **119** | **55** | 0 |
+| Tier 1 — por módulo | 39 | 39 | 0 | 0 |
+| Tier 2 — por módulo | 381 | 381 | 0 | 0 |
+| Tier 3 elevado — por módulo | 44 | 44 | 0 | 0 |
+| Tier 3 raso — por módulo (`I-5`) | 43 | 43 | 0 | 0 |
+| `health` — nominal | 2 | 2 | 0 | 0 |
+| **TOTAL** | **683** | **628 (91,9 %)** | **55 (8,1 %)** | **0** |
+
+628 + 55 = 683 ✔. **Não classificados: ZERO.**
+
+**Subtotal nominal do tier 3 profundo** (as 55 OUT estão **todas** aqui, nominadas com arquivo,
+linha, verbo e path em `F-5` §3): `facilities` 64 = 45 IN / 19 OUT · `ti` 47 = 37 / 10 ·
+`marketing` 30 = 14 / 16 · `engineering` 11 = 4 / 7 · `comex` 8 = 8 / 0 · `reports` 8 = 8 / 0 ·
+`workCenters` 6 = 3 / 3. **Conferência:** 119 + 55 = 174 ✔.
+
+**Sensibilidade à regra de desempate, publicada** (`F-5` §5.3): com `I-6` ligado (norma vigente,
+lista oficial) **628 / 55**; com `I-6` desligado **614 / 69**. As **14 rotas** que mudam de lado
+estão nominadas: `facilities` 5/20/37/47/48/49, `ti` 43/44, `marketing` 3/4, `engineering` 7/11,
+`workCenters` 4/5. *"O efeito de uma regra de desempate não pode ficar dentro da cabeça do
+auditor."*
+
+**O resultado desconfortável, dito sem maquiar** (`F-5` §5.2): a divisão aprovada em D2 reduz o
+alvo da matriz de 11 dimensões em **8,1 %**, **não em uma ordem de grandeza**. **Isto não invalida
+D2** — a divisão continua legítima e as 55 rotas são nominalmente excluíveis a partir de hoje —
+mas *"quem dimensionar `C-136` contando com uma redução material **vai errar o prazo**, e essa é
+uma informação que o diretor precisa ter **antes** de planejar, não depois"*.
+
+**A única alavanca real — não autorizada.** O refinamento **por rota** dentro de tier 1 e tier 2
+(**420 endpoints**) **contraria `I-2`** (`AUDIT_PLAN_EMENDA_02.md:72`), que fixa a unidade em
+**módulo** fora do tier 3. Exigiria **nova decisão humana** (Regra 18). Custo estimado: 3-4
+sessões sobre 26 arquivos de rota; ganho **não garantido** — `financial`, `inventory`, `sales`,
+`rh`, `sst` e `juridico` (287 endpoints) muito provavelmente permanecem IN quase integralmente.
+Registrado como `F-5` **L-02**.
+
+**Instrução operacional vinculante para `C-136`** (`F-5` §8, executando D2):
+
+1. **Matriz de 11 dimensões integral** nas **628 rotas IN** — com a ressalva de que os **8
+   endpoints de `cnab.ts`** recebem **`N/A — rota não montada`**, **não** `NÃO AUDITADO`, com a
+   evidência da não-montagem (`T-17` §1.3, `AUD-SEC-T04-03`).
+2. **Exclusão nominal com dimensão declarada** nas **55 rotas OUT** — a exclusão deve citar
+   `F-5 §3.x #n` e dizer **quais colunas** ficaram vazias, **nunca** frase genérica (exigência
+   literal de D2).
+3. **A lista é fixa a partir da publicação.** `REG-G3` passo 4 **proíbe** ajustá-la depois para
+   caber no achado; reclassificação exige **adendo com motivo escrito**, não edição silenciosa.
+4. **Refutabilidade rota a rota é o produto** — não o número.
+
+**Handoffs que saem de `F-5` e não são finding fechado:** `DIV-F5-02` e `DIV-F5-03` (§11.1); e uma
+**segunda ocorrência de `T17-F07`** em `health.ts:42` — o ramo de falha de `GET /health/ready`
+devolve `error.message` **cru a chamador não autenticado** (rota montada em `app.ts:39`, **antes**
+de qualquer gate). `F-5` §4.5 a encaminhou a `T-18` e ao titular de `T17-F07` como **segunda
+ocorrência, em superfície ainda mais exposta** — **não** como finding novo, e este relatório
+**não** cria ID para ela.
+
+**Lacunas declaradas por `F-5`, reproduzidas sem edição:** `L-01` (árvore lida **não amarrada
+criptograficamente** ao `AUDIT_COMMIT` — mesma limitação de `RES-T17-02`) · **`L-02`**
+(refinamento por rota em tier 1/2 não feito e não autorizado; **o IN de 628 é o teto normativo,
+não necessariamente o material**) · `L-03` (3 das 4 rotas multi-linha aceitas como insumo de
+`T-17`, **declarado como insumo e não como verificação própria**) · `L-04` (`workCenters` POST/PUT
+classificadas por `I-6` sem verificar custo-hora no controller/model — 2 rotas **podem** ser OUT) ·
+`L-05` (`DIV-F5-02`/`-03` não adjudicadas) · `L-06` (`/uploads/*` é superfície **não enumerável
+estaticamente**; cobertura de contrato dessa superfície é **estruturalmente impossível** por método
+estático).
+
 ---
 
 ## 8. `RES-T47-02` — a coleta dinâmica executada e o seu veredito
@@ -693,6 +1019,35 @@ nessas tabelas. **Zero `CHECK`** nas 5 tabelas e nenhum contrato de formato nas 
 > prático é o mesmo em ambas as leituras — `RES-T47-02` permanece **ABERTA** —, mas por motivo
 > diferente, e o motivo importa para a decisão do dono.
 
+### 8.1 `DYN-T41-03` e `DYN-T49-03` — não autorizados, pendência de janela futura (`APR-2026-044` D3)
+
+**Decisão, verbatim:** *"Não autorizo `DYN-T41-03` nem `DYN-T49-03` nesta sessão. Registre como
+pendência para janela futura, escopada especificamente para essas duas consultas nomeadas, somente
+leitura contra produção — fora do lote de ~190 pedidos, decidida separadamente."*
+
+| ID | Pergunta | O que muda |
+|---|---|---|
+| **`DYN-T41-03`** | Existe funcionário com `sst_asos.resultado='inapto'` **vigente** e documento `aso_*` de RH **válido com aptidão**? | **Único** capaz de mover `T41-RH-F02` de **HIGH para CRITICAL** |
+| **`DYN-T49-03`** | Há `inventory_movements` cujo `warehouse_id` esteja **hoje inativo**? | **Único** que separa **risco latente de dano consumado** em `T41-EST-F01` |
+
+**Fundamento registrado, que vira precedente do programa:** rodar contra o banco de teste (vazio)
+produziria um **falso zero** — *"pior que não coletar nada, porque poderia ser lido como 'não
+existe caso real' quando na verdade é só 'banco sem dado nenhum'"*. É a mesma lição que `DYN-T47`
+demonstrou empiricamente (§8) e que `APR-2026-041` já havia registrado **antes** daquela coleta.
+A segunda metade do fundamento é de disciplina de acesso: *"produção exige a mesma disciplina que
+já aplicamos a noite toda: nunca autorizar por extensão, sempre janela própria, escopada, com
+consultas nomeadas"*.
+
+**Quatro condições fixadas para a janela futura:** (1) escopada **especificamente** a estas duas
+consultas nomeadas — não por extensão, não em bloco; (2) **somente leitura**, contra produção;
+(3) **fora** do lote de ~190 pedidos de `B9`, reservado a decisão separada (`APR-2026-043` D5);
+(4) confirmação humana explícita de **dia e horário**, como toda operação contra produção neste
+programa (`APR-2026-016`).
+
+**Consequência sobre o que este relatório pode afirmar:** a **materialização** de `T41-RH-F02` e de
+`T41-EST-F01` permanece **não medida** (`RES-T48-02`). O mecanismo dos dois está provado
+estaticamente; **o dano consumado não está medido e não é afirmado**.
+
 ---
 
 ## 9. Conformidades verificadas e falsos positivos evitados
@@ -706,7 +1061,20 @@ Registro consolidado, porque um relatório final que só publica defeito é envi
 | `T-43` | 8 | **3** — incluindo o de maior impacto: o renderizador do `Grep` deformou literais de rota e sugeria que o cluster clínico não tinha caminho de escrita |
 | `T-45` | 6 | **3** — o upload que não existe; o renderizador de `Grep` (**2ª ocorrência**); a premissa da própria decisão do dono (`sst_devolucoes_epi` não tem coluna biométrica) |
 | `T-47` | 3 | **3** — o "schema-fantasma solto" (há guarda em **duas camadas**); `migracao_*` "órfãs" (são **vivas**; o finding é o oposto); ponto biométrico em `hr_time_sheet_summaries` (hipótese forte morta por leitura) |
-| **TOTAL da última leva** | **38** | **14** |
+| **`F-5`** | **4** | **3** |
+| **TOTAL** | **42** | **17** |
+
+**Os 7 registros de `F-5` §6.2, nominados:**
+
+| ID | Registro | Tipo |
+|---|---|---|
+| `CONF-F5-01` | **683 confirmado por método independente** do de `T-17` — Grep ancorado no início da linha × Grep `-o` + leitura manual. Convergência de dois métodos distintos | conformidade |
+| `CONF-F5-02` | **676 alcançáveis confirmado partindo de base diferente** (683−8+1 × 681−8+2+1). A aritmética de `T-17` §1.3 **fecha** | conformidade |
+| `CONF-F5-03` | **A soma dos tiers fecha em 683 em todos os cortes**: 39 + 381 + 261 + 2, com 261 = 174 + 44 + 43. Nenhum módulo órfão, nenhum contado duas vezes; `financial` 30, `inventory` 27, `production` 23 conferidos por soma de arquivos | conformidade |
+| `CONF-F5-04` | **Falso positivo evitado — `/api/engineering/bom`.** Os 12 endpoints de `bom.ts` **não** foram somados aos 11 de `engineering`: montados antes, em prefixo próprio (`app.ts:193-195`), pertencem à faixa §7.2. Somá-los inflaria `engineering` para 23 e **quebraria o 174** | falso positivo evitado |
+| `CONF-F5-05` | **Falso positivo evitado — `POST /api/facilities/maintenance-tickets` (`:89`) não é shadow endpoint.** A ausência de `authorizeModule` é **intencional e documentada** (`facilities.ts:15-18, 88`, RF-FAC-040). Classificado IN por C2 (o gate desvia e precisa ser verificado), **não** como defeito — a adjudicação é do `authorization-auditor` | falso positivo evitado |
+| `CONF-F5-06` | **Falso positivo evitado — C2 não foi aplicado a "toda rota com middleware de authZ".** A leitura ampla poria **683/683** em IN e esvaziaria a triagem do `REG-G3` | falso positivo evitado |
+| `CONF-F5-07` | **`comex` 8/8 IN e `reports` 8/8 IN** coincidem com o que `EMENDA_02:174-184` já determinara **antes** da varredura — o auditor chegou por leitura do arquivo e só depois confrontou o plano. **Convergência, não deferência** | conformidade |
 
 **Conformidades que a remediação NÃO pode destruir, nomeadas:** o `CHECK` de exatamente-um-dono de
 `production_order_reservations` · o trigger `sst_lock_cat` (imutabilidade legal da CAT,
@@ -717,34 +1085,44 @@ técnica que `T42-PCP-F02` pede · a guarda de CI `no-orphan-pt-schema-tables.te
 (**12 tabelas órfãs cercadas em duas camadas**) · `CreateEpiDeliveryUseCase` com **lista branca
 explícita de 8 campos** (zero mass assignment) · `errorHandler.ts:84-89` mapeando violação de FK
 para **400, não 500** · `00_baseline_frozen.sql:5932`, a minimização deliberada de dado clínico na
-cópia de RH.
+cópia de RH · **`getWarehouseByCode` mantém `active: true`** (`CR-T49-EST-10`: remover o filtro
+"para uniformizar" é regressão — aqui o filtro **sobra em um lugar e falta nos outros**) ·
+**`inventory_counts_warehouse_id_fkey`** (`00_baseline_frozen.sql:24132-24136`), que já impõe a
+**existência** do depósito, restando apenas o `active`.
 
 **Regra de método fixada por três trilhas consecutivas, vinculante para o restante do programa:**
 *achado que dependa da forma exata de um literal é confirmado por **leitura do arquivo**, nunca por
 saída de `Grep`* (`T-43` §4.1, `T-45` §4.2, `T-47` §8.3 — nesta última, um grep de linha única
-**perdeu 4 das 7 tabelas pós-freeze** e quase virou omissão).
+**perdeu 4 das 7 tabelas pós-freeze** e quase virou omissão). **`T-49` e `F-5` reafirmaram a regra
+e a cumpriram**: `T-49` confirmou **27 literais load-bearing** por `Read` com faixa de linhas
+citada (L01-L27), e `F-5` reabriu `marketing.ts:54-58` para amarrar a chamada multi-linha.
 
-**Autocrítica medida dos auditores (`OBS-T26-36`):** a última leva reportou **5 erros contra si
-própria** — `T-42` §10.1 (erro a favor do auditor), `T-43` §6.1 (subestimou os controles do
-produto), `T-43` §6.3 (subestimou a própria categoria), `T-45` §6.2 (afirmou impossibilidade
-falsa), `T-47` §8.3 (grep que quase virou omissão) — **e 1 contra a premissa de uma decisão do
-dono** (`T-45` §6.1). É a evidência mais forte de que a contagem publicada não é seletiva.
+**Autocrítica medida dos auditores (`OBS-T26-36`, ampliada nesta revisão):** a última leva reportou
+**5 erros contra si própria** — `T-42` §10.1 (erro a favor do auditor), `T-43` §6.1 (subestimou os
+controles do produto), `T-43` §6.3 (subestimou a própria categoria), `T-45` §6.2 (afirmou
+impossibilidade falsa), `T-47` §8.3 (grep que quase virou omissão) — **e 1 contra a premissa de uma
+decisão do dono** (`T-45` §6.1). **`T-49` acrescentou 2**, os dois publicados pelo **autor de
+origem contra o próprio trabalho**: o elo "Admissão" de `T41-RH-F02` estava **errado** (e o erro
+**amplia** o finding) e o item 3 de `T41-EST-F01` era **factualmente errado** (o saldo **não** fica
+preso — e isto **reduz** a consequência). **Total: 7 erros contra si próprios.** Um amplia, outro
+reduz, os dois foram publicados com o mesmo peso — é isso que torna a contagem não seletiva.
 
 ---
 
 ## 10. Observações colaterais com efeito sobre a remediação
 
-Registradas como **observações**, não convertidas em finding — não é autoridade do validador
-(`T-48` §4). Devolvidas ao auditor de origem e ao director.
+Registradas como **observações**, não convertidas em finding pelo validador — não é autoridade dele
+(`T-48` §4). Devolvidas ao auditor de origem e ao director. **A coluna "Estado" reflete as decisões
+de `APR-2026-043` e `APR-2026-044`.**
 
-| ID | Observação | Evidência | Efeito |
+| ID | Observação | Evidência | Estado / efeito |
 |---|---|---|---|
-| **`OBS-T48-01`** | **Transferência aprovada não revalida `active` de origem nem de destino.** Uma transferência `pending` cujo destino foi desativado no intervalo **credita saldo em depósito inativo**; a soma sobre ativos cai sem contrapartida em `products.quantity` — **sem que ninguém desative depósito com saldo** | `CreateWarehouseTransferUseCase.ts:63-69` × `ApproveWarehouseTransferUseCase.ts:59-61` | Viola `BUSINESS_RULES.md` §12 item 4 (`docs/business/BUSINESS_RULES.md:360-364`). **Mesma invariante de `T41-EST-F01`, segundo mecanismo.** Se a remediação só tratar o `PUT`, este fica aberto |
-| **`OBS-T48-02`** | **`BUSINESS_RULES.md` §12 se contradiz.** Item 2 (`:345-349`) define saldo total como soma de **todos** os depósitos; item 3 (`:351-354`), como soma dos **ativos**. Itens consecutivos, definições incompatíveis | `docs/business/BUSINESS_RULES.md:345-354` | **Regras 6 e 20. BLOQUEIA a remediação de `T41-EST-F01`** — sem fonte autoritativa fixada, a SanaCore escolheria a regra de negócio sozinha. **Exige decisão humana** |
-| **`OBS-T48-03`** | **A aptidão do ASO vive em QUATRO tabelas, não duas** — `sst_asos.resultado`, `hr_employee_documents.aptitude_result`, `hr_admission_processes.aso_result`, `hr_termination_processes.aso_result`, nenhuma com FK para `sst_asos`. Pior: `hr_termination_processes.aso_result` é **gravado** (`ConfirmTerminationAsoResultUseCase.ts:35`) e **não é lido pelo gate da própria demissão** | `00_baseline_frozen.sql:669-672`, `:765-769`, `:839-842`, `:2300-2304`; `ConcludeAdmissionProcessUseCase.ts:119` | Amplia `T41-RH-F02` de 2 para 4 tabelas e **muda o desenho da correção** |
-| **`OBS-T48-04`** | **`valid_until NULL` = validade infinita no gate de ASO**, e o gate não amarra o documento ao afastamento. Um `aso_retorno` sem validade satisfaz **todos** os retornos futuros do funcionário | `SequelizeEmployeeDocumentRepository.ts:43-54` (`:50`); `HrEmployeeDocument.ts:27`; `ReturnFromAbsenceUseCase.ts:95-103` | Torna o gate de RF-RH-048 satisfazível uma única vez para sempre. **Candidato a finding próprio** — adjudicação do director |
-| **`OBS-T48-05`** | **`CreateAsoUseCase` grava o ASO FORA da transação** que criou; falha no `create` do evento faz rollback do evento e **o ASO permanece**, sem `S-2220` enfileirado | `CreateAsoUseCase.ts:72-99`; `SequelizeAsoRepository.ts:70-72`; `AsoRepository.ts:30` | Obrigação acessória eSocial perdida em silêncio. Convergente com `T43-SST-F01` |
-| **`OBS-T26-40`** | **A suíte de testes existente codifica o comportamento defeituoso** — `server/tests/unit/sst-epi.test.ts:116-130`. **Suíte verde não é evidência de ausência de defeito** quando nenhum teste prova a invariante em questão | `T-46` §3.3 | O teste precisa ser atualizado **no mesmo commit** da remediação de `T45-SST-F01` |
+| **`OBS-T48-01`** | **Transferência aprovada não revalida `active` de origem nem de destino.** Uma transferência `pending` cujo destino foi desativado no intervalo **credita saldo em depósito inativo**; a soma sobre ativos cai sem contrapartida em `products.quantity` — **sem que ninguém desative depósito com saldo** | `CreateWarehouseTransferUseCase.ts:63-69` × `ApproveWarehouseTransferUseCase.ts:59-61` | **ABSORVIDA COMO VETOR V4** de `T41-EST-F01`, com item de reteste próprio (`CR-T49-EST-04`), por decisão argumentada de `T-49` §5 — mesma invariante, mesma coluna, mesma causa raiz; o teste da independência **falha**. **Não vira finding separado** |
+| **`OBS-T48-02`** | **`BUSINESS_RULES.md` §12 se contradizia.** Item 2 (`:345-349`) definia saldo total como soma de **todos** os depósitos; item 3 (`:351-354`), como soma dos **ativos** | `docs/business/BUSINESS_RULES.md:345-354` | **RESOLVIDA** por `APR-2026-043` **D3**: prevalece o **item 3** (*"é o que o código implementa, o que o model cita, e o que torna a invariante testável"*). O item 2 é **redação a corrigir** — item de backlog de **documentação (OpusCore)** —, **não** regra concorrente. **Deixa de bloquear** a remediação de `T41-EST-F01`; Regra 6 preservada |
+| **`OBS-T48-03`** | **A aptidão do ASO vive em QUATRO tabelas, não duas** — `sst_asos.resultado`, `hr_employee_documents.aptitude_result`, `hr_admission_processes.aso_result`, `hr_termination_processes.aso_result`, nenhuma com FK para `sst_asos`. Pior: `hr_termination_processes.aso_result` é **gravado** (`ConfirmTerminationAsoResultUseCase.ts:35`) e **não é lido pelo gate da própria demissão** | `00_baseline_frozen.sql:669-672`, `:765-769`, `:839-842`, `:2300-2304`; `ConcludeAdmissionProcessUseCase.ts:119` | **INCORPORADA AO CRITÉRIO** de `T41-RH-F02` (`CR-T49-RH-01`, `-02`, `-04`, `-05`, `-08`). Amplia o finding de 2 para 4 tabelas e **muda o desenho da correção** |
+| **`OBS-T48-04`** | **`valid_until NULL` = validade infinita no gate de ASO**, e o gate não amarra o documento ao afastamento. Um `aso_retorno` sem validade satisfaz **todos** os retornos futuros do funcionário | `SequelizeEmployeeDocumentRepository.ts:43-54` (`:50`); `HrEmployeeDocument.ts:27`; `ReturnFromAbsenceUseCase.ts:95-103` | **PROMOVIDA A FINDING PRÓPRIO** — **`AUD-RH-VALIDADENULA-01`** (`APR-2026-044` D1), **com um segundo consumidor descoberto em `T-49`** (`ConcludeAdmissionProcessUseCase.ts:125`). Ver §4.5. `CR-T49-RH-09` (fallback) fica **desativado** |
+| **`OBS-T48-05`** | **`CreateAsoUseCase` grava o ASO FORA da transação** que criou; falha no `create` do evento faz rollback do evento e **o ASO permanece**, sem `S-2220` enfileirado | `CreateAsoUseCase.ts:72-99`; `SequelizeAsoRepository.ts:70-72`; `AsoRepository.ts:30` | **ANEXADA COMO CONFIRMAÇÃO INDEPENDENTE DE `T43-SST-F01`** (`APR-2026-044` D2). **Não é item novo, não conta no placar** — dois auditores, caminhos independentes, o mesmo defeito. **Reforça** o finding existente (§4.4 item 7) |
+| **`OBS-T26-40`** | **A suíte de testes existente codifica o comportamento defeituoso** — `server/tests/unit/sst-epi.test.ts:116-130`. **Suíte verde não é evidência de ausência de defeito** quando nenhum teste prova a invariante em questão | `T-46` §3.3 | O teste precisa ser atualizado **no mesmo commit** da remediação de `T45-SST-F01`. **Segunda ocorrência da mesma classe, encontrada por `T-49`:** `server/tests/unit/warehouse-crud.test.ts:136-154` **afirma** que desativar depósito é aceito, com mock sem saldo — armadilha `A2` (§6.4) |
 
 ---
 
@@ -757,6 +1135,19 @@ Registradas como **observações**, não convertidas em finding — não é auto
 | **`DIV-REP-01`** | `T-26` R5 §5.1 `BLQ-3` afirma que a coleta `DYN-T47-01`/`-02` **não foi executada**; o artefato `DYN-T47_COLETA_CONTEINERES.md` prova que **foi** | **Artefato vence (Regra 7).** Registrado; `RES-T47-02` permanece aberta, com a condicionalidade **rebaixada** (§8) |
 | **`DIV-REP-02`** | O mandato desta emissão declara `CASE-004` itens A e B **remediados, `RETEST_REQUIRED`**. O único artefato de `CASE-004` legível na árvore auditável é o `TRIAGE_REPORT.md`, que encerra **autorizando o início do Estágio 1** | **Registrado, não suprido.** O estado é relatado como **declarado, não confirmado por artefato acessível**; o pacote de evidência vive em `sana/ERP-LEGACY-001/CASE-004`, branch não mesclada. **Reforça a exigência de reteste independente da VeriCore** (Regra 4) |
 | **`DIV-REP-03`** | Soma nominal das listas de exclusão com model = **108** × déficit medido com model = **106** (§7.4) | **Registrado, não conciliado.** Uma causa identificada (`sst_acidente_testemunhas`, `T-43` §6.6); a segunda não. Escalado ao director |
+| **`DIV-REP-04`** | O placar oficial (rodada 5) é **483 / 501** e **não contém** `AUD-RH-VALIDADENULA-01`, aberto depois da consolidação por `APR-2026-044` D1 | **Registrado, não forçado (Regra 7).** O finding **não tem severidade fixada** e não é distribuído em banda alguma; total vigente **484**, IDs emitidos **502**, com a linha "sem severidade fixada" explícita (§2.1-bis). **Reconciliação formal é do consolidador/director** |
+
+**Divergências novas trazidas por `F-5`, reproduzidas sem edição** (`F-5` §6.1):
+
+| ID | Divergência | Situação |
+|---|---|---|
+| **`DIV-F5-01`** | **681 × 683** — `AUDIT_PLAN.md:475`, `SYSTEM_MAP.md` e `API_INVENTORY.md` (passo 23) dizem 681; a medição própria de `F-5` e `T-17` dizem **683** | **Reconfirmada, não acomodada.** 681 é subcontagem por Grep de linha única (perde 4 chamadas multi-linha) e ignora `health.ts`. Já escalada por `T-17` §7.1; **permanece aberta** |
+| **`DIV-F5-02`** | `ti.ts:7-8` declara *"57 endpoints do contrato"*; o arquivo tem **47** — discrepância de **10** contra `BLOCO_2_TI_API.md` | **Não adjudicada** (`F-5` L-05): exigiria contar o documento endpoint a endpoint, o que não foi feito. Encaminhada a `T-23` / `AUD-PROC-DOCDRIFT-01` |
+| **`DIV-F5-03`** | `facilities.ts:5-6` declara *"os 60 endpoints do contrato"*; o arquivo tem **64** — discrepância de **4**, mesmo padrão, sentido oposto | **Não adjudicada** (`F-5` L-05) |
+
+> Nota de método registrada pelo próprio autor: `DIV-F5-02` e `DIV-F5-03` foram reportadas **contra
+> a sua própria conveniência** — nenhuma delas muda o total de 174, e ele poderia tê-las calado sem
+> que a lista mudasse de forma alguma.
 
 ### 11.2 Divergências herdadas, reproduzidas por exaustividade
 
@@ -779,19 +1170,21 @@ severidade como mérito resolvido**) · `DIR-DIV-04`, `DIR-DIV-06`, `DIR-DIV-07`
 
 ## 12. Limitações de instrumento e de escopo — declaradas
 
-1. **Nenhuma âncora `arquivo:linha` dos 501 IDs foi reverificada por este agente.** Nenhum arquivo
+1. **Nenhuma âncora `arquivo:linha` dos 502 IDs foi reverificada por este agente.** Nenhum arquivo
    de `server/`, `client/`, `docs/`, `product/`, `mobile/` ou `tv/` foi aberto na produção deste
    relatório. **Se uma âncora está errada na origem, este documento repete o erro.**
 2. **A auditoria é predominantemente estática.** `APR-2026-016` proíbe tocar `erp_evok_audio`. Fila
    dinâmica: **≈232 pedidos catalogados, ~21 executados**. Sete deles **mudam classe de
    severidade** se respondidos: `DYN-T41-03` (**HIGH → CRITICAL**), `DYN-T43-02`, `DYN-T43-04`,
-   `DYN-T42-01`, `DYN-T45-01`, `DYN-T45-04`, `DYN-T45-08`.
+   `DYN-T42-01`, `DYN-T45-01`, `DYN-T45-04`, `DYN-T45-08`. **`DYN-T41-03` e `DYN-T49-03`
+   permanecem NÃO AUTORIZADOS**, com janela futura escopada e 4 condições (§8.1); `DYN-T49-01`,
+   `-02`, `-04`, `-05`, `-06`, `-07` foram **registrados e não executados** por `T-49`.
 3. **`00_baseline_frozen.sql` está exatamente 9 migrations atrasado** (`RES-T42-04`/`RES-T47-06`).
    Para toda tabela criada após `20260810-000038`, *"não achei no baseline"* **não é evidência de
    ausência**. Regenerar exigiria tocar banco, o que `APR-2026-016` proíbe. Ver `DIV-R5-05`.
 4. **O renderizador de `Grep` deforma literais de rota** — propriedade conhecida do instrumento,
    observada em **3 trilhas consecutivas**, que teria produzido em dois casos um CRITICAL
-   espetacular e **falso**.
+   espetacular e **falso**. `T-49` e `F-5` trataram-na explicitamente (§9).
 5. **Deduplicação sintática, não semântica.** `DUP-ABERTA-01` e `DUP-ABERTA-02` seguem abertas.
 6. **A enumeração integral do estrato 4 (81 IDs) não foi entregue** (`T5-02`): há **26 nominais** e
    **55 por ponteiro**. O obstáculo aritmético do ±2 deixou de existir com a errata; o que falta é
@@ -799,15 +1192,24 @@ severidade como mérito resolvido**) · `DIR-DIV-04`, `DIR-DIV-06`, `DIR-DIV-07`
 7. **A classificação de ambiente dos 37 IDs novos não existe** e não é inferida (Regra 6).
    `T41-RH-F02` e `T43-RH-F04` são **candidatos nominais a produção real** no recorte
    desligamento — se confirmado, `T41-RH-F02` **sobe ao estrato 2**. Escalado como extensão de
-   `P-T39-01`.
+   `P-T39-01`. **`AUD-RH-VALIDADENULA-01` tem ambiente heterogêneo declarado** (§4.5) e **não é
+   estratificável** enquanto a severidade não for fixada.
 8. **`git diff c1311a6..HEAD` nunca foi reconfirmado** em nenhuma trilha da última leva;
    `LIM-T37-01` segue aberto; `RES-T46-01` registra que a própria validação leu a árvore de
-   trabalho, não um checkout de `c1311a6f`.
+   trabalho, não um checkout de `c1311a6f`. **`F-5` L-01 herda a mesma limitação** — a árvore lida
+   não foi amarrada criptograficamente ao `AUDIT_COMMIT`.
 9. **Adjudicações pendentes desde a Rodada 1** (`OBS-T26-06`/`T5-05`): `T16-F15`, `T21-F01`
    (`ListProductsUseCase`/`ProductController` que **nenhuma trilha leu**, com pedido da própria
    `T-21` de reavaliação para HIGH se confirmado), `RES-T13-04`, `RES-T13-05`, `T29-MOB-F03`,
    `T32-FST-F04`. **Findings encaminhados e nunca adjudicados não entram neste relatório como
    fechados.**
+10. **O IN de 628 de `F-5` é teto normativo, não necessariamente material** (`F-5` L-02): a
+    qualificação por rota em tier 1/2 (420 endpoints) **não foi feita e não está autorizada**.
+    **`/uploads/*` é superfície não enumerável estaticamente** (`F-5` L-06) — cobertura de contrato
+    dessa superfície é **estruturalmente impossível** pelo método em vigor.
+11. **Os critérios de reteste de `T-49` não foram validados contra plano de remediação real**
+    (`RES-T49-02`), e o censo de escrita que os sustenta é **fechado apenas sobre `server/src/**`**
+    (`RES-T49-01`): scripts, seeds e migrations de dados não foram varridos.
 
 ---
 
@@ -849,10 +1251,19 @@ contagem**, prática que este run rejeita expressamente.
   premissas intactas **por verificação, não por presunção**). **Fecha a pendência `T-16`.**
 - **`D-R3` prejudicada**, por ser condicional à elevação que não ocorreu.
 
-**Nenhuma pendência de severidade permanece aberta com o dono.** Severidades fixadas pelo dono e
-intocadas: `AUD-RH-VTHORISTA-01` CRITICAL · `AUD-EST-TRUNCCADEIA-01` HIGH ·
-`AUD-PAT-DEPRECIACAO-01` MEDIUM · `AUD-ALOG-01/A` CRITICAL e `/B` HIGH · `AUD-RH-COMISSAO-01`
-HIGH · `AUD-CTB-DEBCRED-01` HIGH · `AUD-DB-04`…`-09` MEDIUM ×6.
+**Severidades fixadas pelo dono e intocadas:** `AUD-RH-VTHORISTA-01` CRITICAL ·
+`AUD-EST-TRUNCCADEIA-01` HIGH · `AUD-PAT-DEPRECIACAO-01` MEDIUM · `AUD-ALOG-01/A` CRITICAL e
+`/B` HIGH · `AUD-RH-COMISSAO-01` HIGH · `AUD-CTB-DEBCRED-01` HIGH · `AUD-DB-04`…`-09` MEDIUM ×6 ·
+`T41-EST-F01` e `T41-RH-F02` **HIGH — mantidas por `T-48` e expressamente não alteradas por
+`T-49`**.
+
+**Pendência de severidade ABERTA com o dono, criada nesta revisão:**
+**`AUD-RH-VALIDADENULA-01` — `PROPOSED`, HIGH recomendada, não fixada** (§4.5). É a única.
+
+**Registro de método, em sentido inverso ao de `D-01`** (`APR-2026-043` D3): ao decidir qual item
+do `BUSINESS_RULES` §12 prevalece, o dono **trocou a própria ideia anterior pela recomendação do
+auditor**, declarando o motivo — *"mais simples e mais bem fundamentada que minha ideia anterior"*.
+Registrado como **mudança de posição por argumento**, não como correção de erro.
 
 ---
 
@@ -879,8 +1290,11 @@ no código.
 
 1. `AUDIT_PASSED`, `FINDINGS_CONFIRMED`, `RETEST_PASSED`, `FINDING CLOSED`,
    `REMEDIATION COMPLETE`.
-2. **`G3` integralmente cumprido** — `F-5` não existe; a amostra dos 174 não satisfaz a condição
-   (a); 4 de 10 categorias de segurança não varridas em 19 módulos.
+2. **`G3` integralmente cumprido.** O gate está **`REDUCED_BY_DECISION`** (`APR-2026-043` D1) —
+   **reduzido por decisão humana registrada, não cumprido**. `F-5` **passou a existir** e satisfaz
+   o passo 4 do `REG-G3`, mas a amostra dos 174 profundos **continua** não satisfazendo a condição
+   (a) — ≈83 endpoints sem D4-D8 (`F-6`) — e **4 de 10 categorias de segurança seguem não
+   varridas** em 19 módulos (`F-7`).
 3. **`C-137` fechada** · **`C-136` tocada** · **`C-133` fechada** · **cobertura integral da banda
    dinheiro**.
 4. **Regra 22 sem histórico de exceção** — houve **2**, por falha de despacho, fechadas por
@@ -891,22 +1305,36 @@ no código.
 8. Que os MEDIUM e LOW deste corpus tenham sido validados — **não foram** (`RES-T46-02`).
 9. Que as 22 tabelas sem model estejam "aceitas por exclusão" — estão **nomeadas**, e a decisão é
    do dono.
+10. Que `T41-EST-F01` e `T41-RH-F02` estejam **liberados** à SanaCore — **não estão**, até o
+    reteste adotar o critério de `T-49` (§6.4).
+11. Que `AUD-RH-VALIDADENULA-01` seja HIGH — a severidade **não está fixada** (§4.5), e este
+    relatório não a fixa nem a antecipa.
+12. Que a divisão de `C-136` produza redução material do alvo — **produz 8,1 %** (§7.6).
+13. Que a materialização de `T41-EST-F01` ou `T41-RH-F02` esteja medida — **não está** (§8.1).
 
 ---
 
 ## 17. Encerramento
 
 - Nenhum arquivo do objeto auditado foi criado, alterado, corrigido ou refatorado (Regra 2).
-- Nenhuma evidência histórica de outra organização foi alterada (Regra 15).
+- Nenhuma evidência histórica de outra organização foi alterada (Regra 15). `T-41`, `T-48`, `T-49`
+  e `F-5` são citados e remetidos, **nunca editados**.
 - Nenhum finding criado, fechado, reclassificado, absorvido ou descartado; nenhuma severidade e
-  nenhuma confiança alteradas (Regras 4, 6, 18).
+  nenhuma confiança alteradas (Regras 4, 6, 18). O finding aberto nesta revisão o foi por **decisão
+  do dono** (`APR-2026-044` D1) e é aqui **relatado**, não criado.
 - Zero comando, zero execução, zero conexão de banco (`APR-2026-016` íntegra).
-- **3 divergências novas registradas** (`DIV-REP-01`, `-02`, `-03`), duas delas contra o mandato
-  desta emissão e uma aritmética contra as próprias listas publicadas.
+- **4 divergências desta emissão registradas** (`DIV-REP-01`, `-02`, `-03`, **`-04`**), duas delas
+  contra o mandato, uma aritmética contra as próprias listas publicadas e uma aritmética contra o
+  placar oficial. **3 divergências novas de `F-5`** reproduzidas (`DIV-F5-01`…`-03`).
 - Única escrita: `audit/runs/ERP-LEGACY-001-AUD-001/40-report/`.
 
-**Estado:** `483 VIGENTES (9C · 91H · 248M · 124L · 11I) · 501 IDs EMITIDOS · 1 FALSE_POSITIVE ·
-17 ABSORVIDOS · ERRATA DA BASE APLICADA (HIGH 65/72/85/86/87) · REGRA 22 100/100 (2 EXCEÇÕES
-HISTÓRICAS FECHADAS POR T-48) · C-137 A(79/207), DÉFICIT 128 INTEGRALMENTE NOMINAL (106+22) ·
-CATEGORIA ESPECIAL art. 5º II: 18 TABELAS, CENSO FECHADO ENTRE AS 207, 1 CONDICIONALIDADE
-REBAIXADA (RES-T47-02) · 4 BLOQUEANTES DE ENCERRAMENTO · NENHUM AUDIT_PASSED.`
+**Estado:** `484 VIGENTES (9C · 91H · 248M · 124L · 11I + 1 SEM SEVERIDADE FIXADA) · 502 IDs
+EMITIDOS · 1 FALSE_POSITIVE · 17 ABSORVIDOS · ERRATA DA BASE APLICADA (HIGH 65/72/85/86/87) ·
+REGRA 22 100/100 (2 EXCEÇÕES HISTÓRICAS FECHADAS POR T-48) · G3 REDUCED_BY_DECISION VIA G8
+(APR-2026-043 D1) · F-5 PUBLICADA: 683/683 CLASSIFICADOS, 628 IN / 55 OUT, ZERO NÃO CLASSIFICADOS ·
+CRITÉRIOS DE RETESTE REESCRITOS EM T-49 (12 + 9 ITENS, 13 ARMADILHAS) E OS DOIS FINDINGS NÃO
+LIBERADOS · OBS-T48-02 RESOLVIDA (APR-2026-043 D3) · OBS-T48-05 = CONFIRMAÇÃO INDEPENDENTE DE
+T43-SST-F01 · DYN-T41-03 E DYN-T49-03 NÃO AUTORIZADOS, JANELA FUTURA COM 4 CONDIÇÕES ·
+C-137 A(79/207), DÉFICIT 128 INTEGRALMENTE NOMINAL (106+22) · CATEGORIA ESPECIAL art. 5º II:
+18 TABELAS, CENSO FECHADO ENTRE AS 207, 1 CONDICIONALIDADE REBAIXADA (RES-T47-02) ·
+NENHUM AUDIT_PASSED.`

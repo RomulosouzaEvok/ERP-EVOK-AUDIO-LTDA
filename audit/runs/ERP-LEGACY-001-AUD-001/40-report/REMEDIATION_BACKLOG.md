@@ -5,18 +5,31 @@ PROGRAMA:      ERP-LEGACY-001
 RUN:           ERP-LEGACY-001-AUD-001
 AUDIT_COMMIT:  c1311a6f76b512fef893f7e60d934179cae3409f
 PRODUZIDO POR: vericore-audit-reporting-agent (VeriCore)
-DATA:          2026-08-17
-AUTORIZAÇÃO:   APR-2026-042 D4
+DATA:          2026-08-17 — REVISÃO 2 (emissão original 2026-08-17)
+AUTORIZAÇÃO:   APR-2026-042 D4 (emissão) · APR-2026-043 e APR-2026-044 (revisão)
 HANDOFF:       VeriCore -> SanaCore, VIA vericore-software-audit-director.
                A ordenação executiva final é do director (Regra 5). Este documento é INSUMO.
 FONTES:        T-26_CONSOLIDACAO_RODADA5.md §3 e §9.3 · T-39_FILA_REMEDIACAO_EXPOSICAO.md ·
                T-38_CLASSIFICACAO_AMBIENTE_CORPUS.md · T-48_VALIDACAO_T41.md ·
-               T-40 / T-44 / T-46 (validações) · APR-2026-031 a APR-2026-042
+               T-49_CRITERIOS_RETESTE_T41.md · F-5_LISTA_IN_OUT_CATEGORIA.md ·
+               AUD-RH-VALIDADENULA-01.md · T-40 / T-44 / T-46 (validações) ·
+               APR-2026-031 a APR-2026-044
 REGIME:        read-only sobre o objeto auditado. Zero comando, zero execução,
                zero conexão de banco (APR-2026-016 íntegra).
 NÃO DECLARA:   AUDIT_PASSED · RETEST_PASSED · FINDING CLOSED · REMEDIATION COMPLETE.
                Nenhum finding é fechado por este documento (Regras 3, 4, 5).
 ```
+
+**O que mudou na revisão 2:**
+
+| Mudança | Autoridade | Onde |
+|---|---|---|
+| **`OBS-T48-02` RESOLVIDA** — a regra de saldo total está declarada (item 3: **depósitos ativos**). Deixa de bloquear `T41-EST-F01` | `APR-2026-043` D3 | §6.1 |
+| **Critérios de reteste reescritos** — `T41-EST-F01` (12 itens) e `T41-RH-F02` (9 itens). **Os dois seguem HIGH, `CONFIRMED`, e NÃO LIBERADOS** até o reteste usar o critério de `T-49` | `APR-2026-043` D4 | §5.1, §6.1 |
+| **Item de documentação novo (OpusCore):** corrigir a redação de `BUSINESS_RULES.md` §12 item 2 | `APR-2026-043` D3 | §5.4 |
+| **`AUD-RH-VALIDADENULA-01` aberto** — `PROPOSED`, HIGH recomendada, **não fixada**: **NÃO entra** neste backlog; **compartilha o lote** de `T41-RH-F02` | `APR-2026-044` D1 | §1.2, §5.1 |
+| **`OBS-T48-05` = confirmação independente** de `T43-SST-F01`, não item novo | `APR-2026-044` D2 | §5.1 |
+| **`DYN-T41-03` e `DYN-T49-03` não autorizados** — janela futura com 4 condições | `APR-2026-044` D3 | §8 |
 
 ---
 
@@ -38,8 +51,9 @@ NÃO DECLARA:   AUDIT_PASSED · RETEST_PASSED · FINDING CLOSED · REMEDIATION C
 
 **Regra 22 no estado final: 100 sob o regime · 100 com veredito · 0 exceções.** As duas exceções
 que existiram — `T41-EST-F01` e `T41-RH-F02`, sem despacho até a rodada 5 detectar — foram
-fechadas por `T-48`, ambas `CONFIRMED`, HIGH mantida. **Ambas entram no backlog**, com a trava do
-§5.1.
+fechadas por `T-48`, ambas `CONFIRMED`, HIGH mantida. **Ambas entram no backlog** — e **ambas
+permanecem NÃO LIBERADAS** enquanto o reteste não adotar o critério reescrito em `T-49`
+(`APR-2026-043` D4). Ver §5.1 e §6.1.
 
 ### 1.2 NÃO entra — e por quê
 
@@ -48,16 +62,17 @@ fechadas por `T-48`, ambas `CONFIRMED`, HIGH mantida. **Ambas entram no backlog*
 | **MEDIUM** | 248 | **Sem veredito de validação adversarial.** `RES-T46-02` declara por escrito que os MEDIUM e LOW **não devem ser lidos como validados por omissão**. A Regra 22 cobre CRITICAL/HIGH; **o silêncio sobre MEDIUM/LOW é escopo, não aval**. Permanecem `PROPOSED` |
 | **LOW** | 124 | idem |
 | **INFO** | 11 | idem |
+| **`AUD-RH-VALIDADENULA-01`** (candidato `T49-RH-C01`) | 1 | **`PROPOSED` — severidade HIGH recomendada e NÃO fixada** (`APR-2026-044` D1). Este backlog admite **somente `CONFIRMED`**; promovê-lo aqui violaria a Regra 6. **Caminho para entrar:** o dono fixa a severidade → se HIGH, passa pelo `vericore-finding-validator` (Regra 22) → só então é elegível. **Nota operacional vinculante: ele COMPARTILHA O LOTE DE REMEDIAÇÃO de `T41-RH-F02`** — quem planejar aquele lote precisa saber disto **antes**, não depois (§5.1) |
 | **`FALSE_POSITIVE`** | 1 (`T11-F10`) | Descartado com rastro; nunca entra em backlog |
 | **`DUPLICATE` / absorvidos** | 17 | Cada um tem sobrevivente nomeado; o sobrevivente é que entra |
 | **`AUD-PROC-CUSTODIA-01`** | 1 | **Achado de processo da auditoria**, não do objeto auditado. Não é item de remediação da SanaCore no produto. Segue pela classe de risco `RC-PROC-01` |
 | **`T41-META-F09`** (grupo G-31) | 1 | Achado sobre a **aritmética da própria auditoria**, mesma natureza do anterior |
 | **Adjudicações pendentes** — `T16-F15`, `T21-F01`, `RES-T13-04`, `RES-T13-05`, `T29-MOB-F03`, `T32-FST-F04` | 6 | **Encaminhados e nunca adjudicados** (`T5-05`, aberta desde a Rodada 1). **Não entram como confirmados nem como fechados** |
-| **`OBS-T48-01`…`-05`, `OBS-T26-40`** | 6 | Observações colaterais, **não convertidas em finding** (não é autoridade do validador). Ver §6 — algumas têm efeito **vinculante** sobre a remediação |
+| **`OBS-T48-01`…`-05`, `OBS-T26-40`** | 6 | Observações colaterais, **não convertidas em finding pelo validador**. Três já têm destino decidido: `OBS-T48-01` **absorvida** como vetor V4 de `T41-EST-F01`; `OBS-T48-04` **promovida** a `AUD-RH-VALIDADENULA-01`; `OBS-T48-05` **anexada como confirmação independente** de `T43-SST-F01`. Ver §6 |
 
-**Nenhum item `PROPOSED` foi promovido por este documento** (Regra 6). Os 383 MEDIUM/LOW/INFO
-permanecem rastreados no corpus e serão elegíveis **se e quando** receberem validação — decisão do
-director, não deste agente.
+**Nenhum item `PROPOSED` foi promovido por este documento** (Regra 6). Os 383 MEDIUM/LOW/INFO —
+mais `AUD-RH-VALIDADENULA-01` — permanecem rastreados no corpus e serão elegíveis **se e quando**
+receberem severidade fixada e/ou validação — decisão do dono e do director, não deste agente.
 
 ---
 
@@ -130,10 +145,10 @@ JWT) · `T19-F03` (ciclo `items ⇄ mrp`). O restante de cada trilha MISTO segue
 
 | ID | Veredito Regra 22 | Liberação | Travas vinculantes |
 |---|---|---|---|
-| **`T43-SST-F01`** — ASO gravado fora da transação que enfileira o S-2220 | `T-44` — **`CONFIRMED`**, HIGH mantida, confiança de mecanismo elevada a `CONFIRMED` | **LIBERADO. Cabeça recomendada dos 4** | Correção de **3 linhas, sem migration**, com a forma correta já usada por **8 dos 9** repositórios de SST. **`OR-26`: detecção/tratamento de duplicatas de `sst_asos` ANTES da migration de `UNIQUE (employee_id, tipo, data_realizacao)`** — a auditoria é estática e `APR-2026-016` proíbe consultar produção; **não é possível afirmar que não existem duplicatas preexistentes**, e a migration pode falhar no deploy. **Itens 5-7 de `T-44` §6 fazem parte do escopo**: desempate determinístico em `findLatestAsoByEmployee`; reconciliação `sst_asos` × `sst_eventos_esocial`; definição de `status_esocial_s2220`. **Fechar só os itens 1-3 deixa o ASO órfão sem tratamento e o gate de RH não determinístico.** **Teto de severidade registrado:** nenhum modo de falha determinístico foi provado — quem tentar elevar a CRITICAL alegando falha determinística estará errado |
+| **`T43-SST-F01`** — ASO gravado fora da transação que enfileira o S-2220 | `T-44` — **`CONFIRMED`**, HIGH mantida, confiança de mecanismo elevada a `CONFIRMED`. **Confirmação independente adicional: `OBS-T48-05`** (`APR-2026-044` D2) — dois auditores, trilhas distintas, o **mesmo** defeito. **Não é item novo e não conta duas vezes**; reforça o mecanismo | **LIBERADO. Cabeça recomendada dos 4** | Correção de **3 linhas, sem migration**, com a forma correta já usada por **8 dos 9** repositórios de SST. **`OR-26`: detecção/tratamento de duplicatas de `sst_asos` ANTES da migration de `UNIQUE (employee_id, tipo, data_realizacao)`** — a auditoria é estática e `APR-2026-016` proíbe consultar produção; **não é possível afirmar que não existem duplicatas preexistentes**, e a migration pode falhar no deploy. **Itens 5-7 de `T-44` §6 fazem parte do escopo**: desempate determinístico em `findLatestAsoByEmployee`; reconciliação `sst_asos` × `sst_eventos_esocial`; definição de `status_esocial_s2220`. **Fechar só os itens 1-3 deixa o ASO órfão sem tratamento e o gate de RH não determinístico.** **Teto de severidade registrado:** nenhum modo de falha determinístico foi provado — quem tentar elevar a CRITICAL alegando falha determinística estará errado. **A confirmação convergente NÃO altera este teto** |
 | **`T45-SST-F01`** — portão de BR-SST-002 verifica o rótulo, não o artefato; linha fica imutável | `T-46` — **`CONFIRMED`**, HIGH mantida, confiança de mecanismo elevada a `CONFIRMED` | **LIBERADO** | **`OR-27`: a remediação NÃO pode parar na validação.** O dano das linhas já confirmadas é irreparável pelo par trava-total + estorno inexistente. **Ou `T45-SST-F02` entra no mesmo lote, ou o director decide converter `sst_lock_entrega_epi` em trava seletiva** nos moldes de `sst_lock_cat()` — **decisão humana, não da SanaCore** (Regras 6 e 18). **`server/tests/unit/sst-epi.test.ts:116-130` codifica hoje o comportamento defeituoso e precisa ser atualizado no MESMO commit.** Critério de reteste objetivo em `T-45` §3 |
-| **`T41-EST-F01`** — desativar depósito com saldo remove a linha da invariante sem gerar movimento | **`T-48` — `CONFIRMED (parcial)`**, HIGH mantida (mecanismo ALTA / materialização MÉDIA) | **BLOQUEADO POR PENDÊNCIA HUMANA** — ver §6.1 | **`OR-28`: uma remediação que apenas adicione filtro de `active` NÃO resolve este finding.** O que falta é **guarda na transição `true → false`**. **O critério de reteste original de `T-41` é INSUFICIENTE** (`T-48` §2.3): exige guarda só em `UpdateWarehouseUseCase` e deixa **três** buracos — `addToWarehouse`/`removeFromWarehouse` continuam aceitando depósito inativo, `ApproveWarehouseTransferUseCase` continua executando sobre ids obsoletos, `CreateInventoryCountUseCase` continua criando contagem sobre depósito inativo. **`OBS-T48-01` entra no mesmo recorte.** Correção mínima coerente: (a) guarda na transição; (b) revalidação de `active` na **efetivação** da transferência, origem **e** destino; (c) decisão explícita e documentada sobre `add/removeFromWarehouse` recusarem depósito inativo — **recusar fecha o Caminho A, que é hoje a única reversão existente, e portanto exige criar reversão explícita antes**; (d) `comment` em `warehouses.active` |
-| **`T41-RH-F02`** — ASO em duas tabelas com domínios divergentes; o gate de retorno lê a cópia | **`T-48` — `CONFIRMED`**, HIGH mantida, confiança ALTA | **LIBERADO**, com as travas ao lado | **`OR-29`: remediar no MESMO caso que `T43-META-F11`** — a divergência é **sistêmica: 3 enums de RH contra 1 de SST**. **O critério de reteste original cobre 2 tabelas; são 4** (`OBS-T48-03`): `hr_admission_processes.aso_result` **decide a admissão** e ficaria fora. **Ordem contraintuitiva e obrigatória: vínculo primeiro, domínio depois — ou os dois na mesma migration.** Unificar a grafia antes de criar o vínculo produz o pior resultado intermediário: **passa a parecer conciliável o que continua não sendo conciliado.** **`OBS-T48-04` (validade nula = validade infinita) entra no mesmo lote** — toca a mesma função e o mesmo gate. **PRESERVAR** a minimização de dado clínico de `00_baseline_frozen.sql:5932`: a correção é vincular e igualar domínio, **não** copiar conteúdo clínico da SST para RH. **`DYN-T41-03` é o pedido dinâmico de maior valor da leva: uma única linha de resultado eleva o finding de HIGH a CRITICAL** |
+| **`T41-EST-F01`** — desativar depósito com saldo remove a linha da invariante sem gerar movimento | **`T-48` — `CONFIRMED (parcial)`**, HIGH mantida (mecanismo ALTA / materialização MÉDIA) | **NÃO LIBERADO** — o reteste tem de usar o critério reescrito (`APR-2026-043` D4). **O bloqueio anterior por `OBS-T48-02` está RESOLVIDO** (§6.1) | **A regra de negócio agora está declarada** (`APR-2026-043` D3): `saldo_total = Σ saldo sobre depósitos ATIVOS`. **A SanaCore não precisa mais inventá-la.** **CRITÉRIO DE RETESTE VIGENTE: `T-49` §3.6 — `CR-T49-EST-01` a `-12`. NÃO use `T-41` §5.** De 1 para **4 vetores**: V1 desativação sem guarda · V2 primitivas não filtram `active` (**decisão declarada exigida, não recusa automática** — recusar fecha o único caminho de reversão existente) · **V3 contagem de inventário** sobre depósito inativo (`CreateInventoryCountUseCase` **e** `ApproveInventoryCountUseCase`) · **V4 transferência `pending` aprovada depois**, com guarda **no crédito e no débito** (`OBS-T48-01` absorvida aqui). **Armadilhas nomeadas que reprovam o fechamento:** `comment` em `20260804-000001` (**migration congelada — nenhum banco a recebe**; exige migration **nova**); manter `warehouse-crud.test.ts:136-154`, que **afirma** o comportamento defeituoso e continuaria verde; guarda lendo `products.quantity`; guarda só no Zod; filtro de `active` nas primitivas "de uma vez". **Preservar `getWarehouseByCode` com `active: true`** (`CR-T49-EST-10`). **Passivo preexistente exige decisão declarada** (`CR-T49-EST-09`) — L16: saldo em depósito inativo **não aparece** no resumo por depósito, logo é invisível pela UI. **`OR-28` permanece: filtro de `active` NÃO resolve este finding** |
+| **`T41-RH-F02`** — ASO em **quatro** tabelas com domínios divergentes; o gate de retorno lê a cópia | **`T-48` — `CONFIRMED`**, HIGH mantida, confiança ALTA | **NÃO LIBERADO** — o reteste tem de usar o critério reescrito (`APR-2026-043` D4) | **CRITÉRIO DE RETESTE VIGENTE: `T-49` §4.5 — `CR-T49-RH-01` a `-09`. NÃO use `T-41` §5.** De 2 para **4 tabelas**: `sst_asos` · `hr_employee_documents` (decide demissão e retorno) · **`hr_admission_processes` (DECIDE A ADMISSÃO, fora do gate comum)** · `hr_termination_processes` (**gravada e nunca lida** — destino declarado exigido). **`OR-29`: mesmo caso que `T43-META-F11`** — 3 enums de RH × 1 de SST. **Ordem contraintuitiva e obrigatória: vínculo antes ou junto do domínio** — unificar a grafia primeiro **parece** conciliação e não é. **Armadilhas que reprovam:** FK só em `hr_employee_documents` (**é literalmente o que o critério antigo pedia**); grafia unificada só em `rhEnums.ts`/models; `RENAME VALUE` sem tratar dados; teste só entre as duas tabelas originais; **vínculo implementado copiando laudo da SST para RH** — destrói `00_baseline_frozen.sql:5932` e troca um HIGH por problema de LGPD. **PRESERVAR a minimização de dado clínico.** **`CR-T49-RH-09` está DESATIVADO** — a validade nula virou finding próprio. **LOTE COMPARTILHADO: `AUD-RH-VALIDADENULA-01` é remediado no MESMO lote, sem se confundir com este finding** — contabilidade separada, trabalho único (§5.3). **`DYN-T41-03` — o único pedido capaz de elevar este finding a CRITICAL — NÃO está autorizado** (§8) |
 
 ### 5.2 Os 22 nominais rastreados nas rodadas 2-4
 
@@ -156,10 +171,44 @@ JWT) · `T19-F03` (ciclo `items ⇄ mrp`). O restante de cada trilha MISTO segue
   criar a coluna — nunca depois**; `GET /api/employees` é aberto a qualquer autenticado e o padrão
   de vazamento já se repetiu.
 
-### 5.3 Os 55 restantes — entrega por ponteiro, e o limite declarado
+### 5.3 Lote compartilhado com um finding que NÃO está neste backlog
+
+> **`AUD-RH-VALIDADENULA-01` (candidato `T49-RH-C01`) NÃO é item deste backlog** — é `PROPOSED`,
+> com severidade **HIGH recomendada e não fixada** (§1.2). **Mas compartilha o lote de remediação
+> de `T41-RH-F02`**, por decisão expressa do dono (`APR-2026-044` D1): *"Separar contabilidade não
+> custa nada extra — é o mesmo trabalho, só organizado com clareza."*
+>
+> **Por que quem planeja o lote precisa saber disto antes:** o vetor toca a **mesma função**
+> (`findValidAso`) e o **mesmo gate**, e é **independente nos dois sentidos** — executar todo o
+> critério de `T41-RH-F02` **deixa o vetor inteiramente aberto**, e corrigir a validade não
+> reconcilia nada entre SST e RH.
+>
+> **O que o vetor exige, quando for liberado** (`AUD-RH-VALIDADENULA-01.md` §6): `NULL` deixa de
+> significar "vigente" em `SequelizeEmployeeDocumentRepository.ts:50`; **`valid_until` passa a ser
+> obrigatória para `aso_*` na escrita** (`CreateEmployeeDocumentUseCase.ts:61`) — *corrigir só a
+> leitura apenas move o buraco*; `ConcludeAdmissionProcessUseCase.ts:125` **recusa** conclusão com
+> validade nula em vez de pular a guarda; teste que reprove o estado anterior **nos dois caminhos**;
+> e **decisão registrada sobre o passivo** já gravado.
+>
+> **Restrições:** a SanaCore **não** pode remediar o vetor como se o finding estivesse confirmado —
+> a severidade é do dono (Regra 18) e, se HIGH, a Regra 22 se interpõe. **Nenhum agente promove
+> este item.**
+
+### 5.4 Item de documentação — OpusCore, não SanaCore
+
+| Item | Objeto | Autoridade |
+|---|---|---|
+| **Correção de redação de `docs/business/BUSINESS_RULES.md` §12 item 2** (`:345-349`) | O item 2 define "saldo total" como soma de **todos** os depósitos, contradizendo o item 3 (**ativos**), que é a regra vigente. **Não é regra concorrente — é redação a corrigir** | `APR-2026-043` **D3**, expressamente: *"Item 2 vira só correção de texto, não regra concorrente"*, e a correção **entra no Remediation Backlog como item de documentação (OpusCore)** |
+
+**Trava vinculante:** `CR-T49-EST-11` **reprova** o reteste de `T41-EST-F01` se a contradição
+permanecer no artefato oficial — *"a guarda citaria norma ambígua"*. **Ownership:** `docs/` é da
+OpusCore (CLAUDE.md, tabela de ownership); a SanaCore só o altera em worktree de remediação
+vinculado a um caso. **A VeriCore não escreve neste arquivo** (Regra 2).
+
+### 5.5 Os 55 restantes — entrega por ponteiro, e o limite declarado
 
 **A enumeração integral do estrato 4 não foi entregue** (`T5-02`). Base estabilizada em **81**:
-**26 nominais** (22 de `T-39` §2.4a + os 4 de §5.1) **+ 55 por ponteiro**.
+**26 nominais** (22 de §5.2 + os 4 de §5.1) **+ 55 por ponteiro**.
 
 **O obstáculo aritmético do ±2 deixou de existir** com a errata do placar; o que resta é **trabalho
 de listagem** contra as trilhas de origem da Rodada 1. **Isto é declaração, não omissão.**
@@ -177,18 +226,41 @@ lote**.
 
 ## 6. TRAVAS DE LIBERAÇÃO — o que a SanaCore não pode descobrir na hora
 
-### 6.1 Bloqueio por pendência humana — `OBS-T48-02`
+### 6.1 `T41-EST-F01` e `T41-RH-F02` — o bloqueio mudou de natureza
 
-> **`T41-EST-F01` NÃO PODE SER REMEDIADO** enquanto a contradição de `docs/business/BUSINESS_RULES.md`
-> §12 não for decidida por humano.
+**O que DEIXOU de bloquear.** `OBS-T48-02` está **RESOLVIDA** por `APR-2026-043` **D3**:
+
+> Regra vigente, sem ambiguidade:
+> `saldo_total(produto) = Σ saldo(produto, depósito) para todo depósito ATIVO`
+
+O item 2 de `BUSINESS_RULES.md` §12 (`:345-349`) é **redação a corrigir** (§5.4), **não** regra
+concorrente. **A SanaCore tem regra declarada e não precisa inventá-la** (Regra 6). O bloqueio
+humano que existia sobre `T41-EST-F01` **caiu**.
+
+**O que PASSOU a bloquear** (`APR-2026-043` **D4**, verbatim):
+
+> *"Aprovo devolver os dois à trilha de origem para reescrever antes de remediação. **Fechamento
+> falso custa mais depois do que corrigir agora.**"*
+
+> **`T41-EST-F01` e `T41-RH-F02` permanecem HIGH, `CONFIRMED`, e NÃO LIBERADOS à SanaCore até que
+> o reteste adote o critério reescrito em `T-49`.**
 >
-> **Item 2** (`:345-349`): saldo total é a soma dos saldos em **todos** os depósitos.
-> **Item 3** (`:351-354`): saldo total é a soma sobre os depósitos **ativos**.
-> **Itens consecutivos, definições incompatíveis.**
+> - **`T41-EST-F01`:** `T-49` §3.6 — `CR-T49-EST-01` a `-12` (**4 vetores, 12 itens**, um
+>   condicional). **`T-41` §5 é registro histórico e NÃO é critério operativo.**
+> - **`T41-RH-F02`:** `T-49` §4.5 — `CR-T49-RH-01` a `-09` (**4 tabelas, 9 itens**, um de fallback
+>   **desativado**). Idem quanto a `T-41` §5.
 >
-> Sem fonte autoritativa fixada, **não há critério para dizer o que a guarda de desativação deve
-> proteger**, e a SanaCore teria de **inventar a regra de negócio — o que a Regra 6 proíbe**.
-> Decisão humana obrigatória, **antes** de qualquer item (a)-(d) do §5.1.
+> **Fundamento registrado, que vira precedente do programa:** um reteste que passa com critério
+> subdimensionado **fecha o finding sem fechar o defeito** — e, fechado, a VeriCore **não poderia
+> reabri-lo sem delta audit** (Regra 14). O custo do erro é assimétrico e recai inteiro no futuro.
+>
+> **`T-49` nomeou 13 armadilhas de fechamento falso** (`A1`-`A5`, `B1`-`B5` e as embutidas em
+> `CR-T49-EST-06`, `-09`, `-12`). Duas merecem destaque operacional porque **a SanaCore as
+> encontraria só no reteste**: (i) `comment` acrescentado a `20260804-000001-create-warehouses.cjs`
+> é **inerte** — a migration está na lista congelada e é marcada como aplicada sem executar; exige
+> **migration nova**; (ii) `warehouse-crud.test.ts:136-154` **afirma** que desativar é permitido,
+> com mock sem saldo, e **continuaria verde** após a guarda — tem de ser **substituído**, não
+> complementado.
 
 ### 6.2 Dependências de ordem vigentes
 
@@ -205,10 +277,12 @@ inalterados**. Lista normativa: tabela §5.3 da Rodada 4.
 | `OR-25` | `AUD-PAT-DEPRECIACAO-01` não inicia antes do **gate humano `D-12`** | **`D-12` ABERTA** — implementar depreciação × remover a coluna |
 | **`OR-26`** | `T43-SST-F01`: detecção/tratamento de duplicatas de `sst_asos` **antes** da migration de `UNIQUE` | Precondição, não detalhe |
 | **`OR-27`** | `T45-SST-F01` e `T45-SST-F02` no **mesmo lote** — ou decisão humana de trava seletiva | Sem isso a validação protege o futuro e deixa o dano existente irreparável |
-| **`OR-28`** | `T41-EST-F01` **não** é atendido por filtro de `active` — exige recusa explícita na transição com saldo `<> 0` | `T-41` §7.7 prova que o módulo **sabe** proteger saldo (lock pessimista): a única transição desprotegida é a do flag |
-| **`OR-29`** | `T41-RH-F02` + `T43-META-F11` no mesmo caso — domínio único de aptidão nas **4** tabelas | 3 enums de RH × 1 de SST |
+| **`OR-28`** | `T41-EST-F01` **não** é atendido por filtro de `active` — exige recusa explícita na transição com saldo `<> 0` | `T-41` §7.7 prova que o módulo **sabe** proteger saldo (lock pessimista): a única transição desprotegida é a do flag. **Reforçado por `T-49` V2:** filtrar `active` nas primitivas "de uma vez" **fecha o único caminho de reversão existente** e exige criar reversão antes |
+| **`OR-29`** | `T41-RH-F02` + `T43-META-F11` no mesmo caso — domínio único de aptidão nas **4** tabelas | 3 enums de RH × 1 de SST. **Ordem: vínculo antes ou junto do domínio** (`CR-T49-RH-03`) |
 | **`OR-30`** | `T42-SUP-F04` (índice único parcial em `item_suppliers`) **antes** de qualquer automação que consuma `findPreferredByItem` | De qual fornecedor comprar e a que preço depende de unicidade que o banco não impõe |
 | `C-31` | `AUD-INTEG-03` + `T32-SUP-F03` | **Um item de remediação, conta uma vez** |
+| **Lote RH** *(sem número próprio — não crio ID de dependência)* | `T41-RH-F02` **e** `AUD-RH-VALIDADENULA-01` no mesmo lote, **com contabilidade separada** | `APR-2026-044` D1. **Nenhum fecha o outro**; o segundo só é remediável depois de severidade fixada e, se HIGH, validação (Regra 22) |
+| **Documentação** | Correção de `BUSINESS_RULES.md` §12 item 2 (§5.4) **antes ou junto** do reteste de `T41-EST-F01` | `CR-T49-EST-11` **reprova** se a contradição permanecer no artefato oficial |
 
 **Divergência de remissão registrada e não resolvida (`OBS-T39-02`):** a Rodada 4 §3.3 cita
 "`OR-25`" para a dependência comissionado ↔ comissão, que a tabela §5.3 numera **`OR-24`**. **A
@@ -218,7 +292,9 @@ lista normativa é a tabela §5.3.**
 
 Sobem a **BLOQUEANTE sem novo despacho**: `AUD-RH-VTHORISTA-01` · `AUD-EST-TRUNCCADEIA-01` ·
 `AUD-PAT-DEPRECIACAO-01` (dispara também no **primeiro leitor de `current_value`**) ·
-`AUD-RH-COMISSAO-01` (payroll em produção → CRITICAL).
+`AUD-RH-COMISSAO-01` (payroll em produção → CRITICAL) · **`AUD-RH-VALIDADENULA-01`** (reavaliar
+para bloqueante quando o RH entrar em produção — e antes disso, se qualquer fluxo de
+afastamento/retorno passar a operar com funcionário real).
 
 ### 6.4 Instruções anti-dupla-contagem — vinculantes
 
@@ -230,6 +306,11 @@ Sobem a **BLOQUEANTE sem novo despacho**: `AUD-RH-VTHORISTA-01` · `AUD-EST-TRUN
 3. **`T41-META-F03` × `AUD-DB-T31-03`:** vetores opostos. **A remediação de `AUD-DB-T31-03`
    precisa ser bidirecional**, senão resolve metade.
 4. **`T41-EST-F01` × `T35-DIN-F06`:** opostos. **Filtro de `active` não resolve `T41-EST-F01`.**
+5. **`OBS-T48-05` × `T43-SST-F01`:** **é o mesmo defeito**, confirmado por dois auditores em
+   trilhas independentes (`APR-2026-044` D2). **Um item de remediação, um reteste, uma contagem.**
+6. **`AUD-RH-VALIDADENULA-01` × `T41-RH-F02`:** findings distintos com **lote único**. **Não somar
+   o esforço duas vezes; não fechar um pelo outro** — a independência foi provada nos dois
+   sentidos.
 
 ### 6.5 Conformidades que a remediação NÃO pode destruir
 
@@ -239,7 +320,10 @@ Sobem a **BLOQUEANTE sem novo despacho**: `AUD-RH-VTHORISTA-01` · `AUD-EST-TRUN
 lista branca de 8 campos em `CreateEpiDeliveryUseCase` · `errorHandler.ts:84-89` (FK violation →
 **400, não 500**) · `00_baseline_frozen.sql:5932` (minimização deliberada de dado clínico na cópia
 de RH) · `jur_lgpd_data_subject_requests` (`CHECK` real de identidade verificada) ·
-`hr_job_positions` (`CHECK` de faixa salarial, `:6092`).
+`hr_job_positions` (`CHECK` de faixa salarial, `:6092`) · **`getWarehouseByCode` com filtro
+`active: true`** (`CR-T49-EST-10` — remover "para uniformizar" é regressão) ·
+**`inventory_counts_warehouse_id_fkey`** (a **existência** do depósito já é imposta pelo banco;
+falta apenas `active` — não perseguir o alvo errado).
 
 ---
 
@@ -250,6 +334,8 @@ de RH) · `jur_lgpd_data_subject_requests` (`CHECK` real de identidade verificad
    `RETEST_PASSED` e `FINDING CLOSED`** (Regra 4).
 3. **Nenhuma conexão com o banco de produção real** (`APR-2026-016`). Reprodução e teste apenas em
    banco com sufixo `_test`/`_ci`. **Ausência de Docker ou `psql` NÃO é evidência de sucesso.**
+   **E resultado obtido em banco vazio não é prova de ausência** — precedente `DYN-T47` e
+   `APR-2026-044` D3: *"o zero do banco errado para a pergunta"* / **falso zero**.
 4. **`REMEDIATION_COMPLETE` só pode ser declarado quando TODOS os elementos do respectivo
    `REMEDIATION_CASE` estiverem implementados e documentados.** Implementação parcial apresentada
    como finding resolvido é **vedada** (`APR-2026-021` Parte C).
@@ -261,6 +347,10 @@ de RH) · `jur_lgpd_data_subject_requests` (`CHECK` real de identidade verificad
    Regra 14). Nenhum `RETEST_PASSED`/`FINDING CLOSED` sai desta auditoria.
 7. **Nenhum agente inventa regra de negócio** (Regra 6). Onde a fonte normativa não existe, o item
    **para** e volta ao dono — ver §6.1 e §9.
+8. **Teste que codifica o comportamento defeituoso é substituído, não complementado** — duas
+   ocorrências já nomeadas: `sst-epi.test.ts:116-130` (`OBS-T26-40`) e
+   `warehouse-crud.test.ts:136-154` (`T-49`, armadilha `A2`). **Suíte verde não é evidência de
+   ausência de defeito.**
 
 ---
 
@@ -268,10 +358,11 @@ de RH) · `jur_lgpd_data_subject_requests` (`CHECK` real de identidade verificad
 
 | Destino | Conteúdo |
 |---|---|
-| **Fila dinâmica (DYN) — ≈232 pedidos, ~21 executados** | Ordenar por **valor de decisão**, não por trilha. **Os 7 que mudam classe de severidade:** `DYN-T41-03` (**HIGH → CRITICAL**), `DYN-T43-02`, `DYN-T43-04`, `DYN-T42-01`, `DYN-T45-01`, `DYN-T45-04`, `DYN-T45-08`. **Executados nesta data:** `DYN-T47-01`/`-02` — resultado **não fecha** `RES-T47-02` (Relatório Técnico §8). **Pendências abertas de `APR-2026-024`:** (a) prova literal de escrita em `audit_logs`; (c) bateria dinâmica 02 com o servidor no ar (~70 verificações, incluindo as que sustentariam `AUD-AUTHN-01` e `T24-F01`) |
-| **Backlog de cobertura** | Os **9 blocos** de `CELULAS_SEM_AUTORIZACAO_ACEITACAO.md`, com custo medido. **`B3-bis` (`F-5`) é a lacuna mais barata da run — 1 varredura — e está aberta há 5 rodadas.** `B8` (22 tabelas sem model) **já tem a nomeação entregue** e é decidível |
+| **Fila dinâmica (DYN) — ≈232 pedidos, ~21 executados** | Ordenar por **valor de decisão**, não por trilha. **Os 7 que mudam classe de severidade:** `DYN-T41-03` (**HIGH → CRITICAL**), `DYN-T43-02`, `DYN-T43-04`, `DYN-T42-01`, `DYN-T45-01`, `DYN-T45-04`, `DYN-T45-08`. **`DYN-T41-03` e `DYN-T49-03` NÃO ESTÃO AUTORIZADOS** (`APR-2026-044` D3): pendência de **janela futura**, escopada **especificamente** a essas duas consultas nomeadas, **somente leitura contra produção**, **fora** do lote de ~190 pedidos de `B9`, com **confirmação humana de dia e horário**. São as duas de maior valor do run — uma move um HIGH para CRITICAL, a outra separa risco latente de **dano consumado**. **Registrados e não executados por `T-49`:** `DYN-T49-01`, `-02`, `-04` (estoque) e `-05`, `-06`, `-07` (RH). **Executados nesta data:** `DYN-T47-01`/`-02` — resultado **não fecha** `RES-T47-02` (Relatório Técnico §8). **Pendências abertas de `APR-2026-024`:** (a) prova literal de escrita em `audit_logs`; (c) bateria dinâmica 02 com o servidor no ar (~70 verificações, incluindo as que sustentariam `AUD-AUTHN-01` e `T24-F01`) |
+| **Backlog de cobertura** | Os **9 blocos** de `CELULAS_SEM_AUTORIZACAO_ACEITACAO.md`. **`B1` (`C-136`) — DIVIDIR** (`APR-2026-043` D2), com **`F-5` ENTREGUE** e o alvo redimensionado: **628 rotas IN / 55 OUT**, redução de **8,1 %**, não de uma ordem de grandeza — **dimensionar com 628, nunca com "uma fração"**. `B2`,`B3`,`B3-bis`,`B4`,`B5`,`B7`,`B8` receberam o **critério de D1 em cascata** (cobrir onde o `G3` veda, exclusão nominal no resto). **`B6` permanece com a VeriCore**, sem decisão do dono. **`B9` (prova dinâmica, ~190 pedidos) FORA — sessão própria.** `B8` (22 tabelas sem model) **já tem a nomeação entregue**. **A única alavanca real de redução de `C-136`** — refinamento por rota em tier 1/2, 420 endpoints — **contraria `I-2` e não está autorizada** (`F-5` L-02) |
 | **Backlog de produto — NÃO é auditoria** | As **6 tabelas de RH** (`APR-2026-042` D3): **"Estrutura de banco presente, sem uso de aplicação — decisão de produto pendente."** **Sem prazo, e vedado atribuir prazo, urgência ou recomendação de construir/deprecar.** Mais `D-02`…`D-06` (fonte normativa de regra de negócio) e a deprecação formal de `hr_payroll_import_*` / `hr_time_sheet_summaries`, **não registrada em artefato nenhum** |
-| **Backlog de instrumento da auditoria** | Regeneração do `00_baseline_frozen.sql` (9 migrations atrasado); reconciliação `COMMENT ON COLUMN` × `comment:` como **censo**; `git diff c1311a6..HEAD` **nunca reconfirmado**; `AUD-PROC-CUSTODIA-01` e a classe `RC-PROC-01` (`CE-01`…`CE-09`, com `CE-06` **`EM IMPLEMENTAÇÃO`** — replicação fora do host pendente) |
+| **Backlog de documentação (OpusCore)** | **Correção da redação de `BUSINESS_RULES.md` §12 item 2** (§5.4) — item novo desta revisão, por `APR-2026-043` D3 |
+| **Backlog de instrumento da auditoria** | Regeneração do `00_baseline_frozen.sql` (9 migrations atrasado); reconciliação `COMMENT ON COLUMN` × `comment:` como **censo**; `git diff c1311a6..HEAD` **nunca reconfirmado**; `AUD-PROC-CUSTODIA-01` e a classe `RC-PROC-01` (`CE-01`…`CE-09`, com `CE-06` **`EM IMPLEMENTAÇÃO`** — replicação fora do host pendente); **`DIV-F5-01` (681 × 683, aberta), `DIV-F5-02` e `DIV-F5-03` (docblocks × código, não adjudicadas)**; **segunda ocorrência de `T17-F07` em `health.ts:42`**, encaminhada por `F-5` §4.5 — **handoff, não finding fechado** |
 
 ---
 
@@ -279,14 +370,15 @@ de RH) · `jur_lgpd_data_subject_requests` (`CHECK` real de identidade verificad
 
 | # | Bloqueio | Alcance |
 |---|---|---|
-| **1** | **`OBS-T48-02`** — contradição em `BUSINESS_RULES.md` §12 | **`T41-EST-F01`** (§6.1). Decisão humana obrigatória |
-| **2** | **`D-12`** — depreciação × remoção da coluna | **`AUD-PAT-DEPRECIACAO-01`** por `OR-25` |
-| **3** | **`D-02`…`D-06`** — fonte normativa de regra de negócio (preço > custo, `manutencao`/`garantia`, lado correto de `T33-B-F02`, candidatas a BR-ID, fórmula de rating de fornecedor) | Findings de `T-33` que decidem por código sem fonte autoritativa versionada. **Lacuna de fonte, não de cobertura** |
-| **4** | **`DIV-SEV-01`** — `T17-F05` MEDIUM × `T23-F03` HIGH sobre o mesmo fato, **5ª rodada sem resolução** | O grupo **G-12** carrega HIGH **apenas para priorização**, declaradamente **não** como resolução de mérito. **A SanaCore não pode tratar essa severidade como mérito resolvido** |
-| **5** | **Adjudicações de `T5-05`** — `T16-F15`, `T21-F01`, `RES-T13-04`/`-05`, `T29-MOB-F03`, `T32-FST-F04` | **`T32-FST-F04` está listado no estrato 4 e não deve ser liberado antes do veredito de autorização** |
-| **6** | **`P-T39-01` ampliado (`T5-03`)** — ambiente dos 66 MISTO e dos 37 IDs novos | Bloqueia declarar a fila completa em **grão de item** e qualquer gate de release por exposição real |
-| **7** | **`T5-02`** — enumeração integral do estrato 4 | Bloqueia entregar 55 dos 81 IDs em grão de item (§5.3) |
-| **8** | **`APR-2026-023` Parte A** — gate humano entre as etapas 2 e 3 da chave de idempotência | **`FIND-ERP-001` / `CASE-001`**. Avançar sem aprovação humana registrada é violação de gate (Regra 18) e produz **interrupção da integração em produção** |
+| **1** | **Critério de reteste de `T-49`** — o reteste **tem de** usar `CR-T49-EST-01`…`-12` e `CR-T49-RH-01`…`-09`, não `T-41` §5 | **`T41-EST-F01` e `T41-RH-F02`: NÃO LIBERADOS** (§6.1). *Substitui o bloqueio anterior por `OBS-T48-02`, que está **RESOLVIDA** por `APR-2026-043` D3* |
+| **2** | **Severidade de `AUD-RH-VALIDADENULA-01` não fixada** | O vetor **não é remediável como finding confirmado**; e o **lote de `T41-RH-F02`** não pode ser planejado como se ele não existisse (§5.3). Decisão do dono; se HIGH, **Regra 22** antes de remediação |
+| **3** | **`D-12`** — depreciação × remoção da coluna | **`AUD-PAT-DEPRECIACAO-01`** por `OR-25` |
+| **4** | **`D-02`…`D-06`** — fonte normativa de regra de negócio (preço > custo, `manutencao`/`garantia`, lado correto de `T33-B-F02`, candidatas a BR-ID, fórmula de rating de fornecedor) | Findings de `T-33` que decidem por código sem fonte autoritativa versionada. **Lacuna de fonte, não de cobertura** |
+| **5** | **`DIV-SEV-01`** — `T17-F05` MEDIUM × `T23-F03` HIGH sobre o mesmo fato, **5ª rodada sem resolução** | O grupo **G-12** carrega HIGH **apenas para priorização**, declaradamente **não** como resolução de mérito. **A SanaCore não pode tratar essa severidade como mérito resolvido** |
+| **6** | **Adjudicações de `T5-05`** — `T16-F15`, `T21-F01`, `RES-T13-04`/`-05`, `T29-MOB-F03`, `T32-FST-F04` | **`T32-FST-F04` está listado no estrato 4 e não deve ser liberado antes do veredito de autorização** |
+| **7** | **`P-T39-01` ampliado (`T5-03`)** — ambiente dos 66 MISTO e dos 37 IDs novos | Bloqueia declarar a fila completa em **grão de item** e qualquer gate de release por exposição real |
+| **8** | **`T5-02`** — enumeração integral do estrato 4 | Bloqueia entregar 55 dos 81 IDs em grão de item (§5.5) |
+| **9** | **`APR-2026-023` Parte A** — gate humano entre as etapas 2 e 3 da chave de idempotência | **`FIND-ERP-001` / `CASE-001`**. Avançar sem aprovação humana registrada é violação de gate (Regra 18) e produz **interrupção da integração em produção** |
 
 ---
 
@@ -294,27 +386,31 @@ de RH) · `jur_lgpd_data_subject_requests` (`CHECK` real de identidade verificad
 
 | Exigência | Estado |
 |---|---|
-| Contém **somente** findings `CONFIRMED` | **Sim.** Os 100 CRITICAL/HIGH sob o regime da Regra 22, todos com veredito adversarial registrado. Zero `PROPOSED`, zero `FALSE_POSITIVE` |
+| Contém **somente** findings `CONFIRMED` | **Sim.** Os 100 CRITICAL/HIGH sob o regime da Regra 22, todos com veredito adversarial registrado. **Zero `PROPOSED`** — `AUD-RH-VALIDADENULA-01` foi **explicitamente mantido fora** (§1.2), com o lote compartilhado declarado (§5.3). Zero `FALSE_POSITIVE` |
 | Priorizado por severidade | **Sim**, com o critério de exposição real de `APR-2026-031` D-13 sobreposto nos estratos CRITICAL e HIGH, como o dono determinou |
-| **Todos** os findings `CONFIRMED` aparecem | **Parcialmente, e declarado.** 45 de 100 nominais (4 + 10 + 5 + 26) e **55 por ponteiro de grupo**, por `T5-02` não entregue (§5.3). **Completo em grão de lote; não em grão de item no estrato 4** |
-| Nenhuma severidade, confiança ou status alterado | **Sim** (Regras 15 e 18) |
+| **Todos** os findings `CONFIRMED` aparecem | **Parcialmente, e declarado.** 45 de 100 nominais (4 + 10 + 5 + 26) e **55 por ponteiro de grupo**, por `T5-02` não entregue (§5.5). **Completo em grão de lote; não em grão de item no estrato 4** |
+| Nenhuma severidade, confiança ou status alterado | **Sim** (Regras 15 e 18). `T41-EST-F01` e `T41-RH-F02` seguem **HIGH**, inalteradas por `T-49` |
 | Nenhum finding fechado | **Sim** (Regras 3, 4, 5) |
-| Travas de execução acompanham cada lote | **Sim** — `OR-01`…`OR-30`, cláusulas de reavaliação, anti-dupla-contagem, conformidades a preservar, bloqueios humanos |
+| Travas de execução acompanham cada lote | **Sim** — `OR-01`…`OR-30`, o lote compartilhado de RH, o item de documentação, cláusulas de reavaliação, anti-dupla-contagem, conformidades a preservar, bloqueios humanos e **os critérios de reteste de `T-49` com as 13 armadilhas nomeadas** |
 
 ---
 
 ## 11. Encerramento
 
-- Nenhum arquivo do objeto auditado foi criado, alterado ou corrigido (Regra 2).
+- Nenhum arquivo do objeto auditado foi criado, alterado ou corrigido (Regra 2). O item de
+  documentação da §5.4 é **encaminhamento à OpusCore**, não escrita da VeriCore.
 - Nenhum finding foi fechado, criado ou reclassificado; nenhuma severidade alterada
-  (Regras 4, 6, 18).
+  (Regras 4, 6, 18). `AUD-RH-VALIDADENULA-01` foi aberto por **decisão do dono**
+  (`APR-2026-044` D1) e aqui apenas **referenciado como não elegível**.
 - **`REMEDIATION COMPLETE` não é declarado e não pode ser inferido daqui** — é autoridade da
   SanaCore, e **o fechamento é da VeriCore**.
 - **`CASE-004` itens A e B permanecem ABERTOS**, em `RETEST_REQUIRED`, aguardando reteste
   independente da VeriCore.
 - Zero comando, zero execução, zero conexão de banco (`APR-2026-016` íntegra).
 
-**Estado:** `BACKLOG EMITIDO · 100 FINDINGS CONFIRMED ELEGÍVEIS (9 CRITICAL + 91 HIGH) ·
-45 NOMINAIS + 55 POR PONTEIRO DE GRUPO · 383 MEDIUM/LOW/INFO NÃO ELEGÍVEIS POR AUSÊNCIA DE
-VALIDAÇÃO · 30 DEPENDÊNCIAS DE ORDEM VIGENTES · 8 BLOQUEIOS DE LIBERAÇÃO NOMINAIS ·
-NENHUM FINDING FECHADO.`
+**Estado:** `BACKLOG REVISADO (REV. 2) · 100 FINDINGS CONFIRMED ELEGÍVEIS (9 CRITICAL + 91 HIGH) ·
+45 NOMINAIS + 55 POR PONTEIRO DE GRUPO · 2 DELES (T41-EST-F01, T41-RH-F02) CONFIRMED E **NÃO
+LIBERADOS** ATÉ O RETESTE USAR O CRITÉRIO DE T-49 · 384 NÃO ELEGÍVEIS (383 MEDIUM/LOW/INFO SEM
+VALIDAÇÃO + 1 PROPOSED SEM SEVERIDADE FIXADA) · 1 ITEM DE DOCUMENTAÇÃO (OpusCore) ·
+1 LOTE COMPARTILHADO COM FINDING NÃO ELEGÍVEL · 30 DEPENDÊNCIAS DE ORDEM VIGENTES ·
+9 BLOQUEIOS DE LIBERAÇÃO NOMINAIS · OBS-T48-02 RESOLVIDA · NENHUM FINDING FECHADO.`
