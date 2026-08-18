@@ -85,6 +85,92 @@ STATUS:       REMEDIATION_COMPLETE
 O escopo do `CASE-010` foi implementado, testado no recorte do módulo LGPD e
 documentado com guarda estática versionada.
 
+## Evidência de validação real (Correção 03)
+
+### 1) Typecheck do client
+
+Comando tentado primeiro:
+
+```powershell
+npm run typecheck
+```
+
+Output real:
+
+```text
+npm error Missing script: "typecheck"
+npm error
+npm error To see a list of scripts, run:
+npm error   npm run
+npm error A complete log of this run can be found in: C:\Users\Gilwagno\AppData\Local\npm-cache\_logs\2026-08-18T03_43_29_461Z-debug-0.log
+```
+
+Comando equivalente real no client, porque `client/package.json` nao tem script `typecheck`:
+
+```powershell
+npx tsc -b
+```
+
+Output real:
+
+```text
+```
+
+### 2) Typecheck do server
+
+```powershell
+npm run typecheck
+```
+
+Output real:
+
+```text
+
+> erp-evok-audio-server@1.0.0 typecheck
+> tsc -p tsconfig.json --noEmit
+```
+
+### 3) Build do server
+
+```powershell
+npm run build
+```
+
+Output real:
+
+```text
+
+> erp-evok-audio-server@1.0.0 build
+> tsc -p tsconfig.build.json && npm run release:check
+
+
+> erp-evok-audio-server@1.0.0 release:check
+> tsx scripts/check-lgpd-release-readiness.ts
+
+LGPD release readiness passed (2026-08-14-case-010).
+```
+
+### 4) Suíte unitária relevante do LGPD/jurídico
+
+```powershell
+npx jest --runInBand tests/unit/juridico-lgpd-alert-use-cases.test.ts tests/unit/juridico-lgpd-operational-control-guard.test.ts
+```
+
+Output real:
+
+```text
+
+Test Suites: 2 passed, 2 total
+Tests:       33 passed, 33 total
+Snapshots:   0 total
+Time:        11.779 s
+Ran all test suites matching tests/unit/juridico-lgpd-alert-use-cases.test.ts|tests/unit/juridico-lgpd-operational-control-guard.test.ts.
+```
+
+### 5) Suíte de integração relevante
+
+Nao foi executada uma suite de integracao LGPD nesta correção porque nao existe, no worktree atual, uma suite dedicada em `server/tests/integration` para o escopo FIND-ERP-006. A verificacao local confirmou isso com busca por `lgpd`/`juridico-lgpd` no diretorio de integracao sem retorno de arquivos relevantes. Nenhuma execucao foi mascarada como se tivesse rodado.
+
 REMEDIATION_COMPLETE
 
 ## Correcao 01 - resposta a segunda opiniao da VeriCore
