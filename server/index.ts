@@ -18,9 +18,25 @@ const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
 let server: Server | null = null;
 let shuttingDown = false;
 
-registerProcessSafetyHandlers();
+const NORMAL_SHUTDOWN_FORCED_EXIT_MS = 25000;
+const NORMAL_AUDIT_DRAIN_TIMEOUT_MS = 10000;
+const FATAL_SHUTDOWN_FORCED_EXIT_MS = 5000;
+const FATAL_AUDIT_DRAIN_TIMEOUT_MS = 3000;
 
-async function shutdown(signal: string): Promise<void> {
+registerProcessSafetyHandlers({
+  fatalShutdown: () => shutdown('uncaughtException', {
+    forcedExitMs: FATAL_SHUTDOWN_FORCED_EXIT_MS,
+    drainTimeoutMs: FATAL_AUDIT_DRAIN_TIMEOUT_MS,
+  }),
+  fatalShutdownTimeoutMs: FATAL_SHUTDOWN_FORCED_EXIT_MS + 1000,
+});
+
+interface ShutdownOptions {
+  forcedExitMs?: number;
+  drainTimeoutMs?: number;
+}
+
+async function shutdown(signal: string, options: ShutdownOptions = {}): Promise<void> {
   if (shuttingDown) {
     return;
   }
@@ -29,10 +45,12 @@ async function shutdown(signal: string): Promise<void> {
   setShuttingDown(true);
   logger.info(`Sinal ${signal} recebido. Iniciando shutdown gracioso.`);
 
+  const forcedExitMs = options.forcedExitMs ?? NORMAL_SHUTDOWN_FORCED_EXIT_MS;
+  const drainTimeoutMs = options.drainTimeoutMs ?? NORMAL_AUDIT_DRAIN_TIMEOUT_MS;
   const forcedExit = setTimeout(() => {
-    logger.error('Shutdown excedeu 15s. Encerrando processo forcadamente.');
+    logger.error(`Shutdown excedeu ${forcedExitMs}ms. Encerrando processo forcadamente.`);
     process.exit(1);
-  }, 15000);
+  }, forcedExitMs);
 
   try {
     if (server) {
@@ -47,7 +65,7 @@ async function shutdown(signal: string): Promise<void> {
       });
     }
 
-    const drainResult = await waitForPendingAuditLogs(10000);
+    const drainResult = await waitForPendingAuditLogs(drainTimeoutMs);
     if (!drainResult.drained) {
       logger.error(
         `Shutdown prosseguindo com ${drainResult.pendingActions} audit logs pendentes `

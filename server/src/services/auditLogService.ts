@@ -33,6 +33,7 @@ interface LogActionParams {
 const FAILURE_LOG_PATH = path.join(process.cwd(), 'logs', 'audit-failures.log');
 const RETRY_DELAY_MS = 200;
 const DEFAULT_DRAIN_TIMEOUT_MS = 5000;
+const WEBHOOK_FETCH_TIMEOUT_MS = 3000;
 
 interface AuditFailureStats {
   totalFailures: number;
@@ -154,6 +155,7 @@ async function persistFailureAndAlert(params: LogActionParams, error: Error): Pr
       await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(WEBHOOK_FETCH_TIMEOUT_MS),
         body: JSON.stringify({
           text: `[ERP EVOK AUDIO] Falha ao gravar audit log: ${params.action} em ${params.entityType}#${params.entityId ?? '?'} — ${error.message}`,
         }),

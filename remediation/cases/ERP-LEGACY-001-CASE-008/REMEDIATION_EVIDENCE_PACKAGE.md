@@ -137,6 +137,64 @@ Sugestoes para a VeriCore, sem substituir sua autoridade:
 - Subir container ou inspecionar imagem/compose para confirmar `/app/logs` persistente e gravavel pelo usuario nao-root.
 - Confirmar que nao houve propagacao de erro de auditoria para fluxo de negocio.
 
+## 11. CORRECAO_01
+
+Escopo desta correcao: fechar os tres riscos bloqueantes apontados para o CASE-008 sem mudar a Opcao C nem tocar em governance/audit/.
+
+### 11.1 Problemas e correcoes
+
+| Problema | Causa original | Correcao aplicada |
+|---|---|---|
+| 1. `uncaughtException` nao matava o processo | `server/src/config/processSafety.ts:18-45` | `server/src/config/processSafety.ts:18-70` passou a aceitar `fatalShutdown` e `fatalShutdownTimeoutMs`; `server/index.ts:21-68` agora encaminha `uncaughtException` para o mesmo `shutdown()` com fallback curto de saida. |
+| 2. webhook de auditoria podia ficar pendurado sem timeout | `server/src/services/auditLogService.ts:155-159` | `server/src/services/auditLogService.ts:36, 155-159` passou a usar `AbortSignal.timeout(WEBHOOK_FETCH_TIMEOUT_MS)`; o dreno continua em `server/src/services/auditLogService.ts:187-210`, mas agora nao espera indefinidamente por webhook travado. |
+| 3. orcamentos de shutdown e grace period do Docker estavam incoerentes | `server/index.ts:21-68`, `docker-compose.yml:33-55`, `docker-compose.prod.yml:65-85` | `server/index.ts:21-68` ajustou os tempos para `NORMAL_SHUTDOWN_FORCED_EXIT_MS = 25000`, `NORMAL_AUDIT_DRAIN_TIMEOUT_MS = 10000`, `FATAL_SHUTDOWN_FORCED_EXIT_MS = 5000`, `FATAL_AUDIT_DRAIN_TIMEOUT_MS = 3000`; `docker-compose.yml:42` e `docker-compose.prod.yml:72` passaram a declarar `stop_grace_period: 35s`. |
+
+### 11.2 Prova vermelha
+
+- Problema 1: o handler original de `uncaughtException` so logava e setava `process.exitCode = 1`; nao havia handoff para o shutdown gracioso do servidor.
+- Problema 2: a primeira reproducao do teste de webhook lento mostrou o dreno preso ate estourar o timeout de observacao quando a promessa de webhook nao terminava, com resultado `drained: false`, `pendingActions: 1`, `timedOut: true`.
+- Problema 3: inspecao do compose original mostrava ausencia de `stop_grace_period`, enquanto o processo tinha `forcedExit` e dreno internos sem margem de container.
+
+### 11.3 Prova verde
+
+- `server/tests/unit/case008-correction01.test.ts:28-57` valida que uma excecao nao capturada aciona o shutdown fatal e o processo termina com codigo `1` quando o shutdown nao conclui a tempo.
+- `server/tests/unit/case008-correction01.test.ts:59-122` valida que o fetch do webhook recebe timeout, o evento de auditoria termina e o dreno conclui sem ficar pendurado.
+- `server/tests/unit/case008-audit-log-static.test.ts:6-37` valida a costura estatica do shutdown e o `stop_grace_period` nos dois compose files.
+
+### 11.4 Outputs reais
+
+Validacao final executada na worktree:
+
+```powershell
+cd C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server
+npm test -- --runInBand tests/unit/case008-correction01.test.ts tests/unit/case008-audit-log-static.test.ts tests/unit/case008-audit-log-runtime.test.ts tests/unit/audit-log-failure-alerting.test.ts
+npm run typecheck
+npm run build
+```
+
+Saida real observada:
+
+```text
+> erp-evok-audio-server@1.0.0 test
+> jest --runInBand --runInBand tests/unit/case008-correction01.test.ts tests/unit/case008-audit-log-static.test.ts tests/unit/case008-audit-log-runtime.test.ts tests/unit/audit-log-failure-alerting.test.ts
+
+Test Suites: 4 passed, 4 total
+Tests:       11 passed, 11 total
+Snapshots:   0 total
+Time:        6.504 s, estimated 7 s
+Ran all test suites matching tests/unit/case008-correction01.test.ts|tests/unit/case008-audit-log-static.test.ts|tests/unit/case008-audit-log-runtime.test.ts|tests/unit/audit-log-failure-alerting.test.ts.
+```
+
+```text
+> erp-evok-audio-server@1.0.0 typecheck
+> tsc -p tsconfig.json --noEmit
+```
+
+```text
+> erp-evok-audio-server@1.0.0 build
+> tsc -p tsconfig.build.json
+```
+
 ---
 
 REMEDIATION_COMPLETE
