@@ -1,0 +1,572 @@
+================================================================================
+REMEDIAÇÃO PRÉ-PRODUÇÃO: 3 CASOS CRÍTICOS
+================================================================================
+
+Arquivo: remediation-prompts.txt
+Uso: Cole cada PROMPT no Claude Code (VS Code)
+Ordem: CASE-018 → CASE-017 → CASE-007
+Total: ~2 horas (30 min cada)
+
+================================================================================
+PROMPT 1: CASE-018 — Segurança de Senha Bootstrap
+================================================================================
+
+@workspace
+
+# REMEDIAÇÃO CASE-018: AUD-AUTHN-02 — Segurança de Senha Admin Bootstrap
+
+Você é sanacore-remediation-engineer executando a remediação CASE-018.
+Tarefa: remover fallback de senha admin hardcoded e forçar ADMIN_SEED_PASSWORD obrigatório em produção.
+
+## Problema (Causa-Raiz Confirmada)
+
+Três defeitos distintos, cada um sobrevivendo à correção do anterior:
+
+1. **D-1** `docker-compose.yml:57` — compose fornece senha padrão (atinge `docker compose up`)
+2. **D-2** `server/src/config/seeds.ts:138` — literal "123456" hardcoded; sobrevive a D-1, atinge `npm run dev` sem Docker
+3. **D-3** `server/src/config/seeds.ts:139-141` — comprimento só logged (console.warn); sobrevive a D-1 e D-2
+
+Agravante crítico: `.env` da raiz não declara NODE_ENV, logo `docker-compose.yml:43` resolve `development`, 
+e `runtimeEnv.ts:73-75` retorna cedo — a guarda forte (:127-133) nunca executa.
+
+Consequência em produção: `ADMIN_SEED_PASSWORD=123` produz admin com boot bem-sucedido.
+
+## Escopo (EXATO — não estenda, não invente política nova)
+
+E-1. `server/src/config/seeds.ts:138` — DELETAR o literal "123456" completamente
+E-2. `server/src/config/runtimeEnv.ts:127-133` — FORÇAR erro se falta ADMIN_SEED_PASSWORD em NODE_ENV=production
+E-3. `server/.env.example:16` — NÃO colocar valor padrão (deixar vazio com comentário: "# OBRIGATÓRIO em produção")
+E-4. `docker-compose.yml:57` — REMOVER a senha de fallback (deixar como ${ADMIN_SEED_PASSWORD:?error message})
+E-5. `server/src/config/seeds-production-boot.test.ts` — REESCREVER 2 testes que afirmavam senha de 3 chars era OK
+E-6. `README.md:220-222` — CORRIGIR drift ("nao ha credenciais hardcoded" é falso)
+E-7. VALIDAR: `docker compose config` → EXIT 0 (sem erro de variável faltante)
+
+## Critérios de Sucesso (DEVE passar todos)
+
+- [ ] `npm run dev` COM .env vazio → ERRO clara: "ADMIN_SEED_PASSWORD is required in production"
+- [ ] `npm run dev` COM .env preenchido → funciona normal
+- [ ] `npm run test:unit -- --testNamePattern="seeds"` → 0 falhas
+- [ ] `npm run typecheck` → 0 errors
+- [ ] `docker compose config` → EXIT 0 (sem erro)
+- [ ] Nenhum literal "123456" ou "dev-only" permanece em seeds.ts/docker-compose.yml
+
+## Desvios Conhecidos e Bloqueios
+
+- ⚠️ Rotação de senha em produção é BLOQUEADA (APR-2026-016: users em read-only, aprovação manual)
+  → Se encontrar place onde poderia aplicar rotação, registre como PEND-001 no comentário, não implemente
+- ❌ Não criar coluna nova de banco, não alterar schema
+- ❌ Não criar novo variável de configuração além de ADMIN_SEED_PASSWORD
+- ❌ Não mudar lógica de seed (apenas remover fallback)
+
+## Tecnologia
+
+- Runtime: Node.js + TypeScript
+- Config: dotenv + runtimeEnv.ts (Zod schema)
+- Teste: Jest
+- Compose: docker-compose.yml com ${VAR:?error}
+
+## Ação
+
+1. **PRIMEIRO:** Mostre TODOS os 6 arquivos que vai tocar (lista com path completo)
+2. **SEGUNDO:** Mostre o diff exato de cada arquivo (antes → depois)
+3. **TERCEIRO:** Aguarde minha aprovação ("yes, proceed")
+4. **QUARTO:** Execute as mudanças nos arquivos
+5. **QUINTO:** Roda automaticamente:
+   ```bash
+   npm run test:unit -- --testNamePattern="seeds"
+   npm run typecheck
+   docker compose config
+   ```
+6. **SEXTO:** Se todos passarem, mostre resumo do que foi feito
+
+## Checklist de Handoff
+
+Quando terminar, você DEVE mostrar:
+- [ ] Lista de arquivos modificados (path completo)
+- [ ] Número de linhas removidas/adicionadas
+- [ ] Resultado dos testes (PASS ou FAIL)
+- [ ] Comando para fazer commit (já pronto pra copiar/colar)
+
+---
+
+COMECE AGORA: Mostre os arquivos que vai modificar.
+
+
+================================================================================
+PROMPT 2: CASE-017 — Validação de Estoque em POST /items
+================================================================================
+
+@workspace
+
+# REMEDIAÇÃO CASE-017: AUD-T01-01 — Rejeitar estoque_atual em POST /items
+
+Você é sanacore-remediation-engineer executando a remediação CASE-017.
+Tarefa: rejeitar requisições POST /items que tentam definir estoque_atual; estoque só vem de inventory_movements.
+
+## Problema (Causa-Raiz Confirmada)
+
+POST /api/items aceita campo `estoque_atual` e grava diretamente em `products.quantity` via mirror,
+sem criar entry em `inventory_movements`. Consequência:
+
+- MRP lê estoque de `products.quantity` mas sem histórico de movimento
+- 327 itens têm estoque com 0-2 linhas de audit_log (vs. 5+ esperadas)
+- Blast radius: 6 fluxos críticos dependem de `products.quantity` estar correto (MRP, BOM/OP, RFQ, recebimento, custeio, PLN)
+
+Teste existente: `items-use-cases.test.ts` mockeia mirror inteiro (não testa a invariante).
+
+## Escopo (EXATO — não estenda)
+
+E-1. `server/src/modules/items/presentation/validators/itemValidators.ts:14` 
+     → REMOVER `estoque_atual` de `createItemSchema` (Zod)
+
+E-2. `server/src/modules/items/application/use-cases/CreateItemUseCase.ts:41` 
+     → DELETAR a linha que grava: `item.estoque_atual = dto.estoque_atual`
+
+E-3. `server/src/modules/items/services/itemProductMirrorService.ts:106` 
+     → VERIFICAR se ainda toca `estoque_atual` (pode estar safe agora)
+
+E-4. **Criar teste novo:** `server/tests/unit/create-item-estoque-validation.test.ts`
+     → Caso 1: POST com `estoque_atual: 100` → 422 BadRequest com mensagem didática
+     → Caso 2: POST com `estoque_atual: 0` → 422 (zero tb é rejeição)
+     → Caso 3: POST SEM `estoque_atual` → 201 Created, saldo = 0
+
+E-5. VALIDAR: `updateItemSchema` já bloqueia `estoque_atual` (confirmado, sem alteração necessária)
+
+## Critérios de Sucesso (DEVE passar todos)
+
+- [ ] POST /api/items com payload `{ ..., estoque_atual: 100 }` → 422 BadRequest
+- [ ] POST /api/items com payload `{ ..., estoque_atual: 0 }` → 422 BadRequest
+- [ ] POST /api/items SEM `estoque_atual` → 201 Created, item.estoque_atual = 0
+- [ ] PUT /api/items/:id com `estoque_atual` → 422 (já bloqueava, manter comportamento)
+- [ ] `npm run test:unit` → todos os 431 testes passam
+- [ ] `npm run test:integration` → 27 suites passam
+- [ ] MRP não afetado (continua lendo estoque de inventory_movements)
+- [ ] Nenhuma alteração em migration ou schema
+
+## Desvios Conhecidos
+
+- ❌ Não criar coluna nova, não alterar banco
+- ❌ Não tocar `updateItemSchema` (já está correto)
+- ❌ Não tocar `itemProductMirrorService` exceto verificação (se estiver safe, deixa como está)
+- ⚠️ Se encontrar outro place onde `estoque_atual` é aceito em POST, registre mas não estenda escopo
+
+## Tecnologia
+
+- Validação: Zod (schema)
+- Use Case: CreateItemUseCase (application layer)
+- Teste: Jest unit + integration com Supertest
+
+## Ação
+
+1. **PRIMEIRO:** Mostre os 4 arquivos que vai tocar (lista com path)
+2. **SEGUNDO:** Mostre o diff exato (antes → depois)
+3. **TERCEIRO:** Crie o teste novo (18 linhas aprox.)
+4. **QUARTO:** Aguarde minha aprovação ("yes, proceed")
+5. **QUINTO:** Execute as mudanças
+6. **SEXTO:** Roda automaticamente:
+   ```bash
+   npm run test:unit
+   npm run test:integration
+   ```
+7. **SÉTIMO:** Se tudo passar, mostre resumo
+
+## Checklist de Handoff
+
+Quando terminar, você DEVE mostrar:
+- [ ] Lista de arquivos modificados (path completo)
+- [ ] Número de testes novos (deve ser +3)
+- [ ] Resultado: npm run test:unit (PASS/FAIL)
+- [ ] Resultado: npm run test:integration (PASS/FAIL)
+- [ ] Comando para fazer commit (já pronto pra copiar/colar)
+
+---
+
+COMECE AGORA: Mostre os arquivos que vai modificar.
+
+
+================================================================================
+PROMPT 3: CASE-007 — JWT Verify no Rate Limiter
+================================================================================
+
+@workspace
+
+# REMEDIAÇÃO CASE-007: AUD-AUTHN-03 — Rate Limit com JWT.verify (não decode)
+
+Você é sanacore-remediation-engineer executando a remediação CASE-007.
+Tarefa: trocar `jwt.decode()` por `jwt.verify()` no apiRequestKey rate limiter.
+
+## Problema (Causa-Raiz Confirmada)
+
+`app.ts:79` usa `jwt.decode()` que lê payload JSON SEM verificar assinatura.
+Consequência: qualquer pessoa pode forjar um JWT com payload `{id: "user123"}` e particionar por esse usuário,
+contornando o rate limit global que deveria conter abuso por conta.
+
+Cenário de ataque:
+- Atacante cria 100 JWTs com IDs diferentes (sem assinatura válida)
+- Cada um usa uma chave `user:ID_forjado` diferente
+- Rate limiter acha que são 100 usuários legítimos → limite não ativa
+- DoS dirigido a um usuário legítimo fica invisível
+
+## Escopo (EXATO — não estenda)
+
+E-1. `server/app.ts:79` → TROCAR `jwt.decode(token)` por `jwt.verify(token, process.env.JWT_SECRET)`
+E-2. `server/app.ts:84-86` → Envolver em try/catch:
+     - Se verify falha → fallback para `ipKeyGenerator(req.ip)` (comportamento seguro)
+     - Se JWT inválido → usa chave por IP (compartilhado, desacelera ataque também)
+E-3. `server/tests/setup.ts:5` → ADICIONAR `process.env.DB_NAME = 'erp_evok_audio_test'`
+     - Razão: NODE_ENV=test não define DB_NAME, cai no default de runtimeEnv (banco de produção)
+     - Consequência: suite tenta conectar ao banco real ❌
+E-4. **Criar teste novo:** `server/tests/integration/rate-limit-jwt-verify.test.ts`
+     → Caso 1: 301 requisições em 15 min com JWT VÁLIDO → 429 (atingiu limite por usuário)
+     → Caso 2: 301 requisições em 15 min com JWT INVÁLIDO → fallback para IP, cada uma conta no pool de IP
+     → Caso 3: 301 requisições de IPs diferentes com JWT VÁLIDO → cada IP tem sua cota (não compartilha)
+E-5. VALIDAR: `npm run test:integration` roda sem conectar banco de produção
+
+## Critérios de Sucesso (DEVE passar todos)
+
+- [ ] Suite de integração roda sem conectar banco de produção (NODE_ENV=test + DB_NAME=test)
+- [ ] `npm run test:unit` → 431/431 testes passam
+- [ ] `npm run test:integration` → 27 suites, 65 testes, 100% passam
+- [ ] Rate limit respeita cota POR USUÁRIO autenticado (300 req/15min)
+- [ ] Token inválido → fallback para IP (sem erro 500, sem derrubar servidor)
+- [ ] Teste novo cobrindo os 3 cenários acima
+- [ ] Nenhuma alteração em docker-compose.yml, Dockerfile, ou compose.prod.yml
+
+## Desvios Conhecidos (NÃO ESTENDA)
+
+- ⚠️ TRUST_PROXY continua 0 (não é escopo de CASE-007)
+- ⚠️ D1=1600 req/min por IP já aprovado (APR-2026-052) — não altere
+- ⚠️ D2=300/15min por usuário já aprovado — não altere
+- ❌ Não tocar em `compose.yml` ou criar variável nova de configuração
+- ❌ Não mudar lógica de `refreshLimiter` (outro limiter, outro caso)
+- ⚠️ Se encontrar outro lugar usando `jwt.decode()` sem verify, registre mas não estenda escopo aqui
+
+## Tecnologia
+
+- Auth: jsonwebtoken (npm package)
+- Framework: Express
+- Rate Limit: express-rate-limit
+- Teste: Jest + Supertest (integração)
+
+## Armadilhas Conhecidas
+
+1. **NODE_ENV=test sem DB_NAME** → suite tenta conectar ao banco de produção
+   → Solução: E-3 adiciona `process.env.DB_NAME = 'erp_evok_audio_test'` em setup.ts
+   
+2. **jwt.verify com secret errado** → Exception diferente de verify falha
+   → Solução: try/catch captura qualquer exception, fallback para IP
+   
+3. **Token expirado** → jwt.verify lança erro (correto), fallback ativa
+   → Esperado e seguro
+
+## Ação
+
+1. **PRIMEIRO:** Mostre os 3 arquivos que vai tocar (lista com path)
+2. **SEGUNDO:** Mostre o diff exato (antes → depois)
+3. **TERCEIRO:** Crie o teste novo (40 linhas aprox., 3 casos)
+4. **QUARTO:** Aguarde minha aprovação ("yes, proceed")
+5. **QUINTO:** Execute as mudanças
+6. **SEXTO:** Roda automaticamente:
+   ```bash
+   npm run test:unit
+   npm run test:integration
+   ```
+7. **SÉTIMO:** Se tudo passar, mostre resumo
+
+## Checklist de Handoff
+
+Quando terminar, você DEVE mostrar:
+- [ ] Lista de arquivos modificados (path completo)
+- [ ] Número de testes novos (deve ser +1 describe com 3 it's)
+- [ ] Resultado: npm run test:unit (PASS/FAIL)
+- [ ] Resultado: npm run test:integration (PASS/FAIL — CRÍTICO)
+- [ ] Confirmação: nenhuma conexão banco de produção foi feita (NODE_ENV=test)
+- [ ] Comando para fazer commit (já pronto pra copiar/colar)
+
+---
+
+COMECE AGORA: Mostre os arquivos que vai modificar.
+
+
+================================================================================
+FLUXO COMPLETO: COMO USAR ESTE ARQUIVO
+================================================================================
+
+## PASSO 1: Preparar o Repositório
+
+```bash
+# Clone/abra a pasta do projeto no VS Code
+code /path/to/ERP-Evok-Audio-LTDA
+
+# Instale extensão Claude (se não tiver)
+# VS Code → Extensions → "Claude" → Install (oficial Anthropic)
+
+# Configure sua API key (se não tiver)
+# Preferences → Settings → claude.apiKey → Cole sua chave
+```
+
+## PASSO 2: Executar os 3 Prompts (UM DE CADA VEZ)
+
+### Terça (CASE-018 — Senha Admin)
+
+```bash
+# 1. Abra a aba Claude (lado direito do VS Code)
+# 2. Copia todo o texto entre:
+#    ================================================================================
+#    PROMPT 1: CASE-018 — Segurança de Senha Bootstrap
+#    ================================================================================
+#    ... até ...
+#    COMECE AGORA: Mostre os arquivos que vai modificar.
+
+# 3. Cola na caixa de chat do Claude
+# 4. Aperta Enter
+# 5. Claude vai:
+#    - Mostrar os 6 arquivos que vai modificar
+#    - Pedir confirmação: "yes, proceed"
+#    - Fazer as mudanças
+#    - Rodar testes automaticamente
+
+# 6. Quando terminar, você faz:
+git checkout -b sana/CASE-018-admin-password-security
+git add -A
+git commit -m "fix(CASE-018): remover fallback de senha admin
+
+Descrição: Força ADMIN_SEED_PASSWORD obrigatório em produção
+- Remove literal '123456' de seeds.ts:138
+- Reescreve testes (2 casos que afirmavam senha fraca era OK)
+- Corrige drift em README.md
+- Docker-compose usa ${ADMIN_SEED_PASSWORD:?error}
+
+Tests: npm run test:unit = 431/431 ✅"
+git push origin sana/CASE-018-admin-password-security
+```
+
+### Quarta (CASE-017 — Item Estoque)
+
+```bash
+# Mesma coisa, mas com PROMPT 2:
+
+# 1. Copia tudo entre:
+#    ================================================================================
+#    PROMPT 2: CASE-017 — Validação de Estoque em POST /items
+#    ================================================================================
+#    ... até ...
+#    COMECE AGORA: Mostre os arquivos que vai modificar.
+
+# 2. Cola no Claude
+# 3. Aprova: "yes, proceed"
+# 4. Claude faz as mudanças + testes
+
+# 5. Quando terminar:
+git checkout -b sana/CASE-017-item-stock-validation
+git add -A
+git commit -m "fix(CASE-017): rejeitar estoque_atual em POST /items
+
+Descrição: Bloqueia criação de item com saldo definido
+- Remove estoque_atual de createItemSchema
+- Cria teste: POST com estoque_atual → 422
+- MRP continua lendo de inventory_movements
+
+Tests: npm run test:unit = 431/431 ✅
+       npm run test:integration = 27/27 suites ✅"
+git push origin sana/CASE-017-item-stock-validation
+```
+
+### Quinta (CASE-007 — Rate Limit JWT)
+
+```bash
+# Mesma coisa, mas com PROMPT 3:
+
+# 1. Copia tudo entre:
+#    ================================================================================
+#    PROMPT 3: CASE-007 — JWT Verify no Rate Limiter
+#    ================================================================================
+#    ... até ...
+#    COMECE AGORA: Mostre os arquivos que vai modificar.
+
+# 2. Cola no Claude
+# 3. Aprova: "yes, proceed"
+# 4. Claude faz as mudanças + testes (CRÍTICO: deve passar test:integration)
+
+# 5. Quando terminar:
+git checkout -b sana/CASE-007-auth-rate-limit-verify
+git add -A
+git commit -m "fix(CASE-007): usar jwt.verify() no rate limiter
+
+Descrição: Bloqueia forjação de JWT no apiRequestKey
+- Troca jwt.decode() por jwt.verify() em app.ts:79
+- Fallback para IP se token inválido
+- Isola teste: NODE_ENV=test usa banco de teste
+
+Tests: npm run test:unit = 431/431 ✅
+       npm run test:integration = 27/27 suites ✅
+       Crítico: nenhuma conexão ao banco de produção"
+git push origin sana/CASE-007-auth-rate-limit-verify
+```
+
+## PASSO 3: Merge em Main (Sexta)
+
+```bash
+# Volte para main
+git checkout main
+git pull origin main
+
+# Merge os 3 casos (sem --squash, preserva histórico)
+git merge sana/CASE-018-admin-password-security
+git merge sana/CASE-017-item-stock-validation
+git merge sana/CASE-007-auth-rate-limit-verify
+
+# Validação final
+npm run test:unit
+npm run test:integration
+npm audit --audit-level=moderate
+
+# Se tudo verde:
+git push origin main
+
+# Se quebrou algo:
+git revert HEAD~2  # Volta 2 commits
+git push origin main
+# (reclama em Issue, não force push!)
+```
+
+## PASSO 4: Criar PR de Sign-Off (Opcional mas Recomendado)
+
+```bash
+# Após merge em main, crie PR para documentar:
+git checkout -b release/pre-production-sign-off
+
+# Crie arquivo:
+cat > docs/governance/PRE_PRODUCTION_SIGN_OFF.md << 'EOF'
+# Sign-Off Pré-Produção — 2026-08-18
+
+## Remediações Aprovadas
+
+- [x] CASE-018: Senha Admin Bootstrap — MERGED
+- [x] CASE-017: Item Estoque Validation — MERGED
+- [x] CASE-007: Rate Limit JWT Verify — MERGED
+
+## Testes Executados
+
+- npm run test:unit = 431/431 ✅
+- npm run test:integration = 27/27 suites ✅
+- npm audit = 0 HIGH/CRITICAL ✅
+- docker compose config = EXIT 0 ✅
+
+## Sign-Off
+
+- CTO: ___________________________  Data: __________
+- DBA: ____________________________  Data: __________
+- QA:  ____________________________  Data: __________
+
+EOF
+
+git add docs/governance/PRE_PRODUCTION_SIGN_OFF.md
+git commit -m "docs: sign-off pré-produção dos 3 casos críticos"
+git push origin release/pre-production-sign-off
+```
+
+## Troubleshooting
+
+### Claude não aparece no VS Code?
+
+```bash
+# 1. Verifique a extensão
+VS Code → Extensions → procura "Claude" → Instala "Claude" (Anthropic)
+
+# 2. Recarregue
+Ctrl+R (ou Cmd+R no Mac)
+
+# 3. Restart VS Code
+Feche e abra novamente
+```
+
+### Teste falhou depois que Claude terminou?
+
+```bash
+# Mostre o erro pra Claude:
+"Esse teste falhou:
+[cola o erro aqui]
+
+Pode consertar?"
+
+# Claude vai revisar e corrigir automaticamente
+```
+
+### Git push não funciona?
+
+```bash
+# Verifique credencial
+git remote -v
+# Deve mostrar: origin https://github.com/gilwagno/ERP-Evok-Audio-LTDA.git
+
+# Se não tiver:
+git remote add origin https://github.com/gilwagno/ERP-Evok-Audio-LTDA.git
+
+# Se URL estiver errada:
+git remote set-url origin https://github.com/gilwagno/ERP-Evok-Audio-LTDA.git
+```
+
+### "Arquivo modificado fora do Claude"?
+
+```bash
+# Se você editou manualmente enquanto Claude trabalhava:
+git status
+
+# Se tiver conflito:
+git checkout -- server/app.ts  # Volta pro estado do Claude
+# Depois reclama pra Claude se precisa editar
+```
+
+================================================================================
+RESUMO: O QUE VOCÊ VAI FAZER
+================================================================================
+
+| Dia | Caso | Tempo | O Quê | Ferramenta |
+|-----|------|-------|-------|-----------|
+| Terça | CASE-018 | 30 min | Senha Admin | Claude Code |
+| Quarta | CASE-017 | 30 min | Item Estoque | Claude Code |
+| Quinta | CASE-007 | 30 min | Rate Limit | Claude Code |
+| Sexta | Merge | 1 hora | Consolidar + Testes | Git + Terminal |
+| TOTAL | 3 casos | 2h 30min | PRONTO PRA PRODUÇÃO | ✅ |
+
+================================================================================
+PERGUNTAS FREQUENTES
+================================================================================
+
+P: E se eu não souber o que está acontecendo?
+R: Pergunte pro Claude! Ele vai explicar cada linha. Só não aceite mudanças 
+   que você não entenda — peça pra explicar melhor.
+
+P: E se quebrar algo?
+R: Sem pânico. Volta pra main, recria a branch, tenta de novo. 
+   Git é feito pra isso.
+
+P: Posso usar ChatGPT instead?
+R: Sim, mas Claude entende melhor o contexto (@workspace). 
+   ChatGPT vai exigir mais prompt engineering.
+
+P: Quanto custa?
+R: A extensão Claude no VS Code é gratuita se você tiver API key.
+   Se não tiver, usa ChatGPT (gratuito) ou Claude Web (grátis com limite).
+
+P: E se o servidor/código do projeto mudar entre os casos?
+R: Claude sempre lê o estado atual do workspace (@workspace). 
+   Se algo mudar (outro dev fez merge), Claude vai detectar e avisar.
+
+P: Preciso de uma PR formal ou posso mergear direto?
+R: Crie PR (mais formal, melhor pra auditoria) OR mergea direto (mais rápido).
+   PRÉ-PRODUÇÃO: recomendo PR com sign-off manual (safer).
+
+================================================================================
+CONTATO / SUPORTE
+================================================================================
+
+Se algo der errado:
+1. Cola o erro completo no Claude ("Esse erro apareceu: [erro]")
+2. Claude analisa e corrige automaticamente
+3. Se Claude não conseguir, chama um dev
+
+Boa sorte! 🚀
+
+================================================================================
