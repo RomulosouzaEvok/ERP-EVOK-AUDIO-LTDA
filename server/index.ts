@@ -27,6 +27,7 @@ registerProcessSafetyHandlers({
   fatalShutdown: () => shutdown('uncaughtException', {
     forcedExitMs: FATAL_SHUTDOWN_FORCED_EXIT_MS,
     drainTimeoutMs: FATAL_AUDIT_DRAIN_TIMEOUT_MS,
+    exitCodeOnSuccess: 1,
   }),
   fatalShutdownTimeoutMs: FATAL_SHUTDOWN_FORCED_EXIT_MS + 1000,
 });
@@ -34,9 +35,10 @@ registerProcessSafetyHandlers({
 interface ShutdownOptions {
   forcedExitMs?: number;
   drainTimeoutMs?: number;
+  exitCodeOnSuccess?: number;
 }
 
-async function shutdown(signal: string, options: ShutdownOptions = {}): Promise<void> {
+export async function shutdown(signal: string, options: ShutdownOptions = {}): Promise<void> {
   if (shuttingDown) {
     return;
   }
@@ -47,6 +49,7 @@ async function shutdown(signal: string, options: ShutdownOptions = {}): Promise<
 
   const forcedExitMs = options.forcedExitMs ?? NORMAL_SHUTDOWN_FORCED_EXIT_MS;
   const drainTimeoutMs = options.drainTimeoutMs ?? NORMAL_AUDIT_DRAIN_TIMEOUT_MS;
+  const exitCodeOnSuccess = options.exitCodeOnSuccess ?? 0;
   const forcedExit = setTimeout(() => {
     logger.error(`Shutdown excedeu ${forcedExitMs}ms. Encerrando processo forcadamente.`);
     process.exit(1);
@@ -76,7 +79,7 @@ async function shutdown(signal: string, options: ShutdownOptions = {}): Promise<
     await sequelize.close();
     clearTimeout(forcedExit);
     logger.info('Shutdown concluido com sucesso.');
-    process.exit(0);
+    process.exit(exitCodeOnSuccess);
   } catch (error: unknown) {
     clearTimeout(forcedExit);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -85,7 +88,7 @@ async function shutdown(signal: string, options: ShutdownOptions = {}): Promise<
   }
 }
 
-const start = async () => {
+export const start = async () => {
   const runtimeEnv = loadRuntimeEnv();
 
   try {
@@ -111,4 +114,6 @@ const start = async () => {
   }
 };
 
-void start();
+if (require.main === module) {
+  void start();
+}
