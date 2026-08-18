@@ -64,6 +64,23 @@ function validateContiguity(rules: any[]): void {
       return aMax - bMax;
     });
 
+    const firstMin = toNumber(ordered[0].min_value, 0);
+    if (firstMin > 0) {
+      throw new ValidationError(
+        `Grupo "${contractType}" não cobre o piso 0: a primeira faixa começa em ${describeBound(firstMin)}.`,
+      );
+    }
+
+    const lastRule = ordered[ordered.length - 1];
+    const lastMax = lastRule.max_value === null || lastRule.max_value === undefined
+      ? null
+      : toNumber(lastRule.max_value, 0);
+    if (lastMax !== null) {
+      throw new ValidationError(
+        `Grupo "${contractType}" precisa terminar com teto aberto (max_value: null); a última faixa termina em ${describeBound(lastMax)}.`,
+      );
+    }
+
     for (let index = 0; index < ordered.length - 1; index += 1) {
       const current = ordered[index];
       const next = ordered[index + 1];
@@ -73,14 +90,21 @@ function validateContiguity(rules: any[]): void {
         : toNumber(current.max_value, 0);
       const nextMin = toNumber(next.min_value, 0);
 
-      if (currentMax !== null && nextMin > currentMax) {
+      if (currentMax === null) {
+        throw new ValidationError(
+          `Grupo "${contractType}" tem faixa aberta antes da última posição: `
+            + `${describeBound(currentMin)}-${describeBound(currentMax)}.`,
+        );
+      }
+
+      if (nextMin > currentMax) {
         throw new ValidationError(
           `Grupo "${contractType}" tem lacuna entre ${describeBound(currentMax)} e ${describeBound(nextMin)}: `
             + 'nenhum valor real nesse intervalo fica coberto pela política.',
         );
       }
 
-      if (currentMax === null || nextMin < currentMax) {
+      if (nextMin < currentMax) {
         throw new ValidationError(
           `Grupo "${contractType}" tem sobreposição entre ${describeBound(currentMin)}-${describeBound(currentMax)} e `
             + `${describeBound(nextMin)}-${describeBound(

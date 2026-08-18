@@ -37,6 +37,7 @@ import {
 const ActivateContractUseCase = require('../../src/modules/juridico/application/use-cases/contract/ActivateContractUseCase');
 const ApproveContractUseCase = require('../../src/modules/juridico/application/use-cases/contract/ApproveContractUseCase');
 const CreateContractAddendumUseCase = require('../../src/modules/juridico/application/use-cases/contract/CreateContractAddendumUseCase');
+const ListContractApprovalsUseCase = require('../../src/modules/juridico/application/use-cases/contract/ListContractApprovalsUseCase');
 const contractController = require('../../src/modules/juridico/presentation/controllers/contractController');
 const approvalThresholdController = require('../../src/modules/juridico/presentation/controllers/approvalThresholdController');
 const { BusinessRuleError } = require('../../src/errors');
@@ -200,6 +201,44 @@ describe('FIND-ERP-005 / Falha 1 — RF-JUR-003: alçada vem de configuração, 
     ).rejects.toBeInstanceOf(BusinessRuleError);
   });
 
+  it.each([
+    ['null', null],
+    ['0', 0],
+  ])('R1(b): value %s continua sem alçada exigida em ativar/aprovar/consultar', async (_label, value) => {
+    const rules = defaultPolicyRules();
+    const contract = makeContract({ value, status: 'draft' });
+    const contractRepo = makeContractRepository({ initialContract: contract });
+    const approvalRepo = makeApprovalRepository();
+    const thresholdRepo = makeThresholdRepository(rules);
+
+    const resolved = resolveApprovalPolicy(rules, { value, contractType: contract.contract_type });
+    expect(resolved.requiredRoles).toEqual([]);
+    expect(resolved.requiredLevel).toBe('operate');
+    expect(resolved.snapshot.matched_rule_id).toBeNull();
+    expect(resolved.snapshot.matched_rule).toBeNull();
+
+    await expect(
+      new ActivateContractUseCase(contractRepo, makeAlertRepository(), approvalRepo, thresholdRepo)
+        .execute({ id: 900, approverHasApprove: false }),
+    ).resolves.toMatchObject({ status: 'active' });
+
+    try {
+      await new ApproveContractUseCase(contractRepo, approvalRepo, thresholdRepo)
+        .execute({ contractId: 900, approverUserId: 11, availableRoles: ['diretor'] });
+      throw new Error('expected approval rejection');
+    } catch (error: any) {
+      expect(error).toBeInstanceOf(BusinessRuleError);
+      expect(error.details).toEqual(expect.objectContaining({ rule: 'RF-JUR-003' }));
+      expect(error.details?.reason).not.toBe('APPROVAL_POLICY_GAP');
+    }
+
+    const listing = await new ListContractApprovalsUseCase(contractRepo, approvalRepo, thresholdRepo)
+      .execute({ contractId: 900 });
+    expect(listing.required_roles).toEqual([]);
+    expect(listing.missing_roles).toEqual([]);
+    expect(listing.approval_complete).toBe(true);
+  });
+
   it('R1(c): tipos de contrato diferentes com o MESMO valor recebem alçadas diferentes', () => {
     const rules: ApprovalThresholdRule[] = [
       ...defaultPolicyRules(),
@@ -324,17 +363,40 @@ describe('FIND-ERP-005 / Falha 1 — RF-JUR-003: alçada vem de configuração, 
     }
   });
 
-  it('R1: validatePayload aceita conjunto contíguo válido e ignora faixas inativas para contiguidade', () => {
+  it('R1: validatePayload aceita conjunto contíguo válido com teto aberto e ignora faixas inativas', () => {
     const normalized = approvalThresholdController.__test__validatePayload({
       rules: [
         { contract_type: '*', min_value: 0, max_value: 50000, required_roles: [], required_level: 'approve' },
         { contract_type: '*', min_value: 50000, max_value: 100000, required_roles: ['diretor'], required_level: 'approve' },
-        { contract_type: '*', min_value: 100000, max_value: null, required_roles: ['diretor', 'financeiro'], required_level: 'approve', active: false },
+        { contract_type: '*', min_value: 100000, max_value: null, required_roles: ['diretor', 'financeiro'], required_level: 'approve' },
+        { contract_type: '*', min_value: 200000, max_value: null, required_roles: ['diretor'], required_level: 'approve', active: false },
       ],
     });
 
-    expect(normalized).toHaveLength(3);
-    expect(normalized[2].active).toBe(false);
+    expect(normalized).toHaveLength(4);
+    expect(normalized[2].max_value).toBeNull();
+    expect(normalized[3].active).toBe(false);
+  });
+
+  it('R1: validatePayload aceita grupo com faixa única e teto aberto', () => {
+    const normalized = approvalThresholdController.__test__validatePayload({
+      rules: [
+        { contract_type: '*', min_value: 0, max_value: null, required_roles: [], required_level: 'approve' },
+      ],
+    });
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0].min_value).toBe(0);
+    expect(normalized[0].max_value).toBeNull();
+  });
+
+  it('R1: validatePayload rejeita grupo sem teto aberto na borda superior', () => {
+    expect(() => approvalThresholdController.__test__validatePayload({
+      rules: [
+        { contract_type: '*', min_value: 0, max_value: 50000, required_roles: [], required_level: 'approve' },
+        { contract_type: '*', min_value: 50000, max_value: 100000, required_roles: ['diretor'], required_level: 'approve' },
+      ],
+    })).toThrow(/teto aberto|max_value: null/i);
   });
 
   it('R1: validatePayload rejeita lacuna no mesmo grupo contract_type', () => {
@@ -350,7 +412,7 @@ describe('FIND-ERP-005 / Falha 1 — RF-JUR-003: alçada vem de configuração, 
     expect(() => approvalThresholdController.__test__validatePayload({
       rules: [
         { contract_type: '*', min_value: 0, max_value: 100000, required_roles: [], required_level: 'approve' },
-        { contract_type: '*', min_value: 50000, max_value: 200000, required_roles: ['diretor'], required_level: 'approve' },
+        { contract_type: '*', min_value: 50000, max_value: null, required_roles: ['diretor'], required_level: 'approve' },
       ],
     })).toThrow(/grupo "\*".*sobreposi/i);
   });

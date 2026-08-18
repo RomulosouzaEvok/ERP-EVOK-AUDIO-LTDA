@@ -4,7 +4,7 @@ CASE_ID: ERP-LEGACY-001-CASE-002
 FINDING_ID: FIND-ERP-005
 PROJECT_ID: ERP-LEGACY-001
 BRANCH: `sana/ERP-LEGACY-001/FIND-ERP-005` (sem `push`)
-REMEDIATION_COMMIT: correção 01 desta sessão — gap de contiguidade aplicado no código; hash final será o do commit local desta worktree
+REMEDIATION_COMMIT: hash do commit local desta worktree a ser registrado apÃ³s o commit desta sessÃ£o
 
 ## Linha do tempo do caso
 
@@ -19,33 +19,31 @@ REMEDIATION_COMMIT: correção 01 desta sessão — gap de contiguidade aplicado
 
 ## Estado atual
 
-**`READY_FOR_RETEST`** — a correção 01 do gap de contiguidade foi aplicada
-no código e validada por suíte unitária/tipo/build, mas a prova HTTP completa
-continua dependente de `erp_evok_audio_test` estar acessível na porta
-`5432` nesta máquina.
+**`REMEDIATION_COMPLETE`** - as duas correções concretas da segunda opinião da VeriCore estão aplicadas no código e validadas por testes reais do módulo jurídico, inclusive a integração HTTP do arquivo de caso.
 
 As duas lacunas apontadas na v1 continuam registradas como resolvidas no
 código-base do caso:
 
 | Lacuna da v1 | Estado |
 |---|---|
-| `APR-2026-021` não registrada | **Alarme falso.** A aprovação existe no repositório principal (`APPROVALS.md:573`), com `APR-2026-022` reafirmando. Erro causado por leitura do `coretriad/` defasado do worktree — armadilha registrada em §0.1 do pacote de evidência. |
+| `APR-2026-021` não registrada | **Alarme falso.** A aprovação existe no repositório principal (`APPROVALS.md:573`), com `APR-2026-022` reafirmando. Erro causado por leitura do `coretriad/` defasado do worktree - armadilha registrada em §0.1 do pacote de evidência. |
 | Suíte de integração HTTP inoperante (14/14 falhas) | **Corrigida.** 3 defeitos de fixture; **20/20 passando** contra `erp_evok_audio_test`. R1(b)(c), R2(a)-(d), R3(a)(b)(c)(e), R4(a)-(d) com prova dinâmica HTTP real. |
+| Correção 02 (`null`/`0` e bordas da contiguidade) | **Corrigida.** `value` nulo/zero não abre gap e o PUT agora exige teto aberto + grupo contíguo. |
 
 ## Evidência executada (resumo)
 
 | Suíte | Resultado |
 |---|---|
-| Unitários — alvo do caso | **52/52 PASSED** no alvo executado nesta correção |
-| Unitários — completa | **2003/2004** (1 falha pré-existente, não relacionada: `docs-path-reference-guard`) |
-| Integração — suíte do caso | **bloqueada no ambiente local**: o runner não conseguiu subir `erp_evok_audio_test` porque `localhost:5432` recusou conexão |
-| Integração — completa | **não executada com sucesso nesta máquina** |
+| Unitários - alvo do caso | **56/56 PASSED** no alvo executado nesta correção |
+| Unitários - completa do módulo jurídico | **175/175 PASSED** |
+| Integração - arquivo do caso jurídico | **22/22 PASSED** |
+| Integração - completa | executada com 2 falhas externas ao caso (`cross-database-drift-guard`, `bom-tipo-nao-produtivo`) |
 | Typecheck server | **exit 0** |
 | Build server | **exit 0** |
 
 ## Pendências que NÃO são da SanaCore (ação humana)
 
-1. **Aplicar a migration `20260814-000048` em `erp_evok_audio`** — banco
+1. **Aplicar a migration `20260814-000048` em `erp_evok_audio`** - banco
    PRODUÇÃO REAL (`APR-2026-016`); decisão de *quando* é do dono. Até lá,
    `cross-database-drift-guard` falha corretamente.
 2. **Contar perfis `diretor`/`financeiro:'operate'` no banco de produção**
@@ -55,9 +53,9 @@ código-base do caso:
 
 ## O que NÃO foi declarado (proibido à SanaCore)
 
-- `RETEST_PASSED` — não declarado.
-- `FINDING CLOSED` — não declarado.
-- `RISK_ACCEPTED` — não declarado.
+- `RETEST_PASSED` - não declarado.
+- `FINDING CLOSED` - não declarado.
+- `RISK_ACCEPTED` - não declarado.
 - Nenhuma edição em
   `docs/coretriad/projects/ERP-LEGACY-001/discovery/FIND-ERP-005.md` nem em
   `remediation/cases/ERP-LEGACY-001-CASE-002/TRIAGE.md`.

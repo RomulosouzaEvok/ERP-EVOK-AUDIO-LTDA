@@ -153,7 +153,32 @@ export function resolveApprovalPolicy(
     );
   }
 
+  // `null`/`undefined`/`0` representam "sem valor material exigindo alçada":
+  // preservamos a trilha auditável da política vigente, mas não forçamos
+  // matching por faixa, porque a primeira faixa começa em 0 e o piso é
+  // exclusivo. Assim evitamos um `APPROVAL_POLICY_GAP` artificial para
+  // contratos sem valor definido.
+  const rawValue = params.value;
+  const hasNoValueOrZero = rawValue === null
+    || rawValue === undefined
+    || rawValue === ''
+    || Number(rawValue) === 0;
   const evaluated = toNumber(params.value, 0);
+  if (hasNoValueOrZero) {
+    return {
+      requiredRoles: [],
+      requiredLevel: 'operate',
+      snapshot: {
+        resolved_at: new Date().toISOString(),
+        contract_type: params.contractType ?? ANY_CONTRACT_TYPE,
+        evaluated_value: evaluated,
+        matched_rule_id: null,
+        matched_rule: null,
+        effective_rule_ids: effective.map((rule) => rule.id ?? null),
+      },
+    };
+  }
+
   const matched = effective.find((rule) => {
     const min = toNumber(rule.min_value, 0);
     const max = rule.max_value === null || rule.max_value === undefined ? null : toNumber(rule.max_value, 0);

@@ -580,3 +580,89 @@ O wrapper de integração do `server` usa `SEQUELIZE_ENV=test` para apontar ao
 `erp_evok_audio_test`. Sem o PostgreSQL local ativo na porta `5432`, o runner
 falha antes de abrir a API. Isso não invalida a correção do código, mas deixa
 o HTTP retest sem prova dinâmica nesta máquina.
+
+## 18. CORREÇÃO 02 — `value` nulo/zero e bordas da contiguidade
+
+### 18.1 Problemas confirmados
+
+| Problema | Causa raiz (arquivo:linha) | Efeito observado |
+|---|---|---|
+| P1 | `server/src/modules/juridico/domain/approvalPolicy.ts:166-182` e o ponto onde o contrato grava `value` em `server/src/modules/juridico/application/use-cases/contract/CreateContractUseCase.ts:66` | `null` era convertido em `0` e seguia para o matching; com piso exclusivo e primeira faixa em `0`, isso podia virar `APPROVAL_POLICY_GAP` para contrato sem valor definido. |
+| P2 | `server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts:47-93` | A checagem de contiguidade comparava só pares consecutivos; um grupo com faixa única ou sem teto aberto passava pela validação. |
+
+### 18.2 Correção aplicada
+
+| Fix | Arquivo:linha |
+|---|---|
+| `null`/`undefined`/`0` saem antes do matching e retornam `requiredRoles: []` com `requiredLevel: 'operate'`, preservando o snapshot | `server/src/modules/juridico/domain/approvalPolicy.ts:162-170` |
+| Validação de grupo passou a exigir piso 0, teto aberto obrigatório e continua detectando lacuna/sobreposição entre faixas vizinhas | `server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts:67-107` |
+
+### 18.3 Decisão sobre `value === 0`
+
+`value === 0` recebeu o mesmo tratamento de `null`/`undefined`.
+
+Motivo: no desenho atual, o primeiro piso é `0` e o matching usa piso exclusivo. Tratar `0` como valor material manteria uma lacuna artificial para contratos que, na prática, não têm valor definido. O caminho mais simples e menos invasivo é considerar `0` como "sem alçada exigida", igual a valor ausente.
+
+### 18.4 Prova vermelha
+
+O comportamento incorreto antes desta correção era direto no código:
+
+| Cenário | Código anterior |
+|---|---|
+| `value: null` | caía em `toNumber(..., 0)` e seguia para `evaluated > min`, com risco de `APPROVAL_POLICY_GAP` no piso `0` |
+| `value: 0` | seguia a mesma trilha de `0` e também podia cair em gap artificial |
+| grupo sem teto aberto | a validação só olhava pares consecutivos, então uma faixa única ou um último `max_value` finito não eram barrados |
+
+### 18.5 Prova verde
+
+1. Teste unitário alvo do caso:
+
+```text
+npx jest --runInBand tests/unit/juridico-contract-authority-find-erp-005.test.ts --ci
+Test Suites: 1 passed, 1 total
+Tests: 56 passed, 56 total
+```
+
+2. Suíte unitária completa do módulo jurídico:
+
+```text
+npx jest --runInBand --ci tests/unit/juridico-contract-authority-find-erp-005.test.ts tests/unit/juridico-contract-use-cases.test.ts tests/unit/juridico-corporate-act-use-cases.test.ts tests/unit/juridico-deadline-use-cases.test.ts tests/unit/juridico-legal-case-use-cases.test.ts tests/unit/juridico-lgpd-alert-use-cases.test.ts tests/unit/juridico-proxy-ip-use-cases.test.ts
+Test Suites: 7 passed, 7 total
+Tests: 175 passed, 175 total
+```
+
+3. Integração HTTP do caso jurídico:
+
+```text
+name   : C:\Sistema EvokAudio\ERP-Evok-sana-FIND-ERP-005\server\tests\integration\jur-contract-authority-find-erp-005.test.ts
+status : passed
+passed : 22
+failed : 0
+total  : 22
+```
+
+4. `typecheck` e `build` do `server`:
+
+```text
+> erp-evok-audio-server@1.0.0 typecheck
+> tsc -p tsconfig.json --noEmit
+```
+
+```text
+> erp-evok-audio-server@1.0.0 build
+> tsc -p tsconfig.build.json
+```
+
+5. Suíte unitária completa do `server` e suíte de integração completa do `server` continuam com falhas externas ao caso, já conhecidas no branch:
+
+```text
+FAIL tests/unit/docs-path-reference-guard.test.ts
+  ● guarda de caminhos citados na documentação › todo caminho de arquivo citado em doc vivo existe no disco
+```
+
+```text
+FAIL tests/integration/cross-database-drift-guard.test.ts
+FAIL tests/integration/bom-tipo-nao-produtivo.test.ts
+```
+
+Essas falhas não vêm da correção 02. O arquivo jurídico do caso, porém, passou na integração HTTP e não voltou a abrir `APPROVAL_POLICY_GAP` para `null`/`0`.
