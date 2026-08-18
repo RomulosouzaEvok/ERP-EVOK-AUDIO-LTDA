@@ -41,6 +41,12 @@ export const payAccountSchema = z.object({
   payment_date: z.string().optional(),
   payment_method: z.string().trim().max(50).optional(),
   amount: z.coerce.number().positive().optional(),
+  // Q2 (APR-2026-020 handoff): opcional por enquanto — existe consumidor
+  // externo (n8n/bot) fora do client oficial que ainda não envia esta chave.
+  // Ausente => mesmo comportamento de antes desta remediação (sem 400, sem
+  // proteção de idempotência nesta chamada). Pendência de acompanhamento:
+  // tornar obrigatório quando o consumidor externo migrar.
+  operation_id: z.string().uuid('operation_id deve ser um UUID valido.').optional(),
 }).strict();
 
 export const cashFlowQuerySchema = z.object({

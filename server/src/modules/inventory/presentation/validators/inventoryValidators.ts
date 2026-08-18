@@ -17,6 +17,12 @@ const decimalQuantity = z.coerce.number().positive().refine((value) => {
 export const createInventoryMovementSchema = z.object({
   product_id: z.coerce.number().int().positive().optional(),
   item_id: z.string().trim().min(1).optional(),
+  // Q2 (APR-2026-020 handoff): opcional por enquanto — existe consumidor
+  // externo (n8n/bot) fora do client oficial que ainda não envia esta chave.
+  // Ausente => mesmo comportamento de antes desta remediação (sem 400, sem
+  // proteção de idempotência nesta chamada). Pendência de acompanhamento:
+  // tornar obrigatório quando o consumidor externo migrar.
+  operation_id: z.string().uuid('operation_id deve ser um UUID valido.').optional(),
   type: z.enum(['in', 'out']),
   quantity: decimalQuantity,
   description: z.string().trim().min(1).max(1000),

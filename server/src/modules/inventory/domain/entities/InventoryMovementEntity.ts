@@ -11,6 +11,7 @@ const REFERENCE_TYPES = ['sale', 'purchase', 'production', 'adjustment', 'transf
 interface InventoryMovementEntityProps {
   id?: number | string;
   product_id: number;
+  operation_id?: string | null;
   type: 'in' | 'out' | 'adjustment';
   quantity: number;
   description?: string | null;
@@ -47,6 +48,7 @@ class InventoryMovementEntity extends Entity {
     super({ id: props.id, createdAt: props.createdAt, updatedAt: props.updatedAt });
 
     this.product_id = props.product_id;
+    this.operation_id = props.operation_id ?? null;
     this.type = props.type;
     this.quantity = props.quantity !== undefined ? Number(props.quantity) : undefined;
     this.description = props.description ?? null;
@@ -88,6 +90,7 @@ class InventoryMovementEntity extends Entity {
   toServiceInput() {
     return {
       product_id: this.product_id,
+      operation_id: this.operation_id,
       type: this.type,
       quantity: this.quantity,
       description: this.description,

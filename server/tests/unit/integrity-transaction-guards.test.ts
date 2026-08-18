@@ -61,6 +61,10 @@ jest.mock('../../src/models/index', () => ({
   },
 }));
 
+jest.mock('../../src/models/FinancialPaymentEvent', () => ({
+  create: jest.fn(async (data: any) => ({ id: 1, ...data })),
+}));
+
 import ChangeSaleStatusUseCase = require('../../src/modules/sales/application/use-cases/ChangeSaleStatusUseCase');
 import ReceivePaymentUseCase = require('../../src/modules/financial/application/use-cases/ReceivePaymentUseCase');
 import PayPayableUseCase = require('../../src/modules/financial/application/use-cases/PayPayableUseCase');

@@ -3,24 +3,15 @@
  *
  * Cluster: comercial-financeiro. Alvo A do lote de caracterização.
  *
- * Comportamento congelado: `PayPayableUseCase`/`ReceivePaymentUseCase` só
- * rejeitam reexecução de pagamento quando o título já está `'paid'` ou
- * `'canceled'` (guarda em `PayPayableUseCase.ts:43-44` e
- * `ReceivePaymentUseCase.ts:43-44`). Enquanto o título permanece `'partial'`
- * — que é exatamente o estado criado pela primeira aplicação de um
- * pagamento parcial — uma segunda chamada com os MESMOS parâmetros (retry
- * de rede, timeout de cliente, duplo clique) NÃO é rejeitada:
- * `amount_paid` acumula de novo (`PayPayableUseCase.ts:62`,
- * `ReceivePaymentUseCase.ts:62`), sobrestimando a baixa. Não existe
- * idempotency-key nem hash de operação em nenhum dos dois use cases.
+ * Comportamento validado: `PayPayableUseCase`/`ReceivePaymentUseCase`
+ * persistem cada baixa em `financial_payment_events` com `operation_id`
+ * único. Reexecutar a MESMA operação com a MESMA chave retorna conflito e
+ * não duplica `amount_paid`.
  *
- * Este teste NÃO reabre FIND-ERP-001 — apenas congela, em código executável,
- * o comportamento que o finding já descreveu por leitura estática (GRUPO B,
- * item 1, `ACTUAL_BEHAVIOR`). A suíte existente
- * (`tests/unit/integrity-transaction-guards.test.ts`) cobre APENAS: (a) uma
- * única chamada parcial (`status` vira `'partial'`) e (b) a rejeição quando
- * o título já está `'paid'`. Nenhum teste hoje encadeia DUAS chamadas sobre
- * o MESMO título `'partial'` — esta é a lacuna que este arquivo fecha.
+ * A suíte aqui continua cobrindo os dois lados do caso:
+ * - a baixa parcial legítima segue permitida;
+ * - replay da mesma operação passa a ser recusado;
+ * - valor acima do saldo continua sendo recusado pelo teto de saldo.
  *
  * Âncoras:
  *   - FIND-ERP-001 (GRUPO B, item 1) — "Pagamento parcial retry-duplicado"
@@ -29,9 +20,8 @@
  *   - server/src/modules/financial/application/use-cases/PayPayableUseCase.ts:39-74
  *   - server/src/modules/financial/application/use-cases/ReceivePaymentUseCase.ts:39-74
  *
- * Este teste NÃO valida que o comportamento está correto; ele registra o
- * comportamento vigente na baseline. Alterá-lo exige decisão de negócio
- * registrada.
+ * Este teste agora valida a correção. Alterá-lo sem manter a regra de
+ * `operation_id` por operação quebraria a proteção contra replay.
  *
  * @group unit
  * @ticket ERP-LEGACY-001-passo30
@@ -43,6 +33,22 @@ jest.mock('../../src/config/database', () => ({
   sequelize: {
     transaction: jest.fn(async (callback: any) => callback(fakeTransaction)),
   },
+}));
+
+const appliedOperations = new Set<string>();
+
+jest.mock('../../src/models/FinancialPaymentEvent', () => ({
+  create: jest.fn(async (data: any) => {
+    const operationId = String(data.operation_id || '');
+    if (appliedOperations.has(operationId)) {
+      const error: any = new Error('unique violation');
+      error.name = 'SequelizeUniqueConstraintError';
+      error.errors = [{ path: 'operation_id' }];
+      throw error;
+    }
+    appliedOperations.add(operationId);
+    return { id: appliedOperations.size, ...data };
+  }),
 }));
 
 import PayPayableUseCase = require('../../src/modules/financial/application/use-cases/PayPayableUseCase');
@@ -74,28 +80,35 @@ function buildAccount(overrides: Partial<Record<string, any>> = {}) {
 }
 
 describe('PASSO 30 — pagamento parcial repetido (FIND-ERP-001 grupo B)', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    appliedOperations.clear();
+  });
 
-  it('PayPayableUseCase: reenvio identico sobre titulo `partial` NAO e rejeitado — amount_paid acumula de novo', async () => {
+  it('PayPayableUseCase: reenvio identico sobre titulo `partial` (mesmo operation_id) e rejeitado — amount_paid nao acumula de novo', async () => {
     const account = buildAccount();
     const repository = { findPayableByIdForUpdate: jest.fn(async () => account) };
     const useCase = new PayPayableUseCase(repository);
 
-    const first = await useCase.execute({ id: 1, amount: 400, payment_method: 'ted' });
+    const first = await useCase.execute({ id: 1, amount: 400, payment_method: 'ted', operation_id: '22222222-2222-4222-8222-222222222222' });
     expect(first.account.status).toBe('partial');
     expect(first.account.amount_paid).toBe(400);
 
-    // Reenvio da MESMA chamada (mesmo id, mesmo amount, mesmo metodo) — ex.:
-    // app do fornecedor reenvia por timeout depois que o servidor ja
-    // processou e deu commit na primeira. A guarda (linha 43-44 do use case)
-    // so olha `status === 'paid' | 'canceled'`; `'partial'` passa direto.
-    const second = await useCase.execute({ id: 1, amount: 400, payment_method: 'ted' });
+    // Reenvio da MESMA chamada (mesmo id, mesmo amount, mesmo metodo, MESMO
+    // operation_id) — ex.: app do fornecedor reenvia por timeout depois que
+    // o servidor ja processou e deu commit na primeira. A guarda antiga
+    // (status === 'paid' | 'canceled') sozinha deixaria passar, pois
+    // 'partial' nao esta nesse dominio — mas agora o INSERT em
+    // `financial_payment_events` com o mesmo `operation_id` viola o indice
+    // UNIQUE e e convertido em ConflictError antes de tocar `amount_paid`.
+    await expect(
+      useCase.execute({ id: 1, amount: 400, payment_method: 'ted', operation_id: '22222222-2222-4222-8222-222222222222' })
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('já foi aplicada'),
+    });
 
-    // COMPORTAMENTO CONGELADO (bug confirmado, FIND-ERP-001): a segunda
-    // chamada NAO e rejeitada e o valor pago DOBRA — 800, nao 400 — sem que
-    // o titulo (R$ 1.000) tenha sido de fato pago duas vezes na vida real.
-    expect(second.account.status).toBe('partial');
-    expect(second.account.amount_paid).toBe(800);
+    // A segunda chamada reaproveita a MESMA operação e não altera o saldo.
+    expect(account.amount_paid).toBe(400);
     expect(repository.findPayableByIdForUpdate).toHaveBeenCalledTimes(2);
   });
 
@@ -104,15 +117,17 @@ describe('PASSO 30 — pagamento parcial repetido (FIND-ERP-001 grupo B)', () =>
     const repository = { findReceivableByIdForUpdate: jest.fn(async () => account) };
     const useCase = new ReceivePaymentUseCase(repository);
 
-    const first = await useCase.execute({ id: 1, amount: 200, payment_method: 'pix' });
+    const first = await useCase.execute({ id: 1, amount: 200, payment_method: 'pix', operation_id: '33333333-3333-4333-8333-333333333333' });
     expect(first.account.status).toBe('partial');
     expect(first.account.amount_paid).toBe(200);
 
-    const second = await useCase.execute({ id: 1, amount: 200, payment_method: 'pix' });
+    await expect(
+      useCase.execute({ id: 1, amount: 200, payment_method: 'pix', operation_id: '33333333-3333-4333-8333-333333333333' })
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('já foi aplicada'),
+    });
 
-    // COMPORTAMENTO CONGELADO: mesma lacuna, lado do recebimento.
-    expect(second.account.status).toBe('partial');
-    expect(second.account.amount_paid).toBe(400);
+    expect(account.amount_paid).toBe(200);
   });
 
   it('a duplicidade so e finalmente barrada quando o valor reenviado excede o saldo devedor — nao por deteccao de duplicata', async () => {
@@ -128,8 +143,8 @@ describe('PASSO 30 — pagamento parcial repetido (FIND-ERP-001 grupo B)', () =>
     // PayPayableUseCase.ts:58-60), NAO por reconhecer que e uma repeticao da
     // mesma operacao. Um reenvio de valor <= saldo devedor (ex.: 200)
     // continuaria passando sem nenhuma rejeicao.
-    await expect(useCase.execute({ id: 1, amount: 400 })).rejects.toBeInstanceOf(ValidationError);
-    await expect(useCase.execute({ id: 1, amount: 400 })).rejects.toMatchObject({
+    await expect(useCase.execute({ id: 1, amount: 400, operation_id: '44444444-4444-4444-8444-444444444444' })).rejects.toBeInstanceOf(ValidationError);
+    await expect(useCase.execute({ id: 1, amount: 400, operation_id: '55555555-5555-4555-8555-555555555555' })).rejects.toMatchObject({
       message: expect.stringContaining('excede o saldo devedor'),
     });
     expect(account.amount_paid).toBe(800); // inalterado pela rejeicao

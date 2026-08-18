@@ -53,6 +53,7 @@ import AuditLog = require('./AuditLog');
 import WebhookEvent = require('./WebhookEvent');
 import CompanyFiscalConfig = require('./CompanyFiscalConfig');
 import PurchaseReceipt = require('./PurchaseReceipt');
+import FinancialPaymentEvent = require('./FinancialPaymentEvent');
 import BillOfMaterial = require('./BillOfMaterial');
 import BillOfMaterialItem = require('./BillOfMaterialItem');
 import Item = require('./Item');
@@ -373,6 +374,13 @@ AccountPayable.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' }
 Purchase.hasMany(AccountPayable, { foreignKey: 'purchase_id', as: 'accounts_payable' });
 AccountPayable.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
 
+// AccountPayable/AccountReceivable ↔ FinancialPaymentEvent (FIND-ERP-001,
+// GRUPO B: log append-only de baixas, cada evento com operation_id único —
+// `account_id` referencia AccountPayable OU AccountReceivable dependendo de
+// `account_type`, sem FK direta pois é polimórfico).
+User.hasMany(FinancialPaymentEvent, { foreignKey: 'created_by', as: 'financial_payment_events' });
+FinancialPaymentEvent.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
+
 // Product ↔ InventoryMovement
 Product.hasMany(InventoryMovement, { foreignKey: 'product_id', as: 'movements' });
 InventoryMovement.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
@@ -549,6 +557,12 @@ Product.hasMany(ProductCostLedger, { foreignKey: 'product_id', as: 'cost_ledgers
 ProductCostLedger.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 User.hasMany(ProductCostLedger, { foreignKey: 'created_by', as: 'created_cost_ledgers' });
 ProductCostLedger.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
+
+// Purchase receipt (NF de entrada recebida contra pedido de compra)
+Purchase.hasMany(PurchaseReceipt, { foreignKey: 'purchase_id', as: 'receipts' });
+PurchaseReceipt.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
+User.hasMany(PurchaseReceipt, { foreignKey: 'received_by', as: 'received_purchase_receipts' });
+PurchaseReceipt.belongsTo(User, { foreignKey: 'received_by', as: 'receivedByUser' });
 
 // ============================================
 // RELACIONAMENTOS - MODELO CANONICO INDUSTRIAL
@@ -1527,7 +1541,7 @@ export {
   ProductionOrder, ProductionRoute, ProductionRouteStep, ProductionOrderTracking,
   LotControl, SerialNumber, ProductionLotConsumption, ProductionOrderReservation,
   ServiceOrder, Asset,
-  NonConformity, QualityInspection, MaintenanceOrder, AuditLog, WebhookEvent, CompanyFiscalConfig, PurchaseReceipt,
+  NonConformity, QualityInspection, MaintenanceOrder, AuditLog, WebhookEvent, CompanyFiscalConfig, PurchaseReceipt, FinancialPaymentEvent,
   MasterProductionPlan, MasterProductionPlanLine,
   BillOfMaterial, BillOfMaterialItem,
   Item, ItemEstrutura, ItemCategoria, ItemDetalheComercial, ItemEspecificacaoTecnica, MrpOrdemPlanejada,

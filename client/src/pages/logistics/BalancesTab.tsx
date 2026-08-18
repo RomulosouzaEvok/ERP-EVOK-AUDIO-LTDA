@@ -302,6 +302,7 @@ type MovementFormData = z.infer<typeof movementSchema>;
 function StockMovementDialog({ product, onClose }: { product: productsApi.Product | null; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [formError, setFormError] = React.useState<DidacticError | null>(null);
+  const movementOperationIdRef = React.useRef<string>('');
 
   const { data: warehouses } = useQuery({
     queryKey: ['warehouses'],
@@ -322,6 +323,7 @@ function StockMovementDialog({ product, onClose }: { product: productsApi.Produc
     mutationFn: (values: MovementFormData) =>
       inventoryApi.createMovement({
         product_id: product!.id,
+        operation_id: movementOperationIdRef.current || (movementOperationIdRef.current = crypto.randomUUID()),
         type: values.type,
         quantity: values.quantity,
         description: values.description?.trim() || `Movimentação manual (${values.type})`,
@@ -333,6 +335,7 @@ function StockMovementDialog({ product, onClose }: { product: productsApi.Produc
       queryClient.invalidateQueries({ queryKey: ['inventory-stock-report'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
       queryClient.invalidateQueries({ queryKey: ['warehouse-stock'] });
+      movementOperationIdRef.current = '';
       reset();
       setFormError(null);
       onClose();
@@ -342,13 +345,21 @@ function StockMovementDialog({ product, onClose }: { product: productsApi.Produc
 
   React.useEffect(() => {
     if (product) {
+      movementOperationIdRef.current = crypto.randomUUID();
       reset({ type: 'in', quantity: undefined, description: '', warehouse_code: 'INSUMOS' } as never);
       setFormError(null);
+    } else {
+      movementOperationIdRef.current = '';
     }
   }, [product, reset]);
 
   return (
-    <Dialog open={Boolean(product)} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={Boolean(product)} onOpenChange={(open) => {
+      if (!open) {
+        movementOperationIdRef.current = '';
+        onClose();
+      }
+    }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Movimentar estoque — {product?.name}</DialogTitle>

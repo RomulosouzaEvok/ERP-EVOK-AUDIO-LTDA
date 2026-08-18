@@ -162,6 +162,7 @@ async function validateAndLock(
 async function createMovement(
   data: {
     productId: number;
+    operationId?: string | null;
     userId: number;
     type: 'in' | 'out' | 'adjustment' | 'transfer';
     quantity: number;
@@ -177,6 +178,7 @@ async function createMovement(
     {
       product_id: data.productId,
       item_id: data.itemId ?? null,
+      operation_id: data.operationId ?? null,
       user_id: data.userId,
       type: data.type,
       quantity: data.quantity,
@@ -332,7 +334,8 @@ export async function adjust(
   reason: string,
   transaction: Transaction,
   warehouseId?: number | null,
-  itemId?: string | null
+  itemId?: string | null,
+  operationId?: string | null
 ): Promise<InventoryResult> {
   if (!reason || reason.trim().length === 0) {
     throw Object.assign(new Error('Motivo do ajuste é obrigatório'), {
@@ -362,7 +365,8 @@ export async function adjust(
       description: reason,
       referenceType: 'adjustment',
       warehouseId,
-      itemId
+      itemId,
+      operationId
     },
     transaction
   );

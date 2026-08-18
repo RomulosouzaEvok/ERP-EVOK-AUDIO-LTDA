@@ -115,7 +115,7 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = createInventoryMovementSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { product_id, item_id, type, quantity, description, reference_id, reference_type, warehouse_code } = parsed.data;
+    const { product_id, item_id, operation_id, type, quantity, description, reference_id, reference_type, warehouse_code } = parsed.data;
     const useCase = new CreateInventoryMovementUseCase();
     try {
       // `InventoryService.adjust` (chamado internamente pelo use case) retorna
@@ -129,7 +129,7 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
       // formato de resposta (`InventoryMovement` completo) já documentado
       // no client (`client/src/api/inventory.ts`, `createMovement`).
       const { movementId } = await useCase.execute({
-        product_id, item_id, type, quantity, description, reference_id, reference_type, warehouse_code,
+        product_id, item_id, operation_id, type, quantity, description, reference_id, reference_type, warehouse_code,
         userId: (req as any).user.id,
         transaction: t
       });

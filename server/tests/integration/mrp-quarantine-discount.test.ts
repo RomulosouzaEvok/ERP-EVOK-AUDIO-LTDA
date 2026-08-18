@@ -322,6 +322,7 @@ describeIntegration('MRP — saldo em quarentena nao abate a demanda (G7)', () =
       .set('Authorization', `Bearer ${token()}`)
       .send({
         product_id: ctx.componente.productId,
+        operation_id: randomUUID(),
         type: 'in',
         quantity: SALDO_LIVRE,
         description: 'Saldo livre do componente (validacao do desconto de quarentena)',

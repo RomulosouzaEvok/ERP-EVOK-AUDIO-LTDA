@@ -30,6 +30,7 @@
  *
  * @module tests/integration/production-start-manual-tracking-bypass
  */
+import { randomUUID } from 'crypto';
 import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
@@ -104,6 +105,7 @@ describeIntegration('G6 — apontamento manual sem etapa nao destrava a partida'
       .set('Authorization', `Bearer ${token()}`)
       .send({
         product_id: ctx.componenteId,
+        operation_id: randomUUID(),
         type: 'in',
         quantity: 500,
         description: 'Saldo do componente (validacao do apontamento manual)',

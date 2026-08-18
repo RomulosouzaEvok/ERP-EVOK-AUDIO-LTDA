@@ -62,9 +62,16 @@ exports.receivePayment = async (req: Request, res: Response, next: NextFunction)
   try {
     const parsed = payAccountSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { payment_date, payment_method, amount } = parsed.data;
+    const { payment_date, payment_method, amount, operation_id } = parsed.data;
     const useCase = new ReceivePaymentUseCase(financialRepository);
-    const { account, previousStatus } = await useCase.execute({ id: req.params.id, payment_date, payment_method, amount });
+    const { account, previousStatus } = await useCase.execute({
+      id: req.params.id,
+      payment_date,
+      payment_method,
+      amount,
+      operation_id,
+      createdBy: (req as any).user.id,
+    });
 
     logAction(req, {
       action: 'status_change',
@@ -176,9 +183,16 @@ exports.payPayable = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const parsed = payAccountSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
-    const { payment_date, payment_method, amount } = parsed.data;
+    const { payment_date, payment_method, amount, operation_id } = parsed.data;
     const useCase = new PayPayableUseCase(financialRepository);
-    const { account, previousStatus } = await useCase.execute({ id: req.params.id, payment_date, payment_method, amount });
+    const { account, previousStatus } = await useCase.execute({
+      id: req.params.id,
+      payment_date,
+      payment_method,
+      amount,
+      operation_id,
+      createdBy: (req as any).user.id,
+    });
 
     logAction(req, {
       action: 'status_change',

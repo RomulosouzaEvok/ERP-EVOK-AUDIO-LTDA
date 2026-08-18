@@ -57,14 +57,14 @@ export async function createPayable(input: CreatePayableInput) {
 }
 
 /** `PUT /api/finance/payable/:id/pay`. */
-export async function payPayable(id: number, amount?: number) {
-  const { data } = await httpClient.put<ItemResponse<AccountPayable>>(`/api/finance/payable/${id}/pay`, { amount });
+export async function payPayable(id: number, amount: number | undefined, operation_id: string) {
+  const { data } = await httpClient.put<ItemResponse<AccountPayable>>(`/api/finance/payable/${id}/pay`, { amount, operation_id });
   return data.data;
 }
 
 /** `PUT /api/finance/receivable/:id/pay`. */
-export async function receivePayment(id: number, amount?: number) {
-  const { data } = await httpClient.put<ItemResponse<AccountReceivable>>(`/api/finance/receivable/${id}/pay`, { amount });
+export async function receivePayment(id: number, amount: number | undefined, operation_id: string) {
+  const { data } = await httpClient.put<ItemResponse<AccountReceivable>>(`/api/finance/receivable/${id}/pay`, { amount, operation_id });
   return data.data;
 }
 

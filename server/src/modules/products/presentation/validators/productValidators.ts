@@ -100,6 +100,14 @@ export const productMovementSchema = z.object({
   type: z.enum(['in', 'out']),
   quantity: decimalQuantity.refine((value) => value > 0, { message: 'Quantidade deve ser maior que zero.' }),
   description: z.string().trim().max(500).optional(),
+  // FIND-ERP-001 (GRUPO B, superfície-irmã, mesma causa-raiz de
+  // `POST /api/inventory/movements`) — Q2 (APR-2026-020 handoff): opcional por
+  // enquanto — existe consumidor externo (n8n/bot) fora do client oficial que
+  // ainda não envia esta chave. Ausente => mesmo comportamento de antes desta
+  // remediação (sem 400, sem proteção de idempotência nesta chamada).
+  // Pendência de acompanhamento: tornar obrigatório quando o consumidor
+  // externo migrar.
+  operation_id: z.string().uuid('operation_id deve ser um UUID valido.').optional(),
 }).strict();
 
 const schemas = { createProductSchema, updateProductSchema, productMovementSchema };

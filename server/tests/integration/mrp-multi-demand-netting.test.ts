@@ -177,6 +177,7 @@ describeIntegration('MRP — netagem multi-demanda contra PostgreSQL', () => {
       .set('Authorization', `Bearer ${token()}`)
       .send({
         product_id: componente.productId,
+        operation_id: randomUUID(),
         type: 'in',
         quantity: ESTOQUE_COMPONENTE,
         description: 'Saldo unico que as duas demandas vao disputar (validacao da netagem multi-demanda)',

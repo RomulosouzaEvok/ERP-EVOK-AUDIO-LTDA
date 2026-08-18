@@ -28,6 +28,7 @@
  *
  * @module tests/integration/production-start-gate-g6
  */
+import { randomUUID } from 'crypto';
 import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
@@ -125,6 +126,7 @@ describeIntegration('G6 — gate de partida da ordem de producao', () => {
       .set('Authorization', `Bearer ${token()}`)
       .send({
         product_id: ctx.componenteId,
+        operation_id: randomUUID(),
         type: 'in',
         quantity: 500,
         description: 'Saldo do componente (validacao G6)',

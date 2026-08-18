@@ -114,14 +114,33 @@ Base URL: `/api/finance` (autenticação obrigatória via middleware `authentica
 | Método | Rota | Descrição | Middlewares extras |
 |---|---|---|---|
 | GET | `/api/finance/receivable` | Lista contas a receber (filtros: `status`, `customer_id`, `start_date`, `end_date`; paginação: `page`, `limit`) | — |
-| PUT | `/api/finance/receivable/:id/pay` | Registra recebimento (total/parcial) de conta a receber | — |
+| PUT | `/api/finance/receivable/:id/pay` | Registra recebimento (total/parcial) de conta a receber | `operation_id` UUID opcional (idempotência — ver nota abaixo) |
 | GET | `/api/finance/payable` | Lista contas a pagar (filtros: `status`, `start_date`, `end_date`; paginação: `page`, `limit`) | — |
 | POST | `/api/finance/payable` | Cria conta a pagar avulsa | `authorize('admin', 'financial')` |
-| PUT | `/api/finance/payable/:id/pay` | Registra pagamento (total/parcial) de conta a pagar | — |
+| PUT | `/api/finance/payable/:id/pay` | Registra pagamento (total/parcial) de conta a pagar | `operation_id` UUID opcional (idempotência — ver nota abaixo) |
 | GET | `/api/finance/cash-flow` | Fluxo de caixa agregado por status, em um período | — |
 | GET | `/api/finance/cash-flow-projection` | Projeção de fluxo de caixa por semana (títulos em aberto), `?days=7..90` (default 30) | `authorize('admin', 'financial')` |
 
 Ver `docs/arquitetura/API.md` (seção 6 — Financeiro) para exemplos completos de request/response.
+
+### Idempotência de baixa (FIND-ERP-001, GRUPO B, CASE-001)
+
+`payPayable`/`receivePayment` gravam cada baixa em `financial_payment_events`
+com um `operation_id` (UUID) fornecido pelo cliente, único por operação
+(índice `uq_financial_payment_events_operation_id`). Reenviar a MESMA
+requisição com o MESMO `operation_id` é rejeitado com `409 Conflict`
+("esta operação de baixa já foi aplicada") — protege contra duplo clique e
+retry de rede. Duas baixas de mesmo valor no mesmo título com `operation_id`
+DISTINTOS continuam permitidas (parcelas legítimas).
+
+**`operation_id` é opcional, não obrigatório, por decisão do dono
+registrada em `remediation/cases/ERP-LEGACY-001-CASE-001/`**: existe
+consumidor externo (n8n/bot) fora do client oficial que ainda não envia essa
+chave. Se ausente, o use case gera um UUID aleatório internamente só para
+satisfazer o `NOT NULL` da tabela de eventos — **sem nenhuma proteção de
+idempotência nessa chamada específica** (comportamento igual ao anterior a
+esta remediação). Pendência de acompanhamento: tornar `operation_id`
+obrigatório na rota quando o consumidor externo migrar.
 
 ## Permissões
 

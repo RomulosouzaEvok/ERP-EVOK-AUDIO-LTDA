@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 import { ensureFixtureCategoryId } from '../integration/helpers/categoryFixtures';
 
@@ -6,68 +7,38 @@ import { ensureFixtureCategoryId } from '../integration/helpers/categoryFixtures
  *
  * Cluster: `qualidade-estoque` · Alvo: **FIND-ERP-001, GRUPO B, item 2**
  * (`docs/coretriad/projects/ERP-LEGACY-001/discovery/FIND-ERP-001.md`) —
- * `POST /api/inventory/movements` sem nenhuma proteção de idempotência.
+ * `POST /api/inventory/movements` agora exige `operation_id` e rejeita
+ * replay sequencial da mesma operação.
  *
- * ## Comportamento congelado
+ * ## Comportamento validado
  * Duas chamadas `POST /api/inventory/movements` **sequenciais** (uma após a
- * outra ter recebido `201` e commitado), com corpo idêntico, **não são
- * rejeitadas**: cada uma cria um `InventoryMovement` novo e distinto, e o
- * efeito de estoque é aplicado **duas vezes**. Não há:
- *  - lock sobre um recurso de "operação já processada";
- *  - verificação de estado terminal;
- *  - constraint `UNIQUE` sobre `(reference_type, reference_id)` — o índice
- *    existente (`InventoryMovement.ts:65`, `{ fields: ['reference_type',
- *    'reference_id'] }`) é de CONSULTA, não é `unique: true`.
+ * outra ter recebido `201` e commitado), com corpo idêntico e a mesma
+ * `operation_id`, não duplicam o efeito: a primeira cria o
+ * `InventoryMovement`, a segunda retorna `409` e o saldo fica aplicado uma
+ * única vez.
  *
  * Âncoras:
- *  - `server/src/modules/inventory/presentation/controllers/inventoryController.ts:113-152`
- *    (`create` — abre transação, chama o use case, `t.commit()`, sem
- *    checagem prévia de duplicidade).
- *  - `server/src/modules/inventory/application/use-cases/CreateInventoryMovementUseCase.ts:71-123`
- *    (`execute` inteiro — nenhuma checagem de idempotência).
- *  - `server/src/services/inventoryService.ts:327-381` (`adjust` — sempre
- *    incrementa/decrementa e sempre chama `createMovement`) e `:162-190`
- *    (`createMovement` — `InventoryMovement.create` puro, sem `findOrCreate`
- *    nem checagem prévia).
- *  - `server/src/models/InventoryMovement.ts:57-69` (índices — o único
- *    candidato a dedupe não é `unique: true`).
+ *  - `server/src/modules/inventory/presentation/controllers/inventoryController.ts`
+ *    (`create` — abre transação, chama o use case, `t.commit()`).
+ *  - `server/src/modules/inventory/application/use-cases/CreateInventoryMovementUseCase.ts`
+ *    (`execute` — propaga `operation_id` até o serviço).
+ *  - `server/src/services/inventoryService.ts` (`adjust`/`createMovement`
+ *    — persiste `operation_id`).
+ *  - `server/src/models/InventoryMovement.ts` (índice único parcial sobre
+ *    `operation_id`).
  *
- * ## Divergência adicional observada nesta sessão (evidência > documento)
- * `FIND-ERP-001` cita `reference_id`/`reference_type` do corpo da requisição
- * como parte do cenário de reprodução (`{ ..., reference_id: 123,
- * reference_type: 'adjustment' }`), mas a leitura do código mostra que esse
- * caminho de escrita **descarta silenciosamente os dois campos**:
- * `CreateInventoryMovementUseCase.ts:107-116` chama
- * `InventoryService.adjust(input.product_id, input.type, input.quantity,
- * userId, input.description, transaction, warehouse.id, item_id)` — sem
- * repassar `input.reference_id`/`input.reference_type` — e `adjust()`
- * (`inventoryService.ts:356-368`) grava sempre `referenceType: 'adjustment'`
- * hardcoded e nunca define `referenceId` (`createMovement` recebe
- * `data.referenceId` `undefined` ⇒ persiste `null`). Ou seja: TODA
- * movimentação manual criada por esta rota nasce com
- * `reference_type='adjustment'` e `reference_id=null`, **mesmo que o
- * cliente informe outro valor no payload** — o `reference_id` do payload é
- * aceito pelo schema (`inventoryValidators.ts`), validado pela entidade
- * (`InventoryMovementEntity.toServiceInput()`), e depois simplesmente não
- * chega à escrita. Este teste caracteriza esse comportamento junto ao
- * achado principal, sem promover finding novo (Regra 22 — achado
- * candidato, não confirmado por este agente; reportar ao orquestrador).
+ * ## Sobre a chave e o payload
+ * `reference_id`/`reference_type` continuam aceitos pelo contrato legado,
+ * mas o bloqueio de replay desta rota agora depende de `operation_id` único
+ * por intenção de operação.
  *
  * ## Por que este teste é distinto de `stock-concurrency.test.ts` /
  * `product-movement-concurrency.test.ts`
  * Aquelas suítes disparam as duas chamadas **concorrentemente**
- * (`Promise.allSettled`) contra uma quantidade que deixa o produto SEM
- * saldo suficiente para a segunda — o que é rejeitado ali é efeito do lock
- * pessimista + guarda de saldo insuficiente (`validateAndLock`), não de
- * nenhuma proteção de idempotência. Este teste usa `type: 'in'` (entrada,
- * nunca rejeitada por saldo) e chamadas **sequenciais** (a segunda só é
- * disparada depois que a primeira já commitou), isolando exatamente o
- * cenário do FIND-ERP-001: retry/duplo-clique de uma operação que JÁ teve
+ * (`Promise.allSettled`) contra uma quantidade que deixa o produto sem
+ * saldo suficiente para a segunda. Este teste usa `type: 'in'` e chamadas
+ * **sequenciais**, isolando retry/duplo clique de uma operação que já teve
  * sucesso.
- *
- * Este teste NÃO valida que o comportamento está correto; ele registra o
- * comportamento vigente na baseline. Alterá-lo exige decisão de negócio
- * registrada.
  *
  * Estilo: integração (API HTTP real + banco `erp_evok_audio_test`) — aguarda
  * execução central (`scripts/run-api-suite.cjs`), não executado por este
@@ -104,6 +75,7 @@ describeIntegration('Caracterização — POST /api/inventory/movements: duplo l
     // descrito em FIND-ERP-001 (REPRODUCTION, item 1).
     const payload = {
       product_id: productId,
+      operation_id: randomUUID(),
       type: 'in',
       quantity: 10,
       description: 'Recebimento manual - teste de caracterizacao (duplo clique)',
@@ -117,38 +89,34 @@ describeIntegration('Caracterização — POST /api/inventory/movements: duplo l
     const first = await api().post('/api/inventory/movements').set('Authorization', `Bearer ${token}`).send(payload);
     const second = await api().post('/api/inventory/movements').set('Authorization', `Bearer ${token}`).send(payload);
 
-    // Congela o achado central: NENHUMA das duas chamadas é rejeitada.
+    // Corrigido (FIND-ERP-001, GRUPO B, APR-2026-020): a primeira chamada
+    // aplica a operação; o reenvio sequencial com a MESMA operation_id é
+    // rejeitado pelo índice único parcial — não cria segundo registro.
     expect(first.status).toBe(201);
-    expect(second.status).toBe(201);
-
-    // Congela: são DOIS registros distintos, não uma reexecução idempotente
-    // deduplicada em um único InventoryMovement.
     expect(first.body.data.id).toBeDefined();
-    expect(second.body.data.id).toBeDefined();
-    expect(second.body.data.id).not.toBe(first.body.data.id);
+    expect(first.body.data.operation_id).toBe(payload.operation_id);
 
-    // Congela a divergência adicional: reference_id/reference_type do
-    // payload são descartados pelo caminho de escrita (ver header) —
-    // ambos os registros gravam 'adjustment'/null, não o que foi enviado.
+    expect(second.status).toBe(409);
+
+    // Agravante (P1-04, FORA DE ESCOPO desta remediação — seção 6.1 do
+    // TRIAGE.md): reference_id/reference_type do payload continuam
+    // descartados pelo caminho de escrita. Esta asserção permanece
+    // CONGELADA — não mexer.
     expect(first.body.data.reference_type).toBe('adjustment');
     expect(first.body.data.reference_id).toBeNull();
-    expect(second.body.data.reference_type).toBe('adjustment');
-    expect(second.body.data.reference_id).toBeNull();
 
-    // Congela o efeito de estoque DOBRADO: produto nasceu com quantity=0,
-    // duas entradas de 10 aplicadas integralmente = 20 (não 10).
+    // Congela a correção: produto nasceu com quantity=0, uma entrada de 10
+    // foi aplicada uma única vez = 10 (não 20).
     const finalProduct = await api().get(`/api/products/${productId}`).set('Authorization', `Bearer ${token}`);
-    expect(Number(finalProduct.body.data.quantity)).toBe(20);
+    expect(Number(finalProduct.body.data.quantity)).toBe(10);
 
     // Confirma pela listagem (não só pelo saldo agregado) que existem
-    // exatamente 2 movimentações persistidas para este produto — descarta a
-    // hipótese de que o segundo 201 fosse uma resposta "fantasma" sem
-    // persistência real.
+    // exatamente 1 movimentação persistida para este produto.
     const movements = await api()
       .get('/api/inventory/movements')
       .query({ product_id: productId, limit: 10 })
       .set('Authorization', `Bearer ${token}`);
     expect(movements.status).toBe(200);
-    expect(movements.body.pagination.total).toBe(2);
+    expect(movements.body.pagination.total).toBe(1);
   });
 });

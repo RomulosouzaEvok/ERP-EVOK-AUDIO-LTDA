@@ -222,11 +222,11 @@ exports.movement = async (req: AuthenticatedRequest, res: Response, next: NextFu
     const parsed = productMovementSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
 
-    const { product_id, type, quantity, description } = parsed.data;
+    const { product_id, type, quantity, description, operation_id } = parsed.data;
     t = await sequelize.transaction();
     const useCase = new RegisterProductMovementUseCase(productRepository);
     const { movement, product, previousQuantity, newQuantity } = await useCase.execute({
-      product_id, type, quantity, description, userId: req.user.id, transaction: t
+      product_id, type, quantity, description, operation_id, userId: req.user.id, transaction: t
     });
 
     await t.commit();

@@ -1,6 +1,7 @@
 import type { Transaction } from 'sequelize';
 
 import UseCase from '../../../../shared/application/UseCase';
+import { ConflictError } from '../../../../errors';
 
 const InventoryMovementEntity = require('../../domain/entities/InventoryMovementEntity');
 const InventoryService = require('../../../../services/inventoryService');
@@ -31,6 +32,7 @@ interface CreateInventoryMovementInput {
   description?: string;
   reference_id?: number;
   reference_type?: string;
+  operation_id?: string;
   /** Codigo do deposito onde a movimentacao ocorre (Bloco 4, UC-42). Default 'INSUMOS'. */
   warehouse_code?: string;
   /** Id do usuário que realizou a movimentação. */
@@ -68,8 +70,9 @@ class CreateInventoryMovementUseCase extends UseCase {
    * @throws {Error} Com `statusCode` 404/400/409 propagado por `InventoryService.adjust` (produto não encontrado, estoque insuficiente, etc.).
    * @throws {import('../../../../errors').BusinessRuleError} Se o saldo do depósito for insuficiente para uma saída manual (dual-write), OU se `item_id` foi informado mas não existe `Product` legado correspondente (crosswalk por código) — itens novos sem vínculo legado ainda não têm caminho de estoque manual próprio.
    */
-  async execute({ product_id, item_id, type, quantity, description, reference_id, reference_type, warehouse_code, userId, transaction }: CreateInventoryMovementInput) {
+  async execute({ product_id, item_id, type, quantity, description, reference_id, reference_type, operation_id, warehouse_code, userId, transaction }: CreateInventoryMovementInput) {
     let resolvedProductId = product_id;
+    const normalizedOperationId = operation_id?.trim() || null;
 
     // DUAL-READ: `item_id` (novo, UUID) resolvido para o `Product` legado
     // correspondente via crosswalk por código (mesmo padrão já usado por
@@ -90,7 +93,7 @@ class CreateInventoryMovementUseCase extends UseCase {
     }
 
     const entity = new InventoryMovementEntity({
-      product_id: resolvedProductId, type, quantity, description, reference_id, reference_type
+      product_id: resolvedProductId, operation_id: normalizedOperationId, type, quantity, description, reference_id, reference_type
     });
     const input = entity.toServiceInput();
 
@@ -104,16 +107,25 @@ class CreateInventoryMovementUseCase extends UseCase {
       await WarehouseStockService.removeFromWarehouse(input.product_id, warehouse.id, input.quantity, transaction);
     }
 
-    const result = await InventoryService.adjust(
-      input.product_id,
-      input.type,
-      input.quantity,
-      userId,
-      input.description,
-      transaction,
-      warehouse.id,
-      item_id ?? null
-    );
+    let result: any;
+    try {
+      result = await InventoryService.adjust(
+        input.product_id,
+        input.type,
+        input.quantity,
+        userId,
+        input.description,
+        transaction,
+        warehouse.id,
+        item_id ?? null,
+        input.operation_id
+      );
+    } catch (error: any) {
+      if (error?.name === 'SequelizeUniqueConstraintError') {
+        throw new ConflictError('Esta movimentação de estoque já foi aplicada.');
+      }
+      throw error;
+    }
 
     if (input.type === 'in') {
       await WarehouseStockService.addToWarehouse(input.product_id, warehouse.id, input.quantity, transaction);

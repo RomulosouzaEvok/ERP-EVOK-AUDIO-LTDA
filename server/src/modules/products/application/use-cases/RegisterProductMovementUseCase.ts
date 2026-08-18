@@ -1,5 +1,5 @@
 const UseCase = require('../../../../shared/application/UseCase');
-const { ValidationError } = require('../../../../errors');
+const { ValidationError, ConflictError } = require('../../../../errors');
 const InventoryService = require('../../../../services/inventoryService');
 import type { IProductRepository } from '../../domain/repositories/ProductRepository';
 import type { Transaction } from 'sequelize';
@@ -42,11 +42,12 @@ class RegisterProductMovementUseCase extends UseCase {
    * @throws {ValidationError} Se produto, tipo ou quantidade forem inválidos.
    * @throws {Error} Com `statusCode` 404/409 propagado de `InventoryService.adjust` se o produto não existir ou o estoque for insuficiente (revalidado sob lock).
    */
-  async execute({ product_id, type, quantity, description, userId, transaction }: {
+  async execute({ product_id, type, quantity, description, operation_id, userId, transaction }: {
     product_id: number | string;
     type: 'in' | 'out';
     quantity: number;
     description?: string;
+    operation_id?: string;
     userId: number;
     transaction: Transaction;
   }) {
@@ -57,14 +58,27 @@ class RegisterProductMovementUseCase extends UseCase {
       throw new ValidationError('Quantidade deve ser maior que zero');
     }
 
-    const result = await InventoryService.adjust(
-      product_id,
-      type,
-      quantity,
-      userId,
-      description || 'Movimentação manual',
-      transaction
-    );
+    const normalizedOperationId = operation_id?.trim() || null;
+
+    let result: any;
+    try {
+      result = await InventoryService.adjust(
+        product_id,
+        type,
+        quantity,
+        userId,
+        description || 'Movimentação manual',
+        transaction,
+        undefined,
+        undefined,
+        normalizedOperationId
+      );
+    } catch (error: any) {
+      if (error?.name === 'SequelizeUniqueConstraintError') {
+        throw new ConflictError('Esta movimentação de estoque já foi aplicada.');
+      }
+      throw error;
+    }
 
     return {
       movement: { id: result.movementId },

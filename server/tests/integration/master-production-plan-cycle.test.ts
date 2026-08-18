@@ -31,6 +31,7 @@
  *
  * @module tests/integration/master-production-plan-cycle
  */
+import { randomUUID } from 'crypto';
 import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
@@ -192,6 +193,7 @@ describeIntegration('G17 — ciclo do Plano Mestre de Producao (MPS) contra Post
       .set('Authorization', `Bearer ${token()}`)
       .send({
         product_id: ctx.componenteId,
+        operation_id: randomUUID(),
         type: 'in',
         quantity: SALDO_COMPONENTE,
         description: 'Saldo do componente para a checagem de disponibilidade da OP (validacao G17)',

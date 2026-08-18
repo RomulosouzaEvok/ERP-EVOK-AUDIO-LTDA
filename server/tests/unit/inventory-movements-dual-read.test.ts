@@ -72,6 +72,7 @@ describe('POST /api/inventory/movements — validação Zod dual-read (item_id x
   });
 
   const basePayload = {
+    operation_id: '66666666-6666-4666-8666-666666666666',
     type: 'in',
     quantity: 5,
     description: 'Ajuste de teste',
@@ -176,7 +177,8 @@ describe('CreateInventoryMovementUseCase — resolução item_id -> product_id (
       'Entrada via item novo',
       transaction,
       1,
-      'a1b2c3d4-0000-0000-0000-000000000001'
+      'a1b2c3d4-0000-0000-0000-000000000001',
+      null
     );
   });
 
@@ -215,6 +217,6 @@ describe('CreateInventoryMovementUseCase — resolução item_id -> product_id (
     });
 
     expect(findLegacyProductByItemId).not.toHaveBeenCalled();
-    expect(adjust).toHaveBeenCalledWith(42, 'out', 2, 7, 'Saida legada', transaction, 1, null);
+    expect(adjust).toHaveBeenCalledWith(42, 'out', 2, 7, 'Saida legada', transaction, 1, null, null);
   });
 });

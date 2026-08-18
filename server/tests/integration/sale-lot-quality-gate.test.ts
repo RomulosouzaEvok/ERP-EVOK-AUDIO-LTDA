@@ -47,6 +47,7 @@
  *
  * @module tests/integration/sale-lot-quality-gate
  */
+import { randomUUID } from 'crypto';
 import { api, approverToken, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
@@ -626,6 +627,7 @@ describeIntegration('D-L/D-M — gate de qualidade na SAIDA e devolucao ao mesmo
       .set('Authorization', `Bearer ${token()}`)
       .send({
         product_id: legadoId,
+        operation_id: randomUUID(),
         type: 'in',
         quantity: 3,
         description: 'Saldo inicial de produto legado (validacao D-L)',

@@ -7,6 +7,7 @@ export type InventoryMovementType = 'in' | 'out' | 'adjustment';
 export interface InventoryMovement {
   id: number;
   product_id: number;
+  operation_id?: string;
   type: InventoryMovementType;
   quantity: string;
   description?: string;
@@ -35,6 +36,7 @@ export async function listMovements(params: InventoryMovementListParams = {}) {
 
 export interface CreateInventoryMovementInput {
   product_id: number;
+  operation_id: string;
   type: 'in' | 'out';
   quantity: number;
   description: string;

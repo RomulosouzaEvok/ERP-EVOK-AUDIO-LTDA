@@ -147,6 +147,20 @@ function AccountsTab({ canWrite }: { canWrite: boolean }) {
   const [formError, setFormError] = React.useState<string | null>(null);
   const [payablesPage, setPayablesPage] = React.useState(1);
   const [receivablesPage, setReceivablesPage] = React.useState(1);
+  const payableOperationIdsRef = React.useRef(new Map<number, string>());
+  const receivableOperationIdsRef = React.useRef(new Map<number, string>());
+
+  function getOrCreateOperationId(storeRef: React.MutableRefObject<Map<number, string>>, id: number): string {
+    const existing = storeRef.current.get(id);
+    if (existing) return existing;
+    const next = crypto.randomUUID();
+    storeRef.current.set(id, next);
+    return next;
+  }
+
+  function clearOperationId(storeRef: React.MutableRefObject<Map<number, string>>, id: number): void {
+    storeRef.current.delete(id);
+  }
 
   const { data: payables, isLoading: loadingPayables, isError: errorPayables } = useQuery({
     queryKey: ['payables', payablesPage],
@@ -186,14 +200,22 @@ function AccountsTab({ canWrite }: { canWrite: boolean }) {
   });
 
   const payMutation = useMutation({
-    mutationFn: ({ id, amount }: { id: number; amount?: number }) => financialApi.payPayable(id, amount),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payables'] }),
+    mutationFn: ({ id, amount, operation_id }: { id: number; amount?: number; operation_id: string }) =>
+      financialApi.payPayable(id, amount, operation_id),
+    onSuccess: (_data, variables) => {
+      clearOperationId(payableOperationIdsRef, variables.id);
+      queryClient.invalidateQueries({ queryKey: ['payables'] });
+    },
     onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível registrar o pagamento.')),
   });
 
   const receiveMutation = useMutation({
-    mutationFn: ({ id, amount }: { id: number; amount?: number }) => financialApi.receivePayment(id, amount),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['receivables'] }),
+    mutationFn: ({ id, amount, operation_id }: { id: number; amount?: number; operation_id: string }) =>
+      financialApi.receivePayment(id, amount, operation_id),
+    onSuccess: (_data, variables) => {
+      clearOperationId(receivableOperationIdsRef, variables.id);
+      queryClient.invalidateQueries({ queryKey: ['receivables'] });
+    },
     onError: (error) => window.alert(extractApiErrorMessage(error, 'Não foi possível registrar o recebimento.')),
   });
 
@@ -371,7 +393,13 @@ function AccountsTab({ canWrite }: { canWrite: boolean }) {
                             disabled={payMutation.isPending}
                             onClick={() => {
                               const amount = promptPaymentAmount(remaining);
-                              if (amount !== undefined) payMutation.mutate({ id: account.id, amount });
+                              if (amount !== undefined) {
+                                payMutation.mutate({
+                                  id: account.id,
+                                  amount,
+                                  operation_id: getOrCreateOperationId(payableOperationIdsRef, account.id),
+                                });
+                              }
                             }}
                           >
                             Registrar pagamento
@@ -473,7 +501,13 @@ function AccountsTab({ canWrite }: { canWrite: boolean }) {
                             disabled={receiveMutation.isPending}
                             onClick={() => {
                               const amount = promptPaymentAmount(remaining);
-                              if (amount !== undefined) receiveMutation.mutate({ id: account.id, amount });
+                              if (amount !== undefined) {
+                                receiveMutation.mutate({
+                                  id: account.id,
+                                  amount,
+                                  operation_id: getOrCreateOperationId(receivableOperationIdsRef, account.id),
+                                });
+                              }
                             }}
                           >
                             Registrar recebimento

@@ -95,7 +95,7 @@ Base URL: `/api/products` (autenticação obrigatória via middleware `authentic
 | POST | `/api/products` | Cria produto |
 | PUT | `/api/products/:id` | Atualiza produto (parcial) |
 | DELETE | `/api/products/:id` | Inativa produto (soft delete) |
-| POST | `/api/products/movements` | Registra movimentação manual de estoque (in/out) |
+| POST | `/api/products/movements` | Registra movimentação manual de estoque (in/out). Aceita `operation_id` UUID **opcional** — mesma proteção de idempotência de `POST /api/inventory/movements` (FIND-ERP-001, GRUPO B, CASE-001; ver `server/src/modules/inventory/README.md`). Reenvio com a mesma chave → `409`; ausente → comportamento de transição (sem `400`, sem proteção nessa chamada) até o consumidor externo migrar. |
 
 Ver `docs/arquitetura/API.md` para exemplos completos de request/response.
 

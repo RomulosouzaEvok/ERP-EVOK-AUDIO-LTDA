@@ -110,7 +110,7 @@ Base URL: `/api/inventory` (autenticação obrigatória via middleware `authenti
 |---|---|---|
 | GET | `/api/inventory/movements` | Lista movimentações (filtros: `product_id` (legado) OU `item_id` (novo, dual-read); `type`, `start_date`, `end_date`, `warehouse_id`; paginação: `page`, `limit`) |
 | GET | `/api/inventory/movements/:id` | Busca movimentação por id |
-| POST | `/api/inventory/movements` | Registra movimentação (entrada/saída/ajuste) — transacional, lock pessimista via `InventoryService`. Aceita `product_id` (legado) OU `item_id` (novo, dual-read) — exatamente um dos dois. Ver "Dual-read `item_id`" abaixo. |
+| POST | `/api/inventory/movements` | Registra movimentação (entrada/saída/ajuste) — transacional, lock pessimista via `InventoryService`. Aceita `product_id` (legado) OU `item_id` (novo, dual-read) — exatamente um dos dois — e aceita `operation_id` UUID **opcional** por operação (idempotência — ver nota abaixo). Ver "Dual-read `item_id`" abaixo. |
 | GET | `/api/inventory/stock-report` | Relatório consolidado de estoque (resumo + produtos ativos) |
 | GET | `/api/inventory/low-stock` | Lista produtos ativos com `quantity <= min_quantity` |
 | GET | `/api/inventory/lots?status=&product_id=&page=&limit=` | Lista lotes (`LotControl`) com `product`/`supplier` incluídos. Sem `status` + com `product_id`: mantém o comportamento legado (`available` + saldo > 0), usado na conclusão de OP. Com `status` explícito (ex. `quarantine`): usado pela inspeção de recebimento de qualidade. |
@@ -120,6 +120,27 @@ Base URL: `/api/inventory` (autenticação obrigatória via middleware `authenti
 Ver `docs/arquitetura/API.md` para exemplos completos de request/response. Os endpoints de
 **Inventário Cíclico (F09)**, sob o prefixo `/api/inventory-counts`, estão
 documentados na seção dedicada abaixo.
+
+### Idempotência de movimentação manual (FIND-ERP-001, GRUPO B, CASE-001)
+
+`InventoryMovement` ganhou a coluna `operation_id` (UUID, nullable) com
+índice único parcial (`uq_inventory_movements_operation_id`, `WHERE
+operation_id IS NOT NULL`). As 4 superfícies que chamam
+`InventoryService.adjust` sem máquina de estado própria —
+`POST /api/inventory/movements`, `POST /api/products/movements`,
+`POST /api/mobile-inventory/scan`, `POST /api/mobile-inventory/batch` —
+aceitam `operation_id` opcional: se enviado, reenviar a MESMA chave é
+rejeitado com `409 Conflict`; chaves distintas continuam criando
+movimentos distintos (transferência entre depósitos, recebimento parcial de
+compra, produção e venda — que gravam múltiplas linhas legítimas com o mesmo
+`reference_id` — não são afetados, pois nenhum deles passa `operation_id`).
+
+**`operation_id` é opcional, não obrigatório, por decisão do dono registrada
+em `remediation/cases/ERP-LEGACY-001-CASE-001/`**: existe consumidor externo
+(n8n/bot) fora do client oficial que ainda não envia essa chave. Ausente =>
+mesmo comportamento de antes desta remediação (sem `400`, sem proteção de
+idempotência nessa chamada). Pendência de acompanhamento: tornar
+`operation_id` obrigatório nessas rotas quando o consumidor externo migrar.
 
 ## Permissões
 
