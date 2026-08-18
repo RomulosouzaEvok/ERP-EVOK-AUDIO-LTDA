@@ -203,3 +203,76 @@ falha.** O Remediation Backlog é exatamente esse produto.
 
 Nenhuma declaração de `AUDIT_PASSED`, `RETEST_PASSED` ou `FINDING CLOSED` é feita
 por este documento. Ele é mapa de estado, não veredito.
+
+---
+
+## 8. ATUALIZAÇÃO 2026-08-18 (fim de dia) — leia isto antes de tudo acima
+
+Este arquivo (seções 1-7) ficou **desatualizado no mesmo dia em que foi
+escrito** — mesmo a atualização de tarde (versão anterior desta seção 8)
+ficou obsoleta poucas horas depois. A lição, reforçada explicitamente pelo
+dono neste mesmo dia: **`QUEUE_STATUS.md` é a fonte de verdade da fila, não
+este handoff — sempre reconferir lá antes de responder sobre qualquer CASE.**
+
+A "PARADA DETERMINADA PELO DONO" da §6-BIS ("termine CASE-005 e PARE, não
+inicie caso novo") foi superada por `APR-2026-051`. A divisão de papéis da
+§6-BIS (Claude Code = triagem/segunda opinião, Codex = implementação,
+VeriCore = reteste/fechamento) **continua valendo** e foi reconfirmada pelo
+dono nesta sessão como o **pipeline fixo de remediação** — ver memória
+auxiliar `fluxo-remediacao-codex-vericore` — em 5 passos:
+
+1. Sessão principal prepara o prompt/despacho.
+2. Dono roda no Codex.
+3. Sessão principal dá segunda opinião (revisão adversarial de código real,
+   sempre lendo arquivo:linha, nunca confiando só no pacote de evidência).
+4. Se aprovado, despacha para `vericore-audit-verification-runner` (reteste
+   dinâmico real, com autoridade/ferramentas para executar comando).
+5. Só então `coretriad-director`/dono declara `RETEST_PASSED`/`FINDING CLOSED`.
+
+### Estado real ao final de 18/08 (ver `QUEUE_STATUS.md` para o detalhe completo)
+
+**10 casos com código implementado, TODOS com segunda opinião completa
+(código lido linha a linha) E reteste dinâmico real executado:**
+
+| Caso | Veredito |
+|---|---|
+| CASE-001, CASE-002, CASE-011, CASE-012 | `RETEST_PASSED` |
+| CASE-004, CASE-005, CASE-006, CASE-007, CASE-008, CASE-009 | `RETEST_PASSED_COM_RESSALVA` (ressalvas não-bloqueantes, nenhum bypass) |
+
+Todos aguardam apenas o **veredito formal do coretriad-director** para
+`FINDING CLOSED` — nenhum foi declarado fechado por nenhum agente.
+
+**Ainda sem código, decisão do dono já registrada, despacho já entregue:**
+- `CASE-013` (`APR-2026-058`) — despacho pronto, aguardando o dono rodar no
+  Codex.
+
+**Achados colaterais descobertos durante os retestes (não bloqueiam nenhum
+caso, mas merecem triagem própria):**
+1. Migration do CASE-012 sem backfill quebrava o banco de teste compartilhado
+   — **já corrigida** (commit `59df948`).
+2. `tests/unit/docs-path-reference-guard.test.ts` falha em todo o repositório
+   (2 caminhos de documentação/dependência quebrados) — pré-existente, sem
+   relação com nenhum CASE remediado hoje.
+3. `npm run test:integration` completo falha massivamente (86-119/247) por
+   exaustão do `authenticatedUserLimiter` (CASE-007) — a suíte reusa um único
+   token em centenas de chamadas em segundos. Confirmado por diff que não é
+   regressão de nenhum caso remediado hoje; é comportamento pré-existente,
+   mas é um problema operacional real de CI.
+4. `cross-database-drift-guard`/`docs-reality-drift-guard`/`bom-tipo-nao-produtivo`
+   aparecem falhando repetidamente nos retestes de integração completos —
+   drift entre `erp_evok_audio`(dev) e `erp_evok_audio_test`, e contagem de
+   migrations desatualizada em doc canônica. Recorrente o suficiente para
+   merecer finding próprio de infraestrutura de teste.
+
+**Lição de método fixada nesta sessão:** o banco `erp_evok_audio_test` é
+compartilhado entre todas as worktrees `sana/...`. Reverter/reaplicar uma
+migration de um caso pode expor problemas em migrations de outros casos já
+aplicadas no mesmo banco (foi o que aconteceu com CASE-012 durante o reteste
+do CASE-001). Ao rodar `db:migrate:undo`/`db:migrate`, sempre: (a) fazer
+undo **cirúrgico por nome**, nunca undo genérico do último aplicado; (b)
+comparar `migration:status` antes/depois; (c) restaurar ao estado original
+ao final.
+
+Nenhuma declaração de `FINDING CLOSED` é feita neste documento — essa
+autoridade é exclusiva do coretriad-director/dono, a partir dos vereditos de
+reteste dinâmico já emitidos e registrados em `QUEUE_STATUS.md`.

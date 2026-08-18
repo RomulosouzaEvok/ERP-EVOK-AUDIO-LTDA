@@ -3405,3 +3405,79 @@ permanece não repassada ao container, e o item fica **pendência aberta, sem pr
 · `D6` (`AUD-DB-04` + migration como bloqueantes) — **nenhuma bloqueia a Opção C**,
 que é ortogonal por construção. `D5` (sequenciamento vs `CASE-004`): a triagem mediu
 **indiferença** em C. `D7` resolvido pelo escopo acima.
+
+---
+
+## APR-2026-054 — `CASE-001` (`FIND-ERP-001`): idempotencia
+
+**Data:** 2026-08-18
+**Autoridade:** dono do projeto (via sessao VeriCore/Claude Code)
+**Insumo:** decisao consolidada em conversa direta e transcrita de `PENDING_DECISIONS_2026-08-17.md`
+
+### Decisoes registradas
+
+- **P1 (parcelas identicas legitimas):** Opcao A — chave de idempotencia gerada a cada nova tentativa/abertura de tela. Parcelas legitimas de mesmo valor continuam permitidas; so bloqueia duplo clique/reenvio de rede.
+- **P2 (consumidor externo das rotas):** SIM, existe consumidor externo (n8n/bot/integracao) fora do client oficial usando rotas de lancamento de estoque e pagamento. Consequencia: `operation_id`/chave de idempotencia nao pode ser obrigatoria de imediato; precisa de periodo de transicao em que a chave seja opcional antes de se tornar obrigatoria.
+- **P3 (reenvio detectado):** 409 — responder com erro claro "esta operacao ja foi aplicada", nao replay silencioso 200.
+
+---
+
+## APR-2026-055 — `CASE-002` (`FIND-ERP-005`): alcada de contrato juridico
+
+**Data:** 2026-08-18
+**Autoridade:** dono do projeto (via sessao VeriCore/Claude Code)
+**Insumo:** decisao consolidada em conversa direta e transcrita de `PENDING_DECISIONS_2026-08-17.md`
+
+### Decisoes registradas
+
+- **P4 (origem do valor de alcada):** Opcao A2 — manter os valores R$ 50.000 / R$ 300.000 fixos no codigo (constantes), e corrigir `docs/business/BLOCO_3_JUR_API.md` §2.7 para descrever o mecanismo real (nao existe tabela configuravel, mudar o limite exige deploy, mesmo limite para todo tipo de contrato). Registrar que a Opcao A1 (tabela configuravel) foi avaliada e nao escolhida por ora.
+- **Valores de alcada (R$ 50.000 / R$ 300.000):** o dono decidiu usar esses valores por ora; se estiverem errados, serao corrigidos depois — nao bloquear a correcao por falta de validacao juridica formal agora.
+- **P5 (quem assina aditivo que aumenta valor):** Opcao B1 — exigir nivel de gestor (`approve`) para assinar aditivo que altera o valor do contrato. Aditivo que nao mexe em valor continua no nivel basico.
+- **P6 (estender D-K/"quem cadastra nao aprova" ao Juridico):** Opcao C2 — NAO estender por ora. Avaliado e recusado nesta rodada; motivo: hoje existe praticamente um unico usuario real (`admin`) operando o Juridico, e estender a regra o impediria de aprovar qualquer contrato que ele mesmo cadastrasse, ate existir um segundo aprovador cadastrado. A parte minima (duas aprovacoes nao podem vir da mesma pessoa) ja e corrigida independentemente desta decisao.
+
+---
+
+## APR-2026-056 — `CASE-011` (`FIND-ERP-008`): emissao de CAT - SST
+
+**Data:** 2026-08-18
+**Autoridade:** dono do projeto (via sessao VeriCore/Claude Code)
+**Insumo:** decisao consolidada em conversa direta e transcrita de `PENDING_DECISIONS_2026-08-17.md`
+
+### Decisoes registradas
+
+- **D1 (fonte de verdade do tipo da CAT):** o sistema deve decidir o tipo da CAT sozinho, a partir da gravidade do acidente ja registrada - nao aceitar o que a tela envia sem checagem.
+- **D2 (calendario de feriados nacionais no prazo legal):** NAO implementar agora - registrar formalmente que o calculo do prazo fica simplificado por ora (considera so fins de semana, sem feriados nacionais), ajustando o requisito correspondente para refletir essa simplificacao.
+- **D3 (nome de quem emite a CAT):** remover a promessa da tela e da documentacao - nao criar campo proprio para esse texto; a autoria legal ja e identificada pelo login da pessoa.
+- **D4 (owner de SST/RH para validar a regra):** PENDENTE - o dono vai indicar a pessoa/funcao responsavel em uma resposta futura. Registrar como decisao aberta, nao como decidida.
+
+---
+
+## APR-2026-057 — `CASE-012` (`FIND-ERP-007`): rescisao de contrato de experiencia - RH
+
+**Data:** 2026-08-18
+**Autoridade:** dono do projeto (via sessao VeriCore/Claude Code)
+**Insumo:** decisao consolidada em conversa direta e transcrita de `PENDING_DECISIONS_2026-08-17.md`
+
+### Decisoes registradas
+
+- **P11 (motivo da rescisao deve ser gravado?):** SIM - criar onde guardar o motivo; ele passa a aparecer de fato no processo de demissao (hoje e descartado).
+- **P12 (lista fixa ou texto livre):** texto livre - a tela continua com caixa de texto livre; o campo passa a ser efetivamente persistido.
+- **P13 (obrigatorio e nos dois caminhos de abertura de demissao?):** SIM - motivo obrigatorio, e os dois jeitos de abrir um processo de demissao devem aceitar/exigir o mesmo campo.
+- **P14 (modalidade de aviso previo na rescisao de contrato de experiencia):** o dono confirmou que os contratos de experiencia da Evok tem clausula assecuratoria de rescisao antecipada (art. 481 da CLT). Consequencia juridica: com clausula assecuratoria, a rescisao antecipada segue as regras normais de contrato por prazo indeterminado, incluindo aviso previo normal (trabalhado ou indenizado) - nao se aplica a indenizacao do art. 479 (que so vale na ausencia dessa clausula). Registrar essa decisao com a base legal citada.
+- **P15 (quem escolhe a modalidade do aviso previo):** RH escolhe manualmente na tela - a tela passa a perguntar a modalidade, igual ao outro fluxo de demissao que ja tem essa escolha.
+
+---
+
+## APR-2026-058 — `CASE-013` (`FIND-ERP-009`): segregacao quem-pede/quem-aprova
+
+**Data:** 2026-08-18
+**Autoridade:** dono do projeto (via sessao VeriCore/Claude Code)
+**Insumo:** decisao consolidada em conversa direta e transcrita de `PENDING_DECISIONS_2026-08-17.md`
+
+### Decisoes registradas
+
+- **P17 (escopo da regra "quem pediu nao aprova" nos 24+ pontos mapeados):** Opcao (d) - regra geral para todo ato de aprovacao do sistema, com excecoes nomeadas explicitamente quando necessario. Essa opcao tambem resolve os 11 pontos extras encontrados na triagem que nao estavam na lista original de 24.
+- **P18 (quando aplicar):** tudo de uma vez, agora - antes do Go-Live, ja que hoje nenhum modulo afetado tem dado real, entao aplicar agora nao trava nenhuma operacao real.
+- **P19 (quem sera o 2o aprovador em cada modulo):** PENDENTE - o dono vai indicar as pessoas/modulos em uma resposta futura. Registrar como decisao aberta.
+- **P20 (tolerancia de diferenca na contagem de estoque):** o dono aceitou usar a referencia de mercado/fiscal pesquisada pela VeriCore: tolerancia de +/-2% em valor OU +/-1 unidade, o que for maior, antes de exigir aprovacao de nivel superior na contagem de estoque. Base: pratica de mercado de acuracia de estoque e referencia regulatoria analoga (Decreto 12.955/2026 / Resolucao 6/2026 CGIBS, que fixa 1% de tolerancia fiscal de perda para produtos a granel - usado aqui como referencia, nao como exigencia legal direta sobre este controle interno). Registrar a fonte como referencia de mercado, nao como obrigacao legal direta.
+- **P21 (bloquear entrega de modulo novo sem checagem de lista de controle de aprovacao):** SIM - o dono aceita que a esteira de testes passe a bloquear a entrega de qualquer modulo novo que crie um ato de aprovacao sem constar na lista de controle revisada.
