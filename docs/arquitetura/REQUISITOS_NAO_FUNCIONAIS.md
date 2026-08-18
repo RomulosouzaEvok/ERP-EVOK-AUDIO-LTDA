@@ -44,7 +44,7 @@ antes do Go-Live definitivo com uso pleno de ~100-150 colaboradores.
 | Validação/sanitização de entrada | express-validator (XSS), Zod em vários módulos novos | `[IMPLEMENTADO]` | validators por módulo |
 | TLS em produção | `[PENDENTE]` — depende do reverse proxy ainda não implantado | `[PENDENTE]` | `docs/infra/DEPLOY_UBUNTU.md` |
 | SSL na conexão com o banco | Obrigatório em produção (`DB_SSL=true`, validado no boot) | `[IMPLEMENTADO]` (validação) / `[PENDENTE]` (certificado real do servidor de produção) | `server/src/config/runtimeEnv.ts` |
-| Segredos obrigatórios sem default fraco | `DB_PASSWORD`, `JWT_SECRET`, `ADMIN_SEED_PASSWORD` exigidos em produção, sem fallback previsível | `[IMPLEMENTADO]` | `docker-compose.yml`, `runtimeEnv.ts` |
+| Segredos obrigatórios sem default fraco | `DB_PASSWORD`, `JWT_SECRET`, `ADMIN_SEED_PASSWORD` exigidos sem fallback previsível; `ADMIN_SEED_PASSWORD` também é validada no seed inicial | `[IMPLEMENTADO]` | `docker-compose.yml`, `runtimeEnv.ts`, `seeds.ts` |
 | Auditoria de operações sensíveis | `AuditLog` (ações de usuário), Winston estruturado para logs de sistema | `[IMPLEMENTADO]` | modelo `AuditLog`, `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` |
 | Vulnerabilidades de dependências conhecidas | `npm audit`: 0 vulnerabilidades (última verificação 2026-08-04, após upgrade react-router) | `[IMPLEMENTADO]` (no momento da verificação) | CLAUDE.md §5 |
 | Teste de penetração / pentest formal | Não realizado | `[PENDENTE]` | Não especificado formalmente em nenhum documento |

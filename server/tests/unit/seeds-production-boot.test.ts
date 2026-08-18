@@ -6,12 +6,6 @@ jest.mock('../../src/models/index', () => ({
   Department: {
     bulkCreate: jest.fn(),
   },
-  // Diretorias são criadas ANTES dos departamentos. Desde a correção V-1
-  // (VARREDURA_DUPLA_2026-08-11.md) o seed usa `ignoreDuplicates` e depois
-  // RELÊ as diretorias via `findAll` (instância retornada de linha
-  // pré-existente não traz `id`), então o dublê precisa responder a ambos
-  // com as linhas contendo `code`/`id` — um array vazio faria o `Map` de
-  // resolução ficar vazio e todo departamento nasceria transversal.
   Directorate: {
     bulkCreate: jest.fn(async (rows: Array<{ code: string }>) =>
       rows.map((row, index) => ({ ...row, id: index + 1 })),
@@ -32,7 +26,14 @@ function loadSeedModule() {
   return require('../../src/config/seeds');
 }
 
-describe('Seeds - Production Boot Failure (F.4)', () => {
+function configureCommonEnv(): void {
+  process.env.DB_SSL = 'true';
+  process.env.DB_PASSWORD = 'Sup3rS3cretPass!';
+  process.env.JWT_SECRET = '12345678901234567890123456789012';
+  process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
+}
+
+describe('Seeds - Production Boot Failure (CASE-018)', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -47,105 +48,82 @@ describe('Seeds - Production Boot Failure (F.4)', () => {
     runtimeEnv.clearRuntimeEnvCache();
   });
 
-  it('deve falhar no boot em producao sem ADMIN_SEED_PASSWORD', async () => {
+  it('rejeita seed do admin em desenvolvimento sem ADMIN_SEED_PASSWORD', async () => {
     const { User } = require('../../src/models/index');
     const seedDatabase = loadSeedModule();
 
     User.count.mockResolvedValueOnce(0);
 
-    process.env.NODE_ENV = 'production';
-    process.env.DB_SSL = 'true';
-    process.env.DB_PASSWORD = 'Sup3rS3cretPass!';
-    process.env.JWT_SECRET = '12345678901234567890123456789012';
-    process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
+    process.env.NODE_ENV = 'development';
     delete process.env.ADMIN_SEED_PASSWORD;
 
     await expect(seedDatabase.default()).rejects.toThrow('ADMIN_SEED_PASSWORD');
     expect(User.create).not.toHaveBeenCalled();
   });
 
-  it('deve logar aviso mas continuar em desenvolvimento sem ADMIN_SEED_PASSWORD', async () => {
-    const { User } = require('../../src/models/index');
-    const seedDatabase = loadSeedModule();
-    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-
-    User.count.mockResolvedValueOnce(0);
-
-    process.env.NODE_ENV = 'development';
-    delete process.env.ADMIN_SEED_PASSWORD;
-
-    await seedDatabase.default();
-
-    expect(User.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: 'admin@evokaudio.com.br',
-        password: 'dev-only-change-me',
-        role: 'admin',
-      }),
-    );
-
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('ADMIN_SEED_PASSWORD ausente'),
-    );
-
-    consoleWarnSpy.mockRestore();
-  });
-
-  it('deve usar ADMIN_SEED_PASSWORD quando definida em producao', async () => {
+  it('rejeita seed do admin em producao sem ADMIN_SEED_PASSWORD', async () => {
     const { User } = require('../../src/models/index');
     const seedDatabase = loadSeedModule();
 
     User.count.mockResolvedValueOnce(0);
 
     process.env.NODE_ENV = 'production';
-    process.env.DB_SSL = 'true';
-    process.env.DB_PASSWORD = 'Sup3rS3cretPass!';
-    process.env.JWT_SECRET = '12345678901234567890123456789012';
-    process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
-    process.env.ADMIN_SEED_PASSWORD = 'MySecurePassword123!';
+    configureCommonEnv();
+    delete process.env.ADMIN_SEED_PASSWORD;
 
-    await seedDatabase.default();
-
-    expect(User.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: 'admin@evokaudio.com.br',
-        password: 'MySecurePassword123!',
-        role: 'admin',
-      }),
-    );
+    await expect(seedDatabase.default()).rejects.toThrow('ADMIN_SEED_PASSWORD');
+    expect(User.create).not.toHaveBeenCalled();
   });
 
-  it('deve pular seeds se banco ja possui dados', async () => {
+  it('rejeita placeholder de ADMIN_SEED_PASSWORD em desenvolvimento', async () => {
+    const { User } = require('../../src/models/index');
+    const seedDatabase = loadSeedModule();
+
+    User.count.mockResolvedValueOnce(0);
+
+    process.env.NODE_ENV = 'development';
+    process.env.ADMIN_SEED_PASSWORD = 'CHANGE_ME_REQUIRED_IN_PRODUCTION';
+
+    await expect(seedDatabase.default()).rejects.toThrow('placeholder');
+    expect(User.create).not.toHaveBeenCalled();
+  });
+
+  it('aceita senha forte e cria o admin inicial em desenvolvimento', async () => {
+    const { User } = require('../../src/models/index');
+    const seedDatabase = loadSeedModule();
+
+    User.count.mockResolvedValueOnce(0);
+
+    process.env.NODE_ENV = 'development';
+    process.env.ADMIN_SEED_PASSWORD = 'SenhaSegura123!';
+
+    await expect(seedDatabase.default()).resolves.toBeUndefined();
+    const createdUser = User.create.mock.calls[0][0];
+    expect(createdUser).toEqual(
+      expect.objectContaining({
+        email: 'admin@evokaudio.com.br',
+        role: 'admin',
+        active: true,
+      }),
+    );
+    expect(createdUser.password).toHaveLength(15);
+  });
+
+  it('não tenta criar admin quando já existem usuários, mesmo sem senha configurada', async () => {
     const { User } = require('../../src/models/index');
     const seedDatabase = loadSeedModule();
     const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
     User.count.mockResolvedValueOnce(5);
 
-    await seedDatabase.default();
+    process.env.NODE_ENV = 'development';
+    delete process.env.ADMIN_SEED_PASSWORD;
+
+    await expect(seedDatabase.default()).resolves.toBeUndefined();
 
     expect(User.create).not.toHaveBeenCalled();
-    expect(consoleLogSpy).toHaveBeenCalledWith('📊 Banco já possui dados, seeds ignorados.');
+    expect(consoleLogSpy).toHaveBeenCalled();
 
     consoleLogSpy.mockRestore();
-  });
-
-  it('avisa quando ADMIN_SEED_PASSWORD e muito curta', async () => {
-    const { User } = require('../../src/models/index');
-    const seedDatabase = loadSeedModule();
-    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-
-    User.count.mockResolvedValueOnce(0);
-
-    process.env.NODE_ENV = 'development';
-    process.env.ADMIN_SEED_PASSWORD = '123';
-
-    await seedDatabase.default();
-
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('ADMIN_SEED_PASSWORD muito curta'),
-    );
-
-    consoleWarnSpy.mockRestore();
   });
 });

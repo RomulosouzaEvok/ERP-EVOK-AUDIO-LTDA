@@ -47,7 +47,7 @@ Variáveis que exigem atenção:
 | --------------------- | ----------- | ---------------------------------------------------------------- |
 | `DB_PASSWORD`         | sim         | Senha do PostgreSQL.                                             |
 | `JWT_SECRET`          | sim         | String longa e aleatória.                                        |
-| `ADMIN_SEED_PASSWORD` | em produção | Senha do admin inicial. Com `NODE_ENV=production` o servidor **não inicia** sem ela. |
+| `ADMIN_SEED_PASSWORD` | para o seed inicial | Senha do admin inicial. O seed do administrador **não cria a conta** sem ela, e o compose a exige ao subir a API. |
 
 ## Banco de dados
 

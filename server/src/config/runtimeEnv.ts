@@ -9,7 +9,7 @@ import {
 
 dotenv.config();
 
-const ENV_PLACEHOLDER_PATTERN = /^(CHANGE_ME|dev-only-change-me)/i;
+export const ENV_PLACEHOLDER_PATTERN = /^(CHANGE_ME|dev-only-change-me)/i;
 const booleanFromEnv = z.preprocess((value) => {
   if (typeof value === 'boolean') {
     return value;
