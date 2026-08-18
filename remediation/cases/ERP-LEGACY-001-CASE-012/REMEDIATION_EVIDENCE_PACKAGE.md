@@ -156,6 +156,149 @@ Durante essa expansão indevida, `cross-database-drift-guard.test.ts` invocou um
 
 Depois da ocorrência, tanto a prova HTTP quanto a guarda de drift model × banco foram repetidas por comandos isolados, sem a guarda cross-database, e exclusivamente contra `erp_evok_audio_test`; esses são os outputs registrados nas seções 3 e 5.
 
-## 8. Limites de autoridade
+## 8. Correção 03 — migration não segura para banco com dados existentes
+
+**Origem:** achado urgente de reteste dinâmico do CASE-001 (2026-08-18). O
+runner do CASE-001 precisou fazer o ciclo up/down das migrations dele contra
+`erp_evok_audio_test` (banco compartilhado entre workspaces de remediação) e
+derrubou `20260818-000051-hr-termination-reason.cjs` para testar isso,
+deixando-a em estado `down` nesse banco específico. Ao tentar reaplicá-la,
+falhou com:
+
+```text
+ERROR: column "termination_reason" of relation "hr_termination_processes" contains null values
+```
+
+### Causa-raiz
+
+A versão original de `up()` fazia `addColumn(..., { allowNull: false })`
+diretamente. Isso funciona em banco vazio (o caminho testado originalmente
+nas seções 3–5 acima), mas falha deterministicamente contra qualquer banco
+que já tenha linhas em `hr_termination_processes` sem a coluna nova —
+exatamente o estado em que `erp_evok_audio_test` já se encontrava, por ser
+compartilhado entre casos de remediação concorrentes.
+
+### Correção
+
+`server/migrations/20260818-000051-hr-termination-reason.cjs` passou a
+seguir a sequência add-nullable → backfill → not-null:
+
+1. `addColumn` com `allowNull: true`;
+2. `UPDATE hr_termination_processes SET termination_reason = :placeholder WHERE termination_reason IS NULL`,
+   com o placeholder explícito `'Motivo nao registrado (pre-existente a
+   correcao CASE-012/FIND-ERP-007)'` — não um motivo real, propositalmente
+   identificável como dado retroativo;
+3. `changeColumn` promovendo a coluna para `allowNull: false` só depois do
+   backfill.
+
+`down()` permanece inalterado (`removeColumn`), já que reverter sempre é
+seguro independentemente de haver dados.
+
+### Evidência: ciclo up → down → up contra `erp_evok_audio_test`
+
+Estado inicial confirmado como `down` nesse banco (efeito do reteste do
+CASE-001):
+
+```text
+down 20260818-000051-hr-termination-reason.cjs
+```
+
+`up` com a migration corrigida:
+
+```text
+== 20260818-000051-hr-termination-reason: migrating =======
+== 20260818-000051-hr-termination-reason: migrated (0.019s)
+```
+
+Confirmação de que o backfill atingiu as linhas pré-existentes (4 linhas já
+existiam em `hr_termination_processes` nesse banco, todas receberam o
+placeholder) e de que a coluna ficou `NOT NULL`:
+
+```text
+[ { total: '4', placeholder: '4' } ]
+[ { column_name: 'termination_reason', is_nullable: 'NO' } ]
+```
+
+`down` (reversão):
+
+```text
+== 20260818-000051-hr-termination-reason: reverting =======
+== 20260818-000051-hr-termination-reason: reverted (0.012s)
+```
+
+`up` novamente (segunda aplicação, confirmando idempotência do ciclo):
+
+```text
+== 20260818-000051-hr-termination-reason: migrating =======
+== 20260818-000051-hr-termination-reason: migrated (0.017s)
+```
+
+Status final do Sequelize, confirmando `erp_evok_audio_test` com a migration
+aplicada (`up`) ao término deste trabalho:
+
+```text
+up 20260817-000049-create-financial-payment-events.cjs
+up 20260818-000050-add-purchase-receipts-and-product-cost-ledger-fks.cjs
+up 20260818-000051-hr-termination-reason.cjs
+```
+
+### Evidência: regressão do módulo RH e guardas estruturais
+
+Bateria `rh-*.test.ts`, repetida após a mudança na migration:
+
+```text
+Test Suites: 12 passed, 12 total
+Tests:       211 passed, 211 total
+Snapshots:   0 total
+Time:        6.204 s
+Ran all test suites matching tests/unit/rh-.*\.test\.ts.
+```
+
+Guardas estruturais (`export-assignment-guard`, `model-association-attribute-guard`, `rh-validators`):
+
+```text
+Test Suites: 3 passed, 3 total
+Tests:       39 passed, 39 total
+Snapshots:   0 total
+Time:        2 s, estimated 6 s
+```
+
+Guarda de drift model × banco (`RUN_INTEGRATION=true`, `DB_NAME=erp_evok_audio_test`):
+
+```text
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        6.328 s
+```
+
+Prova HTTP isolada `rh-termination-reason.test.ts` (API temporária dedicada
+na porta 3123, `DB_NAME=erp_evok_audio_test`, sem a expansão indevida de
+escopo já registrada na seção 7 — desta vez o teste foi disparado sem o
+argumento posicional `tests/integration` junto de `--testPathPatterns`, que
+faz o Jest tratar os dois como alternativas e ignorar o filtro na prática):
+
+```text
+Test Suites: 1 passed, 1 total
+Tests:       1 passed, 1 total
+Snapshots:   0 total
+Time:        0.422 s, estimated 1 s
+Ran all test suites matching tests/integration/rh-termination-reason\.test\.ts$.
+```
+
+### Estado final do banco compartilhado
+
+Ao término desta correção, `erp_evok_audio_test` está com
+`20260818-000051-hr-termination-reason.cjs` no estado `up`, contendo a
+coluna `termination_reason` como `NOT NULL`, com as 4 linhas pré-existentes
+preenchidas com o placeholder auditável descrito acima. Nenhum comando foi
+executado contra `erp_evok_audio` (produção).
+
+Esta correção é de robustez de migration/infra compartilhada. Ela não
+reabre FIND-ERP-007 nem altera o `RETEST_PASSED` já declarado pela
+VeriCore; nenhuma declaração de fechamento de finding é feita aqui (Regra 3
+do CLAUDE.md).
+
+## 9. Limites de autoridade
 
 A remediação de código está completa e comprovada, mas a avaliação final do finding pertence à VeriCore. Este pacote não altera o estado do finding e não decide Q3a.
