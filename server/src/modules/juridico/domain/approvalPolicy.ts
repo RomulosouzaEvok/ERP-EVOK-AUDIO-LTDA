@@ -160,9 +160,24 @@ export function resolveApprovalPolicy(
     return evaluated > min && (max === null || evaluated <= max);
   }) ?? null;
 
+  if (matched === null) {
+    throw new BusinessRuleError(
+      `Lacuna de configuração na política de alçada para o valor avaliado (${evaluated}). `
+        + 'Há regras vigentes para este contrato, mas nenhuma cobre esse valor. '
+        + 'Reveja as faixas em Jurídico > Configurações > Alçadas de aprovação para eliminar o intervalo descoberto.',
+      {
+        rule: 'RF-JUR-003',
+        reason: 'APPROVAL_POLICY_GAP',
+        contract_type: params.contractType ?? null,
+        evaluated_value: evaluated,
+        effective_rule_ids: effective.map((rule) => rule.id ?? null),
+      },
+    );
+  }
+
   return {
-    requiredRoles: matched ? [...(matched.required_roles ?? [])] : [],
-    requiredLevel: matched?.required_level ?? 'approve',
+    requiredRoles: [...(matched.required_roles ?? [])],
+    requiredLevel: matched.required_level,
     snapshot: {
       resolved_at: new Date().toISOString(),
       contract_type: params.contractType ?? ANY_CONTRACT_TYPE,

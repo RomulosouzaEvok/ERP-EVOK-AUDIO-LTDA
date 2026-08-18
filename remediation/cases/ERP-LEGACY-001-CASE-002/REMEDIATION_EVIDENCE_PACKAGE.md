@@ -470,3 +470,113 @@ VeriCore (Regra 4).**
 5. Avaliar se o encaminhamento de `purchases`/`comex` (§3) vira finding
    próprio — a interseção com FIND-ERP-009 (ponto #5) está registrada na
    TRIAGE §4 para não haver reteste duplicado nem fechamento por engano.
+
+## 17. CORREÇÃO 01 — Falha 1, gap de contiguidade
+
+### 17.1 Problema observado
+
+O problema confirmável no código era este:
+
+- `server/src/modules/juridico/domain/approvalPolicy.ts:163-165` devolvia
+  `requiredRoles: []` quando existiam regras vigentes, mas nenhuma faixa
+  cobria o valor avaliado.
+- `server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts:47-93`
+  validava cada faixa isoladamente e não o conjunto por `contract_type`, então
+  lacunas e sobreposições podiam ser gravadas.
+
+### 17.2 Correção aplicada
+
+- `server/src/modules/juridico/domain/approvalPolicy.ts:163-175` agora lança
+  `BusinessRuleError` com `reason: 'APPROVAL_POLICY_GAP'` quando há lacuna de
+  configuração no valor avaliado.
+- `server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts:47-153`
+  agora valida contiguidade do conjunto por grupo de `contract_type`, com
+  `'*'` separado dos tipos específicos.
+- `server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts:49-51`
+  registra a decisão de considerar somente faixas com `active !== false` na
+  validação de contiguidade.
+- `server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts:189`
+  expõe `__test__validatePayload` para a suíte de regressão.
+
+### 17.3 Decisão de projeto
+
+Somente faixas `active !== false` entram na checagem de contiguidade. Faixas
+inativas ficam fora da política viva e não devem bloquear validação de uma
+configuração que, por definição, não está em uso.
+
+### 17.4 Prova vermelha
+
+Não houve captura vermelha desta sessão antes da aplicação do patch. O que
+fica registrado como causa-base é o bloco original já descrito acima:
+
+- `approvalPolicy.ts:163-165` aceitava lacuna como “sem papel exigido”.
+- `approvalThresholdController.ts:47-93` aceitava o conjunto sem verificar
+  lacuna ou sobreposição.
+
+### 17.5 Prova verde
+
+1. Alvo do caso, com os novos testes de gap/sobreposição e o fail-closed da
+   avaliação:
+
+```text
+Test Suites: 1 skipped, 1 passed, 1 of 2 total
+Tests:       22 skipped, 52 passed, 74 total
+Snapshots:   0 total
+Time:        20.774 s
+Ran all test suites matching tests/unit/juridico-contract-authority-find-erp-005.test.ts|tests/integration/jur-contract-authority-find-erp-005.test.ts.
+```
+
+2. Suíte unitária completa do `server`:
+
+```text
+FAIL tests/unit/docs-path-reference-guard.test.ts
+  ● guarda de caminhos citados na documentação › todo caminho de arquivo citado em doc vivo existe no disco
+
+    Documentação cita 1 caminho(s) que não existem:
+      docs/coretriad/planning/SIM-002_VALIDATION_REPORT.md:46 → docs/API.md
+
+Test Suites: 1 failed, 177 passed, 178 total
+Tests:       1 failed, 2003 passed, 2004 total
+Snapshots:   0 total
+Time:        36.745 s
+Ran all test suites matching tests/unit.
+```
+
+3. `typecheck` e `build` do `server`:
+
+```text
+> erp-evok-audio-server@1.0.0 typecheck
+> tsc -p tsconfig.json --noEmit
+```
+
+```text
+> erp-evok-audio-server@1.0.0 build
+> tsc -p tsconfig.build.json
+```
+
+4. Integração HTTP tentou subir a suíte real, mas a infraestrutura local não
+   entregou o banco de teste na porta esperada:
+
+```text
+> erp-evok-audio-server@1.0.0 test:integration
+> node scripts/run-api-suite.cjs integration
+
+Loaded configuration file "config\sequelize-cli.config.cjs".
+Using environment "test".
+
+ERROR:
+```
+
+```text
+ComputerName     : localhost
+RemoteAddress    : ::1
+RemotePort       : 5432
+TcpTestSucceeded : False
+```
+
+### 17.6 Nota operacional
+
+O wrapper de integração do `server` usa `SEQUELIZE_ENV=test` para apontar ao
+`erp_evok_audio_test`. Sem o PostgreSQL local ativo na porta `5432`, o runner
+falha antes de abrir a API. Isso não invalida a correção do código, mas deixa
+o HTTP retest sem prova dinâmica nesta máquina.

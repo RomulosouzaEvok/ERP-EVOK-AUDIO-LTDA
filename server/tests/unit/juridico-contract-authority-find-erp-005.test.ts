@@ -38,6 +38,7 @@ const ActivateContractUseCase = require('../../src/modules/juridico/application/
 const ApproveContractUseCase = require('../../src/modules/juridico/application/use-cases/contract/ApproveContractUseCase');
 const CreateContractAddendumUseCase = require('../../src/modules/juridico/application/use-cases/contract/CreateContractAddendumUseCase');
 const contractController = require('../../src/modules/juridico/presentation/controllers/contractController');
+const approvalThresholdController = require('../../src/modules/juridico/presentation/controllers/approvalThresholdController');
 const { BusinessRuleError } = require('../../src/errors');
 
 /**
@@ -273,6 +274,85 @@ describe('FIND-ERP-005 / Falha 1 — RF-JUR-003: alçada vem de configuração, 
     expect(roles(50000.01)).toEqual(['diretor']);
     expect(roles(300000)).toEqual(['diretor']);
     expect(roles(300000.01)).toEqual(['diretor', 'financeiro']);
+  });
+
+  it('R1(d): lacuna entre faixas lança APPROVAL_POLICY_GAP em resolveApprovalPolicy', () => {
+    const rules: ApprovalThresholdRule[] = [
+      { id: 101, contract_type: '*', min_value: 0, max_value: 50000, required_roles: [], required_level: 'approve', active: true },
+      { id: 102, contract_type: '*', min_value: 300000, max_value: null, required_roles: ['diretor'], required_level: 'approve', active: true },
+    ];
+
+    try {
+      resolveApprovalPolicy(rules, { value: 100000, contractType: 'commercial' });
+      throw new Error('expected approval policy gap');
+    } catch (error: any) {
+      expect(error).toBeInstanceOf(BusinessRuleError);
+      expect(error.details).toEqual(expect.objectContaining({
+        rule: 'RF-JUR-003',
+        reason: 'APPROVAL_POLICY_GAP',
+      }));
+      expect(String(error.message)).toMatch(/lacuna de configura/i);
+    }
+  });
+
+  it('R1(d): lacuna também falha fechado via resolveContractApprovalPolicy', async () => {
+    const repo = makeThresholdRepository([
+      { id: 201, contract_type: '*', min_value: 0, max_value: 50000, required_roles: [], required_level: 'approve', active: true },
+      { id: 202, contract_type: '*', min_value: 300000, max_value: null, required_roles: ['diretor'], required_level: 'approve', active: true },
+    ]);
+
+    await expect(
+      resolveContractApprovalPolicy(repo, { value: 100000, contract_type: 'commercial' }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        rule: 'RF-JUR-003',
+        reason: 'APPROVAL_POLICY_GAP',
+      }),
+    });
+  });
+
+  it('R1 + R5: política vazia continua fail-closed com reason distinto', () => {
+    try {
+      resolveApprovalPolicy([], { value: 5000000, contractType: 'commercial' });
+      throw new Error('expected unavailable policy');
+    } catch (error: any) {
+      expect(error).toBeInstanceOf(BusinessRuleError);
+      expect(error.details).toEqual(expect.objectContaining({
+        rule: 'RF-JUR-003',
+        reason: 'APPROVAL_POLICY_UNAVAILABLE',
+      }));
+    }
+  });
+
+  it('R1: validatePayload aceita conjunto contíguo válido e ignora faixas inativas para contiguidade', () => {
+    const normalized = approvalThresholdController.__test__validatePayload({
+      rules: [
+        { contract_type: '*', min_value: 0, max_value: 50000, required_roles: [], required_level: 'approve' },
+        { contract_type: '*', min_value: 50000, max_value: 100000, required_roles: ['diretor'], required_level: 'approve' },
+        { contract_type: '*', min_value: 100000, max_value: null, required_roles: ['diretor', 'financeiro'], required_level: 'approve', active: false },
+      ],
+    });
+
+    expect(normalized).toHaveLength(3);
+    expect(normalized[2].active).toBe(false);
+  });
+
+  it('R1: validatePayload rejeita lacuna no mesmo grupo contract_type', () => {
+    expect(() => approvalThresholdController.__test__validatePayload({
+      rules: [
+        { contract_type: '*', min_value: 0, max_value: 50000, required_roles: [], required_level: 'approve' },
+        { contract_type: '*', min_value: 300000, max_value: null, required_roles: ['diretor'], required_level: 'approve' },
+      ],
+    })).toThrow(/grupo "\*".*lacuna/i);
+  });
+
+  it('R1: validatePayload rejeita sobreposição no mesmo grupo contract_type', () => {
+    expect(() => approvalThresholdController.__test__validatePayload({
+      rules: [
+        { contract_type: '*', min_value: 0, max_value: 100000, required_roles: [], required_level: 'approve' },
+        { contract_type: '*', min_value: 50000, max_value: 200000, required_roles: ['diretor'], required_level: 'approve' },
+      ],
+    })).toThrow(/grupo "\*".*sobreposi/i);
   });
 });
 

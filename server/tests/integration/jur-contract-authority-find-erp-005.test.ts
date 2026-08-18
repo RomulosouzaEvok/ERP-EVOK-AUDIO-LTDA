@@ -483,6 +483,38 @@ describeIntegration('FIND-ERP-005 — alçada de contrato jurídico (RF-JUR-003)
       expect(response.status).toBe(400);
     });
 
+    it('PUT rejeita lacuna entre faixas do mesmo contract_type', async () => {
+      const response = await api()
+        .put(`${JUR_BASE}/settings/approval-thresholds`)
+        .set('Authorization', `Bearer ${authToken()}`)
+        .send({
+          reason: 'Regressao FIND-ERP-005 gap',
+          rules: [
+            { contract_type: '*', min_value: 0, max_value: 50000, required_roles: [], required_level: 'approve' },
+            { contract_type: '*', min_value: 300000, max_value: null, required_roles: ['diretor'], required_level: 'approve' },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toMatch(/grupo "\*".*lacuna/i);
+    });
+
+    it('PUT rejeita sobreposição entre faixas do mesmo contract_type', async () => {
+      const response = await api()
+        .put(`${JUR_BASE}/settings/approval-thresholds`)
+        .set('Authorization', `Bearer ${authToken()}`)
+        .send({
+          reason: 'Regressao FIND-ERP-005 overlap',
+          rules: [
+            { contract_type: '*', min_value: 0, max_value: 100000, required_roles: [], required_level: 'approve' },
+            { contract_type: '*', min_value: 50000, max_value: 200000, required_roles: ['diretor'], required_level: 'approve' },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toMatch(/grupo "\*".*sobreposi/i);
+    });
+
     it('R1(b): alterar a configuração muda o comportamento de activate SEM deploy', async () => {
       const original = await api()
         .get(`${JUR_BASE}/settings/approval-thresholds`)

@@ -4,7 +4,7 @@ CASE_ID: ERP-LEGACY-001-CASE-002
 FINDING_ID: FIND-ERP-005
 PROJECT_ID: ERP-LEGACY-001
 BRANCH: `sana/ERP-LEGACY-001/FIND-ERP-005` (sem `push`)
-REMEDIATION_COMMIT: `1046e16` — codigo de produto integralmente em `67b49fb`..`54572b7`; `48c93cd` e `1046e16` sao evidencia/teste/doc
+REMEDIATION_COMMIT: correção 01 desta sessão — gap de contiguidade aplicado no código; hash final será o do commit local desta worktree
 
 ## Linha do tempo do caso
 
@@ -19,10 +19,13 @@ REMEDIATION_COMMIT: `1046e16` — codigo de produto integralmente em `67b49fb`..
 
 ## Estado atual
 
-**`REMEDIATION_COMPLETE`** — código, migration, testes e documentação
-entregues e verificados por execução real.
+**`READY_FOR_RETEST`** — a correção 01 do gap de contiguidade foi aplicada
+no código e validada por suíte unitária/tipo/build, mas a prova HTTP completa
+continua dependente de `erp_evok_audio_test` estar acessível na porta
+`5432` nesta máquina.
 
-**`READY_FOR_RETEST`.** As duas lacunas apontadas na v1 estão resolvidas:
+As duas lacunas apontadas na v1 continuam registradas como resolvidas no
+código-base do caso:
 
 | Lacuna da v1 | Estado |
 |---|---|
@@ -33,11 +36,12 @@ entregues e verificados por execução real.
 
 | Suíte | Resultado |
 |---|---|
-| Unitários — alvo do caso | **95/95 PASSED** |
-| Unitários — completa | **1996/1998** (2 pré-existentes, não relacionadas) |
-| Integração — suíte do caso | **20/20 PASSED** |
-| Integração — completa | **259/267** (1 falha é a migration não aplicada no banco real; 7 alheias ao caso) |
-| Typecheck server + client | **exit 0** |
+| Unitários — alvo do caso | **52/52 PASSED** no alvo executado nesta correção |
+| Unitários — completa | **2003/2004** (1 falha pré-existente, não relacionada: `docs-path-reference-guard`) |
+| Integração — suíte do caso | **bloqueada no ambiente local**: o runner não conseguiu subir `erp_evok_audio_test` porque `localhost:5432` recusou conexão |
+| Integração — completa | **não executada com sucesso nesta máquina** |
+| Typecheck server | **exit 0** |
+| Build server | **exit 0** |
 
 ## Pendências que NÃO são da SanaCore (ação humana)
 
@@ -63,4 +67,5 @@ entregues e verificados por execução real.
 
 Devolução ao `coretriad-director` para acionar a VeriCore
 (`vericore-audit-verification-runner`) no reteste independente de R1-R6
-contra o REMEDIATION_COMMIT, usando exclusivamente `erp_evok_audio_test`.
+contra o `REMEDIATION_COMMIT`, usando exclusivamente `erp_evok_audio_test`
+quando a infraestrutura local estiver disponível.

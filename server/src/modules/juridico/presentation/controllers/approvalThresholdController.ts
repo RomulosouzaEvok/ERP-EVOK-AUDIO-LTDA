@@ -34,6 +34,64 @@ const thresholdRepository = new SequelizeApprovalThresholdRepository();
 
 const VALID_LEVELS = ['operate', 'approve'];
 
+function toNumber(value: string | number | null | undefined, fallback: number): number {
+  if (value === null || value === undefined || value === '') return fallback;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function describeBound(value: number | null): string {
+  return value === null ? '∞' : String(value);
+}
+
+function validateContiguity(rules: any[]): void {
+  const groups = new Map<string, any[]>();
+  // Somente faixas ativas participam da política viva; inativas são ignoradas
+  // nesta checagem para não bloquear versões desativadas/temporárias.
+  for (const rule of rules.filter((entry) => entry.active !== false)) {
+    const key = rule.contract_type;
+    const bucket = groups.get(key) ?? [];
+    bucket.push(rule);
+    groups.set(key, bucket);
+  }
+
+  for (const [contractType, groupRules] of groups.entries()) {
+    const ordered = [...groupRules].sort((a, b) => {
+      const minDiff = toNumber(a.min_value, 0) - toNumber(b.min_value, 0);
+      if (minDiff !== 0) return minDiff;
+      const aMax = a.max_value === null || a.max_value === undefined ? Number.POSITIVE_INFINITY : toNumber(a.max_value, Number.POSITIVE_INFINITY);
+      const bMax = b.max_value === null || b.max_value === undefined ? Number.POSITIVE_INFINITY : toNumber(b.max_value, Number.POSITIVE_INFINITY);
+      return aMax - bMax;
+    });
+
+    for (let index = 0; index < ordered.length - 1; index += 1) {
+      const current = ordered[index];
+      const next = ordered[index + 1];
+      const currentMin = toNumber(current.min_value, 0);
+      const currentMax = current.max_value === null || current.max_value === undefined
+        ? null
+        : toNumber(current.max_value, 0);
+      const nextMin = toNumber(next.min_value, 0);
+
+      if (currentMax !== null && nextMin > currentMax) {
+        throw new ValidationError(
+          `Grupo "${contractType}" tem lacuna entre ${describeBound(currentMax)} e ${describeBound(nextMin)}: `
+            + 'nenhum valor real nesse intervalo fica coberto pela política.',
+        );
+      }
+
+      if (currentMax === null || nextMin < currentMax) {
+        throw new ValidationError(
+          `Grupo "${contractType}" tem sobreposição entre ${describeBound(currentMin)}-${describeBound(currentMax)} e `
+            + `${describeBound(nextMin)}-${describeBound(
+              next.max_value === null || next.max_value === undefined ? null : toNumber(next.max_value, 0),
+            )}.`,
+        );
+      }
+    }
+  }
+}
+
 /**
  * Valida o conjunto de faixas recebido. Rejeita conjunto vazio: uma política
  * vazia significaria "nenhum contrato exige aprovação", que é exatamente o
@@ -50,7 +108,7 @@ function validatePayload(body: any): any[] {
     throw new ValidationError('Informe "rules" com ao menos uma faixa de alçada. Política vazia não é aceita.');
   }
 
-  return rules.map((rule: any, index: number) => {
+  const normalized = rules.map((rule: any, index: number) => {
     const position = `rules[${index}]`;
     const contractType = typeof rule?.contract_type === 'string' && rule.contract_type.trim() !== ''
       ? rule.contract_type.trim()
@@ -90,6 +148,8 @@ function validatePayload(body: any): any[] {
       valid_to: rule?.valid_to ?? null,
     };
   });
+  validateContiguity(normalized);
+  return normalized;
 }
 
 /** `GET /api/jur/settings/approval-thresholds` — faixas vigentes + histórico recente. */
@@ -125,3 +185,5 @@ exports.replace = async (req: Request, res: Response, next: NextFunction) => {
     res.json({ success: true, data: { rules: saved } });
   } catch (error) { next(error); }
 };
+
+exports.__test__validatePayload = validatePayload;
