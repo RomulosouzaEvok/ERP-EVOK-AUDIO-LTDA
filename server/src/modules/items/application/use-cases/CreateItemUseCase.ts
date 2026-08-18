@@ -39,7 +39,7 @@ class CreateItemUseCase extends UseCase<Record<string, any>, any> {
         unidade: input.unidade,
         status: input.status ?? 'ATIVO',
         estoque_atual: 0,
-        estoque_reservado: input.estoque_reservado ?? 0,
+        estoque_reservado: 0,
         estoque_seguranca: input.estoque_seguranca ?? 0,
         lote_minimo: input.lote_minimo ?? 0,
         lead_time_dias: input.lead_time_dias ?? 0,

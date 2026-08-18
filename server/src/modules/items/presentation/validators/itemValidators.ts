@@ -15,7 +15,7 @@ export const createItemSchema = z.object({
   unidade: z.string().trim().min(1).max(12),
   status: z.enum(['ATIVO', 'INATIVO', 'BLOQUEADO']).optional(),
   estoque_atual: zeroInitialStock.optional(),
-  estoque_reservado: z.coerce.number().min(0).optional(),
+  estoque_reservado: zeroInitialStock.optional(),
   estoque_seguranca: z.coerce.number().min(0).optional(),
   lote_minimo: z.coerce.number().min(0).optional(),
   lead_time_dias: z.coerce.number().int().min(0).optional(),

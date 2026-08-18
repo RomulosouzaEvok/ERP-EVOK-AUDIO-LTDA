@@ -16,6 +16,41 @@ Evidencias auditadas:
 - Cadastro web de `Product` aceitava `quantity`; cadastro de `Item` aceitava `estoque_atual`; o espelhamento `ItemProductMirrorService` propagava esses valores para o cadastro gemeo, criando saldo fisico sem movimento, deposito ou ledger.
 - Caminhos de saida sem lote validavam apenas `products.quantity` bruto; se existisse saldo em `lot_controls` com status `quarantine`/`blocked`, a baixa ainda era aceita por fluxo lot-blind.
 
+## CORRECAO_01
+### Problema 1 - teste de concorrencia com prerequisitos faltantes
+- Causa: `server/tests/helpers/testApi.ts:91-103` gateia os testes de integracao em `RUN_INTEGRATION`, `TEST_AUTH_TOKEN` e `TEST_API_URL`. Na sessao inicial esses envs nao existiam, entao `product-movement-concurrency.test.ts` ficava `describe.skip`.
+- Correção: subi uma API de teste isolada em `http://127.0.0.1:3101` apontando para `erp_evok_audio_test`, reutilizei o token real do admin `ci-admin@evok.local` e executei o arquivo isolado de concorrencia de fato.
+- Output real:
+
+```powershell
+npm test -- tests/integration/product-movement-concurrency.test.ts
+```
+
+```text
+Test Suites: 1 passed, 1 total
+Tests: 1 passed, 1 total
+Snapshots:   0 total
+Time:        0.463 s, estimated 1 s
+Ran all test suites matching tests/integration/product-movement-concurrency.test.ts.
+```
+
+### Problema 2 - baseline de caracterizacao sobrescrita
+- Causa: o arquivo ativo `server/tests/characterization/qualidade-estoque--scan-mobile-fura-quarentena.test.ts` foi reduzido para 3 casos; a baseline original de 4 casos veio de `git show 694955f:server/tests/characterization/qualidade-estoque--scan-mobile-fura-quarentena.test.ts`.
+- Correção: restaurei os 4 casos originais em `server/tests/characterization/qualidade-estoque--scan-mobile-fura-quarentena.baseline.test.ts:61-180`, mantendo o arquivo separado da regressao ativa e explicitamente como `describe.skip` para preservar a baseline historica sem quebrar a suite verde atual.
+- Confirmacao: o bloco restaurado contem os 4 casos originais de `694955f` e coexiste com a regressao nova no arquivo ativo.
+
+### Problema 3 - `estoque_reservado` nascia livre no cadastro
+- Causa: `server/src/modules/items/presentation/validators/itemValidators.ts:17-18` aceitava `estoque_reservado` arbitrario e `server/src/modules/items/application/use-cases/CreateItemUseCase.ts:41-42` persistia o valor do payload.
+- Correção: o schema de item passou a reutilizar `zeroInitialStock` em `estoque_reservado` e o use case agora grava `estoque_reservado: 0` sempre, alinhado ao mesmo principio ja aplicado a `estoque_atual`.
+- Evidencia de cobertura:
+  - `server/tests/unit/case006-stock-write-contract.test.ts:44-55`
+  - `server/tests/unit/case006-item-reserved-stock.test.ts:13-36`
+
+### Validacao real executada nesta correção
+- `npm run typecheck` em `server/` -> `tsc -p tsconfig.json --noEmit` passou.
+- `npm test -- tests/unit/case006-stock-write-contract.test.ts tests/unit/case006-item-reserved-stock.test.ts tests/characterization/qualidade-estoque--scan-mobile-fura-quarentena.test.ts tests/characterization/qualidade-estoque--scan-mobile-fura-quarentena.baseline.test.ts` -> `3` suites passaram e `1` ficou `skipped` de proposito; `9` testes passaram e `4` ficaram `skipped` (a baseline historica foi preservada como `describe.skip`).
+- `npm run build` em `server/` -> `tsc -p tsconfig.build.json` passou.
+
 ## LOCAL_FIX
 Implementado fechamento fail-closed dos caminhos de escrita de estoque:
 
