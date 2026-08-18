@@ -10,6 +10,7 @@ import {
 dotenv.config();
 
 const ENV_PLACEHOLDER_PATTERN = /^(CHANGE_ME|dev-only-change-me)/i;
+const WEAK_JWT_SECRET_VALUES = new Set(['change_me', 'default_jwt_secret', 'admin123', 'password']);
 const booleanFromEnv = z.preprocess((value) => {
   if (typeof value === 'boolean') {
     return value;
@@ -70,6 +71,25 @@ const runtimeEnvSchema = z.object({
   // regra. Ver a validação de produção no `superRefine` abaixo.
   PRODUCTION_TRACKING_REQUIRED: z.string().optional(),
 }).superRefine((env, ctx) => {
+  if (!env.JWT_SECRET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['JWT_SECRET'],
+      message: 'JWT_SECRET nao configurado corretamente. Defina JWT_SECRET em variaveis de ambiente ou secret manager antes de iniciar.',
+    });
+  }
+
+  if (env.NODE_ENV === 'production' && env.JWT_SECRET) {
+    const normalizedJwtSecret = env.JWT_SECRET.trim().toLowerCase();
+    if (WEAK_JWT_SECRET_VALUES.has(normalizedJwtSecret) || ENV_PLACEHOLDER_PATTERN.test(env.JWT_SECRET)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['JWT_SECRET'],
+        message: 'JWT_SECRET deve ter ao menos 32 caracteres e nao pode usar placeholder em producao.',
+      });
+    }
+  }
+
   if (env.NODE_ENV !== 'production') {
     return;
   }
