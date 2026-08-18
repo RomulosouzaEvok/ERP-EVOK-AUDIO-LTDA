@@ -170,6 +170,7 @@ app.use('/api/production-orders', require('./src/modules/production/presentation
 app.use('/api/production/downtimes', require('./src/modules/production/presentation/routes/productionDowntimes'));
 // Roteiro de producao (gap G5) — pre-requisito do apontamento obrigatorio (G4).
 app.use('/api/production/routes', require('./src/modules/production/presentation/routes/productionRoutes'));
+app.use('/api/production/cost-settings', require('./src/modules/production/presentation/routes/productionCostSettings'));
 // Plano Mestre de Producao / MPS (gap G17, decisao D-F do dono do produto) — a
 // camada de decisao entre a carteira de pedidos e a ordem de producao. Nao ha
 // gatilho automatico de OP na confirmacao da venda: a OP nasce da liberacao

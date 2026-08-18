@@ -65,9 +65,9 @@ qualquer cenário. Foi isso que motivou o gap **G4**.
 | **K250/K255** | Produção e consumo em terceiros | — | ❌ **não modelado** (industrialização por encomenda não existe no ERP) |
 | **K280** | Correção de apontamento | — | ❌ não modelado |
 
-> **Importante:** o ERP **não gera o arquivo do Bloco K**. Ele mantém o dado que
-> alimentaria os registros. O leiaute é definido em Ato COTEPE e muda; gerar o
-> arquivo é trabalho separado, ainda **não iniciado**.
+> **Importante:** o ERP **nao gera o arquivo oficial do Bloco K**. Agora existe
+> um **preview estruturado/export CSV** em `/api/fiscal/bloco-k`, mas o leiaute
+> oficial em Ato COTEPE continua sendo trabalho separado.
 
 ---
 
@@ -135,7 +135,7 @@ lançamento próprio de `product_cost_ledgers`
 |---|---|---|
 | Roteiro ativo por produto fabricado | `Produção > Roteiros de Fabricação` | **0 roteiros cadastrados** |
 | `work_centers.cost_per_hour > 0` | `POST`/`PUT /api/work-centers` | único centro (`MONTAGEM`) com **0** |
-| `production_cost_settings.default_labor_rate_per_hour` | **sem API** ⚠️ | **0** |
+| `production_cost_settings.default_labor_rate_per_hour` | `PUT /api/production/cost-settings` | **0** |
 | `PRODUCTION_TRACKING_REQUIRED` | variável de ambiente (declarada em `.env.example`) | ausente → `block` (a lei) |
 
 > ⚠️ **Em produção, `warn` derruba o boot (2026-08-11).** A variável desliga,
@@ -178,9 +178,11 @@ explícito), mas exige configuração antes do primeiro uso real.
 
 ## 7. Pendências de engenharia
 
-- Geração do arquivo (K200/K230/K235/K280) — **não iniciada**.
-- K250/K255 (industrialização por encomenda) — não modelado.
-- API para `production_cost_settings.default_labor_rate_per_hour`.
+- Geração do arquivo oficial (K200/K230/K235/K280) - **nao iniciada**.
+- Preview estruturado/export CSV — iniciado em `/api/fiscal/bloco-k`.
+- K250/K255 (industrializacao por encomenda) - nao modelado.
+- API para `production_cost_settings.default_labor_rate_per_hour` já existe
+  em `/api/production/cost-settings`.
 - Coluna amarrando a OP à revisão de roteiro (hoje mitigado pelos apontamentos).
 
 Todas registradas em `docs/governance/TODO.md`.

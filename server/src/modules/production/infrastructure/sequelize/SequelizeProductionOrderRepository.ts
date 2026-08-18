@@ -40,7 +40,8 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
       include: [
         { model: Product, as: 'product', attributes: ['id', 'name', 'code', 'product_type'] },
         { model: Employee, as: 'responsible', attributes: ['id', 'name'] },
-        { model: Item, as: 'item', attributes: ['id', 'codigo', 'descricao'] }
+        { model: Item, as: 'item', attributes: ['id', 'codigo', 'descricao'] },
+        { model: ProductionRoute, as: 'productionRoute', attributes: ['id', 'route_code', 'revision', 'status'] }
       ],
       limit,
       offset,
@@ -65,7 +66,8 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
         { model: Product, as: 'product', attributes: ['id', 'name', 'code', 'product_type'] },
         { model: Employee, as: 'responsible', attributes: ['id', 'name'] },
         { model: User, as: 'createdBy', attributes: ['id', 'name'] },
-        { model: Item, as: 'item', attributes: ['id', 'codigo', 'descricao'] }
+        { model: Item, as: 'item', attributes: ['id', 'codigo', 'descricao'] },
+        { model: ProductionRoute, as: 'productionRoute', attributes: ['id', 'route_code', 'revision', 'status'] }
       ]
     });
   }
@@ -73,7 +75,10 @@ class SequelizeProductionOrderRepository extends ProductionOrderRepository {
   /** @param id - ID da OP. @returns OP com resumo do produto ou null. */
   public async findByIdWithProductSummary(id: number): Promise<any | null> {
     return ProductionOrder.findByPk(id, {
-      include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'code'] }]
+      include: [
+        { model: Product, as: 'product', attributes: ['id', 'name', 'code'] },
+        { model: ProductionRoute, as: 'productionRoute', attributes: ['id', 'route_code', 'revision', 'status'] }
+      ]
     });
   }
 

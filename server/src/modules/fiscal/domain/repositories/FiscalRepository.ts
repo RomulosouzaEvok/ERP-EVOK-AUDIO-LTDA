@@ -194,6 +194,20 @@ class FiscalRepository {
   async findReceivablesBySaleId(saleId: number | string, options?: FindOptions): Promise<any[]> { // eslint-disable-line no-unused-vars
     throw new Error('FiscalRepository.findReceivablesBySaleId não implementado.');
   }
+
+  /**
+   * Consolida as bases do Bloco K a partir do que o ERP ja registra.
+   *
+   * O retorno e um preview estruturado, nao o arquivo oficial do SPED.
+   *
+   * @abstract
+   * @param {string} startDate
+   * @param {string} endDate
+   * @returns {Promise<Object>}
+   */
+  async findBlocoKPreview(startDate: string, endDate: string): Promise<any> { // eslint-disable-line no-unused-vars
+    throw new Error('FiscalRepository.findBlocoKPreview não implementado.');
+  }
 }
 
 export = FiscalRepository;

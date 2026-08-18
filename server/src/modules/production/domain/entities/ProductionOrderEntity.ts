@@ -48,6 +48,7 @@ interface ProductionTransitionChanges {
   start_date?: Date;
   /** G6: preenchido na partida quando a OP ainda nao tem responsavel. FK -> `employees.id`. */
   responsible_id?: number;
+  production_route_id?: number | null;
   quantity_produced?: number;
   quantity_scrapped?: number;
   scrap_reason?: string | null;

@@ -381,6 +381,7 @@ describe('G4 — apontamento de producao obrigatorio', () => {
       // `production_orders` nao tem por falta de coluna.
       expect(rows[0]).toMatchObject({ production_order_id: 7, production_route_step_id: 101, sequence: 1, status: 'pending' });
       expect(rows[1]).toMatchObject({ production_order_id: 7, production_route_step_id: 102, sequence: 2, status: 'pending' });
+      expect(repo.update).toHaveBeenCalledWith(7, expect.objectContaining({ production_route_id: 55 }), expect.anything());
       for (const row of rows) {
         expect(TRACKING_STATUS_ENUM).toContain(row.status);
       }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Use case: alterar status da OP.
  *
  * @module modules/production/application/use-cases/ChangeProductionOrderStatusUseCase
@@ -86,18 +86,21 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
 
       if (input.status === 'released') {
         await this.reserveMaterials(order, input.user_id, t);
-        await this.materializeTrackingFromActiveRoute(order, t);
+        const productionRouteId = await this.materializeTrackingFromActiveRoute(order, t);
+        if (productionRouteId !== null) {
+          updateData.production_route_id = productionRouteId;
+        }
       }
 
       if (input.status === 'in_progress') {
         await this.assertOrderIsReadyToStart(order, t);
         // G6: quem manda a ordem para o chao de fabrica responde por ela ate
         // ser reatribuida. Preencher em vez de recusar fecha o buraco de
-        // auditoria sem inventar obrigatoriedade — `responsible_id` e opcional
+        // auditoria sem inventar obrigatoriedade â€” `responsible_id` e opcional
         // por desenho em todo o modulo. A coluna e FK para `employees.id`, e
         // nao para `users.id`: sem a traducao, o id do JWT apontaria para
         // outro funcionario. Usuario que nao e funcionario deixa o campo como
-        // esta — nao se trava a partida por causa de um cadastro de RH.
+        // esta â€” nao se trava a partida por causa de um cadastro de RH.
         if (!order.responsible_id && input.user_id) {
           const employee = await this.productionOrderRepository.findEmployeeByUserId(input.user_id, t);
           if (employee?.id) updateData.responsible_id = employee.id;
@@ -127,11 +130,11 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
   /**
    * Le o modo de vigencia do apontamento obrigatorio (gap G4).
    *
-   * `PRODUCTION_TRACKING_REQUIRED` ausente ou invalido → `block` (a lei
+   * `PRODUCTION_TRACKING_REQUIRED` ausente ou invalido â†’ `block` (a lei
    * aplicada). Valor invalido tambem gera log de erro: um typo jamais pode
    * DESLIGAR uma regra fiscal em silencio.
    *
-   * A leitura acontece a cada chamada, de proposito — permite virar a chave
+   * A leitura acontece a cada chamada, de proposito â€” permite virar a chave
    * durante a janela de UAT sem reiniciar o processo, e mantem o modulo de
    * regras puro (ele recebe o valor bruto por parametro).
    *
@@ -159,7 +162,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * ## Por que na liberacao, e por que isto e parte do G4
    *
    * Exigir apontamento sem dar ao operador contra o que apontar seria regra
-   * inexequivel — a mesma armadilha que o G5 evitou ao entregar a API de
+   * inexequivel â€” a mesma armadilha que o G5 evitou ao entregar a API de
    * roteiro. Aqui a OP liberada ja nasce com sua lista de operacoes a executar,
    * e o chao de fabrica (`Producao > Chao de Fabrica`) so precisa iniciar e
    * concluir cada uma.
@@ -170,20 +173,18 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * ATIVA no instante da liberacao. Como roteiro `active` e imutavel (regra G5
    * `G5-ROUTE-NOT-DRAFT`) e uma revisao substituida vira `superseded` **com as
    * etapas intactas**, o processo efetivamente executado fica reconstituivel a
-   * partir dos proprios apontamentos — sem a coluna
-   * `production_orders.production_route_id`, que exigiria migration e decisao
-   * de negocio (dependencia registrada pelo agente do G5, commit `c21f81b`).
+   * partir dos proprios apontamentos. A OP tambem grava o roteiro ativo usado
+   * na liberacao.
    *
    * **Limite honesto desta mitigacao:** ela cobre a OP liberada COM roteiro
    * ativo. Apontamento criado a mao (`POST /api/production-orders/:id/tracking`
-   * sem `production_route_step_id`) e OP liberada quando o produto ainda nao
-   * tinha roteiro continuam sem o vinculo. Reconstituir 100% dos casos exige a
-   * coluna — ver `docs/governance/TODO.md`.
+   * sem `production_route_step_id`) continua sem o vinculo fino da etapa, mas o
+   * roteiro da OP agora fica persistido.
    *
    * ## Idempotencia
    *
    * Se a OP ja tiver qualquer apontamento, nada e criado. Isso protege o
-   * caminho `released → canceled → ...` e qualquer reprocessamento, e evita
+   * caminho `released â†’ canceled â†’ ...` e qualquer reprocessamento, e evita
    * colidir com o indice unico `(production_order_id, sequence)`.
    *
    * No modo `warn` a materializacao NAO acontece: criar etapas pendentes sem o
@@ -194,18 +195,18 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * @param transaction - Transacao ativa.
    * @returns void
    */
-  private async materializeTrackingFromActiveRoute(order: any, transaction: any): Promise<void> {
-    if (this.resolveEnforcementMode() !== 'block') return;
+  private async materializeTrackingFromActiveRoute(order: any, transaction: any): Promise<number | null> {
+    if (this.resolveEnforcementMode() !== 'block') return null;
 
     const existing = await this.productionOrderRepository.listTrackingByOrderForUpdate(order.id, transaction);
-    if (existing && existing.length > 0) return;
+    if (existing && existing.length > 0) return order.production_route_id ?? null;
 
     const route = await this.productionOrderRepository.findActiveRouteWithStepsByProduct(order.product_id, transaction);
     const steps = route?.steps ?? [];
     if (steps.length === 0) {
       // Sem roteiro ativo (ou roteiro sem etapa ativa) a liberacao segue: o
       // bloqueio mora na CONCLUSAO, com mensagem dizendo o que cadastrar. Nao
-      // se trava a liberacao por falta de roteiro — isso pararia a fabrica por
+      // se trava a liberacao por falta de roteiro â€” isso pararia a fabrica por
       // um problema de cadastro que ainda da tempo de resolver.
       logger.warn('OP liberada sem roteiro ativo: nenhum apontamento foi materializado.', {
         rule: PRODUCTION_TRACKING_RULES.TRACKING_REQUIRED,
@@ -213,7 +214,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
         order_number: order.order_number,
         product_id: order.product_id,
       });
-      return;
+      return null;
     }
 
     await this.productionOrderRepository.bulkCreateTracking(
@@ -228,13 +229,15 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       })),
       transaction,
     );
+
+    return route.id;
   }
 
   /**
    * Porta de entrada da conclusao: exige apontamento de producao (gap G4).
    *
    * Roda ANTES de `completeOrder`, portanto antes de qualquer escrita de
-   * estoque, lote, custo ou status — se qualquer regra reprovar, **nada foi
+   * estoque, lote, custo ou status â€” se qualquer regra reprovar, **nada foi
    * gravado**, e nem depende do rollback para isso.
    *
    * Regras aplicadas, em ordem, todas com `details.rule`:
@@ -259,43 +262,43 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * @throws {BusinessRuleError} 422 com `details.rule` em qualquer reprovacao.
    */
   /**
-   * **G6** — gate de PARTIDA da ordem (`* → in_progress`).
+   * **G6** â€” gate de PARTIDA da ordem (`* â†’ in_progress`).
    *
-   * ## Por que este gate nasceu só agora
+   * ## Por que este gate nasceu sÃ³ agora
    *
-   * O G6 ficou três rodadas sem implementação porque as validações sugeridas
+   * O G6 ficou trÃªs rodadas sem implementaÃ§Ã£o porque as validaÃ§Ãµes sugeridas
    * (centro de trabalho e operador em `production_orders`) exigiam colunas que
-   * a tabela não tem. O que destravou foi o par G5 + G4: com roteiro
-   * cadastrável e apontamento obrigatório na conclusão, a pré-condição real da
-   * partida deixou de precisar de coluna nova — e ficou visível um defeito de
-   * processo que o G4 sozinho não resolve.
+   * a tabela nÃ£o tem. O que destravou foi o par G5 + G4: com roteiro
+   * cadastrÃ¡vel e apontamento obrigatÃ³rio na conclusÃ£o, a prÃ©-condiÃ§Ã£o real da
+   * partida deixou de precisar de coluna nova â€” e ficou visÃ­vel um defeito de
+   * processo que o G4 sozinho nÃ£o resolve.
    *
-   * Hoje, produto sem roteiro ativo é **liberado** (a materialização só grava
-   * um `warn` no log), a fábrica monta o lote inteiro, e a OP só é recusada na
-   * **conclusão** — com material já consumido e horas já gastas. Recusar na
-   * partida transforma uma perda de produção em um problema de cadastro que
-   * ainda dá tempo de resolver.
+   * Hoje, produto sem roteiro ativo Ã© **liberado** (a materializaÃ§Ã£o sÃ³ grava
+   * um `warn` no log), a fÃ¡brica monta o lote inteiro, e a OP sÃ³ Ã© recusada na
+   * **conclusÃ£o** â€” com material jÃ¡ consumido e horas jÃ¡ gastas. Recusar na
+   * partida transforma uma perda de produÃ§Ã£o em um problema de cadastro que
+   * ainda dÃ¡ tempo de resolver.
    *
-   * ## Mesma chave do G4, de propósito
+   * ## Mesma chave do G4, de propÃ³sito
    *
    * Respeita `PRODUCTION_TRACKING_REQUIRED`: em `warn` o gate apenas registra
-   * o log e deixa passar. É a mesma família de regra (a OP precisa ter contra
-   * o que apontar) e um segundo botão criaria a chance de desligar metade da
-   * obrigação sem perceber.
+   * o log e deixa passar. Ã‰ a mesma famÃ­lia de regra (a OP precisa ter contra
+   * o que apontar) e um segundo botÃ£o criaria a chance de desligar metade da
+   * obrigaÃ§Ã£o sem perceber.
    *
    * ## O furo fechado em 2026-08-11
    *
    * O gate contava linhas de apontamento. Como
    * `POST /api/production-orders/:id/tracking` aceita
-   * `production_route_step_id: null` (apontamento manual, que é fluxo
-   * legítimo), **uma linha manual vazia destravava a partida de uma OP sem
-   * roteiro nenhum**. Agora a pré-condição é ter lastro de roteiro: alguma
+   * `production_route_step_id: null` (apontamento manual, que Ã© fluxo
+   * legÃ­timo), **uma linha manual vazia destravava a partida de uma OP sem
+   * roteiro nenhum**. Agora a prÃ©-condiÃ§Ã£o Ã© ter lastro de roteiro: alguma
    * linha ligada a uma etapa, **ou** roteiro ativo cadastrado para o produto
-   * — que é exatamente a saída que a mensagem de erro indica. Apontar à mão
-   * DEPOIS da partida continua livre: o gate é de partida.
+   * â€” que Ã© exatamente a saÃ­da que a mensagem de erro indica. Apontar Ã  mÃ£o
+   * DEPOIS da partida continua livre: o gate Ã© de partida.
    *
    * @param order - OP travada.
-   * @param transaction - Transação ativa.
+   * @param transaction - TransaÃ§Ã£o ativa.
    * @returns void
    * @throws {BusinessRuleError} 422 `G6-START-NO-ROUTE` / `G6-START-NO-ROUTE-STEP` / `G6-START-WC-INACTIVE`.
    */
@@ -314,7 +317,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
       return;
     }
 
-    // Auditoria 2026-08-11: a contagem de linhas nao basta — linha manual
+    // Auditoria 2026-08-11: a contagem de linhas nao basta â€” linha manual
     // aceita `production_route_step_id: null`. A saida honesta para quem
     // esbarrar no bloqueio e cadastrar o roteiro, entao a existencia dele
     // tambem destrava a partida (e o que a mensagem de erro manda fazer). A
@@ -354,7 +357,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
 
     // As duas ultimas regras precisam do centro de trabalho de cada etapa, que
     // so a consulta com `include` traz. As linhas ja estao travadas pelo
-    // `listTrackingByOrderForUpdate` acima — esta segunda leitura acontece
+    // `listTrackingByOrderForUpdate` acima â€” esta segunda leitura acontece
     // dentro da mesma transacao e enxerga exatamente as mesmas linhas.
     const detailedTrackings = await this.productionOrderRepository.listTrackingWithRouteStepByOrder(order.id, transaction);
     assertCompletedStepsHaveMeasurableTime(order.order_number, detailedTrackings || []);
@@ -370,7 +373,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
   /**
    * Completa a OP consumindo componentes, recebendo produto acabado e
    * registrando custo real (material + mao-de-obra apontada + overhead
-   * rateado — item 7/9 do LEVANTAMENTO_ERP, ver `registerLaborAndOverheadCost`).
+   * rateado â€” item 7/9 do LEVANTAMENTO_ERP, ver `registerLaborAndOverheadCost`).
    *
    * @param order - OP travada.
    * @param previousStatus - Status anterior.
@@ -381,7 +384,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * @throws {ConflictError} Se estoque/custo falhar.
    */
   private async completeOrder(order: any, previousStatus: string, producedQty: number, input: ChangeProductionOrderStatusInput, transaction: any): Promise<void> {
-    // Concluir com quantidade zero nao e conclusao — e cancelamento. Ate
+    // Concluir com quantidade zero nao e conclusao â€” e cancelamento. Ate
     // 2026-08-09 este `return` silencioso marcava a OP como `completed` sem
     // consumir nada, sem criar lote e, pior, sem liberar a reserva de
     // material (a liberacao mora dentro do bloco da explosao, abaixo), que
@@ -389,14 +392,14 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
     if (producedQty <= 0) {
       throw new BusinessRuleError(
         `Nao e possivel concluir a OP ${order.order_number} com quantidade produzida zero. `
-        + 'Informe a quantidade produzida, ou cancele a OP (status `canceled`) — o cancelamento libera '
+        + 'Informe a quantidade produzida, ou cancele a OP (status `canceled`) â€” o cancelamento libera '
         + 'o material reservado, a conclusao com zero deixaria a reserva presa.',
         { rule: 'G2', orderNumber: order.order_number, quantityProduced: producedQty },
       );
     }
 
     try {
-      // Roteamento de deposito (Bloco 4, BUSINESS_RULES.md §12 item 7):
+      // Roteamento de deposito (Bloco 4, BUSINESS_RULES.md Â§12 item 7):
       // consumo de componentes sai sempre de INSUMOS; produto acabado
       // concluido entra sempre em ACABADOS.
       const insumosWarehouse = await WarehouseStockService.getWarehouseByCode('INSUMOS', transaction);
@@ -404,7 +407,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
 
       // A explosao da BOM governa TUDO na conclusao: consumo de componentes,
       // baixa de lote e o custo que entra no estoque. Ate 2026-08-09 o 404 de
-      // "sem BOM ativa" era engolido aqui, e a OP concluia mesmo assim — nada
+      // "sem BOM ativa" era engolido aqui, e a OP concluia mesmo assim â€” nada
       // era consumido, nenhum lote baixado, e o produto acabado entrava em
       // estoque com custo ZERO, contaminando o custo medio de todo o resto
       // (gap G2 da auditoria da cadeia do produto). Concluir sem BOM ativa
@@ -416,7 +419,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
         if (bomError.statusCode !== 404) throw bomError;
         throw new BusinessRuleError(
           `Nao e possivel concluir a OP ${order.order_number}: o produto nao tem estrutura (BOM) ativa. `
-          + 'Sem ela o sistema nao sabe o que consumir nem quanto o produto custa — concluir assim faria o '
+          + 'Sem ela o sistema nao sabe o que consumir nem quanto o produto custa â€” concluir assim faria o '
           + 'produto acabado entrar em estoque com custo zero. Ative uma BOM para este produto e conclua novamente.',
           { rule: 'G2', productId: order.product_id, orderNumber: order.order_number },
         );
@@ -443,7 +446,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
             warehouseId: insumosWarehouse.id
           });
 
-          // Dual-write (BUSINESS_RULES.md §12 item 3): consumo de componentes
+          // Dual-write (BUSINESS_RULES.md Â§12 item 3): consumo de componentes
           // sai do Deposito de Insumos, nunca deixando o saldo do deposito
           // negativo (422 didatico em removeFromWarehouse).
           await WarehouseStockService.removeFromWarehouse(component.component_id, insumosWarehouse.id, component.quantity, transaction);
@@ -468,7 +471,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
         warehouseId: acabadosWarehouse.id
       });
 
-      // Dual-write (BUSINESS_RULES.md §12 item 3): produto acabado recebido
+      // Dual-write (BUSINESS_RULES.md Â§12 item 3): produto acabado recebido
       // entra sempre no Deposito de Produto Acabado, nunca em Insumos.
       await WarehouseStockService.addToWarehouse(order.product_id, acabadosWarehouse.id, producedQty, transaction);
 
@@ -534,13 +537,13 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    *   Soma-se o custo de todas as etapas concluidas.
    *
    *   **Gap G4 (2026-08-10):** com `PRODUCTION_TRACKING_REQUIRED=block`
-   *   (padrao) este caminho nunca mais e alcancado com mao-de-obra zero — a
+   *   (padrao) este caminho nunca mais e alcancado com mao-de-obra zero â€” a
    *   conclusao ja foi barrada por
    *   {@link assertTrackingIsSufficientForCompletion}. O tratamento tolerante
    *   descrito abaixo so vale no modo de transicao `warn`: OP sem nenhum
    *   apontamento (ou sem etapas `completed`) nao gera lancamento de
    *   mao-de-obra (decisao: nao ha base para estimar horas trabalhadas em
-   *   OPs legadas/sem rastreamento por etapa — nenhum custo e melhor que um
+   *   OPs legadas/sem rastreamento por etapa â€” nenhum custo e melhor que um
    *   custo fabricado).
    * - **Overhead:** `overhead_rate_percent / 100` aplicado sobre a base
    *   configurada em `production_cost_settings.overhead_calculation_basis`
@@ -548,7 +551,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    *   `labor_only` = so mao-de-obra; `material_only` = so material).
    *
    * Ambos os lancamentos, quando o valor calculado e zero (sem apontamento
-   * ou taxa de overhead zerada), sao omitidos do ledger — nao ha valor de
+   * ou taxa de overhead zerada), sao omitidos do ledger â€” nao ha valor de
    * auditoria em registrar entradas de custo zero.
    *
    * @param params - Contexto da OP concluida.
@@ -623,7 +626,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    * as MESMAS funcoes puras que a porta de entrada
    * ({@link assertTrackingIsSufficientForCompletion}) usa para reprovar a
    * conclusao. Se as duas implementacoes divergissem, o gate aprovaria uma OP
-   * cujo custo de mao-de-obra sairia zero assim mesmo — que e exatamente o
+   * cujo custo de mao-de-obra sairia zero assim mesmo â€” que e exatamente o
    * defeito que o G4 elimina.
    *
    * No modo `block`, `null` (hora nao mensuravel ou taxa nao resolvivel) e
@@ -677,7 +680,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
 
   /**
    * Reserva materiais da BOM ao liberar a OP, **vinculando cada reserva a
-   * esta OP** (`production_order_reservations`, gap G3 — 2026-08-09).
+   * esta OP** (`production_order_reservations`, gap G3 â€” 2026-08-09).
    *
    * @param order - Ordem travada.
    * @param userId - Usuario executor.
@@ -727,7 +730,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
   }
 
   /**
-   * Libera integralmente o saldo reservado desta OP — e apenas dela.
+   * Libera integralmente o saldo reservado desta OP â€” e apenas dela.
    *
    * Gap G3 (2026-08-09). Substitui as duas rotinas anteriores
    * (`releaseMaterialsIfReserved` reexplodindo a BOM no cancelamento e
@@ -736,7 +739,7 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
    *
    * 1. **Canibalizacao**: a liberacao caia em `releaseReservedQuantity`, que
    *    fazia `MIN(products.reserved_quantity, desejado)` sobre o contador
-   *    GLOBAL do produto — ou seja, uma OP liberava (e em seguida consumia)
+   *    GLOBAL do produto â€” ou seja, uma OP liberava (e em seguida consumia)
    *    material reservado por outra OP;
    * 2. **Reserva presa**: a quantidade a liberar era recalculada explodindo a
    *    BOM de novo. Se a estrutura do produto mudasse entre a liberacao da OP
@@ -1012,3 +1015,5 @@ class ChangeProductionOrderStatusUseCase extends UseCase<ChangeProductionOrderSt
 }
 
 export = ChangeProductionOrderStatusUseCase;
+
+

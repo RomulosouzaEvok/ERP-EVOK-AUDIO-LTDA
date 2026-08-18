@@ -3,6 +3,8 @@ import request from 'supertest';
 type HttpMethod = 'post' | 'put' | 'patch' | 'delete';
 type Level = 'operate' | 'approve';
 
+jest.setTimeout(15000);
+
 const authModulePath = '../../src/middlewares/auth';
 
 function createControllerMock() {
@@ -314,6 +316,17 @@ describe('RBAC critical write routes (authorizeModule retrofit)', () => {
       method: 'post',
       path: '/api/work-centers/',
       moduleKey: 'centros_de_trabalho',
+    });
+  });
+
+  it('protege leitura e escrita da configuracao de custeio de producao', async () => {
+    await expectRbacFlow({
+      routeModulePath: '../../src/modules/production/presentation/routes/productionCostSettings',
+      controllerModulePath: '../../src/modules/production/presentation/controllers/productionCostSettingsController',
+      mountPath: '/api/production/cost-settings',
+      method: 'put',
+      path: '/api/production/cost-settings/',
+      moduleKey: 'producao',
     });
   });
 

@@ -1,10 +1,10 @@
 /**
- * 🏭 Model: ProductionOrder (Ordens de Produção)
+ * Model: ProductionOrder (Ordens de Producao)
  *
  * @module models/ProductionOrder
  *
- * Gerencia ordens de produção com workflow de status:
- * planned → released → in_progress → completed/paused/canceled.
+ * Gerencia ordens de producao com workflow de status:
+ * planned -> released -> in_progress -> completed/paused/canceled.
  * Consome BOM e gera produto acabado no estoque.
  */
 
@@ -27,6 +27,7 @@ interface ProductionOrderAttributes {
   sales_order_id: number | null;
   responsible_id: number | null;
   department_id: number | null;
+  production_route_id: number | null;
   notes: string | null;
   created_by: number | null;
   item_id?: string | null;
@@ -36,41 +37,35 @@ interface ProductionOrderAttributes {
 
 const ProductionOrder = sequelize.define('ProductionOrder', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  order_number: { type: DataTypes.STRING(20), allowNull: false, unique: true, comment: 'Nº da OP (OP-YYYY-XXXX)' },
-  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id' },
+  order_number: { type: DataTypes.STRING(20), allowNull: false, unique: true, comment: 'Numero da OP (OP-YYYY-XXXX)' },
+  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id' },
   quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, comment: 'Quantidade planejada' },
   quantity_produced: { type: DataTypes.DECIMAL(18, 6), defaultValue: 0, comment: 'Quantidade produzida' },
   quantity_scrapped: { type: DataTypes.DECIMAL(18, 6), defaultValue: 0, comment: 'Quantidade refugada na conclusao da OP (nao entra em estoque)' },
   scrap_reason: { type: DataTypes.TEXT, allowNull: true, comment: 'Motivo do refugo registrado na conclusao da OP' },
   priority: { type: DataTypes.ENUM('low', 'normal', 'high', 'urgent'), defaultValue: 'normal' },
   status: { type: DataTypes.ENUM('planned', 'released', 'in_progress', 'completed', 'paused', 'canceled'), defaultValue: 'planned' },
-  // allowNull:true explicito (bomba de schema corrigida em 2026-08-04, ver
-  // migration 20260804-000012-fix-production-orders-nullable-columns.cjs):
-  // sem essa flag o Sequelize assume allowNull:false por padrao, e a
-  // baseline migration (20260731-000001) usa exatamente attribute.allowNull
-  // para criar a tabela fisica — o resultado era NOT NULL sem default em
-  // colunas legitimamente opcionais, quebrando toda criacao de OP (rota
-  // normal e a nova conversao MRP -> OP) que nao populava manualmente cada
-  // um destes campos.
   start_date: { type: DataTypes.DATEONLY, allowNull: true },
   due_date: { type: DataTypes.DATEONLY, allowNull: false, comment: 'Prazo final' },
   completion_date: { type: DataTypes.DATEONLY, allowNull: true },
-  sales_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → sales.id (pedido de venda associado)' },
-  responsible_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → employees.id (responsável)' },
+  sales_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> sales.id (pedido de venda associado)' },
+  responsible_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> employees.id (responsavel)' },
   department_id: {
     type: DataTypes.INTEGER,
     allowNull: true,
-    comment: 'FK → departments.id (departamento dono da OP; opcional, usado pelo painel de TV de demandas por departamento — nullable também no histórico legado, sem backfill possível, ver migration 20260806-000003)'
+    comment: 'FK -> departments.id (departamento dono da OP; opcional, usado pelo painel de TV de demandas por departamento)'
   },
+  production_route_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> production_routes.id (roteiro efetivamente usado na liberacao da OP)' },
   notes: { type: DataTypes.TEXT, allowNull: true },
-  created_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → users.id (criador)' },
-  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (Fase 4.4 expand-contract)' }
+  created_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id (criador)' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK -> items.id (Fase 4.4 expand-contract)' }
 }, {
   tableName: 'production_orders',
   underscored: true,
   timestamps: true,
   indexes: [
-    { fields: ['department_id'] }
+    { fields: ['department_id'] },
+    { fields: ['production_route_id'] }
   ]
 });
 

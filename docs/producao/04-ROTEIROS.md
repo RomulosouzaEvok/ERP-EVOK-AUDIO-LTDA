@@ -266,8 +266,9 @@ tinha `cost_per_hour = 0`.
 
 - ✅ `cost_per_hour` passou a ser configurável em `POST`/`PUT /api/work-centers`
   (entregue junto com o G4 — antes só existia por SQL direto).
-- ⚠️ `default_labor_rate_per_hour` **continua sem API**. Etapa de apontamento
-  sem centro de trabalho depende dele. Registrado em `docs/governance/TODO.md`.
+- ✅ `default_labor_rate_per_hour` agora tem API em
+  `/api/production/cost-settings`. Etapa de apontamento sem centro de
+  trabalho depende dele.
 
 ### Janela de transição
 

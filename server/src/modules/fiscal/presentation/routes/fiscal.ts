@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../../../../middlewares/auth');
 const fiscalController = require('../controllers/fiscalController');
+const blocoKRouter = require('./blocoK');
 
 /**
  * Rotas do módulo `fiscal` sob `/api/fiscal`. Os endpoints de NF-e por
@@ -13,5 +14,6 @@ const fiscalController = require('../controllers/fiscalController');
 
 router.get('/config', authenticate, authorize('admin'), fiscalController.getCompanyFiscalConfig);
 router.put('/config', authenticate, authorize('admin'), fiscalController.upsertCompanyFiscalConfig);
+router.use('/bloco-k', blocoKRouter);
 
 module.exports = router;

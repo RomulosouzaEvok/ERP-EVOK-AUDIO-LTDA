@@ -6571,7 +6571,8 @@ Verificado no banco de dev em 2026-08-10 — **os três estavam zerados**:
 - [ ] Definir `work_centers.cost_per_hour > 0`. Hoje o único centro
   (`MONTAGEM`) tem **0**. Já configurável via API desde esta entrega.
 - [ ] Definir `production_cost_settings.default_labor_rate_per_hour` para etapas
-  **sem** centro de trabalho. Hoje **0** — e **sem API** (ver pendência abaixo).
+  **sem** centro de trabalho. Hoje **0** — e agora configurável pela API em
+  `/api/production/cost-settings`.
 
 Sem pelo menos uma taxa positiva, **toda conclusão de OP falha** com
 `G4-LABOR-RATE-MISSING`. Isso é o zero silencioso virando erro explícito, mas
@@ -6579,17 +6580,14 @@ exige configuração antes do primeiro uso.
 
 ### ⚠️ Pendências e limitações reportadas (não implementadas)
 
-- [ ] **`production_cost_settings` não tem nenhuma API.** O fallback global de
-  taxa horária (`default_labor_rate_per_hour`), a base de rateio e o percentual
-  de overhead só existem por SQL direto. É um módulo de configuração pequeno,
-  mas é backend + tela.
-- [ ] **OP continua sem coluna de revisão de roteiro.** A mitigação entregue
-  (cada apontamento guarda `production_route_step_id` da revisão ativa na
-  liberação, e roteiro ativo é imutável) **não cobre** OP liberada sem roteiro
-  ativo nem apontamento criado à mão. Reconstituir 100% dos casos exige
-  `production_orders.production_route_id` — migration + decisão de negócio. É a
-  mesma dependência que o G5 registrou (commit `c21f81b`) e que o G1 tem para
-  revisão de BOM (`067472a`).
+- [x] **`production_cost_settings` ganhou API.** O fallback global de taxa
+  horária (`default_labor_rate_per_hour`), a base de rateio e o percentual de
+  overhead agora existem em `/api/production/cost-settings`. Falta apenas a
+  tela se ainda não estiver pronta.
+- [x] **OP registra `production_route_id`.** A OP liberada grava qual roteiro
+  ativo estava em vigor no momento da liberação, fechando o rastro histórico
+  da revisão usada. O limite conhecido agora fica apenas em apontamentos
+  manuais sem `production_route_step_id`.
 - [ ] **Geração do arquivo do Bloco K (K200/K230/K235/K280) não iniciada.** O
   ERP passa a **registrar** o dado; gerar o arquivo (leiaute de Ato COTEPE) é
   trabalho separado. K250/K255 (industrialização por encomenda) não é modelado.
@@ -6599,6 +6597,9 @@ exige configuração antes do primeiro uso.
   (`e2e-cadeia-insumo-produto.test.ts` ganhou as etapas 6b/gate G4;
   `production-order-scrap.test.ts` ganhou o helper `apontarEtapa`), mas **não
   rodaram**. O que **foi** verificado contra o Postgres real está abaixo.
+- [ ] **Preview estruturado/export CSV do Bloco K iniciado em `/api/fiscal/bloco-k`.**
+  O arquivo oficial do leiaute de Ato COTEPE continua separado; K250/K255
+  (industrializacao por encomenda) nao e modelado.
 - [ ] **Tela de chão de fábrica (`client/`) não foi tocada** — `ShopFloorPage`
   já cobre criar/iniciar/concluir etapa, então a regra é exequível pela UI hoje.
   Falta: campo `cost_per_hour` na tela de centro de trabalho e tradução dos 7

@@ -441,6 +441,10 @@ ProductionOrder.belongsTo(Sale, { foreignKey: 'sales_order_id', as: 'salesOrder'
 Department.hasMany(ProductionOrder, { foreignKey: 'department_id', as: 'production_orders' });
 ProductionOrder.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
 
+// ProductionRoute ↔ ProductionOrder (roteiro efetivamente usado na liberacao da OP).
+ProductionRoute.hasMany(ProductionOrder, { foreignKey: 'production_route_id', as: 'production_orders' });
+ProductionOrder.belongsTo(ProductionRoute, { foreignKey: 'production_route_id', as: 'productionRoute' });
+
 Product.hasMany(ProductionRoute, { foreignKey: 'product_id', as: 'production_routes' });
 ProductionRoute.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 
