@@ -523,7 +523,11 @@ Grava `status='prorrogado'`, `effective_end_date=period_2_end_date`.
 ```
 ou
 ```json
-{ "decision": "rescindir", "termination_reason": "termino_experiencia" }
+{
+  "decision": "rescindir",
+  "termination_reason": "Rescisão antecipada solicitada pelo RH",
+  "notice_modality": "indenizado"
+}
 ```
 
 `decision` enum: `prorrogar` (atalho para §5.1, mesma validação),
@@ -532,6 +536,12 @@ ou
 destrutivo, RF-RH-013), `rescindir` (cria `TerminationProcess` com
 `termination_type='termino_experiencia'` — UC-68 A1/UC-70 A1 — e retorna o
 `id` do processo criado para o RH continuar o fluxo em §6).
+
+Quando `decision='rescindir'`, `termination_reason` é texto livre obrigatório
+e `notice_modality` também é obrigatória (`trabalhado` ou `indenizado`). A
+modalidade é escolhida pelo RH. Conforme APR-2026-057/P14, os contratos de
+experiência da Evok têm cláusula assecuratória de rescisão antecipada (art. 481
+CLT), portanto aplica-se o aviso prévio normal e não a indenização do art. 479.
 
 **Erros:**
 | Código | `code` | Quando |
@@ -575,6 +585,7 @@ Base: `/api/rh/termination-processes`.
   "termination_type": "sem_justa_causa",
   "notice_date": "2026-08-10",
   "notice_modality": "indenizado",
+  "termination_reason": "Reestruturação da área",
   "termination_date": "2026-08-10"
 }
 ```
@@ -585,11 +596,13 @@ RF-RH-019) — sugestão, campo `notice_date` do payload permanece o valor
 final ajustável pelo RH (não sobrescrito automaticamente).
 `payment_deadline` = `termination_date + 10 dias corridos`, calculado no
 servidor (RF-RH-018), não aceito no payload.
+`termination_reason` é texto livre obrigatório, com a mesma regra aplicada ao
+caminho de decisão de contrato da §5.2.
 
 **Erros:**
 | Código | `code` | Quando |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | `employee_id`/`termination_type`/`notice_date`/`termination_date` ausentes |
+| 400 | `VALIDATION_ERROR` | `employee_id`/`termination_type`/`notice_date`/`notice_modality`/`termination_reason` ausentes |
 | 404 | `NOT_FOUND` | `employee_id` não existe |
 | 409 | `CONFLICT` | Já existe `TerminationProcess` aberto (`status` ≠ `concluido`/`cancelado`) para o mesmo `employee_id` |
 

@@ -232,8 +232,10 @@ export interface DecideEmployeeContractInput {
   decision: 'prorrogar' | 'efetivar' | 'rescindir';
   /** Obrigatório quando `decision === 'prorrogar'`. */
   period_2_end_date?: string;
-  /** Usado quando `decision === 'rescindir'`. */
+  /** Obrigatório quando `decision === 'rescindir'`. */
   termination_reason?: string;
+  /** Obrigatório quando `decision === 'rescindir'` (APR-2026-057/P14-P15). */
+  notice_modality?: NoticeModality;
 }
 
 /**
@@ -259,6 +261,7 @@ export interface TerminationProcess {
   termination_type: TerminationType;
   notice_date: string;
   notice_modality: NoticeModality;
+  termination_reason: string;
   termination_date: string | null;
   trct_file_path: string | null;
   trct_paid_at: string | null;
@@ -303,6 +306,7 @@ export interface CreateTerminationProcessInput {
   termination_type: TerminationType;
   notice_date: string;
   notice_modality: NoticeModality;
+  termination_reason: string;
   termination_date?: string | null;
 }
 

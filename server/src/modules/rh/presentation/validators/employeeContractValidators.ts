@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 import { ValidationError } from '../../../../errors';
-import { contractStatusEnum, contractTypeEnum, dateOnly } from './rhEnums';
+import { contractStatusEnum, contractTypeEnum, dateOnly, noticeModalityEnum } from './rhEnums';
 
 /** `PATCH /employee-contracts/:id/extend` — RF-RH-015 (Art. 451, CLT). */
 export const extendContractSchema = z.object({
@@ -24,11 +24,31 @@ export const extendContractSchema = z.object({
 export const decideContractSchema = z.object({
   decision: z.enum(['prorrogar', 'efetivar', 'rescindir']),
   period_2_end_date: dateOnly.optional(),
-  termination_reason: z.string().trim().max(1000).optional(),
+  termination_reason: z.string().trim().min(1).max(1000).optional(),
+  notice_modality: noticeModalityEnum.optional(),
 }).strict()
-  .refine((data) => data.decision !== 'prorrogar' || Boolean(data.period_2_end_date), {
-    message: 'period_2_end_date é obrigatório quando decision="prorrogar".',
-    path: ['period_2_end_date'],
+  .superRefine((data, ctx) => {
+    if (data.decision === 'prorrogar' && !data.period_2_end_date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'period_2_end_date é obrigatório quando decision="prorrogar".',
+        path: ['period_2_end_date'],
+      });
+    }
+    if (data.decision === 'rescindir' && !data.termination_reason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'termination_reason é obrigatório quando decision="rescindir".',
+        path: ['termination_reason'],
+      });
+    }
+    if (data.decision === 'rescindir' && !data.notice_modality) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'notice_modality é obrigatório quando decision="rescindir".',
+        path: ['notice_modality'],
+      });
+    }
   });
 
 export const listContractQuerySchema = z.object({

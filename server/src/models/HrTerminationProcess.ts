@@ -22,6 +22,7 @@ const HrTerminationProcess = sequelize.define('HrTerminationProcess', {
   },
   notice_date: { type: DataTypes.DATEONLY, allowNull: false },
   notice_modality: { type: DataTypes.ENUM('trabalhado', 'indenizado'), allowNull: false },
+  termination_reason: { type: DataTypes.TEXT, allowNull: false },
   termination_date: DataTypes.DATEONLY,
   trct_file_path: DataTypes.STRING(255),
   trct_paid_at: DataTypes.DATE,

@@ -108,8 +108,10 @@ describe('Validators do módulo RH — .strict() e regras de payload', () => {
   const {
     createAdmissionProcessSchema, concludeAdmissionSchema, cancelAdmissionSchema,
   } = require('../../src/modules/rh/presentation/validators/admissionValidators');
-  const { decideContractSchema } = require('../../src/modules/rh/presentation/validators/employeeContractValidators');
-  const { createTerminationSchema } = require('../../src/modules/rh/presentation/validators/terminationValidators');
+  const employeeContractValidators = require('../../src/modules/rh/presentation/validators/employeeContractValidators');
+  const terminationValidators = require('../../src/modules/rh/presentation/validators/terminationValidators');
+  const { decideContractSchema } = employeeContractValidators;
+  const { createTerminationSchema } = terminationValidators;
   const { createEmployeeDocumentSchema } = require('../../src/modules/rh/presentation/validators/employeeDocumentValidators');
   const { createVacationScheduleSchema, reviseVacationScheduleSchema } = require('../../src/modules/rh/presentation/validators/vacationValidators');
 
@@ -123,7 +125,7 @@ describe('Validators do módulo RH — .strict() e regras de payload', () => {
   it('rejeita payment_deadline no body (coluna GERADA pelo banco, Art. 477 §6º CLT)', () => {
     const result = createTerminationSchema.safeParse({
       employee_id: 501, termination_type: 'pedido', notice_date: '2026-08-10',
-      notice_modality: 'trabalhado', payment_deadline: '2026-08-20',
+      notice_modality: 'trabalhado', termination_reason: 'Pedido do empregado', payment_deadline: '2026-08-20',
     });
     expect(result.success).toBe(false);
   });
@@ -153,6 +155,37 @@ describe('Validators do módulo RH — .strict() e regras de payload', () => {
     expect(decideContractSchema.safeParse({ decision: 'efetivar' }).success).toBe(true);
   });
 
+  it.each([
+    [{ decision: 'rescindir', notice_modality: 'trabalhado' }, 'termination_reason'],
+    [{ decision: 'rescindir', termination_reason: 'Motivo informado' }, 'notice_modality'],
+  ])('decision=rescindir rejeita com 400 quando falta %s', (payload, _missingField) => {
+    const result = decideContractSchema.safeParse(payload);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(() => employeeContractValidators.handleZodError(result.error)).toThrow(
+        expect.objectContaining({ statusCode: 400 }),
+      );
+    }
+  });
+
+  it('decision=rescindir aceita motivo e modalidade válidos', () => {
+    expect(decideContractSchema.safeParse({
+      decision: 'rescindir', termination_reason: 'Motivo informado', notice_modality: 'indenizado',
+    }).success).toBe(true);
+  });
+
+  it('POST /termination-processes rejeita com 400 quando termination_reason está ausente', () => {
+    const result = createTerminationSchema.safeParse({
+      employee_id: 501, termination_type: 'pedido', notice_date: '2026-08-10', notice_modality: 'trabalhado',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(() => terminationValidators.handleZodError(result.error)).toThrow(
+        expect.objectContaining({ statusCode: 400 }),
+      );
+    }
+  });
+
   it('exige abono_days quando abono=true (Art. 143, caput, CLT)', () => {
     const base = { accrual_period_id: 88, start_date: '2026-12-07', days: 20 };
     expect(createVacationScheduleSchema.safeParse({ ...base, abono: true }).success).toBe(false);
@@ -172,6 +205,7 @@ describe('Validators do módulo RH — .strict() e regras de payload', () => {
   it('rejeita data fora do formato YYYY-MM-DD', () => {
     const result = createTerminationSchema.safeParse({
       employee_id: 501, termination_type: 'pedido', notice_date: '10/08/2026', notice_modality: 'trabalhado',
+      termination_reason: 'Pedido do empregado',
     });
     expect(result.success).toBe(false);
   });

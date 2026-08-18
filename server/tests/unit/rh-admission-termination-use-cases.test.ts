@@ -195,7 +195,8 @@ describe('CreateTerminationProcessUseCase — RF-RH-017/018/019', () => {
 
     const result = await useCase.execute({
       employee_id: 501, termination_type: 'sem_justa_causa', notice_date: '2026-08-10',
-      notice_modality: 'indenizado', termination_date: '2026-08-10', hireDate: '2016-08-10', createdBy: 9,
+      notice_modality: 'indenizado', termination_reason: 'Reestruturação da área',
+      termination_date: '2026-08-10', hireDate: '2016-08-10', createdBy: 9,
     });
 
     // 10 anos completos → 30 + 3×10 = 60 dias de aviso.
@@ -203,6 +204,9 @@ describe('CreateTerminationProcessUseCase — RF-RH-017/018/019', () => {
     // Art. 477 §6º — 10 dias corridos a partir do TÉRMINO do contrato.
     expect(result.suggested_payment_deadline).toBe('2026-08-20');
     expect(result.status).toBe('aberto');
+    expect(repository.create).toHaveBeenCalledWith(expect.objectContaining({
+      termination_reason: 'Reestruturação da área',
+    }));
   });
 
   it('limita o aviso prévio a 90 dias (60 adicionais) mesmo com 30 anos de casa', async () => {
@@ -211,7 +215,7 @@ describe('CreateTerminationProcessUseCase — RF-RH-017/018/019', () => {
 
     const result = await useCase.execute({
       employee_id: 501, termination_type: 'pedido', notice_date: '2026-08-10',
-      notice_modality: 'trabalhado', hireDate: '1996-08-10', createdBy: 9,
+      notice_modality: 'trabalhado', termination_reason: 'Pedido do empregado', hireDate: '1996-08-10', createdBy: 9,
     });
     expect(result.suggested_notice_days).toBe(90);
   });
@@ -221,7 +225,8 @@ describe('CreateTerminationProcessUseCase — RF-RH-017/018/019', () => {
     const useCase = new (CreateTerminationProcessUseCase as any)(repository);
 
     await expect(useCase.execute({
-      employee_id: 501, termination_type: 'pedido', notice_date: '2026-08-10', notice_modality: 'trabalhado', createdBy: 9,
+      employee_id: 501, termination_type: 'pedido', notice_date: '2026-08-10', notice_modality: 'trabalhado',
+      termination_reason: 'Pedido do empregado', createdBy: 9,
     })).rejects.toMatchObject({ statusCode: 409 });
     expect(repository.create).not.toHaveBeenCalled();
   });
@@ -231,8 +236,20 @@ describe('CreateTerminationProcessUseCase — RF-RH-017/018/019', () => {
     const useCase = new (CreateTerminationProcessUseCase as any)(repository);
 
     await expect(useCase.execute({
-      employee_id: 501, termination_type: 'demissao', notice_date: '2026-08-10', notice_modality: 'trabalhado', createdBy: 9,
+      employee_id: 501, termination_type: 'demissao', notice_date: '2026-08-10', notice_modality: 'trabalhado',
+      termination_reason: 'Motivo informado', createdBy: 9,
     })).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('400 quando termination_reason está ausente', async () => {
+    const repository = buildRepository();
+    const useCase = new (CreateTerminationProcessUseCase as any)(repository);
+
+    await expect(useCase.execute({
+      employee_id: 501, termination_type: 'pedido', notice_date: '2026-08-10',
+      notice_modality: 'trabalhado', createdBy: 9,
+    })).rejects.toMatchObject({ statusCode: 400 });
+    expect(repository.create).not.toHaveBeenCalled();
   });
 });
 

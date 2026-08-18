@@ -102,13 +102,38 @@ describe('DecideEmployeeContractUseCase — RF-RH-016 (UC-68)', () => {
     const extendUseCase: any = { execute: jest.fn() };
     const useCase = new (DecideEmployeeContractUseCase as any)(repository, createTermination, extendUseCase, runInTransaction);
 
-    const result = await useCase.execute({ id: 42, decision: 'rescindir', createdBy: 9 });
+    const result = await useCase.execute({
+      id: 42,
+      decision: 'rescindir',
+      termination_reason: 'Encerramento antecipado solicitado pelo RH',
+      notice_modality: 'indenizado',
+      createdBy: 9,
+    });
 
     expect(createTermination.execute).toHaveBeenCalledWith(expect.objectContaining({
-      employee_id: 501, termination_type: 'termino_experiencia', notice_modality: 'trabalhado', createdBy: 9,
+      employee_id: 501,
+      termination_type: 'termino_experiencia',
+      termination_reason: 'Encerramento antecipado solicitado pelo RH',
+      notice_modality: 'indenizado',
+      createdBy: 9,
     }));
     expect(result.id).toBe(77);
     expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ notice_modality: 'trabalhado' }, 'termination_reason'],
+    [{ termination_reason: 'Motivo informado' }, 'notice_modality'],
+  ])('rescindir rejeita com 400 quando falta %s', async (fields, _missingField) => {
+    const repository = buildRepository();
+    const createTermination: any = { execute: jest.fn() };
+    const useCase = new (DecideEmployeeContractUseCase as any)(
+      repository, createTermination, { execute: jest.fn() }, runInTransaction,
+    );
+
+    await expect(useCase.execute({ id: 42, decision: 'rescindir', createdBy: 9, ...fields }))
+      .rejects.toMatchObject({ statusCode: 400 });
+    expect(createTermination.execute).not.toHaveBeenCalled();
   });
 
   it('prorrogar delega para ExtendEmployeeContractUseCase (regra do Art. 451 não é duplicada)', async () => {

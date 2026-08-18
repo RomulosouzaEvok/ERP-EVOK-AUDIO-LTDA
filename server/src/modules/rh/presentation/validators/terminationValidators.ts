@@ -20,6 +20,7 @@ export const createTerminationSchema = z.object({
   termination_type: terminationTypeEnum,
   notice_date: dateOnly,
   notice_modality: noticeModalityEnum,
+  termination_reason: z.string().trim().min(1).max(1000),
   termination_date: dateOnly.nullable().optional(),
 }).strict();
 

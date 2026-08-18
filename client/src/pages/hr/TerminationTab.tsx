@@ -276,6 +276,7 @@ function CreateTerminationDialog({
   const [terminationType, setTerminationType] = React.useState<hrApi.TerminationType>('sem_justa_causa');
   const [noticeDate, setNoticeDate] = React.useState('');
   const [noticeModality, setNoticeModality] = React.useState<hrApi.NoticeModality>('indenizado');
+  const [terminationReason, setTerminationReason] = React.useState('');
   const [terminationDate, setTerminationDate] = React.useState('');
   const [error, setError] = React.useState<DidacticError | null>(null);
   const [validationError, setValidationError] = React.useState<string | null>(null);
@@ -286,6 +287,7 @@ function CreateTerminationDialog({
       setTerminationType('sem_justa_causa');
       setNoticeDate('');
       setNoticeModality('indenizado');
+      setTerminationReason('');
       setTerminationDate('');
       setError(null);
       setValidationError(null);
@@ -299,6 +301,7 @@ function CreateTerminationDialog({
         termination_type: terminationType,
         notice_date: noticeDate,
         notice_modality: noticeModality,
+        termination_reason: terminationReason,
         termination_date: terminationDate || undefined,
       }),
     onSuccess: () => {
@@ -309,8 +312,8 @@ function CreateTerminationDialog({
   });
 
   const handleConfirm = () => {
-    if (!employeeId || !noticeDate) {
-      setValidationError('Selecione o funcionário e informe a data do aviso.');
+    if (!employeeId || !noticeDate || !terminationReason.trim()) {
+      setValidationError('Selecione o funcionário, informe a data do aviso e o motivo da rescisão.');
       return;
     }
     setValidationError(null);
@@ -368,6 +371,15 @@ function CreateTerminationDialog({
                 <option value="trabalhado">Trabalhado</option>
               </SelectNative>
             </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="termination-reason">Motivo *</Label>
+            <textarea
+              id="termination-reason"
+              className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={terminationReason}
+              onChange={(event) => setTerminationReason(event.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="termination-date">Data de desligamento</Label>

@@ -31,6 +31,7 @@ interface CreateTerminationProcessInput {
   termination_type: string;
   notice_date: string;
   notice_modality: string;
+  termination_reason: string;
   termination_date?: string | null;
   hireDate?: string | null; // Para sugerir aviso prévio proporcional (Lei 12.506/2011) — resolvido pelo controller via Employee.hire_date.
   createdBy: number;
@@ -49,8 +50,8 @@ class CreateTerminationProcessUseCase extends UseCase<CreateTerminationProcessIn
    * @throws {ConflictError} Já existe `TerminationProcess` aberto para o funcionário (409).
    */
   public async execute(input: CreateTerminationProcessInput): Promise<any> {
-    if (!input.employee_id || !input.termination_type || !input.notice_date) {
-      throw new ValidationError('employee_id, termination_type e notice_date são obrigatórios.');
+    if (!input.employee_id || !input.termination_type || !input.notice_date || !input.termination_reason?.trim()) {
+      throw new ValidationError('employee_id, termination_type, notice_date e termination_reason são obrigatórios.');
     }
     if (!TERMINATION_TYPES.includes(input.termination_type)) {
       throw new ValidationError(`termination_type deve ser um de: ${TERMINATION_TYPES.join(', ')}.`);
@@ -69,6 +70,7 @@ class CreateTerminationProcessUseCase extends UseCase<CreateTerminationProcessIn
       termination_type: input.termination_type,
       notice_date: input.notice_date,
       notice_modality: input.notice_modality,
+      termination_reason: input.termination_reason.trim(),
       termination_date: input.termination_date ?? null,
       status: 'aberto',
       created_by: input.createdBy,

@@ -288,6 +288,7 @@ function DecideContractDialog({
   const [decision, setDecision] = React.useState<'prorrogar' | 'efetivar' | 'rescindir'>('efetivar');
   const [periodEndDate, setPeriodEndDate] = React.useState('');
   const [terminationReason, setTerminationReason] = React.useState('');
+  const [noticeModality, setNoticeModality] = React.useState<hrApi.NoticeModality | ''>('');
   const [validationError, setValidationError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<DidacticError | null>(null);
 
@@ -296,6 +297,7 @@ function DecideContractDialog({
       setDecision('efetivar');
       setPeriodEndDate('');
       setTerminationReason('');
+      setNoticeModality('');
       setValidationError(null);
       setError(null);
     }
@@ -306,7 +308,8 @@ function DecideContractDialog({
       hrApi.decideEmployeeContract(contract!.id, {
         decision,
         period_2_end_date: decision === 'prorrogar' ? periodEndDate : undefined,
-        termination_reason: decision === 'rescindir' ? terminationReason || undefined : undefined,
+        termination_reason: decision === 'rescindir' ? terminationReason : undefined,
+        notice_modality: decision === 'rescindir' ? noticeModality || undefined : undefined,
       }),
     onSuccess: () => {
       onDone();
@@ -318,6 +321,14 @@ function DecideContractDialog({
   const handleConfirm = () => {
     if (decision === 'prorrogar' && !periodEndDate) {
       setValidationError('Informe a data de fim do 2º período.');
+      return;
+    }
+    if (decision === 'rescindir' && !terminationReason.trim()) {
+      setValidationError('Informe o motivo da rescisão.');
+      return;
+    }
+    if (decision === 'rescindir' && !noticeModality) {
+      setValidationError('Selecione a modalidade do aviso prévio.');
       return;
     }
     setValidationError(null);
@@ -354,13 +365,23 @@ function DecideContractDialog({
           )}
           {decision === 'rescindir' && (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="decision-termination-reason">Motivo (opcional)</Label>
+              <Label htmlFor="decision-termination-reason">Motivo *</Label>
               <textarea
                 id="decision-termination-reason"
                 className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={terminationReason}
                 onChange={(event) => setTerminationReason(event.target.value)}
               />
+              <Label htmlFor="decision-notice-modality">Modalidade do aviso prévio *</Label>
+              <SelectNative
+                id="decision-notice-modality"
+                value={noticeModality}
+                onChange={(event) => setNoticeModality(event.target.value as hrApi.NoticeModality)}
+              >
+                <option value="">Selecione...</option>
+                <option value="trabalhado">Trabalhado</option>
+                <option value="indenizado">Indenizado</option>
+              </SelectNative>
               {!canApprove && (
                 <p className="text-sm text-amber-600">
                   Rescindir exige nível de aprovação de RH ("rh:approve"). O botão de confirmação ficará desabilitado se você

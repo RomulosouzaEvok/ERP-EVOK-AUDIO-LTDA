@@ -26,6 +26,7 @@ interface DecideEmployeeContractInput {
   decision: 'prorrogar' | 'efetivar' | 'rescindir';
   period_2_end_date?: string;
   termination_reason?: string;
+  notice_modality?: 'trabalhado' | 'indenizado';
   createdBy: number;
 }
 
@@ -97,11 +98,18 @@ class DecideEmployeeContractUseCase extends UseCase<DecideEmployeeContractInput,
     // decisão apenas ABRE o processo formal (UC-68 A1/UC-70 A1), evitando
     // marcar o contrato como encerrado antes das travas de ASO
     // demissional/checklist de ativos serem cumpridas.
+    if (!input.termination_reason?.trim() || !input.notice_modality) {
+      throw new ValidationError('termination_reason e notice_modality são obrigatórios para decision=rescindir.');
+    }
     return this.createTerminationProcessUseCase.execute({
       employee_id: contract.employee_id,
       termination_type: 'termino_experiencia',
       notice_date: new Date().toISOString().slice(0, 10),
-      notice_modality: 'trabalhado',
+      // APR-2026-057/P14: os contratos de experiência da Evok têm cláusula
+      // assecuratória (art. 481 CLT); aplica-se aviso prévio normal escolhido
+      // pelo RH (trabalhado ou indenizado), não a indenização do art. 479.
+      notice_modality: input.notice_modality,
+      termination_reason: input.termination_reason.trim(),
       termination_date: null,
       createdBy: input.createdBy,
     });
