@@ -304,7 +304,7 @@ function AccidentDetailDialog({
     accident && ['com_afastamento', 'incapacidade_permanente', 'obito'].includes(accident.gravidade);
 
   const emitCatMutation = useMutation({
-    mutationFn: () => sstApi.emitCat(accident!.id, 'Técnico SST'),
+    mutationFn: () => sstApi.emitCat(accident!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sst-accident-cats', accident?.id] });
       setCatError(null);
@@ -376,7 +376,7 @@ function AccidentDetailDialog({
                         className="flex flex-wrap items-center justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 p-2"
                       >
                         <span>
-                          {cat.tipo === 'inicial' ? 'CAT inicial' : 'Reabertura'} — emitido por {cat.emitente}
+                          {cat.tipo === 'inicial' ? 'CAT inicial' : cat.tipo === 'obito' ? 'CAT por óbito' : 'Reabertura'}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded bg-destructive px-2 py-0.5 font-semibold text-destructive-foreground">
                           Prazo legal: {formatDateTime(cat.prazo_limite)}
@@ -395,7 +395,7 @@ function AccidentDetailDialog({
                     title={!canApprove ? 'Requer nível de aprovação (approve) no módulo SST' : undefined}
                     onClick={() => emitCatMutation.mutate()}
                   >
-                    Emitir CAT inicial
+                    Emitir CAT
                   </Button>
                 )}
                 {catError && <DidacticAlert className="mt-2" error={catError} />}

@@ -40,7 +40,9 @@ class SequelizeAccidentRepository extends AccidentRepository {
         { model: SstAcidenteComplemento, as: 'complementos' },
         { model: SstCat, as: 'cats' }
       ],
-      ...(transaction ? { transaction, lock: transaction.LOCK.UPDATE } : {})
+      // Com os includes opcionais acima, `FOR UPDATE` sem alvo tenta travar
+      // também o lado anulável dos LEFT JOINs e o PostgreSQL rejeita a query.
+      ...(transaction ? { transaction, lock: { level: transaction.LOCK.UPDATE, of: SstAcidente } } : {})
     });
   }
 

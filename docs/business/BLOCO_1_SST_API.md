@@ -422,13 +422,15 @@ com `dias_perdidos` já somado/consolidado + a lista de complementos
 
 **POST /api/sst/accidents/:id/cat — Request:**
 ```json
-{ "tipo": "inicial", "emitente": "Técnico SST" }
+{}
 ```
-`emitente` é texto livre (nome/função de quem assina, para fins de
-documento — não substitui `req.user.id`, que é sempre gravado como
-`registrado_por`). Efeitos:
+O cliente não escolhe o tipo: o backend deriva `obito` exclusivamente quando
+`accident.gravidade = "obito"` e `inicial` nos demais casos. Um `tipo` legado
+explicitamente incoerente recebe 422. A autoria é exclusivamente o usuário
+autenticado, persistido em `emitente_id`; não há texto livre de emitente. Efeitos:
 1. Calcula `prazo_limite`: 1º dia útil seguinte a `accident.data_hora`
-   (calendário de dias úteis + feriados nacionais, RNF-SST-04); imediato
+   considerando apenas sábado/domingo como não úteis, sem calendário de
+   feriados nacionais nesta versão (simplificação de RNF-SST-04); imediato
    (`prazo_limite = data_hora`) se `gravidade = "obito"`.
 2. Cria `EventoESocialSST` tipo `S-2210`, `status: "pendente"`
    (RF-SST-042).

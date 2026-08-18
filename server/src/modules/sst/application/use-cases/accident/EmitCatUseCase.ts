@@ -1,10 +1,10 @@
 /**
- * Use case: emitir CAT inicial vinculada a um acidente (RF-SST-024/025,
+ * Use case: emitir a primeira CAT vinculada a um acidente (RF-SST-024/025,
  * UC-46). Reabertura usa `ReopenCatUseCase` (endpoint separado).
  *
  * Efeitos, na mesma transação:
  * 1. Calcula `prazo_limite` (RNF-SST-04).
- * 2. Cria a CAT (`tipo: 'inicial'`).
+ * 2. Cria a CAT (`tipo: 'obito'` para acidente fatal; `inicial` nos demais).
  * 3. Enfileira `EventoESocialSST` tipo `S-2210` `pendente` (RF-SST-042).
  * 4. Marca `sst_acidentes.houve_cat = true` (única forma permitida de
  *    alterar essa coluna após confirmado — mesma trilha de auditoria de
@@ -28,7 +28,7 @@ const { sequelize } = require('../../../../../config/database');
 interface EmitCatInput {
   accidentId: string | number;
   emitenteId: number;
-  body: { tipo?: string; emitente?: string };
+  body?: { tipo?: string };
 }
 
 class EmitCatUseCase extends UseCase<EmitCatInput, any> {
@@ -43,21 +43,28 @@ class EmitCatUseCase extends UseCase<EmitCatInput, any> {
 
   /**
    * @throws {NotFoundError} Se o acidente não existir (404).
-   * @throws {BusinessRuleError} Se já existir uma CAT `inicial` para o acidente (422).
+   * @throws {BusinessRuleError} Se já existir a primeira CAT ou se um tipo explícito contrariar a gravidade (422).
    */
-  public async execute({ accidentId, emitenteId, body }: EmitCatInput): Promise<any> {
+  public async execute({ accidentId, emitenteId, body = {} }: EmitCatInput): Promise<any> {
     const t = await sequelize.transaction();
     try {
       const acidente = await this.accidentRepository.findAccidentById(accidentId, t);
       if (!acidente) throw new NotFoundError('Acidente não encontrado.');
 
       const catsExistentes = await this.accidentRepository.findCatsByAccidentId(acidente.id);
-      const jaTemInicial = catsExistentes.some((c: any) => c.tipo === 'inicial');
-      if (jaTemInicial) {
+      const jaTemComunicacaoInicial = catsExistentes.some((c: any) => c.tipo === 'inicial' || c.tipo === 'obito');
+      if (jaTemComunicacaoInicial) {
         throw new BusinessRuleError('Já existe uma CAT inicial para este acidente — use POST /cat/:catId/reopen para reabertura.');
       }
 
-      const tipo = body.tipo === 'obito' ? 'obito' : 'inicial';
+      // APR-2026-056/D1: a gravidade registrada é a única fonte de verdade;
+      // o request nunca decide se a comunicação é inicial ou de óbito.
+      const tipo = acidente.gravidade === 'obito' ? 'obito' : 'inicial';
+      if (body.tipo !== undefined && body.tipo !== tipo) {
+        throw new BusinessRuleError(
+          `O tipo de CAT informado (${body.tipo}) é incompatível com a gravidade do acidente; o tipo esperado é ${tipo}.`,
+        );
+      }
       const prazoLimite = calcularPrazoLimiteCat(acidente.data_hora, acidente.gravidade);
 
       const cat = await this.accidentRepository.createCat({

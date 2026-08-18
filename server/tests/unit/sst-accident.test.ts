@@ -14,6 +14,7 @@ const CreateAccidentComplementUseCase = require('../../src/modules/sst/applicati
 const CloseAccidentUseCase = require('../../src/modules/sst/application/use-cases/accident/CloseAccidentUseCase');
 const EmitCatUseCase = require('../../src/modules/sst/application/use-cases/accident/EmitCatUseCase');
 const CreateAccidentInvestigationUseCase = require('../../src/modules/sst/application/use-cases/accident/CreateAccidentInvestigationUseCase');
+const { calcularPrazoLimiteCat } = require('../../src/modules/sst/domain/services/legalDeadlineService');
 const { ValidationError, NotFoundError, BusinessRuleError, ConflictError } = require('../../src/errors');
 
 jest.mock('../../src/config/database', () => ({
@@ -175,7 +176,7 @@ describe('EmitCatUseCase', () => {
     const esocialRepo = makeEsocialRepository();
     const useCase = new EmitCatUseCase(accidentRepo, esocialRepo);
 
-    const result = await useCase.execute({ accidentId: 77, emitenteId: 20, body: { tipo: 'inicial', emitente: 'Tecnico SST' } });
+    const result = await useCase.execute({ accidentId: 77, emitenteId: 20, body: {} });
 
     expect(accidentRepo.createCat).toHaveBeenCalledWith(expect.objectContaining({ acidente_id: 77, tipo: 'inicial' }), expect.anything());
     expect(esocialRepo.create).toHaveBeenCalledWith(expect.objectContaining({ tipo: 'S-2210', origem_tipo: 'cat', origem_id: 200 }), expect.anything());
@@ -188,17 +189,46 @@ describe('EmitCatUseCase', () => {
     const esocialRepo = makeEsocialRepository();
     const useCase = new EmitCatUseCase(accidentRepo, esocialRepo);
 
-    await expect(useCase.execute({ accidentId: 77, emitenteId: 20, body: { tipo: 'inicial' } })).rejects.toBeInstanceOf(BusinessRuleError);
+    await expect(useCase.execute({ accidentId: 77, emitenteId: 20, body: {} })).rejects.toBeInstanceOf(BusinessRuleError);
     expect(accidentRepo.createCat).not.toHaveBeenCalled();
   });
 
-  it('calcula prazo_limite imediato (mesmo dia) para gravidade obito', async () => {
+  it('deriva tipo=obito da gravidade e calcula prazo imediato sem tipo no body', async () => {
     const accidentRepo = makeAccidentRepository({ findAccidentById: jest.fn(async () => makeAcidente({ gravidade: 'obito', data_hora: '2026-08-06T10:00:00Z' })) });
     const esocialRepo = makeEsocialRepository();
     const useCase = new EmitCatUseCase(accidentRepo, esocialRepo);
 
-    const result = await useCase.execute({ accidentId: 77, emitenteId: 20, body: { tipo: 'inicial' } });
+    const result = await useCase.execute({ accidentId: 77, emitenteId: 20, body: {} });
+    expect(result.cat.tipo).toBe('obito');
     expect(result.prazo_limite).toBe('2026-08-06');
+  });
+
+  it.each([
+    ['obito', 'inicial'],
+    ['sem_afastamento', 'obito'],
+  ])('rejeita tipo explícito incoerente: gravidade=%s, body.tipo=%s', async (gravidade, tipo) => {
+    const accidentRepo = makeAccidentRepository({
+      findAccidentById: jest.fn(async () => makeAcidente({ gravidade })),
+    });
+    const esocialRepo = makeEsocialRepository();
+    const useCase = new EmitCatUseCase(accidentRepo, esocialRepo);
+
+    await expect(useCase.execute({ accidentId: 77, emitenteId: 20, body: { tipo } }))
+      .rejects.toBeInstanceOf(BusinessRuleError);
+    expect(accidentRepo.createCat).not.toHaveBeenCalled();
+  });
+
+  it('rejeita nova comunicação inicial quando a CAT existente é do tipo obito', async () => {
+    const accidentRepo = makeAccidentRepository({
+      findAccidentById: jest.fn(async () => makeAcidente({ gravidade: 'obito' })),
+      findCatsByAccidentId: jest.fn(async () => [{ id: 199, tipo: 'obito' }]),
+    });
+    const esocialRepo = makeEsocialRepository();
+    const useCase = new EmitCatUseCase(accidentRepo, esocialRepo);
+
+    await expect(useCase.execute({ accidentId: 77, emitenteId: 20, body: {} }))
+      .rejects.toBeInstanceOf(BusinessRuleError);
+    expect(accidentRepo.createCat).not.toHaveBeenCalled();
   });
 
   it('nao bloqueia a criacao mesmo com prazo_limite ja vencido (E1) — evento nasce pendente', async () => {
@@ -206,9 +236,15 @@ describe('EmitCatUseCase', () => {
     const esocialRepo = makeEsocialRepository();
     const useCase = new EmitCatUseCase(accidentRepo, esocialRepo);
 
-    const result = await useCase.execute({ accidentId: 77, emitenteId: 20, body: { tipo: 'inicial' } });
+    const result = await useCase.execute({ accidentId: 77, emitenteId: 20, body: {} });
     expect(result.cat).toBeDefined();
     expect(esocialRepo.create).toHaveBeenCalledWith(expect.objectContaining({ status: 'pendente' }), expect.anything());
+  });
+});
+
+describe('calcularPrazoLimiteCat', () => {
+  it('pula sábado e domingo: acidente na sexta vence na segunda-feira', () => {
+    expect(calcularPrazoLimiteCat('2026-08-07T10:00:00Z', 'sem_afastamento')).toBe('2026-08-10');
   });
 });
 

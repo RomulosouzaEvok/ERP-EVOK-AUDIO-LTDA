@@ -371,13 +371,12 @@ export async function closeAccident(id: number) {
   return data.data;
 }
 
-export type CatTipo = 'inicial' | 'reabertura';
+export type CatTipo = 'inicial' | 'obito' | 'reabertura';
 
 export interface Cat {
   id: number;
   accident_id: number;
   tipo: CatTipo;
-  emitente: string;
   prazo_limite: string;
   status: 'pendente_transmissao' | 'transmitida';
   esocial_event_id?: number;
@@ -385,10 +384,9 @@ export interface Cat {
 }
 
 /** @throws {AxiosError} 422 `BUSINESS_RULE_VIOLATION` — tentativa de emitir 2ª CAT inicial (usar reopen). */
-export async function emitCat(accidentId: number, emitente: string) {
+export async function emitCat(accidentId: number) {
   const { data } = await httpClient.post<ItemResponse<{ cat: Cat; esocial_event_id?: number }>>(
     `/api/sst/accidents/${accidentId}/cat`,
-    { tipo: 'inicial', emitente },
   );
   return data.data;
 }
@@ -398,8 +396,8 @@ export async function listCats(accidentId: number) {
   return data.data;
 }
 
-export async function reopenCat(catId: number, emitente: string) {
-  const { data } = await httpClient.post<ItemResponse<Cat>>(`/api/sst/cat/${catId}/reopen`, { emitente });
+export async function reopenCat(catId: number) {
+  const { data } = await httpClient.post<ItemResponse<Cat>>(`/api/sst/cat/${catId}/reopen`);
   return data.data;
 }
 
