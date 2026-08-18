@@ -81,6 +81,8 @@ export const SEGREGATION_RULES = {
   PURCHASE_ORDER_AUTHORITY: 'D-K-ALCADA',
   /** `POST /api/comex/import-processes/:id/approve` (gate COMEX, G11-COMEX). */
   IMPORT_PROCESS_AUTHORITY: 'D-K-COMEX',
+  /** `POST /api/jur/contracts/:id/approve` (alçada de contrato jurídico, CASE-002). */
+  JUR_CONTRACT_AUTHORITY: 'D-K-JURIDICO',
 } as const;
 
 /** União dos identificadores de {@link SEGREGATION_RULES}. */
@@ -116,6 +118,42 @@ export function isSelfApproval(
   if (requesterUserId === null || requesterUserId === undefined) return false;
   if (approverUserId === null || approverUserId === undefined) return false;
   return Number(requesterUserId) === Number(approverUserId);
+}
+
+/** Entrada da segregação entre duas aprovações sucessivas do mesmo documento. */
+export interface PriorApproverCheckInput {
+  rule: SegregationRule;
+  existingApprovals: Array<{ approver_user_id?: number | null; approver_role?: string | null }>;
+  approverUserId: number | null | undefined;
+  documentLabel: string;
+  approverHint: string;
+}
+
+/**
+ * Impede que a mesma pessoa registre duas aprovações de papéis distintos.
+ * Base sincronizada do REMEDIATION_COMMIT `8d78882` do CASE-002; `admin`
+ * deliberadamente não é isento porque a regra compara identidade.
+ */
+export function assertApproverIsNotPriorApprover(input: PriorApproverCheckInput): void {
+  const already = (input.existingApprovals ?? []).find(
+    (approval) => isSelfApproval(approval?.approver_user_id, input.approverUserId),
+  );
+  if (!already) return;
+
+  throw new BusinessRuleError(
+    `Segregacao de funcao: voce ja registrou a aprovacao "${already.approver_role ?? 'anterior'}" de ${input.documentLabel}, `
+      + 'entao nao pode registrar tambem a segunda. Dupla aprovacao exige DUAS PESSOAS. '
+      + `Peca a segunda aprovacao a ${input.approverHint}. `
+      + 'Se ninguem mais tem esse acesso hoje, o administrador precisa cadastrar um segundo aprovador '
+      + '(Administracao > Perfis de Acesso) — ser administrador nao isenta, porque nenhum nivel de permissao '
+      + 'transforma uma pessoa em duas.',
+    {
+      rule: input.rule,
+      approver_user_id: input.approverUserId,
+      existing_role: already.approver_role ?? null,
+      what_to_do: `Solicitar a segunda aprovacao a ${input.approverHint}.`,
+    },
+  );
 }
 
 /**

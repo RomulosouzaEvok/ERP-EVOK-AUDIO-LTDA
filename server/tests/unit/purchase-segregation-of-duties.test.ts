@@ -134,9 +134,10 @@ describe('D-K — regra pura (shared/domain/segregationOfDuties)', () => {
       PURCHASE_ORDER: 'D-K-PEDIDO',
       PURCHASE_ORDER_AUTHORITY: 'D-K-ALCADA',
       IMPORT_PROCESS_AUTHORITY: 'D-K-COMEX',
+      JUR_CONTRACT_AUTHORITY: 'D-K-JURIDICO',
     });
-    // Os 4 valores sao distintos: um cliente consegue diferenciar qual gate reprovou.
-    expect(new Set(Object.values(SEGREGATION_RULES)).size).toBe(4);
+    // Os 5 valores sao distintos: um cliente consegue diferenciar qual gate reprovou.
+    expect(new Set(Object.values(SEGREGATION_RULES)).size).toBe(5);
   });
 
   it('auto-aprovacao e apenas "mesma pessoa", nao "mesmo papel"', () => {
