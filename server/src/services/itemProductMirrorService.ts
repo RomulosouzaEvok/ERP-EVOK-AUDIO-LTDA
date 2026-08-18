@@ -103,6 +103,9 @@ class ItemProductMirrorService {
       // cliente — o espelho nasce com 0 e o comercial define depois.
       price: 0,
       cost_price: item.custo_padrao ?? 0,
+      // O saldo do espelho vem do item apenas na criação legítima; o POST
+      // agora não aceita `estoque_atual`, então não existe caminho de entrada
+      // para sobrescrever estoque sem movimento.
       quantity: item.estoque_atual ?? 0,
       min_quantity: item.estoque_seguranca ?? 0,
       unit: item.unidade || 'un',

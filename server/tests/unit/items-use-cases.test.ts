@@ -113,6 +113,10 @@ describe('updateItemSchema — validacao do payload de PATCH /api/items/:id', ()
     expect(updateItemSchema.parse({})).toEqual({});
   });
 
+  it('rejeita estoque_atual no PATCH de item', () => {
+    expect(() => updateItemSchema.parse({ estoque_atual: 10 })).toThrow();
+  });
+
   it('rejeita campos desconhecidos (schema estrito)', () => {
     expect(() => updateItemSchema.parse({ codigo: 'NAO-PERMITIDO' })).toThrow();
   });

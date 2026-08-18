@@ -11,7 +11,6 @@ export const createItemSchema = z.object({
   tipo: z.enum(['MATERIA_PRIMA', 'SUBCONJUNTO', 'PRODUTO_ACABADO', 'USO_E_CONSUMO', 'ATIVO_IMOBILIZADO']),
   unidade: z.string().trim().min(1).max(12),
   status: z.enum(['ATIVO', 'INATIVO', 'BLOQUEADO']).optional(),
-  estoque_atual: z.coerce.number().min(0).optional(),
   estoque_reservado: z.coerce.number().min(0).optional(),
   estoque_seguranca: z.coerce.number().min(0).optional(),
   lote_minimo: z.coerce.number().min(0).optional(),
