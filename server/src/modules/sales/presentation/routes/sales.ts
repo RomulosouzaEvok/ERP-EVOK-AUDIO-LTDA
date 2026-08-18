@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, authorizeModule } = require('../../../../middlewares/auth');
+const idempotencyMiddleware = require('../../../../middlewares/idempotency');
 const saleController = require('../controllers/saleController');
 const fiscalController = require('../../../fiscal/presentation/controllers/fiscalController');
 
@@ -42,7 +43,7 @@ router.put('/customers/:id/prices/:priceId', authenticate, authorizeModule('vend
 router.delete('/customers/:id/prices/:priceId', authenticate, authorizeModule('vendas', 'operate'), saleController.deactivateCustomerPrice);
 
 router.get('/:id', authenticate, authorizeModule('vendas'), saleController.getById);
-router.post('/', authenticate, authorizeModule('vendas', 'operate'), saleController.create);
+router.post('/', authenticate, authorizeModule('vendas', 'operate'), idempotencyMiddleware(), saleController.create);
 router.put('/:id/status', authenticate, authorizeModule('vendas', 'operate'), saleController.updateStatus);
 // Gap 2/3 ("Alteração de pedido"): substitui o conjunto de itens de uma
 // venda quote/confirmed (bloqueado a partir de partially_invoiced/invoiced
