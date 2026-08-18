@@ -1,0 +1,173 @@
+================================================================================
+DISPATCH CLAUDE CODE — CASE-018 + CASE-007
+================================================================================
+
+VOCÊ: Copie TUDO isso e cole na aba Claude Code do VS Code
+CLAUDE CODE: Leia, execute, NÃO TERMINE até passar em TODOS os critérios
+
+================================================================================
+PROMPT MASTER CLAUDE CODE
+================================================================================
+
+@workspace
+
+# REMEDIAÇÃO DUAL: CASE-018 + CASE-007 — Segurança (Senha + Rate Limit)
+
+Você é sanacore-remediation-engineer. Tarefas: remover fallback de senha admin 
+E trocar jwt.decode por jwt.verify no rate limiter.
+
+## PARTE 1: CASE-018 — AUD-AUTHN-02 (Segurança de Senha Admin Bootstrap)
+
+### Problema (CASE-018)
+
+Três defeitos distintos:
+1. `docker-compose.yml:57` — compose fornece senha padrão
+2. `server/src/config/seeds.ts:138` — literal "123456" hardcoded
+3. `server/src/config/seeds.ts:139-141` — comprimento só logged
+
+Consequência: ADMIN_SEED_PASSWORD=123 produz admin com boot bem-sucedido em produção.
+
+### Escopo CASE-018 (EXATO)
+
+E-1. `server/src/config/seeds.ts:138` — DELETAR o literal "123456"
+E-2. `server/src/config/runtimeEnv.ts:127-133` — FORÇAR erro se falta ADMIN_SEED_PASSWORD em produção
+E-3. `server/.env.example:16` — NÃO colocar valor padrão (deixar vazio com comentário)
+E-4. `docker-compose.yml:57` — REMOVER senha fallback, usar ${ADMIN_SEED_PASSWORD:?error}
+E-5. `server/src/config/seeds-production-boot.test.ts` — REESCREVER 2 testes
+E-6. `README.md:220-222` — CORRIGIR drift ("nao ha credenciais hardcoded")
+E-7. VALIDAR: `docker compose config` → EXIT 0
+
+### Critérios Sucesso CASE-018
+
+- [ ] `npm run dev` COM .env vazio → ERRO: "ADMIN_SEED_PASSWORD is required"
+- [ ] `npm run dev` COM .env válido → funciona normal
+- [ ] `npm run test:unit -- --testNamePattern="seeds"` → 0 falhas
+- [ ] `npm run typecheck` → 0 errors
+- [ ] `docker compose config` → EXIT 0
+- [ ] Nenhum literal "123456" permanece em seeds.ts/docker-compose.yml
+
+---
+
+## PARTE 2: CASE-007 — AUD-AUTHN-03 (Rate Limit com JWT Verify)
+
+### Problema (CASE-007)
+
+`app.ts:79` usa `jwt.decode()` (lê payload SEM verificar assinatura).
+Atacante cria 100 JWTs forjados com IDs diferentes → contorna rate limit global.
+
+### Escopo CASE-007 (EXATO)
+
+E-1. `server/app.ts:79` → TROCAR `jwt.decode()` por `jwt.verify(token, process.env.JWT_SECRET)`
+E-2. `server/app.ts:84-86` → Envolver em try/catch, fallback para `ipKeyGenerator(req.ip)`
+E-3. `server/tests/setup.ts:5` → ADICIONAR `process.env.DB_NAME = 'erp_evok_audio_test'`
+E-4. **Criar teste novo:** `server/tests/integration/rate-limit-jwt-verify.test.ts`
+     → Caso 1: 301 requisições com JWT VÁLIDO → 429 (limite por usuário)
+     → Caso 2: 301 requisições com JWT INVÁLIDO → fallback para IP
+     → Caso 3: 301 requisições de IPs diferentes → cada IP tem cota própria
+E-5. VALIDAR: `npm run test:integration` roda sem conectar banco de produção
+
+### Critérios Sucesso CASE-007
+
+- [ ] Suite integração roda SEM conectar banco produção (NODE_ENV=test + DB_NAME=test)
+- [ ] `npm run test:unit` → 431/431 PASS
+- [ ] `npm run test:integration` → 27/27 suites, 65 testes, 100% PASS
+- [ ] Rate limit respeita cota POR USUÁRIO autenticado (300 req/15min)
+- [ ] Token inválido → fallback para IP (sem erro 500)
+- [ ] Teste novo cobrindo 3 cenários acima
+- [ ] Nenhuma alteração em compose.yml/Dockerfile
+
+---
+
+## SEQUÊNCIA EXECUÇÃO
+
+**FAÇA NESTA ORDEM (não pule nenhum):**
+
+### FASE 1: Análise (você mostra o que vai fazer)
+
+Mostre TODOS os arquivos que vai tocar:
+- CASE-018: 6 arquivos (seeds.ts, runtimeEnv.ts, .env.example, docker-compose.yml, test.ts, README.md)
+- CASE-007: 3 arquivos (app.ts, setup.ts, + 1 novo teste)
+
+Depois mostre o DIFF EXATO (antes → depois) de CADA arquivo.
+
+Só DEPOIS você aprova para continuar.
+
+### FASE 2: Execução (você faz as mudanças)
+
+Aguarde aprovação: "yes, proceed"
+
+Então execute todas as mudanças nos arquivos.
+
+### FASE 3: Testes (você roda a suite)
+
+Depois de modificar TODOS os arquivos, roda:
+
+```bash
+npm run typecheck
+docker compose config
+npm run test:unit -- --testNamePattern="seeds"
+npm run test:unit
+npm run test:integration
+```
+
+### FASE 4: Relatório (você mostra o resultado)
+
+Se TUDO passar:
+- [ ] Lista de 9 arquivos modificados (path completo)
+- [ ] Número de testes novos criados
+- [ ] Resultado de cada comando acima (PASS/FAIL)
+- [ ] Comando para fazer commit
+
+Se ALGO falhar:
+- [ ] Mostra o erro completo
+- [ ] Oferece solução
+
+---
+
+## DESVIOS CONHECIDOS (NÃO ESTENDA)
+
+CASE-018:
+- ❌ Não criar variável nova (só ADMIN_SEED_PASSWORD)
+- ❌ Não alterar schema/banco
+- ⚠️ Rotação em produção é BLOQUEADA (APR-2026-016)
+
+CASE-007:
+- ⚠️ TRUST_PROXY continua 0 (não escopo deste caso)
+- ⚠️ D1=1600 req/min por IP já aprovado (não altere)
+- ⚠️ D2=300/15min por usuário já aprovado (não altere)
+- ❌ Não alterar compose/Dockerfile
+
+---
+
+## ARMADILHAS
+
+1. NODE_ENV=test SEM DB_NAME → tenta banco produção
+   Solução: E-3 de CASE-007 adiciona DB_NAME em setup.ts
+
+2. jwt.verify sem try/catch → Exception deruba tudo
+   Solução: E-2 envolve em try/catch com fallback
+
+3. Teste existente TRAVA o defeito (seeds-prod-test.ts afirma que 3 chars é OK)
+   Solução: E-5 de CASE-018 reescreve o teste
+
+---
+
+## CHECKLIST FINAL (antes de parar)
+
+Quando você TERMINAR E TODOS OS TESTES PASSAREM, mostre:
+
+- [ ] Lista de 9 arquivos modificados com path completo
+- [ ] Número de testes NOVOS (deve ser +1 describe com 3 it's para CASE-007)
+- [ ] Número de testes REESCRITOS (deve ser 2 para CASE-018)
+- [ ] `npm run typecheck` = 0 errors ✅
+- [ ] `npm run test:unit` = 431/431 PASS ✅
+- [ ] `npm run test:integration` = 27/27 suites PASS ✅
+- [ ] `docker compose config` = EXIT 0 ✅
+- [ ] Nenhuma conexão ao banco de produção foi feita (NODE_ENV=test) ✅
+- [ ] Comando para fazer commit (já pronto pra copiar/colar)
+
+---
+
+COMECE AGORA: Mostre TODOS os arquivos que vai tocar (9 total).
+
+================================================================================
