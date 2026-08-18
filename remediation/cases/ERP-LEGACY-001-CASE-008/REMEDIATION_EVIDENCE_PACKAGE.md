@@ -6,7 +6,7 @@ PROJECT_ID: `ERP-LEGACY-001`
 TRACK: `Opção C / APR-2026-053`
 BRANCH: `sana/ERP-LEGACY-001/CASE-008`
 WORKTREE: `C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008`
-REMEDIATION_COMMIT: `a9102738bc9f011af222377525874b3647651933`
+REMEDIATION_COMMITS: Correcao inicial `a9102738bc9f011af222377525874b3647651933`; Correcao 01 `27ddbbb1166c0fa76e694c714ac2e5932e3152bf`; Correcao 02 (codigo/teste) `be6fb32`
 STATUS DESTE PACOTE: evidencia de implementacao. Nao declara `FINDING CLOSED`, `RETEST_PASSED` nem aceite de remediacao; essa autoridade permanece exclusiva da VeriCore.
 
 ---
@@ -198,3 +198,87 @@ Ran all test suites matching tests/unit/case008-correction01.test.ts|tests/unit/
 ---
 
 REMEDIATION_COMPLETE
+
+## 12. CORRECAO_02
+
+Escopo desta correcao: preservar o codigo de saida fatal quando o shutdown
+disparado por `uncaughtException` conclui seu fechamento gracioso sem erro.
+Timeouts, dreno, webhook e `stop_grace_period` nao foram alterados.
+
+### 12.1 Problema e causa
+
+No commit-base `27ddbbb`, `server/index.ts:79` encerrava todo shutdown
+bem-sucedido com `process.exit(0)`. A funcao era compartilhada por
+SIGTERM/SIGINT e pelo callback `fatalShutdown`; assim, uma
+`uncaughtException` podia fechar HTTP, auditoria e Sequelize corretamente,
+mas reportar saida limpa ao orquestrador.
+
+Prova vermelha estatica executada contra o commit-base:
+
+```text
+git show 27ddbbb:server/index.ts | Select-String -Pattern 'process.exit\(0\)' -Context 3,1
+
+      await sequelize.close();
+      clearTimeout(forcedExit);
+      logger.info('Shutdown concluido com sucesso.');
+>     process.exit(0);
+    } catch (error: unknown) {
+```
+
+### 12.2 Correcao aplicada
+
+| Mudanca | Evidencia |
+|---|---|
+| `ShutdownOptions` passou a aceitar `exitCodeOnSuccess?: number` | `server/index.ts:35-39` |
+| O caminho de sucesso usa o valor configurado, com default `0` | `server/index.ts:52,82` |
+| O callback de `uncaughtException` passa `exitCodeOnSuccess: 1` | `server/index.ts:26-32` |
+| SIGTERM/SIGINT continuam usando o default `0` | `server/index.ts:102-109` |
+| O catch continua saindo com `1`, sem alteracao semantica | `server/index.ts:83-88` |
+
+Para tornar a rotina testavel sem subir servidor ou banco, `start` e
+`shutdown` foram exportados e o auto-start ficou protegido por
+`require.main === module` (`server/index.ts:91,117-119`). A execucao normal do
+entrypoint compilado continua chamando `start`; a importacao em teste nao abre
+socket nem conexao.
+
+Commit de codigo e teste: `be6fb32` (`fix(case008): preserve fatal shutdown exit code`).
+
+### 12.3 Teste unitario e prova verde
+
+`server/tests/unit/case008-correction02.test.ts` usa mocks para
+`app.listen`/`server.close`, `waitForPendingAuditLogs`, `sequelize.close`,
+logger, runtime env e process safety. Nenhuma conexao HTTP ou de banco e
+aberta.
+
+- `uncaughtException`: invoca o `fatalShutdown` realmente registrado e
+  confirma `server.close`, dreno, fechamento do Sequelize e `process.exit(1)`;
+  tambem confirma ausencia de `process.exit(0)`.
+- `SIGTERM`: confirma o mesmo fechamento e `process.exit(0)`.
+- erro em `sequelize.close`: confirma que o catch continua em
+  `process.exit(1)`.
+
+Comando e output real final:
+
+```text
+npx jest --runInBand --ci tests/unit/case008-correction02.test.ts tests/unit/case008-correction01.test.ts tests/unit/case008-audit-log-static.test.ts tests/unit/case008-audit-log-runtime.test.ts tests/unit/audit-log-failure-alerting.test.ts
+
+Test Suites: 5 passed, 5 total
+Tests:       14 passed, 14 total
+Snapshots:   0 total
+Time:        1.883 s, estimated 5 s
+Ran all test suites matching tests/unit/case008-correction02.test.ts|tests/unit/case008-correction01.test.ts|tests/unit/case008-audit-log-static.test.ts|tests/unit/case008-audit-log-runtime.test.ts|tests/unit/audit-log-failure-alerting.test.ts.
+```
+
+```text
+> erp-evok-audio-server@1.0.0 typecheck
+> tsc -p tsconfig.json --noEmit
+
+> erp-evok-audio-server@1.0.0 build
+> tsc -p tsconfig.build.json
+```
+
+### 12.4 Estado e risco residual
+
+`REMEDIATION_COMPLETE` para o escopo da Correcao 02. Isso nao declara
+`RETEST_PASSED` nem `FINDING CLOSED`; a revisao independente e o reteste
+continuam sob autoridade exclusiva da VeriCore.
