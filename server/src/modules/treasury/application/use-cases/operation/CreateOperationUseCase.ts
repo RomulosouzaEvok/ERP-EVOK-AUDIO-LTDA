@@ -20,6 +20,7 @@ type CreateOperationInput = {
   end_date?: string | null;
   guarantee_type?: 'aval' | 'fianca' | 'alienacao' | 'recebiveis' | 'none';
   notes?: string | null;
+  createdBy: number;
 };
 
 class CreateOperationUseCase extends UseCase<CreateOperationInput, any> {
@@ -55,6 +56,7 @@ class CreateOperationUseCase extends UseCase<CreateOperationInput, any> {
       guarantee_type: input.guarantee_type ?? 'none',
       notes: input.notes ?? null,
       status: 'active',
+      created_by: input.createdBy,
     });
   }
 }

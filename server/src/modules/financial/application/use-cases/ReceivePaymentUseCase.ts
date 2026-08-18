@@ -11,6 +11,7 @@ interface ReceivePaymentInput {
   payment_date?: string | Date;
   payment_method?: string;
   amount?: number | string;
+  approverUserId: number;
 }
 
 /**
@@ -36,7 +37,7 @@ class ReceivePaymentUseCase extends UseCase {
    * @param {number|string} [input.amount]
    * @returns {Promise<{ account: Object, previousStatus: string }>}
    */
-  async execute({ id, payment_date, payment_method, amount }: ReceivePaymentInput) {
+  async execute({ id, payment_date, payment_method, amount, approverUserId }: ReceivePaymentInput) {
     return sequelize.transaction(async (transaction: Transaction) => {
       const account = await this.financialRepository.findReceivableByIdForUpdate(id, transaction);
       if (!account) throw new NotFoundError('Conta a receber nao encontrada');
@@ -68,6 +69,8 @@ class ReceivePaymentUseCase extends UseCase {
       account.status = newAmountPaidCents >= totalCents ? 'paid' : 'partial';
       account.payment_date = payment_date || new Date();
       account.payment_method = payment_method || account.payment_method;
+      account.approved_by = approverUserId;
+      account.approval_date = new Date().toISOString().slice(0, 10);
       await account.save({ transaction });
 
       return { account, previousStatus };

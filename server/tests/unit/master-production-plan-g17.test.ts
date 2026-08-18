@@ -363,7 +363,7 @@ describe('G17 — CreateMasterProductionPlanUseCase (consolidação da demanda)'
     });
 
     expect(repository.createPlan).toHaveBeenCalledWith(
-      expect.objectContaining({ planner_id: PLANNER_ID, status: 'draft' }),
+      expect.objectContaining({ planner_id: PLANNER_ID, created_by: PLANNER_ID, status: 'draft' }),
       expect.anything(),
     );
   });

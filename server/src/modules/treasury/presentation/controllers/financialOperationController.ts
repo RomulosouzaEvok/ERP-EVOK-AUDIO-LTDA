@@ -70,7 +70,7 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
     if (!parsed.success) handleZodError(parsed.error);
 
     const useCase = new CreateOperationUseCase(treasuryRepository);
-    const operation = await useCase.execute(parsed.data);
+    const operation = await useCase.execute({ ...parsed.data, createdBy: (req as any).user.id });
 
     logAction(req, {
       action: 'create',
@@ -115,7 +115,9 @@ exports.settle = async (req: Request, res: Response, next: NextFunction) => {
     if (!parsed.success) handleZodError(parsed.error);
 
     const useCase = new SettleOperationUseCase(treasuryRepository);
-    const operation = await useCase.execute({ id: Number(req.params.id), settled_at: parsed.data.settled_at, transaction: t });
+    const operation = await useCase.execute({
+      id: Number(req.params.id), settled_at: parsed.data.settled_at, userId: (req as any).user.id, transaction: t,
+    });
 
     await t.commit();
 
@@ -140,7 +142,7 @@ exports.cancel = async (req: Request, res: Response, next: NextFunction) => {
   const t: Transaction = await sequelize.transaction();
   try {
     const useCase = new CancelOperationUseCase(treasuryRepository);
-    const operation = await useCase.execute({ id: Number(req.params.id), transaction: t });
+    const operation = await useCase.execute({ id: Number(req.params.id), userId: (req as any).user.id, transaction: t });
 
     await t.commit();
 

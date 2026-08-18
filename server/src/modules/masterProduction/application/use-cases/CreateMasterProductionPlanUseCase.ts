@@ -201,6 +201,7 @@ class CreateMasterProductionPlanUseCase extends UseCase<CreateMasterProductionPl
         horizon_start: horizonStart,
         horizon_end: horizonEnd,
         status: 'draft',
+        created_by: input.plannerId,
         planner_id: input.plannerId,
         consolidated_at: new Date(),
         notes: input.notes ? String(input.notes).trim() : null,

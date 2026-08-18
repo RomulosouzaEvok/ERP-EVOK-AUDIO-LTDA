@@ -51,6 +51,7 @@ interface MasterProductionPlanAttributes {
   horizon_start: string;
   horizon_end: string;
   status: MasterProductionPlanStatus;
+  created_by: number;
   planner_id: number;
   consolidated_at: Date;
   firmed_by: number | null;
@@ -76,6 +77,7 @@ const MasterProductionPlan = sequelize.define<any, MasterProductionPlanAttribute
     defaultValue: 'draft',
     comment: 'draft | firm | released | canceled — so plano firm gera OP'
   },
+  created_by: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> users.id de quem abriu o plano (SEMPRE do JWT)' },
   planner_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> users.id — SEMPRE do JWT, nunca do body' },
   consolidated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, comment: 'Momento da fotografia da demanda; o plano nao se re-consolida sozinho' },
   firmed_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id de quem congelou a decisao (do JWT)' },
@@ -92,7 +94,8 @@ const MasterProductionPlan = sequelize.define<any, MasterProductionPlanAttribute
   timestamps: true,
   indexes: [
     { fields: ['status'] },
-    { fields: ['planner_id'] }
+    { fields: ['planner_id'] },
+    { fields: ['created_by'] }
   ]
 });
 

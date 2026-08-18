@@ -64,7 +64,9 @@ exports.receivePayment = async (req: Request, res: Response, next: NextFunction)
     if (!parsed.success) handleZodError(parsed.error);
     const { payment_date, payment_method, amount } = parsed.data;
     const useCase = new ReceivePaymentUseCase(financialRepository);
-    const { account, previousStatus } = await useCase.execute({ id: req.params.id, payment_date, payment_method, amount });
+    const { account, previousStatus } = await useCase.execute({
+      id: req.params.id, payment_date, payment_method, amount, approverUserId: (req as any).user.id,
+    });
 
     logAction(req, {
       action: 'status_change',
@@ -178,7 +180,9 @@ exports.payPayable = async (req: Request, res: Response, next: NextFunction) => 
     if (!parsed.success) handleZodError(parsed.error);
     const { payment_date, payment_method, amount } = parsed.data;
     const useCase = new PayPayableUseCase(financialRepository);
-    const { account, previousStatus } = await useCase.execute({ id: req.params.id, payment_date, payment_method, amount });
+    const { account, previousStatus } = await useCase.execute({
+      id: req.params.id, payment_date, payment_method, amount, approverUserId: (req as any).user.id,
+    });
 
     logAction(req, {
       action: 'status_change',

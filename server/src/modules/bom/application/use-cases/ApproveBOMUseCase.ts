@@ -37,7 +37,7 @@ class ApproveBOMUseCase extends UseCase {
    * @throws {BusinessRuleError} `G1-BOM-SUPERSEDED-IMUTAVEL` se a BOM já tiver
    *   sido substituída por uma revisão mais nova.
    */
-  async execute({ id }: { id: number }) {
+  async execute({ id, approverUserId }: { id: number; approverUserId: number }) {
     const before = await this.bomRepository.findRawById(id);
     if (!before) {
       throw new NotFoundError('BOM não encontrada');
@@ -55,7 +55,7 @@ class ApproveBOMUseCase extends UseCase {
     const { updated, supersededIds } = await this.bomRepository.activateExclusively(
       Number(before.id),
       Number(before.product_id),
-      {},
+      { approved_by: approverUserId, approval_date: new Date().toISOString().slice(0, 10) },
     );
     if (!updated) {
       throw new NotFoundError('BOM não encontrada');

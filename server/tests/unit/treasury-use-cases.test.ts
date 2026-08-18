@@ -102,11 +102,12 @@ describe('CreateOperationUseCase', () => {
     const repo = makeTreasuryRepository();
 
     const result = await new CreateOperationUseCase(repo).execute({
-      operation_type: 'loan', institution: 'BNDES', contract_number: 'BNDES-001', amount: 200000, start_date: '2026-08-01',
+      operation_type: 'loan', institution: 'BNDES', contract_number: 'BNDES-001', amount: 200000, start_date: '2026-08-01', createdBy: 7,
     });
 
-    expect(repo.createOperation).toHaveBeenCalledWith(expect.objectContaining({ contract_number: 'BNDES-001', status: 'active', guarantee_type: 'none' }));
+    expect(repo.createOperation).toHaveBeenCalledWith(expect.objectContaining({ contract_number: 'BNDES-001', status: 'active', guarantee_type: 'none', created_by: 7 }));
     expect(result.status).toBe('active');
+    expect(result.created_by).toBe(7);
   });
 
   it('FLUXO DE EXCECAO: rejeita contract_number duplicado com ConflictError', async () => {
@@ -165,9 +166,9 @@ describe('SettleOperationUseCase', () => {
       findOperationByIdForUpdate: jest.fn(async () => ({ id: 1, contract_number: 'BNDES-001', status: 'active' })),
     });
 
-    await new SettleOperationUseCase(repo).execute({ id: 1, settled_at: '2026-08-07', transaction: FAKE_TRANSACTION });
+    await new SettleOperationUseCase(repo).execute({ id: 1, settled_at: '2026-08-07', userId: 11, transaction: FAKE_TRANSACTION });
 
-    expect(repo.updateOperation).toHaveBeenCalledWith(1, { status: 'settled', settled_at: '2026-08-07' }, FAKE_TRANSACTION);
+    expect(repo.updateOperation).toHaveBeenCalledWith(1, { status: 'settled', settled_at: '2026-08-07', settled_by: 11 }, FAKE_TRANSACTION);
   });
 
   it('FLUXO DE EXCECAO: rejeita liquidar operação que não está active', async () => {
@@ -191,9 +192,9 @@ describe('CancelOperationUseCase', () => {
       findOperationByIdForUpdate: jest.fn(async () => ({ id: 1, contract_number: 'BNDES-001', status: 'active' })),
     });
 
-    await new CancelOperationUseCase(repo).execute({ id: 1, transaction: FAKE_TRANSACTION });
+    await new CancelOperationUseCase(repo).execute({ id: 1, userId: 12, transaction: FAKE_TRANSACTION });
 
-    expect(repo.updateOperation).toHaveBeenCalledWith(1, { status: 'canceled' }, FAKE_TRANSACTION);
+    expect(repo.updateOperation).toHaveBeenCalledWith(1, { status: 'canceled', canceled_by: 12 }, FAKE_TRANSACTION);
   });
 
   it('FLUXO DE EXCECAO: rejeita cancelar operação já settled', async () => {

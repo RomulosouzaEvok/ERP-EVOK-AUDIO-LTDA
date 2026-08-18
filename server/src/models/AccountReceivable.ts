@@ -32,6 +32,8 @@ interface AccountReceivableAttributes {
   negativation_date: string | null;
   notes: string | null;
   cost_center_id: number | null;
+  approved_by: number | null;
+  approval_date: string | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -65,7 +67,9 @@ const AccountReceivable = sequelize.define('AccountReceivable', {
   protest_date: { type: DataTypes.DATEONLY, allowNull: true, comment: 'Data do protesto; NULL se não houve protesto' },
   negativation_date: { type: DataTypes.DATEONLY, allowNull: true, comment: 'Data da negativação; NULL se não houve' },
   notes: { type: DataTypes.TEXT, allowNull: true, comment: 'Observações livres (opcional)' },
-  cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = "Sem centro de custo" nos relatórios)' }
+  cost_center_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → cost_centers.id (opcional; NULL = "Sem centro de custo" nos relatórios)' },
+  approved_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → users.id de quem registrou o recebimento' },
+  approval_date: { type: DataTypes.DATEONLY, allowNull: true, comment: 'Data em que o recebimento foi registrado' }
 }, {
   tableName: 'accounts_receivable',
   underscored: true,

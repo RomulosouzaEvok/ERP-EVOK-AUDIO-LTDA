@@ -118,9 +118,12 @@ describe('G1 - ativar uma revisao rebaixa a anterior', () => {
     const repository = makeRepository({ id: 9, product_id: 17, status: 'draft', revision: 'S2' });
     const useCase = new ApproveBOMUseCase(repository);
 
-    const result = await useCase.execute({ id: 9 });
+    const result = await useCase.execute({ id: 9, approverUserId: 31 });
 
-    expect(repository.activateExclusively).toHaveBeenCalledWith(9, 17, {});
+    expect(repository.activateExclusively).toHaveBeenCalledWith(9, 17, {
+      approved_by: 31,
+      approval_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
     expect(result.supersededIds).toEqual([7]);
   });
 
@@ -129,7 +132,7 @@ describe('G1 - ativar uma revisao rebaixa a anterior', () => {
 
     await expect(new UpdateBOMUseCase(repository).execute({ id: 9, data: { notes: 'x' } }))
       .rejects.toMatchObject({ statusCode: 404 });
-    await expect(new ApproveBOMUseCase(repository).execute({ id: 9 }))
+    await expect(new ApproveBOMUseCase(repository).execute({ id: 9, approverUserId: 31 }))
       .rejects.toMatchObject({ statusCode: 404 });
   });
 });

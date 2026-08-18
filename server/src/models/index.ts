@@ -364,6 +364,7 @@ AccountReceivable.belongsTo(Sale, { foreignKey: 'sale_id', as: 'sale' });
 // Client ↔ AccountReceivable
 Client.hasMany(AccountReceivable, { foreignKey: 'customer_id', as: 'accounts_receivable' });
 AccountReceivable.belongsTo(Client, { foreignKey: 'customer_id', as: 'customer' });
+AccountReceivable.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' });
 
 // Supplier ↔ AccountPayable
 Supplier.hasMany(AccountPayable, { foreignKey: 'supplier_id', as: 'accounts_payable' });
@@ -372,6 +373,7 @@ AccountPayable.belongsTo(Supplier, { foreignKey: 'supplier_id', as: 'supplier' }
 // Purchase ↔ AccountPayable
 Purchase.hasMany(AccountPayable, { foreignKey: 'purchase_id', as: 'accounts_payable' });
 AccountPayable.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
+AccountPayable.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' });
 
 // Product ↔ InventoryMovement
 Product.hasMany(InventoryMovement, { foreignKey: 'product_id', as: 'movements' });
@@ -702,10 +704,20 @@ MasterProductionPlanLine.belongsTo(ProductionOrder, { foreignKey: 'production_or
 // Rastreabilidade de quem planejou / firmou / liberou / cancelou — sempre do JWT.
 User.hasMany(MasterProductionPlan, { foreignKey: 'planner_id', as: 'master_production_plans' });
 MasterProductionPlan.belongsTo(User, { foreignKey: 'planner_id', as: 'planner' });
+User.hasMany(MasterProductionPlan, { foreignKey: 'created_by', as: 'created_master_production_plans' });
+MasterProductionPlan.belongsTo(User, { foreignKey: 'created_by', as: 'createdBy' });
 MasterProductionPlan.belongsTo(User, { foreignKey: 'firmed_by', as: 'firmedBy' });
 MasterProductionPlan.belongsTo(User, { foreignKey: 'released_by', as: 'releasedBy' });
 MasterProductionPlan.belongsTo(User, { foreignKey: 'canceled_by', as: 'canceledBy' });
 MasterProductionPlanLine.belongsTo(User, { foreignKey: 'decided_by', as: 'decidedBy' });
+
+// ---- Tesouraria (operações financeiras) ----
+User.hasMany(TreasuryFinancialOperation, { foreignKey: 'created_by', as: 'treasury_financial_operations_created' });
+TreasuryFinancialOperation.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+User.hasMany(TreasuryFinancialOperation, { foreignKey: 'settled_by', as: 'treasury_financial_operations_settled' });
+TreasuryFinancialOperation.belongsTo(User, { foreignKey: 'settled_by', as: 'settledBy' });
+User.hasMany(TreasuryFinancialOperation, { foreignKey: 'canceled_by', as: 'treasury_financial_operations_canceled' });
+TreasuryFinancialOperation.belongsTo(User, { foreignKey: 'canceled_by', as: 'canceledBy' });
 
 // MaintenanceOrder associations
 Asset.hasMany(MaintenanceOrder, { foreignKey: 'asset_id', as: 'maintenance_orders' });
@@ -731,6 +743,7 @@ AuditLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 // Product ↔ BillOfMaterial
 Product.hasMany(BillOfMaterial, { foreignKey: 'product_id', as: 'boms' });
 BillOfMaterial.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+BillOfMaterial.belongsTo(User, { foreignKey: 'approved_by', as: 'approvedBy' });
 
 // BillOfMaterial ↔ BillOfMaterialItem
 BillOfMaterial.hasMany(BillOfMaterialItem, { foreignKey: 'bom_id', as: 'items' });

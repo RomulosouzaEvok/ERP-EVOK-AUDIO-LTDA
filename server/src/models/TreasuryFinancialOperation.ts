@@ -34,6 +34,9 @@ interface TreasuryFinancialOperationAttributes {
   status: TreasuryOperationStatus;
   notes: string | null;
   settled_at: string | null;
+  created_by: number;
+  settled_by: number | null;
+  canceled_by: number | null;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -62,6 +65,9 @@ const TreasuryFinancialOperation = sequelize.define('TreasuryFinancialOperation'
   },
   notes: { type: DataTypes.TEXT, allowNull: true },
   settled_at: { type: DataTypes.DATEONLY, allowNull: true },
+  created_by: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> users.id de quem criou a operacao' },
+  settled_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id de quem liquidou a operacao' },
+  canceled_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id de quem cancelou a operacao' },
 }, {
   tableName: 'treasury_financial_operations',
   underscored: true,

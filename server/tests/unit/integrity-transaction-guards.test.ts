@@ -152,6 +152,7 @@ describe('Integrity transaction guards', () => {
       id: 1,
       amount: 100,
       payment_method: 'pix',
+      approverUserId: 41,
     });
 
     expect(sequelize.transaction).toHaveBeenCalledTimes(1);
@@ -164,6 +165,8 @@ describe('Integrity transaction guards', () => {
     expect(result.account.status).toBe('partial');
     expect(result.account.amount).toBe(120);
     expect(result.account.amount_paid).toBe(100);
+    expect(result.account.approved_by).toBe(41);
+    expect(result.account.approval_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it('bloqueia recebimento de conta ja paga antes de novo save', async () => {
@@ -200,6 +203,7 @@ describe('Integrity transaction guards', () => {
       id: 10,
       amount: 250,
       payment_method: 'ted',
+      approverUserId: 42,
     });
 
     expect(sequelize.transaction).toHaveBeenCalledTimes(1);
@@ -211,6 +215,8 @@ describe('Integrity transaction guards', () => {
     expect(result.account.status).toBe('partial');
     expect(result.account.amount).toBe(300);
     expect(result.account.amount_paid).toBe(250);
+    expect(result.account.approved_by).toBe(42);
+    expect(result.account.approval_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it('aprova pedido usando lock no registro principal', async () => {

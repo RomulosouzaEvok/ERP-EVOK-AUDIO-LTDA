@@ -16,7 +16,7 @@ import UseCase from '../../../../../shared/application/UseCase';
 import { NotFoundError, BusinessRuleError } from '../../../../../errors';
 import TreasuryRepository from '../../../domain/repositories/TreasuryRepository';
 
-type CancelOperationInput = { id: number; transaction: Transaction };
+type CancelOperationInput = { id: number; userId: number; transaction: Transaction };
 
 class CancelOperationUseCase extends UseCase<CancelOperationInput, any> {
   private readonly treasuryRepository: TreasuryRepository;
@@ -30,7 +30,7 @@ class CancelOperationUseCase extends UseCase<CancelOperationInput, any> {
    * @throws {NotFoundError} Se a operação não existir.
    * @throws {BusinessRuleError} Se a operação não estiver `active`.
    */
-  async execute({ id, transaction }: CancelOperationInput) {
+  async execute({ id, userId, transaction }: CancelOperationInput) {
     const operation = await this.treasuryRepository.findOperationByIdForUpdate(id, transaction);
     if (!operation) {
       throw new NotFoundError(`Operação financeira ${id} não encontrada.`);
@@ -39,7 +39,7 @@ class CancelOperationUseCase extends UseCase<CancelOperationInput, any> {
       throw new BusinessRuleError(`Operação "${operation.contract_number}" está "${operation.status}" — apenas operações ativas podem ser canceladas.`);
     }
 
-    return this.treasuryRepository.updateOperation(id, { status: 'canceled' }, transaction);
+    return this.treasuryRepository.updateOperation(id, { status: 'canceled', canceled_by: userId }, transaction);
   }
 }
 
