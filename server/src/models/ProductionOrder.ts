@@ -1,10 +1,10 @@
 /**
- * Model: ProductionOrder (Ordens de Producao)
+ * 🏭 Model: ProductionOrder (Ordens de Produção)
  *
  * @module models/ProductionOrder
  *
- * Gerencia ordens de producao com workflow de status:
- * planned -> released -> in_progress -> completed/paused/canceled.
+ * Gerencia ordens de produção com workflow de status:
+ * planned → released → in_progress → completed/paused/canceled.
  * Consome BOM e gera produto acabado no estoque.
  */
 
@@ -45,15 +45,23 @@ const ProductionOrder = sequelize.define('ProductionOrder', {
   scrap_reason: { type: DataTypes.TEXT, allowNull: true, comment: 'Motivo do refugo registrado na conclusao da OP' },
   priority: { type: DataTypes.ENUM('low', 'normal', 'high', 'urgent'), defaultValue: 'normal' },
   status: { type: DataTypes.ENUM('planned', 'released', 'in_progress', 'completed', 'paused', 'canceled'), defaultValue: 'planned' },
+  // allowNull:true explicito (bomba de schema corrigida em 2026-08-04, ver
+  // migration 20260804-000012-fix-production-orders-nullable-columns.cjs):
+  // sem essa flag o Sequelize assume allowNull:false por padrao, e a
+  // baseline migration (20260731-000001) usa exatamente attribute.allowNull
+  // para criar a tabela fisica — o resultado era NOT NULL sem default em
+  // colunas legitimamente opcionais, quebrando toda criacao de OP (rota
+  // normal e a nova conversao MRP -> OP) que nao populava manualmente cada
+  // um destes campos.
   start_date: { type: DataTypes.DATEONLY, allowNull: true },
   due_date: { type: DataTypes.DATEONLY, allowNull: false, comment: 'Prazo final' },
   completion_date: { type: DataTypes.DATEONLY, allowNull: true },
-  sales_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> sales.id (pedido de venda associado)' },
-  responsible_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> employees.id (responsavel)' },
+  sales_order_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → sales.id (pedido de venda associado)' },
+  responsible_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → employees.id (responsável)' },
   department_id: {
     type: DataTypes.INTEGER,
     allowNull: true,
-    comment: 'FK -> departments.id (departamento dono da OP; opcional, usado pelo painel de TV de demandas por departamento)'
+    comment: 'FK → departments.id (departamento dono da OP; opcional, usado pelo painel de TV de demandas por departamento — nullable também no histórico legado, sem backfill possível, ver migration 20260806-000003)'
   },
   production_route_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> production_routes.id (roteiro efetivamente usado na liberacao da OP)' },
   notes: { type: DataTypes.TEXT, allowNull: true },

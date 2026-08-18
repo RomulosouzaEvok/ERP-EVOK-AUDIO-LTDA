@@ -14,6 +14,8 @@ function flattenBlocoKRows(preview: any): Array<Record<string, unknown>> {
     rows.push({
       section: 'K200',
       record: 'stock',
+      is_reference_only: preview.is_reference_only ?? false,
+      disclaimer: preview.disclaimer ?? '',
       product_code: row.product_code,
       product_name: row.product_name,
       unit: row.unit,
@@ -28,6 +30,8 @@ function flattenBlocoKRows(preview: any): Array<Record<string, unknown>> {
     rows.push({
       section: 'K230',
       record: 'production',
+      is_reference_only: preview.is_reference_only ?? false,
+      disclaimer: preview.disclaimer ?? '',
       order_number: row.order_number,
       product_code: row.product_code,
       product_name: row.product_name,
@@ -44,6 +48,8 @@ function flattenBlocoKRows(preview: any): Array<Record<string, unknown>> {
     rows.push({
       section: 'K235',
       record: 'consumption',
+      is_reference_only: preview.is_reference_only ?? false,
+      disclaimer: preview.disclaimer ?? '',
       order_number: row.order_number,
       product_code: row.product_code,
       product_name: row.product_name,
@@ -58,6 +64,8 @@ function flattenBlocoKRows(preview: any): Array<Record<string, unknown>> {
     rows.push({
       section: 'K280',
       record: 'adjustment',
+      is_reference_only: preview.is_reference_only ?? false,
+      disclaimer: preview.disclaimer ?? '',
       ...row,
     });
   }
@@ -78,6 +86,8 @@ exports.getBlocoKPreview = async (req: Request, res: Response, next: NextFunctio
 
     if (parsed.data.format === 'csv') {
       const csv = toCsv(flattenBlocoKRows(preview), [
+        { header: 'is_reference_only', accessor: (row: any) => row.is_reference_only },
+        { header: 'disclaimer', accessor: (row: any) => row.disclaimer ?? '' },
         { header: 'Seccao', accessor: (row: any) => row.section },
         { header: 'Registro', accessor: (row: any) => row.record },
         { header: 'Pedido/OP', accessor: (row: any) => row.order_number ?? '' },
@@ -110,3 +120,5 @@ exports.getBlocoKPreview = async (req: Request, res: Response, next: NextFunctio
     next(error);
   }
 };
+
+exports.flattenBlocoKRows = flattenBlocoKRows;

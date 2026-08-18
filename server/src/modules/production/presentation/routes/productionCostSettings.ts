@@ -6,10 +6,10 @@ const productionCostSettingsController = require('../controllers/productionCostS
 /**
  * Rotas da configuracao singleton de custeio de producao.
  *
- * Leitura exige apenas o modulo `producao`; escrita exige `operate`.
+ * Leitura exige apenas o modulo `producao`; escrita exige `approve`.
  */
 
 router.get('/', authenticate, authorizeModule('producao'), productionCostSettingsController.get);
-router.put('/', authenticate, authorizeModule('producao', 'operate'), productionCostSettingsController.upsert);
+router.put('/', authenticate, authorizeModule('producao', 'approve'), productionCostSettingsController.upsert);
 
 module.exports = router;

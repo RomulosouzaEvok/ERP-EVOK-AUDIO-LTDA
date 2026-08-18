@@ -170,6 +170,8 @@ class SequelizeFiscalRepository extends FiscalRepository {
       report_type: 'bloco-k-preview',
       generated_at: new Date(),
       period: { start_date: startDate, end_date: endDate },
+      is_reference_only: true,
+      disclaimer: 'Preview referencial; nao e o arquivo oficial do SPED.',
       summary: {
         k200_count: (k200 as any[]).length,
         k230_count: (k230 as any[]).length,

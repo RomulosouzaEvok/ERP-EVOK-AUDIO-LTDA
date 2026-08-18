@@ -66,8 +66,10 @@ qualquer cenário. Foi isso que motivou o gap **G4**.
 | **K280** | Correção de apontamento | — | ❌ não modelado |
 
 > **Importante:** o ERP **nao gera o arquivo oficial do Bloco K**. Agora existe
-> um **preview estruturado/export CSV** em `/api/fiscal/bloco-k`, mas o leiaute
-> oficial em Ato COTEPE continua sendo trabalho separado.
+> um **preview estruturado/export CSV referencial** em `/api/fiscal/bloco-k`
+> com `is_reference_only: true`, mas o leiaute oficial em Ato COTEPE continua
+> sendo trabalho separado. Esse preview não deve ser tratado como arquivo
+> fiscal oficial.
 
 ---
 
@@ -179,7 +181,7 @@ explícito), mas exige configuração antes do primeiro uso real.
 ## 7. Pendências de engenharia
 
 - Geração do arquivo oficial (K200/K230/K235/K280) - **nao iniciada**.
-- Preview estruturado/export CSV — iniciado em `/api/fiscal/bloco-k`.
+- Preview estruturado/export CSV referencial — iniciado em `/api/fiscal/bloco-k`.
 - K250/K255 (industrializacao por encomenda) - nao modelado.
 - API para `production_cost_settings.default_labor_rate_per_hour` já existe
   em `/api/production/cost-settings`.

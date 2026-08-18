@@ -23,7 +23,7 @@ exports.get = async (_req: Request, res: Response, next: NextFunction) => {
 exports.upsert = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = upsertProductionCostSettingsSchema.safeParse(req.body);
-    if (!parsed.success) handleZodError(parsed.error);
+    if (!parsed.success) return handleZodError(parsed.error);
 
     const useCase = new UpsertProductionCostSettingsUseCase(repository);
     const settings = await useCase.execute(parsed.data);

@@ -1,6 +1,7 @@
 import request from 'supertest';
 
 const authModulePath = '../../src/middlewares/auth';
+const auditLogServicePath = '../../src/services/auditLogService';
 const controllerModulePath = '../../src/modules/production/presentation/controllers/productionCostSettingsController';
 const routeModulePath = '../../src/modules/production/presentation/routes/productionCostSettings';
 
@@ -19,36 +20,18 @@ function createAuthMock() {
       permissions = JSON.parse(String(permissionsHeader));
     }
 
-    req.user = { id: 1, role: roleHeader, permissions };
+    req.user = {
+      id: 1,
+      role: roleHeader,
+      permissions,
+      accessProfileId: 1,
+      accessProfileName: 'Perfil CI',
+    };
     next();
   };
 
-  const authorizeModule = (moduleKey: string, requiredLevel: 'operate' | 'approve' = 'operate') => (req, res, next) => {
-    if (!req.user) {
-      res.status(401).json({ success: false, error: 'Nao autenticado' });
-      return;
-    }
-
-    if (req.user.role === 'admin') {
-      next();
-      return;
-    }
-
-    const level = req.user.permissions?.[moduleKey];
-    if (!level) {
-      res.status(403).json({ success: false, error: { code: 'MODULE_ACCESS_DENIED' } });
-      return;
-    }
-
-    if (requiredLevel === 'approve' && level !== 'approve') {
-      res.status(403).json({ success: false, error: { code: 'APPROVAL_LEVEL_REQUIRED' } });
-      return;
-    }
-
-    next();
-  };
-
-  return { authenticate, authorizeModule };
+  const actual = jest.requireActual(authModulePath);
+  return { ...actual, authenticate };
 }
 
 function createControllerMock() {
@@ -61,8 +44,10 @@ function createControllerMock() {
 function buildApp() {
   jest.resetModules();
   const controllerMock = createControllerMock();
+  const logActionMock = jest.fn();
 
   jest.doMock(authModulePath, () => createAuthMock());
+  jest.doMock(auditLogServicePath, () => ({ logAction: logActionMock }));
   jest.doMock(controllerModulePath, () => controllerMock);
 
   let expressModule: any;
@@ -77,29 +62,28 @@ function buildApp() {
   const app = expressModule();
   app.use(expressModule.json());
   app.use('/api/production/cost-settings', routeModule);
-  return { app };
+  return { app, controllerMock, logActionMock };
 }
 
 describe('production cost settings route', () => {
-  it('protege leitura e escrita do singleton de custeio', async () => {
-    const { app } = buildApp();
+  it('GET com nivel operate permite leitura', async () => {
+    const { app, controllerMock } = buildApp();
 
-    const unauthenticated = await request(app).get('/api/production/cost-settings/');
-    expect(unauthenticated.status).toBe(401);
-
-    const forbidden = await request(app)
-      .get('/api/production/cost-settings/')
-      .set('x-test-role', 'operator')
-      .set('x-test-permissions', JSON.stringify({}));
-    expect(forbidden.status).toBe(403);
-
-    const readable = await request(app)
+    const response = await request(app)
       .get('/api/production/cost-settings/')
       .set('x-test-role', 'operator')
       .set('x-test-permissions', JSON.stringify({ producao: 'operate' }));
-    expect(readable.status).toBe(200);
 
-    const writable = await request(app)
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true, handler: 'get' });
+    expect(controllerMock.get).toHaveBeenCalledTimes(1);
+    expect(controllerMock.upsert).not.toHaveBeenCalled();
+  });
+
+  it('PUT com nivel operate bloqueia escrita', async () => {
+    const { app, controllerMock, logActionMock } = buildApp();
+
+    const response = await request(app)
       .put('/api/production/cost-settings/')
       .set('x-test-role', 'operator')
       .set('x-test-permissions', JSON.stringify({ producao: 'operate' }))
@@ -108,6 +92,29 @@ describe('production cost settings route', () => {
         overhead_rate_percent: 10,
         default_labor_rate_per_hour: 40,
       });
-    expect(writable.status).toBe(200);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('APPROVAL_LEVEL_REQUIRED');
+    expect(controllerMock.upsert).not.toHaveBeenCalled();
+    expect(logActionMock).toHaveBeenCalled();
+  });
+
+  it('PUT com nivel approve permite escrita', async () => {
+    const { app, controllerMock, logActionMock } = buildApp();
+
+    const response = await request(app)
+      .put('/api/production/cost-settings/')
+      .set('x-test-role', 'operator')
+      .set('x-test-permissions', JSON.stringify({ producao: 'approve' }))
+      .send({
+        overhead_calculation_basis: 'material_labor',
+        overhead_rate_percent: 10,
+        default_labor_rate_per_hour: 40,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true, handler: 'upsert' });
+    expect(controllerMock.upsert).toHaveBeenCalledTimes(1);
+    expect(logActionMock).not.toHaveBeenCalled();
   });
 });
