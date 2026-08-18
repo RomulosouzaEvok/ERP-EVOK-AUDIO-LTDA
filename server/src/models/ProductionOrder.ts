@@ -37,8 +37,8 @@ interface ProductionOrderAttributes {
 
 const ProductionOrder = sequelize.define('ProductionOrder', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  order_number: { type: DataTypes.STRING(20), allowNull: false, unique: true, comment: 'Numero da OP (OP-YYYY-XXXX)' },
-  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> products.id' },
+  order_number: { type: DataTypes.STRING(20), allowNull: false, unique: true, comment: 'Nº da OP (OP-YYYY-XXXX)' },
+  product_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK → products.id' },
   quantity: { type: DataTypes.DECIMAL(18, 6), allowNull: false, comment: 'Quantidade planejada' },
   quantity_produced: { type: DataTypes.DECIMAL(18, 6), defaultValue: 0, comment: 'Quantidade produzida' },
   quantity_scrapped: { type: DataTypes.DECIMAL(18, 6), defaultValue: 0, comment: 'Quantidade refugada na conclusao da OP (nao entra em estoque)' },
@@ -63,10 +63,10 @@ const ProductionOrder = sequelize.define('ProductionOrder', {
     allowNull: true,
     comment: 'FK → departments.id (departamento dono da OP; opcional, usado pelo painel de TV de demandas por departamento — nullable também no histórico legado, sem backfill possível, ver migration 20260806-000003)'
   },
-  production_route_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> production_routes.id (roteiro efetivamente usado na liberacao da OP)' },
+  production_route_id: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → production_routes.id (roteiro efetivamente usado na liberacao da OP)' },
   notes: { type: DataTypes.TEXT, allowNull: true },
-  created_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id (criador)' },
-  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK -> items.id (Fase 4.4 expand-contract)' }
+  created_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK → users.id (criador)' },
+  item_id: { type: DataTypes.UUID, allowNull: true, comment: 'FK → items.id (Fase 4.4 expand-contract)' }
 }, {
   tableName: 'production_orders',
   underscored: true,

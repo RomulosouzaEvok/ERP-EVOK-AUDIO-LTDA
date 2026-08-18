@@ -180,9 +180,9 @@ explícito), mas exige configuração antes do primeiro uso real.
 
 ## 7. Pendências de engenharia
 
-- Geração do arquivo oficial (K200/K230/K235/K280) - **nao iniciada**.
+- Geração do arquivo oficial (K200/K230/K235/K280) — **não iniciada**.
 - Preview estruturado/export CSV referencial — iniciado em `/api/fiscal/bloco-k`.
-- K250/K255 (industrializacao por encomenda) - nao modelado.
+- K250/K255 (industrialização por encomenda) — não modelado.
 - API para `production_cost_settings.default_labor_rate_per_hour` já existe
   em `/api/production/cost-settings`.
 - Coluna amarrando a OP à revisão de roteiro (hoje mitigado pelos apontamentos).

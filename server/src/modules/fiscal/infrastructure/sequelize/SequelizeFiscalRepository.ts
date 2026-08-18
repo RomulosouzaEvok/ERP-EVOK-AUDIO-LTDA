@@ -171,7 +171,10 @@ class SequelizeFiscalRepository extends FiscalRepository {
       generated_at: new Date(),
       period: { start_date: startDate, end_date: endDate },
       is_reference_only: true,
-      disclaimer: 'Preview referencial; nao e o arquivo oficial do SPED.',
+      disclaimer:
+        'Preview referencial: K200 reflete o saldo atual do sistema, nao o saldo na data de corte do periodo informado; '
+        + 'startDate/endDate nao sao usados na query de K200; K280 nao e gerado nesta versao; '
+        + 'faltam campos oficiais do leiaute (IND_EST, COD_PART, COD_ITEM, DT_INI_OP/DT_FIN_OP, COD_DOC_OP).',
       summary: {
         k200_count: (k200 as any[]).length,
         k230_count: (k230 as any[]).length,

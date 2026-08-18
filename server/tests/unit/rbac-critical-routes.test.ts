@@ -327,6 +327,7 @@ describe('RBAC critical write routes (authorizeModule retrofit)', () => {
       method: 'put',
       path: '/api/production/cost-settings/',
       moduleKey: 'producao',
+      requiredLevel: 'approve',
     });
   });
 
