@@ -6,6 +6,7 @@ const GetNonConformityByIdUseCase = require('../../application/use-cases/GetNonC
 const CreateNonConformityUseCase = require('../../application/use-cases/CreateNonConformityUseCase');
 const UpdateNonConformityUseCase = require('../../application/use-cases/UpdateNonConformityUseCase');
 const CloseNonConformityUseCase = require('../../application/use-cases/CloseNonConformityUseCase');
+const { logAction } = require('../../../../services/auditLogService');
 
 /**
  * Controller enxuto do módulo `nonConformities`. Delega toda a regra de
@@ -42,6 +43,21 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CreateNonConformityUseCase(nonConformitiesRepository);
     const nonConformity = await useCase.execute({ ...req.body, reportedBy: (req as any).user.id });
+
+    logAction(req, {
+      action: 'create',
+      entityType: 'NonConformity',
+      entityId: nonConformity.id,
+      entityDescription: nonConformity.nc_number,
+      newValues: {
+        status: nonConformity.status,
+        severity: nonConformity.severity,
+        origin: nonConformity.origin,
+        immediate_action: nonConformity.immediate_action,
+      },
+      description: `Não conformidade ${nonConformity.nc_number} registrada`,
+    });
+
     res.status(201).json({ success: true, data: nonConformity });
   } catch (error) {
     next(error);
@@ -51,8 +67,30 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
 /** `PUT /api/quality/non-conformities/:id` — atualiza uma não conformidade existente. */
 exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const before = await nonConformitiesRepository.findById(Number(req.params.id));
     const useCase = new UpdateNonConformityUseCase(nonConformitiesRepository);
     const nonConformity = await useCase.execute({ id: req.params.id, body: req.body, closedBy: (req as any).user.id });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'NonConformity',
+      entityId: nonConformity.id,
+      entityDescription: nonConformity.nc_number,
+      oldValues: {
+        status: before.status,
+        severity: before.severity,
+        origin: before.origin,
+        immediate_action: before.immediate_action,
+      },
+      newValues: {
+        status: nonConformity.status,
+        severity: nonConformity.severity,
+        origin: nonConformity.origin,
+        immediate_action: nonConformity.immediate_action,
+      },
+      description: `Não conformidade ${nonConformity.nc_number} atualizada`,
+    });
+
     res.json({ success: true, data: nonConformity });
   } catch (error) {
     next(error);
@@ -62,11 +100,23 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
 /** `DELETE /api/quality/non-conformities/:id` — fecha (soft delete) uma não conformidade. */
 exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const before = await nonConformitiesRepository.findById(Number(req.params.id));
     const useCase = new CloseNonConformityUseCase(nonConformitiesRepository);
     // `closedBy` vem do JWT (nunca do body): identifica quem encerrou a RNC,
     // dado de auditoria ISO 9001 §8.7. Mesmo padrão anti-spoofing da
     // remediação 3.1 já usado em `update`/`create` acima.
     const result = await useCase.execute({ id: req.params.id, closedBy: (req as any).user.id });
+
+    logAction(req, {
+      action: 'soft_delete',
+      entityType: 'NonConformity',
+      entityId: before.id,
+      entityDescription: before.nc_number,
+      oldValues: { status: before.status },
+      newValues: { status: 'closed' },
+      description: `Não conformidade ${before.nc_number} fechada`,
+    });
+
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);

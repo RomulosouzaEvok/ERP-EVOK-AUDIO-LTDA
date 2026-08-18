@@ -143,13 +143,10 @@ mesma pendência documentada nos demais módulos migrados.
 
 ## Eventos / Auditoria
 
-**Nenhum endpoint deste módulo chama `logAction`** — o controller anterior
-(`server/src/controllers/supplierController.ts`) nunca teve integração
-com `auditLogService`, e este comportamento foi preservado
-intencionalmente nesta migração (instrução explícita: não adicionar
-auditoria que não existia). Diferente de `users`/`purchases`/`financial`,
-criação, atualização e inativação de fornecedores **não geram registro em
-`audit_logs`** hoje.
+**Os endpoints de escrita deste módulo agora chamam `logAction`** — o
+controller em `server/src/modules/suppliers/presentation/controllers/supplierController.ts`
+passou a registrar criação, atualização e inativação de fornecedores em
+`audit_logs`, mantendo o mesmo contrato HTTP.
 
 ## Fluxo simplificado (Mermaid)
 

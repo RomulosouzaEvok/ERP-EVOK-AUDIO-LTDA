@@ -48,18 +48,23 @@ const MODULES_DIR = path.resolve(__dirname, '../../src/modules');
  */
 const DEBITO_CONHECIDO = new Set([
   'accessProfiles',
-  'assets',
+  // 'assets' saiu em 2026-08-18 (SanaCore `ERP-LEGACY-001-CASE-016` Fase 2,
+  // `AUD-DB-03`/`AUD-ALOG-01`): handlers de escrita passaram a chamar `logAction`.
   'categories',
-  'clients',
   'departments',
   'employees',
   'items',
   'mobileInventory',
-  'nonConformities',
-  'serviceOrders',
-  'suppliers',
+  // 'clients' saiu em 2026-08-18 (SanaCore `ERP-LEGACY-001-CASE-016` Fase 2,
+  // `AUD-DB-03`/`AUD-ALOG-01`): handlers de escrita passaram a chamar `logAction`.
+  // 'nonConformities' saiu em 2026-08-18 (SanaCore `ERP-LEGACY-001-CASE-016` Fase 2,
+  // `AUD-DB-03`/`AUD-ALOG-01`): handlers de escrita passaram a chamar `logAction`.
+  // 'serviceOrders' saiu em 2026-08-18 (SanaCore `ERP-LEGACY-001-CASE-016` Fase 2,
+  // `AUD-DB-03`/`AUD-ALOG-01`): handlers de escrita passaram a chamar `logAction`.
   'users',
   'webhooks',
+  // 'suppliers' saiu em 2026-08-18 (SanaCore `ERP-LEGACY-001-CASE-016` Fase 2,
+  // `AUD-DB-03`/`AUD-ALOG-01`): handlers de escrita passaram a chamar `logAction`.
 ]);
 
 /** Lê recursivamente os arquivos `.ts` de um diretório (se existir). */

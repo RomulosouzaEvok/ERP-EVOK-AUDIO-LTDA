@@ -22,6 +22,7 @@ const UpdateAssetUseCase = require('../../application/use-cases/UpdateAssetUseCa
 const DeactivateAssetUseCase = require('../../application/use-cases/DeactivateAssetUseCase');
 const UploadEntityPhotoUseCase = require('../../../../shared/application/UploadEntityPhotoUseCase');
 const GenerateEntityQrCodeUseCase = require('../../../../shared/application/GenerateEntityQrCodeUseCase');
+const { logAction } = require('../../../../services/auditLogService');
 
 /**
  * Controller enxuto do módulo `assets`. Delega toda a regra de negócio aos
@@ -58,6 +59,16 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const useCase = new CreateAssetUseCase(assetsRepository);
     const asset = await useCase.execute(req.body);
+
+    logAction(req, {
+      action: 'create',
+      entityType: 'Asset',
+      entityId: asset.id,
+      entityDescription: asset.tag,
+      newValues: { tag: asset.tag, name: asset.name, department_id: asset.department_id, status: asset.status },
+      description: `Ativo ${asset.tag} criado`,
+    });
+
     res.status(201).json({ success: true, data: asset });
   } catch (error) {
     next(error);
@@ -67,8 +78,30 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
 /** `PUT /api/assets/:id` — atualiza um ativo existente. */
 exports.update = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const before = await assetsRepository.findById(Number(req.params.id));
     const useCase = new UpdateAssetUseCase(assetsRepository);
     const asset = await useCase.execute({ id: req.params.id, body: req.body });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'Asset',
+      entityId: asset.id,
+      entityDescription: asset.tag,
+      oldValues: {
+        tag: before.tag,
+        name: before.name,
+        department_id: before.department_id,
+        status: before.status,
+      },
+      newValues: {
+        tag: asset.tag,
+        name: asset.name,
+        department_id: asset.department_id,
+        status: asset.status,
+      },
+      description: `Ativo ${asset.tag} atualizado`,
+    });
+
     res.json({ success: true, data: asset });
   } catch (error) {
     next(error);
@@ -78,8 +111,20 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
 /** `DELETE /api/assets/:id` — inativa (soft delete) um ativo. */
 exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const before = await assetsRepository.findById(Number(req.params.id));
     const useCase = new DeactivateAssetUseCase(assetsRepository);
     const result = await useCase.execute({ id: req.params.id });
+
+    logAction(req, {
+      action: 'soft_delete',
+      entityType: 'Asset',
+      entityId: before.id,
+      entityDescription: before.tag,
+      oldValues: { status: before.status },
+      newValues: { status: 'decommissioned' },
+      description: `Ativo ${before.tag} inativado`,
+    });
+
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
@@ -89,6 +134,7 @@ exports.remove = async (req: Request, res: Response, next: NextFunction) => {
 /** `POST /api/assets/:id/photo` — envia/substitui a foto do ativo. */
 exports.uploadPhoto = async (req: RequestWithFile, res: Response, next: NextFunction) => {
   try {
+    const before = await assetsRepository.findById(Number(req.params.id));
     const useCase = new UploadEntityPhotoUseCase();
     const { entity } = await useCase.execute({
       repository: assetsRepository,
@@ -97,6 +143,17 @@ exports.uploadPhoto = async (req: RequestWithFile, res: Response, next: NextFunc
       subfolder: 'assets',
       entityLabel: 'Ativo',
     });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'Asset',
+      entityId: entity.id,
+      entityDescription: entity.tag,
+      oldValues: { has_photo: Boolean(before.photo_path) },
+      newValues: { has_photo: true },
+      description: `Foto do ativo ${entity.tag} atualizada`,
+    });
+
     res.json({ success: true, data: entity });
   } catch (error) {
     next(error);

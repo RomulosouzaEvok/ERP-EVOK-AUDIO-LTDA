@@ -11,6 +11,7 @@ import GetClientByIdUseCase = require('../../application/use-cases/GetClientById
 import CreateClientUseCase = require('../../application/use-cases/CreateClientUseCase');
 import UpdateClientUseCase = require('../../application/use-cases/UpdateClientUseCase');
 import DeactivateClientUseCase = require('../../application/use-cases/DeactivateClientUseCase');
+const { logAction } = require('../../../../services/auditLogService');
 const { createClientSchema, updateClientSchema, handleZodError }: any = require('../validators/clientValidators');
 
 const clientsRepository = new SequelizeClientsRepository();
@@ -54,6 +55,15 @@ export async function create(req: Request, res: Response, next: NextFunction): P
     const useCase = new CreateClientUseCase(clientsRepository);
     const client = await useCase.execute(parsed.data);
 
+    logAction(req, {
+      action: 'create',
+      entityType: 'Client',
+      entityId: client.id,
+      entityDescription: client.name,
+      newValues: { name: client.name, status: client.status },
+      description: `Cliente ${client.name} criado`,
+    });
+
     res.status(201).json({ success: true, data: client });
   } catch (error) {
     next(error);
@@ -66,8 +76,20 @@ export async function update(req: Request, res: Response, next: NextFunction): P
     const parsed = updateClientSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
 
+    const before = await clientsRepository.findById(Number(req.params.id));
     const useCase = new UpdateClientUseCase(clientsRepository);
     const client = await useCase.execute({ id: Number(req.params.id), body: parsed.data });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'Client',
+      entityId: client.id,
+      entityDescription: client.name,
+      oldValues: { name: before.name, status: before.status },
+      newValues: { name: client.name, status: client.status },
+      description: `Cliente ${client.name} atualizado`,
+    });
+
     res.json({ success: true, data: client });
   } catch (error) {
     next(error);
@@ -77,8 +99,20 @@ export async function update(req: Request, res: Response, next: NextFunction): P
 /** `DELETE /api/clients/:id` — inativa (soft delete) um cliente. @param req - Request. @param res - Response. @param next - Next. @returns Promise<void>. */
 export async function remove(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const before = await clientsRepository.findById(Number(req.params.id));
     const useCase = new DeactivateClientUseCase(clientsRepository);
     const result = await useCase.execute({ id: Number(req.params.id) });
+
+    logAction(req, {
+      action: 'soft_delete',
+      entityType: 'Client',
+      entityId: before.id,
+      entityDescription: before.name,
+      oldValues: { status: before.status },
+      newValues: { status: 'inactive' },
+      description: `Cliente ${before.name} inativado`,
+    });
+
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);

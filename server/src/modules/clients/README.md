@@ -162,13 +162,10 @@ mesma pendência documentada nos demais módulos migrados.
 
 ## Eventos / Auditoria
 
-**Nenhum endpoint deste módulo chama `logAction`** — o controller anterior
-(`server/src/controllers/clientController.ts`) nunca teve integração com
-`auditLogService`, e este comportamento foi preservado intencionalmente
-nesta migração (instrução explícita: não adicionar auditoria que não
-existia). Diferente de `users`/`purchases`/`financial`, criação,
-atualização e inativação de clientes **não geram registro em
-`audit_logs`** hoje.
+**Os endpoints de escrita deste módulo agora chamam `logAction`** — o
+controller em `server/src/modules/clients/presentation/controllers/clientController.ts`
+passou a registrar criação, atualização e inativação de clientes em
+`audit_logs`, mantendo o mesmo contrato HTTP.
 
 ## Fluxo simplificado (Mermaid)
 

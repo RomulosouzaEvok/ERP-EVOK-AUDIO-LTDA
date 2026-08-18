@@ -8,6 +8,7 @@ const CreateSupplierUseCase = require('../../application/use-cases/CreateSupplie
 const UpdateSupplierUseCase = require('../../application/use-cases/UpdateSupplierUseCase');
 const DeactivateSupplierUseCase = require('../../application/use-cases/DeactivateSupplierUseCase');
 const ListSupplierItemsUseCase = require('../../application/use-cases/ListSupplierItemsUseCase');
+const { logAction } = require('../../../../services/auditLogService');
 const { createSupplierSchema, updateSupplierSchema, handleZodError } = require('../validators/supplierValidators');
 
 /**
@@ -81,6 +82,15 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
     const useCase = new CreateSupplierUseCase(suppliersRepository);
     const supplier = await useCase.execute(parsed.data);
 
+    logAction(req, {
+      action: 'create',
+      entityType: 'Supplier',
+      entityId: supplier.id,
+      entityDescription: supplier.company_name,
+      newValues: { company_name: supplier.company_name, status: supplier.status, is_foreign: supplier.is_foreign },
+      description: `Fornecedor ${supplier.company_name} criado`,
+    });
+
     res.status(201).json({ success: true, data: supplier });
   } catch (error) {
     next(error);
@@ -100,8 +110,27 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
     const parsed = updateSupplierSchema.safeParse(req.body);
     if (!parsed.success) handleZodError(parsed.error);
 
+    const before = await suppliersRepository.findById(Number(req.params.id));
     const useCase = new UpdateSupplierUseCase(suppliersRepository);
     const supplier = await useCase.execute({ id: req.params.id, body: parsed.data });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'Supplier',
+      entityId: supplier.id,
+      entityDescription: supplier.company_name,
+      oldValues: {
+        company_name: before.company_name,
+        status: before.status,
+        is_foreign: before.is_foreign,
+      },
+      newValues: {
+        company_name: supplier.company_name,
+        status: supplier.status,
+        is_foreign: supplier.is_foreign,
+      },
+      description: `Fornecedor ${supplier.company_name} atualizado`,
+    });
     res.json({ success: true, data: supplier });
   } catch (error) {
     next(error);
@@ -118,8 +147,20 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
  */
 exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const before = await suppliersRepository.findById(Number(req.params.id));
     const useCase = new DeactivateSupplierUseCase(suppliersRepository);
     const result = await useCase.execute({ id: req.params.id });
+
+    logAction(req, {
+      action: 'soft_delete',
+      entityType: 'Supplier',
+      entityId: before.id,
+      entityDescription: before.company_name,
+      oldValues: { status: before.status },
+      newValues: { status: 'inactive' },
+      description: `Fornecedor ${before.company_name} inativado`,
+    });
+
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
