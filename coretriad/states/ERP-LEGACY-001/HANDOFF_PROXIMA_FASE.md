@@ -201,6 +201,58 @@ falha.** O Remediation Backlog é exatamente esse produto.
 
 ---
 
+## 9. Estado da remediação — CASE-013 a CASE-015 (2026-08-18, sessão atual)
+
+### Casos completados e validados (pipeline inteiro: segunda opinião + reteste dinâmico)
+
+**`CASE-001` a `CASE-012`** — 12 casos, todos com `REMEDIATION_COMPLETE` e reteste
+independente da VeriCore executado. Histórico completo em
+`coretriad/states/ERP-LEGACY-001/QUEUE_STATUS.md` (atualizado 2026-08-18).
+
+- **CASE-001 a CASE-003**: FIND-ERP-001, AUD-PROC-CUSTODIA-01, FIND-ERP-004 (processamento sem registro).
+- **CASE-004**: AUD-ALOG-01 itens A (employees) e B (items/inactivate).
+- **CASE-005**: AUD-AUTHN-01 (JWT rotation).
+- **CASE-006 a CASE-009**: FIND-ERP-002 (imutabilidade audit_logs), AUD-INTEG-03, AUD-RH-CPFSEARCH-01.
+- **CASE-010 a CASE-012**: FIND-ERP-006 (LGPD), FIND-ERP-008 (MRP costing), FIND-ERP-007 (RH termination reason).
+
+### Casos em despacho/triagem (ainda não rodaram no Codex)
+
+| CASE | Finding | Status | Base |
+|---|---|---|---|
+| **CASE-013** | FIND-ERP-009 (segregação "quem pede não aprova", 24+11 pontos) | `CODEX_REMEDIATION_DISPATCH.md` pronto; despacho autorizado por `APR-2026-058`; pré-requisito (CASE-002 com `REMEDIATION_COMMIT`) **satisfeito**. | `sana/ERP-LEGACY-001/CASE-013` |
+| **CASE-014** | AUD-ALOG-01 itens C, F, G (desativação lógica em categories/departments/itemSuppliers) | Triagem completa; `CODEX_REMEDIATION_DISPATCH.md` pronto; nenhuma decisão pendente; coordenação registrada com CASE-004 (mesmo arquivo `itemController.ts`). | `remediation/cases/ERP-LEGACY-001-CASE-014/` |
+| **CASE-015** | AUD-DB-01 (credencial de runtime superusuário vs. role `evok_app` de privilégio mínimo) | **Triagem INTERROMPIDA** — agente `sanacore-remediation-triage` foi cancelado antes de terminar. Nenhum artefato gerado ainda. Retomar nesta sessão. Risco: `APR-2026-049` reservou "rotação de credencial de produção" para decisão do dono — triagem precisa avaliar se ativar `evok_app` cai dentro da reserva e bloqueia se necessário. | (não iniciado) |
+
+### Fila oficial restante (T-39, estrato 2 a 4)
+
+**Estrato 2 (HIGH, produção real, 6 findings):**
+`AUD-DB-03`, `AUD-T01-01`, `AUD-T01-02`, `AUD-AUTHN-02`, `T33-A-F04` — após CASE-015.
+
+**Estrato 3 (CRITICAL, dev/homologação, 4 findings):**
+`T08-F01`, `T24-F01`, `AUD-COM-DESCONTO-01`, `AUD-RH-VTHORISTA-01`.
+
+**Estrato 4 (HIGH, dev/homologação, 79 findings):**
+Nenhum triado ainda.
+
+### Pipeline fixo confirmado (2026-08-18)
+
+1. Sessão principal (Claude Code) prepara prompt/despacho (`CODEX_REMEDIATION_DISPATCH.md`).
+2. Dono roda prompt no Codex (fora desta sessão) — implementação real acontece lá.
+3. Sessão principal dá segunda opinião (adversarial, arquivo:linha, não confiar em MD).
+4. Se aprovado, despacha para `vericore-audit-verification-runner` (reteste dinâmico).
+5. Só depois VeriCore declara `RETEST_PASSED`/`FINDING CLOSED`.
+
+**Nota:** nunca general-purpose para segunda opinião — usar `vericore-database-auditor`,
+`vericore-authentication-auditor`, etc., conforme o domínio. Ver memória
+`usar-agentes-especificos-vericore.md`.
+
+### Próximo passo
+
+Retomar a triagem de **CASE-015** (AUD-DB-01). Confira bloqueio por `APR-2026-049`
+antes de gerar despacho.
+
+---
+
 Nenhuma declaração de `AUDIT_PASSED`, `RETEST_PASSED` ou `FINDING CLOSED` é feita
 por este documento. Ele é mapa de estado, não veredito.
 
