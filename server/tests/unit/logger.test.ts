@@ -31,6 +31,7 @@ describe('config/logger', () => {
     process.env.DB_PASSWORD = 'senha-forte-real';
     process.env.ADMIN_SEED_PASSWORD = 'senha-forte-real-2';
     process.env.DB_SSL = 'true';
+    process.env.TRUST_PROXY = '1';
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const prodLogger = require('../../src/config/logger').default;
     expect(prodLogger.level).toBe('info');

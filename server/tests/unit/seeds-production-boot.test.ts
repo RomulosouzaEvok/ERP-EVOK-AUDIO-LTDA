@@ -58,6 +58,7 @@ describe('Seeds - Production Boot Failure (F.4)', () => {
     process.env.DB_PASSWORD = 'Sup3rS3cretPass!';
     process.env.JWT_SECRET = '12345678901234567890123456789012';
     process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
+    process.env.TRUST_PROXY = '1';
     delete process.env.ADMIN_SEED_PASSWORD;
 
     await expect(seedDatabase.default()).rejects.toThrow('ADMIN_SEED_PASSWORD');
@@ -102,6 +103,7 @@ describe('Seeds - Production Boot Failure (F.4)', () => {
     process.env.DB_PASSWORD = 'Sup3rS3cretPass!';
     process.env.JWT_SECRET = '12345678901234567890123456789012';
     process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
+    process.env.TRUST_PROXY = '1';
     process.env.ADMIN_SEED_PASSWORD = 'MySecurePassword123!';
 
     await seedDatabase.default();

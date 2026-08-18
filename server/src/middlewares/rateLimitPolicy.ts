@@ -19,6 +19,7 @@ export const RATE_LIMIT_AUTHENTICATED_USER_MAX_PER_15_MINUTES = readPositiveInte
   'RATE_LIMIT_AUTHENTICATED_USER_MAX_PER_15_MINUTES',
   300,
 );
+export const RATE_LIMIT_LOGIN_IP_MAX_PER_15_MINUTES = 300;
 export const RATE_LIMIT_REFRESH_USER_MAX_PER_15_MINUTES = readPositiveIntegerEnv(
   'RATE_LIMIT_REFRESH_USER_MAX_PER_15_MINUTES',
   30,
@@ -44,6 +45,15 @@ export function rateLimitIpKey(req: Request): string {
   });
 }
 
+export function loginAttemptIpKey(req: Request): string {
+  const ip = ipKeyGenerator(req.ip ?? '');
+  return setRateLimitContext(req, {
+    limiter: 'login_ip',
+    key: `ip:${ip}`,
+    keySource: 'ip',
+  });
+}
+
 export function loginAttemptAccountKey(req: Request): string {
   const ip = ipKeyGenerator(req.ip ?? '');
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
@@ -51,6 +61,20 @@ export function loginAttemptAccountKey(req: Request): string {
     limiter: 'login_account',
     key: email ? `ip-email:${ip}:${email}` : `ip:${ip}`,
     keySource: email ? 'ip_email' : 'ip',
+  });
+}
+
+function buildLoginAttemptLimiter(
+  limiter: string,
+  max: number,
+  keyGenerator: (req: Request) => string,
+  message: string,
+): ReturnType<typeof rateLimit> {
+  return rateLimit({
+    windowMs: FIFTEEN_MINUTES_MS,
+    max,
+    keyGenerator,
+    handler: rateLimitHandler(limiter, max, FIFTEEN_MINUTES_MS, message),
   });
 }
 
@@ -103,6 +127,19 @@ export const loginAttemptLimiter = rateLimit({
   keyGenerator: loginAttemptAccountKey,
   handler: rateLimitHandler('login_account', 10, FIFTEEN_MINUTES_MS, 'Muitas tentativas. Tente novamente em 15 minutos.'),
 });
+
+export function createLoginAttemptIpLimiter(
+  max = RATE_LIMIT_LOGIN_IP_MAX_PER_15_MINUTES,
+): ReturnType<typeof rateLimit> {
+  return buildLoginAttemptLimiter(
+    'login_ip',
+    max,
+    loginAttemptIpKey,
+    'Muitas tentativas de login. Tente novamente em 15 minutos.',
+  );
+}
+
+export const loginAttemptIpLimiter = createLoginAttemptIpLimiter();
 
 export const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -201,11 +238,15 @@ export async function applyAuthenticatedRateLimits(req: Request, res: Response, 
 module.exports = {
   RATE_LIMIT_IP_MAX_PER_MINUTE,
   RATE_LIMIT_AUTHENTICATED_USER_MAX_PER_15_MINUTES,
+  RATE_LIMIT_LOGIN_IP_MAX_PER_15_MINUTES,
   RATE_LIMIT_REFRESH_USER_MAX_PER_15_MINUTES,
   rateLimitIpKey,
+  loginAttemptIpKey,
   loginAttemptAccountKey,
   authenticatedUserKey,
   loginAttemptLimiter,
+  loginAttemptIpLimiter,
+  createLoginAttemptIpLimiter,
   registerLimiter,
   apiIpLimiter,
   passwordRecoveryLimiter,

@@ -46,6 +46,7 @@ describe('runtimeEnv — PRODUCTION_TRACKING_REQUIRED em producao (G4/G6)', () =
     process.env.JWT_SECRET = '12345678901234567890123456789012';
     process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
     process.env.ADMIN_SEED_PASSWORD = 'SenhaSegura123!';
+    process.env.TRUST_PROXY = '1';
   }
 
   it('falha o boot em producao quando PRODUCTION_TRACKING_REQUIRED=warn', () => {

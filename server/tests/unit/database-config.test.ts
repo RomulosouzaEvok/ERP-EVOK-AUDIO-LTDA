@@ -17,6 +17,7 @@ describe('database config', () => {
     process.env.JWT_SECRET = '12345678901234567890123456789012';
     process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
     process.env.ADMIN_SEED_PASSWORD = 'SenhaSegura123!';
+    process.env.TRUST_PROXY = '1';
 
     const runtimeEnv = require('../../src/config/runtimeEnv');
     runtimeEnv.clearRuntimeEnvCache();

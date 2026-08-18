@@ -163,6 +163,14 @@ const runtimeEnvSchema = z.object({
       message: 'DB_ALLOW_UNSAFE_ALTER=true e proibido em producao.',
     });
   }
+
+  if (env.TRUST_PROXY <= 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['TRUST_PROXY'],
+      message: 'TRUST_PROXY deve ser maior que zero em producao quando a API fica atras de proxy reverso.',
+    });
+  }
 });
 
 export type RuntimeEnv = {

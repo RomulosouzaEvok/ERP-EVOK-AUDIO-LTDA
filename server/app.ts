@@ -11,6 +11,7 @@ import { loadRuntimeEnv } from './src/config/runtimeEnv';
 import {
   apiIpLimiter,
   loginAttemptLimiter,
+  loginAttemptIpLimiter,
   passwordRecoveryLimiter,
   registerLimiter,
 } from './src/middlewares/rateLimitPolicy';
@@ -52,9 +53,12 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // Limiters de entrada precisam vir depois do body parser porque login e
-// recuperacao de senha usam req.body.email para a cota por conta. A cota
-// global da API aqui e sempre por IP; cotas por usuario autenticado sao
-// aplicadas somente apos jwt.verify em authenticate.
+// recuperacao de senha usam req.body.email para a cota por conta. Login
+// agora tem dois contadores: um por IP (anti-spraying) e outro por
+// `(ip, email)` (anti-abuso por conta). A cota global da API aqui e sempre
+// por IP; cotas por usuario autenticado sao aplicadas somente apos
+// jwt.verify em authenticate.
+app.use('/api/auth/login', loginAttemptIpLimiter);
 app.use('/api/auth/login', loginAttemptLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/forgot-password', passwordRecoveryLimiter);

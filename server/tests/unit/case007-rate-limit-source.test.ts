@@ -36,4 +36,13 @@ describe('CASE-007 rate-limit source guards', () => {
 
     expect(appSource).not.toContain("app.use('/api/auth/refresh'");
   });
+
+  it('mounts the login IP limiter before the auth router', () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, '../../app.ts'), 'utf8');
+    const loginIpMount = "app.use('/api/auth/login', loginAttemptIpLimiter);";
+    const authRouterMount = "app.use('/api/auth', require('./src/modules/auth/presentation/routes/auth'));";
+
+    expect(appSource).toContain(loginIpMount);
+    expect(appSource.indexOf(loginIpMount)).toBeLessThan(appSource.indexOf(authRouterMount));
+  });
 });

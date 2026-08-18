@@ -6,8 +6,10 @@ import {
   RATE_LIMIT_AUTHENTICATED_USER_MAX_PER_15_MINUTES,
   RATE_LIMIT_IP_MAX_PER_MINUTE,
   authenticatedUserKey,
+  loginAttemptIpKey,
   loginAttemptAccountKey,
   rateLimitIpKey,
+  RATE_LIMIT_LOGIN_IP_MAX_PER_15_MINUTES,
 } from '../../src/middlewares/rateLimitPolicy';
 
 function forgedBearerToken(id: number): string {
@@ -31,6 +33,7 @@ describe('CASE-007 rate-limit policy', () => {
   it('keeps the owner-approved D1 and D2 quotas explicit', () => {
     expect(RATE_LIMIT_IP_MAX_PER_MINUTE).toBe(1600);
     expect(RATE_LIMIT_AUTHENTICATED_USER_MAX_PER_15_MINUTES).toBe(300);
+    expect(RATE_LIMIT_LOGIN_IP_MAX_PER_15_MINUTES).toBe(300);
   });
 
   it('ignores forged JWT ids when computing the API IP quota key', () => {
@@ -56,10 +59,13 @@ describe('CASE-007 rate-limit policy', () => {
   it('preserves per-account login protection while exposing the shared IP quota key', () => {
     const firstLoginKey = loginAttemptAccountKey(request({ body: { email: 'Alice@Example.com' } }));
     const secondLoginKey = loginAttemptAccountKey(request({ body: { email: 'Bob@Example.com' } }));
+    const firstLoginIpKey = loginAttemptIpKey(request({ body: { email: 'Alice@Example.com' } }));
+    const secondLoginIpKey = loginAttemptIpKey(request({ body: { email: 'Bob@Example.com' } }));
     const firstIpKey = rateLimitIpKey(request({ body: { email: 'Alice@Example.com' } }));
     const secondIpKey = rateLimitIpKey(request({ body: { email: 'Bob@Example.com' } }));
 
     expect(firstLoginKey).not.toBe(secondLoginKey);
+    expect(firstLoginIpKey).toBe(secondLoginIpKey);
     expect(firstIpKey).toBe(secondIpKey);
   });
 });

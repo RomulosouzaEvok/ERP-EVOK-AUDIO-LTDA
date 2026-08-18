@@ -112,4 +112,78 @@ VeriCore deve confirmar o typecheck mobile apos reconciliar ou aprovar explicita
 - Nenhum arquivo em `audit/`, `coretriad/`, `coretriad/states/`, `coretriad/governance/` ou `.claude/` foi alterado.
 - `server/package.json` nao foi alterado.
 
+## 9. CORRECAO_01
+
+Escopo desta correcao: fechar o V3 de password spraying e tornar `TRUST_PROXY`
+obrigatorio em producao, sem tocar nos vetores V1, V2 e V2b que ja estavam
+corretos.
+
+### 9.1 Problemas corrigidos
+
+| Problema | Causa original | Correcao aplicada |
+|---|---|---|
+| 1. Spraying com e-mails diferentes e mesmo IP escapava do rate limit | `server/src/middlewares/rateLimitPolicy.ts:48-59` so criava a chave `(ip,email)` em `loginAttemptAccountKey`; `server/app.ts:58-62` montava apenas esse limiter no login | `server/src/middlewares/rateLimitPolicy.ts:22,48-59,131-142,241-249` agora expõe `RATE_LIMIT_LOGIN_IP_MAX_PER_15_MINUTES`, `loginAttemptIpKey`, `createLoginAttemptIpLimiter` e `loginAttemptIpLimiter`; `server/app.ts:13,61-62` monta o limiter por IP e o limiter por conta no login |
+| 2. `TRUST_PROXY` podia ficar 0/ausente em producao e colapsar toda a fabrica num unico balde | `server/src/config/runtimeEnv.ts:59,73-171` aceitava `TRUST_PROXY=0` sem trava de producao; `server/app.ts:32` repassava o valor cru para `app.set('trust proxy', ...)` | `server/src/config/runtimeEnv.ts:59,73-171` agora reprova `TRUST_PROXY <= 0` quando `NODE_ENV=production`; os testes de producao foram ajustados para exigir `TRUST_PROXY=1` nas baselines reais |
+| 3. Move de constantes de rate limit para o schema Zod | Fora do escopo desta entrega; seria uma refatoracao maior do que a correcao pedida | Nao foi alterado nesta correcao. Fica como pendencia separada, sem bloquear o fechamento dos problemas bloqueantes |
+
+### 9.2 Prova vermelha
+
+- Antes da correcao, a triagem ja registrava que `loginAttemptKey` dava 10
+  tentativas por `(ip,email)` e que 20 e-mails distintos do mesmo IP geravam
+  20 orcamentos independentes (`TRIAGE.md:249-270`, `TRIAGE.md:539`).
+- Antes da correcao, `TRUST_PROXY` era apenas um `default(0)` no schema
+  (`server/src/config/runtimeEnv.ts:59`) e nao havia validacao de boot em
+  producao, o que permitia subir atras de proxy com `req.ip` colapsado no IP
+  do proxy.
+
+### 9.3 Prova verde
+
+- `server/tests/unit/case007-login-spraying.test.ts:14-55` prova o novo
+  comportamento: tres tentativas com e-mails diferentes e mesmo IP passam;
+  a quarta vira `429` e gera `rate_limit_exceeded` com `limiter=login_ip`.
+- `server/tests/unit/case007-rate-limit-policy.test.ts:29-63` confirma os
+  novos identificadores de chave e a cota agregada por IP para login.
+- `server/tests/unit/case007-rate-limit-source.test.ts:12-22` confirma que o
+  `loginAttemptIpLimiter` foi montado no `app.ts` antes do router de auth.
+- `server/tests/unit/runtime-env.test.ts:98-130` confirma que producao falha
+  quando `TRUST_PROXY` esta ausente ou explicitamente `0`, e sobe quando
+  recebe um valor valido.
+- `server/tests/unit/runtime-env-production-tracking.test.ts:42-49` e os
+  demais testes de producao receberam `TRUST_PROXY=1` na baseline, provando
+  que a nova validacao nao bloqueia dev/test, apenas producao mal configurada.
+
+### 9.4 Outputs reais
+
+Validacao final executada na worktree:
+
+```powershell
+cd C:\Sistema EvokAudio\ERP-Evok-sana-CASE-007\server
+npm test -- --runInBand tests/unit/case007-login-spraying.test.ts tests/unit/case007-rate-limit-source.test.ts tests/unit/case007-rate-limit-policy.test.ts tests/unit/runtime-env.test.ts tests/unit/runtime-env-production-tracking.test.ts tests/unit/database-config.test.ts tests/unit/logger.test.ts tests/unit/seeds-production-boot.test.ts
+npm run typecheck
+npm run build
+```
+
+Saida real observada:
+
+```text
+> erp-evok-audio-server@1.0.0 test
+> jest --runInBand --runInBand tests/unit/case007-login-spraying.test.ts tests/unit/case007-rate-limit-source.test.ts tests/unit/case007-rate-limit-policy.test.ts tests/unit/runtime-env.test.ts tests/unit/runtime-env-production-tracking.test.ts tests/unit/database-config.test.ts tests/unit/logger.test.ts tests/unit/seeds-production-boot.test.ts
+
+Test Suites: 8 passed, 8 total
+Tests:       33 passed, 33 total
+Snapshots:   0 total
+Time:        18.693 s
+Ran all test suites matching tests/unit/case007-login-spraying.test.ts|tests/unit/case007-rate-limit-source.test.ts|tests/unit/case007-rate-limit-policy.test.ts|tests/unit/runtime-env.test.ts|tests/unit/runtime-env-production-tracking.test.ts|tests/unit/database-config.test.ts|tests/unit/logger.test.ts|tests/unit/seeds-production-boot.test.ts.
+```
+
+```text
+> erp-evok-audio-server@1.0.0 typecheck
+> tsc -p tsconfig.json --noEmit
+```
+
+```text
+> erp-evok-audio-server@1.0.0 build
+> tsc -p tsconfig.build.json
+```
+
 REMEDIATION_COMPLETE

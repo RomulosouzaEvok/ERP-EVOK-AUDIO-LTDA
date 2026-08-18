@@ -75,6 +75,7 @@ describe('runtimeEnv', () => {
     process.env.JWT_EXPIRE = '12h';
     process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
     process.env.ADMIN_SEED_PASSWORD = 'SenhaSegura123!';
+    process.env.TRUST_PROXY = '1';
 
     const runtimeEnv = require('../../src/config/runtimeEnv');
     runtimeEnv.clearRuntimeEnvCache();
@@ -94,8 +95,44 @@ describe('runtimeEnv', () => {
     expect(runtimeEnv.loadRuntimeEnv().trustProxy).toBe(0);
   });
 
+  it('falha em producao quando TRUST_PROXY nao esta configurado ou e zero', () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.TRUST_PROXY;
+    process.env.DB_SSL = 'true';
+    process.env.DB_PASSWORD = 'Sup3rS3cretPass!';
+    process.env.JWT_SECRET = '12345678901234567890123456789012';
+    process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
+    process.env.ADMIN_SEED_PASSWORD = 'SenhaSegura123!';
+
+    const runtimeEnv = require('../../src/config/runtimeEnv');
+    runtimeEnv.clearRuntimeEnvCache();
+
+    expect(() => runtimeEnv.loadRuntimeEnv()).toThrow('TRUST_PROXY');
+  });
+
+  it('falha em producao quando TRUST_PROXY e zero explicitamente', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.TRUST_PROXY = '0';
+    process.env.DB_SSL = 'true';
+    process.env.DB_PASSWORD = 'Sup3rS3cretPass!';
+    process.env.JWT_SECRET = '12345678901234567890123456789012';
+    process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
+    process.env.ADMIN_SEED_PASSWORD = 'SenhaSegura123!';
+
+    const runtimeEnv = require('../../src/config/runtimeEnv');
+    runtimeEnv.clearRuntimeEnvCache();
+
+    expect(() => runtimeEnv.loadRuntimeEnv()).toThrow('TRUST_PROXY');
+  });
+
   it('TRUST_PROXY respeita o valor configurado (numero de saltos de proxy)', () => {
+    process.env.NODE_ENV = 'production';
     process.env.TRUST_PROXY = '2';
+    process.env.DB_SSL = 'true';
+    process.env.DB_PASSWORD = 'Sup3rS3cretPass!';
+    process.env.JWT_SECRET = '12345678901234567890123456789012';
+    process.env.CORS_ORIGIN = 'https://app.evokaudio.com.br';
+    process.env.ADMIN_SEED_PASSWORD = 'SenhaSegura123!';
 
     const runtimeEnv = require('../../src/config/runtimeEnv');
     runtimeEnv.clearRuntimeEnvCache();
