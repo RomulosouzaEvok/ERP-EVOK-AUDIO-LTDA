@@ -13,6 +13,7 @@ import { loadRuntimeEnv, getJwtRuntimeConfig } from './src/config/runtimeEnv';
 import healthRouter from './src/routes/health';
 
 const errorHandler = require('./src/middlewares/errorHandler');
+const requestIdMiddleware = require('./src/middlewares/requestId');
 const requestContext = require('./src/middlewares/requestContext');
 const { authenticate } = require('./src/middlewares/auth');
 
@@ -34,7 +35,6 @@ const corsOptions = {
 
 app.use(helmet());
 app.use(cors(corsOptions));
-app.use(requestContext);
 
 app.use('/health', healthRouter);
 
@@ -134,6 +134,8 @@ app.use(express.json({
   verify: (req: any, _res, buf) => { req.rawBody = buf; },
 }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+app.use(requestIdMiddleware);
+app.use(requestContext);
 
 // Os limiters precisam vir DEPOIS do body parser: `loginAttemptKey` le
 // `req.body.email` para compor a chave por conta (nao so por IP) — antes
