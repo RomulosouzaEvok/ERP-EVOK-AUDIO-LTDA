@@ -19,7 +19,7 @@
     "test:edge": "jest --runInBand tests/edge",
     "test:characterization": "node scripts/run-api-suite.cjs characterization",
     "test:coverage": "jest --coverage",
-    "test:unit:ci": "jest --runInBand tests/unit --ci --json --outputFile=tmp/jest-unit.json",
+    "test:unit:ci": "node -e \"require('fs').mkdirSync('tmp', { recursive: true })\" && jest --runInBand tests/unit --ci --json --outputFile=tmp/jest-unit.json",
     "test:unit:strict": "npm run test:unit:ci && node scripts/assert-jest-no-skips.cjs tmp/jest-unit.json",
     "test:integration:strict": "node scripts/run-api-suite.cjs integration",
     "test:edge:strict": "node scripts/run-api-suite.cjs edge",
