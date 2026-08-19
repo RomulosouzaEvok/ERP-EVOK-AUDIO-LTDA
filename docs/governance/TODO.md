@@ -7245,7 +7245,7 @@ suítes unitárias com repositório dublê, que não tem coluna `NOT NULL`, nem
   `tests/unit/run-api-suite-timeout-guard.test.ts`. Evidência:
   `npm --prefix .\server run test:unit` → 183/183 suítes, 1965/1965 testes;
   `npm --prefix .\server run test:integration` → 61/61 suítes, 250/250 testes.
-- [ ] **`estoque_retido_qualidade` não chega a nenhum payload.**
+- [x] **`estoque_retido_qualidade` não chega a nenhum payload.**
   `SequelizeItemRepository.listMrpInventoryPositions` calcula o campo (e
   `estoque_fisico`), mas nada é propagado para `mrp_ordens_planejadas` nem
   para a resposta de `POST /api/mrp/plan`. Na prática, o planejador vê o
@@ -7253,6 +7253,13 @@ suítes unitárias com repositório dublê, que não tem coluna `NOT NULL`, nem
   Não é defeito de regra — a conta está certa —, é falta de explicação na
   tela. A verificação direta hoje só é possível por SQL, que é como a suíte
   nova faz.
+  **Resolvido em 2026-08-19:** `POST /api/mrp/plan` e
+  `GET /api/mrp/planned-orders` agora expõem `estoque_fisico` e
+  `estoque_retido_qualidade` no JSON, sem nova coluna/schema. A persistência
+  continua usando apenas as colunas reais de `mrp_ordens_planejadas`; a
+  listagem recalcula os campos virtuais a partir de `products` +
+  `lot_controls`. Evidência: `tests/unit/mrp-multi-demand-allocation.test.ts`
+  e `tests/integration/mrp-quarantine-discount.test.ts`.
 
 ---
 

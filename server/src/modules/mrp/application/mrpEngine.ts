@@ -50,6 +50,10 @@ export interface MrpInventoryPosition {
   itemId: string;
   /** Quantidade fisica em estoque. */
   onHand: number;
+  /** Quantidade fisica bruta antes de descontar retencao de qualidade. */
+  physicalStock?: number;
+  /** Quantidade retida por qualidade/quarentena, ja descontada de `onHand`. */
+  qualityWithheldStock?: number;
   /** Quantidade ja reservada. */
   reserved?: number;
   /** Estoque minimo de seguranca. */
@@ -113,6 +117,10 @@ export interface MrpPlannedOrder {
   itemId: string;
   /** Quantidade bruta necessaria antes do estoque. */
   grossRequirement: number;
+  /** Estoque fisico bruto, antes de descontar retencao de qualidade. */
+  physicalStock: number;
+  /** Estoque retido por qualidade/quarentena. */
+  qualityWithheldStock: number;
   /** Estoque disponivel considerado. */
   availableStock: number;
   /** Quantidade liquida antes de arredondar lote. */
@@ -243,9 +251,12 @@ export function calculateMrpPlan(
   return Array.from(aggregated.values())
     .map((requirement) => {
       const stock = stockByItem.get(requirement.itemId);
+      const onHand = stock?.onHand ?? 0;
+      const qualityWithheldStock = Math.max(0, stock?.qualityWithheldStock ?? 0);
+      const physicalStock = Math.max(0, stock?.physicalStock ?? onHand);
       const availableStock = Math.max(
         0,
-        (stock?.onHand ?? 0) - (stock?.reserved ?? 0) - (stock?.safetyStock ?? 0),
+        onHand - (stock?.reserved ?? 0) - (stock?.safetyStock ?? 0),
       );
       const netRequirement = Math.max(0, roundQuantity(requirement.grossRequirement - availableStock));
       const lotSize = stock?.minimumLotSize && stock.minimumLotSize > 0 ? stock.minimumLotSize : 0;
@@ -256,6 +267,8 @@ export function calculateMrpPlan(
       return {
         itemId: requirement.itemId,
         grossRequirement: requirement.grossRequirement,
+        physicalStock: roundQuantity(physicalStock),
+        qualityWithheldStock: roundQuantity(qualityWithheldStock),
         availableStock: roundQuantity(availableStock),
         netRequirement,
         plannedQuantity,

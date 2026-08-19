@@ -18,6 +18,45 @@ const { sequelize } = require('../../../../models/index');
  * requisicao de compra (mesma regra de `ConvertPlannedOrdersToRequisitionUseCase`).
  */
 const AUTO_CONVERTIBLE_STATUSES = ['RASCUNHO', 'APROVADA'];
+const PLAN_VISIBILITY_FIELDS = ['estoque_fisico', 'estoque_retido_qualidade'] as const;
+
+function planLineKey(order: Record<string, any>): string {
+  return `${order.item_id}|${String(order.data_necessidade).slice(0, 10)}|${order.origem}|${order.origem_id ?? ''}`;
+}
+
+function readOrderField(order: any, field: string): any {
+  if (typeof order.get === 'function') {
+    return order.get(field);
+  }
+  return order[field];
+}
+
+function persistedOrderKey(order: any): string {
+  return planLineKey({
+    item_id: readOrderField(order, 'item_id'),
+    data_necessidade: readOrderField(order, 'data_necessidade'),
+    origem: readOrderField(order, 'origem'),
+    origem_id: readOrderField(order, 'origem_id'),
+  });
+}
+
+function stripVirtualPlanFields(order: Record<string, any>): Record<string, any> {
+  const copy = { ...order };
+  for (const field of PLAN_VISIBILITY_FIELDS) {
+    delete copy[field];
+  }
+  return copy;
+}
+
+function attachPlanVisibilityFields(order: any, metadata: Record<string, any>): void {
+  for (const field of PLAN_VISIBILITY_FIELDS) {
+    if (typeof order.setDataValue === 'function') {
+      order.setDataValue(field, metadata[field]);
+    } else {
+      order[field] = metadata[field];
+    }
+  }
+}
 
 /**
  * Caso de uso para gerar e persistir plano MRP.
@@ -98,6 +137,8 @@ class GenerateMrpPlanUseCase extends UseCase<Record<string, any>, any[]> {
       safetyStock: Number(item.estoque_seguranca ?? 0),
       minimumLotSize: Number(item.lote_minimo ?? 0),
       leadTimeDays: Number(item.lead_time_dias ?? 0),
+      physicalStock: Number(item.estoque_fisico ?? item.estoque_atual ?? 0),
+      qualityWithheldStock: Number(item.estoque_retido_qualidade ?? 0),
     }));
 
     // ATENCAO — netagem CONJUNTA (correcao do defeito CRITICO 1 da auditoria
@@ -129,6 +170,8 @@ class GenerateMrpPlanUseCase extends UseCase<Record<string, any>, any[]> {
           origem: allocation.origem,
           origem_id: allocation.origemId,
           necessidade_bruta: Number((previous?.necessidade_bruta ?? 0) + allocation.grossRequirement),
+          estoque_fisico: Number((previous?.estoque_fisico ?? 0) + allocation.physicalStock),
+          estoque_retido_qualidade: Number((previous?.estoque_retido_qualidade ?? 0) + allocation.qualityWithheldStock),
           estoque_disponivel: Number((previous?.estoque_disponivel ?? 0) + allocation.availableStock),
           necessidade_liquida: Number((previous?.necessidade_liquida ?? 0) + allocation.netRequirement),
           quantidade_planejada: Number((previous?.quantidade_planejada ?? 0) + allocation.plannedQuantity),
@@ -143,12 +186,21 @@ class GenerateMrpPlanUseCase extends UseCase<Record<string, any>, any[]> {
     }
 
     return sequelize.transaction(async (transaction: any) => {
+      const planRows = Array.from(planByOrigin.values());
+      const planMetadata = new Map(planRows.map((order) => [planLineKey(order), order]));
       const persistedOrders = await this.mrpRepository.upsertPlannedOrders(
-        Array.from(planByOrigin.values()),
+        planRows.map(stripVirtualPlanFields),
         transaction,
       );
 
       await this.autoConvertEligibleOrders(persistedOrders, input.requester_id, transaction);
+
+      for (const order of persistedOrders) {
+        const metadata = planMetadata.get(persistedOrderKey(order));
+        if (metadata) {
+          attachPlanVisibilityFields(order, metadata);
+        }
+      }
 
       return persistedOrders;
     });
