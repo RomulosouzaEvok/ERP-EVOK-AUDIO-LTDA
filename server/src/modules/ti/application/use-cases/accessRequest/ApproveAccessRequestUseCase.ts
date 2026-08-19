@@ -12,6 +12,10 @@ import { NotFoundError, ValidationError, ForbiddenError } from '../../../../../e
 import type { ApproveAccessRequestInput } from '../../../domain/entities/AccessRequestTypes';
 import { toAccessRequestDTO } from '../../../infrastructure/mappers/AccessRequestMapper';
 import { isEligibleApprover } from '../../../domain/services/approverEligibilityService';
+import {
+  SEGREGATION_RULES,
+  assertApproverIsNotRequester,
+} from '../../../../../shared/domain/segregationOfDuties';
 
 class ApproveAccessRequestUseCase extends UseCase<ApproveAccessRequestInput, any> {
   private readonly repository: AccessRequestRepository;
@@ -36,6 +40,14 @@ class ApproveAccessRequestUseCase extends UseCase<ApproveAccessRequestInput, any
     if (!eligible) {
       throw new ForbiddenError('Você não tem permissão para aprovar esta solicitação — apenas o módulo ti:approve ou o gestor do departamento podem fazê-lo.');
     }
+
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.TI_ACCESS_REQUEST_APPROVE,
+      requesterUserId: request.requested_by,
+      approverUserId,
+      documentLabel: `a solicitacao de acesso #${id}`,
+      approverHint: "outro usuario com nivel 'approve' no modulo de TI ou o gestor do departamento",
+    });
 
     await this.repository.update(id, { status: 'approved', approved_by: approverUserId, approved_at: new Date() });
     return toAccessRequestDTO(await this.repository.findById(id));

@@ -14,12 +14,17 @@
 const ExecuteAccessRequestUseCase = require('../../src/modules/ti/application/use-cases/accessRequest/ExecuteAccessRequestUseCase');
 const CheckOffboardingBlockersUseCase = require('../../src/modules/ti/application/use-cases/accessRequest/CheckOffboardingBlockersUseCase');
 const ApproveAccessRequestUseCase = require('../../src/modules/ti/application/use-cases/accessRequest/ApproveAccessRequestUseCase');
+const RejectAccessRequestUseCase = require('../../src/modules/ti/application/use-cases/accessRequest/RejectAccessRequestUseCase');
 const { ValidationError, NotFoundError, BusinessRuleError, ForbiddenError } = require('../../src/errors');
 
 jest.mock('../../src/modules/ti/domain/services/approverEligibilityService', () => ({
   isEligibleApprover: jest.fn(),
 }));
 const { isEligibleApprover } = require('../../src/modules/ti/domain/services/approverEligibilityService');
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 function makeAccessRequestRepository(overrides: Partial<any> = {}) {
   let state = overrides.initialRequest ?? { id: 900, type: 'revoke', status: 'pending', employee_id: 350, department_id: 4, checklist: {} };
@@ -88,6 +93,42 @@ describe('ExecuteAccessRequestUseCase — revoke (offboarding)', () => {
   });
 });
 
+describe('RejectAccessRequestUseCase (CASE-013/FIND-ERP-009)', () => {
+  it('rejeita quando usuario elegivel e diferente do solicitante', async () => {
+    (isEligibleApprover as jest.Mock).mockResolvedValue(true);
+    const repo = makeAccessRequestRepository({ initialRequest: { id: 904, type: 'grant', status: 'pending', department_id: 4, requested_by: 44 } });
+
+    const result = await new RejectAccessRequestUseCase(repo).execute({
+      id: 904,
+      rejection_reason: 'Perfil incorreto',
+      approverUserId: 55,
+      approverRole: 'operator',
+      approverHasTiApprove: true,
+    });
+
+    expect(result.status).toBe('rejected');
+  });
+
+  it('bloqueia autorejeicao mesmo quando o usuario e elegivel', async () => {
+    (isEligibleApprover as jest.Mock).mockResolvedValue(true);
+    const repo = makeAccessRequestRepository({ initialRequest: { id: 904, type: 'grant', status: 'pending', department_id: 4, requested_by: 55 } });
+
+    const error = await new RejectAccessRequestUseCase(repo)
+      .execute({
+        id: 904,
+        rejection_reason: 'Perfil incorreto',
+        approverUserId: 55,
+        approverRole: 'admin',
+        approverHasTiApprove: true,
+      })
+      .catch((e: any) => e);
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details.rule).toBe('CASE-013-TI-ACCESS-REJECT');
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+});
+
 describe('ExecuteAccessRequestUseCase — grant (onboarding)', () => {
   it('provisiona acesso quando a solicitacao ja esta approved', async () => {
     const repo = makeAccessRequestRepository({ initialRequest: { id: 901, type: 'grant', status: 'approved', employee_id: 620, department_id: 4, requested_profile_id: 7, corporate_email: 'x@evokaudio.com' } });
@@ -112,10 +153,23 @@ describe('ExecuteAccessRequestUseCase — grant (onboarding)', () => {
 describe('ApproveAccessRequestUseCase (§4.1 — elegibilidade de aprovador)', () => {
   it('aprova quando o use case resolve elegibilidade (ti:approve ou gestor)', async () => {
     (isEligibleApprover as jest.Mock).mockResolvedValue(true);
-    const repo = makeAccessRequestRepository({ initialRequest: { id: 902, type: 'grant', status: 'pending', department_id: 4 } });
+    const repo = makeAccessRequestRepository({ initialRequest: { id: 902, type: 'grant', status: 'pending', department_id: 4, requested_by: 44 } });
 
     const result = await new ApproveAccessRequestUseCase(repo).execute({ id: 902, approverUserId: 55, approverRole: 'operator', approverHasTiApprove: false });
     expect(result.status).toBe('approved');
+  });
+
+  it('CASE-013/FIND-ERP-009: bloqueia autoaprovacao mesmo quando o usuario e elegivel', async () => {
+    (isEligibleApprover as jest.Mock).mockResolvedValue(true);
+    const repo = makeAccessRequestRepository({ initialRequest: { id: 902, type: 'grant', status: 'pending', department_id: 4, requested_by: 55 } });
+
+    const error = await new ApproveAccessRequestUseCase(repo)
+      .execute({ id: 902, approverUserId: 55, approverRole: 'admin', approverHasTiApprove: true })
+      .catch((e: any) => e);
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details.rule).toBe('CASE-013-TI-ACCESS-APPROVE');
+    expect(repo.update).not.toHaveBeenCalled();
   });
 
   it('FLUXO DE EXCECAO: BLOQUEIA aprovador nao elegivel (nem ti:approve, nem gestor)', async () => {

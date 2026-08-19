@@ -11,6 +11,10 @@ import { NotFoundError, ValidationError, ForbiddenError } from '../../../../../e
 import type { RejectAccessRequestInput } from '../../../domain/entities/AccessRequestTypes';
 import { toAccessRequestDTO } from '../../../infrastructure/mappers/AccessRequestMapper';
 import { isEligibleApprover } from '../../../domain/services/approverEligibilityService';
+import {
+  SEGREGATION_RULES,
+  assertApproverIsNotRequester,
+} from '../../../../../shared/domain/segregationOfDuties';
 
 class RejectAccessRequestUseCase extends UseCase<RejectAccessRequestInput, any> {
   private readonly repository: AccessRequestRepository;
@@ -34,6 +38,14 @@ class RejectAccessRequestUseCase extends UseCase<RejectAccessRequestInput, any> 
 
     const eligible = await isEligibleApprover({ approverUserId, approverRole, approverHasTiApprove, departmentId: request.department_id });
     if (!eligible) throw new ForbiddenError('Você não tem permissão para rejeitar esta solicitação.');
+
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.TI_ACCESS_REQUEST_REJECT,
+      requesterUserId: request.requested_by,
+      approverUserId,
+      documentLabel: `a solicitacao de acesso #${id}`,
+      approverHint: "outro usuario com nivel 'approve' no modulo de TI ou o gestor do departamento",
+    });
 
     await this.repository.update(id, { status: 'rejected', rejection_reason, approved_by: approverUserId, approved_at: new Date() });
     return toAccessRequestDTO(await this.repository.findById(id));

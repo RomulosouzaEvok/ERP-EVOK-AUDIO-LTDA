@@ -83,6 +83,10 @@ export const SEGREGATION_RULES = {
   IMPORT_PROCESS_AUTHORITY: 'D-K-COMEX',
   /** `POST /api/jur/contracts/:id/approve` (alçada de contrato jurídico, CASE-002). */
   JUR_CONTRACT_AUTHORITY: 'D-K-JURIDICO',
+  /** `POST /api/ti/access-requests/:id/approve` (CASE-013/FIND-ERP-009). */
+  TI_ACCESS_REQUEST_APPROVE: 'CASE-013-TI-ACCESS-APPROVE',
+  /** `POST /api/ti/access-requests/:id/reject` (CASE-013/FIND-ERP-009). */
+  TI_ACCESS_REQUEST_REJECT: 'CASE-013-TI-ACCESS-REJECT',
 } as const;
 
 /** União dos identificadores de {@link SEGREGATION_RULES}. */
