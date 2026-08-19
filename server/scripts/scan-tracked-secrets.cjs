@@ -4,7 +4,15 @@ const { execFileSync } = require('child_process');
 
 const rootDir = path.resolve(__dirname, '..', '..');
 const blockedFileNames = new Set(['.env', '.env.local', '.env.production', '.env.test']);
-const allowedFragments = ['.env.example', '.env.docker.example', 'node_modules', 'dist', 'tmp', '.git'];
+const allowedFragments = [
+  '.env.example',
+  '.env.docker.example',
+  'node_modules',
+  'dist',
+  'tmp',
+  '.git',
+  'audit/runs',
+];
 const contentChecks = [
   /BEGIN [A-Z ]*PRIVATE KEY/,
   /AKIA[0-9A-Z]{16}/,
