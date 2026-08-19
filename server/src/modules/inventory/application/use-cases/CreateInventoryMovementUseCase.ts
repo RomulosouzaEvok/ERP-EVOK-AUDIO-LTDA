@@ -112,7 +112,9 @@ class CreateInventoryMovementUseCase extends UseCase {
       input.description,
       transaction,
       warehouse.id,
-      item_id ?? null
+      item_id ?? null,
+      reference_id,
+      reference_type as any
     );
 
     if (input.type === 'in') {

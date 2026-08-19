@@ -64,6 +64,8 @@ import { ValidationError } from '../errors';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Product, InventoryMovement, ProductionOrderReservation } = require('../models/index');
 
+type InventoryMovementReferenceType = 'sale' | 'purchase' | 'production' | 'adjustment' | 'transfer' | 'sst_epi_delivery' | 'import';
+
 /**
  * Tolerância para comparação de quantidades decimais (DECIMAL(18,6)).
  * Abaixo disso, uma diferença é ruído de ponto flutuante, não saldo real.
@@ -332,7 +334,9 @@ export async function adjust(
   reason: string,
   transaction: Transaction,
   warehouseId?: number | null,
-  itemId?: string | null
+  itemId?: string | null,
+  referenceId?: number,
+  referenceType: InventoryMovementReferenceType = 'adjustment'
 ): Promise<InventoryResult> {
   if (!reason || reason.trim().length === 0) {
     throw Object.assign(new Error('Motivo do ajuste é obrigatório'), {
@@ -360,7 +364,8 @@ export async function adjust(
       type: 'adjustment',
       quantity,
       description: reason,
-      referenceType: 'adjustment',
+      referenceId,
+      referenceType,
       warehouseId,
       itemId
     },

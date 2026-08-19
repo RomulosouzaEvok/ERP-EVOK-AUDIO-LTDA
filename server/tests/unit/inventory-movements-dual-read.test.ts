@@ -161,6 +161,8 @@ describe('CreateInventoryMovementUseCase — resolução item_id -> product_id (
       type: 'in',
       quantity: 5,
       description: 'Entrada via item novo',
+      reference_id: 777,
+      reference_type: 'adjustment',
       userId: 1,
       transaction,
     });
@@ -176,7 +178,9 @@ describe('CreateInventoryMovementUseCase — resolução item_id -> product_id (
       'Entrada via item novo',
       transaction,
       1,
-      'a1b2c3d4-0000-0000-0000-000000000001'
+      'a1b2c3d4-0000-0000-0000-000000000001',
+      777,
+      'adjustment'
     );
   });
 
@@ -215,6 +219,24 @@ describe('CreateInventoryMovementUseCase — resolução item_id -> product_id (
     });
 
     expect(findLegacyProductByItemId).not.toHaveBeenCalled();
-    expect(adjust).toHaveBeenCalledWith(42, 'out', 2, 7, 'Saida legada', transaction, 1, null);
+    expect(adjust).toHaveBeenCalledWith(42, 'out', 2, 7, 'Saida legada', transaction, 1, null, undefined, undefined);
+  });
+
+  it('propaga reference_id/reference_type mesmo no fluxo legado por product_id', async () => {
+    const { CreateInventoryMovementUseCase, adjust } = loadUseCaseWithMocks({ legacyProduct: null });
+
+    const useCase = new CreateInventoryMovementUseCase();
+    await useCase.execute({
+      product_id: 42,
+      type: 'out',
+      quantity: 2,
+      description: 'Saida com rastreio',
+      reference_id: 55,
+      reference_type: 'adjustment',
+      userId: 7,
+      transaction,
+    });
+
+    expect(adjust).toHaveBeenCalledWith(42, 'out', 2, 7, 'Saida com rastreio', transaction, 1, null, 55, 'adjustment');
   });
 });
