@@ -21,7 +21,7 @@ interface LogActionParams {
    */
   action: AuditActionInput;
   entityType: string;
-  entityId?: number;
+  entityId?: number | string | null;
   entityDescription?: string;
   oldValues?: Record<string, unknown>;
   newValues?: Record<string, unknown>;

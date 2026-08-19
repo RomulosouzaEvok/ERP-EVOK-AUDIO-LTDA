@@ -65,6 +65,19 @@ interface AuditLogModel extends ModelStatic<AuditLogInstance> {
   }): Promise<void>;
 }
 
+function normalizeNullableIntegerId(value: number | string | null | undefined): number | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'string' && value.trim() === '') {
+    return null;
+  }
+
+  const numericValue = Number(value);
+  return Number.isSafeInteger(numericValue) ? numericValue : null;
+}
+
 const AuditLog = sequelize.define<AuditLogInstance>('AuditLog', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   user_id: { type: DataTypes.INTEGER, comment: 'FK → users.id (quem executou a ação)' },
@@ -152,7 +165,7 @@ const AuditLog = sequelize.define<AuditLogInstance>('AuditLog', {
     user_agent: typeof data.req?.headers?.['user-agent'] === 'string' ? data.req.headers['user-agent'] : null,
     action: resolved.action,
     entity_type: data.entityType,
-    entity_id: data.entityId !== undefined && data.entityId !== null ? Number(data.entityId) : null,
+    entity_id: normalizeNullableIntegerId(data.entityId),
     entity_description: data.entityDescription ?? null,
     old_values: data.oldValues ?? null,
     new_values: data.newValues ?? null,

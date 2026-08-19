@@ -76,6 +76,21 @@ describe('AuditLog.register: vocabulário canônico + marcador do verbo', () => 
     });
   });
 
+  it('normaliza entityId UUID para null, sem tentar persistir NaN em coluna integer', async () => {
+    await AuditLog.register({
+      action: 'create',
+      entityType: 'Item',
+      entityId: '550e8400-e29b-41d4-a716-446655440000',
+      entityDescription: 'ITEM-UUID',
+    });
+
+    expect(createSpy.mock.calls[0][0]).toMatchObject({
+      action: 'create',
+      entity_id: null,
+      entity_type: 'Item',
+    });
+  });
+
   /**
    * `assign` é o caso de permissão: atribuir perfil de acesso a um usuário
    * vira `permission_change`, que é o filtro que um auditor de segurança
