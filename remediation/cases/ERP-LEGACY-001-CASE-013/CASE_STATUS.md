@@ -12,6 +12,8 @@ STATUS:    IN_PROGRESS
 - Fase 1 concluida: identidade gravada em MPS, BOM, contas a pagar/receber e tesouraria.
 - Fase 2A concluida nesta continuacao: segregacao de funcao em `POST /api/ti/access-requests/:id/approve` e `POST /api/ti/access-requests/:id/reject`, comparando `requested_by` contra o aprovador/rejeitador autenticado.
 - Evidencia da Fase 2A: `REMEDIATION_EVIDENCE_CONTINUATION_2026-08-19.md`.
+- Fase 2B concluida nesta continuacao: segregacao de funcao em `PATCH /api/accounting/entries/:id/post` e `PATCH /api/accounting/entries/:id/reverse`, bloqueando o criador do lancamento e tambem o usuario que postou o original no caminho de estorno.
+- Evidencia da Fase 2B: `REMEDIATION_EVIDENCE_CONTINUATION_2026-08-19.md`.
 - Fase 2 segue em aberto para os demais pontos com campo de solicitante ja existente.
 - Fases 3 a 7 ainda pendentes.
 
@@ -20,6 +22,7 @@ STATUS:    IN_PROGRESS
 - `npx jest server/tests/unit/master-production-plan-g17.test.ts server/tests/unit/bom-engineering-change-control-g1.test.ts server/tests/unit/integrity-transaction-guards.test.ts server/tests/unit/treasury-use-cases.test.ts --runInBand`
 - `npx jest server/tests/unit/rbac-critical-routes.test.ts --runInBand --testTimeout=20000`
 - `npm test -- --runInBand tests/unit/ti-access-request-use-cases.test.ts` -> 1 suite, 12 tests passed.
+- `npm test -- --runInBand tests/unit/accounting-use-cases.test.ts` -> 1 suite, 24 tests passed.
 - `npm run typecheck`
 - `npm run build`
 

@@ -182,7 +182,7 @@ describe('UpdateEntryUseCase', () => {
 
   it('FLUXO PRINCIPAL: substitui integralmente os itens de um lançamento em draft', async () => {
     const repo = makeAccountingRepository({
-      findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', status: 'draft' })),
+      findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', status: 'draft', created_by: 2 })),
       findAccountById: jest.fn(async (id: number) => ({ id, code: String(id), accept_entries: true, active: true })),
     });
 
@@ -241,6 +241,25 @@ describe('PostEntryUseCase', () => {
     expect(repo.updateEntry).toHaveBeenCalledWith(1, expect.objectContaining({ status: 'posted', approved_by: 7 }), FAKE_TRANSACTION);
   });
 
+  it('CASE-013/FIND-ERP-009: rejeita postar lancamento criado pelo mesmo usuario', async () => {
+    const repo = makeAccountingRepository({
+      findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', status: 'draft', created_by: 7 })),
+      findEntryItems: jest.fn(async () => [
+        { account_id: 1, debit: 300, credit: 0 },
+        { account_id: 2, debit: 0, credit: 300 },
+      ]),
+    });
+
+    const error = await new PostEntryUseCase(repo)
+      .execute({ id: 1, userId: 7, transaction: FAKE_TRANSACTION })
+      .catch((e: any) => e);
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details.rule).toBe('CASE-013-ACCOUNTING-ENTRY-POST');
+    expect(repo.findEntryItems).not.toHaveBeenCalled();
+    expect(repo.updateEntry).not.toHaveBeenCalled();
+  });
+
   it('FLUXO DE EXCECAO: rejeita lançamento com menos de 2 itens', async () => {
     const repo = makeAccountingRepository({
       findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', status: 'draft' })),
@@ -266,7 +285,7 @@ describe('PostEntryUseCase', () => {
 describe('ReverseEntryUseCase', () => {
   it('FLUXO PRINCIPAL: gera novo lançamento com débito/crédito invertidos e marca o original como reversed', async () => {
     const repo = makeAccountingRepository({
-      findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', description: 'Original', status: 'posted' })),
+      findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', description: 'Original', status: 'posted', created_by: 1, approved_by: 2 })),
       findEntryItems: jest.fn(async () => [
         { account_id: 1, cost_center_id: null, debit: 500, credit: 0, historical: 'Débito original' },
         { account_id: 2, cost_center_id: null, debit: 0, credit: 500, historical: 'Crédito original' },
@@ -285,6 +304,36 @@ describe('ReverseEntryUseCase', () => {
     expect(repo.createEntryItem).toHaveBeenNthCalledWith(2, expect.objectContaining({ debit: 500, credit: 0 }), FAKE_TRANSACTION);
     expect(repo.updateEntry).toHaveBeenCalledWith(1, { status: 'reversed' }, FAKE_TRANSACTION);
     expect(result.original.status).toBe('reversed');
+  });
+
+  it('CASE-013/FIND-ERP-009: rejeita estorno feito pelo criador do lancamento original', async () => {
+    const repo = makeAccountingRepository({
+      findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', description: 'Original', status: 'posted', created_by: 3, approved_by: 2 })),
+    });
+
+    const error = await new ReverseEntryUseCase(repo)
+      .execute({ id: 1, userId: 3, transaction: FAKE_TRANSACTION })
+      .catch((e: any) => e);
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details.rule).toBe('CASE-013-ACCOUNTING-ENTRY-REVERSE-CREATOR');
+    expect(repo.createEntry).not.toHaveBeenCalled();
+    expect(repo.updateEntry).not.toHaveBeenCalled();
+  });
+
+  it('CASE-013/FIND-ERP-009: rejeita estorno feito pelo aprovador/postador do lancamento original', async () => {
+    const repo = makeAccountingRepository({
+      findEntryByIdForUpdate: jest.fn(async () => ({ id: 1, entry_number: 'LC-000001', description: 'Original', status: 'posted', created_by: 1, approved_by: 3 })),
+    });
+
+    const error = await new ReverseEntryUseCase(repo)
+      .execute({ id: 1, userId: 3, transaction: FAKE_TRANSACTION })
+      .catch((e: any) => e);
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details.rule).toBe('CASE-013-ACCOUNTING-ENTRY-REVERSE-POSTER');
+    expect(repo.createEntry).not.toHaveBeenCalled();
+    expect(repo.updateEntry).not.toHaveBeenCalled();
   });
 
   it('FLUXO DE EXCECAO: rejeita estornar lançamento que não está posted', async () => {

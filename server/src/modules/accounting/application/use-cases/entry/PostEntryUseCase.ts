@@ -20,6 +20,10 @@ import type { Transaction } from 'sequelize';
 import UseCase from '../../../../../shared/application/UseCase';
 import { NotFoundError, BusinessRuleError } from '../../../../../errors';
 import AccountingRepository from '../../../domain/repositories/AccountingRepository';
+import {
+  SEGREGATION_RULES,
+  assertApproverIsNotRequester,
+} from '../../../../../shared/domain/segregationOfDuties';
 
 const { toCents, fromCents } = require('../../../../../shared/utils/money');
 
@@ -49,6 +53,14 @@ class PostEntryUseCase extends UseCase<PostEntryInput, any> {
     if (entry.status !== 'draft') {
       throw new BusinessRuleError(`Lançamento ${entry.entry_number} está "${entry.status}" — apenas lançamentos em rascunho (draft) podem ser postados.`);
     }
+
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.ACCOUNTING_ENTRY_POST,
+      requesterUserId: entry.created_by,
+      approverUserId: userId,
+      documentLabel: `o lancamento contabil ${entry.entry_number}`,
+      approverHint: "outro usuario com nivel 'approve' no modulo contabilidade",
+    });
 
     const items = await this.accountingRepository.findEntryItems(id, transaction);
     if (items.length < 2) {

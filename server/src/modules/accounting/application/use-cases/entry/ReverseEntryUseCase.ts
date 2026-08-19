@@ -19,6 +19,10 @@ import type { Transaction } from 'sequelize';
 import UseCase from '../../../../../shared/application/UseCase';
 import { NotFoundError, BusinessRuleError } from '../../../../../errors';
 import AccountingRepository from '../../../domain/repositories/AccountingRepository';
+import {
+  SEGREGATION_RULES,
+  assertApproverIsNotRequester,
+} from '../../../../../shared/domain/segregationOfDuties';
 
 interface ReverseEntryInput {
   id: number;
@@ -47,6 +51,21 @@ class ReverseEntryUseCase extends UseCase<ReverseEntryInput, any> {
     if (original.status !== 'posted') {
       throw new BusinessRuleError(`Lançamento ${original.entry_number} está "${original.status}" — apenas lançamentos contabilizados (posted) podem ser estornados.`);
     }
+
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.ACCOUNTING_ENTRY_REVERSE_CREATOR,
+      requesterUserId: original.created_by,
+      approverUserId: userId,
+      documentLabel: `o lancamento contabil ${original.entry_number}`,
+      approverHint: "outro usuario com nivel 'approve' no modulo contabilidade",
+    });
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.ACCOUNTING_ENTRY_REVERSE_POSTER,
+      requesterUserId: original.approved_by,
+      approverUserId: userId,
+      documentLabel: `o lancamento contabil ${original.entry_number}`,
+      approverHint: "outro usuario com nivel 'approve' no modulo contabilidade",
+    });
 
     const originalItems = await this.accountingRepository.findEntryItems(id, transaction);
 

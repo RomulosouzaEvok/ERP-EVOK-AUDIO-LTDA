@@ -87,6 +87,12 @@ export const SEGREGATION_RULES = {
   TI_ACCESS_REQUEST_APPROVE: 'CASE-013-TI-ACCESS-APPROVE',
   /** `POST /api/ti/access-requests/:id/reject` (CASE-013/FIND-ERP-009). */
   TI_ACCESS_REQUEST_REJECT: 'CASE-013-TI-ACCESS-REJECT',
+  /** `PATCH /api/accounting/entries/:id/post` (CASE-013/FIND-ERP-009). */
+  ACCOUNTING_ENTRY_POST: 'CASE-013-ACCOUNTING-ENTRY-POST',
+  /** `PATCH /api/accounting/entries/:id/reverse` vs original creator (CASE-013/FIND-ERP-009). */
+  ACCOUNTING_ENTRY_REVERSE_CREATOR: 'CASE-013-ACCOUNTING-ENTRY-REVERSE-CREATOR',
+  /** `PATCH /api/accounting/entries/:id/reverse` vs original poster (CASE-013/FIND-ERP-009). */
+  ACCOUNTING_ENTRY_REVERSE_POSTER: 'CASE-013-ACCOUNTING-ENTRY-REVERSE-POSTER',
 } as const;
 
 /** União dos identificadores de {@link SEGREGATION_RULES}. */
