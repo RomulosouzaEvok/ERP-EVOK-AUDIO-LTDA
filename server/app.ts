@@ -13,7 +13,7 @@ import { loadRuntimeEnv, getJwtRuntimeConfig } from './src/config/runtimeEnv';
 import healthRouter from './src/routes/health';
 
 const errorHandler = require('./src/middlewares/errorHandler');
-const requestIdMiddleware = require('./src/middlewares/requestId');
+const requestIdMiddleware = require('./src/middlewares/requestId').default;
 const requestContext = require('./src/middlewares/requestContext');
 const { authenticate } = require('./src/middlewares/auth');
 

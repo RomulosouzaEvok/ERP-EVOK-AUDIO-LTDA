@@ -275,6 +275,12 @@ PurchaseOrderApproval.belongsTo(User, { foreignKey: 'approver_user_id', as: 'app
 PurchaseRequisition.hasMany(Purchase, { foreignKey: 'requisition_id', as: 'purchase_orders' });
 Purchase.belongsTo(PurchaseRequisition, { foreignKey: 'requisition_id', as: 'requisition' });
 
+// Purchase ↔ PurchaseReceipt
+Purchase.hasMany(PurchaseReceipt, { foreignKey: 'purchase_id', as: 'receipts' });
+PurchaseReceipt.belongsTo(Purchase, { foreignKey: 'purchase_id', as: 'purchase' });
+User.hasMany(PurchaseReceipt, { foreignKey: 'received_by', as: 'purchase_receipts_received' });
+PurchaseReceipt.belongsTo(User, { foreignKey: 'received_by', as: 'receivedBy' });
+
 // Purchase requisitions
 User.hasMany(PurchaseRequisition, { foreignKey: 'requester_id', as: 'purchase_requisitions' });
 PurchaseRequisition.belongsTo(User, { foreignKey: 'requester_id', as: 'requester' });

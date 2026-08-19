@@ -81,6 +81,8 @@ export interface AllocatedPlanLine {
   origem: string;
   origemId: string | null;
   grossRequirement: number;
+  physicalStock: number;
+  qualityWithheldStock: number;
   availableStock: number;
   netRequirement: number;
   plannedQuantity: number;
@@ -198,6 +200,8 @@ export function allocateOrderToOrigins(
     origem,
     origemId,
     grossRequirement: order.grossRequirement,
+    physicalStock: order.physicalStock,
+    qualityWithheldStock: order.qualityWithheldStock,
     availableStock: order.availableStock,
     netRequirement: order.netRequirement,
     plannedQuantity: order.plannedQuantity,
@@ -225,7 +229,7 @@ export function allocateOrderToOrigins(
   const keptGross = kept.reduce((total, share) => total + share.grossRequirement, 0);
 
   const lines: AllocatedPlanLine[] = [];
-  const distributed = { gross: 0, available: 0, net: 0, planned: 0 };
+  const distributed = { gross: 0, physical: 0, withheld: 0, available: 0, net: 0, planned: 0 };
 
   // A primeira participacao (a maior) fica para o fim: ela recebe o RESTO de
   // cada medida, o que faz a soma fechar sem residuo de arredondamento.
@@ -235,12 +239,16 @@ export function allocateOrderToOrigins(
       origem: share.origem,
       origemId: share.origemId,
       grossRequirement: roundQuantity(order.grossRequirement * ratio),
+      physicalStock: roundQuantity(order.physicalStock * ratio),
+      qualityWithheldStock: roundQuantity(order.qualityWithheldStock * ratio),
       availableStock: roundQuantity(order.availableStock * ratio),
       netRequirement: roundQuantity(order.netRequirement * ratio),
       plannedQuantity: roundQuantity(order.plannedQuantity * ratio),
     };
 
     distributed.gross += line.grossRequirement;
+    distributed.physical += line.physicalStock;
+    distributed.withheld += line.qualityWithheldStock;
     distributed.available += line.availableStock;
     distributed.net += line.netRequirement;
     distributed.planned += line.plannedQuantity;
@@ -251,6 +259,8 @@ export function allocateOrderToOrigins(
     origem: kept[0].origem,
     origemId: kept[0].origemId,
     grossRequirement: roundQuantity(order.grossRequirement - distributed.gross),
+    physicalStock: roundQuantity(order.physicalStock - distributed.physical),
+    qualityWithheldStock: roundQuantity(order.qualityWithheldStock - distributed.withheld),
     availableStock: roundQuantity(order.availableStock - distributed.available),
     netRequirement: roundQuantity(order.netRequirement - distributed.net),
     plannedQuantity: roundQuantity(order.plannedQuantity - distributed.planned),

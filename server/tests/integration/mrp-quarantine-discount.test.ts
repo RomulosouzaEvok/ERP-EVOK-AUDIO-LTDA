@@ -237,7 +237,6 @@ describeIntegration('MRP — saldo em quarentena nao abate a demanda (G7)', () =
         tipo: itemTipo,
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 0,
         estoque_seguranca: 0,
         lote_minimo: 0,
         lead_time_dias: 0,
@@ -409,6 +408,8 @@ describeIntegration('MRP — saldo em quarentena nao abate a demanda (G7)', () =
 
     const linha = linhas[0];
     expect(Number(linha.necessidade_bruta)).toBeCloseTo(DEMANDA_CABE_NO_FISICO * QTD_POR_UNIDADE, 4);
+    expect(Number(linha.estoque_fisico)).toBeCloseTo(SALDO_FISICO, 4);
+    expect(Number(linha.estoque_retido_qualidade)).toBeCloseTo(SALDO_QUARENTENA, 4);
     // 45 livres − 5 de seguranca. Os 60 em quarentena NAO entram.
     expect(Number(linha.estoque_disponivel)).toBeCloseTo(DISPONIVEL_COM_QUARENTENA, 4);
     expect(Number(linha.necessidade_liquida)).toBeCloseTo(
@@ -422,6 +423,15 @@ describeIntegration('MRP — saldo em quarentena nao abate a demanda (G7)', () =
     );
     expect(String(linha.origem_id)).toBe(ctx.origemCabe);
     ctx.ordemCabeId = String(linha.id);
+
+    const listed = await api()
+      .get('/api/mrp/planned-orders')
+      .set('Authorization', `Bearer ${token()}`);
+    expectStatus(listed, 200, 'mrp:planned-orders');
+    const persisted = listed.body.data.find((order: any) => String(order.id) === ctx.ordemCabeId);
+    expect(persisted).toBeDefined();
+    expect(Number(persisted.estoque_fisico)).toBeCloseTo(SALDO_FISICO, 4);
+    expect(Number(persisted.estoque_retido_qualidade)).toBeCloseTo(SALDO_QUARENTENA, 4);
   });
 
   // ====================================================================
@@ -447,10 +457,9 @@ describeIntegration('MRP — saldo em quarentena nao abate a demanda (G7)', () =
       { productId: ctx.componente.productId },
     );
     // Este e o numero que `quarantineBalanceService.sumWithheldByProduct`
-    // calcula e que `listMrpInventoryPositions` subtrai. Ele NAO e exposto em
-    // nenhum payload (`estoque_retido_qualidade` morre dentro do repositorio,
-    // nao chega a `mrp_ordens_planejadas`), entao a unica verificacao direta
-    // possivel e esta, contra a mesma fonte que o servico consulta.
+    // calcula e que `listMrpInventoryPositions` subtrai. Ele tambem precisa
+    // aparecer no payload do MRP para explicar ao planejador por que o saldo
+    // disponivel caiu.
     expect(Number(retido.retido)).toBeCloseTo(SALDO_QUARENTENA, 4);
   });
 
@@ -463,6 +472,8 @@ describeIntegration('MRP — saldo em quarentena nao abate a demanda (G7)', () =
     expect(linhas).toHaveLength(1);
     const linha = linhas[0];
     expect(Number(linha.necessidade_bruta)).toBeCloseTo(DEMANDA_GRANDE * QTD_POR_UNIDADE, 4);
+    expect(Number(linha.estoque_fisico)).toBeCloseTo(SALDO_FISICO, 4);
+    expect(Number(linha.estoque_retido_qualidade)).toBeCloseTo(SALDO_QUARENTENA, 4);
     expect(Number(linha.estoque_disponivel)).toBeCloseTo(DISPONIVEL_COM_QUARENTENA, 4);
     expect(Number(linha.necessidade_liquida)).toBeCloseTo(DEMANDA_GRANDE - DISPONIVEL_COM_QUARENTENA, 4);
     // A linha tem de fechar sozinha na tela do planejador.
@@ -535,6 +546,8 @@ describeIntegration('MRP — saldo em quarentena nao abate a demanda (G7)', () =
     expect(linhas).toHaveLength(1);
     const linha = linhas[0];
     expect(String(linha.id)).toBe(ctx.ordemGrandeId);
+    expect(Number(linha.estoque_fisico)).toBeCloseTo(SALDO_FISICO, 4);
+    expect(Number(linha.estoque_retido_qualidade)).toBeCloseTo(0, 4);
     expect(Number(linha.estoque_disponivel)).toBeCloseTo(DISPONIVEL_APOS_LIBERACAO, 4);
     expect(Number(linha.necessidade_liquida)).toBeCloseTo(DEMANDA_GRANDE - DISPONIVEL_APOS_LIBERACAO, 4);
     // A queda e exatamente o saldo que estava em quarentena — nem mais (o

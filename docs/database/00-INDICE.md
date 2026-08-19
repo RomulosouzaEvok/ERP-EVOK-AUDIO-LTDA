@@ -19,9 +19,9 @@ nota no topo desse arquivo).
 > está desatualizada** — elas já foram aplicadas e estão no baseline congelado
 > (`server/database/postgresql/00_baseline_frozen.sql`).
 >
-> **Medição canônica de 2026-08-12** (contagem direta no PostgreSQL, não
+> **Medição canônica de 2026-08-19** (contagem direta no PostgreSQL, não
 > estimativa). Este é um dos **dois** pontos canônicos do projeto — o outro é
-> o `CLAUDE.md` §1. A guarda
+> o `docs/project-memory/product/ERP_SSOT.md` §1. A guarda
 > `server/tests/integration/docs-reality-drift-guard.test.ts` confere o número
 > de migrations dos dois contra `SequelizeMeta`; não reescreva o marcador
 > "Medição canônica" nem o rótulo "Migrations aplicadas" da tabela sem ajustar
@@ -29,9 +29,9 @@ nota no topo desse arquivo).
 >
 > | Métrica | Valor |
 > |---|---|
-> | Migrations aplicadas | **169** |
-> | Tabelas (`information_schema.tables`, schema `public`) | **207** |
-> | Foreign keys (`pg_constraint`, `contype='f'`) | **478** |
+> | Migrations aplicadas | **172** |
+> | Tabelas (`information_schema.tables`, schema `public`) | **209** |
+> | Foreign keys (`pg_constraint`, `contype='f'`) | **483** |
 > | Tabelas `sst_*` | 35 |
 > | Tabelas `jur_*` | 18 |
 > | Tabelas `marketing_*` | 6 |

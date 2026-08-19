@@ -12,6 +12,7 @@ const UpdateEntryUseCase = require('../../src/modules/accounting/application/use
 const PostEntryUseCase = require('../../src/modules/accounting/application/use-cases/entry/PostEntryUseCase');
 const ReverseEntryUseCase = require('../../src/modules/accounting/application/use-cases/entry/ReverseEntryUseCase');
 const { ConflictError, NotFoundError, BusinessRuleError } = require('../../src/errors');
+const { createEntrySchema, updateEntrySchema } = require('../../src/modules/accounting/presentation/validators/accountingEntryValidators');
 
 const FAKE_TRANSACTION = {} as any;
 
@@ -35,6 +36,33 @@ function makeAccountingRepository(overrides: Partial<any> = {}) {
     ...overrides,
   };
 }
+
+describe('accountingEntryValidators', () => {
+  const validItems = [
+    { account_id: 1, debit: 100 },
+    { account_id: 2, credit: 100 },
+  ];
+
+  it('aceita entry_date no formato YYYY-MM-DD em criação e edição', () => {
+    expect(createEntrySchema.safeParse({
+      entry_date: '2026-08-07',
+      description: 'Lançamento manual',
+      entry_type: 'adjustment',
+      items: validItems,
+    }).success).toBe(true);
+    expect(updateEntrySchema.safeParse({ entry_date: '2026-08-08' }).success).toBe(true);
+  });
+
+  it('rejeita entry_date malformado antes de chegar ao banco (P2-3 da auditoria CONT/TES/CTR)', () => {
+    expect(createEntrySchema.safeParse({
+      entry_date: '07/08/2026',
+      description: 'Lançamento manual',
+      entry_type: 'adjustment',
+      items: validItems,
+    }).success).toBe(false);
+    expect(updateEntrySchema.safeParse({ entry_date: 'not-a-date' }).success).toBe(false);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Plano de Contas

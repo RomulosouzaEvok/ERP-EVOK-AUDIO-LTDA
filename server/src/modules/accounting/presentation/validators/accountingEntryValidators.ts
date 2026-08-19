@@ -13,6 +13,7 @@ const entryTypeEnum = z.enum([
 ]);
 
 const statusEnum = z.enum(['draft', 'posted', 'reversed']);
+const dateOnlySchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar no formato YYYY-MM-DD.');
 
 const entryItemSchema = z.object({
   account_id: z.coerce.number().int().positive(),
@@ -23,14 +24,14 @@ const entryItemSchema = z.object({
 }).strict();
 
 export const createEntrySchema = z.object({
-  entry_date: z.string().trim().min(1, 'entry_date é obrigatório.'),
+  entry_date: dateOnlySchema,
   description: z.string().trim().min(1, 'description é obrigatório.').max(255),
   entry_type: entryTypeEnum,
   items: z.array(entryItemSchema).min(1, 'Informe ao menos um item.'),
 }).strict();
 
 export const updateEntrySchema = z.object({
-  entry_date: z.string().trim().min(1).optional(),
+  entry_date: dateOnlySchema.optional(),
   description: z.string().trim().min(1).max(255).optional(),
   entry_type: entryTypeEnum.optional(),
   items: z.array(entryItemSchema).min(1).optional(),

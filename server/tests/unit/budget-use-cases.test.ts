@@ -177,6 +177,32 @@ describe('DeleteBudgetLineUseCase', () => {
     await new DeleteBudgetLineUseCase(repo).execute({ id: 1 });
     expect(repo.deleteBudgetLine).toHaveBeenCalledWith(1);
   });
+
+  it('FLUXO PRINCIPAL: retorna aviso ao excluir linha de orçamento de período já decorrido (P2-4 da auditoria CONT/TES/CTR)', async () => {
+    const repo = makeBudgetRepository({
+      findBudgetLineById: jest.fn(async () => ({
+        id: 1, cost_center_id: 7, year: 2026, month: 7, category: 'custo_fixo',
+      })),
+    });
+
+    const result = await new DeleteBudgetLineUseCase(repo, () => new Date('2026-08-19T12:00:00Z')).execute({ id: 1 });
+
+    expect(repo.deleteBudgetLine).toHaveBeenCalledWith(1);
+    expect(result.warning).toContain('2026-07');
+    expect(result.warning).toContain('relatórios históricos');
+  });
+
+  it('FLUXO PRINCIPAL: não retorna aviso ao excluir linha de período corrente ou futuro', async () => {
+    const repo = makeBudgetRepository({
+      findBudgetLineById: jest.fn(async () => ({
+        id: 1, cost_center_id: 7, year: 2026, month: 8, category: 'custo_fixo',
+      })),
+    });
+
+    const result = await new DeleteBudgetLineUseCase(repo, () => new Date('2026-08-19T12:00:00Z')).execute({ id: 1 });
+
+    expect(result.warning).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------

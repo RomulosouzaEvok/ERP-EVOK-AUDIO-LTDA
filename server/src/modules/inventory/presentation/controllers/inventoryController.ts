@@ -310,9 +310,12 @@ exports.getLotQrCode = async (req: Request, res: Response, next: NextFunction) =
  */
 exports.releaseLot = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const parsedId = idParamSchema.safeParse(req.params.id);
+    if (!parsedId.success) handleZodError(parsedId.error);
+
     const useCase = new ReleaseLotUseCase(inventoryRepository, qualityRepository);
     const lot = await useCase.execute({
-      id: req.params.id,
+      id: parsedId.data,
       notes: req.body?.notes,
       releasedBy: (req as any).user.id,
     });
@@ -348,8 +351,11 @@ exports.releaseLot = async (req: Request, res: Response, next: NextFunction) => 
  */
 exports.blockLot = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const parsedId = idParamSchema.safeParse(req.params.id);
+    if (!parsedId.success) handleZodError(parsedId.error);
+
     const useCase = new BlockLotUseCase(inventoryRepository);
-    const lot = await useCase.execute({ id: req.params.id, reason: req.body?.reason });
+    const lot = await useCase.execute({ id: parsedId.data, reason: req.body?.reason });
 
     logAction(req, {
       action: 'update',

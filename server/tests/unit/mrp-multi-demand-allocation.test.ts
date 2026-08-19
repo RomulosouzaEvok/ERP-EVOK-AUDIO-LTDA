@@ -127,6 +127,41 @@ describe('GenerateMrpPlanUseCase — netagem conjunta e rateio por origem', () =
     expect(Number(menor.necessidade_liquida)).toBeCloseTo(16.666667, 6);
   });
 
+  it('propaga estoque fisico e estoque retido por qualidade no mesmo rateio da linha', async () => {
+    const deps = buildDeps(40);
+    deps.itemRepository.listMrpInventoryPositions = jest.fn(async () => [
+      {
+        id: 'MP-1',
+        estoque_atual: 40,
+        estoque_fisico: 100,
+        estoque_retido_qualidade: 60,
+        estoque_reservado: 0,
+        estoque_seguranca: 0,
+        lote_minimo: 0,
+        lead_time_dias: 0,
+      },
+    ]);
+    deps.mrpRepository.upsertPlannedOrders = jest.fn(async (orders: any[]) => orders.map((order) => ({ ...order })));
+    const useCase = new GenerateMrpPlanUseCase(deps.mrpRepository as any, deps.itemRepository as any);
+
+    const linhas = await useCase.execute({
+      demands: [demanda(100, 'SO-1'), demanda(100, 'SO-2')],
+    });
+
+    expect(linhas).toHaveLength(2);
+    expect(soma(linhas, 'estoque_fisico')).toBeCloseTo(100, 6);
+    expect(soma(linhas, 'estoque_retido_qualidade')).toBeCloseTo(60, 6);
+    for (const linha of linhas) {
+      expect(Number(linha.estoque_fisico)).toBeCloseTo(50, 6);
+      expect(Number(linha.estoque_retido_qualidade)).toBeCloseTo(30, 6);
+      expect(Number(linha.estoque_disponivel)).toBeCloseTo(20, 6);
+    }
+
+    const [persistedPayload] = deps.mrpRepository.upsertPlannedOrders.mock.calls[0];
+    expect(persistedPayload[0]).not.toHaveProperty('estoque_fisico');
+    expect(persistedPayload[0]).not.toHaveProperty('estoque_retido_qualidade');
+  });
+
   it('demandas da MESMA origem viram uma linha so (a chave de rastreabilidade nao se multiplica)', async () => {
     const deps = buildDeps(0);
     const useCase = new GenerateMrpPlanUseCase(deps.mrpRepository as any, deps.itemRepository as any);

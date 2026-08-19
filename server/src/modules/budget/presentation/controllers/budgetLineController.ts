@@ -96,15 +96,15 @@ exports.remove = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = Number(req.params.id);
     const useCase = new DeleteBudgetLineUseCase(budgetRepository);
-    await useCase.execute({ id });
+    const result = await useCase.execute({ id });
 
     logAction(req, {
       action: 'delete',
       entityType: 'BudgetLine',
       entityId: id,
-      description: `Linha de orçamento ${id} excluída`,
+      description: result.warning ? `Linha de orçamento ${id} excluída. ${result.warning}` : `Linha de orçamento ${id} excluída`,
     });
 
-    res.json({ success: true, data: null });
+    res.json({ success: true, data: null, ...(result.warning ? { warnings: [result.warning] } : {}) });
   } catch (error) { next(error); }
 };

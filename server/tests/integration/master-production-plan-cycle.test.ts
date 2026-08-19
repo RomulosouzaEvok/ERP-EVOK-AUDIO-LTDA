@@ -132,7 +132,6 @@ describeIntegration('G17 — ciclo do Plano Mestre de Producao (MPS) contra Post
         tipo: itemTipo,
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 0,
         estoque_seguranca: 0,
         lote_minimo: 1,
         lead_time_dias: 1,

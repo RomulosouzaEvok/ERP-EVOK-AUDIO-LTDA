@@ -1,9 +1,22 @@
 import MrpRepository from '../../domain/repositories/MrpRepository';
-const { MrpOrdemPlanejada, Item } = require('../../../../models/index');
+const { MrpOrdemPlanejada, Item, Product } = require('../../../../models/index');
 const { Op } = require('sequelize');
 // G1 (2026-08-10): o MRP deixou de ler `item_estruturas`. Planejamento e
 // consumo passam a ler a MESMA estrutura — ver `bomStructureProjection`.
 const BomStructureProjection = require('../../../../services/bomStructureProjection');
+const QuarantineBalanceService = require('../../../../services/quarantineBalanceService');
+
+function attachedItem(record: any): any {
+  return record.item ?? (typeof record.get === 'function' ? record.get('item') : null);
+}
+
+function setVirtualField(record: any, field: string, value: unknown): void {
+  if (typeof record.setDataValue === 'function') {
+    record.setDataValue(field, value);
+  } else {
+    record[field] = value;
+  }
+}
 
 class SequelizeMrpRepository extends MrpRepository {
   /**
@@ -87,10 +100,43 @@ class SequelizeMrpRepository extends MrpRepository {
   }
 
   public async listPlannedOrders(): Promise<any[]> {
-    return MrpOrdemPlanejada.findAll({
+    const orders = await MrpOrdemPlanejada.findAll({
       include: [{ model: Item, as: 'item' }],
       order: [['data_liberacao', 'ASC'], ['data_necessidade', 'ASC']],
     });
+
+    const itemCodes = [
+      ...new Set(
+        orders
+          .map((order: any) => attachedItem(order)?.codigo)
+          .filter(Boolean)
+          .map((code: unknown) => String(code)),
+      ),
+    ];
+    const products = itemCodes.length
+      ? await Product.findAll({
+        where: { code: { [Op.in]: itemCodes } },
+        attributes: ['id', 'code', 'quantity'],
+      })
+      : [];
+    const productByCode = new Map<string, any>(products.map((product: any) => [String(product.code), product]));
+    const withheldByProduct = await QuarantineBalanceService.sumWithheldByProduct(
+      products.map((product: any) => product.id).filter((id: unknown) => id !== undefined && id !== null),
+    );
+
+    for (const order of orders) {
+      const item = attachedItem(order);
+      const product = item ? productByCode.get(String(item.codigo)) : null;
+
+      setVirtualField(order, 'estoque_fisico', product ? Number(product.quantity ?? 0) : null);
+      setVirtualField(
+        order,
+        'estoque_retido_qualidade',
+        product ? (withheldByProduct.get(Number(product.id)) ?? 0) : 0,
+      );
+    }
+
+    return orders;
   }
 
   /**
