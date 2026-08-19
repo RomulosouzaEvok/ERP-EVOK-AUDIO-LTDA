@@ -23,6 +23,7 @@ const {
   updateItemSupplierSchema,
 } = require('../validators/itemValidators');
 const { ValidationError, BusinessRuleError } = require('../../../../errors');
+const { logAction } = require('../../../../services/auditLogService');
 const Validators = require('../../../../utils/validators');
 
 const itemRepository = new SequelizeItemRepository();
@@ -71,6 +72,21 @@ exports.create = async (req: Request, res: Response, next: NextFunction) => {
     const body = createItemSchema.parse(req.body);
     const useCase = new CreateItemUseCase(itemRepository);
     const item = await useCase.execute(body);
+
+    logAction(req, {
+      action: 'create',
+      entityType: 'Item',
+      entityId: item.id,
+      entityDescription: item.codigo,
+      newValues: {
+        codigo: item.codigo,
+        descricao: item.descricao,
+        tipo: item.tipo,
+        unidade: item.unidade,
+      },
+      description: `Item ${item.codigo} criado`,
+    });
+
     res.status(201).json({ success: true, data: item });
   } catch (error: any) {
     if (error?.issues) {
@@ -90,6 +106,16 @@ exports.update = async (req: Request, res: Response, next: NextFunction) => {
     const body = updateItemSchema.parse(req.body);
     const useCase = new UpdateItemUseCase(itemRepository);
     const item = await useCase.execute({ itemId: req.params.id, data: body });
+
+    logAction(req, {
+      action: 'update',
+      entityType: 'Item',
+      entityId: item.id,
+      entityDescription: item.codigo,
+      newValues: body,
+      description: `Item ${item.codigo} atualizado`,
+    });
+
     res.json({ success: true, data: item });
   } catch (error: any) {
     if (error?.issues) {
@@ -140,6 +166,17 @@ exports.inactivate = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const useCase = new DeactivateItemUseCase(itemRepository, itemEstruturaRepository);
     const item = await useCase.execute({ itemId: req.params.id });
+
+    logAction(req, {
+      action: 'soft_delete',
+      entityType: 'Item',
+      entityId: item.id,
+      entityDescription: item.codigo,
+      oldValues: { status: 'ATIVO' },
+      newValues: { status: 'INATIVO' },
+      description: `Item ${item.codigo} inativado`,
+    });
+
     res.json({ success: true, data: item });
   } catch (error: any) {
     if (error?.issues) {

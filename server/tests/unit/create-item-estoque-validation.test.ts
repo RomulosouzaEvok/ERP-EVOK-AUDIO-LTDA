@@ -21,6 +21,10 @@ function buildApp() {
     ensureProductMirrorForItem: jest.fn(async () => null),
   }));
 
+  jest.doMock('../../src/services/auditLogService', () => ({
+    logAction: jest.fn(async () => undefined),
+  }));
+
   jest.doMock('../../src/modules/items/application/use-cases/DeactivateItemUseCase', () =>
     jest.fn().mockImplementation(() => ({
       execute: jest.fn(),
