@@ -14,6 +14,8 @@ STATUS:    IN_PROGRESS
 - Evidencia da Fase 2A: `REMEDIATION_EVIDENCE_CONTINUATION_2026-08-19.md`.
 - Fase 2B concluida nesta continuacao: segregacao de funcao em `PATCH /api/accounting/entries/:id/post` e `PATCH /api/accounting/entries/:id/reverse`, bloqueando o criador do lancamento e tambem o usuario que postou o original no caminho de estorno.
 - Evidencia da Fase 2B: `REMEDIATION_EVIDENCE_CONTINUATION_2026-08-19.md`.
+- Fase 2C concluida nesta continuacao: segregacao de funcao em `PUT /api/inventory/transfers/:id/approve` e `PUT /api/inventory/transfers/:id/reject`, usando `warehouse_transfers.user_id` como solicitante.
+- Evidencia da Fase 2C: `REMEDIATION_EVIDENCE_CONTINUATION_2026-08-19.md`.
 - Fase 2 segue em aberto para os demais pontos com campo de solicitante ja existente.
 - Fases 3 a 7 ainda pendentes.
 
@@ -23,6 +25,7 @@ STATUS:    IN_PROGRESS
 - `npx jest server/tests/unit/rbac-critical-routes.test.ts --runInBand --testTimeout=20000`
 - `npm test -- --runInBand tests/unit/ti-access-request-use-cases.test.ts` -> 1 suite, 12 tests passed.
 - `npm test -- --runInBand tests/unit/accounting-use-cases.test.ts` -> 1 suite, 24 tests passed.
+- `npm test -- --runInBand tests/unit/warehouse-stock.test.ts` -> 1 suite, 37 tests passed.
 - `npm run typecheck`
 - `npm run build`
 

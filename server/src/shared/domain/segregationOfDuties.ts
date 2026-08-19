@@ -93,6 +93,10 @@ export const SEGREGATION_RULES = {
   ACCOUNTING_ENTRY_REVERSE_CREATOR: 'CASE-013-ACCOUNTING-ENTRY-REVERSE-CREATOR',
   /** `PATCH /api/accounting/entries/:id/reverse` vs original poster (CASE-013/FIND-ERP-009). */
   ACCOUNTING_ENTRY_REVERSE_POSTER: 'CASE-013-ACCOUNTING-ENTRY-REVERSE-POSTER',
+  /** `PUT /api/inventory/transfers/:id/approve` (CASE-013/FIND-ERP-009). */
+  WAREHOUSE_TRANSFER_APPROVE: 'CASE-013-WAREHOUSE-TRANSFER-APPROVE',
+  /** `PUT /api/inventory/transfers/:id/reject` (CASE-013/FIND-ERP-009). */
+  WAREHOUSE_TRANSFER_REJECT: 'CASE-013-WAREHOUSE-TRANSFER-REJECT',
 } as const;
 
 /** União dos identificadores de {@link SEGREGATION_RULES}. */

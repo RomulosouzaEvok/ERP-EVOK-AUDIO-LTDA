@@ -324,6 +324,19 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
     expect(Product.findByPk).not.toHaveBeenCalled();
   });
 
+  it('CASE-013/FIND-ERP-009: bloqueia autoaprovacao de transferencia antes de alterar saldos', async () => {
+    const useCase = new ApproveWarehouseTransferUseCase(repository);
+
+    const error = await useCase.execute({ id: 55, approverId: 3, transaction }).catch((e: any) => e);
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details.rule).toBe('CASE-013-WAREHOUSE-TRANSFER-APPROVE');
+    expect(WarehouseStockService.removeFromWarehouse).not.toHaveBeenCalled();
+    expect(WarehouseStockService.addToWarehouse).not.toHaveBeenCalled();
+    expect(InventoryMovement.create).not.toHaveBeenCalled();
+    expect(WarehouseTransfer.__row.update).not.toHaveBeenCalled();
+  });
+
   it('aprovacao propaga 422 didatico quando saldo de origem e insuficiente NO MOMENTO da aprovacao', async () => {
     WarehouseStockService.removeFromWarehouse.mockRejectedValueOnce(
       new BusinessRuleError('Saldo insuficiente do produto "Produto 10" (#10) no depósito "Deposito INSUMOS" (INSUMOS). Saldo atual: 2, solicitado: 7.', {
@@ -362,6 +375,17 @@ describe('CreateWarehouseTransferUseCase / ApproveWarehouseTransferUseCase / Rej
     expect(transfer.approved_by).toBe(9);
     expect(WarehouseStockService.addToWarehouse).not.toHaveBeenCalled();
     expect(WarehouseStockService.removeFromWarehouse).not.toHaveBeenCalled();
+  });
+
+  it('CASE-013/FIND-ERP-009: bloqueia autorejeicao de transferencia sem alterar status', async () => {
+    const useCase = new RejectWarehouseTransferUseCase(repository);
+
+    const error = await useCase.execute({ id: 55, approverId: 3, reason: 'Sem disponibilidade real', transaction }).catch((e: any) => e);
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details.rule).toBe('CASE-013-WAREHOUSE-TRANSFER-REJECT');
+    expect(WarehouseTransfer.__row.update).not.toHaveBeenCalled();
+    expect(WarehouseTransfer.__row.status).toBe('pending');
   });
 
   it('rejeita rejeicao sem motivo (reason obrigatorio)', async () => {

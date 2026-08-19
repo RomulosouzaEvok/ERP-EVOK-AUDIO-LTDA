@@ -18,6 +18,10 @@ import UseCase from '../../../../shared/application/UseCase';
 import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { NotFoundError, BusinessRuleError } from '../../../../errors';
 import { Transaction } from 'sequelize';
+import {
+  SEGREGATION_RULES,
+  assertApproverIsNotRequester,
+} from '../../../../shared/domain/segregationOfDuties';
 
 interface ApproveWarehouseTransferInput {
   id: number | string;
@@ -51,6 +55,14 @@ class ApproveWarehouseTransferUseCase extends UseCase<ApproveWarehouseTransferIn
         `Apenas transferências 'pending' podem ser aprovadas. Status atual: '${transfer.status}'.`
       );
     }
+
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.WAREHOUSE_TRANSFER_APPROVE,
+      requesterUserId: transfer.user_id,
+      approverUserId: input.approverId,
+      documentLabel: `a transferencia entre depositos #${transfer.id}`,
+      approverHint: "outro usuario com nivel 'approve' no modulo estoque",
+    });
 
     const quantity = Number(transfer.quantity);
 

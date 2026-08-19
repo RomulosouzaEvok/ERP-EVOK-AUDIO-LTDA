@@ -57,6 +57,54 @@ Ran all test suites matching tests/unit/ti-access-request-use-cases.test.ts.
 
 ---
 
+## Fase 2C - Inventory warehouse transfers
+
+### Escopo
+
+Subentrega parcial do item 2 do despacho do CASE-013: aplicar segregacao no
+ponto #12 da triagem e no ato simetrico de rejeicao:
+
+- `PUT /api/inventory/transfers/:id/approve`
+- `PUT /api/inventory/transfers/:id/reject`
+
+### Causa-Raiz
+
+- `ApproveWarehouseTransferUseCase.ts`: `approverId` era usado nos movimentos e em `approved_by`, mas nao era comparado com `warehouse_transfers.user_id`.
+- `RejectWarehouseTransferUseCase.ts`: tambem gravava `approved_by` sem comparar o rejeitador com o solicitante.
+
+### Correcao
+
+- `server/src/shared/domain/segregationOfDuties.ts`: adicionadas as regras `CASE-013-WAREHOUSE-TRANSFER-APPROVE` e `CASE-013-WAREHOUSE-TRANSFER-REJECT`.
+- `ApproveWarehouseTransferUseCase.ts`: chama `assertApproverIsNotRequester` usando `transfer.user_id` antes de debitar origem, creditar destino, criar `InventoryMovement` ou atualizar status.
+- `RejectWarehouseTransferUseCase.ts`: chama `assertApproverIsNotRequester` usando `transfer.user_id` antes de marcar a transferencia como `rejected`.
+- `server/tests/unit/warehouse-stock.test.ts`: adicionada cobertura para autoaprovacao sem alteracao de saldos/movimentos/status e autorejeicao sem alteracao de status.
+
+### Prova Verde
+
+```text
+> erp-evok-audio-server@1.0.0 test
+> jest --runInBand --runInBand tests/unit/warehouse-stock.test.ts
+
+Test Suites: 1 passed, 1 total
+Tests:       37 passed, 37 total
+Snapshots:   0 total
+Time:        10.272 s
+Ran all test suites matching tests/unit/warehouse-stock.test.ts.
+```
+
+```text
+> erp-evok-audio-server@1.0.0 typecheck
+> tsc -p tsconfig.json --noEmit
+```
+
+### Limites
+
+- Esta subentrega nao conclui a fase 2 completa; os demais pontos do CASE-013 continuam em aberto.
+- Nenhuma conexao com `erp_evok_audio` foi aberta.
+- Nenhum `FINDING CLOSED`, `RETEST_PASSED` ou `REMEDIATION_COMPLETE` e declarado aqui.
+
+---
+
 ## Fase 2B - Accounting post/reverse
 
 ### Escopo

@@ -14,6 +14,10 @@ import UseCase from '../../../../shared/application/UseCase';
 import InventoryRepository = require('../../domain/repositories/InventoryRepository');
 import { NotFoundError, BusinessRuleError, ValidationError } from '../../../../errors';
 import { Transaction } from 'sequelize';
+import {
+  SEGREGATION_RULES,
+  assertApproverIsNotRequester,
+} from '../../../../shared/domain/segregationOfDuties';
 
 interface RejectWarehouseTransferInput {
   id: number | string;
@@ -53,6 +57,14 @@ class RejectWarehouseTransferUseCase extends UseCase<RejectWarehouseTransferInpu
         `Apenas transferências 'pending' podem ser rejeitadas. Status atual: '${transfer.status}'.`
       );
     }
+
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.WAREHOUSE_TRANSFER_REJECT,
+      requesterUserId: transfer.user_id,
+      approverUserId: input.approverId,
+      documentLabel: `a transferencia entre depositos #${transfer.id}`,
+      approverHint: "outro usuario com nivel 'approve' no modulo estoque",
+    });
 
     await transfer.update({
       status: 'rejected',
