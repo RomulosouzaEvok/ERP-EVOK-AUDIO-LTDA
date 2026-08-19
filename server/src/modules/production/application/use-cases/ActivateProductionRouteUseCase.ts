@@ -21,6 +21,10 @@ import {
 } from '../../domain/productionRouteRules';
 import { resolveRouteStepWorkCenters } from '../services/resolveRouteStepWorkCenters';
 import type ProductionRouteRepository from '../../domain/repositories/ProductionRouteRepository';
+import {
+  SEGREGATION_RULES,
+  assertApproverIsNotRequester,
+} from '../../../../shared/domain/segregationOfDuties';
 
 /** Entrada da ativacao. */
 interface ActivateProductionRouteInput {
@@ -60,6 +64,14 @@ class ActivateProductionRouteUseCase extends UseCase<ActivateProductionRouteInpu
     if (!route) throw new NotFoundError('Roteiro de producao nao encontrado.');
 
     assertStatusTransition(route.status, 'active');
+
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.PRODUCTION_ROUTE_ACTIVATE,
+      requesterUserId: route.created_by,
+      approverUserId: input.approved_by,
+      documentLabel: `o roteiro de producao #${route.id}`,
+      approverHint: "outro usuario com nivel 'approve' no modulo producao",
+    });
 
     const persistedSteps = await this.productionRouteRepository.listSteps(route.id, transaction);
     assertHasSteps(persistedSteps);

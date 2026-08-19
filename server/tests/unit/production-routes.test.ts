@@ -435,6 +435,21 @@ describe('ActivateProductionRouteUseCase', () => {
     expect(repository.updateRouteFields).not.toHaveBeenCalled();
   });
 
+  it('CASE-013/FIND-ERP-009: bloqueia autoativacao antes de validar etapas', async () => {
+    const repository = buildRepository({
+      findRouteByIdForUpdate: jest.fn(async (id: number) => ({ id, status: 'draft', product_id: 7, created_by: 42 })),
+      listSteps: jest.fn(async () => [step(1)]),
+    });
+    const useCase = new ActivateProductionRouteUseCase(repository as any);
+
+    const error = await catchError(useCase.execute({ id: 1, approved_by: 42, transaction: TX }));
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details.rule).toBe('CASE-013-PRODUCTION-ROUTE-ACTIVATE');
+    expect(repository.listSteps).not.toHaveBeenCalled();
+    expect(repository.updateRouteFields).not.toHaveBeenCalled();
+  });
+
   it('rejeita ativacao de roteiro ja superseded com G5-ROUTE-STATUS-TRANSITION', async () => {
     const repository = buildRepository({
       findRouteByIdForUpdate: jest.fn(async (id: number) => ({ id, status: 'superseded', product_id: 7 })),
@@ -485,13 +500,26 @@ describe('ActivateProductionRouteUseCase', () => {
 describe('InactivateProductionRouteUseCase', () => {
   it('inativa um roteiro ativo', async () => {
     const repository = buildRepository({
-      findRouteByIdForUpdate: jest.fn(async (id: number) => ({ id, status: 'active', product_id: 7 })),
+      findRouteByIdForUpdate: jest.fn(async (id: number) => ({ id, status: 'active', product_id: 7, created_by: 7 })),
     });
     const useCase = new InactivateProductionRouteUseCase(repository as any);
 
-    await useCase.execute({ id: 1, transaction: TX });
+    await useCase.execute({ id: 1, approved_by: 42, transaction: TX });
 
     expect(repository.updateRouteFields).toHaveBeenCalledWith(1, { status: 'inactive' }, TX);
+  });
+
+  it('CASE-013/FIND-ERP-009: bloqueia autoinativacao antes de alterar status', async () => {
+    const repository = buildRepository({
+      findRouteByIdForUpdate: jest.fn(async (id: number) => ({ id, status: 'active', product_id: 7, created_by: 42 })),
+    });
+    const useCase = new InactivateProductionRouteUseCase(repository as any);
+
+    const error = await catchError(useCase.execute({ id: 1, approved_by: 42, transaction: TX }));
+
+    expect(error).toBeInstanceOf(BusinessRuleError);
+    expect(error.details.rule).toBe('CASE-013-PRODUCTION-ROUTE-INACTIVATE');
+    expect(repository.updateRouteFields).not.toHaveBeenCalled();
   });
 
   it('rejeita inativacao de rascunho com G5-ROUTE-STATUS-TRANSITION', async () => {

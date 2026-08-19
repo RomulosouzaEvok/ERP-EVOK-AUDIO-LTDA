@@ -12,10 +12,16 @@ import UseCase from '../../../../shared/application/UseCase';
 import { NotFoundError } from '../../../../errors';
 import { assertStatusTransition } from '../../domain/productionRouteRules';
 import type ProductionRouteRepository from '../../domain/repositories/ProductionRouteRepository';
+import {
+  SEGREGATION_RULES,
+  assertApproverIsNotRequester,
+} from '../../../../shared/domain/segregationOfDuties';
 
 /** Entrada da inativacao. */
 interface InactivateProductionRouteInput {
   id: number;
+  /** Sempre `req.user.id` (JWT) quando chamado pela API; usado para segregacao. */
+  approved_by?: number | null;
   transaction?: any;
 }
 
@@ -46,6 +52,14 @@ class InactivateProductionRouteUseCase extends UseCase<InactivateProductionRoute
     if (!route) throw new NotFoundError('Roteiro de producao nao encontrado.');
 
     assertStatusTransition(route.status, 'inactive');
+
+    assertApproverIsNotRequester({
+      rule: SEGREGATION_RULES.PRODUCTION_ROUTE_INACTIVATE,
+      requesterUserId: route.created_by,
+      approverUserId: input.approved_by,
+      documentLabel: `o roteiro de producao #${route.id}`,
+      approverHint: "outro usuario com nivel 'approve' no modulo producao",
+    });
 
     await this.productionRouteRepository.updateRouteFields(route.id, { status: 'inactive' }, transaction);
 

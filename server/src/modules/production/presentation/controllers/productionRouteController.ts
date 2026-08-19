@@ -211,7 +211,7 @@ exports.inactivate = async (req: Request, res: Response, next: NextFunction) => 
   const t = await sequelize.transaction();
   try {
     const useCase = new InactivateProductionRouteUseCase(productionRouteRepository);
-    const route = await useCase.execute({ id: Number(req.params.id), transaction: t });
+    const route = await useCase.execute({ id: Number(req.params.id), approved_by: currentUserId(req), transaction: t });
 
     await t.commit();
 

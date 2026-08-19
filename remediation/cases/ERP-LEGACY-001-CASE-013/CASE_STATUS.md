@@ -16,6 +16,9 @@ STATUS:    IN_PROGRESS
 - Evidencia da Fase 2B: `REMEDIATION_EVIDENCE_CONTINUATION_2026-08-19.md`.
 - Fase 2C concluida nesta continuacao: segregacao de funcao em `PUT /api/inventory/transfers/:id/approve` e `PUT /api/inventory/transfers/:id/reject`, usando `warehouse_transfers.user_id` como solicitante.
 - Evidencia da Fase 2C: `REMEDIATION_EVIDENCE_CONTINUATION_2026-08-19.md`.
+- Fase 2D concluida nesta continuacao: segregacao de funcao em `PATCH /api/production/routes/:id/activate` e `PATCH /api/production/routes/:id/inactivate`, usando `production_routes.created_by` como solicitante.
+- Evidencia da Fase 2D: `REMEDIATION_EVIDENCE_CONTINUATION_2026-08-19.md`.
+- Engenharia/desenhos foi verificada e nao alterada nesta rodada: o despacho trata `drawing.created_by` como existente, mas `ProductDrawing` ainda nao possui esse campo; precisa de etapa RC-2 antes da segregacao.
 - Fase 2 segue em aberto para os demais pontos com campo de solicitante ja existente.
 - Fases 3 a 7 ainda pendentes.
 
@@ -26,6 +29,7 @@ STATUS:    IN_PROGRESS
 - `npm test -- --runInBand tests/unit/ti-access-request-use-cases.test.ts` -> 1 suite, 12 tests passed.
 - `npm test -- --runInBand tests/unit/accounting-use-cases.test.ts` -> 1 suite, 24 tests passed.
 - `npm test -- --runInBand tests/unit/warehouse-stock.test.ts` -> 1 suite, 37 tests passed.
+- `npm test -- --runInBand tests/unit/production-routes.test.ts` -> 1 suite, 45 tests passed.
 - `npm run typecheck`
 - `npm run build`
 

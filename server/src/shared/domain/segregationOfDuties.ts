@@ -97,6 +97,10 @@ export const SEGREGATION_RULES = {
   WAREHOUSE_TRANSFER_APPROVE: 'CASE-013-WAREHOUSE-TRANSFER-APPROVE',
   /** `PUT /api/inventory/transfers/:id/reject` (CASE-013/FIND-ERP-009). */
   WAREHOUSE_TRANSFER_REJECT: 'CASE-013-WAREHOUSE-TRANSFER-REJECT',
+  /** `PATCH /api/production/routes/:id/activate` (CASE-013/FIND-ERP-009). */
+  PRODUCTION_ROUTE_ACTIVATE: 'CASE-013-PRODUCTION-ROUTE-ACTIVATE',
+  /** `PATCH /api/production/routes/:id/inactivate` (CASE-013/FIND-ERP-009). */
+  PRODUCTION_ROUTE_INACTIVATE: 'CASE-013-PRODUCTION-ROUTE-INACTIVATE',
 } as const;
 
 /** União dos identificadores de {@link SEGREGATION_RULES}. */

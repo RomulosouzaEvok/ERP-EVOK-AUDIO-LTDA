@@ -57,6 +57,56 @@ Ran all test suites matching tests/unit/ti-access-request-use-cases.test.ts.
 
 ---
 
+## Fase 2D - Production routes activate/inactivate
+
+### Escopo
+
+Subentrega parcial do item 2 do despacho do CASE-013: aplicar segregacao no
+ponto #16 da triagem e no ato simetrico NP-8:
+
+- `PATCH /api/production/routes/:id/activate`
+- `PATCH /api/production/routes/:id/inactivate`
+
+### Causa-Raiz
+
+- `ActivateProductionRouteUseCase.ts`: gravava `approved_by` a partir do JWT, mas nao comparava o aprovador com `production_routes.created_by`.
+- `InactivateProductionRouteUseCase.ts`: nao recebia a identidade do usuario autenticado e inativava o roteiro ativo sem segregacao.
+
+### Correcao
+
+- `server/src/shared/domain/segregationOfDuties.ts`: adicionadas as regras `CASE-013-PRODUCTION-ROUTE-ACTIVATE` e `CASE-013-PRODUCTION-ROUTE-INACTIVATE`.
+- `ActivateProductionRouteUseCase.ts`: chama `assertApproverIsNotRequester` contra `route.created_by` antes de validar etapas, rebaixar roteiro ativo anterior ou ativar o rascunho.
+- `InactivateProductionRouteUseCase.ts`: recebe `approved_by` opcional vindo do controller e chama `assertApproverIsNotRequester` contra `route.created_by` antes de atualizar status para `inactive`.
+- `productionRouteController.ts`: passa `currentUserId(req)` para o use case de inativacao.
+- `server/tests/unit/production-routes.test.ts`: adicionada cobertura para autoativacao sem validar etapas/alterar status e autoinativacao sem alterar status.
+
+### Prova Verde
+
+```text
+> erp-evok-audio-server@1.0.0 test
+> jest --runInBand --runInBand tests/unit/production-routes.test.ts
+
+Test Suites: 1 passed, 1 total
+Tests:       45 passed, 45 total
+Snapshots:   0 total
+Time:        0.306 s
+Ran all test suites matching tests/unit/production-routes.test.ts.
+```
+
+```text
+> erp-evok-audio-server@1.0.0 typecheck
+> tsc -p tsconfig.json --noEmit
+```
+
+### Limites
+
+- Engenharia/desenhos foi verificada e nao alterada nesta rodada: o despacho trata `drawing.created_by` como existente, mas o model `ProductDrawing` ainda nao possui esse campo. Esse ponto precisa de etapa RC-2 para gravar identidade antes da segregacao.
+- Esta subentrega nao conclui a fase 2 completa; os demais pontos do CASE-013 continuam em aberto.
+- Nenhuma conexao com `erp_evok_audio` foi aberta.
+- Nenhum `FINDING CLOSED`, `RETEST_PASSED` ou `REMEDIATION_COMPLETE` e declarado aqui.
+
+---
+
 ## Fase 2C - Inventory warehouse transfers
 
 ### Escopo
