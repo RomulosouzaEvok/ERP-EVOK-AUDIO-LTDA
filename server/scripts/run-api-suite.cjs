@@ -14,6 +14,7 @@ const serverDir = path.resolve(__dirname, '..');
 require('dotenv').config({ path: path.join(serverDir, '.env.test') });
 require('dotenv').config({ path: path.join(serverDir, '.env') });
 const jestBin = path.join(serverDir, 'node_modules', 'jest', 'bin', 'jest.js');
+const API_SUITE_TEST_TIMEOUT_MS = process.env.API_SUITE_TEST_TIMEOUT_MS || '60000';
 
 const productFixtureDefaults = {
   location: 'CI',
@@ -497,6 +498,7 @@ async function runJestSuite(suiteName, env, filter) {
     jestBin,
     '--runInBand',
     `tests/${suiteName}`,
+    `--testTimeout=${API_SUITE_TEST_TIMEOUT_MS}`,
     // Jest 30 removeu `--testPathPattern` (singular) em favor de
     // `--testPathPatterns`. Com o nome antigo o Jest aborta com codigo 1
     // ANTES de rodar qualquer teste — o filtro de depuracao estava

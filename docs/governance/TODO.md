@@ -7229,7 +7229,7 @@ suítes unitárias com repositório dublê, que não tem coluna `NOT NULL`, nem
   `mrp_ordens_planejadas.status` não tem valor para "não é mais necessária" —
   é decisão de processo, não de teste. Registrado no JSDoc da etapa 7 de
   `tests/integration/mrp-quarantine-discount.test.ts`.
-- [ ] **A suíte de integração é intermitente por timeout de 5 s.** Nenhum
+- [x] **A suíte de integração é intermitente por timeout de 5 s.** Nenhum
   arquivo de `tests/integration/` define `jest.setTimeout`, e o default do
   Jest é dimensionado para teste unitário. Em 4 execuções houve 3 falhas, em
   3 arquivos **diferentes** (`rbac-maintenance-service-orders-access-denied`,
@@ -7239,6 +7239,12 @@ suítes unitárias com repositório dublê, que não tem coluna `NOT NULL`, nem
   desta entrega já nascem com `jest.setTimeout(60_000)`; os outros 51
   continuam expostos. Uma suíte que reprova por sorte treina o time a
   reexecutar até passar, que é o oposto do que uma rede de segurança faz.
+  **Resolvido em 2026-08-19:** `scripts/run-api-suite.cjs` agora passa
+  `--testTimeout=60000` para as suítes API de forma centralizada, com override
+  opcional por `API_SUITE_TEST_TIMEOUT_MS`. Guarda unitária:
+  `tests/unit/run-api-suite-timeout-guard.test.ts`. Evidência:
+  `npm --prefix .\server run test:unit` → 183/183 suítes, 1965/1965 testes;
+  `npm --prefix .\server run test:integration` → 61/61 suítes, 250/250 testes.
 - [ ] **`estoque_retido_qualidade` não chega a nenhum payload.**
   `SequelizeItemRepository.listMrpInventoryPositions` calcula o campo (e
   `estoque_fisico`), mas nada é propagado para `mrp_ordens_planejadas` nem
