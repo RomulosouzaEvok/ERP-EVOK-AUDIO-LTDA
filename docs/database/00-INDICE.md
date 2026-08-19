@@ -29,7 +29,7 @@ nota no topo desse arquivo).
 >
 > | Métrica | Valor |
 > |---|---|
-> | Migrations aplicadas | **174** |
+> | Migrations aplicadas | **175** |
 > | Tabelas (`information_schema.tables`, schema `public`) | **210** |
 > | Foreign keys (`pg_constraint`, `contype='f'`) | **483** |
 > | Tabelas `sst_*` | 35 |
