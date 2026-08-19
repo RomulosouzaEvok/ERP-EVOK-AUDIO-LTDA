@@ -22,7 +22,7 @@ const {
   createItemSupplierSchema,
   updateItemSupplierSchema,
 } = require('../validators/itemValidators');
-const { ValidationError } = require('../../../../errors');
+const { ValidationError, BusinessRuleError } = require('../../../../errors');
 const Validators = require('../../../../utils/validators');
 
 const itemRepository = new SequelizeItemRepository();
@@ -64,6 +64,10 @@ exports.list = async (req: Request, res: Response, next: NextFunction) => {
 
 exports.create = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'estoque_atual')) {
+      return next(new BusinessRuleError('estoque_atual não pode ser informado na criação de item.'));
+    }
+
     const body = createItemSchema.parse(req.body);
     const useCase = new CreateItemUseCase(itemRepository);
     const item = await useCase.execute(body);

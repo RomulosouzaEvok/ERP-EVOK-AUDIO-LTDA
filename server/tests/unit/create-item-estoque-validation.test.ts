@@ -95,7 +95,7 @@ function buildApp() {
 }
 
 describe('POST /api/items - bloqueio de estoque_atual', () => {
-  it('rejeita estoque_atual: 100 com 400', async () => {
+  it('rejeita estoque_atual: 100 com 422', async () => {
     const app = buildApp();
 
     const response = await request(app)
@@ -108,10 +108,10 @@ describe('POST /api/items - bloqueio de estoque_atual', () => {
         estoque_atual: 100,
       });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
   });
 
-  it('rejeita estoque_atual: 0 com 400', async () => {
+  it('rejeita estoque_atual: 0 com 422', async () => {
     const app = buildApp();
 
     const response = await request(app)
@@ -124,7 +124,7 @@ describe('POST /api/items - bloqueio de estoque_atual', () => {
         estoque_atual: 0,
       });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
   });
 
   it('aceita POST sem estoque_atual e cria com saldo 0', async () => {
