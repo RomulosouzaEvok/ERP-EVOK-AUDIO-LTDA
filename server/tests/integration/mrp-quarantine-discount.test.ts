@@ -237,7 +237,6 @@ describeIntegration('MRP — saldo em quarentena nao abate a demanda (G7)', () =
         tipo: itemTipo,
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 0,
         estoque_seguranca: 0,
         lote_minimo: 0,
         lead_time_dias: 0,

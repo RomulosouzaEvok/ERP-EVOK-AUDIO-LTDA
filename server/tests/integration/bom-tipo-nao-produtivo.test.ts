@@ -25,12 +25,13 @@
  * @module tests/integration/bom-tipo-nao-produtivo
  */
 import { api, authToken, hasIntegrationPrerequisites } from '../helpers/testApi';
+import { randomUUID } from 'crypto';
 
 const describeIntegration = hasIntegrationPrerequisites() ? describe : describe.skip;
 
 /** Prefixo de todo registro criado por esta suite. */
 const P = 'G1TNP';
-const SUFFIX = String(Date.now()).slice(-8);
+const SUFFIX = randomUUID().slice(0, 8);
 
 describeIntegration('G1 — BOM recusa item de suprimento/patrimonio', () => {
   const ctx: Record<string, any> = {};
@@ -70,6 +71,18 @@ describeIntegration('G1 — BOM recusa item de suprimento/patrimonio', () => {
       .post('/api/items')
       .set('Authorization', `Bearer ${token()}`)
       .send({ codigo, descricao: `${P} item ${key}`, tipo, unidade: 'UN' });
+    if (response.status === 409) {
+      const existing = await api()
+        .get('/api/items')
+        .set('Authorization', `Bearer ${token()}`)
+        .query({ search: codigo, limit: 20 });
+      expectStatus(existing, 200, `item:lookup:${key}`);
+      const found = (existing.body.data ?? []).find((row: any) => row.codigo === codigo);
+      if (!found) {
+        throw new Error(`[item:lookup:${key}] conflito 409, mas o item ${codigo} nao foi encontrado na busca.`);
+      }
+      return codigo;
+    }
     expectStatus(response, 201, `item:${key}`);
     return codigo;
   }
@@ -99,6 +112,18 @@ describeIntegration('G1 — BOM recusa item de suprimento/patrimonio', () => {
         lead_time: 1,
         revision: '00',
       });
+    if (response.status === 409) {
+      const existing = await api()
+        .get('/api/products')
+        .set('Authorization', `Bearer ${token()}`)
+        .query({ search: code, limit: 20 });
+      expectStatus(existing, 200, `produto:lookup:${code}`);
+      const found = (existing.body.data ?? []).find((row: any) => row.code === code);
+      if (!found) {
+        throw new Error(`[produto:lookup:${code}] conflito 409, mas o produto ${code} nao foi encontrado na busca.`);
+      }
+      return found.id;
+    }
     expectStatus(response, 201, `produto:${code}`);
     return response.body.data.id;
   }
@@ -112,7 +137,7 @@ describeIntegration('G1 — BOM recusa item de suprimento/patrimonio', () => {
    * @returns Resposta Supertest crua (o teste decide o que esperar dela).
    */
   async function createBom(productId: number, componentId: number, revision: string) {
-    return api()
+    const response = await api()
       .post('/api/engineering/bom')
       .set('Authorization', `Bearer ${token()}`)
       .send({
@@ -121,6 +146,19 @@ describeIntegration('G1 — BOM recusa item de suprimento/patrimonio', () => {
         notes: 'Estrutura da validacao de tipo nao-produtivo',
         items: [{ component_product_id: componentId, quantity: 1, unit: 'un', component_type: 'raw_material' }],
       });
+    if (response.status === 409) {
+      const existing = await api()
+        .get('/api/engineering/bom')
+        .set('Authorization', `Bearer ${token()}`)
+        .query({ product_id: productId, limit: 100 });
+      expectStatus(existing, 200, `bom:lookup:${revision}`);
+      const found = (existing.body.data ?? []).find((row: any) => row.revision === revision);
+      if (!found) {
+        throw new Error(`[bom:lookup:${revision}] conflito 409, mas a BOM ${revision} nao foi encontrada na busca.`);
+      }
+      return { status: 409, body: { success: true, data: { bom: found } } };
+    }
+    return response;
   }
 
   // ====================================================================

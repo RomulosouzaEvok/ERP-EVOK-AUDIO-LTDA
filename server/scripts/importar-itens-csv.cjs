@@ -20,7 +20,7 @@
  * com aspas. Nenhum campo pode conter `;`.
  *
  * Colunas consumidas: `codigo`, `descricao`, `tipo`, `unidade`, `status`,
- * `custo_padrao`, `estoque_atual`, `estoque_seguranca`, `lote_minimo`,
+ * `custo_padrao`, `estoque_seguranca`, `lote_minimo`,
  * `lead_time_dias`.
  *
  * As demais colunas (`codigo_legado`, `referencia_legado`, `unidade_sugerida`,
@@ -78,7 +78,7 @@ const ESPERA_PADRAO_S = 60;
 
 /** Campos aceitos por `createItemSchema` (que é `.strict()`). */
 const CAMPOS_TEXTO = ['codigo', 'descricao', 'tipo', 'unidade', 'status'];
-const CAMPOS_NUMERO = ['custo_padrao', 'estoque_atual', 'estoque_seguranca', 'lote_minimo', 'lead_time_dias'];
+const CAMPOS_NUMERO = ['custo_padrao', 'estoque_seguranca', 'lote_minimo', 'lead_time_dias'];
 
 /**
  * Lê o CSV `;`-separado, sem tratamento de aspas (ver cabeçalho).

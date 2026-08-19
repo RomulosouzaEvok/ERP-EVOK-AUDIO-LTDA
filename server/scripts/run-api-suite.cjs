@@ -457,7 +457,6 @@ async function ensureFixtures() {
         tipo: 'MATERIA_PRIMA',
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 100,
         estoque_reservado: 0,
         estoque_seguranca: 0,
         lote_minimo: 1,

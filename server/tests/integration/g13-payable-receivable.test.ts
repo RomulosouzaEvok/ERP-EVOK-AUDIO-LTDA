@@ -319,7 +319,6 @@ describeIntegration('G13 — conta a pagar nasce no recebimento, conta a receber
         tipo: 'MATERIA_PRIMA',
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 0,
         custo_padrao: INSUMO_PRECO,
         lead_time_dias: 1,
       });

@@ -313,7 +313,6 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
         tipo: 'MATERIA_PRIMA',
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 0,
         custo_padrao: RAW_UNIT_PRICE,
         lead_time_dias: 1,
       });
@@ -329,7 +328,6 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
         tipo: 'PRODUTO_ACABADO',
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 0,
         custo_padrao: 0,
       });
     expectStatus(finishedItem, 201, 'finishedItem');
@@ -1106,7 +1104,6 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
         tipo: 'SUBCONJUNTO',
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 0,
       });
     expectStatus(subItem, 201, 'subItem');
 
@@ -1119,7 +1116,6 @@ describeIntegration('E2E — cadeia completa: insumo cadastrado ate produto acab
         tipo: 'PRODUTO_ACABADO',
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 0,
       });
     expectStatus(parentItem, 201, 'parentItem');
 

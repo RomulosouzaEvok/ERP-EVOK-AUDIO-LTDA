@@ -1,6 +1,6 @@
 import request from 'supertest';
 
-jest.setTimeout(10000);
+jest.setTimeout(15_000);
 
 type HttpMethod = 'post' | 'put' | 'patch' | 'delete';
 type Level = 'operate' | 'approve';

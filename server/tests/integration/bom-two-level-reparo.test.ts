@@ -263,7 +263,6 @@ describeIntegration('G18 — estrutura de dois niveis: o REPARO e produto vendid
         tipo: itemType,
         unidade: 'un',
         status: 'ATIVO',
-        estoque_atual: 0,
         estoque_seguranca: 0,
         lote_minimo: 1,
         lead_time_dias: 1,
