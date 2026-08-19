@@ -14,13 +14,16 @@ import { NotFoundError } from '../../../../../errors';
 import BudgetRepository from '../../../domain/repositories/BudgetRepository';
 
 type DeleteBudgetLineInput = { id: number };
+type DeleteBudgetLineResult = { warning: string | null };
 
-class DeleteBudgetLineUseCase extends UseCase<DeleteBudgetLineInput, void> {
+class DeleteBudgetLineUseCase extends UseCase<DeleteBudgetLineInput, DeleteBudgetLineResult> {
   private readonly budgetRepository: BudgetRepository;
+  private readonly clock: () => Date;
 
-  constructor(budgetRepository: BudgetRepository) {
+  constructor(budgetRepository: BudgetRepository, clock: () => Date = () => new Date()) {
     super();
     this.budgetRepository = budgetRepository;
+    this.clock = clock;
   }
 
   /** @throws {NotFoundError} Se a linha de orçamento não existir. */
@@ -30,6 +33,23 @@ class DeleteBudgetLineUseCase extends UseCase<DeleteBudgetLineInput, void> {
       throw new NotFoundError(`Linha de orçamento ${id} não encontrada.`);
     }
     await this.budgetRepository.deleteBudgetLine(id);
+    return { warning: this.buildHistoricalWarning(line) };
+  }
+
+  private buildHistoricalWarning(line: any): string | null {
+    if (!this.isClosedPlanningPeriod(line)) return null;
+    const period = line.month ? `${line.year}-${String(line.month).padStart(2, '0')}` : String(line.year);
+    return `Linha de orçamento ${period} excluída fisicamente; relatórios históricos orçado×realizado desse período podem perder o valor planejado.`;
+  }
+
+  private isClosedPlanningPeriod(line: any): boolean {
+    const now = this.clock();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    if (Number(line.year) < currentYear) return true;
+    if (Number(line.year) > currentYear) return false;
+    if (line.month == null) return false;
+    return Number(line.month) < currentMonth;
   }
 }
 
