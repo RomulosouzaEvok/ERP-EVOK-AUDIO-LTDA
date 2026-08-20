@@ -1,0 +1,46 @@
+Você está atuando como sanacore-remediation-engineer dentro da estrutura CoreTriad deste repositório.
+
+Isto é uma CORREÇÃO 01 sobre a remediação já existente do CASE-008 (AUD-DB-02, commit a910273). NÃO é reimplementação — mantenha a Opção C (zero call site tocado, webhook não conectado por padrão) e o safeJsonStringify, que estão corretos.
+
+Trabalhe exclusivamente na worktree/branch já existente:
+  worktree: C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+  branch:   sana/ERP-LEGACY-001/CASE-008
+
+Regras absolutas:
+- NÃO conecte em erp_evok_audio (produção).
+- Não execute operação destrutiva em banco real. Testes de integração HTTP somente contra erp_evok_audio_test.
+- Não toque em audit/, coretriad/governance/, coretriad/states/, .claude/.
+- Não declare FINDING CLOSED nem RETEST_PASSED.
+- Capture e registre o OUTPUT REAL dos comandos executados (typecheck, testes), não apenas a alegação em texto.
+
+Leitura obrigatória antes de editar:
+1. Leia server/src/config/processSafety.ts por inteiro.
+2. Leia server/src/services/auditLogService.ts, a função que faz o fetch do webhook e a rotina de dreno (waitForPendingAuditLogs).
+3. Leia server/index.ts, a sequência de shutdown (forcedExit, chamada ao dreno, sequelize.close()).
+4. Leia docker-compose.yml e docker-compose.prod.yml (healthcheck e ausência de stop_grace_period).
+
+PROBLEMA 1 (BLOQUEANTE) — handler de uncaughtException não mata o processo:
+processSafety.ts registra process.on('uncaughtException', ...) que só loga e seta process.exitCode = 1, sem nunca chamar process.exit() nem shutdown(). Num servidor HTTP ativo isso nunca aborta o processo sozinho — o processo continua servindo requisições com estado potencialmente corrompido, e o healthcheck continua respondendo 200. Corrija para que o handler, depois de logar, dispare a mesma rotina de shutdown() já usada no encerramento normal (ver server/index.ts), com um fallback de process.exit(1) caso o shutdown gracioso não complete num tempo curto. O processo não pode continuar vivo servindo requisições depois de uma exceção não capturada.
+
+PROBLEMA 2 (BLOQUEANTE) — fetch do webhook de auditoria sem timeout:
+Em auditLogService.ts, o fetch(webhookUrl, ...) não tem AbortSignal/timeout. Se o destino do webhook pendurar o socket, o await fica pendente indefinidamente, e o dreno de shutdown (waitForPendingAuditLogs, 10s) expira e PROSSEGUE sem esperar — perdendo o evento de auditoria silenciosamente, o fail-open exato que este caso existe para consertar. Adicione timeout ao fetch (signal: AbortSignal.timeout(N), N curto, poucos segundos) para que falha de rede no webhook não segure a promise indefinidamente. Contabilize a falha em auditFailureStats normalmente.
+
+PROBLEMA 3 (ALTA) — orçamento de shutdown incoerente com o grace period do Docker:
+server/index.ts tem forcedExit em 15s e dreno de auditoria pedindo até 10s — se server.close() levar mais de 5s, o forcedExit mata o processo antes do sequelize.close(). E nem docker-compose.yml nem docker-compose.prod.yml declaram stop_grace_period (default Docker 10s, depois SIGKILL) — o dreno nunca termina dentro do grace period real em container. Declare stop_grace_period explícito nos dois arquivos docker-compose, com margem suficiente para que a relação "stop_grace_period do Docker > forcedExit do processo > dreno de auditoria" valha de fato, com folga clara documentada. Ajuste os orçamentos internos se necessário para ficarem coerentes entre si.
+
+Documente no REMEDIATION_EVIDENCE_PACKAGE.md do caso (seção nova "Correção 01"):
+- os 3 problemas, com arquivo:linha da causa;
+- a correção de cada um, com arquivo:linha;
+- prova vermelha: cenário de exceção não capturada mantendo o processo vivo ANTES da correção (Problema 1); cenário de webhook lento/pendurado segurando o dreno indefinidamente ANTES da correção (Problema 2);
+- prova verde: os mesmos cenários corrigidos DEPOIS;
+- output REAL de: testes novos/atualizados, typecheck/build do server.
+
+Validação depois:
+- Execute os testes novos/atualizados e a suíte relevante, capture e registre o output real.
+- Execute typecheck/build do server, capture e registre o output real.
+
+Ao terminar:
+- Atualize REMEDIATION_EVIDENCE_PACKAGE.md e o status do caso, mantendo REMEDIATION_COMPLETE apenas se os 3 pontos estiverem de fato corrigidos e comprovados com output real.
+- Commit na branch sana/ERP-LEGACY-001/CASE-008, não em main.
+- Nunca escreva FINDING CLOSED nem RETEST_PASSED.
+- Pare aguardando revisão/segunda opinião/reteste da VeriCore.

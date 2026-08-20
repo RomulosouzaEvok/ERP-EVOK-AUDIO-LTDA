@@ -1,0 +1,2558 @@
+OpenAI Codex v0.148.0-alpha.9
+--------
+workdir: C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: medium
+reasoning summaries: none
+session id: 01a012d2-0148-7461-b9ea-dbdc6015028f
+--------
+user
+Você está atuando como sanacore-remediation-engineer dentro da estrutura CoreTriad deste repositório.
+
+Isto é uma CORREÇÃO 01 sobre a remediação já existente do CASE-008 (AUD-DB-02, commit a910273). NÃO é reimplementação — mantenha a Opção C (zero call site tocado, webhook não conectado por padrão) e o safeJsonStringify, que estão corretos.
+
+Trabalhe exclusivamente na worktree/branch já existente:
+  worktree: C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+  branch:   sana/ERP-LEGACY-001/CASE-008
+
+Regras absolutas:
+- NÃO conecte em erp_evok_audio (produção).
+- Não execute operação destrutiva em banco real. Testes de integração HTTP somente contra erp_evok_audio_test.
+- Não toque em audit/, coretriad/governance/, coretriad/states/, .claude/.
+- Não declare FINDING CLOSED nem RETEST_PASSED.
+- Capture e registre o OUTPUT REAL dos comandos executados (typecheck, testes), não apenas a alegação em texto.
+
+Leitura obrigatória antes de editar:
+1. Leia server/src/config/processSafety.ts por inteiro.
+2. Leia server/src/services/auditLogService.ts, a função que faz o fetch do webhook e a rotina de dreno (waitForPendingAuditLogs).
+3. Leia server/index.ts, a sequência de shutdown (forcedExit, chamada ao dreno, sequelize.close()).
+4. Leia docker-compose.yml e docker-compose.prod.yml (healthcheck e ausência de stop_grace_period).
+
+PROBLEMA 1 (BLOQUEANTE) — handler de uncaughtException não mata o processo:
+processSafety.ts registra process.on('uncaughtException', ...) que só loga e seta process.exitCode = 1, sem nunca chamar process.exit() nem shutdown(). Num servidor HTTP ativo isso nunca aborta o processo sozinho — o processo continua servindo requisições com estado potencialmente corrompido, e o healthcheck continua respondendo 200. Corrija para que o handler, depois de logar, dispare a mesma rotina de shutdown() já usada no encerramento normal (ver server/index.ts), com um fallback de process.exit(1) caso o shutdown gracioso não complete num tempo curto. O processo não pode continuar vivo servindo requisições depois de uma exceção não capturada.
+
+PROBLEMA 2 (BLOQUEANTE) — fetch do webhook de auditoria sem timeout:
+Em auditLogService.ts, o fetch(webhookUrl, ...) não tem AbortSignal/timeout. Se o destino do webhook pendurar o socket, o await fica pendente indefinidamente, e o dreno de shutdown (waitForPendingAuditLogs, 10s) expira e PROSSEGUE sem esperar — perdendo o evento de auditoria silenciosamente, o fail-open exato que este caso existe para consertar. Adicione timeout ao fetch (signal: AbortSignal.timeout(N), N curto, poucos segundos) para que falha de rede no webhook não segure a promise indefinidamente. Contabilize a falha em auditFailureStats normalmente.
+
+PROBLEMA 3 (ALTA) — orçamento de shutdown incoerente com o grace period do Docker:
+server/index.ts tem forcedExit em 15s e dreno de auditoria pedindo até 10s — se server.close() levar mais de 5s, o forcedExit mata o processo antes do sequelize.close(). E nem docker-compose.yml nem docker-compose.prod.yml declaram stop_grace_period (default Docker 10s, depois SIGKILL) — o dreno nunca termina dentro do grace period real em container. Declare stop_grace_period explícito nos dois arquivos docker-compose, com margem suficiente para que a relação "stop_grace_period do Docker > forcedExit do processo > dreno de auditoria" valha de fato, com folga clara documentada. Ajuste os orçamentos internos se necessário para ficarem coerentes entre si.
+
+Documente no REMEDIATION_EVIDENCE_PACKAGE.md do caso (seção nova "Correção 01"):
+- os 3 problemas, com arquivo:linha da causa;
+- a correção de cada um, com arquivo:linha;
+- prova vermelha: cenário de exceção não capturada mantendo o processo vivo ANTES da correção (Problema 1); cenário de webhook lento/pendurado segurando o dreno indefinidamente ANTES da correção (Problema 2);
+- prova verde: os mesmos cenários corrigidos DEPOIS;
+- output REAL de: testes novos/atualizados, typecheck/build do server.
+
+Validação depois:
+- Execute os testes novos/atualizados e a suíte relevante, capture e registre o output real.
+- Execute typecheck/build do server, capture e registre o output real.
+
+Ao terminar:
+- Atualize REMEDIATION_EVIDENCE_PACKAGE.md e o status do caso, mantendo REMEDIATION_COMPLETE apenas se os 3 pontos estiverem de fato corrigidos e comprovados com output real.
+- Commit na branch sana/ERP-LEGACY-001/CASE-008, não em main.
+- Nunca escreva FINDING CLOSED nem RETEST_PASSED.
+- Pare aguardando revisão/segunda opinião/reteste da VeriCore.
+
+codex
+Vou seguir a remediação do CASE-008 sem reimplementar a Opção C. Primeiro vou ler as fontes obrigatórias e mapear os pontos exatos de shutdown, timeout do webhook e os limites do Docker antes de tocar em código.
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Users\\Gilwagno\\.codex\\skills\\.system\\evok-production-readiness\\SKILL.md' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+2026-08-18T03:02:47.319869Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 8.8 seconds
+Output:
+Get-Content : Não é possível localizar o caminho 
+'C:\Users\Gilwagno\.codex\skills\.system\evok-production-readiness\SKILL.md' porque ele não existe.
+No linha:2 caractere:1
++ Get-Content 'C:\Users\Gilwagno\.codex\skills\.system\evok-production- ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Gilwag...diness\SKILL.md:String) [Get-Content], ItemNotFoundEx 
+   ception
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+ exited 1 in 8809ms:
+Get-Content : Não é possível localizar o caminho 
+'C:\Users\Gilwagno\.codex\skills\.system\evok-production-readiness\SKILL.md' porque ele não existe.
+No linha:2 caractere:1
++ Get-Content 'C:\Users\Gilwagno\.codex\skills\.system\evok-production- ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Gilwag...diness\SKILL.md:String) [Get-Content], ItemNotFoundEx 
+   ception
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+codex
+A primeira leitura falhou porque o skill está no repositório, não no perfil do usuário. Vou carregar o `SKILL.md` local e em seguida abrir os arquivos obrigatórios do fluxo de shutdown e auditoria.
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\.agents\\skills\\evok-production-readiness\\SKILL.md' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+ succeeded in 284ms:
+---
+name: evok-production-readiness
+description: Executa a remediacao de producao do ERP EVOK AUDIO seguindo o cronograma versionado, com foco em AppSec, PostgreSQL, integridade transacional, testes e baixo custo operacional.
+---
+
+# Skill: EVOK Production Readiness
+
+## Missao
+
+Corrigir o ERP EVOK AUDIO para producao seguindo o SSOT vigente. Os documentos
+`docs/AUDITORIA_PRODUCAO_2026-07-30.md` e
+`docs/CRONOGRAMA_CORRECAO_E_GO_LIVE_2026-07-30.md` **nao existem mais** â€”
+use sempre:
+
+- `AGENTS.md` (raiz) â€” status atual do Go-Live, sempre o primeiro a ler.
+- `docs/governance/auditorias/AUDITORIA_PRE_PRODUCAO_2026-08-02.md` â€” auditoria vigente (P0 e P1
+  ja remediados no commit `d1d3aff`).
+- `docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md` â€” roadmap P1/P2/P3 pos-Go-Live.
+- `docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md` e `docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md` â€” gate
+  de Go-Live atual (UAT â†’ aprovacao formal G6).
+- `docs/governance/TODO.md` â€” pendencia granular por modulo/bloco.
+
+Nao entregue somente recomendacoes. Inspecione, implemente, valide e documente
+as correcoes no repositorio.
+
+## Regras de seguranca
+
+- Execute `git status --short` antes de editar.
+- Preserve alteracoes existentes de outros usuarios.
+- Nunca use `git reset --hard` ou `git checkout --`.
+- Use `apply_patch` para alteracoes manuais.
+- Nao altere a auditoria original.
+- Nao use `sequelize.sync({ force: true })` ou `alter: true` em producao.
+- Nao faca deploy real ou operacao destrutiva em banco real.
+- Nunca grave secrets em codigo, logs, Git ou imagens.
+- Nao marque teste pulado como aprovado.
+- Nao invente resultados de comandos.
+
+## Estrategia de baixo custo
+
+- Reutilize Node, TypeScript, Express, PostgreSQL, Sequelize, Jest e Docker.
+- Use PostgreSQL local via Docker para testes.
+- Evite dependencias novas e servicos pagos.
+- So use Redis se a topologia tiver multiplas instancias.
+- Paralelize apenas tarefas independentes e sem conflito de arquivos.
+- Evite refatoracoes fora do escopo dos gates de producao.
+
+## Estado atual
+
+Os gates G0-G5 abaixo (runtime seguro, migrations, RBAC, integridade,
+Docker/CI) **ja estao implementados na baseline** (4 P0 + 2 P1 remediados
+em 2026-08-02). Trate-os como checklist de regressao, nao como trabalho a
+fazer do zero. O gate ativo hoje e o **G6**: UAT completo â†’ aprovacao
+formal â†’ Go-Live. Depois do Go-Live, o trabalho vira roadmap
+P1/P2/P3 (`docs/governance/auditorias/LEVANTAMENTO_ERP_2026-08-02.md`).
+
+## Ordem obrigatoria (referencia de regressao, G0-G5 ja concluidos)
+
+### G0 - Baseline
+
+Registrar status do Git, commit, versoes, typecheck, build, testes e suites
+puladas. Confirmar o estado do repositorio antes de qualquer alteracao.
+
+### G1 - Runtime seguro
+
+Consolidar `app.ts` e `index.ts`, executar o artefato compilado, mover dependencias
+de runtime como `zod`, validar ambiente no boot, bloquear `force/alter`, exigir
+TLS PostgreSQL e remover defaults inseguros.
+
+### G2 - Banco e recuperacao
+
+Criar migrations versionadas, eliminar DDL automatico no boot, validar banco
+novo e existente, configurar backup, executar restore e documentar RPO, RTO e
+rollback.
+
+### G3 - Acesso controlado
+
+Criar matriz de roles e proteger toda escrita critica de produtos, estoque,
+vendas, compras, financeiro, producao, BOM, MRP, inventario e auditoria.
+Implementar troca de senha, invalidacao de sessoes, JWT com politica explicita
+e validacao de secrets no boot.
+
+### G4 - Integridade
+
+Corrigir locks e idempotencia de vendas, estoque, compras, pagamentos e
+producao. Garantir transacoes, constraints, indices e testes concorrentes reais.
+
+### G5 - Operacao
+
+Criar Dockerfile multi-stage, imagem nao-root, CI, scans, testes obrigatorios,
+healthchecks, readiness com banco, shutdown gracioso, logs estruturados,
+correlation ID, deploy e rollback.
+
+### G6 - Release
+
+Executar testes completos sem skips, UAT, backup pre-deploy, canario, smoke
+tests, rollback em homologacao, aprovacao formal e reauditoria.
+
+## Criterio de progresso
+
+Para cada tarefa do cronograma, registrar:
+
+- ID da tarefa.
+- Status: `[ ]`, `[~]`, `[x]` ou `[!]`.
+- Responsavel.
+- Arquivos alterados.
+- Testes executados.
+- Evidencia.
+- Risco residual.
+- Dependencias desbloqueadas.
+
+Nao avance de gate se existir falha critica no gate anterior. Se algo estiver
+bloqueado por infraestrutura externa, continue tarefas independentes, marque
+`[!]` e informe a causa exata.
+
+## Validacao minima
+
+Executar a partir de `server/` (nao ha scripts equivalentes na raiz do
+projeto), quando aplicavel:
+
+```text
+npm ci
+npm run typecheck
+npm run build
+npm run test:unit -- --ci
+npm run test:integration -- --ci
+npm run test:edge -- --ci
+npm audit --omit=dev
+```
+
+O CI deve falhar com erro de tipo, build, teste, suite obrigatoria pulada,
+migration, secret, dependencia de runtime ausente ou healthcheck indisponivel.
+
+## Relatorio por gate
+
+Ao concluir cada gate, informar:
+
+1. Tarefas concluidas.
+2. Tarefas pendentes.
+3. Tarefas bloqueadas.
+4. Arquivos alterados.
+5. Comandos executados.
+6. Resultados.
+7. Riscos residuais.
+8. Gate liberado ou bloqueado.
+
+O resultado final so pode ser `APROVAR`, `BLOQUEAR` ou `APROVAR COM RISCO FORMAL`.
+
+
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\server\\index.ts' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\docker-compose.yml' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'git status --short' in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\server\\src\\config\\processSafety.ts' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\server\\src\\services\\auditLogService.ts' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\docker-compose.prod.yml' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+ succeeded in 460ms:
+/**
+ * TypeScript entrypoint for ERP EVOK Audio API.
+ */
+
+import type { Server } from 'http';
+
+import app from './app';
+import connectDB from './config/db';
+import logger from './src/config/logger';
+import { sequelize } from './src/config/database';
+import { registerProcessSafetyHandlers } from './src/config/processSafety';
+import { loadRuntimeEnv } from './src/config/runtimeEnv';
+import { setShuttingDown } from './src/config/runtimeState';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
+let server: Server | null = null;
+let shuttingDown = false;
+
+registerProcessSafetyHandlers();
+
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+  setShuttingDown(true);
+  logger.info(`Sinal ${signal} recebido. Iniciando shutdown gracioso.`);
+
+  const forcedExit = setTimeout(() => {
+    logger.error('Shutdown excedeu 15s. Encerrando processo forcadamente.');
+    process.exit(1);
+  }, 15000);
+
+  try {
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server?.close((error?: Error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
+
+    const drainResult = await waitForPendingAuditLogs(10000);
+    if (!drainResult.drained) {
+      logger.error(
+        `Shutdown prosseguindo com ${drainResult.pendingActions} audit logs pendentes `
+        + `(timedOut=${drainResult.timedOut}).`,
+      );
+    }
+
+    await sequelize.close();
+    clearTimeout(forcedExit);
+    logger.info('Shutdown concluido com sucesso.');
+    process.exit(0);
+  } catch (error: unknown) {
+    clearTimeout(forcedExit);
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
+    logger.error(`Falha no shutdown: ${message}`);
+    process.exit(1);
+  }
+}
+
+const start = async () => {
+  const runtimeEnv = loadRuntimeEnv();
+
+  try {
+    await connectDB();
+
+    server = app.listen(runtimeEnv.port, () => {
+      logger.info(`Servidor rodando na porta ${runtimeEnv.port}`);
+      logger.info(`Ambiente: ${runtimeEnv.nodeEnv}`);
+      logger.info('Banco: PostgreSQL via Sequelize');
+    });
+
+    process.on('SIGTERM', () => {
+      void shutdown('SIGTERM');
+    });
+
+    process.on('SIGINT', () => {
+      void shutdown('SIGINT');
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
+    logger.error(`Falha ao iniciar o servidor: ${message}`);
+    process.exit(1);
+  }
+};
+
+void start();
+
+
+ succeeded in 485ms:
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: evok-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: erp_evok_audio
+      POSTGRES_USER: evok_admin
+      TZ: America/Sao_Paulo
+      # DB_PASSWORD e obrigatorio (sem fallback fraco): falha explicita no
+      # startup se nao estiver definido no .env, em vez de subir com uma
+      # senha default previsivel silenciosamente.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env antes de subir o Postgres}
+    ports:
+      # Vinculado apenas a localhost: a API acessa via rede interna do
+      # compose (DB_HOST=postgres); acesso administrativo remoto deve usar
+      # tunel SSH, nunca expor 0.0.0.0:5432 publicamente.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evok_admin -d erp_evok_audio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: erp-evok-audio-server:${APP_IMAGE_TAG:-local}
+    container_name: evok-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5000
+      TZ: America/Sao_Paulo
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: erp_evok_audio
+      DB_USER: evok_admin
+      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env antes de subir a API}
+      DB_SSL: ${DB_SSL:-false}
+      DB_SSL_CA_PATH: ${DB_SSL_CA_PATH:-}
+      DB_LOGGING: ${DB_LOGGING:-false}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-please-change-me-123456789}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-dev-only-change-me-please}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
+    ports:
+      # Exposto em 0.0.0.0:5000 propositalmente em dev: os apps mobile/TV da
+      # rede local acessam a API pelo IP da maquina (ex.: 172.16.0.164:5000).
+      # Bind em 127.0.0.1 quebraria esse fluxo de dev.
+      # EM PRODUCAO: troque para "127.0.0.1:5000:5000" e coloque um reverse
+      # proxy TLS (nginx/Caddy) na frente, terminando HTTPS e repassando
+      # para 127.0.0.1:5000 â€” nunca exponha a API em 0.0.0.0 diretamente
+      # na internet.
+      - "5000:5000"
+    volumes:
+      # Uploads (fotos/desenhos de produto) gravados pela API precisam
+      # sobreviver a `docker compose up --build` / recreate do container.
+      # Sem volume nomeado aqui, todo arquivo enviado via multer some no
+      # prÃ³ximo rebuild da imagem. Este diretÃ³rio DEVE entrar na rotina de
+      # backup junto com o dump do Postgres (ver docs/infra/DEPLOY_UBUNTU.md).
+      - app_uploads:/app/uploads
+      # Fallback de falhas de auditoria (`logs/audit-failures.log`) e logs
+      # estruturados precisam sobreviver a rebuild/recreate. O Dockerfile cria
+      # /app/logs com dono do usuario nao-root `evok` para evitar EACCES.
+      - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  postgres_data:
+  # Persistencia de uploads (fotos/desenhos de produto enviados via multer).
+  # Sem isso, dados sao perdidos a cada `docker compose up --build` ou
+  # recreate do container `api`. Inclua no backup junto com o dump do
+  # Postgres (ver checklist em docs/infra/DEPLOY_UBUNTU.md).
+  app_uploads:
+  # Persistencia de logs e fallback de auditoria.
+  app_logs:
+
+
+ succeeded in 482ms:
+# docker-compose.prod.yml â€” ESQUELETO para o servidor de producao.
+#
+# STATUS: nao exercitado ainda (servidor de producao/VPS ainda nao foi
+# adquirido â€” ver docs/governance/go-live/GO_LIVE_G6_CHECKLIST.md e
+# docs/governance/go-live/DIARIO_BORDO_GO_LIVE_G6.md). Este arquivo existe para ficar PRONTO
+# quando a infra existir, nao para ser aplicado agora. Baseado no
+# docker-compose.yml de desenvolvimento, com as diferencas de producao
+# comentadas abaixo.
+#
+# Uso quando o servidor existir:
+#   cp .env.example .env   # preencher com segredos fortes E UNICOS de producao
+#   docker compose -f docker-compose.prod.yml config   # validar antes de subir
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Pre-requisitos que este arquivo assume e NAO implementa sozinho:
+#   - Reverse proxy + TLS (nginx/Caddy) na frente da API, terminando HTTPS
+#     e repassando para 127.0.0.1:5000 (ver docs/infra/DEPLOY_UBUNTU.md).
+#   - DB_SSL=true + DB_SSL_CA_PATH/DB_SSL_CA_BASE64 validados de ponta a
+#     ponta contra o Postgres real de producao (nao apenas a flag ligada).
+#   - Cron/systemd timer de backup ativo (scripts/schedule-backup-cron.sh)
+#     rodando fora deste compose, apontando para o volume postgres_data
+#     deste arquivo.
+#   - .env de producao com DB_PASSWORD, JWT_SECRET, ADMIN_SEED_PASSWORD e
+#     APP_DB_ROLE_PASSWORD fortes e UNICOS â€” nunca reaproveitar valores de
+#     dev/staging.
+#   - A API ja roda com a role de privilegio minimo `evok_app` por PADRAO
+#     (ver o servico `api` abaixo). Rode as migrations ANTES de subir a API:
+#     e a migration 20260806-000080 que cria a role, e a 20260810-000041 que
+#     garante os GRANTs em TODAS as tabelas â€” sem ela, um banco novo nasce
+#     com a role sem poder ler nem escrever nada (defeito real medido em
+#     2026-08-10). Ver docs/database/05-ACESSOS_E_ISOLAMENTO.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: evok-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-erp_evok_audio}
+      POSTGRES_USER: ${DB_ADMIN_USER:-evok_admin}
+      TZ: America/Sao_Paulo
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env antes de subir o Postgres de producao}
+    # PRODUCAO: porta do Postgres NAO exposta ao host/rede externa. A API
+    # conecta pela rede interna do compose (DB_HOST=postgres). Se precisar
+    # de acesso administrativo pontual, use `docker exec` ou um tunel SSH
+    # â€” nunca publique 5432 no host de producao.
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_ADMIN_USER:-evok_admin} -d ${DB_NAME:-erp_evok_audio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: erp-evok-audio-server:${APP_IMAGE_TAG:-prod}
+    container_name: evok-api-prod
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      TZ: America/Sao_Paulo
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-erp_evok_audio}
+      # O runtime roda com a role de PRIVILEGIO MINIMO por padrao
+      # (`evok_app`): ela tem SELECT/INSERT/UPDATE/DELETE nas tabelas de
+      # negocio e NENHUM privilegio de DDL â€” testado conectando de fato
+      # (CREATE TABLE, DROP TABLE e leitura de `SequelizeMeta` sao recusados).
+      #
+      # Deixar isso como default, e nao como recomendacao em comentario, e
+      # deliberado: seguranca que depende de alguem lembrar de trocar uma
+      # variavel no dia do deploy nao acontece.
+      #
+      # `DB_USER`/`DB_PASSWORD` (a role administrativa) continuam servindo ao
+      # servico do Postgres e as MIGRATIONS, que precisam de DDL e rodam FORA
+      # deste container. Ver docs/database/05-ACESSOS_E_ISOLAMENTO.md.
+      DB_USER: ${APP_DB_USER:-evok_app}
+      DB_PASSWORD: ${APP_DB_ROLE_PASSWORD:?defina APP_DB_ROLE_PASSWORD no .env (senha da role evok_app, a mesma usada pela migration que a cria) antes de subir a API de producao}
+      # PRODUCAO: TLS obrigatorio na conexao com o Postgres gerenciado
+      # (validar de ponta a ponta antes do Go-Live â€” item pendente do
+      # checklist em docs/infra/DEPLOY_UBUNTU.md).
+      DB_SSL: ${DB_SSL:-true}
+      DB_SSL_CA_PATH: ${DB_SSL_CA_PATH:-}
+      DB_SSL_CA_BASE64: ${DB_SSL_CA_BASE64:-}
+      DB_LOGGING: "false"
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env antes de subir a API de producao}
+      CORS_ORIGIN: ${CORS_ORIGIN:?defina CORS_ORIGIN (dominio real do frontend) no .env}
+      # PRODUCAO: atras de 1 reverse proxy (nginx/Caddy) â€” necessario para
+      # o rate-limit de login enxergar o IP real do cliente.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:?defina ADMIN_SEED_PASSWORD no .env antes de subir a API de producao}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
+      LOG_FILE: ${LOG_FILE:-/app/logs/app.log}
+    # PRODUCAO: porta da API vinculada apenas a localhost. Um reverse
+    # proxy (nginx/Caddy) na mesma maquina termina TLS e repassa para
+    # 127.0.0.1:5000. NUNCA publicar 0.0.0.0:5000 direto na internet em
+    # producao (diferente do docker-compose.yml de dev, que expÃµe em
+    # 0.0.0.0 propositalmente para os apps mobile/TV da rede local).
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - app_uploads_prod:/app/uploads
+      # Logs estruturados (Winston) persistidos fora do container â€” sem
+      # rotacao de arquivo embutida (configurar logrotate externo
+      # apontando para este volume, ver CLAUDE.md secao Monitoramento).
+      - app_logs_prod:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  postgres_data_prod:
+  # Persistencia de uploads (fotos/desenhos de produto enviados via multer)
+  # e de logs estruturados. Ambos DEVEM entrar na rotina de backup do
+  # servidor de producao junto com o dump do Postgres â€” ver
+  # docs/database/07-DISASTER_RECOVERY.md e docs/infra/DEPLOY_UBUNTU.md.
+  app_uploads_prod:
+  app_logs_prod:
+
+# NAO IMPLEMENTADO NESTE ARQUIVO (fora de escopo de composicao Docker,
+# ver documentos referenciados):
+#   - Reverse proxy/TLS (nginx/Caddy) â€” nao ha servico dedicado aqui
+#     porque a config real (certificado, dominio) depende do servidor
+#     escolhido; adicionar servico proprio quando o dominio/certificado
+#     existirem.
+#   - Cron de backup â€” roda fora do compose, no host (ver
+#     scripts/schedule-backup-cron.sh), apontando para o volume
+#     postgres_data_prod acima via `docker exec`.
+
+
+ succeeded in 502ms:
+?? .dispatch-logs/
+warning: unable to access 'C:\Users\Gilwagno/.config/git/ignore': Permission denied
+warning: unable to access 'C:\Users\Gilwagno/.config/git/ignore': Permission denied
+
+ succeeded in 504ms:
+import logger from './logger';
+
+let registered = false;
+
+function describeReason(reason: unknown): string {
+  if (reason instanceof Error) {
+    return `${reason.message}\n${reason.stack ?? ''}`;
+  }
+
+  return String(reason);
+}
+
+export function registerProcessSafetyHandlers(): void {
+  if (registered) {
+    return;
+  }
+
+  registered = true;
+
+  process.on('unhandledRejection', (reason) => {
+    logger.error(`Unhandled promise rejection: ${describeReason(reason)}`);
+  });
+
+  process.on('uncaughtException', (error) => {
+    logger.error(`Uncaught exception: ${describeReason(error)}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { registerProcessSafetyHandlers };
+
+
+ succeeded in 565ms:
+import type { Request } from 'express';
+import fs from 'fs';
+import path from 'path';
+
+import {
+  downgradeAuditAction,
+  isUnsupportedAuditActionError,
+  markAuditActionInDescription,
+  resolveAuditAction,
+  type AuditActionInput,
+} from '../shared/domain/auditActions';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AuditLog = require('../models/AuditLog');
+
+interface LogActionParams {
+  /**
+   * Verbo do vocabulÃ¡rio fechado (`shared/domain/auditActions`). NÃ£o Ã©
+   * `string`: era exatamente a tipagem larga que deixava 37 literais fora do
+   * `ENUM` passarem pelo `tsc` e sumirem em silÃªncio no banco.
+   */
+  action: AuditActionInput;
+  entityType: string;
+  entityId?: number;
+  entityDescription?: string;
+  oldValues?: Record<string, unknown>;
+  newValues?: Record<string, unknown>;
+  description?: string;
+  success?: boolean;
+  errorMessage?: string;
+}
+
+const FAILURE_LOG_PATH = path.join(process.cwd(), 'logs', 'audit-failures.log');
+const RETRY_DELAY_MS = 200;
+const DEFAULT_DRAIN_TIMEOUT_MS = 5000;
+
+interface AuditFailureStats {
+  totalFailures: number;
+  persistedFailures: number;
+  fileFailures: number;
+  webhookFailures: number;
+  lastErrorMessage: string | null;
+  lastFailureAt: string | null;
+  pendingActions: number;
+}
+
+interface AuditDrainResult {
+  drained: boolean;
+  pendingActions: number;
+  timedOut: boolean;
+}
+
+const pendingAuditActions = new Set<Promise<void>>();
+const auditFailureStats: AuditFailureStats = {
+  totalFailures: 0,
+  persistedFailures: 0,
+  fileFailures: 0,
+  webhookFailures: 0,
+  lastErrorMessage: null,
+  lastFailureAt: null,
+  pendingActions: 0,
+};
+
+/**
+ * Valores canÃ´nicos que ESTE banco comprovadamente ainda nÃ£o conhece
+ * (migration `20260810-000036` nÃ£o aplicada). Preenchido pela primeira
+ * rejeiÃ§Ã£o `22P02` e consultado depois para jÃ¡ gravar no valor degradado,
+ * sem gastar um `INSERT` que se sabe que vai falhar.
+ *
+ * MemÃ³ria de processo, de propÃ³sito: reinicia junto com o processo, entÃ£o
+ * assim que a migration for aplicada e o serviÃ§o reiniciar, o vocabulÃ¡rio
+ * completo volta a ser tentado de primeira. Nenhuma configuraÃ§Ã£o a mudar.
+ */
+const actionsRejectedByDatabase = new Set<string>();
+
+function updatePendingActionCount(): void {
+  auditFailureStats.pendingActions = pendingAuditActions.size;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function safeJsonStringify(value: unknown): string {
+  const seen = new WeakSet<object>();
+
+  try {
+    return JSON.stringify(value, (_key, currentValue) => {
+      if (typeof currentValue === 'bigint') {
+        return currentValue.toString();
+      }
+
+      if (typeof currentValue === 'function') {
+        return `[Function ${currentValue.name || 'anonymous'}]`;
+      }
+
+      if (typeof currentValue === 'object' && currentValue !== null) {
+        if (seen.has(currentValue)) {
+          return '[Circular]';
+        }
+        seen.add(currentValue);
+      }
+
+      return currentValue;
+    });
+  } catch (serializationError) {
+    return JSON.stringify({
+      level: 'critical',
+      message: 'Falha ao serializar evento de auditoria',
+      timestamp: new Date().toISOString(),
+      error: errorMessage(serializationError),
+    });
+  }
+}
+
+/**
+ * Persiste um evento de auditoria que falhou em gravar mesmo apos retry, em
+ * arquivo dedicado (sobrevive a rotacao/perda do log de console) e dispara
+ * um alerta via webhook se `AUDIT_ALERT_WEBHOOK_URL` estiver configurado.
+ * Nunca lanca: e o ultimo recurso antes de desistir silenciosamente.
+ *
+ * @param params - Payload do evento de auditoria que falhou.
+ * @param error - Erro da ultima tentativa de gravacao.
+ * @returns Promise resolvida sempre.
+ */
+async function persistFailureAndAlert(params: LogActionParams, error: Error): Promise<void> {
+  const entry = {
+    level: 'critical',
+    message: 'Falha ao gravar audit log apos retry',
+    timestamp: new Date().toISOString(),
+    error: error.message,
+    event: params,
+  };
+
+  auditFailureStats.totalFailures += 1;
+  auditFailureStats.lastErrorMessage = error.message;
+  auditFailureStats.lastFailureAt = entry.timestamp;
+
+  const serializedEntry = safeJsonStringify(entry);
+  console.error(serializedEntry);
+
+  try {
+    fs.mkdirSync(path.dirname(FAILURE_LOG_PATH), { recursive: true });
+    fs.appendFileSync(FAILURE_LOG_PATH, `${serializedEntry}\n`);
+    auditFailureStats.persistedFailures += 1;
+  } catch (fileError) {
+    auditFailureStats.fileFailures += 1;
+    console.error('[auditLogService] Falha ao persistir audit-failures.log:', fileError);
+  }
+
+  const webhookUrl = process.env.AUDIT_ALERT_WEBHOOK_URL;
+  if (webhookUrl) {
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: `[ERP EVOK AUDIO] Falha ao gravar audit log: ${params.action} em ${params.entityType}#${params.entityId ?? '?'} â€” ${error.message}`,
+        }),
+      });
+    } catch (webhookError) {
+      auditFailureStats.webhookFailures += 1;
+      console.error('[auditLogService] Falha ao notificar webhook de alerta:', webhookError);
+    }
+  }
+}
+
+function trackAuditAction(promise: Promise<void>): Promise<void> {
+  pendingAuditActions.add(promise);
+  updatePendingActionCount();
+
+  void promise.finally(() => {
+    pendingAuditActions.delete(promise);
+    updatePendingActionCount();
+  });
+
+  return promise;
+}
+
+function getAuditFailureStats(): AuditFailureStats {
+  updatePendingActionCount();
+  return { ...auditFailureStats };
+}
+
+async function waitForPendingAuditLogs(timeoutMs = DEFAULT_DRAIN_TIMEOUT_MS): Promise<AuditDrainResult> {
+  if (pendingAuditActions.size === 0) {
+    updatePendingActionCount();
+    return { drained: true, pendingActions: 0, timedOut: false };
+  }
+
+  const pending = Array.from(pendingAuditActions);
+  let timedOut = false;
+  let timeoutHandle: NodeJS.Timeout | null = null;
+
+  try {
+    await Promise.race([
+      Promise.allSettled(pending),
+      new Promise<void>((resolve) => {
+        timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle !== null) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+
+  updatePendingActionCount();
+
+  return {
+    drained: pendingAuditActions.size === 0,
+    pendingActions: pendingAuditActions.size,
+    timedOut,
+  };
+}
+
+function __resetAuditLogRuntimeStateForTests(): void {
+  pendingAuditActions.clear();
+  actionsRejectedByDatabase.clear();
+  auditFailureStats.totalFailures = 0;
+  auditFailureStats.persistedFailures = 0;
+  auditFailureStats.fileFailures = 0;
+  auditFailureStats.webhookFailures = 0;
+  auditFailureStats.lastErrorMessage = null;
+  auditFailureStats.lastFailureAt = null;
+  auditFailureStats.pendingActions = 0;
+}
+
+/**
+ * Wrapper fino sobre `AuditLog.register` para reduzir repetiÃ§Ã£o nos
+ * controllers. Sempre fire-and-forget (nÃ£o bloqueia a resposta HTTP
+ * principal): nunca propaga erro para o chamador. Faz uma tentativa de
+ * retry antes de desistir; se ambas falharem, o evento Ã© persistido em
+ * `logs/audit-failures.log` e, se configurado, um alerta Ã© disparado via
+ * `AUDIT_ALERT_WEBHOOK_URL` â€” a falha nunca fica sÃ³ no console.
+ *
+ * ## DegradaÃ§Ã£o de vocabulÃ¡rio (2026-08-10)
+ *
+ * Fire-and-forget Ã© Ã³timo para nÃ£o derrubar a resposta HTTP e pÃ©ssimo para
+ * descobrir que o log nÃ£o estÃ¡ sendo gravado: era assim que 46 call sites
+ * escreviam `action` fora do `ENUM` e a trilha simplesmente nÃ£o existia
+ * (`docs/governance/auditorias/VARREDURA_ESCRITA_REAL_2026-08-10.md` Â§2).
+ *
+ * Agora, quando o Postgres rejeita o valor por nÃ£o conhecÃª-lo ainda
+ * (migration `20260810-000036` pendente), o evento **nÃ£o Ã© descartado**: Ã©
+ * regravado com o valor legado equivalente (`AUDIT_ACTION_DB_FALLBACK`) e a
+ * `description` recebe o marcador `[verbo]`, de modo que a linha existe,
+ * Ã© atribuÃ­vel e Ã© recuperÃ¡vel. Depois da migration aplicada, a primeira
+ * tentativa passa e nada disso Ã© exercitado.
+ *
+ * Quando a aÃ§Ã£o auditada ocorre dentro de uma transaction Sequelize,
+ * chame esta funÃ§Ã£o DEPOIS do `t.commit()`, nunca dentro da transaction,
+ * para nÃ£o segurar locks de banco desnecessariamente.
+ *
+ * @param req - Request Express (usada para extrair user, ip, user-agent, rota e mÃ©todo).
+ * @param params - Dados do evento de auditoria.
+ * @returns Nunca rejeita.
+ */
+async function performLogAction(req: Request, params: LogActionParams): Promise<void> {
+  const {
+    action,
+    entityType,
+    entityId,
+    entityDescription,
+    oldValues,
+    newValues,
+    description,
+    success = true,
+    errorMessage
+  } = params;
+
+  const resolved = resolveAuditAction(action);
+  const fallback = downgradeAuditAction(resolved.action);
+
+  if (resolved.unknown) {
+    console.warn(
+      `[auditLogService] action '${resolved.requested}' nao pertence ao vocabulario de auditoria `
+      + `(src/shared/domain/auditActions.ts); gravando como '${resolved.action}' com marcador na description.`,
+    );
+  }
+
+  const basePayload = {
+    req,
+    entityType,
+    entityId,
+    entityDescription,
+    oldValues,
+    newValues,
+    success,
+    errorMessage
+  };
+
+  const payload = { ...basePayload, action, description };
+
+  /**
+   * Payload equivalente no valor legado, com o verbo original preservado no
+   * inÃ­cio da `description`.
+   *
+   * @returns Payload pronto para `AuditLog.register`.
+   */
+  const buildDowngradedPayload = () => ({
+    ...basePayload,
+    action: fallback!,
+    description: markAuditActionInDescription(
+      resolved.requested,
+      description ?? `${resolved.requested} em ${entityType} #${entityId}`,
+    ),
+  });
+
+  // Ja sabemos (por rejeicao anterior neste processo) que o banco nao conhece
+  // este valor â€” vai direto no degradado em vez de queimar um INSERT certo de
+  // falhar a cada evento.
+  if (fallback && actionsRejectedByDatabase.has(resolved.action)) {
+    try {
+      await AuditLog.register(buildDowngradedPayload());
+      return;
+    } catch (downgradedError) {
+      await persistFailureAndAlert(params, downgradedError as Error);
+      return;
+    }
+  }
+
+  try {
+    await AuditLog.register(payload);
+  } catch (firstError) {
+    if (fallback && isUnsupportedAuditActionError(firstError)) {
+      actionsRejectedByDatabase.add(resolved.action);
+      console.warn(
+        `[auditLogService] enum_audit_logs_action ainda nao aceita '${resolved.action}' `
+        + '(migration 20260810-000036 pendente). Gravando como '
+        + `'${fallback}' com marcador '[${resolved.requested}]' na description â€” o evento NAO e perdido.`,
+      );
+
+      try {
+        await AuditLog.register(buildDowngradedPayload());
+        return;
+      } catch (downgradedError) {
+        await persistFailureAndAlert(params, downgradedError as Error);
+        return;
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+
+    try {
+      await AuditLog.register(payload);
+    } catch (secondError) {
+      await persistFailureAndAlert(params, secondError as Error);
+    }
+  }
+}
+
+function logAction(req: Request, params: LogActionParams): Promise<void> {
+  return trackAuditAction(
+    performLogAction(req, params).catch(async (error: unknown) => {
+      await persistFailureAndAlert(params, error instanceof Error ? error : new Error(errorMessage(error)));
+    }),
+  );
+}
+
+export = {
+  logAction,
+  getAuditFailureStats,
+  waitForPendingAuditLogs,
+  __resetAuditLogRuntimeStateForTests,
+};
+
+
+codex
+Já confirmei a causa nos pontos centrais: o handler de exceção não encerra o processo, o fetch do webhook não tem timeout e o shutdown ainda está apertado para o grace period do Docker. Agora vou localizar a documentação do caso e os testes existentes para encaixar a correção sem mexer em call sites.
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg -n "REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02" -S .' in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "rg -n \"registerProcessSafetyHandlers|uncaughtException|waitForPendingAuditLogs|AUDIT_ALERT_WEBHOOK_URL|AbortSignal\\.timeout|forcedExit|stop_grace_period|healthcheck\" server test . -S" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+2026-08-18T03:03:05.474761Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.5 seconds
+Output:
+rg : O termo 'rg' não é reconhecido como nome de cmdlet, função, arquivo de script ou programa operável. Verifique a 
+grafia do nome ou, se um caminho tiver sido incluído, veja se o caminho está correto e tente novamente.
+No linha:2 caractere:1
++ rg -n "registerProcessSafetyHandlers|uncaughtException|waitForPending ...
++ ~~
+    + CategoryInfo          : ObjectNotFound: (rg:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+
+2026-08-18T03:03:05.474795Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.5 seconds
+Output:
+rg : O termo 'rg' não é reconhecido como nome de cmdlet, função, arquivo de script ou programa operável. Verifique a 
+grafia do nome ou, se um caminho tiver sido incluído, veja se o caminho está correto e tente novamente.
+No linha:2 caractere:1
++ rg -n "REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02" - ...
++ ~~
+    + CategoryInfo          : ObjectNotFound: (rg:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+
+ exited 1 in 467ms:
+rg : O termo 'rg' não é reconhecido como nome de cmdlet, função, arquivo de script ou programa operável. Verifique a 
+grafia do nome ou, se um caminho tiver sido incluído, veja se o caminho está correto e tente novamente.
+No linha:2 caractere:1
++ rg -n "registerProcessSafetyHandlers|uncaughtException|waitForPending ...
++ ~~
+    + CategoryInfo          : ObjectNotFound: (rg:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+
+ exited 1 in 469ms:
+rg : O termo 'rg' não é reconhecido como nome de cmdlet, função, arquivo de script ou programa operável. Verifique a 
+grafia do nome ou, se um caminho tiver sido incluído, veja se o caminho está correto e tente novamente.
+No linha:2 caractere:1
++ rg -n "REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02" - ...
++ ~~
+    + CategoryInfo          : ObjectNotFound: (rg:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+
+codex
+`rg` não está disponível neste shell, então vou usar `Select-String` e `Get-ChildItem` para achar os arquivos e cobrir as referências de teste/documentação com o mesmo rigor.
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Recurse -File | Select-String -Pattern 'REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02' | Select-Object Path,LineNumber,Line | Format-List" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Recurse -File server, . | Select-String -Pattern 'registerProcessSafetyHandlers|uncaughtException|waitForPendingAuditLogs|AUDIT_ALERT_WEBHOOK_URL|AbortSignal\\.timeout|forcedExit|stop_grace_period|healthcheck' | Select-Object Path,LineNumber,Line | Format-List" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+2026-08-18T03:03:21.704242Z ERROR codex_core::tools::router: error=Exit code: 124
+Wall time: 10.2 seconds
+Output:
+command timed out after 10163 milliseconds
+
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\.env.example
+LineNumber : 76
+Line       : AUDIT_ALERT_WEBHOOK_URL=
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\Dockerfile
+LineNumber : 36
+Line       : HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 CMD node -e "const 
+             http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusC
+             ode===200?0:1));req.on('error',()=>process.exit(1));"
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\Dockerfile.local-runtime
+LineNumber : 18
+Line       : HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 CMD node -e "const 
+             http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusC
+             ode===200?0:1));req.on('error',()=>process.exit(1));"
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 11
+Line       : import { registerProcessSafetyHandlers } from './src/config/processSafety';
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 16
+Line       : const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 21
+Line       : registerProcessSafetyHandlers();
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 32
+Line       :   const forcedExit = setTimeout(() => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 50
+Line       :     const drainResult = await waitForPendingAuditLogs(10000);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 59
+Line       :     clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 63
+Line       :     clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 17
+Line       : const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 20
+Line       : (0, processSafety_1.registerProcessSafetyHandlers)();
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 28
+Line       :     const forcedExit = setTimeout(() => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 44
+Line       :         const drainResult = await waitForPendingAuditLogs(10000);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 50
+Line       :         clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 55
+Line       :         clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 6
+Line       : exports.registerProcessSafetyHandlers = registerProcessSafetyHandlers;
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 15
+Line       : function registerProcessSafetyHandlers() {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 23
+Line       :     process.on('uncaughtException', (error) => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 28
+Line       : module.exports = { registerProcessSafetyHandlers };
+
+
+ exited 124 in 10163ms:
+
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\.env.example
+LineNumber : 76
+Line       : AUDIT_ALERT_WEBHOOK_URL=
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\Dockerfile
+LineNumber : 36
+Line       : HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 CMD node -e "const 
+             http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusC
+             ode===200?0:1));req.on('error',()=>process.exit(1));"
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\Dockerfile.local-runtime
+LineNumber : 18
+Line       : HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 CMD node -e "const 
+             http=require('http');const req=http.get('http://127.0.0.1:5000/health/ready',res=>process.exit(res.statusC
+             ode===200?0:1));req.on('error',()=>process.exit(1));"
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 11
+Line       : import { registerProcessSafetyHandlers } from './src/config/processSafety';
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 16
+Line       : const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 21
+Line       : registerProcessSafetyHandlers();
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 32
+Line       :   const forcedExit = setTimeout(() => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 50
+Line       :     const drainResult = await waitForPendingAuditLogs(10000);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 59
+Line       :     clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 63
+Line       :     clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 17
+Line       : const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 20
+Line       : (0, processSafety_1.registerProcessSafetyHandlers)();
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 28
+Line       :     const forcedExit = setTimeout(() => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 44
+Line       :         const drainResult = await waitForPendingAuditLogs(10000);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 50
+Line       :         clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 55
+Line       :         clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 6
+Line       : exports.registerProcessSafetyHandlers = registerProcessSafetyHandlers;
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 15
+Line       : function registerProcessSafetyHandlers() {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 23
+Line       :     process.on('uncaughtException', (error) => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 28
+Line       : module.exports = { registerProcessSafetyHandlers };
+
+
+2026-08-18T03:03:21.723053Z ERROR codex_core::tools::router: error=Exit code: 124
+Wall time: 10.2 seconds
+Output:
+command timed out after 10182 milliseconds
+
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\agents\sanacore\sanacore-remediation-evidence.md
+LineNumber : 3
+Line       : description: Empacotador de evidência da SanaCore — monta o REMEDIATION_EVIDENCE_PACKAGE e cria a 
+             remediation-response, preparando o caso para reteste independente da VeriCore.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\agents\sanacore\sanacore-remediation-evidence.md
+LineNumber : 14
+Line       : - Montar `REMEDIATION_EVIDENCE_PACKAGE`
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\agents\sanacore\sanacore-remediation-evidence.md
+LineNumber : 15
+Line       :   (`coretriad/contracts/REMEDIATION_EVIDENCE_PACKAGE.md`): finding
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\agents\sanacore\sanacore-remediation-evidence.md
+LineNumber : 33
+Line       : **Saídas:** REMEDIATION_EVIDENCE_PACKAGE completo em `remediation/cases/`,
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\skills\coretriad-sim-close\SKILL.md
+LineNumber : 36
+Line       : provar o loop de falha). Cada caso gera REMEDIATION_EVIDENCE_PACKAGE com
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.codex\agents\sanacore-remediation-engineer.toml
+LineNumber : 25
+Line       :   formato de `REMEDIATION_EVIDENCE_PACKAGE` ja usado pelos casos anteriores.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 3
+Line       : workdir: C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 15
+Line       : Isto é uma CORREÇÃO 01 sobre a remediação já existente do CASE-008 (AUD-DB-02, commit a910273). NÃO é 
+             reimplementação — mantenha a Opção C (zero call site tocado, webhook não conectado por padrão) e o 
+             safeJsonStringify, que estão corretos.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 18
+Line       :   worktree: C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 19
+Line       :   branch:   sana/ERP-LEGACY-001/CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 43
+Line       : Documente no REMEDIATION_EVIDENCE_PACKAGE.md do caso (seção nova "Correção 01"):
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 55
+Line       : - Atualize REMEDIATION_EVIDENCE_PACKAGE.md e o status do caso, mantendo REMEDIATION_COMPLETE apenas se os 
+             3 pontos estiverem de fato corrigidos e comprovados com output real.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 56
+Line       : - Commit na branch sana/ERP-LEGACY-001/CASE-008, não em main.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 61
+Line       : Vou seguir a remediação do CASE-008 sem reimplementar a Opção C. Primeiro vou ler as fontes obrigatórias 
+             e mapear os pontos exatos de shutdown, timeout do webhook e os limites do Docker antes de tocar em código.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 63
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 
+             'C:\\Users\\Gilwagno\\.codex\\skills\\.system\\evok-production-readiness\\SKILL.md' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 91
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\.agents\\skills\\evok-production-readiness\\SKILL.md' -Raw" in 
+             C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 243
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\server\\index.ts' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 245
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\docker-compose.yml' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 247
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'git status --short' in 
+             C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 249
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\server\\src\\config\\processSafety.ts' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 251
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\server\\src\\services\\auditLogService.ts' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 253
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\docker-compose.prod.yml' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1021
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg -n 
+             "REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02" -S .' in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1023
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "rg -n \"registerProcessSafetyHa
+             ndlers|uncaughtException|waitForPendingAuditLogs|AUDIT_ALERT_WEBHOOK_URL|AbortSignal\\.timeout|forcedExit|
+             stop_grace_period|healthcheck\" server test . -S" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1042
+Line       : + rg -n "REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02" - ...
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1062
+Line       : + rg -n "REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02" - ...
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1071
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Recurse -File | 
+             Select-String -Pattern 'REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02' | Select-Object 
+             Path,LineNumber,Line | Format-List" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1073
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Recurse -File 
+             server, . | Select-String -Pattern 'registerProcessSafetyHandlers|uncaughtException|waitForPendingAuditLog
+             s|AUDIT_ALERT_WEBHOOK_URL|AbortSignal\\.timeout|forcedExit|stop_grace_period|healthcheck' | Select-Object 
+             Path,LineNumber,Line | Format-List" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 3
+Line       : Isto é uma CORREÇÃO 01 sobre a remediação já existente do CASE-008 (AUD-DB-02, commit a910273). NÃO é 
+             reimplementação — mantenha a Opção C (zero call site tocado, webhook não conectado por padrão) e o 
+             safeJsonStringify, que estão corretos.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 6
+Line       :   worktree: C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 7
+Line       :   branch:   sana/ERP-LEGACY-001/CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 31
+Line       : Documente no REMEDIATION_EVIDENCE_PACKAGE.md do caso (seção nova "Correção 01"):
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 43
+Line       : - Atualize REMEDIATION_EVIDENCE_PACKAGE.md e o status do caso, mantendo REMEDIATION_COMPLETE apenas se os 
+             3 pontos estiverem de fato corrigidos e comprovados com output real.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 44
+Line       : - Commit na branch sana/ERP-LEGACY-001/CASE-008, não em main.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\G4_PRECONDICAO_B
+             ANCO_TESTE.md
+LineNumber : 72
+Line       : 48c93cd docs(sana): FIND-ERP-005 REMEDIATION_EVIDENCE_PACKAGE + response + status
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-03_AUDIT_LOG_REPORT.md
+LineNumber : 31
+Line       : **AUD-DB-02 — A trilha é best-effort e estruturalmente não-transacional.**
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-08_FISCAL.md
+LineNumber : 125
+Line       : **Impacto de negócio, na ordem em que o dono sente:** a nota é cancelada na SEFAZ, **o cliente continua 
+             com título a receber ativo por uma nota que não existe** (o JSDoc `:36-39` descreve exatamente esse dano 
+             como o motivo de a etapa existir), a mercadoria continua baixada do estoque e a venda continua 
+             `invoiced`. O único vestígio é um `logger.warn` (`:176`) — não vai para `audit_logs`, e T-03/AUD-DB-02 já 
+             demonstrou que a persistência de log é best-effort.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-08_FISCAL.md
+LineNumber : 248
+Line       : Não há Carta de Correção Eletrônica (varredura de `carta|cce|correcao` no módulo fiscal: zero) nem 
+             inutilização (T08-F10). Mais estrutural: `sale_invoices` tem `nfe_status` **atual** (`SaleInvoice.ts:80`) 
+             e nenhuma tabela de eventos — a sequência "autorizada em X, corrigida em Y, cancelada em Z por W com 
+             justificativa J" **não é reconstituível**: a justificativa do cancelamento vive só na descrição de um 
+             `logAction` (`fiscalController.ts:95`), cuja fragilidade T-03/AUD-DB-02 mediu. Etapa ausente **dos dois 
+             lados** (desenho e código), registrada conforme §20.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-25_VALIDACAO_A
+             DVERSARIAL_RODADA2.md
+LineNumber : 20
+Line       : | `AUD-DB-02` | T-03 | HIGH | **CONFIRMED** | Consistente com a arquitetura já mapeada (T-19 confirma 
+             independentemente: escrita de `AuditLog` vive em `services/auditLogService.ts`, fora de módulo, sem 
+             transação propagável). Não reli `auditLogService.ts`/`AuditLog.ts` linha a linha nesta rodada (já os 
+             havia base a Rodada 1 via handoffs cruzados), mas a convergência T-03×T-19 sobre o mesmo arquivo, por 
+             ângulos distintos, é evidência forte o suficiente para não rebaixar. |
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-25_VALIDACAO_A
+             DVERSARIAL_RODADA2.md
+LineNumber : 65
+Line       : - **CONFIRMED por convergência independente forte** (mecanismo já provado por outra trilha sobre o mesmo 
+             objeto, ou fato de banco de dados não sujeito a exceção): `AUD-DB-02`, `AUD-DB-03`, `T-05-04`, `T13-F02`, 
+             `T13-F03`, `T19-F01` (quanto ao padrão, não aos números) — **6 findings**.
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-26_CONSOLIDACAO.md
+LineNumber : 511
+Line       : | `AUD-DB-02` | HIGH | T-03 | **CONFIRMED por convergência** | trilha **best-effort e estruturalmente 
+             não-transacional**: 362/362 call sites não aguardam; fallback em `logs/`, que **não é volume** ⇒ morre no 
+             recreate; webhook de alerta **vazio por padrão** |
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-38_CLASSIFICAC
+             AO_AMBIENTE_CORPUS.md
+LineNumber : 184
+Line       : `AUD-AUTHN-03`, `AUD-DB-01`, `AUD-DB-02`, `AUD-DB-03`, `FIND-ERP-002`, `T33-A-F04` —
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-38_CLASSIFICAC
+             AO_AMBIENTE_CORPUS.md
+LineNumber : 257
+Line       :    `AUD-DB-01`, `AUD-DB-02`, `AUD-DB-03` [recorte], `FIND-ERP-002`, `T33-A-F04`).
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-39_FILA_REMEDI
+             ACAO_EXPOSICAO.md
+LineNumber : 125
+Line       :    `AUD-T01-01` · `AUD-T01-02` · `AUD-AUTHN-02` · `AUD-AUTHN-03` · `AUD-DB-01` · `AUD-DB-02` ·
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\40-report\REMEDIATION_BACKLOG.md
+LineNumber : 102
+Line       :    no `REMEDIATION_EVIDENCE_PACKAGE` e no reteste. **`AUD-DB-04` permanece MEDIUM e aberto.**
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\40-report\REMEDIATION_BACKLOG.md
+LineNumber : 107
+Line       :    `AUD-AUTHN-02` · `AUD-AUTHN-03` · `AUD-DB-01` · `AUD-DB-02` · `AUD-DB-03` (**no recorte tier 1
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\40-report\REMEDIATION_BACKLOG.md
+LineNumber : 344
+Line       :    testes de regressão criados → documentação afetada atualizada → `REMEDIATION_EVIDENCE_PACKAGE`
+
+
+ exited 124 in 10182ms:
+
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\agents\sanacore\sanacore-remediation-evidence.md
+LineNumber : 3
+Line       : description: Empacotador de evidência da SanaCore — monta o REMEDIATION_EVIDENCE_PACKAGE e cria a 
+             remediation-response, preparando o caso para reteste independente da VeriCore.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\agents\sanacore\sanacore-remediation-evidence.md
+LineNumber : 14
+Line       : - Montar `REMEDIATION_EVIDENCE_PACKAGE`
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\agents\sanacore\sanacore-remediation-evidence.md
+LineNumber : 15
+Line       :   (`coretriad/contracts/REMEDIATION_EVIDENCE_PACKAGE.md`): finding
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\agents\sanacore\sanacore-remediation-evidence.md
+LineNumber : 33
+Line       : **Saídas:** REMEDIATION_EVIDENCE_PACKAGE completo em `remediation/cases/`,
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.claude\skills\coretriad-sim-close\SKILL.md
+LineNumber : 36
+Line       : provar o loop de falha). Cada caso gera REMEDIATION_EVIDENCE_PACKAGE com
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.codex\agents\sanacore-remediation-engineer.toml
+LineNumber : 25
+Line       :   formato de `REMEDIATION_EVIDENCE_PACKAGE` ja usado pelos casos anteriores.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 3
+Line       : workdir: C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 15
+Line       : Isto é uma CORREÇÃO 01 sobre a remediação já existente do CASE-008 (AUD-DB-02, commit a910273). NÃO é 
+             reimplementação — mantenha a Opção C (zero call site tocado, webhook não conectado por padrão) e o 
+             safeJsonStringify, que estão corretos.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 18
+Line       :   worktree: C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 19
+Line       :   branch:   sana/ERP-LEGACY-001/CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 43
+Line       : Documente no REMEDIATION_EVIDENCE_PACKAGE.md do caso (seção nova "Correção 01"):
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 55
+Line       : - Atualize REMEDIATION_EVIDENCE_PACKAGE.md e o status do caso, mantendo REMEDIATION_COMPLETE apenas se os 
+             3 pontos estiverem de fato corrigidos e comprovados com output real.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 56
+Line       : - Commit na branch sana/ERP-LEGACY-001/CASE-008, não em main.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 61
+Line       : Vou seguir a remediação do CASE-008 sem reimplementar a Opção C. Primeiro vou ler as fontes obrigatórias 
+             e mapear os pontos exatos de shutdown, timeout do webhook e os limites do Docker antes de tocar em código.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 63
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 
+             'C:\\Users\\Gilwagno\\.codex\\skills\\.system\\evok-production-readiness\\SKILL.md' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 91
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\.agents\\skills\\evok-production-readiness\\SKILL.md' -Raw" in 
+             C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 243
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\server\\index.ts' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 245
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\docker-compose.yml' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 247
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'git status --short' in 
+             C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 249
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\server\\src\\config\\processSafety.ts' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 251
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\server\\src\\services\\auditLogService.ts' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 253
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema 
+             EvokAudio\\ERP-Evok-sana-CASE-008\\docker-compose.prod.yml' -Raw" in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1021
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg -n 
+             "REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02" -S .' in C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1023
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "rg -n \"registerProcessSafetyHa
+             ndlers|uncaughtException|waitForPendingAuditLogs|AUDIT_ALERT_WEBHOOK_URL|AbortSignal\\.timeout|forcedExit|
+             stop_grace_period|healthcheck\" server test . -S" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1042
+Line       : + rg -n "REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02" - ...
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1062
+Line       : + rg -n "REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02" - ...
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1071
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Recurse -File | 
+             Select-String -Pattern 'REMEDIATION_EVIDENCE_PACKAGE|Correção 01|CASE-008|AUD-DB-02' | Select-Object 
+             Path,LineNumber,Line | Format-List" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\log-correcao-01.jsonl
+LineNumber : 1073
+Line       : "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Recurse -File 
+             server, . | Select-String -Pattern 'registerProcessSafetyHandlers|uncaughtException|waitForPendingAuditLog
+             s|AUDIT_ALERT_WEBHOOK_URL|AbortSignal\\.timeout|forcedExit|stop_grace_period|healthcheck' | Select-Object 
+             Path,LineNumber,Line | Format-List" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 3
+Line       : Isto é uma CORREÇÃO 01 sobre a remediação já existente do CASE-008 (AUD-DB-02, commit a910273). NÃO é 
+             reimplementação — mantenha a Opção C (zero call site tocado, webhook não conectado por padrão) e o 
+             safeJsonStringify, que estão corretos.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 6
+Line       :   worktree: C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 7
+Line       :   branch:   sana/ERP-LEGACY-001/CASE-008
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 31
+Line       : Documente no REMEDIATION_EVIDENCE_PACKAGE.md do caso (seção nova "Correção 01"):
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 43
+Line       : - Atualize REMEDIATION_EVIDENCE_PACKAGE.md e o status do caso, mantendo REMEDIATION_COMPLETE apenas se os 
+             3 pontos estiverem de fato corrigidos e comprovados com output real.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\.dispatch-logs\prompt-correcao-01.txt
+LineNumber : 44
+Line       : - Commit na branch sana/ERP-LEGACY-001/CASE-008, não em main.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\G4_PRECONDICAO_B
+             ANCO_TESTE.md
+LineNumber : 72
+Line       : 48c93cd docs(sana): FIND-ERP-005 REMEDIATION_EVIDENCE_PACKAGE + response + status
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-03_AUDIT_LOG_REPORT.md
+LineNumber : 31
+Line       : **AUD-DB-02 — A trilha é best-effort e estruturalmente não-transacional.**
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-08_FISCAL.md
+LineNumber : 125
+Line       : **Impacto de negócio, na ordem em que o dono sente:** a nota é cancelada na SEFAZ, **o cliente continua 
+             com título a receber ativo por uma nota que não existe** (o JSDoc `:36-39` descreve exatamente esse dano 
+             como o motivo de a etapa existir), a mercadoria continua baixada do estoque e a venda continua 
+             `invoiced`. O único vestígio é um `logger.warn` (`:176`) — não vai para `audit_logs`, e T-03/AUD-DB-02 já 
+             demonstrou que a persistência de log é best-effort.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-08_FISCAL.md
+LineNumber : 248
+Line       : Não há Carta de Correção Eletrônica (varredura de `carta|cce|correcao` no módulo fiscal: zero) nem 
+             inutilização (T08-F10). Mais estrutural: `sale_invoices` tem `nfe_status` **atual** (`SaleInvoice.ts:80`) 
+             e nenhuma tabela de eventos — a sequência "autorizada em X, corrigida em Y, cancelada em Z por W com 
+             justificativa J" **não é reconstituível**: a justificativa do cancelamento vive só na descrição de um 
+             `logAction` (`fiscalController.ts:95`), cuja fragilidade T-03/AUD-DB-02 mediu. Etapa ausente **dos dois 
+             lados** (desenho e código), registrada conforme §20.
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-25_VALIDACAO_A
+             DVERSARIAL_RODADA2.md
+LineNumber : 20
+Line       : | `AUD-DB-02` | T-03 | HIGH | **CONFIRMED** | Consistente com a arquitetura já mapeada (T-19 confirma 
+             independentemente: escrita de `AuditLog` vive em `services/auditLogService.ts`, fora de módulo, sem 
+             transação propagável). Não reli `auditLogService.ts`/`AuditLog.ts` linha a linha nesta rodada (já os 
+             havia base a Rodada 1 via handoffs cruzados), mas a convergência T-03×T-19 sobre o mesmo arquivo, por 
+             ângulos distintos, é evidência forte o suficiente para não rebaixar. |
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-25_VALIDACAO_A
+             DVERSARIAL_RODADA2.md
+LineNumber : 65
+Line       : - **CONFIRMED por convergência independente forte** (mecanismo já provado por outra trilha sobre o mesmo 
+             objeto, ou fato de banco de dados não sujeito a exceção): `AUD-DB-02`, `AUD-DB-03`, `T-05-04`, `T13-F02`, 
+             `T13-F03`, `T19-F01` (quanto ao padrão, não aos números) — **6 findings**.
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-26_CONSOLIDACAO.md
+LineNumber : 511
+Line       : | `AUD-DB-02` | HIGH | T-03 | **CONFIRMED por convergência** | trilha **best-effort e estruturalmente 
+             não-transacional**: 362/362 call sites não aguardam; fallback em `logs/`, que **não é volume** ⇒ morre no 
+             recreate; webhook de alerta **vazio por padrão** |
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-38_CLASSIFICAC
+             AO_AMBIENTE_CORPUS.md
+LineNumber : 184
+Line       : `AUD-AUTHN-03`, `AUD-DB-01`, `AUD-DB-02`, `AUD-DB-03`, `FIND-ERP-002`, `T33-A-F04` —
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-38_CLASSIFICAC
+             AO_AMBIENTE_CORPUS.md
+LineNumber : 257
+Line       :    `AUD-DB-01`, `AUD-DB-02`, `AUD-DB-03` [recorte], `FIND-ERP-002`, `T33-A-F04`).
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\07-findings\T-39_FILA_REMEDI
+             ACAO_EXPOSICAO.md
+LineNumber : 125
+Line       :    `AUD-T01-01` · `AUD-T01-02` · `AUD-AUTHN-02` · `AUD-AUTHN-03` · `AUD-DB-01` · `AUD-DB-02` ·
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\40-report\REMEDIATION_BACKLOG.md
+LineNumber : 102
+Line       :    no `REMEDIATION_EVIDENCE_PACKAGE` e no reteste. **`AUD-DB-04` permanece MEDIUM e aberto.**
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\40-report\REMEDIATION_BACKLOG.md
+LineNumber : 107
+Line       :    `AUD-AUTHN-02` · `AUD-AUTHN-03` · `AUD-DB-01` · `AUD-DB-02` · `AUD-DB-03` (**no recorte tier 1
+
+Path       : C:\Sistema 
+             EvokAudio\ERP-Evok-sana-CASE-008\audit\runs\ERP-LEGACY-001-AUD-001\40-report\REMEDIATION_BACKLOG.md
+LineNumber : 344
+Line       :    testes de regressão criados → documentação afetada atualizada → `REMEDIATION_EVIDENCE_PACKAGE`
+
+
+codex
+Já achei o pacote de evidência em outro run do audit, mas preciso do arquivo do caso atual e dos testes que cobrem essas rotas de falha. Vou reduzir a busca para `server/` e para o pacote de evidência do CASE-008 para evitar varrer o repositório inteiro de novo.
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Recurse -File 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008' -Filter 'REMEDIATION_EVIDENCE_PACKAGE.md' | Select-Object FullName" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Recurse -File 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\server' | Select-String -Pattern 'registerProcessSafetyHandlers|uncaughtException|waitForPendingAuditLogs|AUDIT_ALERT_WEBHOOK_URL|AbortSignal\\.timeout|forcedExit' | Select-Object Path,LineNumber,Line | Format-List" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+ succeeded in 1245ms:
+
+FullName                                                                                                             
+--------                                                                                                             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\coretriad\contracts\REMEDIATION_EVIDENCE_PACKAGE.md                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\remediation\cases\ERP-LEGACY-001-CASE-003\REMEDIATION_EVIDENCE_PACKAGE.md
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\remediation\cases\ERP-LEGACY-001-CASE-008\REMEDIATION_EVIDENCE_PACKAGE.md
+
+
+
+2026-08-18T03:03:40.876011Z ERROR codex_core::tools::router: error=Exit code: 124
+Wall time: 10.2 seconds
+Output:
+command timed out after 10170 milliseconds
+
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\.env.example
+LineNumber : 76
+Line       : AUDIT_ALERT_WEBHOOK_URL=
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 11
+Line       : import { registerProcessSafetyHandlers } from './src/config/processSafety';
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 16
+Line       : const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 21
+Line       : registerProcessSafetyHandlers();
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 32
+Line       :   const forcedExit = setTimeout(() => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 50
+Line       :     const drainResult = await waitForPendingAuditLogs(10000);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 59
+Line       :     clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 63
+Line       :     clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 17
+Line       : const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 20
+Line       : (0, processSafety_1.registerProcessSafetyHandlers)();
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 28
+Line       :     const forcedExit = setTimeout(() => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 44
+Line       :         const drainResult = await waitForPendingAuditLogs(10000);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 50
+Line       :         clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 55
+Line       :         clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 6
+Line       : exports.registerProcessSafetyHandlers = registerProcessSafetyHandlers;
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 15
+Line       : function registerProcessSafetyHandlers() {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 23
+Line       :     process.on('uncaughtException', (error) => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 28
+Line       : module.exports = { registerProcessSafetyHandlers };
+
+
+ exited 124 in 10170ms:
+
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\.env.example
+LineNumber : 76
+Line       : AUDIT_ALERT_WEBHOOK_URL=
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 11
+Line       : import { registerProcessSafetyHandlers } from './src/config/processSafety';
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 16
+Line       : const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 21
+Line       : registerProcessSafetyHandlers();
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 32
+Line       :   const forcedExit = setTimeout(() => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 50
+Line       :     const drainResult = await waitForPendingAuditLogs(10000);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 59
+Line       :     clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\index.ts
+LineNumber : 63
+Line       :     clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 17
+Line       : const { waitForPendingAuditLogs } = require('./src/services/auditLogService');
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 20
+Line       : (0, processSafety_1.registerProcessSafetyHandlers)();
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 28
+Line       :     const forcedExit = setTimeout(() => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 44
+Line       :         const drainResult = await waitForPendingAuditLogs(10000);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 50
+Line       :         clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\index.js
+LineNumber : 55
+Line       :         clearTimeout(forcedExit);
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 6
+Line       : exports.registerProcessSafetyHandlers = registerProcessSafetyHandlers;
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 15
+Line       : function registerProcessSafetyHandlers() {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 23
+Line       :     process.on('uncaughtException', (error) => {
+
+Path       : C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\dist\src\config\processSafety.js
+LineNumber : 28
+Line       : module.exports = { registerProcessSafetyHandlers };
+
+
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\remediation\\cases\\ERP-LEGACY-001-CASE-008\\REMEDIATION_EVIDENCE_PACKAGE.md' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Recurse -File 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\server' -Include *.test.ts,*.spec.ts,*.test.js,*.spec.js | Select-Object FullName" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+exec
+"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'C:\\Sistema EvokAudio\\ERP-Evok-sana-CASE-008\\coretriad\\contracts\\REMEDIATION_EVIDENCE_PACKAGE.md' -Raw" in C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008
+ succeeded in 337ms:
+# REMEDIATION_EVIDENCE_PACKAGE (SanaCore -> VeriCore)
+
+CASE_ID: `ERP-LEGACY-001-CASE-008`
+FINDING_ID: `AUD-DB-02`
+PROJECT_ID: `ERP-LEGACY-001`
+TRACK: `OpÃ§Ã£o C / APR-2026-053`
+BRANCH: `sana/ERP-LEGACY-001/CASE-008`
+WORKTREE: `C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008`
+REMEDIATION_COMMIT: `a9102738bc9f011af222377525874b3647651933`
+STATUS DESTE PACOTE: evidencia de implementacao. Nao declara `FINDING CLOSED`, `RETEST_PASSED` nem aceite de remediacao; essa autoridade permanece exclusiva da VeriCore.
+
+---
+
+## 1. ROOT_CAUSE
+
+O servico de auditoria ja tentava reduzir perda silenciosa com retry e fallback, mas ainda tinha quatro lacunas dentro do escopo autorizado da Opcao C:
+
+- O caminho fatal em `persistFailureAndAlert` fazia `console.error(JSON.stringify(entry))` fora de protecao. Payload circular, `BigInt` ou outro valor nao serializavel podia fazer o proprio fallback rejeitar.
+- `logAction` continuava sendo usado como fire-and-forget em diversos chamadores; se o fallback rejeitasse, a promise flutuante podia virar `unhandledRejection`, e em Node 24 isso e caminho de encerramento de processo.
+- O shutdown fechava HTTP e em seguida encerrava conexoes/saia sem esperar promises de auditoria ainda pendentes.
+- O fallback de arquivo apontava para `logs/audit-failures.log`, mas o compose dev nao persistia `/app/logs`, e a imagem nao garantia `/app/logs` criado/chown para o usuario nao-root.
+
+## 2. CORRECTION_STRATEGY
+
+A estrategia adotada foi fechar somente a Opcao C autorizada, sem alterar a semantica transacional do sistema:
+
+- `logAction` continua nao bloqueando resposta HTTP e nao propaga erro para os controllers.
+- O corpo real da gravacao foi isolado em `performLogAction`; `logAction` agora registra a promise em um conjunto de pendencias e consome qualquer rejeicao internamente.
+- O fallback usa serializacao segura para circular refs, `BigInt` e functions, evitando que o proprio log de falha gere nova falha fatal.
+- Counters consultaveis foram adicionados para tornar falhas de auditoria visiveis (`getAuditFailureStats`), sem acoplar webhook/email ou fila duravel.
+- `waitForPendingAuditLogs` drena promises pendentes durante shutdown, com timeout finito.
+- Handlers de `unhandledRejection` e `uncaughtException` foram registrados cedo no boot.
+- `/app/logs` ganhou volume persistente no compose dev, e o Dockerfile cria/chown `/app/logs` junto de `/app/uploads`.
+
+Escopos explicitamente nao executados: nao tornar `logAction` transacional, nao propagar erro aos fluxos de negocio, nao tocar nos chamadores em massa, nao conectar webhook/email real, nao implementar fila duravel e nao editar `docker-compose.prod.yml`.
+
+## 3. FILES_CHANGED
+
+| Arquivo | Mudanca |
+|---|---|
+| `server/src/services/auditLogService.ts` | Tracking de promises pendentes, drain, serializacao segura, counters de falha e garantia de que `logAction` nao rejeita. |
+| `server/src/config/processSafety.ts` | Registro idempotente de handlers globais de seguranca de processo. |
+| `server/index.ts` | Registro cedo dos handlers e drain de audit logs antes de `sequelize.close()`. |
+| `server/Dockerfile` | Criacao de `/app/logs` e chown para usuario nao-root `evok`. |
+| `docker-compose.yml` | Volume persistente `app_logs:/app/logs` no servico `api`. |
+| `server/tests/unit/case008-audit-log-runtime.test.ts` | Regressao runtime para payload circular, drain e counters de falha. |
+| `server/tests/unit/case008-audit-log-static.test.ts` | Regressao estatica para handlers, ordem de shutdown e persistencia de logs. |
+
+## 4. TESTS_ADDED
+
+- `server/tests/unit/case008-audit-log-runtime.test.ts`
+- `server/tests/unit/case008-audit-log-static.test.ts`
+
+Os testes mockam `../../src/models/AuditLog`; nao importam `app.ts` e nao abrem conexao de banco.
+
+## 5. BEFORE_FIX_PROOF
+
+Prova vermelha executada contra `AUDIT_COMMIT` `c1311a6f76b512fef893f7e60d934179cae3409f`, em copia temporaria isolada:
+
+```powershell
+git archive c1311a6f76b512fef893f7e60d934179cae3409f -o $temp\audit.tar
+tar -xf $temp\audit.tar
+Copy-Item server/tests/unit/case008-audit-log-runtime.test.ts $temp\server\tests\unit\
+Copy-Item server/tests/unit/case008-audit-log-static.test.ts $temp\server\tests\unit\
+cd $temp\server
+npm ci
+npm test -- --runInBand tests/unit/case008-audit-log-runtime.test.ts tests/unit/case008-audit-log-static.test.ts
+```
+
+Resultado esperado e observado: `FAIL`, 2 suites falharam, 6 testes falharam.
+
+Falhas relevantes observadas:
+
+- `service.__resetAuditLogRuntimeStateForTests is not a function`
+- `server/src/config/processSafety.ts` inexistente.
+- `waitForPendingAuditLogs` nao encontrado antes de `sequelize.close()`.
+- `docker-compose.yml` sem `- app_logs:/app/logs`.
+
+Isso demonstra que os testes novos capturam lacunas reais existentes no commit auditado.
+
+## 6. AFTER_FIX_PROOF
+
+Comandos executados na worktree de remediacao:
+
+```powershell
+cd C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server
+npm test -- --runInBand tests/unit/audit-log-failure-alerting.test.ts tests/unit/audit-log-action-downgrade.test.ts tests/unit/audit-log-register-normalization.test.ts tests/unit/case008-audit-log-runtime.test.ts tests/unit/case008-audit-log-static.test.ts
+npm run typecheck
+npm run build
+```
+
+Resultados:
+
+- `PASS`: 5 suites, 19 testes.
+- `npm run typecheck`: `tsc -p tsconfig.json --noEmit` passou.
+- `npm run build`: `tsc -p tsconfig.build.json` passou.
+
+Observacao operacional: uma tentativa de rodar `typecheck` e `build` em paralelo falhou por limite ambiental de memoria/paginacao do Windows (`errno=1455`). A validacao conclusiva foi repetida sequencialmente e passou.
+
+## 7. REGRESSION_ANALYSIS
+
+- O comportamento de negocio segue fire-and-forget: falha de auditoria nao bloqueia resposta HTTP.
+- Falhas de auditoria deixam de depender de `JSON.stringify` inseguro no fallback.
+- Promises pendentes passam a ser drenaveis no shutdown sem espera infinita.
+- Logs de fallback persistem em volume dev e o caminho existe com ownership adequado na imagem.
+- `docker-compose.prod.yml` ja declarava volume de logs em `/app/logs`; nao foi editado. A criacao/chown no Dockerfile remove a armadilha de EACCES tambem para a imagem usada em producao, dentro do escopo autorizado.
+
+## 8. IMPACT
+
+ARCHITECTURE_IMPACT: baixo. Mudanca restrita a runtime safety do servico de auditoria, boot/shutdown e infra de volume.
+
+DATABASE_IMPACT: nenhum schema, migration ou dado alterado. Nenhuma conexao de banco foi aberta por estes testes.
+
+API_IMPACT: nenhum endpoint novo ou alterado.
+
+SECURITY_CHECKS:
+
+- Nao houve acesso a `erp_evok_audio` de producao.
+- Nao houve mudanca em `server/package.json`, `runtimeEnv.ts`, `server/app.ts`, `audit/`, `coretriad/governance/`, `coretriad/states/` ou `.claude/`.
+- O fallback agora e fail-safe contra payload circular/`BigInt`.
+- `unhandledRejection` e `uncaughtException` deixam rastro em logger central.
+
+## 9. RESIDUAL_RISK
+
+- Nao foi implementada fila duravel, por decisao explicita de escopo da Opcao C.
+- Nao foi conectado webhook/email real, por decisao explicita de escopo.
+- Counters sao consultaveis via modulo, mas este caso nao expÃ´s endpoint/metric pipeline novo.
+- O reteste da VeriCore deve validar o comportamento em ambiente containerizado com volume real de `/app/logs`.
+
+## 10. RETEST_INSTRUCTIONS
+
+Sugestoes para a VeriCore, sem substituir sua autoridade:
+
+- Reexecutar os dois testes novos do CASE-008 e os testes legados de audit log listados em `AFTER_FIX_PROOF`.
+- Validar que `logAction` resolve mesmo com payload circular/`BigInt` quando `AuditLog.register` falha.
+- Validar que `waitForPendingAuditLogs` e chamado antes de `sequelize.close()` em shutdown.
+- Subir container ou inspecionar imagem/compose para confirmar `/app/logs` persistente e gravavel pelo usuario nao-root.
+- Confirmar que nao houve propagacao de erro de auditoria para fluxo de negocio.
+
+---
+
+REMEDIATION_COMPLETE
+
+
+ succeeded in 354ms:
+# REMEDIATION_EVIDENCE_PACKAGE  (SanaCore â†’ VeriCore)
+CASE_ID:
+FINDING_ID:
+
+ROOT_CAUSE:
+LOCAL_FIX:
+SYSTEMIC_FIX_REQUIRED:
+BLAST_RADIUS:
+CORRECTION_STRATEGY:
+
+FILES_CHANGED:
+TESTS_ADDED:
+TESTS_CHANGED:
+TEST_RESULTS:
+REGRESSION_ANALYSIS:
+
+ARCHITECTURE_IMPACT:
+DATABASE_IMPACT:
+API_IMPACT:
+SECURITY_CHECKS:
+DOCUMENTATION_UPDATED:
+
+COMMIT_HASH:            # REMEDIATION_COMMIT (nÃ£o substitui AUDIT_COMMIT)
+BRANCH:                 # sana/<PROJECT>/<FINDING>
+RESIDUAL_RISK:
+RETEST_INSTRUCTIONS:
+
+
+ succeeded in 4978ms:
+
+FullName                                                                                                            
+--------                                                                                                            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@bcoe\v8-coverage\src\test\merge.spec.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@jest\pattern\src\__tests__\TestPathPatterns.test.ts
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@jest\snapshot-utils\src\__tests__\utils.test.ts    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\prototypes\copy-prototype-me...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\prototypes\index.test.js       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\called-in-order.test.js        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\class-name.test.js             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\deprecated.test.js             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\every.test.js                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\function-name.test.js          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\global.test.js                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\index.test.js                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\order-by-first-call.test.js    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\type-of.test.js                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\@sinonjs\commons\lib\value-to-string.test.js        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\dijkstrajs\test\dijkstra.test.js                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\gensync\test\index.test.js                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\pg-protocol\dist\inbound-parser.test.js             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\pg-protocol\dist\outbound-serializer.test.js        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\pg-protocol\src\inbound-parser.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\pg-protocol\src\outbound-serializer.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\pstree.remy\tests\index.test.js                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\retry-as-promised\test\promise.test.js              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\simple-update-notifier\src\cache.spec.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\simple-update-notifier\src\getDistVersion.spec.ts   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\simple-update-notifier\src\hasNewVersion.spec.ts    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\simple-update-notifier\src\index.spec.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\all-errors.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\anyunknown.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\array.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\async-parsing.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\async-refinements.test.ts          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\base.test.ts                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\bigint.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\branded.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\catch.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\coerce.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\complex.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\custom.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\date.test.ts                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\deepmasking.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\default.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\description.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\discriminated-unions.test.ts       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\enum.test.ts                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\error.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\firstparty.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\firstpartyschematypes.test.ts      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\function.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\generics.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\instanceof.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\intersection.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\language-server.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\literal.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\map.test.ts                        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\masking.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\mocker.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\nan.test.ts                        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\nativeEnum.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\nullable.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\number.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\object-augmentation.test.ts        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\object-in-es5-env.test.ts          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\object.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\optional.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\parser.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\parseUtil.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\partials.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\pickomit.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\pipeline.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\preprocess.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\primitive.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\promise.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\readonly.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\record.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\recursive.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\refine.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\safeparse.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\set.test.ts                        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\standard-schema.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\string.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\transformer.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\tuple.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\unions.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\validations.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v3\tests\void.test.ts                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\anyunknown.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\apply.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\array.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\assignability.test.ts      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\async-parsing.test.ts      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\async-refinements.test.ts  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\base.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\bigint.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\brand.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\catch.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\coalesce.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\codec-examples.test.ts     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\codec.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\coerce.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\continuability.test.ts     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\custom.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\date.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\datetime.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\default.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\describe-meta-checks.tes...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\description.test.ts        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\detached-methods.test.ts   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\discriminated-unions.tes...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\enum.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\error-utils.test.ts        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\error.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\file.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\firstparty.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\fix-json-issue.test.ts     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\from-json-schema.test.ts   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\function.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\generics.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\global-config.test.ts      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\hash.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\index.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\instanceof.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\intersection.test.ts       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\jitless-allows-eval.test.ts
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\json.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\lazy.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\literal.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\locales_ka.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\locales_ro.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\map.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\nan.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\nested-refine.test.ts      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\nonoptional.test.ts        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\nullable.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\number.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\object.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\optional.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\partial.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\pickomit.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\pipe.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\prefault.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\preprocess-types.test.ts   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\preprocess.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\primitive.test.ts          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\promise.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\prototypes.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\readonly.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\record.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\recursive-types.test.ts    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\refine.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\registries.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\set.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\standard-schema.test.ts    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\string-formats.test.ts     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\string.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\stringbool.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\template-literal.test.ts   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\to-json-schema-methods.t...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\to-json-schema.test.ts     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\transform.test.ts          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\tuple.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\union.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\url.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\validations.test.ts        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\classic\tests\void.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\be.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\el.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\en.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\es.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\fr.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\he.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\hr.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\nl.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\ru.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\tr.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\locales\uz.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\extend.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\index.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\record-constructor.test.ts    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\core\tests\recursive-tuples.test.ts      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\apply.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\assignability.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\brand.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\checks.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\codec.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\computed.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\error.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\functions.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\index.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\number.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\object.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\prototypes.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\recursive-types.test.ts       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\standard-schema.test.ts       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\node_modules\zod\src\v4\mini\tests\string.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\characterization\comercial-financeiro--desconto-nao-cheg...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\characterization\comercial-financeiro--maquina-estados-v...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\characterization\comercial-financeiro--pagamento-parcial...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\characterization\comercial-financeiro--tributos-vigentes...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\characterization\planejamento-producao--bom-explosion-di...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\characterization\planejamento-producao--mrp-lote-minimo-...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\characterization\planejamento-producao--production-order...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\characterization\qualidade-estoque--duplicacao-lancament...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\characterization\qualidade-estoque--scan-mobile-fura-qua...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\edge\industrial-edge-cases.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\app-role-privileges-guard.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\auth-me-permissions.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\bank-reconciliation-ofx-import.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\bom-component-type-regression.test.ts          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\bom-cycle-multilevel.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\bom-tipo-nao-produtivo.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\bom-two-level-reparo.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\catalog-spreadsheet-import.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\clients-suppliers-financial-bom-validation.t...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\column-name-drift-guard.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\critical-foreign-keys-guard.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\cross-database-drift-guard.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\directorate-governance-cycle.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\docs-reality-drift-guard.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\e2e-cadeia-insumo-produto.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\entity-photo-qrcode.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\enum-literal-guard.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\g13-payable-receivable.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\inventory-count-claim-concurrency.test.ts      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\legacy-routes-rbac-regression.test.ts          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\maintenance-order-lifecycle.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\master-production-plan-cycle.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\material-requisition-flow.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\mrp-multi-demand-netting.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\mrp-quarantine-discount.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\mrp-rerun-idempotency.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\mrp.test.ts                                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\n8n-webhook.test.ts                            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\password-recovery-and-session-revocation.tes...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\product-movement-concurrency.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\product-validation-strict.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\production-downtime-concurrency.test.ts        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\production-order-scrap.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\production-order-status-concurrency.test.ts    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\production-start-gate-g6.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\production-start-manual-tracking-bypass.test.ts
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\purchase-origin-foreign-supplier.test.ts       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\purchase-receipt-duplicate-invoice.test.ts     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\purchase-receive-concurrency.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\purchase-requisitions.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\quality-release-after-block.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\quality-releases-receiving-lot.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\rbac-directorate-access-denied.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\rbac-maintenance-service-orders-access-denie...
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\rbac-module-access-denied.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\reports-cross-module-permission.test.ts        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\reports-export.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\rh-block6-extension.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\rh-time-import-attendance.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\sale-cancel-concurrency.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\sale-invalid-payload-no-crash.test.ts          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\sale-invoice-history.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\sale-lot-quality-gate.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\sale-nfe-issuance.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\sale-quote-confirm.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\schema-model-drift-guard.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\stock-concurrency.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\traceability-and-audit-log-regression.test.ts  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\integration\traceability.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\access-profiles.test.ts                               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\accounting-use-cases.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\assets-use-cases.test.ts                              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\audit-action-vocabulary.test.ts                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\audit-coverage-guard.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\audit-log-action-downgrade.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\audit-log-failure-alerting.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\audit-log-register-normalization.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\auditLogs-use-cases.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\auth-refresh.test.ts                                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\bom-cost-staleness.test.ts                            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\bom-create-revision-rules-g1.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\bom-engineering-change-control-g1.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\bom-recursive.test.ts                                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\bom-single-source-g1.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\bom-tree-cycle.test.ts                                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\budget-use-cases.test.ts                              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\case008-audit-log-runtime.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\case008-audit-log-static.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\categories-use-cases.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\change-password-session-invalidation.test.ts          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\change-sale-status-partially-invoiced.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\client-cnae-optional.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\comex-directorate-approval.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\comex.test.ts                                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\cost-center-realized-payment-date.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\cost-centers-and-cashflow-projection.test.ts          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\cost-variance-report.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\create-sale-quote.test.ts                             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\customer-price-list.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\dashboard-department-demands-repository.test.ts       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\dashboard-department-demands-use-case.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\dashboard-handoffs-repository.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\dashboard-repository.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\dashboard-use-cases.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\database-config.test.ts                               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\deactivate-item-http-409.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\departments-use-cases.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\directorate-use-cases.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\docs-path-reference-guard.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\edit-sale-items.test.ts                               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\employees-use-cases.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\engineering-module.test.ts                            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\engineering-sample-requisition.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\entity-photo-qrcode.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\export-assignment-guard.test.ts                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\facilities-area-use-cases.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\facilities-cleaning-schedule-use-cases.test.ts        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\facilities-driver-use-cases.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\facilities-fine-use-cases.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\facilities-fuel-record-use-cases.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\facilities-trip-use-cases.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\facilities-vehicle-use-cases.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\facilities-visitor-use-cases.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\get-sale-nfe-status-reconciliation.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\handoff-signal.test.ts                                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\health-routes.test.ts                                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\integrity-transaction-guards.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\intelligent-auditor-repository.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\intelligentAuditor-use-cases.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\inventory-count-assignment.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\inventory-movements-dual-read.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\inventory-service-contract.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\issue-sale-nfe-partial.test.ts                        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\item-repository-live-inventory.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\item-repository-update-conversao-automatica.test.ts   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\item-suppliers.test.ts                                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\items-models.test.ts                                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\items-use-cases.test.ts                               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\juridico-contract-use-cases.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\juridico-corporate-act-use-cases.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\juridico-deadline-use-cases.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\juridico-legal-case-use-cases.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\juridico-lgpd-alert-use-cases.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\juridico-proxy-ip-use-cases.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\laboratory-tests.test.ts                              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\logger.test.ts                                        
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\lot-traceability-qrcode.test.ts                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\maintenance-use-cases.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\manufacturing-reports.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\marketing-campaign-use-cases.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\marketing-convert-lead-use-case.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\marketing-event-use-cases.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\marketing-funnel-report-use-case.test.ts              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\marketing-handoff-lead-use-case.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\marketing-lead-saneamento.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\marketing-lead-use-cases.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\marketing-material-use-cases.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\master-production-plan-g17.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\material-receipt-quarantine.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\mobileInventory-use-cases.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\model-association-attribute-guard.test.ts             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\module-authorization-map.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\mrp-auto-convert.test.ts                              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\mrp-convert-to-production-order.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\mrp-convert-to-requisition.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\mrp-engine.test.ts                                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\mrp-multi-demand-allocation.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\mrp-persistence.test.ts                               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\mrp-requisition-helper-idempotency.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\nfe-access-key-validator.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\no-orphan-pt-schema-tables.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\non-conformity-closure-date.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\non-conformity-supplier-return.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\nonConformities-use-cases.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\oee-report.test.ts                                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\onda3-shipping-cockpit-cashflow.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\organizational-structure-guard.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\product-movement-decimal-regression.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\production-downtime.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\production-labor-overhead-cost.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\production-order-lifecycle.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\production-order-material-reservation.test.ts         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\production-routes.test.ts                             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\production-start-gate-route-step-g6.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\production-tracking-required-g4.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\purchase-approval-authority.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\purchase-payable-no-recebimento-g13.test.ts           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\purchase-requisition-create.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\purchase-requisition-department.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\purchase-requisition-status.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\purchase-segregation-of-duties.test.ts                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\quality-inspection-release-gate.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\quality-lot-lifecycle.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\quarantine-blocks-planning-balance.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rbac-critical-routes.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\reconciliation-ofx-parser.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\reconciliation-use-cases.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\reports-export.test.ts                                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\requisition-convert-to-purchase.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\requisition-receipt-status.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rfq.test.ts                                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-admission-termination-use-cases.test.ts            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-aej-parser.test.ts                                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-block6-extension-rules.test.ts                     
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-block6-extension-use-cases.test.ts                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-contract-use-cases.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-deactivate-employee-termination-guard.test.ts      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-experience-contract-rules.test.ts                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-sensitive-fields.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-termination-rules.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-vacation-rules.test.ts                             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-vacation-use-cases.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\rh-validators.test.ts                                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\runtime-env-production-tracking.test.ts               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\runtime-env.test.ts                                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sale-invoice-accumulator.test.ts                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sale-receivable-na-nfe-g13.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sale-stock-baixa-na-nfe-g9.test.ts                    
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sales-nfe-rbac.test.ts                                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sales-validators.test.ts                              
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sanitize-search-repos.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\seeds-production-boot.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\serviceOrders-use-cases.test.ts                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-accident.test.ts                                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-aso.test.ts                                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-cipa.test.ts                                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-corrective-action.test.ts                         
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-epi.test.ts                                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-esocial.test.ts                                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-pgr.test.ts                                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-rbac.test.ts                                      
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-safety-routine.test.ts                            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\sst-training.test.ts                                  
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\tax-calculation-service.test.ts                       
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\ti-access-request-use-cases.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\ti-authorize-self-or-module.test.ts                   
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\ti-backup-use-cases.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\ti-license-use-cases.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\ti-routes-smoke.test.ts                               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\ti-term-use-cases.test.ts                             
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\ti-ticket-use-cases.test.ts                           
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\ti-validators.test.ts                                 
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\treasury-use-cases.test.ts                            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\warehouse-crud.test.ts                                
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\warehouse-invariants.test.ts                          
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\warehouse-stock.test.ts                               
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\webhooks-use-cases.test.ts                            
+C:\Sistema EvokAudio\ERP-Evok-sana-CASE-008\server\tests\unit\work-centers.test.ts                                  
+
+
+
