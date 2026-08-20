@@ -91,6 +91,8 @@ describeIntegration('P0.3: Critical Foreign Keys', () => {
       await expectForeignKey('sale_items', 'fk_sale_items_sale_id', 'CASCADE');
       await expectForeignKey('accounts_receivable', 'fk_accounts_receivable_sale_id');
       await expectForeignKey('accounts_payable', 'fk_accounts_payable_purchase_id');
+      await expectForeignKey('purchase_receipts', 'fk_purchase_receipts_purchase_id', 'RESTRICT');
+      await expectForeignKey('purchase_receipts', 'fk_purchase_receipts_received_by', 'RESTRICT');
       await expectForeignKey('inventory_movements', 'fk_inventory_movements_user_id');
       await expectForeignKey('inventory_counts', 'fk_inventory_counts_created_by');
       await expectForeignKey('inventory_count_items', 'fk_inventory_count_items_inventory_count_id', 'CASCADE');
@@ -111,6 +113,7 @@ describeIntegration('P0.3: Critical Foreign Keys', () => {
       await expectForeignKey('item_estruturas', 'fk_item_estruturas_item_pai_id');
       await expectForeignKey('item_estruturas', 'fk_item_estruturas_parent_id');
       await expectForeignKey('mrp_ordens_planejadas', 'fk_mrp_ordens_planejadas_item_id');
+      await expectForeignKey('product_cost_ledgers', 'fk_product_cost_ledgers_product_id', 'RESTRICT');
     });
   });
 
@@ -130,6 +133,7 @@ describeIntegration('P0.3: Critical Foreign Keys', () => {
       await expectIndex('sale_items', 'sale_id');
       await expectIndex('serial_numbers', 'lot_control_id');
       await expectIndex('non_conformities', 'reported_by');
+      await expectIndex('product_cost_ledgers', 'product_id');
       await expectIndex('product_cost_ledgers', 'created_by');
     });
   });

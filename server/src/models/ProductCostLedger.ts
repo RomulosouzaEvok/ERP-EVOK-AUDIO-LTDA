@@ -50,7 +50,7 @@ const ProductCostLedger = sequelize.define('ProductCostLedger', {
   underscored: true,
   timestamps: true,
   indexes: [
-    { fields: ['product_id'] },
+    { fields: ['product_id'], name: 'idx_product_cost_ledgers_product_id_fk' },
     { fields: ['source_type', 'source_id'] }
   ]
 });

@@ -107,64 +107,54 @@ Ver `docs/carga-inicial/GUIA_CARGA_INICIAL.md` para o passo a passo.
 | Montar a BOM | Engenharia | MRP, custo, baixa de estoque |
 | Inventário físico de abertura | Almoxarifado | Tudo |
 
-### 3.2 🔴 Cadastro mestre de itens não tem trilha de auditoria (achado novo)
+### 3.2 🟢 Cadastro mestre de itens com trilha de auditoria
 
-Descoberto ao conferir a carga dos 327 insumos de hoje: as 327 criações via
-`POST /api/items` **não geraram um único registro** em `audit_logs`. A tabela
-inteira tinha 2 linhas depois da carga — os dois logins.
+**Resolvido em 2026-08-18.** O `itemController` passou a chamar `logAction`
+em `create`, `update` e `inactivate`, e a guarda de cobertura de auditoria
+foi atualizada para remover `items` do débito conhecido.
 
-**Medido:** `itemController.ts` não chama `logAction` nenhuma vez. Para
-comparação, o `productController` legado chama 6 vezes e o de BOM, 4. No total,
-**63 dos 98 controllers** registram auditoria; o do item mestre está entre os
-35 que não registram.
+Evidência:
+- `server/src/modules/items/presentation/controllers/itemController.ts`
+- `server/tests/unit/item-audit-trail.test.ts`
+- `server/tests/unit/audit-coverage-guard.test.ts`
 
-**Por que importa:** `items` é o cadastro canônico que alimenta MRP, BOM,
-custeio e rastreabilidade. Hoje é impossível responder quem mudou o custo
-padrão de um insumo, quem inativou um item ou quando — exatamente as perguntas
-que uma auditoria fiscal ou de ISO 9001 faz. O risco cresce assim que a
-Controladoria começar a preencher os custos (etapa 4 do guia de carga).
+Validação:
+- `npm run typecheck` no `server/`
+- `npx jest --runInBand tests/unit/item-audit-trail.test.ts`
+- `npx jest --runInBand tests/unit/audit-coverage-guard.test.ts`
 
-**Correção sugerida:** chamar `logAction` em `create`, `update` e `inactivate`
-de `itemController`, no mesmo padrão já usado por `productController`. É
-trabalho pequeno e localizado. **Não implementado** — fora do escopo pedido.
+### 3.2b 🟢 `purchase_receipts` e `product_cost_ledgers` com FKs críticas
 
-### 3.2b 🟡 `purchase_receipts` não tem nenhuma foreign key (P1-07, promovido em 2026-08-12)
+**Resolvido em 2026-08-18.** A migration
+`server/migrations/20260818-000050-add-purchase-receipts-and-product-cost-ledger-fks.cjs`
+adicionou:
 
-Estava enterrado como caixa `- [ ]` no `TODO.md` desde a auditoria de
-2026-08-09 e nunca subiu para esta lista. **Continua aberto** — a auditoria
-documental de 2026-08-12 remediu e confirmou.
+- `purchase_receipts.purchase_id -> purchase_orders.id`
+- `purchase_receipts.received_by -> users.id`
+- `product_cost_ledgers.product_id -> products.id`
 
-**Medido em `pg_constraint` (2026-08-12), banco `erp_evok_audio`:**
+Evidência:
+- `npm run migration:up` aplicado com sucesso
+- `server/tests/integration/critical-foreign-keys-guard.test.ts` passou
 
-| Tabela | FKs esperadas | FKs existentes |
-|---|---|---|
-| `purchase_receipts` | `purchase_id` → `purchase_orders`, `received_by` → `users` | **nenhuma** |
-| `product_cost_ledgers` | `product_id` → `products`, `created_by` → `users` | só `created_by` |
-
-**Por que importa:** contradiz frontalmente a decisão arquitetural registrada
-em `CLAUDE.md` §7 ("Foreign Keys Obrigatórias — integridade referencial
-obrigatória, 467 FKs"). São as **duas únicas exceções conhecidas**, e uma delas
-está no caminho do recebimento de compra — o evento que dispara entrada de
-estoque **e** nascimento de conta a pagar (G13). Sem FK, um recebimento pode
-apontar para um pedido que não existe e nada reclama.
-
-**Mitigação atual (por que não é 🔴):** as duas tabelas têm **0 linhas** hoje,
-então não há órfão para limpar. A correção é uma migration aditiva simples,
-sem backfill — e o custo de fazê-la só cresce depois da carga inicial.
-
-**Correção:** migration adicionando as 3 FKs faltantes (`ON DELETE RESTRICT`,
-padrão do projeto), aplicada nos dois bancos na mesma rodada. **Fazer antes de
-o recebimento começar a gravar dado real.**
+Risco residual: zero linhas existentes hoje, então não houve backfill nem
+conflito histórico.
 
 ### 3.3 🔴 Pré-requisitos de configuração da produção
 
 - **`work_centers` tem 1 centro ("Montagem Final") com `cost_per_hour = 0`.**
-  Custo de mão de obra sai zerado. Medido no banco hoje.
-- **Nenhum produto tem roteiro ativo.** Desde o G6, iniciar OP sem roteiro
-  falha (`G6-START-NO-ROUTE`) — correto, mas significa que **nenhuma OP pode
-  começar** enquanto os roteiros não forem cadastrados.
-- **`production_cost_settings` não tem API.** O fallback global de mão de obra
-  só é editável direto no banco.
+  Custo de mão de obra sai zerado. Medido no banco hoje. Isso não é bug de
+  código: depende de valor real vindo da operação/Controladoria.
+- **Nenhum produto tem roteiro ativo.** Hoje o banco tem `production_routes = 0`
+  linhas, `active_routes = 0` e `products_with_active_route = 0`. Desde o G6,
+  iniciar OP sem roteiro falha (`G6-START-NO-ROUTE`) — correto, mas significa
+  que **nenhuma OP pode começar** até que os roteiros sejam cadastrados e
+  aprovados pelo negócio.
+- **`production_cost_settings` existe, mas sem API.** A linha singleton está
+  com `overhead_calculation_basis = material_labor`, `overhead_rate_percent = 0`
+  e `default_labor_rate_per_hour = 0`. O fallback global de mão de obra só é
+  editável direto no banco, então qualquer mudança aqui exige decisão explícita:
+  manter como parâmetro de DB ou abrir endpoint administrativo.
 
 ### 3.4 🟡 Infraestrutura de produção
 

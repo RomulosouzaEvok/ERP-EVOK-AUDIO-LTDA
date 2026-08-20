@@ -25,14 +25,21 @@ interface PurchaseReceiptAttributes {
 
 const PurchaseReceipt = sequelize.define('PurchaseReceipt', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  purchase_id: { type: DataTypes.INTEGER, allowNull: false },
+  purchase_id: { type: DataTypes.INTEGER, allowNull: false, comment: 'FK -> purchase_orders.id' },
   invoice_number: { type: DataTypes.STRING(50), allowNull: false },
-  received_by: DataTypes.INTEGER,
+  received_by: { type: DataTypes.INTEGER, allowNull: true, comment: 'FK -> users.id (quem recebeu a NF de compra)' },
   received_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
 }, {
   tableName: 'purchase_receipts',
   underscored: true,
   timestamps: true,
+  indexes: [
+    {
+      unique: true,
+      fields: ['purchase_id', 'invoice_number'],
+      name: 'purchase_receipts_purchase_invoice_unique',
+    },
+  ],
 });
 
 export = PurchaseReceipt;

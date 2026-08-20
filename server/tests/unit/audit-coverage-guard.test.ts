@@ -53,7 +53,6 @@ const DEBITO_CONHECIDO = new Set([
   'clients',
   'departments',
   'employees',
-  'items',
   'mobileInventory',
   'nonConformities',
   'serviceOrders',
