@@ -1,0 +1,50 @@
+Você está atuando como sanacore-remediation-engineer dentro da estrutura CoreTriad deste repositório.
+
+Isto é uma CORREÇÃO 02 sobre uma implementação já existente e parcialmente aprovada (FIND-ERP-005, Falha 1, Correção 01 no commit 5107409). NÃO é reimplementação, NÃO reabre Falhas 2/3/4, NÃO precisa de decisão nova do dono — os 2 problemas abaixo são bugs concretos achados na segunda opinião da VeriCore sobre o próprio código da Correção 01.
+
+Trabalhe exclusivamente na worktree/branch já existente:
+  worktree: C:\Sistema EvokAudio\ERP-Evok-sana-FIND-ERP-005
+  branch:   sana/ERP-LEGACY-001/FIND-ERP-005
+
+Regras absolutas:
+- NÃO conecte em erp_evok_audio (produção), nem para contar linhas.
+- Não execute operação destrutiva em banco real. Testes de integração HTTP somente contra erp_evok_audio_test.
+- Não toque em audit/, coretriad/governance/, coretriad/states/, .claude/ ou docs/ fora do já autorizado no caso.
+- Não regrida a Camada 1 nem a Camada 2 da Correção 01 para o cenário de lacuna NO MEIO do intervalo (o caso original) — só corrija as bordas (piso e teto) e o tratamento de value nulo/zero.
+- Não declare FINDING CLOSED nem RETEST_PASSED.
+- Capture e registre no pacote de evidência o OUTPUT REAL dos comandos executados (typecheck, testes) — não apenas a alegação em texto.
+
+Leitura obrigatória antes de editar:
+1. Leia server/src/modules/juridico/domain/approvalPolicy.ts por inteiro, função resolveApprovalPolicy e toNumber.
+2. Leia server/src/modules/juridico/application/use-cases/CreateContractUseCase.ts (linha ~66, onde value: input.value ?? null é gravado).
+3. Leia server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts, a função de validação de contiguidade adicionada na Correção 01.
+4. Leia server/tests/unit/juridico-contract-authority-find-erp-005.test.ts, especialmente as linhas ~279-339 (os testes da Correção 01).
+
+PROBLEMA 1 (BLOQUEANTE) — regressão de value nulo/zero:
+resolveApprovalPolicy trata min_value como exclusivo (evaluated > min). Como a primeira faixa começa em min_value: 0, um contrato com value: null (toNumber(null, 0) vira 0) faz 0 > 0 ser falso, então nenhuma faixa casa, e o fail-closed novo da Correção 01 lança APPROVAL_POLICY_GAP para um contrato que legitimamente não tem valor definido — isso é uma regressão, contrato sem valor deveria continuar ativando sem exigir alçada, como fazia antes da Correção 01.
+Corrija tratando value nulo/undefined como "sem alçada exigida" (requiredRoles: [] com nível mínimo) ANTES de entrar na lógica de matching de faixas, sem lançar APPROVAL_POLICY_GAP. Avalie se value === 0 (valor real de contrato zero, não ausência) deve ter o mesmo tratamento ou precisa de ajuste na faixa mínima — escolha a forma mais simples que não quebre a semântica de piso exclusivo pros demais valores positivos, e documente a escolha no pacote de evidência. Adicione testes explícitos: value: null e value: 0 continuam ativando/aprovando/consultando sem estourar APPROVAL_POLICY_GAP.
+
+PROBLEMA 2 (BLOQUEANTE) — validação de contiguidade não cobre as bordas:
+A validação de contiguidade em approvalThresholdController.ts só compara pares consecutivos dentro de cada grupo (por contract_type, com '*' separado). Isso deixa passar um conjunto de faixas que não cobre acima do maior max_value configurado (nenhuma faixa com max_value: null), e não valida grupo com uma única faixa. Prova concreta: o teste em juridico-contract-authority-find-erp-005.test.ts:328-339, que a Correção 01 registrou como "conjunto contíguo válido", na verdade usa duas faixas ativas (0-50000 e 50000-100000) sem nenhuma cobrindo acima de 100000 — está documentando como válido um payload com lacuna real.
+Corrija a validação para exigir, em cada grupo (contract_type específico e '*' separadamente): (a) a faixa de menor min_value cobre o piso desejado (coordenar com a correção do Problema 1 pra não conflitar); (b) a faixa de maior max_value tem max_value === null (teto aberto obrigatório); (c) essas duas checagens valem mesmo pra grupo com uma única faixa (não dependam do loop de pares consecutivos rodar). Corrija também o teste de :328-339 — ou adicione a faixa 100000-∞ como active: true nesse payload, ou reescreva o teste para provar que esse payload específico (sem teto aberto) é rejeitado pelo PUT.
+
+Não regrida: a detecção de lacuna NO MEIO do intervalo (cenário original da Correção 01, ex. 0-50000 + 300000-∞ deixando 50000-300000 descoberto) precisa continuar funcionando exatamente como está.
+
+Documente no REMEDIATION_EVIDENCE_PACKAGE.md (seção nova "Correção 02"):
+- os 2 problemas, com arquivo:linha da causa;
+- a correção de cada um, com arquivo:linha;
+- a decisão tomada sobre value === 0 (mesmo tratamento de null, ou faixa ajustada) e por quê;
+- prova vermelha: os cenários exatos (value: null, value: 0, conjunto sem teto aberto, grupo com faixa única) falhando/rejeitando incorretamente ANTES desta correção;
+- prova verde: os mesmos cenários corrigidos DEPOIS;
+- confirmação de que o cenário original da Correção 01 (lacuna no meio) continua funcionando — não regredido;
+- output REAL de: testes novos/atualizados do módulo juridico, typecheck/build do server.
+
+Validação depois:
+- Execute os testes novos e a suíte completa do módulo jurídico (unitários + integração), capture e registre o output real.
+- Execute typecheck/build do server, capture e registre o output real.
+
+Ao terminar:
+- Atualize REMEDIATION_EVIDENCE_PACKAGE.md e CASE_STATUS.md, mantendo STATUS: REMEDIATION_COMPLETE apenas se os 2 pontos estiverem de fato corrigidos e comprovados com output real, e sem regressão do cenário original.
+- Commit na branch sana/ERP-LEGACY-001/FIND-ERP-005, não em main.
+- Nunca escreva FINDING CLOSED nem RETEST_PASSED.
+- Pare aguardando revisão/segunda opinião/reteste da VeriCore.

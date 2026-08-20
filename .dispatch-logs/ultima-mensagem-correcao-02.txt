@@ -1,0 +1,31 @@
+Correções aplicadas no working tree e validadas, mas o `git commit` foi bloqueado por permissão no admin do worktree `.git/worktrees/ERP-Evok-sana-FIND-ERP-005/index.lock`, então o branch ainda ficou sem commit.
+
+O que foi alterado:
+- [server/src/modules/juridico/domain/approvalPolicy.ts](/C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/server/src/modules/juridico/domain/approvalPolicy.ts)
+- [server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts](/C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts)
+- [server/tests/unit/juridico-contract-authority-find-erp-005.test.ts](/C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/server/tests/unit/juridico-contract-authority-find-erp-005.test.ts)
+- [server/tests/integration/jur-contract-authority-find-erp-005.test.ts](/C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/server/tests/integration/jur-contract-authority-find-erp-005.test.ts)
+- [remediation/cases/ERP-LEGACY-001-CASE-002/REMEDIATION_EVIDENCE_PACKAGE.md](/C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/remediation/cases/ERP-LEGACY-001-CASE-002/REMEDIATION_EVIDENCE_PACKAGE.md)
+- [remediation/cases/ERP-LEGACY-001-CASE-002/CASE_STATUS.md](/C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/remediation/cases/ERP-LEGACY-001-CASE-002/CASE_STATUS.md)
+
+Correção 02:
+- `value: null/undefined/0` agora sai antes do matching e resolve como `requiredRoles: []` com `requiredLevel: 'operate'`.
+- A validação do PUT agora exige piso 0, teto aberto e continua detectando lacuna/sobreposição no meio.
+- `value === 0` ficou com o mesmo tratamento de `null`, porque é o menor ajuste que preserva a semântica de piso exclusivo sem criar gap artificial.
+
+Validação real executada:
+- `npm run typecheck` -> exit 0
+- `npm run build` -> exit 0
+- `npx jest --runInBand tests/unit/juridico-contract-authority-find-erp-005.test.ts --ci` -> `56/56` passed
+- Suíte unitária do módulo jurídico -> `7/7` suites, `175/175` tests passed
+- Integração HTTP do caso jurídico -> `22/22` passed no `tmp/jest-integration.json`
+
+Também tentei a suíte completa:
+- `npm run test:unit` ainda falha em `tests/unit/docs-path-reference-guard.test.ts`, fora deste caso
+- `npm run test:integration` ainda falha em `tests/integration/cross-database-drift-guard.test.ts` e `tests/integration/bom-tipo-nao-produtivo.test.ts`, fora deste caso
+- O arquivo do caso jurídico passou na integração mesmo com essas falhas externas
+
+Bloqueio final:
+- `git commit -m "fix(juridico): handle null value and threshold borders"` falhou com `Permission denied` ao criar `C:/Sistema EvokAudio/ERP-Evok--Audio-LTDA/.git/worktrees/ERP-Evok-sana-FIND-ERP-005/index.lock`
+
+Se você liberar escrita nesse admin do worktree, eu finalizo o commit imediatamente e atualizo o `REMEDIATION_COMMIT` com o hash real.

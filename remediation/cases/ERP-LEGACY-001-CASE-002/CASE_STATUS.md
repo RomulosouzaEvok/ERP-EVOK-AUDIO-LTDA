@@ -4,7 +4,7 @@ CASE_ID: ERP-LEGACY-001-CASE-002
 FINDING_ID: FIND-ERP-005
 PROJECT_ID: ERP-LEGACY-001
 BRANCH: `sana/ERP-LEGACY-001/FIND-ERP-005` (sem `push`)
-REMEDIATION_COMMIT: hash do commit local desta worktree a ser registrado apÃ³s o commit desta sessÃ£o
+REMEDIATION_COMMIT: `8d78882`
 
 ## Linha do tempo do caso
 

@@ -1,0 +1,31 @@
+Corrigi as duas camadas da Falha 1 e registrei a remediação no caso, mas não consegui criar o commit porque o sandbox bloqueou escrita no gitdir do worktree.
+
+O que mudou:
+- `[approvalPolicy.ts](C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/server/src/modules/juridico/domain/approvalPolicy.ts#L163)` agora falha fechado com `APPROVAL_POLICY_GAP` quando há política vigente, mas nenhuma faixa cobre o valor.
+- `[approvalThresholdController.ts](C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/server/src/modules/juridico/presentation/controllers/approvalThresholdController.ts#L47)` agora valida contiguidade do conjunto por `contract_type`, com `'*'` separado, rejeitando lacuna e sobreposição.
+- A validação ignora explicitamente faixas `active === false`, como registrado no próprio controller.
+- Adicionei testes unitários e HTTP para:
+  - lacuna na avaliação;
+  - fail-closed pré-existente da política vazia;
+  - `PUT` rejeitando lacuna;
+  - `PUT` rejeitando sobreposição;
+  - caminho feliz contíguo permanecendo aceito.
+
+Evidência atualizada:
+- `[REMEDIATION_EVIDENCE_PACKAGE.md](C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/remediation/cases/ERP-LEGACY-001-CASE-002/REMEDIATION_EVIDENCE_PACKAGE.md)`
+- `[CASE_STATUS.md](C:/Sistema%20EvokAudio/ERP-Evok-sana-FIND-ERP-005/remediation/cases/ERP-LEGACY-001-CASE-002/CASE_STATUS.md)` agora está em `READY_FOR_RETEST`, não `REMEDIATION_COMPLETE`.
+
+Validação real executada:
+- alvo do caso: `52 passed, 22 skipped` no run combinado unit + integration alvo
+- suíte unitária completa: `2003 passed, 1 failed` com uma falha pré-existente fora do escopo (`docs-path-reference-guard`)
+- `npm run typecheck`: exit 0
+- `npm run build`: exit 0
+- integração completa: não subiu porque `localhost:5432` recusou conexão; `SEQUELIZE_ENV=test` foi usado, mas a migration falhou antes da API
+- `Test-NetConnection localhost -Port 5432` retornou `TcpTestSucceeded : False`
+
+Bloqueio do commit:
+- `git add` falhou com `Unable to create ... index.lock: Permission denied` no gitdir do worktree principal, então não consegui registrar o commit nesta sessão.
+
+Próximos passos naturais:
+1. Subir ou disponibilizar `erp_evok_audio_test` em `localhost:5432` e rerodar a suíte HTTP completa.
+2. Dar acesso de escrita ao gitdir do worktree para eu criar o commit pedido.
